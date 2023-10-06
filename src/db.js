@@ -1,56 +1,66 @@
-// import low from "lowdb";
-// import { LocalStorage } from "lowdb/browser";
-// import id from "lodash-id";
+import { get, set, update } from "idb-keyval";
 
-// const adapter = new LocalStorage("db");
-// const db = low(adapter);
+// cons);
 
-// db.defaults({ folders: [], notes: [] }).write();
+export const getFolders = async () => {
+  const folders = await get("folders");
+  return folders;
+};
 
-import low from "lowdb";
-import LocalStorage from "lowdb/adapters/LocalStorage";
-import id from "lodash-id";
+export const getNotes = async () => {
+  const notes = await get("notes");
+  return notes;
+};
 
-const adapter = new LocalStorage("db");
-const db = low(adapter);
+export const setFolders = async (folders) => {
+  await set("folders", folders);
+};
 
-db.defaults({
-  folders: [
-    {
-      id: 1,
-      name: "Folder 1",
-      subfolders: [
-        { id: 11, name: "Subfolder 1.1", subfolders: [] },
-        { id: 12, name: "Subfolder 1.2", subfolders: [] },
-      ],
-    },
-    {
-      id: 2,
-      name: "Folder 2",
-      subfolders: [
-        {
-          id: 21,
-          name: "Subfolder 2.1",
-          subfolders: [{ id: 211, name: "Subfolder 2.1.1", subfolders: [] }],
-        },
-      ],
-    },
-  ],
-  notes: [
-    {
-      id: 1,
-      title: "Note 1",
-      body: "This is note 1 content.",
-      modifiedDate: "2023-04-25",
-    },
-    {
-      id: 2,
-      title: "Note 2",
-      body: "This is note 2 content.",
-      modifiedDate: "2023-04-24",
-    },
-  ],
-}).write();
-db._.mixin(id);
+export const setNotes = async (notes) => {
+  await set("notes", notes);
+};
 
-export default db;
+export const updateNote = async (updatedNote) => {
+  const notes = await get("notes");
+  const updatedNotes = notes.map((note) =>
+    note.id === updatedNote.id ? updatedNote : note
+  );
+  await set("notes", updatedNotes);
+};
+
+export const sampleFolders = [
+  {
+    id: 1,
+    name: "Folder 1",
+    subfolders: [
+      { id: 11, name: "Subfolder 1.1", subfolders: [] },
+      { id: 12, name: "Subfolder 1.2", subfolders: [] },
+    ],
+  },
+  {
+    id: 2,
+    name: "Folder 2",
+    subfolders: [
+      {
+        id: 21,
+        name: "Subfolder 2.1",
+        subfolders: [{ id: 211, name: "Subfolder 2.1.1", subfolders: [] }],
+      },
+    ],
+  },
+];
+
+export const sampleNotes = [
+  {
+    id: 1,
+    title: "Note 1",
+    body: "This is note 1 content.",
+    modifiedDate: "2023-04-25",
+  },
+  {
+    id: 2,
+    title: "Note 2",
+    body: "This is note 2 content.",
+    modifiedDate: "2023-04-24",
+  },
+];

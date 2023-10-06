@@ -1,8 +1,8 @@
-import React from 'react';
+import React from "react";
 
 const NoteList = ({ notes, onSelectNote }) => {
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-full overflow-y-auto" style={{ background: "#FFFFFD" }}>
       {notes.map((note) => (
         <div
           key={note.id}
@@ -11,7 +11,9 @@ const NoteList = ({ notes, onSelectNote }) => {
         >
           <div className="font-semibold">{note.title}</div>
           <div className="text-sm text-gray-600">{note.body}</div>
-          <div className="text-xs text-gray-500">{note.modifiedDate}</div>
+          <div className="text-xs text-gray-500">
+            {note.modifiedDate.toLocaleString()}
+          </div>
         </div>
       ))}
     </div>
