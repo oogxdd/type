@@ -7,6 +7,7 @@ const ChatPlugin = Extension.create({
     return {
       "Mod-Enter": async ({ editor }) => {
         event.preventDefault();
+        editor.commands.enter();
         console.log("go");
         console.log(editor);
         this.options.setLoading(true);
@@ -14,41 +15,69 @@ const ChatPlugin = Extension.create({
         // Assuming your editor content is stored as HTML
         const editorHTML = editor.getHTML();
 
-        // Extracting messages from HTML
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(editorHTML, "text/html");
-
-        const messages = [];
-        let currentRole = "user";
-        let currentContent = "";
-
-        doc.body.querySelectorAll("p").forEach((element) => {
-          element.childNodes.forEach((childNode) => {
-            // Check if it's a Text node or a colored span
-            if (childNode.nodeType === 3) {
-              const content = childNode.textContent.trim();
-              if (content) {
-                currentRole = "user";
-                messages.push({ role: currentRole, content });
-              }
-            } else if (
-              childNode.nodeType === 1 &&
-              childNode.tagName.toLowerCase() === "span" &&
-              childNode.style.color === "rgb(149, 141, 241)"
-            ) {
-              const content = childNode.textContent.trim();
-              if (content) {
-                currentRole = "assistant";
-                messages.push({ role: currentRole, content });
-              }
+        let parser = new DOMParser();
+        let dom = parser.parseFromString(editorHTML, "text/html");
+        let paragraphs = dom.body.getElementsByTagName("p");
+        let output = [];
+        let currentUserMessage = [];
+        for (let message of paragraphs) {
+          if (message.getElementsByTagName("span").length > 0) {
+            // Assistant message, add the user message that has been built up to this point, if it exists
+            if (currentUserMessage.length > 0) {
+              output.push({
+                role: "user",
+                content: currentUserMessage.join("\n"),
+              });
+              currentUserMessage = [];
             }
-          });
-        });
+            output.push({ role: "assistant", content: message.textContent });
+          } else if (message.textContent.trim() !== "") {
+            // Join user messages together
+            currentUserMessage.push(message.textContent.trim());
+          }
+        } // Check for last user conversation with no assistant response at the end
+        if (currentUserMessage.length > 0) {
+          output.push({ role: "user", content: currentUserMessage.join("\n") });
+        }
+        console.log(output);
+
+        const messages = output;
+
+        // Extracting messages from HTML
+        // const parser = new DOMParser();
+        // const doc = parser.parseFromString(editorHTML, "text/html");
+
+        // const messages = [];
+        // let currentRole = "user";
+        // let currentContent = "";
+
+        // doc.body.querySelectorAll("p").forEach((element) => {
+        //   element.childNodes.forEach((childNode) => {
+        //     // Check if it's a Text node or a colored span
+        //     if (childNode.nodeType === 3) {
+        //       const content = childNode.textContent.trim();
+        //       if (content) {
+        //         currentRole = "user";
+        //         messages.push({ role: currentRole, content });
+        //       }
+        //     } else if (
+        //       childNode.nodeType === 1 &&
+        //       childNode.tagName.toLowerCase() === "span" &&
+        //       childNode.style.color === "rgb(149, 141, 241)"
+        //     ) {
+        //       const content = childNode.textContent.trim();
+        //       if (content) {
+        //         currentRole = "assistant";
+        //         messages.push({ role: currentRole, content });
+        //       }
+        //     }
+        //   });
+        // });
 
         // Add the last message
-        if (currentContent !== "") {
-          messages.push({ role: currentRole, content: currentContent });
-        }
+        // if (currentContent !== "") {
+        //   messages.push({ role: currentRole, content: currentContent });
+        // }
 
         const response = await fetch("/api/vercel-ai", {
           method: "POST",
@@ -80,7 +109,6 @@ const ChatPlugin = Extension.create({
           // let responseText = "";
 
           editor.commands.insertContent(`<br />`);
-          editor.commands.insertContent(`<br />`);
           // editor.commands.setColor("#22f2ff");
           editor.commands.setColor("#20b0b9");
 
@@ -96,7 +124,8 @@ const ChatPlugin = Extension.create({
           }
 
           editor.commands.unsetColor();
-          editor.commands.insertContent(`<br /><br />`);
+          editor.commands.insertContent(`<br />`);
+          editor.commands.enter();
         }
       },
     };

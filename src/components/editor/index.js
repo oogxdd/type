@@ -30,6 +30,7 @@ export const EditorComponent = () => {
     content:
       window.localStorage.getItem("content") || "<p>Hello World! 🌍️</p>",
     onUpdate: ({ editor }) => {
+      console.log(editor.getJSON());
       window.localStorage.setItem("content", editor.getHTML());
     },
   });
