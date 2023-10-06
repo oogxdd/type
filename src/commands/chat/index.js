@@ -10,12 +10,13 @@ const ChatPlugin = Extension.create({
         console.log("go");
         console.log(editor);
 
-        // editor.commands.insertContent(
-        //   `<span style="color: #958DF1">Oh, for some reason that’s purple.</span>`
-        // );
-        // editor.commands.insertContent(`<br />`);
-
-        const responseText = "gpt response here";
+        const editorContent = editor.getText(); // Assuming getHTML() gets the text content
+        const response = await fetch(
+          `/api/generate?prompt=${encodeURIComponent(editorContent)}`
+        );
+        const responseData = await response.json();
+        console.log(responseData);
+        const responseText = responseData.res;
 
         editor
           .chain()
@@ -23,13 +24,6 @@ const ChatPlugin = Extension.create({
           .insertContent(`<span style="color: #958DF1">${responseText}</span>`)
           .insertContent("<br /><br />")
           .run();
-
-        // editor.commands.insertContent(`<br /><br />`);
-        // editor.commands.setColor("#22f2ff");
-        // editor.commands.insertContent(`Example Text`);
-        // editor.commands.unsetColor();
-        // editor.commands.insertContent(`<br />`);
-        // editor.commands.insertContent(`<br />`);
       },
     };
   },

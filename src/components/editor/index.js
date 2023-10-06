@@ -12,6 +12,8 @@ export const EditorComponent = () => {
     content: "<p>Hello World! 🌍️</p>",
   });
 
+  console.log(editor.getHTML());
+
   return (
     <EditorContent
       editor={editor}
