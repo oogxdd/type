@@ -41,5 +41,15 @@
 }
 
 body {
-  padding: 24px;
+  // padding: 24px;
+}
+
+
+.ProseMirror {
+  padding: 12px;
+  height: 100vh;
+}
+
+.ProseMirror-focus {
+  outline: none !important;
 }
