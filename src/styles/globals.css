@@ -6,10 +6,6 @@ body {
   background: whitesmoke;
 }
 
-body {
-  /* // padding: 24px; */
-}
-
 .ProseMirror {
   padding: 38px 24px;
   font-size: 13px;

@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react'
 
 function NoteContent({ note, onUpdateNote, onCreateNewNote }) {
-  const [content, setContent] = useState(note ? note.content : "");
+  const [content, setContent] = useState(note ? note.content : '')
 
   useEffect(() => {
-    setContent(note ? note.content : "");
-  }, [note]);
+    setContent(note ? note.content : '')
+  }, [note])
 
   const handleChange = (e) => {
-    setContent(e.target.value);
-  };
+    setContent(e.target.value)
+  }
 
   const handleBlur = () => {
     if (note) {
@@ -17,20 +17,20 @@ function NoteContent({ note, onUpdateNote, onCreateNewNote }) {
         ...note,
         content,
         modifiedDate: new Date(),
-      });
+      })
     }
-  };
+  }
 
   const handleClick = () => {
     if (!note && onCreateNewNote) {
-      onCreateNewNote();
+      onCreateNewNote()
     }
-  };
+  }
 
   return (
     <div
       className="p-6 w-full h-full flex flex-col"
-      style={{ background: "#FFFFFD" }}
+      style={{ background: '#FFFFFD' }}
     >
       {note && (
         <>
@@ -65,7 +65,7 @@ function NoteContent({ note, onUpdateNote, onCreateNewNote }) {
         </div>
       )}
     </div>
-  );
+  )
 }
 
-export default NoteContent;
+export default NoteContent

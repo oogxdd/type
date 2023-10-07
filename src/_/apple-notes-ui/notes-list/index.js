@@ -1,8 +1,8 @@
-import React from "react";
+import React from 'react'
 
 const NoteList = ({ notes, onSelectNote }) => {
   return (
-    <div className="h-full overflow-y-auto" style={{ background: "#FFFFFD" }}>
+    <div className="h-full overflow-y-auto" style={{ background: '#FFFFFD' }}>
       {notes.map((note) => (
         <div
           key={note.id}
@@ -17,7 +17,7 @@ const NoteList = ({ notes, onSelectNote }) => {
         </div>
       ))}
     </div>
-  );
-};
+  )
+}
 
-export default NoteList;
+export default NoteList
