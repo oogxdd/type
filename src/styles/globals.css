@@ -14,7 +14,7 @@ body {
   padding: 38px 24px;
   font-size: 13px;
   line-height: 170%;
-  /* height: 100vh; */
+  min-height: 100vh;
 }
 
 .ProseMirror-focus {

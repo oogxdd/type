@@ -5,17 +5,20 @@ import StarterKit from "@tiptap/starter-kit";
 import Color from "@tiptap/extension-color";
 import TextStyle from "@tiptap/extension-text-style";
 import ChatDialoguePlugin from "@/commands/chat";
-import { Mark } from "@tiptap/core";
+// import ChatReplyNode from "./extensions/chat-reply-node";
+import NewPageInputRule from "./extensions/new-page-input-rule";
+import ChangePageInputRule from "./extensions/change-page-input-rule";
 
-const ChatReplyMark = Mark.create({
-  name: "chat-reply-mark",
-  attrs: { class: "chat-reply" },
-  parseDOM: [{ tag: "span.chat-reply" }],
-  toDOM: (node) => ["span", { class: "chat-reply" }, 0],
-});
+import Loader from "@/components/ui/loader";
+
+const defaultContent = "<p>Hello World! 🌍️</p>";
+// const defaultContent = "<p>Hello World! 🌍️</p><chat-reply>test</chat-reply>";
 
 export const EditorComponent = () => {
   const [isLoading, setLoading] = useState(false);
+
+  const contentKey = "content";
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -24,14 +27,16 @@ export const EditorComponent = () => {
       }),
       TextStyle,
       Color,
+      NewPageInputRule,
+      ChangePageInputRule,
+      // ChatReplyNode,
       // ChatReplyMark,
     ],
-    autofocus: true,
-    content:
-      window.localStorage.getItem("content") || "<p>Hello World! 🌍️</p>",
+    autofocus: "end",
+    content: window.localStorage.getItem(contentKey) || defaultContent,
     onUpdate: ({ editor }) => {
       console.log(editor.getJSON());
-      window.localStorage.setItem("content", editor.getHTML());
+      window.localStorage.setItem(contentKey, editor.getHTML());
     },
   });
 
@@ -49,12 +54,5 @@ export const EditorComponent = () => {
     </>
   );
 };
-
-const Loader = () => (
-  <div className="top-4 right-4 bg-cyan-300">
-    loading...
-    <span />
-  </div>
-);
 
 export default EditorComponent;
