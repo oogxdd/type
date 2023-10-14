@@ -48,7 +48,9 @@ const ChatPlugin = Extension.create({
           },
           body: JSON.stringify({
             messages,
-            model: 'gpt-4',
+            // model: "gpt-3.5-turbo-16k",
+            // model: 'gpt-4',
+            // model: 'gpt-4',
           }),
         })
 

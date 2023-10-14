@@ -1,9 +1,9 @@
-import { Extension, InputRule } from "@tiptap/core";
+import { Extension, InputRule } from '@tiptap/core'
 
-const contentRegex = /\/page ([^\n]+)\n/;
+const contentRegex = /\/page ([^\n]+)\n/
 
 const ChangePageInputRule = Extension.create({
-  name: "change-page-input-rule",
+  name: 'change-page-input-rule',
 
   addInputRules() {
     return [
@@ -11,18 +11,20 @@ const ChangePageInputRule = Extension.create({
         find: contentRegex,
         type: this.type,
         handler: ({ state, range, match }) => {
-          const title = match[1];
-          console.log("Page Title:", title);
+          const title = match[1]
+          this.options.setContentKey(title)
 
-          const { tr } = state;
-          const start = range.from;
-          const end = range.to;
+          const { tr } = state
+          const start = range.from
+          const end = range.to
 
-          return tr.delete(start, end).setMeta("page_title", title);
+          console.log(title)
+
+          return tr.delete(start, end).setMeta('page_title', title)
         },
       }),
-    ];
+    ]
   },
-});
+})
 
-export default ChangePageInputRule;
+export default ChangePageInputRule
