@@ -1,4 +1,5 @@
 import { Extension, InputRule } from '@tiptap/core'
+import { CONTENT_PRE_KEY } from '@/constants'
 
 const contentRegex = /\/page ([^\n]+)\n/
 
@@ -12,7 +13,7 @@ const ChangePageInputRule = Extension.create({
         type: this.type,
         handler: ({ state, range, match }) => {
           const title = match[1]
-          this.options.setContentKey(title)
+          this.options.setContentKey(`${CONTENT_PRE_KEY}${title}`)
 
           const { tr } = state
           const start = range.from

@@ -1,50 +1,40 @@
-import React, { useState } from 'react'
-// import FolderItem from "./folder";
+import { useEffect, useState } from 'react'
+import { CONTENT_PRE_KEY } from '@/constants'
 
-const FolderList = ({ folders, onSelectFolder }) => {
+const NotesListPage = ({ setContentKey }) => {
+  const [notes, setNotes] = useState([])
+  const [focusedNote, setFocusedNote] = useState(null)
+
+  useEffect(() => {
+    fetchNotes()
+  }, [])
+
+  const fetchNotes = () => {
+    //... Fetching Code: read from localStorage
+    let keys = Object.keys(window.localStorage).filter(
+      (key) => key.startsWith(CONTENT_PRE_KEY) && key !== 'contentKey'
+    )
+    setNotes(keys)
+  }
+
+  const handleSelect = (index) => {
+    let selectedNote = notes[index]
+    setContentKey(selectedNote)
+  }
+
   return (
-    <div className="h-full overflow-y-auto" style={{ background: '#ECEDED' }}>
-      {folders.map((folder) => (
-        <FolderItem
-          key={folder.id}
-          folder={folder}
-          onSelectFolder={onSelectFolder}
-        />
+    <div>
+      {notes.map((key, i) => (
+        <div
+          style={i === focusedNote ? { backgroundColor: 'lightgrey' } : {}}
+          key={i}
+          onClick={() => handleSelect(i)}
+        >
+          {key}
+        </div>
       ))}
     </div>
   )
 }
 
-const FolderItem = ({ folder, onSelectFolder }) => {
-  const [isExpanded, setIsExpanded] = useState(false)
-
-  const handleFolderClick = () => {
-    setIsExpanded(!isExpanded)
-  }
-
-  return (
-    <>
-      <div
-        onClick={handleFolderClick}
-        className="flex items-center p-2 cursor-pointer hover:bg-gray-200"
-      >
-        {folder.subfolders.length > 0 && (
-          <span className={`mr-1 text-xs ${isExpanded ? 'font-bold' : ''}`}>
-            {isExpanded ? '▾' : '▸'}
-          </span>
-        )}
-        <span onClick={() => onSelectFolder(folder)}>{folder.name}</span>
-      </div>
-      {isExpanded && (
-        <div className="pl-4">
-          <FolderList
-            folders={folder.subfolders}
-            onSelectFolder={onSelectFolder}
-          />
-        </div>
-      )}
-    </>
-  )
-}
-
-export default FolderList
+export default NotesListPage
