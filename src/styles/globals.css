@@ -16,3 +16,19 @@ body {
 .ProseMirror-focus {
   outline: none !important;
 }
+
+.text-editor-nice p {
+  font-size: 24px;
+  /* line-height: 150%; */
+  line-height: 182%;
+  font-family: auto !important;
+}
+
+p:empty {
+  /* Your specific styles for empty <p> tags */
+  color: red;
+  background-color: lightgray;
+  padding: 10px;
+  border: 1px dashed black;
+  display: block; /* Makes sure the <p> tag is visible even if empty */
+}
