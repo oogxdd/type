@@ -10,27 +10,36 @@ const NotesListPage = ({ setContentKey }) => {
   }, [])
 
   const fetchNotes = () => {
-    //... Fetching Code: read from localStorage
     let keys = Object.keys(window.localStorage).filter(
       (key) => key.startsWith(CONTENT_PRE_KEY) && key !== 'contentKey'
     )
-    setNotes(keys)
+    console.log(keys)
+
+    let notesWithContent = keys.map((key) => {
+      return {
+        id: key,
+        content: window.localStorage.getItem(key),
+      }
+    })
+
+    console.log(notesWithContent)
+    setNotes(notesWithContent)
   }
 
   const handleSelect = (index) => {
-    let selectedNote = notes[index]
+    let selectedNote = notes[index].id
     setContentKey(selectedNote)
   }
 
   return (
     <div>
-      {notes.map((key, i) => (
+      {notes.map((note, i) => (
         <div
           style={i === focusedNote ? { backgroundColor: 'lightgrey' } : {}}
-          key={i}
+          key={note.id}
           onClick={() => handleSelect(i)}
         >
-          {key}
+          {note.content.substr(0, 60)}
         </div>
       ))}
     </div>

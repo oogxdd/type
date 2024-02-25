@@ -16,3 +16,8 @@ body {
 .ProseMirror-focus {
   outline: none !important;
 }
+
+* {
+  font-family: system-ui;
+  outline: none !important;
+}

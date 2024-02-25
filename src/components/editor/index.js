@@ -11,6 +11,8 @@ import Color from '@tiptap/extension-color'
 import ChatDialoguePlugin from './extensions/chat-extension'
 import NewPageInputRule from './extensions/input-rules/new-page-input-rule'
 import ChangePageInputRule from './extensions/input-rules/change-page-input-rule'
+import DeletePageInputRule from './extensions/input-rules/delete-page'
+
 import CodeBlock from './extensions/nodes/code-block'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 
@@ -45,6 +47,13 @@ export const EditorComponent = () => {
     setContentKey(`${CONTENT_PRE_KEY}${newId}`)
   }
 
+  const deletePage = async () => {
+    const currentContentKey = await window.localStorage.getItem('contentKey')
+
+    window.localStorage.removeItem(currentContentKey)
+    setContentKey(`content1`)
+  }
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -53,6 +62,7 @@ export const EditorComponent = () => {
       ChatDialoguePlugin.configure({ setLoading }),
       NewPageInputRule.configure({ newPage }),
       ChangePageInputRule.configure({ setContentKey }),
+      DeletePageInputRule.configure({ setContentKey, deletePage }),
       // CodeBlock,
       CodeBlockLowlight.configure({
         lowlight,

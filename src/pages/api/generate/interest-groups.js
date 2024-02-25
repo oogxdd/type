@@ -11,7 +11,8 @@ async function handler(req) {
   const {
     messages = [],
     // model = 'gpt-3.5-turbo-16k',
-    model = 'gpt-4',
+    // model = 'gpt-4',
+    model = 'gpt-4-turbo-preview',
     //
   } = await req.json()
 
