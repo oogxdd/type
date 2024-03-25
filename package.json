@@ -16,12 +16,14 @@
     "@tiptap/core": "^2.1.11",
     "@tiptap/extension-code-block-lowlight": "^2.1.11",
     "@tiptap/extension-color": "^2.1.11",
-    "@tiptap/extension-document": "^2.1.11",
+    "@tiptap/extension-focus": "^2.2.4",
+    "@tiptap/extension-heading": "^2.2.4",
+    "@tiptap/extension-italic": "^2.2.4",
     "@tiptap/extension-link": "^2.1.11",
     "@tiptap/extension-mention": "^2.1.11",
-    "@tiptap/extension-paragraph": "^2.1.11",
+    "@tiptap/extension-paragraph": "^2.2.4",
     "@tiptap/extension-placeholder": "^2.1.11",
-    "@tiptap/extension-text": "^2.1.11",
+    "@tiptap/extension-text": "^2.2.4",
     "@tiptap/extension-text-style": "^2.1.11",
     "@tiptap/pm": "^2.1.11",
     "@tiptap/react": "^2.1.11",
@@ -32,6 +34,7 @@
     "eslint": "8.50.0",
     "eslint-config-next": "13.5.4",
     "eventsource-parser": "^1.1.1",
+    "flowbite-react": "^0.7.5",
     "highlight.js": "^11.8.0",
     "idb-keyval": "^6.2.1",
     "lodash-id": "^0.14.1",
@@ -44,13 +47,14 @@
     "react": "18.2.0",
     "react-bootstrap": "^2.9.0",
     "react-dom": "18.2.0",
+    "react-player": "^2.15.1",
     "sass": "^1.69.0",
     "tippy.js": "^6.3.7"
   },
   "devDependencies": {
-    "autoprefixer": "^10.4.16",
-    "postcss": "^8.4.31",
-    "tailwindcss": "^3.3.3"
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.1"
   },
   "prettier": {
     "singleQuote": true,

@@ -8,9 +8,10 @@ body {
 
 .ProseMirror {
   padding: 38px 24px;
-  font-size: 13px;
+  font-size: 16px;
   line-height: 170%;
   min-height: 100vh;
+  max-width: 900px;
 }
 
 .ProseMirror-focus {
@@ -20,4 +21,13 @@ body {
 * {
   font-family: system-ui;
   outline: none !important;
+}
+
+.has-focus {
+  border-radius: 3px;
+  box-shadow: 0 0 0 3px #68cef8;
+}
+
+p {
+  margin-bottom: 24px;
 }
