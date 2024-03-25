@@ -5,8 +5,15 @@ import { useState } from 'react'
 import { data } from '@/data'
 import { dataToTiptapJson } from '@/helpers'
 
-import StarterKit from '@tiptap/starter-kit'
+// import StarterKit from '@tiptap/starter-kit'
 import * as Extensions from './extensions'
+
+import Document from '@tiptap/extension-document'
+import History from '@tiptap/extension-history'
+import Paragraph from '@tiptap/extension-paragraph'
+import Text from '@tiptap/extension-text'
+import Gapcursor from '@tiptap/extension-gapcursor'
+
 // import {
 //   UtteranceExtension,
 //   SpeakerExtension,
@@ -34,16 +41,25 @@ export const EditorComponent = () => {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      Document,
+      Paragraph,
+      Text,
+      History,
+      Gapcursor,
+      // StarterKit,
       Extensions.UtteranceExtension,
       Extensions.SpeakerExtension.configure({
         seekTo: seekTo,
       }),
       Extensions.SpeakerParagraph,
       Extensions.WordExtension,
-      Extensions.WordMark.configure({
+      // Extensions.WordMark.configure({
+      //   seekTo: seekTo,
+      // }),
+      Extensions.WordExtension.configure({
         seekTo: seekTo,
       }),
+
       //Focus.configure({
       //  className: 'has-focus',
       //  mode: 'deepest',
@@ -52,6 +68,21 @@ export const EditorComponent = () => {
     ],
     // autofocus: 'end',
     content: defaultContent,
+    onBeforeCreate: ({ editor }) => {
+      console.log('--r--')
+      console.log(editor)
+      // console.log(editor.getHTML())
+      // window.localStorage.setItem(contentKey, editor.getHTML())
+    },
+    onSelectionUpdate: ({ editor, ...b }, d, e) => {
+      console.log('--r--')
+      console.log(editor)
+      console.log(b)
+      console.log(d)
+      console.log(e)
+      // console.log(editor.getHTML())
+      // window.localStorage.setItem(contentKey, editor.getHTML())
+    },
     onUpdate: ({ editor }) => {
       console.log('--upd--')
       console.log(editor.getJSON())

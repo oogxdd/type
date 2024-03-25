@@ -26,6 +26,7 @@ const TextEditorPage = () => {
     const currentWordEl =
       currentWord &&
       document.getElementById(`word-${currentWord.start}-${currentWord.end}`)
+    console.log(currentWordEl)
 
     let prevbg
     if (currentWordEl) {

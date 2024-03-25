@@ -519,6 +519,11 @@
   resolved "https://registry.yarnpkg.com/@tiptap/extension-document/-/extension-document-2.1.11.tgz#76782660420900acb6301a5ba69c27054139b622"
   integrity sha512-L/iLuqxvJep33ycCFNrnUhdR0VtcZyeNnqB+ZvVHzEwLoRud+LBy44lpEdBrAFsvRm3DG14m/FGYL+TfaD0vxA==
 
+"@tiptap/extension-document@^2.2.4":
+  version "2.2.4"
+  resolved "https://registry.yarnpkg.com/@tiptap/extension-document/-/extension-document-2.2.4.tgz#d46c1fdd1ea5b7191112fae4e9f8a63a46309afc"
+  integrity sha512-z+05xGK0OFoXV1GL+/8bzcZuWMdMA3+EKwk5c+iziG60VZcvGTF7jBRsZidlu9Oaj0cDwWHCeeo6L9SgSh6i2A==
+
 "@tiptap/extension-dropcursor@^2.1.11":
   version "2.1.11"
   resolved "https://registry.yarnpkg.com/@tiptap/extension-dropcursor/-/extension-dropcursor-2.1.11.tgz#1a23efec39c3e59c1b7eeb970ed2facdbe1f920d"
@@ -541,6 +546,11 @@
   resolved "https://registry.yarnpkg.com/@tiptap/extension-gapcursor/-/extension-gapcursor-2.1.11.tgz#77bcd8d886405c10ddbc251186d88be752db2ec4"
   integrity sha512-P/xjyhSOVyop5XXbNtRPgrooQrSlpYblwR67ClI9FAC7uQliuOwi5VcndmEItjWWSe85kJa2IHjOS7mLYvJe8A==
 
+"@tiptap/extension-gapcursor@^2.2.4":
+  version "2.2.4"
+  resolved "https://registry.yarnpkg.com/@tiptap/extension-gapcursor/-/extension-gapcursor-2.2.4.tgz#607b2682376c5ced086258f8329eb080e8047627"
+  integrity sha512-Y6htT/RDSqkQ1UwG2Ia+rNVRvxrKPOs3RbqKHPaWr3vbFWwhHyKhMCvi/FqfI3d5pViVHOZQ7jhb5hT/a0BmNw==
+
 "@tiptap/extension-hard-break@^2.1.11":
   version "2.1.11"
   resolved "https://registry.yarnpkg.com/@tiptap/extension-hard-break/-/extension-hard-break-2.1.11.tgz#49fd0954fab4448dd3a975f2b20340ab9c0d8b95"
@@ -560,6 +570,11 @@
   version "2.1.11"
   resolved "https://registry.yarnpkg.com/@tiptap/extension-history/-/extension-history-2.1.11.tgz#80a6a8887c8a5a4b73f06285a273928d4c51d7b5"
   integrity sha512-88dovV2O9icmBn0IvaArFFeS6X5ts6BxZPu5VbGML8KBL8iAu+Og7RXEPdOy5e13K0K4V21fDpO3n7KdvNOAYQ==
+
+"@tiptap/extension-history@^2.2.4":
+  version "2.2.4"
+  resolved "https://registry.yarnpkg.com/@tiptap/extension-history/-/extension-history-2.2.4.tgz#2d37ccfce9a8b7997bb4d46ebb19e986c5eb6f39"
+  integrity sha512-FDM32XYF5NU4mzh+fJ8w2CyUqv0l2Nl15sd6fOhQkVxSj8t57z+DUXc9ZR3zkH+1RAagYJo/2Gu3e99KpMr0tg==
 
 "@tiptap/extension-horizontal-rule@^2.1.11":
   version "2.1.11"

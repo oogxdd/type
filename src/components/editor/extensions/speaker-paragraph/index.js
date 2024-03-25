@@ -6,6 +6,8 @@ export const SpeakerParagraph = Node.create({
 
   // content: 'inline*',
   content: 'inline*',
+  // content: 'text*',
+  // content: 'block*',
   group: 'block',
 
   // marks: '',
@@ -76,21 +78,38 @@ export const SpeakerParagraph = Node.create({
           // console.log(contentAfterCursor.content)
 
           const newContent = contentAfterCursor.content.map((i) => {
-            const mark = i.marks[0]
             const obj = {
-              type: 'text',
-              text: i.text,
-              marks: [
+              type: 'word',
+              attrs: i.attrs,
+              content: [
                 {
-                  type: 'italic',
-                  attrs: {
-                    id: mark.id,
-                    start: mark.start,
-                    end: mark.end,
-                  },
+                  type: 'text',
+                  text: i.attrs.word,
                 },
               ],
+              // {
+              //       id: mark.id,
+              //       start: mark.start,
+              //       end: mark.end,
+              //       word: mark.end,
+
+              // }
             }
+            // const mark = i.marks[0]
+            // const obj = {
+            //   type: 'text',
+            //   text: i.text,
+            //   marks: [
+            //     {
+            //       type: 'italic',
+            //       attrs: {
+            //         id: mark.id,
+            //         start: mark.start,
+            //         end: mark.end,
+            //       },
+            //     },
+            //   ],
+            // }
             return obj
           })
 
