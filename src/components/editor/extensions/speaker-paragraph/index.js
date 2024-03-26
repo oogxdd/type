@@ -53,9 +53,15 @@ export const SpeakerParagraph = Node.create({
         })
 
         if (utteranceNode) {
+          console.log('utterancePos')
           console.log(utterancePos)
+          console.log('utteranceNode')
           console.log(utteranceNode)
+          console.log('utteranceNode'.size)
           console.log(utteranceNode.size)
+          console.log('fromPos')
+          console.log($from)
+          console.log(selection)
 
           // Find the current speaker paragraph
           const currentSpeakerParagraph = utteranceNode.content.content.find(
@@ -66,9 +72,13 @@ export const SpeakerParagraph = Node.create({
           console.log(currentSpeakerParagraph.content.size)
           console.log($from.pos)
 
+          // const contentAfterCursor = currentSpeakerParagraph.slice(
+          //   // $from.pos - 5 // I don't know why
+          //   $from.pos
+          // )
           const contentAfterCursor = currentSpeakerParagraph.content.cut(
             // $from.pos - 5 // I don't know why
-            $from.pos
+            $from.parentOffset
           )
 
           console.log('currentSpeakerParagraph')
@@ -77,39 +87,49 @@ export const SpeakerParagraph = Node.create({
           console.log(contentAfterCursor)
           // console.log(contentAfterCursor.content)
 
-          const newContent = contentAfterCursor.content.map((i) => {
-            const obj = {
-              type: 'word',
-              attrs: i.attrs,
-              content: [
-                {
-                  type: 'text',
-                  text: i.attrs.word,
-                },
-              ],
-              // {
-              //       id: mark.id,
-              //       start: mark.start,
-              //       end: mark.end,
-              //       word: mark.end,
-
-              // }
-            }
-            // const mark = i.marks[0]
+          let newUtteranceStart = 0
+          const newContent = contentAfterCursor.content.map((i, index) => {
+            // **
+            // THIS DOES NODE
+            // **
             // const obj = {
-            //   type: 'text',
-            //   text: i.text,
-            //   marks: [
+            //   type: 'word',
+            //   attrs: i.attrs,
+            //   content: [
             //     {
-            //       type: 'italic',
-            //       attrs: {
-            //         id: mark.id,
-            //         start: mark.start,
-            //         end: mark.end,
-            //       },
+            //       type: 'text',
+            //       text: i.attrs.word,
             //     },
             //   ],
             // }
+
+            // **
+            // THIS DOES MARK
+            // **
+            const mark = i.marks[0]
+            const obj = {
+              type: 'text',
+              text: i.text,
+              marks: [
+                {
+                  type: 'italic',
+                  attrs: {
+                    id: mark.attrs.id,
+                    start: mark.attrs.start,
+                    end: mark.attrs.end,
+                  },
+                },
+              ],
+            }
+
+            // determine new utterance start
+            if (index === 0) {
+              console.log(99999999999999999999)
+              console.log(i)
+              console.log(mark)
+              newUtteranceStart = mark.attrs.start
+            }
+
             return obj
           })
 
@@ -120,8 +140,8 @@ export const SpeakerParagraph = Node.create({
                 type: 'speaker',
                 attrs: {
                   speaker: 'New speaker',
-                  start: 170,
-                  end: 263258,
+                  start: newUtteranceStart,
+                  // end: 263258,
                 },
                 content: [
                   {
@@ -139,7 +159,10 @@ export const SpeakerParagraph = Node.create({
 
           const rangeToDelete = {
             from: $from.pos,
-            to: currentSpeakerParagraph.content.size,
+            to:
+              $from.pos +
+              currentSpeakerParagraph.content.size -
+              $from.parentOffset,
             // to:
             //   utterancePos +
             //   utteranceNode.nodeSize +
@@ -156,10 +179,10 @@ export const SpeakerParagraph = Node.create({
               // tr.selection.to,
               newNode,
               {
-                updateSelection: false,
+                updateSelection: true,
               }
             )
-            // .deleteRange(rangeToDelete)
+            .deleteRange(rangeToDelete)
             .run()
         }
 

@@ -43,34 +43,40 @@ export function dataToTiptapJson(data) {
 
       block.words.forEach((word) => {
         const wordMark = {
-          attrs: {
-            start: word.start,
-            end: word.end,
-            word: `${word.text} `,
-            id: `word-${word.start}-${word.end}`,
-          },
-
-          // type: 'text',
-          // text: `${word.text} `,
-          // marks: [
-          //   {
-          //     type: 'italic',
-          //     attrs: {
-          //       start: word.start,
-          //       end: word.end,
-          //       id: `word-${word.start}-${word.end}`,
-          //     },
-          //   },
-          // ],
-
-          type: 'word',
-          text: 'text',
-          content: [
+          // **
+          // THIS DOES MARK
+          // **
+          type: 'text',
+          text: `${word.text} `,
+          marks: [
             {
-              type: 'text',
-              text: `${word.text} `,
+              type: 'italic',
+              attrs: {
+                start: word.start,
+                end: word.end,
+                id: `word-${word.start}-${word.end}`,
+              },
             },
           ],
+
+          // **
+          // THIS DOES NODE
+          // **
+          // type: 'word',
+          // text: 'text',
+          // content: [
+          //   {
+          //     type: 'text',
+          //     text: `${word.text} `,
+          //   },
+          // ],
+          // attrs: {
+          //   start: word.start,
+          //   end: word.end,
+          //   word: `${word.text} `,
+          //   id: `word-${word.start}-${word.end}`,
+          // },
+          //
         }
 
         // speakerBlock.content.push(wordMark)
