@@ -2,7 +2,7 @@ export function dataToTiptapJson(data) {
   const result = []
 
   data
-    .filter((i, ind) => ind < 2)
+    // .filter((i, ind) => ind < 2)
     .forEach((block) => {
       let speaker = block.speaker
 
