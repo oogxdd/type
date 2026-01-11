@@ -1,0 +1,213 @@
+:root {
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+  color: #1f2328;
+  background-color: #f4f5f7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 280px 320px 1fr;
+  height: 100vh;
+}
+
+.pane {
+  border-right: 1px solid #d7dce2;
+  background: #fbfbfc;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pane:last-child {
+  border-right: none;
+}
+
+.pane-header {
+  padding: 12px 16px;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #5b6572;
+  border-bottom: 1px solid #e3e7ec;
+  background: #f1f3f6;
+}
+
+.pane-body {
+  padding: 8px 0;
+  overflow: auto;
+  position: relative;
+  flex: 1;
+}
+
+.item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+.item-row.selected {
+  background: #dbe7ff;
+}
+
+.item-row.drop-before::before,
+.item-row.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  background: #356ae6;
+}
+
+.item-row.drop-before::before {
+  top: 0;
+}
+
+.item-row.drop-after::after {
+  bottom: 0;
+}
+
+.item-row.drop-inside {
+  background: #e8f2ff;
+  outline: 1px dashed #356ae6;
+}
+
+.drop-line {
+  height: 8px;
+  margin: 0 8px;
+  position: relative;
+}
+
+.drop-line.active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 3px;
+  height: 2px;
+  background: #356ae6;
+}
+
+.folder-row:hover .row-actions {
+  opacity: 1;
+}
+
+.item-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon-btn {
+  border: none;
+  background: none;
+  padding: 2px 6px;
+  font-size: 12px;
+  color: #5b6572;
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  color: #1f2328;
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rename-input {
+  flex: 1;
+  border: 1px solid #c6ccd4;
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+
+.notes-pane .pane-body {
+  padding: 6px 0;
+}
+
+.note-row {
+  padding: 6px 16px;
+}
+
+.context-menu {
+  position: fixed;
+  background: #ffffff;
+  border: 1px solid #cfd5dc;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  padding: 6px;
+  z-index: 20;
+}
+
+.context-menu button {
+  border: none;
+  background: none;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.context-menu button:hover {
+  background: #eef2f8;
+}
+
+.editor-pane {
+  background: #ffffff;
+}
+
+.editor-body {
+  padding: 12px;
+}
+
+.editor {
+  width: 100%;
+  height: 100%;
+  border: 1px solid #d6dbe3;
+  border-radius: 10px;
+  padding: 12px;
+  font-family: "SF Mono", "IBM Plex Mono", Consolas, monospace;
+  font-size: 14px;
+  resize: none;
+}
+
+.empty {
+  padding: 16px;
+  color: #7a8593;
+}
+
+@media (max-width: 1000px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: 240px 220px 1fr;
+  }
+
+  .pane {
+    border-right: none;
+    border-bottom: 1px solid #d7dce2;
+  }
+
+  .pane:last-child {
+    border-bottom: none;
+  }
+}
