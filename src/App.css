@@ -58,6 +58,7 @@ body {
   cursor: pointer;
   user-select: none;
   position: relative;
+  z-index: 1;
 }
 
 .item-row.selected {
@@ -87,21 +88,7 @@ body {
   outline: 1px dashed #356ae6;
 }
 
-.drop-line {
-  height: 8px;
-  margin: 0 8px;
-  position: relative;
-}
 
-.drop-line.active::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 3px;
-  height: 2px;
-  background: #356ae6;
-}
 
 .folder-row:hover .row-actions {
   opacity: 1;
@@ -178,6 +165,15 @@ body {
 
 .editor-body {
   padding: 12px;
+}
+
+.note-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #6b7482;
+  margin-bottom: 8px;
+  gap: 12px;
 }
 
 .editor {

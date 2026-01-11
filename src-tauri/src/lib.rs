@@ -14,6 +14,12 @@ struct NoteEntry {
 }
 
 #[derive(Serialize)]
+struct NoteMeta {
+    created_ms: Option<i64>,
+    updated_ms: Option<i64>,
+}
+
+#[derive(Serialize)]
 struct FolderNode {
     name: String,
     path: String,
@@ -239,6 +245,23 @@ fn write_note(app: tauri::AppHandle, path: String, content: String) -> Result<()
     fs::write(full_path, content).map_err(|err| err.to_string())
 }
 
+fn time_to_ms(time: std::time::SystemTime) -> Option<i64> {
+    let duration = time.duration_since(std::time::UNIX_EPOCH).ok()?;
+    i64::try_from(duration.as_millis()).ok()
+}
+
+#[tauri::command]
+fn get_note_meta(app: tauri::AppHandle, path: String) -> Result<NoteMeta, String> {
+    let full_path = resolve_path(&app, &path)?;
+    let metadata = fs::metadata(full_path).map_err(|err| err.to_string())?;
+    let created_ms = metadata.created().ok().and_then(time_to_ms);
+    let updated_ms = metadata.modified().ok().and_then(time_to_ms);
+    Ok(NoteMeta {
+        created_ms,
+        updated_ms,
+    })
+}
+
 #[tauri::command]
 fn move_items(
     app: tauri::AppHandle,
@@ -395,6 +418,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_tree,
             read_note,
+            get_note_meta,
             write_note,
             move_items,
             delete_items,

@@ -1,11 +1,26 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent, MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import {
+  DndContext,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
 type NoteEntry = {
   name: string;
   path: string;
+};
+
+type NoteMeta = {
+  created_ms: number | null;
+  updated_ms: number | null;
 };
 
 type FolderNode = {
@@ -20,7 +35,30 @@ type DragPayload = {
   paths: string[];
 };
 
+type DragData = {
+  kind: "folder" | "note";
+  path: string;
+};
+
+const encodePath = (path: string) => encodeURIComponent(path);
+const decodePath = (path: string) => decodeURIComponent(path);
+const rowId = (kind: "folder" | "note", path: string) =>
+  `${kind}-row|${encodePath(path)}`;
+const dragId = (kind: "folder" | "note", path: string) =>
+  `${kind}|${encodePath(path)}`;
+
 type DropPosition = "before" | "after" | "inside";
+
+type DropTarget = {
+  kind: "folder" | "note";
+  path: string;
+  position: DropPosition;
+};
+
+type RowTarget = {
+  kind: "folder" | "note";
+  path: string;
+};
 
 function flattenVisibleFolders(
   node: FolderNode,
@@ -64,29 +102,8 @@ function findNode(node: FolderNode | null, path: string): FolderNode | null {
   return null;
 }
 
-function parseDragPayload(event: DragEvent): DragPayload | null {
-  const raw = event.dataTransfer.getData("application/x-notes-drag");
-  if (!raw) {
-    return null;
-  }
-  try {
-    return JSON.parse(raw) as DragPayload;
-  } catch {
-    return null;
-  }
-}
-
 function isDescendant(parent: string, candidate: string) {
   return parent !== "" && (candidate === parent || candidate.startsWith(`${parent}/`));
-}
-
-function getDropPosition(event: DragEvent, allowInside: boolean): DropPosition {
-  const rect = event.currentTarget.getBoundingClientRect();
-  const ratio = (event.clientY - rect.top) / rect.height;
-  if (allowInside && ratio > 0.25 && ratio < 0.75) {
-    return "inside";
-  }
-  return ratio < 0.5 ? "before" : "after";
 }
 
 function reorderList(
@@ -119,23 +136,24 @@ function App() {
   const [lastSelectedNote, setLastSelectedNote] = useState<string>("");
   const [activeNote, setActiveNote] = useState<string | null>(null);
   const [noteContent, setNoteContent] = useState<string>("");
+  const [noteMeta, setNoteMeta] = useState<NoteMeta | null>(null);
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState<string>("");
-  const [folderDropTarget, setFolderDropTarget] = useState<{
-    path: string;
-    position: DropPosition;
-  } | null>(null);
-  const [noteDropTarget, setNoteDropTarget] = useState<{
-    path: string;
-    position: DropPosition;
-  } | null>(null);
   const [draggingPayload, setDraggingPayload] = useState<DragPayload | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<DropTarget | null>(null);
+  const draggingPayloadRef = useRef<DragPayload | null>(null);
   const [noteMenu, setNoteMenu] = useState<{
     visible: boolean;
     x: number;
     y: number;
   }>({ visible: false, x: 0, y: 0 });
   const saveTimer = useRef<number | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    })
+  );
 
   const refreshTree = async () => {
     const data = await invoke<FolderNode>("get_tree");
@@ -171,12 +189,18 @@ function App() {
   useEffect(() => {
     if (!activeNote) {
       setNoteContent("");
+      setNoteMeta(null);
       return;
     }
     let cancelled = false;
     invoke<string>("read_note", { path: activeNote }).then((content) => {
       if (!cancelled) {
         setNoteContent(content);
+      }
+    });
+    invoke<NoteMeta>("get_note_meta", { path: activeNote }).then((meta) => {
+      if (!cancelled) {
+        setNoteMeta(meta);
       }
     });
     return () => {
@@ -192,7 +216,11 @@ function App() {
       window.clearTimeout(saveTimer.current);
     }
     saveTimer.current = window.setTimeout(() => {
-      invoke("write_note", { path: activeNote, content: noteContent });
+      invoke("write_note", { path: activeNote, content: noteContent }).then(() => {
+        setNoteMeta((prev) =>
+          prev ? { ...prev, updated_ms: Date.now() } : prev
+        );
+      });
     }, 400);
     return () => {
       if (saveTimer.current) {
@@ -263,28 +291,6 @@ function App() {
     setActiveNote(notePath);
   };
 
-  const handleFolderDragStart = (path: string, event: DragEvent) => {
-    const payloadPaths = selectedFolders.has(path) ? [...selectedFolders] : [path];
-    if (!selectedFolders.has(path)) {
-      setSelectedFolders(new Set([path]));
-    }
-    const payload = { kind: "folder", paths: payloadPaths } satisfies DragPayload;
-    event.dataTransfer.setData("application/x-notes-drag", JSON.stringify(payload));
-    event.dataTransfer.effectAllowed = "move";
-    setDraggingPayload(payload);
-  };
-
-  const handleNoteDragStart = (path: string, event: DragEvent) => {
-    const payloadPaths = selectedNotes.has(path) ? [...selectedNotes] : [path];
-    if (!selectedNotes.has(path)) {
-      setSelectedNotes(new Set([path]));
-    }
-    const payload = { kind: "note", paths: payloadPaths } satisfies DragPayload;
-    event.dataTransfer.setData("application/x-notes-drag", JSON.stringify(payload));
-    event.dataTransfer.effectAllowed = "move";
-    setDraggingPayload(payload);
-  };
-
   const handleFolderDrop = async (
     targetPath: string,
     position: DropPosition,
@@ -325,20 +331,30 @@ function App() {
     if (movingSet.has(targetPath)) {
       return;
     }
+    const movingNames = moving.map((path) => path.split("/").pop() || path);
+    const siblingNames = siblingPaths.map((path) => path.split("/").pop() || path);
     const allSameParent = moving.every(
       (path) => folderParentMap.parent.get(path) === parentPath
     );
-    if (!allSameParent) {
-      return;
-    }
-    const orderedMoving = siblingPaths.filter((path) => movingSet.has(path));
-    const newOrder = reorderList(siblingPaths, orderedMoving, targetPath, position);
+    const orderedMovingNames = allSameParent
+      ? siblingNames.filter((name) => movingNames.includes(name))
+      : movingNames;
+    const remainingNames = siblingNames.filter((name) => !movingNames.includes(name));
+    const targetName = targetPath.split("/").pop() || targetPath;
+    const newOrderNames = reorderList(
+      remainingNames,
+      orderedMovingNames,
+      targetName,
+      position
+    );
     const parentNode = findNode(tree, parentPath);
     const noteOrder = parentNode?.notes.map((note) => note.name) || [];
-    const folderOrder = newOrder.map((path) => path.split("/").pop() || path);
+    if (!allSameParent) {
+      await invoke("move_items", { items: moving, destination: parentPath });
+    }
     await invoke("set_order", {
       parent: parentPath,
-      folder_order: folderOrder,
+      folder_order: newOrderNames,
       note_order: noteOrder,
     });
     await refreshTree();
@@ -421,66 +437,141 @@ function App() {
     await refreshTree();
   };
 
-  const renderFolderRow = (node: FolderNode, depth: number) => {
+  const handleDragStart = (event: DragStartEvent) => {
+    const data = event.active.data.current as DragData | undefined;
+    if (!data) {
+      return;
+    }
+    setDropIndicator(null);
+    if (data.kind === "folder") {
+      const next = selectedFolders.has(data.path)
+        ? [...selectedFolders]
+        : [data.path];
+      if (!selectedFolders.has(data.path)) {
+        setSelectedFolders(new Set([data.path]));
+      }
+      const payload = { kind: "folder", paths: next };
+      setDraggingPayload(payload);
+      draggingPayloadRef.current = payload;
+    } else {
+      const next = selectedNotes.has(data.path) ? [...selectedNotes] : [data.path];
+      if (!selectedNotes.has(data.path)) {
+        setSelectedNotes(new Set([data.path]));
+      }
+      const payload = { kind: "note", paths: next };
+      setDraggingPayload(payload);
+      draggingPayloadRef.current = payload;
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const payload = draggingPayloadRef.current;
+    const target = dropIndicator;
+    setDraggingPayload(null);
+    draggingPayloadRef.current = null;
+    setDropIndicator(null);
+
+    if (!payload || !target) {
+      return;
+    }
+
+    if (payload.kind === "folder" && target.kind === "folder") {
+      await handleFolderDrop(target.path, target.position, payload);
+      return;
+    }
+
+    if (payload.kind === "note" && target.kind === "note") {
+      await handleNoteDrop(target.path, target.position, payload);
+      return;
+    }
+
+    if (payload.kind === "note" && target.kind === "folder") {
+      await handleFolderDrop(target.path, target.position, payload);
+    }
+  };
+
+  const handleDragCancel = () => {
+    setDraggingPayload(null);
+    draggingPayloadRef.current = null;
+    setDropIndicator(null);
+  };
+
+  const handleDragMove = (event: DragMoveEvent) => {
+    const over = event.over;
+    if (!over) {
+      setDropIndicator(null);
+      return;
+    }
+    const target = over.data.current as RowTarget | undefined;
+    const overRect = over.rect;
+    const activeRect = event.active.rect.current.translated;
+    if (!target || !overRect || !activeRect) {
+      setDropIndicator(null);
+      return;
+    }
+    const payload = draggingPayloadRef.current;
+    if (payload?.paths.includes(target.path)) {
+      setDropIndicator(null);
+      return;
+    }
+    const centerY = activeRect.top + activeRect.height / 2;
+    const top = overRect.top;
+    const bottom = overRect.bottom;
+    const height = Math.max(bottom - top, 1);
+    let position: DropPosition = "inside";
+    if (target.kind === "note") {
+      position = centerY < top + height / 2 ? "before" : "after";
+    } else {
+      const edge = height * 0.22;
+      if (centerY < top + edge) {
+        position = "before";
+      } else if (centerY > bottom - edge) {
+        position = "after";
+      } else {
+        position = "inside";
+      }
+    }
+    setDropIndicator({ kind: target.kind, path: target.path, position });
+  };
+
+  const FolderRow = ({ node, depth }: { node: FolderNode; depth: number }) => {
     const isSelected = selectedFolders.has(node.path);
     const isExpanded = expanded.has(node.path);
     const hasChildren = node.children.length > 0;
     const dropState =
-      folderDropTarget?.path === node.path ? folderDropTarget.position : null;
-    const canShowDropLines = draggingPayload?.kind === "folder" && node.path !== "";
-    const canDropInside = draggingPayload?.kind === "folder" || draggingPayload?.kind === "note";
+      dropIndicator?.kind === "folder" && dropIndicator.path === node.path
+        ? dropIndicator.position
+        : null;
+
+    const { setNodeRef: setDragRef, listeners, attributes } = useDraggable({
+      id: dragId("folder", node.path),
+      data: { kind: "folder", path: node.path } satisfies DragData,
+      disabled: node.path === "",
+    });
+    const { setNodeRef: setDropRef } = useDroppable({
+      id: rowId("folder", node.path),
+      data: { kind: "folder", path: node.path } satisfies RowTarget,
+    });
+
+    const setRowRef = (element: HTMLDivElement | null) => {
+      setDragRef(element);
+      setDropRef(element);
+    };
 
     return (
       <div key={node.path}>
-        {canShowDropLines && (
-          <div
-            className={`drop-line ${
-              dropState === "before" ? "active" : ""
-            }`}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setFolderDropTarget({ path: node.path, position: "before" });
-            }}
-            onDragLeave={() => setFolderDropTarget(null)}
-            onDrop={async (event) => {
-              event.preventDefault();
-              const payload = parseDragPayload(event);
-              setFolderDropTarget(null);
-              if (!payload) {
-                return;
-              }
-              await handleFolderDrop(node.path, "before", payload);
-            }}
-          />
-        )}
         <div
+          ref={setRowRef}
           className={`item-row folder-row ${isSelected ? "selected" : ""} ${
             dropState === "inside" ? "drop-inside" : ""
+          } ${dropState === "before" ? "drop-before" : ""} ${
+            dropState === "after" ? "drop-after" : ""
           }`}
           style={{ paddingLeft: 12 + depth * 16 }}
-          draggable={node.path !== ""}
           onClick={(event) => handleFolderClick(node.path, event)}
-          onDragStart={(event) => handleFolderDragStart(node.path, event)}
-          onDragEnd={() => {
-            setDraggingPayload(null);
-            setFolderDropTarget(null);
-          }}
-          onDragOver={(event) => {
-            event.preventDefault();
-            if (canDropInside) {
-              setFolderDropTarget({ path: node.path, position: "inside" });
-            }
-          }}
-          onDragLeave={() => setFolderDropTarget(null)}
-          onDrop={async (event) => {
-            event.preventDefault();
-            const payload = parseDragPayload(event);
-            setFolderDropTarget(null);
-            if (!payload) {
-              return;
-            }
-            await handleFolderDrop(node.path, "inside", payload);
-          }}
+          {...attributes}
+          {...listeners}
+          data-drop={dropState || ""}
         >
           <button
             className="icon-btn"
@@ -541,171 +632,131 @@ function App() {
             </div>
           )}
         </div>
-        {canShowDropLines && (
-          <div
-            className={`drop-line ${
-              dropState === "after" ? "active" : ""
-            }`}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setFolderDropTarget({ path: node.path, position: "after" });
-            }}
-            onDragLeave={() => setFolderDropTarget(null)}
-            onDrop={async (event) => {
-              event.preventDefault();
-              const payload = parseDragPayload(event);
-              setFolderDropTarget(null);
-              if (!payload) {
-                return;
-              }
-              await handleFolderDrop(node.path, "after", payload);
-            }}
-          />
-        )}
         {isExpanded &&
-          node.children.map((child) => renderFolderRow(child, depth + 1))}
+          node.children.map((child) => (
+            <FolderRow key={child.path} node={child} depth={depth + 1} />
+          ))}
+      </div>
+    );
+  };
+
+  const NoteRow = ({ note }: { note: NoteEntry }) => {
+    const isSelected = selectedNotes.has(note.path);
+    const dropState =
+      dropIndicator?.kind === "note" && dropIndicator.path === note.path
+        ? dropIndicator.position
+        : null;
+    const { setNodeRef, listeners, attributes } = useDraggable({
+      id: dragId("note", note.path),
+      data: { kind: "note", path: note.path } satisfies DragData,
+    });
+    const { setNodeRef: setDropRef } = useDroppable({
+      id: rowId("note", note.path),
+      data: { kind: "note", path: note.path } satisfies RowTarget,
+      disabled: draggingPayload?.kind === "folder",
+    });
+
+    const setRowRef = (element: HTMLDivElement | null) => {
+      setNodeRef(element);
+      setDropRef(element);
+    };
+
+    return (
+      <div>
+        <div
+          ref={setRowRef}
+          className={`item-row note-row ${isSelected ? "selected" : ""} ${
+            dropState === "before" ? "drop-before" : ""
+          } ${dropState === "after" ? "drop-after" : ""}`}
+          onClick={(event) => handleNoteClick(note.path, event)}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            if (!selectedNotes.has(note.path)) {
+              setSelectedNotes(new Set([note.path]));
+            }
+            setNoteMenu({ visible: true, x: event.clientX, y: event.clientY });
+          }}
+          {...attributes}
+          {...listeners}
+          data-drop={dropState || ""}
+        >
+          <span className="item-label">{note.name}</span>
+        </div>
       </div>
     );
   };
 
   const notes = activeNode?.notes || [];
-
+  const createdLabel = noteMeta?.created_ms
+    ? new Date(noteMeta.created_ms).toLocaleString()
+    : "—";
+  const updatedLabel = noteMeta?.updated_ms
+    ? new Date(noteMeta.updated_ms).toLocaleString()
+    : "—";
   return (
-    <div className="app">
-      <div className="pane tree-pane">
-        <div className="pane-header">Folders</div>
-        <div className="pane-body">
-          {tree ? renderFolderRow(tree, 0) : <div className="empty">Loading…</div>}
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
+      <div className="app">
+        <div className="pane tree-pane">
+          <div className="pane-header">Folders</div>
+          <div className="pane-body">
+            {tree ? <FolderRow node={tree} depth={0} /> : <div className="empty">Loading…</div>}
+          </div>
         </div>
-      </div>
-      <div className="pane notes-pane">
-        <div className="pane-header">Notes</div>
-        <div
-          className="pane-body"
-          onClick={() => setNoteMenu({ visible: false, x: 0, y: 0 })}
-          onDragOver={(event) => {
-            if (draggingPayload?.kind === "note") {
-              event.preventDefault();
-            }
-          }}
-          onDrop={async (event) => {
-            if (draggingPayload?.kind !== "note" || !activeNode) {
-              return;
-            }
-            event.preventDefault();
-            const payload = parseDragPayload(event);
-            if (!payload) {
-              return;
-            }
-            await invoke("move_items", { items: payload.paths, destination: activeNode.path });
-            await refreshTree();
-          }}
-        >
-          {notes.length === 0 && <div className="empty">No notes</div>}
-          {notes.map((note) => {
-            const isSelected = selectedNotes.has(note.path);
-            const dropState =
-              noteDropTarget?.path === note.path ? noteDropTarget.position : null;
-            return (
-              <div key={note.path}>
-                {draggingPayload?.kind === "note" && (
-                  <div
-                    className={`drop-line ${
-                      dropState === "before" ? "active" : ""
-                    }`}
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                      setNoteDropTarget({ path: note.path, position: "before" });
-                    }}
-                    onDragLeave={() => setNoteDropTarget(null)}
-                    onDrop={async (event) => {
-                      event.preventDefault();
-                      const payload = parseDragPayload(event);
-                      setNoteDropTarget(null);
-                      if (!payload) {
-                        return;
-                      }
-                      await handleNoteDrop(note.path, "before", payload);
-                    }}
-                  />
-                )}
-                <div
-                  className={`item-row note-row ${isSelected ? "selected" : ""} ${
-                    dropState === "inside" ? "drop-inside" : ""
-                  }`}
-                  draggable
-                  onClick={(event) => handleNoteClick(note.path, event)}
-                  onDragStart={(event) => handleNoteDragStart(note.path, event)}
-                  onDragEnd={() => {
-                    setDraggingPayload(null);
-                    setNoteDropTarget(null);
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    if (!selectedNotes.has(note.path)) {
-                      setSelectedNotes(new Set([note.path]));
-                    }
-                    setNoteMenu({ visible: true, x: event.clientX, y: event.clientY });
+        <div className="pane notes-pane">
+          <div className="pane-header">Notes</div>
+          <div
+            className="pane-body"
+            onClick={() => setNoteMenu({ visible: false, x: 0, y: 0 })}
+          >
+            {notes.length === 0 && <div className="empty">No notes</div>}
+            {notes.map((note) => (
+              <NoteRow key={note.path} note={note} />
+            ))}
+            {noteMenu.visible && (
+              <div
+                className="context-menu"
+                style={{ top: noteMenu.y, left: noteMenu.x }}
+              >
+                <button
+                  onClick={async () => {
+                    await deleteNotes([...selectedNotes]);
+                    setNoteMenu({ visible: false, x: 0, y: 0 });
                   }}
                 >
-                  <span className="item-label">{note.name}</span>
-                </div>
-                {draggingPayload?.kind === "note" && (
-                  <div
-                    className={`drop-line ${
-                      dropState === "after" ? "active" : ""
-                    }`}
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                      setNoteDropTarget({ path: note.path, position: "after" });
-                    }}
-                    onDragLeave={() => setNoteDropTarget(null)}
-                    onDrop={async (event) => {
-                      event.preventDefault();
-                      const payload = parseDragPayload(event);
-                      setNoteDropTarget(null);
-                      if (!payload) {
-                        return;
-                      }
-                      await handleNoteDrop(note.path, "after", payload);
-                    }}
-                  />
-                )}
+                  Delete selected
+                </button>
               </div>
-            );
-          })}
-          {noteMenu.visible && (
-            <div
-              className="context-menu"
-              style={{ top: noteMenu.y, left: noteMenu.x }}
-            >
-              <button
-                onClick={async () => {
-                  await deleteNotes([...selectedNotes]);
-                  setNoteMenu({ visible: false, x: 0, y: 0 });
-                }}
-              >
-                Delete selected
-              </button>
-            </div>
-          )}
+            )}
+          </div>
+        </div>
+        <div className="pane editor-pane">
+          <div className="pane-header">Editor</div>
+          <div className="pane-body editor-body">
+            {activeNote && (
+              <div className="note-meta">
+                <div>Created: {createdLabel}</div>
+                <div>Updated: {updatedLabel}</div>
+              </div>
+            )}
+            {activeNote ? (
+              <textarea
+                className="editor"
+                value={noteContent}
+                onChange={(event) => setNoteContent(event.target.value)}
+              />
+            ) : (
+              <div className="empty">Select a note to edit</div>
+            )}
+          </div>
         </div>
       </div>
-      <div className="pane editor-pane">
-        <div className="pane-header">Editor</div>
-        <div className="pane-body editor-body">
-          {activeNote ? (
-            <textarea
-              className="editor"
-              value={noteContent}
-              onChange={(event) => setNoteContent(event.target.value)}
-            />
-          ) : (
-            <div className="empty">Select a note to edit</div>
-          )}
-        </div>
-      </div>
-    </div>
+    </DndContext>
   );
 }
 
