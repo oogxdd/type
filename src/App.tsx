@@ -15,6 +15,7 @@ import { snapCenterToCursor } from "@dnd-kit/modifiers";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { invoke } from "@tauri-apps/api/core";
+import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import "./App.css";
 import { DROP_PREFIX, ROOT_ID, FoldersPanel } from "./components/FoldersPanel";
 import type { DragData, FolderNode, NoteEntry, NoteMeta } from "./types";
@@ -49,6 +50,24 @@ const invokeLogged = async <T,>(
     console.error("error", error);
     console.groupEnd();
     throw error;
+  }
+};
+
+const confirmAction = async (message: string) => {
+  try {
+    const result = window.confirm(message);
+    console.log("[confirm] window", message, result);
+    return result;
+  } catch (error) {
+    console.warn("[confirm] window failed, falling back", error);
+  }
+  try {
+    const result = await confirmDialog(message);
+    console.log("[confirm] dialog", message, result);
+    return Boolean(result);
+  } catch (error) {
+    console.error("[confirm] dialog failed", error);
+    return false;
   }
 };
 
@@ -555,7 +574,8 @@ function App() {
     if (paths.length === 0) {
       return;
     }
-    const confirmed = window.confirm(`Delete ${paths.length} folder(s)?`);
+    console.log("[folders] deleteFolders", paths);
+    const confirmed = await confirmAction(`Delete ${paths.length} folder(s)?`);
     if (!confirmed) {
       return;
     }
@@ -571,7 +591,7 @@ function App() {
     if (paths.length === 0) {
       return;
     }
-    const confirmed = window.confirm(`Delete ${paths.length} note(s)?`);
+    const confirmed = await confirmAction(`Delete ${paths.length} note(s)?`);
     if (!confirmed) {
       return;
     }

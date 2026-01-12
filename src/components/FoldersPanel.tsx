@@ -107,7 +107,11 @@ function TreeRow({
         <button
           type="button"
           className="icon-btn tree-toggle"
-          onClick={(event) => onToggle(event, node.id)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelect(event, node.id);
+            onToggle(event, node.id);
+          }}
           onPointerDown={(event) => event.stopPropagation()}
           aria-label={isCollapsed ? "Expand folder" : "Collapse folder"}
         >
@@ -145,6 +149,7 @@ function TreeRow({
             className="icon-btn row-action-btn"
             onClick={(event) => {
               event.stopPropagation();
+              onSelect(event, node.id);
               startRenameFolder(node.id);
             }}
             onPointerDown={(event) => event.stopPropagation()}
@@ -163,6 +168,8 @@ function TreeRow({
             className="icon-btn row-action-btn"
             onClick={(event) => {
               event.stopPropagation();
+              console.log("[folders] delete click", node.id);
+              onSelect(event, node.id);
               deleteFolders([node.id]);
             }}
             onPointerDown={(event) => event.stopPropagation()}

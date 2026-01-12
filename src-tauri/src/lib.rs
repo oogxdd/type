@@ -114,7 +114,9 @@ fn sort_by_order(mut names: Vec<String>, order: &[String]) -> Vec<String> {
     names.sort_by(|a, b| {
         let a_idx = index.get(a).copied().unwrap_or(usize::MAX);
         let b_idx = index.get(b).copied().unwrap_or(usize::MAX);
-        a_idx.cmp(&b_idx).then_with(|| a.to_lowercase().cmp(&b.to_lowercase()))
+        a_idx
+            .cmp(&b_idx)
+            .then_with(|| a.to_lowercase().cmp(&b.to_lowercase()))
     });
     names
 }
@@ -134,10 +136,7 @@ fn build_folder_node(dir: &Path, rel_path: &str) -> Result<FolderNode, String> {
     for entry in fs::read_dir(dir).map_err(|err| err.to_string())? {
         let entry = entry.map_err(|err| err.to_string())?;
         let path = entry.path();
-        let name = entry
-            .file_name()
-            .to_string_lossy()
-            .to_string();
+        let name = entry.file_name().to_string_lossy().to_string();
         if name == ORDER_FILE {
             continue;
         }
@@ -404,16 +403,10 @@ fn delete_items(app: tauri::AppHandle, items: Vec<String>) -> Result<(), String>
         let meta = fs::metadata(&full_path).map_err(|err| err.to_string())?;
         if meta.is_dir() {
             fs::remove_dir_all(&full_path).map_err(|err| err.to_string())?;
-            parent_folder_groups
-                .entry(parent)
-                .or_default()
-                .push(name);
+            parent_folder_groups.entry(parent).or_default().push(name);
         } else {
             fs::remove_file(&full_path).map_err(|err| err.to_string())?;
-            parent_note_groups
-                .entry(parent)
-                .or_default()
-                .push(name);
+            parent_note_groups.entry(parent).or_default().push(name);
         }
     }
 
@@ -446,7 +439,12 @@ fn rename_item(app: tauri::AppHandle, path: String, new_name: String) -> Result<
     let new_path = parent.join(&new_name);
     fs::rename(&full_path, &new_path).map_err(|err| err.to_string())?;
     let is_folder = new_path.is_dir();
-    update_order_rename(parent, full_path.file_name().unwrap().to_str().unwrap(), &new_name, is_folder)?;
+    update_order_rename(
+        parent,
+        full_path.file_name().unwrap().to_str().unwrap(),
+        &new_name,
+        is_folder,
+    )?;
 
     let root = notes_root(&app)?;
     Ok(strip_root(&root, &new_path))
@@ -472,6 +470,7 @@ fn set_order(app: tauri::AppHandle, args: SetOrderArgs) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             get_tree,
