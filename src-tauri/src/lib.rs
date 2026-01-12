@@ -19,6 +19,15 @@ struct NoteMeta {
     updated_ms: Option<i64>,
 }
 
+#[derive(Deserialize)]
+struct SetOrderArgs {
+    parent: String,
+    #[serde(rename = "folderOrder")]
+    folder_order: Vec<String>,
+    #[serde(rename = "noteOrder")]
+    note_order: Vec<String>,
+}
+
 #[derive(Serialize)]
 struct FolderNode {
     name: String,
@@ -269,9 +278,21 @@ fn move_items(
     destination: String,
 ) -> Result<(), String> {
     let root = notes_root(&app)?;
+    println!(
+        "[move_items] root={} destination={}",
+        root.to_string_lossy(),
+        destination
+    );
     let destination_path = resolve_path(&app, &destination)?;
+    println!(
+        "[move_items] destination_path={}",
+        destination_path.to_string_lossy()
+    );
     if !destination_path.exists() {
-        return Err("Destination folder does not exist.".to_string());
+        return Err(format!(
+            "Destination folder does not exist: {}",
+            destination_path.to_string_lossy()
+        ));
     }
 
     let mut source_groups_folders: HashMap<PathBuf, Vec<String>> = HashMap::new();
@@ -281,7 +302,19 @@ fn move_items(
 
     for item in items {
         let source = resolve_path(&app, &item)?;
-        let meta = fs::metadata(&source).map_err(|err| err.to_string())?;
+        if !source.exists() {
+            return Err(format!(
+                "Source does not exist: {}",
+                source.to_string_lossy()
+            ));
+        }
+        let meta = fs::metadata(&source).map_err(|err| {
+            format!(
+                "Failed to read metadata for {}: {}",
+                source.to_string_lossy(),
+                err
+            )
+        })?;
         let name = source
             .file_name()
             .and_then(|n| n.to_str())
@@ -293,7 +326,19 @@ fn move_items(
             .to_path_buf();
 
         let target = destination_path.join(&name);
-        fs::rename(&source, &target).map_err(|err| err.to_string())?;
+        println!(
+            "[move_items] move {} -> {}",
+            source.to_string_lossy(),
+            target.to_string_lossy()
+        );
+        fs::rename(&source, &target).map_err(|err| {
+            format!(
+                "Move failed {} -> {}: {}",
+                source.to_string_lossy(),
+                target.to_string_lossy(),
+                err
+            )
+        })?;
         if meta.is_dir() {
             source_groups_folders
                 .entry(parent)
@@ -323,6 +368,12 @@ fn move_items(
 
     let dest_rel = strip_root(&root, &destination_path);
     let dest_full = resolve_path(&app, &dest_rel)?;
+    println!(
+        "[move_items] update order dest={} folders={} notes={}",
+        dest_full.to_string_lossy(),
+        moved_folder_names.len(),
+        moved_note_names.len()
+    );
     if !moved_folder_names.is_empty() {
         update_order_append(&dest_full, &moved_folder_names, true)?;
     }
@@ -384,6 +435,11 @@ fn delete_items(app: tauri::AppHandle, items: Vec<String>) -> Result<(), String>
 #[tauri::command]
 fn rename_item(app: tauri::AppHandle, path: String, new_name: String) -> Result<String, String> {
     let full_path = resolve_path(&app, &path)?;
+    println!(
+        "[rename_item] path={} new_name={}",
+        full_path.to_string_lossy(),
+        new_name
+    );
     let parent = full_path
         .parent()
         .ok_or_else(|| "Missing parent folder.".to_string())?;
@@ -397,16 +453,18 @@ fn rename_item(app: tauri::AppHandle, path: String, new_name: String) -> Result<
 }
 
 #[tauri::command]
-fn set_order(
-    app: tauri::AppHandle,
-    parent: String,
-    folder_order: Vec<String>,
-    note_order: Vec<String>,
-) -> Result<(), String> {
-    let parent_path = resolve_path(&app, &parent)?;
+fn set_order(app: tauri::AppHandle, args: SetOrderArgs) -> Result<(), String> {
+    let parent_path = resolve_path(&app, &args.parent)?;
+    println!(
+        "[set_order] parent={} folder_order={} note_order={} parent_path={}",
+        args.parent,
+        args.folder_order.len(),
+        args.note_order.len(),
+        parent_path.to_string_lossy()
+    );
     let order = OrderFile {
-        folder_order,
-        note_order,
+        folder_order: args.folder_order,
+        note_order: args.note_order,
     };
     write_order_file(&parent_path, &order)
 }

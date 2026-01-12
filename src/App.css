@@ -55,10 +55,20 @@ body {
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
+  padding-right: 160px;
   cursor: pointer;
   user-select: none;
   position: relative;
   z-index: 1;
+  touch-action: none;
+}
+
+.folder-row {
+  cursor: grab;
+}
+
+.folder-row:active {
+  cursor: grabbing;
 }
 
 .item-row.selected {
@@ -88,10 +98,38 @@ body {
   outline: 1px dashed #356ae6;
 }
 
+.tree-root {
+  min-height: 100%;
+}
+
+.tree-root.drop-inside {
+  outline: 1px dashed #356ae6;
+  outline-offset: -6px;
+}
+
+.tree-children {
+  margin-left: 0;
+}
+
+.folder-row.is-dragging {
+  opacity: 0.4;
+}
+
+.drag-ghost {
+  padding: 6px 10px;
+  background: #ffffff;
+  border: 1px solid #cfd5dc;
+  border-radius: 8px;
+  font-size: 12px;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
+  pointer-events: none;
+}
+
 
 
 .folder-row:hover .row-actions {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .item-label {
@@ -108,10 +146,12 @@ body {
   font-size: 12px;
   color: #5b6572;
   cursor: pointer;
+  border-radius: 6px;
 }
 
 .icon-btn:hover {
   color: #1f2328;
+  background: #eef2f6;
 }
 
 .row-actions {
@@ -119,6 +159,11 @@ body {
   gap: 6px;
   opacity: 0;
   transition: opacity 0.15s ease;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .rename-input {
