@@ -343,7 +343,7 @@ function App() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 2 },
+      activationConstraint: { distance: 6 },
     })
   );
 
@@ -425,7 +425,10 @@ function App() {
     };
   }, [activeNote, noteContent]);
 
-  const handleFolderClick = (path: string, event: MouseEvent) => {
+  const handleFolderClick = (path: string, event: MouseEvent | { stopPropagation?: () => void }) => {
+    if (event && typeof event.stopPropagation === "function") {
+      event.stopPropagation();
+    }
     const nextSelected = new Set(selectedFolders);
     if (event.shiftKey && lastSelectedFolder) {
       const visibleFolders = orderedIds;
@@ -522,7 +525,7 @@ function App() {
     }
     const newPath = await invokeLogged<string>("rename_item", {
       path: renamingFolder,
-      new_name: renameValue.trim(),
+      newName: renameValue.trim(),
     });
     setRenamingFolder(null);
     setRenameValue("");
@@ -550,6 +553,10 @@ function App() {
 
   const deleteNotes = async (paths: string[]) => {
     if (paths.length === 0) {
+      return;
+    }
+    const confirmed = window.confirm(`Delete ${paths.length} note(s)?`);
+    if (!confirmed) {
       return;
     }
     await invokeLogged("delete_items", { items: paths });
@@ -1018,7 +1025,9 @@ function App() {
         </div>
       </div>
       <DragOverlay modifiers={[snapCenterToCursor]}>
-        {activeId ? <div className="drag-ghost">Moving</div> : null}
+        {activeId ? (
+          <div className="drag-ghost">{activeId.split("/").pop() || activeId}</div>
+        ) : null}
       </DragOverlay>
     </DndContext>
   );

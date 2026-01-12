@@ -96,14 +96,21 @@ function TreeRow({
       }${isOver && !edgePosition ? " drop-inside" : ""}${
         edgePosition === "before" ? " drop-before" : ""
       }${edgePosition === "after" ? " drop-after" : ""}`}
-      onClick={(event) => onSelect(event, node.id)}
+      onMouseDown={(event) => {
+        console.log("[folders] select mouse", node.id);
+        onSelect(event, node.id);
+      }}
+      onPointerDown={(event) => {
+        console.log("[folders] select pointer", node.id);
+        onSelect(event, node.id);
+      }}
       {...listeners}
       {...attributes}
     >
       {node.children.length > 0 ? (
         <button
           type="button"
-          className="icon-btn"
+          className="icon-btn tree-toggle"
           onClick={(event) => onToggle(event, node.id)}
           onPointerDown={(event) => event.stopPropagation()}
           aria-label={isCollapsed ? "Expand folder" : "Collapse folder"}
@@ -111,9 +118,7 @@ function TreeRow({
           {isCollapsed ? "▸" : "▾"}
         </button>
       ) : (
-        <button type="button" className="icon-btn" aria-hidden>
-          •
-        </button>
+        <span className="icon-spacer" aria-hidden />
       )}
       {renaming ? (
         <input
@@ -135,24 +140,50 @@ function TreeRow({
         <span className="item-label">{node.name}</span>
       )}
       {!renaming && (
-        <div className="row-actions">
+        <div
+          className="row-actions"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
           <button
-            className="icon-btn"
+            className="icon-btn row-action-btn"
             onClick={(event) => {
               event.stopPropagation();
               startRenameFolder(node.id);
             }}
+            onPointerDown={(event) => event.stopPropagation()}
+            aria-label="Rename folder"
+            title="Rename"
           >
-            Rename
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M4 16.5V20h3.5L18.6 8.9a1 1 0 0 0 0-1.4l-2.1-2.1a1 1 0 0 0-1.4 0L4 16.5z"
+                fill="currentColor"
+              />
+              <path d="M13.8 5.2l3 3" stroke="currentColor" strokeWidth="1.6" />
+            </svg>
           </button>
           <button
-            className="icon-btn"
+            className="icon-btn row-action-btn"
             onClick={(event) => {
               event.stopPropagation();
               deleteFolders([node.id]);
             }}
+            onPointerDown={(event) => event.stopPropagation()}
+            aria-label="Delete folder"
+            title="Delete"
           >
-            Delete
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7z"
+                fill="currentColor"
+              />
+              <path
+                d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
+                fill="currentColor"
+              />
+              <path d="M4 7h16" stroke="currentColor" strokeWidth="1.6" />
+            </svg>
           </button>
         </div>
       )}
@@ -272,7 +303,11 @@ export function FoldersPanel({
       <div
         ref={setRootDropRef}
         className={`pane-body tree-root${isOver ? " drop-inside" : ""}`}
-        onClick={onClearSelection}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            onClearSelection();
+          }
+        }}
       >
         {treeData.map((node) => (
           <TreeNode
