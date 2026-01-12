@@ -347,6 +347,14 @@ function App() {
     })
   );
 
+  useEffect(() => {
+    console.log("[folders] selectedFolders", Array.from(selectedFolders));
+  }, [selectedFolders]);
+
+  useEffect(() => {
+    console.log("[folders] activeFolder", activeFolder);
+  }, [activeFolder]);
+
   const refreshTree = async () => {
     const data = await invokeLogged<FolderNode>("get_tree");
     setTree(data);
@@ -383,6 +391,10 @@ function App() {
   const activeNode = useMemo(() => {
     return findNode(tree, activeFolder);
   }, [tree, activeFolder]);
+
+  useEffect(() => {
+    console.log("[folders] activeNode", activeNode?.path || null);
+  }, [activeNode]);
 
   useEffect(() => {
     if (!activeNote) {
@@ -425,10 +437,14 @@ function App() {
     };
   }, [activeNote, noteContent]);
 
-  const handleFolderClick = (path: string, event: MouseEvent | { stopPropagation?: () => void }) => {
+  const handleFolderClick = (
+    event: MouseEvent | { stopPropagation?: () => void },
+    path: string
+  ) => {
     if (event && typeof event.stopPropagation === "function") {
       event.stopPropagation();
     }
+    console.log("[folders] onSelect handler", path);
     const nextSelected = new Set(selectedFolders);
     if (event.shiftKey && lastSelectedFolder) {
       const visibleFolders = orderedIds;

@@ -100,10 +100,6 @@ function TreeRow({
         console.log("[folders] select mouse", node.id);
         onSelect(event, node.id);
       }}
-      onPointerDown={(event) => {
-        console.log("[folders] select pointer", node.id);
-        onSelect(event, node.id);
-      }}
       {...listeners}
       {...attributes}
     >
