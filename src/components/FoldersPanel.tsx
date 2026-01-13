@@ -20,6 +20,9 @@ type FoldersPanelProps = {
   expanded: Set<string>;
   onToggle: (event: MouseEvent, id: string) => void;
   onClearSelection: () => void;
+  onPaneKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
+  onPaneClick?: () => void;
+  paneBodyRef?: React.Ref<HTMLDivElement>;
   renamingFolder: string | null;
   renameValue: string;
   setRenameValue: (value: string) => void;
@@ -96,8 +99,12 @@ function TreeRow({
       }${isOver && !edgePosition ? " drop-inside" : ""}${
         edgePosition === "before" ? " drop-before" : ""
       }${edgePosition === "after" ? " drop-after" : ""}`}
-      onMouseDown={(event) => {
-        console.log("[folders] select mouse", node.id);
+      onClick={(event) => {
+        const target = event.target as HTMLElement | null;
+        if (target && target.closest(".row-actions, .tree-toggle, .rename-input")) {
+          return;
+        }
+        console.log("[folders] select click", node.id);
         onSelect(event, node.id);
       }}
       {...listeners}
@@ -109,10 +116,10 @@ function TreeRow({
           className="icon-btn tree-toggle"
           onClick={(event) => {
             event.stopPropagation();
-            onSelect(event, node.id);
             onToggle(event, node.id);
           }}
           onPointerDown={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
           aria-label={isCollapsed ? "Expand folder" : "Collapse folder"}
         >
           {isCollapsed ? "▸" : "▾"}
@@ -128,6 +135,7 @@ function TreeRow({
           onChange={(event) => setRenameValue(event.target.value)}
           onBlur={submitRenameFolder}
           onKeyDown={(event) => {
+            event.stopPropagation();
             if (event.key === "Enter") {
               submitRenameFolder();
             }
@@ -135,6 +143,8 @@ function TreeRow({
               cancelRenameFolder();
             }
           }}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
         />
       ) : (
         <span className="item-label">{node.name}</span>
@@ -143,16 +153,17 @@ function TreeRow({
         <div
           className="row-actions"
           onPointerDown={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >
           <button
             className="icon-btn row-action-btn"
             onClick={(event) => {
               event.stopPropagation();
-              onSelect(event, node.id);
               startRenameFolder(node.id);
             }}
             onPointerDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
             aria-label="Rename folder"
             title="Rename"
           >
@@ -168,11 +179,10 @@ function TreeRow({
             className="icon-btn row-action-btn"
             onClick={(event) => {
               event.stopPropagation();
-              console.log("[folders] delete click", node.id);
-              onSelect(event, node.id);
               deleteFolders([node.id]);
             }}
             onPointerDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
             aria-label="Delete folder"
             title="Delete"
           >
@@ -287,6 +297,9 @@ export function FoldersPanel({
   expanded,
   onToggle,
   onClearSelection,
+  onPaneKeyDown,
+  onPaneClick,
+  paneBodyRef,
   renamingFolder,
   renameValue,
   setRenameValue,
@@ -304,9 +317,21 @@ export function FoldersPanel({
     <div className="pane tree-pane">
       <div className="pane-header">Folders</div>
       <div
-        ref={setRootDropRef}
+        ref={(node) => {
+          setRootDropRef(node);
+          if (typeof paneBodyRef === "function") {
+            paneBodyRef(node);
+          } else if (paneBodyRef && "current" in paneBodyRef) {
+            paneBodyRef.current = node;
+          }
+        }}
         className={`pane-body tree-root${isOver ? " drop-inside" : ""}`}
+        tabIndex={0}
+        onKeyDown={onPaneKeyDown}
         onClick={(event) => {
+          if (onPaneClick) {
+            onPaneClick();
+          }
           if (event.target === event.currentTarget) {
             onClearSelection();
           }

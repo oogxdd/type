@@ -359,6 +359,8 @@ function App() {
   const dragStartPoint = useRef<{ x: number; y: number } | null>(null);
   const expandTimeoutRef = useRef<number | null>(null);
   const expandTargetRef = useRef<string | null>(null);
+  const notesPanelRef = useRef<HTMLDivElement | null>(null);
+  const foldersPanelRef = useRef<HTMLDivElement | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -558,6 +560,8 @@ function App() {
       setRenamingFolder(null);
       return;
     }
+    const wasSelected = selectedFolders.has(renamingFolder);
+    const wasActive = activeFolder === renamingFolder;
     const newPath = await invokeLogged<string>("rename_item", {
       path: renamingFolder,
       newName: renameValue.trim(),
@@ -565,9 +569,16 @@ function App() {
     setRenamingFolder(null);
     setRenameValue("");
     await refreshTree();
-    setActiveFolder(newPath);
-    setSelectedFolders(new Set([newPath]));
-    setLastSelectedFolder(newPath);
+    if (wasActive) {
+      setActiveFolder(newPath);
+    }
+    if (wasSelected) {
+      const nextSelected = new Set(selectedFolders);
+      nextSelected.delete(renamingFolder);
+      nextSelected.add(newPath);
+      setSelectedFolders(nextSelected);
+      setLastSelectedFolder(newPath);
+    }
   };
 
   const deleteFolders = async (paths: string[]) => {
@@ -633,6 +644,16 @@ function App() {
       });
       setLastSelectedFolder(data.path);
       document.body.style.setProperty("cursor", "grabbing");
+    }
+    if (data.type === "note") {
+      setSelectedNotes((prev) => {
+        if (prev.has(data.path)) {
+          return prev;
+        }
+        return new Set([data.path]);
+      });
+      setLastSelectedNote(data.path);
+      setActiveNote(data.path);
     }
   };
 
@@ -891,23 +912,35 @@ function App() {
         logGroup("note drop ignored", { reason: "missing target" });
         return;
       }
+      const selectedList = selectedNotes.has(data.path)
+        ? Array.from(selectedNotes)
+        : [data.path];
       if (overData.type === "folder") {
         logGroup("note move to folder", {
-          note: data.path,
+          notes: selectedList,
           destination: overData.path,
         });
-        await invokeLogged("move_items", { items: [data.path], destination: overData.path });
+        await invokeLogged("move_items", { items: selectedList, destination: overData.path });
+        if (selectedList.includes(activeNote || "")) {
+          setActiveNote(null);
+          setNoteContent("");
+          setNoteMeta(null);
+        }
+        setSelectedNotes(new Set());
         await refreshTree();
         return;
       }
       if (overData.type === "note" && activeNode) {
+        if (selectedList.includes(overData.path)) {
+          return;
+        }
         const notePaths = activeNode.notes.map((note) => note.path);
-        const newOrder = reorderList(notePaths, [data.path], overData.path);
+        const newOrder = reorderList(notePaths, selectedList, overData.path);
         const folderOrder = activeNode.children.map((child) => child.name);
         const noteOrder = newOrder.map((path) => path.split("/").pop() || path);
         logGroup("note reorder", {
           parent: activeNode.path,
-          dragging: data.path,
+          dragging: selectedList,
           over: overData.path,
           noteOrder,
           folderOrder,
@@ -979,6 +1012,38 @@ function App() {
     ? new Date(noteMeta.updated_ms).toLocaleString()
     : "—";
 
+  const handleNotesKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        foldersPanelRef.current?.focus();
+      }
+      return;
+    }
+    if (!activeNode || notes.length === 0) {
+      return;
+    }
+    event.preventDefault();
+    const notePaths = notes.map((note) => note.path);
+    const current = lastSelectedNote && notePaths.includes(lastSelectedNote)
+      ? lastSelectedNote
+      : activeNote || notePaths[0];
+    const currentIndex = notePaths.indexOf(current);
+    const delta = event.key === "ArrowUp" ? -1 : 1;
+    const nextIndex = Math.max(0, Math.min(notePaths.length - 1, currentIndex + delta));
+    const nextPath = notePaths[nextIndex];
+    setSelectedNotes(new Set([nextPath]));
+    setLastSelectedNote(nextPath);
+    setActiveNote(nextPath);
+  };
+
+  const handleFoldersKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      notesPanelRef.current?.focus();
+    }
+  };
+
   return (
     <DndContext
       sensors={sensors}
@@ -997,6 +1062,11 @@ function App() {
           edgeSnap={edgeSnap}
           expanded={expanded}
           onToggle={handleToggle}
+          onPaneKeyDown={handleFoldersKeyDown}
+          onPaneClick={() => {
+            foldersPanelRef.current?.focus();
+          }}
+          paneBodyRef={foldersPanelRef}
           onClearSelection={() => {
             setSelectedFolders(new Set());
             setLastSelectedFolder("");
@@ -1015,7 +1085,16 @@ function App() {
         />
         <div className="pane notes-pane">
           <div className="pane-header">Notes</div>
-          <div className="pane-body" onClick={() => setNoteMenu({ visible: false, x: 0, y: 0 })}>
+          <div
+            className="pane-body"
+            ref={notesPanelRef}
+            tabIndex={0}
+            onKeyDown={handleNotesKeyDown}
+            onClick={() => {
+              setNoteMenu({ visible: false, x: 0, y: 0 });
+              notesPanelRef.current?.focus();
+            }}
+          >
             {notes.length === 0 && <div className="empty">No notes</div>}
             <SortableContext
               items={notes.map((note) => note.path)}
