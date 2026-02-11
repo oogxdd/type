@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -26,6 +26,14 @@ import { flattenTree, removeChildrenOf } from "./tree/utilities";
 
 const indentationWidth = 18;
 const LOG_PREFIX = "[notes]";
+
+type NotePreview = {
+  title: string;
+  snippet: string;
+  timeLabel: string;
+  dayKey: string;
+  dayLabel: string;
+};
 
 const logGroup = (label: string, data?: Record<string, unknown>) => {
   console.groupCollapsed(`${LOG_PREFIX} ${label}`);
@@ -356,6 +364,85 @@ function reorderList(list: string[], moving: string[], target: string) {
   ];
 }
 
+const getDayGroup = (timestamp: number | null) => {
+  if (!timestamp) {
+    return { dayKey: "unknown", dayLabel: "No date" };
+  }
+  const value = new Date(timestamp);
+  const today = new Date();
+  const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const yesterdayStart = new Date(dayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  const itemStart = new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  if (itemStart.getTime() === dayStart.getTime()) {
+    return { dayKey: `d-${itemStart.getTime()}`, dayLabel: "Today" };
+  }
+  if (itemStart.getTime() === yesterdayStart.getTime()) {
+    return { dayKey: `d-${itemStart.getTime()}`, dayLabel: "Yesterday" };
+  }
+  return {
+    dayKey: `d-${itemStart.getTime()}`,
+    dayLabel: value.toLocaleDateString([], { day: "numeric", month: "long" }),
+  };
+};
+
+const parseNotePreview = (noteName: string, content: string, updatedMs: number | null): NotePreview => {
+  const lines = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const titleFromText = lines[0]?.replace(/^#{1,6}\s+/, "") || "";
+  const fallbackTitle = noteName.replace(/\.md$/i, "");
+  const title = titleFromText || fallbackTitle;
+  const snippet = (lines.find((line) => line !== lines[0]) || "").replace(/^[-*]\s+/, "");
+  const timeLabel = updatedMs
+    ? new Date(updatedMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : "";
+  const { dayKey, dayLabel } = getDayGroup(updatedMs);
+  return { title, snippet, timeLabel, dayKey, dayLabel };
+};
+
+const renderMarkdownPreview = (value: string): ReactNode[] => {
+  return value.split(/\r?\n/).map((line, index) => {
+    if (line.startsWith("### ")) {
+      return (
+        <h3 className="md-h3" key={`line-${index}`}>
+          {line.slice(4)}
+        </h3>
+      );
+    }
+    if (line.startsWith("## ")) {
+      return (
+        <h2 className="md-h2" key={`line-${index}`}>
+          {line.slice(3)}
+        </h2>
+      );
+    }
+    if (line.startsWith("# ")) {
+      return (
+        <h1 className="md-h1" key={`line-${index}`}>
+          {line.slice(2)}
+        </h1>
+      );
+    }
+    if (line.startsWith("- ") || line.startsWith("* ")) {
+      return (
+        <p className="md-li" key={`line-${index}`}>
+          {line.slice(2)}
+        </p>
+      );
+    }
+    if (line.trim() === "") {
+      return <div className="md-space" key={`line-${index}`} aria-hidden />;
+    }
+    return (
+      <p className="md-p" key={`line-${index}`}>
+        {line}
+      </p>
+    );
+  });
+};
+
 function App() {
   const [tree, setTree] = useState<FolderNode | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set([""]));
@@ -368,6 +455,7 @@ function App() {
   const [noteContent, setNoteContent] = useState<string>("");
   const [noteDirty, setNoteDirty] = useState(false);
   const [noteMeta, setNoteMeta] = useState<NoteMeta | null>(null);
+  const [notePreviews, setNotePreviews] = useState<Record<string, NotePreview>>({});
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState<string>("");
   const [noteMenu, setNoteMenu] = useState<{
@@ -1053,7 +1141,7 @@ function App() {
     expandTargetRef.current = null;
   };
 
-  const NoteRow = ({ note }: { note: NoteEntry }) => {
+  const NoteRow = ({ note, preview }: { note: NoteEntry; preview?: NotePreview }) => {
     const isSelected = selectedNotes.has(note.path);
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
       useSortable({
@@ -1083,18 +1171,63 @@ function App() {
         {...attributes}
         {...listeners}
       >
-        <span className="item-label">{note.name}</span>
+        <div className="note-row-main">
+          <div className="note-row-top">
+            <span className="note-row-title">{preview?.title || note.name.replace(/\.md$/i, "")}</span>
+            <span className="note-row-time">{preview?.timeLabel || ""}</span>
+          </div>
+          <div className="note-row-snippet">{preview?.snippet || "No additional text"}</div>
+        </div>
       </div>
     );
   };
 
   const notes = activeNode?.notes || [];
+  const groupedNotes = useMemo(() => {
+    let lastDay = "";
+    return notes.map((note) => {
+      const preview = notePreviews[note.path];
+      const dayKey = preview?.dayKey || "unknown";
+      const dayLabel = preview?.dayLabel || "No date";
+      const showDayHeader = dayKey !== lastDay;
+      lastDay = dayKey;
+      return { note, preview, dayKey, dayLabel, showDayHeader };
+    });
+  }, [notes, notePreviews]);
   const createdLabel = noteMeta?.created_ms
     ? new Date(noteMeta.created_ms).toLocaleString()
     : "—";
   const updatedLabel = noteMeta?.updated_ms
     ? new Date(noteMeta.updated_ms).toLocaleString()
     : "—";
+
+  useEffect(() => {
+    if (notes.length === 0) {
+      setNotePreviews({});
+      return;
+    }
+    let cancelled = false;
+    Promise.all(
+      notes.map(async (note) => {
+        const [meta, content] = await Promise.all([
+          invokeLogged<NoteMeta>("get_note_meta", { path: note.path }),
+          invokeLogged<string>("read_note", { path: note.path }),
+        ]);
+        const updatedMs = meta.updated_ms ?? meta.created_ms ?? null;
+        return [note.path, parseNotePreview(note.name, content, updatedMs)] as const;
+      })
+    ).then((entries) => {
+      if (cancelled) {
+        return;
+      }
+      setNotePreviews(Object.fromEntries(entries));
+    }).catch((error) => {
+      console.error("[notes] failed to build previews", error);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [notes]);
 
   const handleNotesKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
@@ -1281,8 +1414,15 @@ function App() {
               items={notes.map((note) => note.path)}
               strategy={verticalListSortingStrategy}
             >
-              {notes.map((note) => (
-                <NoteRow key={note.path} note={note} />
+              {groupedNotes.map(({ note, preview, dayKey, dayLabel, showDayHeader }) => (
+                <div key={note.path}>
+                  {showDayHeader && (
+                    <div className="notes-day-header" data-day={dayKey}>
+                      {dayLabel}
+                    </div>
+                  )}
+                  <NoteRow note={note} preview={preview} />
+                </div>
               ))}
             </SortableContext>
             {noteMenu.visible && (
@@ -1309,14 +1449,20 @@ function App() {
               </div>
             )}
             {activeNote ? (
-              <textarea
-                className="editor"
-                value={noteContent}
-                onChange={(event) => {
-                  setNoteContent(event.target.value);
-                  setNoteDirty(true);
-                }}
-              />
+              <div className="editor-split">
+                <textarea
+                  className="editor"
+                  value={noteContent}
+                  onChange={(event) => {
+                    setNoteContent(event.target.value);
+                    setNoteDirty(true);
+                  }}
+                />
+                <div className="editor-live-preview">
+                  <div className="editor-live-label">Preview</div>
+                  <div className="markdown-preview">{renderMarkdownPreview(noteContent)}</div>
+                </div>
+              </div>
             ) : (
               <div className="empty">Select a note to edit</div>
             )}

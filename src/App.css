@@ -365,11 +365,84 @@ body {
 }
 
 .notes-pane .pane-body {
-  padding: 6px 0;
+  padding: 10px 10px 16px;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(68, 82, 100, 0.3), rgba(68, 82, 100, 0) 42%),
+    linear-gradient(180deg, #1f2934 0%, #1a232d 100%);
+  color: #e8eef5;
+}
+
+.notes-pane .pane-header {
+  background: #18212b;
+  color: #95a5b5;
+  border-bottom: 1px solid rgba(142, 158, 176, 0.22);
 }
 
 .note-row {
-  padding: 6px 16px;
+  padding: 14px 14px;
+  border-radius: 14px;
+  margin: 0 2px 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.note-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(163, 180, 199, 0.2);
+}
+
+.note-row.selected {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08));
+  border-color: rgba(196, 208, 223, 0.35);
+  box-shadow: 0 10px 24px rgba(4, 8, 14, 0.32);
+}
+
+.note-row-main {
+  width: 100%;
+}
+
+.note-row-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.note-row-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 17px;
+  font-weight: 700;
+  color: #f3f7fc;
+}
+
+.note-row-time {
+  color: #d0d9e2;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.note-row-snippet {
+  margin-top: 2px;
+  color: #9ba8b7;
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes-day-header {
+  margin: 14px 6px 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(158, 173, 189, 0.2);
+  font-size: 19px;
+  font-weight: 700;
+  color: #dce5ee;
 }
 
 .context-menu {
@@ -395,7 +468,7 @@ body {
 }
 
 .editor-pane {
-  background: #ffffff;
+  background: #f8fafc;
 }
 
 .editor-body {
@@ -414,12 +487,86 @@ body {
 .editor {
   width: 100%;
   height: 100%;
+  min-height: 320px;
   border: 1px solid #d6dbe3;
   border-radius: 10px;
   padding: 12px;
   font-family: "SF Mono", "IBM Plex Mono", Consolas, monospace;
   font-size: 14px;
   resize: none;
+}
+
+.editor-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  height: calc(100% - 32px);
+  min-height: 0;
+}
+
+.editor-live-preview {
+  height: 100%;
+  border: 1px solid #d6dbe3;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px 12px 12px;
+  overflow: auto;
+}
+
+.editor-live-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7e8898;
+  margin-bottom: 8px;
+}
+
+.markdown-preview {
+  white-space: pre-wrap;
+  color: #1d2733;
+}
+
+.md-h1,
+.md-h2,
+.md-h3,
+.md-p,
+.md-li {
+  margin: 0;
+}
+
+.md-h1 {
+  font-size: 28px;
+  line-height: 1.2;
+  margin-bottom: 6px;
+}
+
+.md-h2 {
+  font-size: 23px;
+  line-height: 1.25;
+  margin-bottom: 6px;
+}
+
+.md-h3 {
+  font-size: 19px;
+  line-height: 1.3;
+  margin-bottom: 5px;
+}
+
+.md-p,
+.md-li {
+  font-size: 15px;
+  line-height: 1.45;
+  color: #2c3a49;
+}
+
+.md-li::before {
+  content: "• ";
+  color: #6a7482;
+}
+
+.md-space {
+  height: 0.85em;
 }
 
 .empty {
@@ -440,5 +587,9 @@ body {
 
   .pane:last-child {
     border-bottom: none;
+  }
+
+  .editor-split {
+    grid-template-columns: 1fr;
   }
 }
