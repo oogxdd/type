@@ -8,7 +8,7 @@ use tauri::Manager;
 
 const ORDER_FILE: &str = ".notes-order.json";
 #[cfg(target_os = "macos")]
-const MACOS_WINDOW_ALPHA: f64 = 0.9;
+const MACOS_WINDOW_ALPHA: f64 = 1.0;
 
 #[cfg(target_os = "macos")]
 fn apply_macos_window_alpha(window: &tauri::WebviewWindow, alpha: f64) -> tauri::Result<()> {

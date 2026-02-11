@@ -883,21 +883,21 @@ body {
 }
 
 .app.theme-dark {
-  --ui-bg: #171a1f;
-  --ui-pane: rgba(28, 31, 36, 0.9);
+  --ui-bg: #171a1e;
+  --ui-pane: rgba(27, 29, 34, 0.94);
   --ui-pane-right: rgba(20, 24, 30, 0.78);
   --ui-editor-surface: rgba(23, 28, 34, 0.86);
   --ui-editor-border: #343c47;
-  --ui-border: #363b44;
-  --ui-border-strong: #454b56;
+  --ui-border: #373b43;
+  --ui-border-strong: #444954;
   --ui-text: #e6ebf2;
   --ui-muted: #9da6b2;
-  --ui-select: #343a44;
+  --ui-select: #353941;
   --ui-accent: #84a7ff;
   background: radial-gradient(
     1400px 700px at -200px -80px,
-    rgba(52, 56, 64, 0.72) 0%,
-    rgba(21, 24, 29, 0.5) 56%
+    rgba(50, 54, 62, 0.7) 0%,
+    rgba(20, 22, 28, 0.56) 56%
   );
 }
 
@@ -930,11 +930,11 @@ body {
   flex-direction: column;
   background: linear-gradient(
     180deg,
-    rgba(52, 57, 67, 0.94) 0%,
-    rgba(40, 45, 54, 0.93) 46%,
-    rgba(33, 38, 46, 0.92) 100%
+    rgba(40, 43, 50, 0.95) 0%,
+    rgba(34, 37, 44, 0.94) 46%,
+    rgba(29, 32, 38, 0.93) 100%
   );
-  border-right: 1px solid #444c57;
+  border-right: 1px solid #474c56;
   backdrop-filter: blur(2px) saturate(110%);
   -webkit-backdrop-filter: blur(2px) saturate(110%);
 }
@@ -1015,7 +1015,7 @@ body {
 
 .app.theme-dark .tree-pane .item-row.selected {
   background: rgba(255, 255, 255, 0.12);
-  box-shadow: inset 2px 0 0 rgba(194, 203, 218, 0.62);
+  box-shadow: inset 2px 0 0 rgba(210, 210, 216, 0.58);
 }
 
 .app.theme-dark .tree-pane .item-label {
@@ -1034,19 +1034,22 @@ body {
 }
 
 .app.theme-dark .tree-pane .tree-guide-vert {
-  background: rgba(213, 213, 218, 0.14);
+  background: rgba(213, 213, 218, 0.12);
 }
 
 .app.theme-dark .notes-pane,
-.app.theme-dark .settings-sections-pane,
+.app.theme-dark .settings-sections-pane {
+  background: rgba(30, 32, 37, 0.76);
+}
+
 .app.theme-dark .settings-detail-pane,
 .app.theme-dark .editor-pane {
-  background: rgba(28, 31, 36, 0.68);
+  background: rgba(27, 29, 34, 0.78);
 }
 
 .app.theme-dark .notes-pane .pane-body,
 .app.theme-dark .settings-sections-pane .pane-body {
-  background: rgba(28, 31, 36, 0.86);
+  background: rgba(31, 33, 38, 0.92);
   padding: calc(8px + var(--left-panels-drag-height)) 8px 10px;
 }
 
@@ -1082,7 +1085,7 @@ body {
 }
 
 .app.theme-dark .settings-detail-pane .pane-body {
-  background: rgba(25, 25, 27, 0.88);
+  background: rgba(23, 25, 29, 0.9);
   padding: 20px 22px;
 }
 
@@ -1124,18 +1127,18 @@ body {
 }
 
 .app.theme-dark .editor-body {
-  background: rgba(25, 25, 27, 0.88);
+  background: rgba(23, 25, 29, 0.9);
   padding: 0;
 }
 
 .app.theme-dark .tiptap-editor {
   border-color: #3a3a3e;
   border-top-color: transparent;
-  background: rgba(31, 31, 33, 0.94);
+  background: rgba(27, 29, 33, 0.95);
 }
 
 .app.theme-dark .tiptap-toolbar {
-  background: rgba(31, 31, 33, 0.94);
+  background: rgba(27, 29, 33, 0.95);
   border-bottom-color: #3a3a3e;
 }
 
