@@ -1434,7 +1434,6 @@ function App() {
           indentationWidth={indentationWidth}
         />
         <div className="pane notes-pane">
-          <div className="pane-header">Notes</div>
           <div
             className="pane-body"
             ref={notesPanelRef}

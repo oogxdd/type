@@ -82,10 +82,11 @@ function TreeRow({
     [setNodeRef, setDropRef]
   );
 
-  const style: React.CSSProperties = {
+  const style = {
     transform: isDragging ? undefined : CSS.Translate.toString(transform),
     paddingLeft: 12 + depth * indentationWidth,
-  };
+  } as React.CSSProperties;
+  const guideBaseLeft = 12 + 20 + 6 + 8;
 
   return (
     <div
@@ -111,6 +112,17 @@ function TreeRow({
       {...listeners}
       {...attributes}
     >
+      {depth > 0 && (
+        <span className="tree-guides" aria-hidden>
+          {Array.from({ length: depth }, (_, index) => (
+            <span
+              key={`depth-${index}`}
+              className="tree-guide-vert"
+              style={{ left: guideBaseLeft + index * indentationWidth }}
+            />
+          ))}
+        </span>
+      )}
       {node.children.length > 0 ? (
         <button
           type="button"
@@ -300,7 +312,6 @@ export function FoldersPanel({
 
   return (
     <div className="pane tree-pane">
-      <div className="pane-header">Folders</div>
       <div
         ref={(node) => {
           setRootDropRef(node);

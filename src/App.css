@@ -187,20 +187,35 @@ body {
   min-height: 24px;
   padding: 4px 10px;
   padding-right: 12px;
-  transition: background 0.1s ease, border-color 0.1s ease;
+  transition: background 0.1s ease;
   border: none;
-  border-bottom: 1px solid #f0f3f5;
 }
 
 .tree-pane .item-row:hover {
   background: #f7f9fb;
-  border-color: #e8edf1;
 }
 
 .tree-pane .item-row.selected {
   background: #f4f8ff;
-  border-bottom-color: #d9e6ff;
   box-shadow: inset 2px 0 0 var(--ui-accent);
+}
+
+.tree-pane .folder-row {
+  position: relative;
+}
+
+.tree-pane .tree-guides {
+  position: absolute;
+  inset: 2px 0;
+  pointer-events: none;
+}
+
+.tree-pane .tree-guide-vert {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #e2e9f0;
 }
 
 .tree-pane .item-row:hover,
