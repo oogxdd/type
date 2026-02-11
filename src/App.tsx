@@ -18,6 +18,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu } from "@tauri-apps/api/menu";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
+import { Settings } from "lucide-react";
 import "./App.css";
 import { DROP_PREFIX, ROOT_ID, FoldersPanel } from "./components/FoldersPanel";
 import { NoteEditor } from "./components/NoteEditor";
@@ -1657,8 +1658,12 @@ function App() {
                   setAppMode((prev) => (prev === "notes" ? "settings" : "notes"));
                 }}
               >
-                <span className="nav-action-icon" aria-hidden>
-                  {appMode === "settings" ? "←" : "⚙"}
+                <span className="nav-action-icon text-base leading-none" aria-hidden>
+                  {appMode === "settings" ? (
+                    "←"
+                  ) : (
+                    <Settings className="h-4 w-4 shrink-0" strokeWidth={1.9} />
+                  )}
                 </span>
                 <span>{appMode === "settings" ? "Back to notes" : "Settings"}</span>
               </button>
