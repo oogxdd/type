@@ -321,46 +321,48 @@ export function FoldersPanel({
       {topAction ? <div className="pane-top">{topAction}</div> : null}
       <div className="pane-section">
         {sectionTitle ? <div className="pane-section-title">{sectionTitle}</div> : null}
-        <div
-          ref={(node) => {
-            setRootDropRef(node);
-            if (typeof paneBodyRef === "function") {
-              paneBodyRef(node);
-            } else if (paneBodyRef && "current" in paneBodyRef) {
-              paneBodyRef.current = node;
-            }
-          }}
-          className={`pane-body tree-root${isOver ? " drop-inside" : ""}`}
-          tabIndex={0}
-          onKeyDown={onPaneKeyDown}
-          onClick={(event) => {
-            if (onPaneClick) {
-              onPaneClick();
-            }
-            if (event.target === event.currentTarget) {
-              onClearSelection();
-            }
-          }}
-        >
-          {treeData.map((node) => (
-            <TreeNode
-              key={node.id}
-              node={node}
-              depth={0}
-              edgeSnap={edgeSnap}
-              expanded={expanded}
-              onToggle={onToggle}
-              selectedIds={selectedIds}
-              onSelect={onSelect}
-              renamingFolder={renamingFolder}
-              renameValue={renameValue}
-              setRenameValue={setRenameValue}
-              submitRenameFolder={submitRenameFolder}
-              cancelRenameFolder={cancelRenameFolder}
-              onContextMenu={onContextMenu}
-              indentationWidth={indentationWidth}
-            />
-          ))}
+        <div className="nav-scroll-area">
+          <div
+            ref={(node) => {
+              setRootDropRef(node);
+              if (typeof paneBodyRef === "function") {
+                paneBodyRef(node);
+              } else if (paneBodyRef && "current" in paneBodyRef) {
+                paneBodyRef.current = node;
+              }
+            }}
+            className={`pane-body tree-root${isOver ? " drop-inside" : ""}`}
+            tabIndex={0}
+            onKeyDown={onPaneKeyDown}
+            onClick={(event) => {
+              if (onPaneClick) {
+                onPaneClick();
+              }
+              if (event.target === event.currentTarget) {
+                onClearSelection();
+              }
+            }}
+          >
+            {treeData.map((node) => (
+              <TreeNode
+                key={node.id}
+                node={node}
+                depth={0}
+                edgeSnap={edgeSnap}
+                expanded={expanded}
+                onToggle={onToggle}
+                selectedIds={selectedIds}
+                onSelect={onSelect}
+                renamingFolder={renamingFolder}
+                renameValue={renameValue}
+                setRenameValue={setRenameValue}
+                submitRenameFolder={submitRenameFolder}
+                cancelRenameFolder={cancelRenameFolder}
+                onContextMenu={onContextMenu}
+                indentationWidth={indentationWidth}
+              />
+            ))}
+          </div>
         </div>
       </div>
       {footer ? <div className="pane-footer">{footer}</div> : null}

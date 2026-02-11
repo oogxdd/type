@@ -456,6 +456,7 @@ const parseNotePreview = (noteName: string, content: string, updatedMs: number |
 
 function App() {
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [appMode, setAppMode] = useState<AppMode>("notes");
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("general");
   const [tree, setTree] = useState<FolderNode | null>(null);
@@ -1571,115 +1572,132 @@ function App() {
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className={`app theme-${theme} min-h-screen`}>
-        <FoldersPanel
-          treeData={treeData}
-          selectedIds={selectedFolders}
-          onSelect={handleFolderClick}
-          edgeSnap={edgeSnap}
-          expanded={expanded}
-          onToggle={handleToggle}
-          onPaneKeyDown={handleFoldersKeyDown}
-          onPaneClick={() => {
-            focusNoScroll(foldersPanelRef.current);
-          }}
-          paneBodyRef={foldersPanelRef}
-          onClearSelection={() => {
-            setSelectedFolders(new Set());
-            setLastSelectedFolder("");
-          }}
-          renamingFolder={renamingFolder}
-          renameValue={renameValue}
-          setRenameValue={setRenameValue}
-          submitRenameFolder={submitRenameFolder}
-          cancelRenameFolder={() => {
-            setRenamingFolder(null);
-            setRenameValue("");
-          }}
-          onContextMenu={handleFolderContextMenu}
-          indentationWidth={indentationWidth}
-          sectionTitle="Folders"
-          topAction={
-            <button
-              type="button"
-              className="nav-action nav-action-new rounded-xl px-3 py-2 transition-colors"
-              onClick={(event) => {
-                event.stopPropagation();
-                handleNewNoteNavigation();
-              }}
-            >
-              <span className="nav-action-icon" aria-hidden>
-                +
-              </span>
-              <span>New note</span>
-            </button>
-          }
-          footer={
-            <button
-              type="button"
-              className={`nav-action nav-action-settings rounded-xl px-3 py-2 transition-colors${
-                appMode === "settings" ? " active" : ""
-              }`}
-              onClick={(event) => {
-                event.stopPropagation();
-                setAppMode((prev) => (prev === "notes" ? "settings" : "notes"));
-              }}
-            >
-              <span className="nav-action-icon" aria-hidden>
-                {appMode === "settings" ? "←" : "⚙"}
-              </span>
-              <span>{appMode === "settings" ? "Back to notes" : "Settings"}</span>
-            </button>
-          }
-        />
-        {appMode === "notes" ? (
-          <div className="pane notes-pane min-w-0">
-            <div
-              className="pane-body focus:outline-none"
-              ref={notesPanelRef}
-              tabIndex={0}
-              onKeyDown={handleNotesKeyDown}
-              onClick={() => {
-                focusNoScroll(notesPanelRef.current);
-              }}
-            >
-              {notes.length === 0 && <div className="empty">No notes</div>}
-              <SortableContext
-                items={notes.map((note) => note.path)}
-                strategy={verticalListSortingStrategy}
+      <div className={`window-shell theme-${theme}`}>
+        <div className={`app theme-${theme}${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
+          <div className="left-panels-drag-region" data-tauri-drag-region aria-hidden />
+          <button
+            type="button"
+            className="sidebar-toggle-btn"
+            aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+            onClick={() => setSidebarCollapsed((prev) => !prev)}
+          >
+            <svg viewBox="0 0 16 16" aria-hidden>
+              <rect x="1.5" y="2" width="13" height="12" rx="3" fill="none" stroke="currentColor" />
+              <path d="M6 2.8v10.4" fill="none" stroke="currentColor" />
+            </svg>
+          </button>
+          <FoldersPanel
+            treeData={treeData}
+            selectedIds={selectedFolders}
+            onSelect={handleFolderClick}
+            edgeSnap={edgeSnap}
+            expanded={expanded}
+            onToggle={handleToggle}
+            onPaneKeyDown={handleFoldersKeyDown}
+            onPaneClick={() => {
+              focusNoScroll(foldersPanelRef.current);
+            }}
+            paneBodyRef={foldersPanelRef}
+            onClearSelection={() => {
+              setSelectedFolders(new Set());
+              setLastSelectedFolder("");
+            }}
+            renamingFolder={renamingFolder}
+            renameValue={renameValue}
+            setRenameValue={setRenameValue}
+            submitRenameFolder={submitRenameFolder}
+            cancelRenameFolder={() => {
+              setRenamingFolder(null);
+              setRenameValue("");
+            }}
+            onContextMenu={handleFolderContextMenu}
+            indentationWidth={indentationWidth}
+            sectionTitle="Folders"
+            topAction={
+              <button
+                type="button"
+                className="nav-action nav-action-new rounded-xl px-3 py-2 transition-colors"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleNewNoteNavigation();
+                }}
               >
-                {notes.map((note) => (
-                  <NoteRow key={note.path} note={note} preview={notePreviews[note.path]} />
+                <span className="nav-action-icon" aria-hidden>
+                  +
+                </span>
+                <span>New note</span>
+              </button>
+            }
+            footer={
+              <button
+                type="button"
+                className={`nav-action nav-action-settings rounded-xl px-3 py-2 transition-colors${
+                  appMode === "settings" ? " active" : ""
+                }`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setAppMode((prev) => (prev === "notes" ? "settings" : "notes"));
+                }}
+              >
+                <span className="nav-action-icon" aria-hidden>
+                  {appMode === "settings" ? "←" : "⚙"}
+                </span>
+                <span>{appMode === "settings" ? "Back to notes" : "Settings"}</span>
+              </button>
+            }
+          />
+          {appMode === "notes" ? (
+            <div className="pane notes-pane min-w-0">
+              <div className="notes-count-label" aria-live="polite">
+                {notes.length} notes
+              </div>
+              <div
+                className="pane-body focus:outline-none"
+                ref={notesPanelRef}
+                tabIndex={0}
+                onKeyDown={handleNotesKeyDown}
+                onClick={() => {
+                  focusNoScroll(notesPanelRef.current);
+                }}
+              >
+                {notes.length === 0 && <div className="empty">No notes</div>}
+                <SortableContext
+                  items={notes.map((note) => note.path)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {notes.map((note) => (
+                    <NoteRow key={note.path} note={note} preview={notePreviews[note.path]} />
+                  ))}
+                </SortableContext>
+              </div>
+            </div>
+          ) : (
+            <div className="pane settings-sections-pane min-w-0">
+              <div className="pane-body settings-sections-body">
+                {SETTINGS_SECTIONS.map((section) => (
+                  <SettingsRow key={section.id} section={section} />
                 ))}
-              </SortableContext>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="pane settings-sections-pane min-w-0">
-            <div className="pane-body settings-sections-body">
-              {SETTINGS_SECTIONS.map((section) => (
-                <SettingsRow key={section.id} section={section} />
-              ))}
+          )}
+          {appMode === "notes" ? (
+            <div className="pane editor-pane min-w-0">
+              <div className="pane-body editor-body">
+                {activeNote ? (
+                  <div className="editor-single">
+                    <NoteEditor markdown={noteContent} onChange={handleEditorChange} />
+                  </div>
+                ) : (
+                  <div className="empty">Select a note to edit</div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-        {appMode === "notes" ? (
-          <div className="pane editor-pane min-w-0">
-            <div className="pane-body editor-body">
-              {activeNote ? (
-                <div className="editor-single">
-                  <NoteEditor markdown={noteContent} onChange={handleEditorChange} />
-                </div>
-              ) : (
-                <div className="empty">Select a note to edit</div>
-              )}
+          ) : (
+            <div className="pane settings-detail-pane min-w-0">
+              <div className="pane-body settings-detail-body">{renderSettingsDetail()}</div>
             </div>
-          </div>
-        ) : (
-          <div className="pane settings-detail-pane min-w-0">
-            <div className="pane-body settings-detail-body">{renderSettingsDetail()}</div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       <DragOverlay modifiers={[snapCenterToCursor]}>
         {activeId ? (
