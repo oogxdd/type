@@ -4,13 +4,14 @@
   line-height: 1.4;
   color: #1f2328;
   background-color: #f4f5f7;
-  --tree-accent: #2f6b5f;
-  --tree-accent-soft: rgba(47, 107, 95, 0.16);
-  --tree-line: rgba(47, 107, 95, 0.7);
-  --tree-bg: #f4f2ee;
-  --tree-bg-strong: #ebe6de;
-  --tree-text: #2f2b25;
-  --tree-muted: #6a6258;
+  --tree-accent: #d6ddff;
+  --tree-accent-soft: rgba(214, 221, 255, 0.72);
+  --tree-line: #5f70cc;
+  --tree-bg: #f7f8fb;
+  --tree-bg-strong: #f1f3f8;
+  --tree-text: #323844;
+  --tree-muted: #6c7382;
+  --tree-border: #c8ced8;
 }
 
 * {
@@ -141,11 +142,6 @@ body {
 
 
 
-.folder-row:hover .row-actions {
-  opacity: 1;
-  pointer-events: auto;
-}
-
 .item-label {
   flex: 1;
   overflow: hidden;
@@ -168,61 +164,81 @@ body {
   background: #eef2f6;
 }
 
-.row-actions {
-  display: flex;
-  gap: 6px;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
-}
-
 .tree-pane {
-  background: linear-gradient(180deg, var(--tree-bg) 0%, #f7f5f2 40%, #f1f3f6 100%);
-  border-right: 1px solid #d7d0c6;
+  background:
+    radial-gradient(circle at -10% -10%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 45%),
+    linear-gradient(180deg, var(--tree-bg) 0%, #f3f5fb 100%);
+  border-right: 1px solid var(--tree-border);
+  font-family: "IBM Plex Mono", "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .tree-pane .pane-header {
-  font-family: "Avenir Next", "Gill Sans", "Trebuchet MS", sans-serif;
+  font-family: inherit;
   font-size: 12px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.02em;
+  text-transform: none;
   color: var(--tree-muted);
   background: var(--tree-bg-strong);
-  border-bottom: 1px solid #d8d1c6;
+  border-bottom: 1px solid var(--tree-border);
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  backdrop-filter: blur(6px);
 }
 
 .tree-pane .pane-body {
-  padding: 10px 6px 12px;
+  padding: 10px 8px 14px;
   background-image: radial-gradient(
-    circle at 10% 0%,
-    rgba(255, 255, 255, 0.5),
+    circle at 6% 0%,
+    rgba(255, 255, 255, 0.8),
     rgba(255, 255, 255, 0)
   );
 }
 
 .tree-pane .item-row {
-  border-radius: 10px;
-  margin: 2px 8px;
-  padding: 7px 12px;
-  padding-right: 72px;
-  transition: background 0.15s ease, box-shadow 0.15s ease;
+  border-radius: 8px;
+  margin: 3px 2px;
+  min-height: 32px;
+  padding: 6px 10px;
+  padding-right: 12px;
+  transition: background 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+  border: 1px solid transparent;
+}
+
+.tree-pane .tree-node {
+  position: relative;
 }
 
 .tree-pane .item-row:hover {
-  background: rgba(255, 255, 255, 0.7);
-  box-shadow: inset 0 0 0 1px rgba(195, 185, 170, 0.45);
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(185, 193, 206, 0.6);
+  box-shadow: 0 4px 10px rgba(37, 45, 60, 0.08);
 }
 
 .tree-pane .item-row.selected {
-  background: #fef3d6;
-  box-shadow: inset 0 0 0 1px rgba(194, 159, 76, 0.45);
+  background: var(--tree-accent-soft);
+  border-color: rgba(104, 119, 191, 0.5);
+  box-shadow: 0 4px 12px rgba(54, 73, 162, 0.16);
+}
+
+.tree-pane .item-row.selected::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 99px;
+  background: #5868be;
+}
+
+.tree-pane .item-row:hover,
+.tree-pane .item-row:focus-within {
+  z-index: 3;
 }
 
 .tree-pane .item-row.drop-inside {
-  background: rgba(229, 246, 236, 0.7);
+  background: rgba(219, 229, 255, 0.6);
   outline: 1px dashed var(--tree-line);
 }
 
@@ -239,41 +255,77 @@ body {
   border-radius: 12px;
 }
 
+.tree-pane .tree-children {
+  margin-left: 0;
+  border-left: none;
+  padding-left: 0;
+}
+
 .tree-pane .item-label {
   color: var(--tree-text);
-  font-weight: 600;
+  font-weight: 540;
+  letter-spacing: 0.01em;
 }
 
 .tree-pane .note-count {
   font-size: 11px;
   color: var(--tree-muted);
-  background: rgba(235, 229, 221, 0.9);
-  border: 1px solid rgba(205, 196, 184, 0.6);
+  background: rgba(235, 238, 246, 0.95);
+  border: 1px solid rgba(186, 194, 209, 0.8);
   border-radius: 999px;
   padding: 2px 8px;
   margin-left: 6px;
-  line-height: 1.4;
+  line-height: 1.3;
   white-space: nowrap;
+  font-weight: 500;
 }
 
 .tree-pane .icon-btn {
   color: var(--tree-muted);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 2px 6px;
 }
 
 .tree-pane .icon-btn:hover {
   color: var(--tree-text);
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(230, 234, 244, 0.9);
 }
 
 .tree-pane .tree-toggle {
-  font-size: 15px;
-  width: 26px;
-  height: 24px;
+  width: 20px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
+}
+
+.tree-pane .tree-toggle svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.15s ease;
+}
+
+.tree-pane .tree-toggle.is-collapsed svg {
+  transform: rotate(0deg);
+}
+
+.tree-pane .tree-toggle:not(.is-collapsed) svg {
+  transform: rotate(90deg);
+}
+
+.tree-pane .folder-glyph {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #6f7ca5;
+}
+
+.tree-pane .folder-glyph svg {
+  width: 14px;
+  height: 14px;
 }
 
 .tree-pane .drag-handle {
@@ -290,42 +342,26 @@ body {
 }
 
 .tree-pane .icon-spacer {
-  width: 26px;
-  height: 24px;
+  width: 20px;
+  height: 22px;
   display: inline-block;
-}
-
-.tree-pane .row-actions {
-  right: 10px;
-  background: rgba(250, 248, 244, 0.9);
-  border: 1px solid rgba(205, 196, 184, 0.6);
-  padding: 2px 4px;
-  border-radius: 999px;
-  box-shadow: 0 6px 12px rgba(25, 29, 37, 0.08);
-}
-
-.tree-pane .row-action-btn {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  font-size: 12px;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.tree-pane .row-action-btn svg {
-  width: 14px;
-  height: 14px;
 }
 
 .rename-input {
   flex: 1;
-  border: 1px solid #c6ccd4;
-  border-radius: 6px;
-  padding: 4px 6px;
+  border: 1px solid rgba(137, 149, 178, 0.62);
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 7px;
+  padding: 4px 8px;
   font-size: 13px;
+  font-family: inherit;
+  color: var(--tree-text);
+}
+
+.rename-input:focus {
+  outline: none;
+  border-color: rgba(92, 108, 184, 0.8);
+  box-shadow: 0 0 0 2px rgba(120, 136, 212, 0.22);
 }
 
 .notes-pane .pane-body {

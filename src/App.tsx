@@ -15,6 +15,8 @@ import { snapCenterToCursor } from "@dnd-kit/modifiers";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { invoke } from "@tauri-apps/api/core";
+import { LogicalPosition } from "@tauri-apps/api/dpi";
+import { Menu } from "@tauri-apps/api/menu";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import "./App.css";
 import { DROP_PREFIX, ROOT_ID, FoldersPanel } from "./components/FoldersPanel";
@@ -384,6 +386,9 @@ function App() {
   const expandTargetRef = useRef<string | null>(null);
   const notesPanelRef = useRef<HTMLDivElement | null>(null);
   const foldersPanelRef = useRef<HTMLDivElement | null>(null);
+  const folderContextPathRef = useRef<string | null>(null);
+  const selectedFoldersRef = useRef<Set<string>>(new Set());
+  const folderMenuPromiseRef = useRef<Promise<Menu> | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -393,6 +398,7 @@ function App() {
 
   useEffect(() => {
     console.log("[folders] selectedFolders", Array.from(selectedFolders));
+    selectedFoldersRef.current = selectedFolders;
   }, [selectedFolders]);
 
   useEffect(() => {
@@ -622,6 +628,57 @@ function App() {
       setActiveFolder("");
     }
     await refreshTree();
+  };
+
+  const getFolderNativeMenu = () => {
+    if (!folderMenuPromiseRef.current) {
+      folderMenuPromiseRef.current = Menu.new({
+        items: [
+          {
+            id: "folder.rename",
+            text: "Rename folder",
+            action: () => {
+              const path = folderContextPathRef.current;
+              if (!path) {
+                return;
+              }
+              startRenameFolder(path);
+            },
+          },
+          {
+            id: "folder.delete",
+            text: "Delete folder",
+            action: () => {
+              const path = folderContextPathRef.current;
+              if (!path) {
+                return;
+              }
+              const selected = selectedFoldersRef.current;
+              const paths =
+                selected.size > 1 && selected.has(path) ? Array.from(selected) : [path];
+              void deleteFolders(paths);
+            },
+          },
+        ],
+      });
+    }
+    return folderMenuPromiseRef.current;
+  };
+
+  const handleFolderContextMenu = async (event: MouseEvent, path: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setNoteMenu({ visible: false, x: 0, y: 0 });
+    if (!selectedFolders.has(path)) {
+      setSelectedFolders(new Set([path]));
+      setLastSelectedFolder(path);
+    }
+    setActiveFolder(path);
+    setSelectedNotes(new Set());
+    setActiveNote(null);
+    folderContextPathRef.current = path;
+    const menu = await getFolderNativeMenu();
+    await menu.popup(new LogicalPosition(event.clientX, event.clientY));
   };
 
   const deleteNotes = async (paths: string[]) => {
@@ -1171,7 +1228,14 @@ function App() {
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="app">
+      <div
+        className="app"
+        onClick={() => {
+          if (noteMenu.visible) {
+            setNoteMenu({ visible: false, x: 0, y: 0 });
+          }
+        }}
+      >
         <FoldersPanel
           treeData={treeData}
           selectedIds={selectedFolders}
@@ -1181,6 +1245,7 @@ function App() {
           onToggle={handleToggle}
           onPaneKeyDown={handleFoldersKeyDown}
           onPaneClick={() => {
+            setNoteMenu({ visible: false, x: 0, y: 0 });
             focusNoScroll(foldersPanelRef.current);
           }}
           paneBodyRef={foldersPanelRef}
@@ -1196,8 +1261,7 @@ function App() {
             setRenamingFolder(null);
             setRenameValue("");
           }}
-          startRenameFolder={startRenameFolder}
-          deleteFolders={deleteFolders}
+          onContextMenu={handleFolderContextMenu}
           indentationWidth={indentationWidth}
         />
         <div className="pane notes-pane">

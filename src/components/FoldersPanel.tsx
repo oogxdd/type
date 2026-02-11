@@ -28,8 +28,7 @@ type FoldersPanelProps = {
   setRenameValue: (value: string) => void;
   submitRenameFolder: () => void;
   cancelRenameFolder: () => void;
-  startRenameFolder: (path: string) => void;
-  deleteFolders: (paths: string[]) => void;
+  onContextMenu: (event: MouseEvent, id: string) => void;
   indentationWidth: number;
 };
 
@@ -46,8 +45,7 @@ type TreeRowProps = {
   setRenameValue: (value: string) => void;
   submitRenameFolder: () => void;
   cancelRenameFolder: () => void;
-  startRenameFolder: (path: string) => void;
-  deleteFolders: (paths: string[]) => void;
+  onContextMenu: (event: MouseEvent, id: string) => void;
   indentationWidth: number;
 };
 
@@ -64,8 +62,7 @@ function TreeRow({
   setRenameValue,
   submitRenameFolder,
   cancelRenameFolder,
-  startRenameFolder,
-  deleteFolders,
+  onContextMenu,
   indentationWidth,
 }: TreeRowProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -102,11 +99,14 @@ function TreeRow({
       data-folder={node.id}
       onClick={(event) => {
         const target = event.target as HTMLElement | null;
-        if (target && target.closest(".row-actions, .tree-toggle, .rename-input")) {
+        if (target && target.closest(".tree-toggle, .rename-input")) {
           return;
         }
         console.log("[folders] select click", node.id);
         onSelect(event, node.id);
+      }}
+      onContextMenu={(event) => {
+        onContextMenu(event, node.id);
       }}
       {...listeners}
       {...attributes}
@@ -114,7 +114,7 @@ function TreeRow({
       {node.children.length > 0 ? (
         <button
           type="button"
-          className="icon-btn tree-toggle"
+          className={`icon-btn tree-toggle${isCollapsed ? " is-collapsed" : ""}`}
           onClick={(event) => {
             event.stopPropagation();
             onToggle(event, node.id);
@@ -123,10 +123,25 @@ function TreeRow({
           onMouseDown={(event) => event.stopPropagation()}
           aria-label={isCollapsed ? "Expand folder" : "Collapse folder"}
         >
-          {isCollapsed ? "▸" : "▾"}
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          </svg>
         </button>
       ) : (
         <span className="icon-spacer" aria-hidden />
+      )}
+      {!renaming && (
+        <span className="folder-glyph" aria-hidden>
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9z"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
       )}
       {renaming ? (
         <input
@@ -155,57 +170,6 @@ function TreeRow({
           {node.noteCount}
         </span>
       ) : null}
-      {!renaming && (
-        <div
-          className="row-actions"
-          onPointerDown={(event) => event.stopPropagation()}
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <button
-            className="icon-btn row-action-btn"
-            onClick={(event) => {
-              event.stopPropagation();
-              startRenameFolder(node.id);
-            }}
-            onPointerDown={(event) => event.stopPropagation()}
-            onMouseDown={(event) => event.stopPropagation()}
-            aria-label="Rename folder"
-            title="Rename"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M4 16.5V20h3.5L18.6 8.9a1 1 0 0 0 0-1.4l-2.1-2.1a1 1 0 0 0-1.4 0L4 16.5z"
-                fill="currentColor"
-              />
-              <path d="M13.8 5.2l3 3" stroke="currentColor" strokeWidth="1.6" />
-            </svg>
-          </button>
-          <button
-            className="icon-btn row-action-btn"
-            onClick={(event) => {
-              event.stopPropagation();
-              deleteFolders([node.id]);
-            }}
-            onPointerDown={(event) => event.stopPropagation()}
-            onMouseDown={(event) => event.stopPropagation()}
-            aria-label="Delete folder"
-            title="Delete"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M6 7h12l-1 13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7z"
-                fill="currentColor"
-              />
-              <path
-                d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
-                fill="currentColor"
-              />
-              <path d="M4 7h16" stroke="currentColor" strokeWidth="1.6" />
-            </svg>
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -223,8 +187,7 @@ type TreeNodeProps = {
   setRenameValue: (value: string) => void;
   submitRenameFolder: () => void;
   cancelRenameFolder: () => void;
-  startRenameFolder: (path: string) => void;
-  deleteFolders: (paths: string[]) => void;
+  onContextMenu: (event: MouseEvent, id: string) => void;
   indentationWidth: number;
 };
 
@@ -241,8 +204,7 @@ function TreeNode({
   setRenameValue,
   submitRenameFolder,
   cancelRenameFolder,
-  startRenameFolder,
-  deleteFolders,
+  onContextMenu,
   indentationWidth,
 }: TreeNodeProps) {
   const edgePosition = edgeSnap?.id === node.id ? edgeSnap.position : null;
@@ -263,8 +225,7 @@ function TreeNode({
         setRenameValue={setRenameValue}
         submitRenameFolder={submitRenameFolder}
         cancelRenameFolder={cancelRenameFolder}
-        startRenameFolder={startRenameFolder}
-        deleteFolders={deleteFolders}
+        onContextMenu={onContextMenu}
         indentationWidth={indentationWidth}
       />
       {node.children.length > 0 && !isCollapsed && (
@@ -284,8 +245,7 @@ function TreeNode({
               setRenameValue={setRenameValue}
               submitRenameFolder={submitRenameFolder}
               cancelRenameFolder={cancelRenameFolder}
-              startRenameFolder={startRenameFolder}
-              deleteFolders={deleteFolders}
+              onContextMenu={onContextMenu}
               indentationWidth={indentationWidth}
             />
           ))}
@@ -311,8 +271,7 @@ export function FoldersPanel({
   setRenameValue,
   submitRenameFolder,
   cancelRenameFolder,
-  startRenameFolder,
-  deleteFolders,
+  onContextMenu,
   indentationWidth,
 }: FoldersPanelProps) {
   const { setNodeRef: setRootDropRef, isOver } = useDroppable({
@@ -358,8 +317,7 @@ export function FoldersPanel({
             setRenameValue={setRenameValue}
             submitRenameFolder={submitRenameFolder}
             cancelRenameFolder={cancelRenameFolder}
-            startRenameFolder={startRenameFolder}
-            deleteFolders={deleteFolders}
+            onContextMenu={onContextMenu}
             indentationWidth={indentationWidth}
           />
         ))}
