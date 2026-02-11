@@ -21,6 +21,7 @@ import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { Settings } from "lucide-react";
 import "./App.css";
 import { DROP_PREFIX, ROOT_ID, FoldersPanel } from "./components/FoldersPanel";
+import { Button } from "./components/ui/button";
 import { NoteEditor } from "./components/NoteEditor";
 import type { DragData, FolderNode, NoteEntry, NoteMeta } from "./types";
 import type { TreeItem } from "./tree/types";
@@ -1266,16 +1267,18 @@ function App() {
   const SettingsRow = ({ section }: { section: SettingsSection }) => {
     const isSelected = activeSettingsSection === section.id;
     return (
-      <button
+      <Button
         type="button"
         className={`item-row settings-row transition-colors${isSelected ? " selected" : ""}`}
+        variant="ghost"
+        size="sm"
         onClick={() => setActiveSettingsSection(section.id)}
       >
         <div className="settings-row-main">
           <div className="settings-row-title">{section.title}</div>
           <div className="settings-row-subline">{section.description}</div>
         </div>
-      </button>
+      </Button>
     );
   };
 
@@ -1408,6 +1411,14 @@ function App() {
             <span>Renderer</span>
             <code>Tauri + React</code>
           </div>
+        </div>
+        <div className="settings-action-row">
+          <Button variant="outline" size="sm" type="button">
+            Check updates
+          </Button>
+          <Button variant="secondary" size="sm" type="button">
+            Reset demo values
+          </Button>
         </div>
       </>
     );

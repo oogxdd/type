@@ -712,6 +712,11 @@ body {
   padding: 8px 10px;
   text-align: left;
   cursor: pointer;
+  justify-content: flex-start;
+  height: auto;
+  min-height: 0;
+  border-radius: 0;
+  font-weight: 400;
 }
 
 .settings-row:hover {
@@ -804,6 +809,12 @@ body {
   font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
   color: #334050;
+}
+
+.settings-action-row {
+  margin-top: 14px;
+  display: flex;
+  gap: 8px;
 }
 
 .editor-pane {
@@ -1177,8 +1188,7 @@ body {
   background: rgba(213, 213, 218, 0.12);
 }
 
-.app.theme-dark .notes-pane,
-.app.theme-dark .settings-sections-pane {
+.app.theme-dark .notes-pane {
   background: rgba(33, 35, 40, 0.74);
 }
 
@@ -1187,9 +1197,17 @@ body {
   background: rgba(26, 28, 33, 0.8);
 }
 
-.app.theme-dark .notes-pane .pane-body,
-.app.theme-dark .settings-sections-pane .pane-body {
+.app.theme-dark .settings-sections-pane {
+  background: rgba(26, 28, 33, 0.8);
+}
+
+.app.theme-dark .notes-pane .pane-body {
   background: rgba(34, 36, 41, 0.9);
+  padding: calc(8px + var(--left-panels-drag-height)) 8px 10px;
+}
+
+.app.theme-dark .settings-sections-pane .pane-body {
+  background: rgba(24, 26, 30, 0.92);
   padding: calc(8px + var(--left-panels-drag-height)) 8px 10px;
 }
 
@@ -1264,6 +1282,25 @@ body {
 
 .app.theme-dark .settings-info-row code {
   color: #e2e8f2;
+}
+
+.app.theme-dark .settings-action-row [data-slot="button"][data-variant="outline"] {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: #364152;
+  color: #dce3ec;
+}
+
+.app.theme-dark .settings-action-row [data-slot="button"][data-variant="outline"]:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app.theme-dark .settings-action-row [data-slot="button"][data-variant="secondary"] {
+  background: rgba(255, 255, 255, 0.12);
+  color: #e8edf4;
+}
+
+.app.theme-dark .settings-action-row [data-slot="button"][data-variant="secondary"]:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .app.theme-dark .editor-body {
