@@ -53,6 +53,27 @@ const invokeLogged = async <T,>(
   }
 };
 
+const focusNoScroll = (el: HTMLElement | null) => {
+  if (!el) {
+    return;
+  }
+  try {
+    el.focus({ preventScroll: true });
+  } catch {
+    el.focus();
+  }
+};
+
+const scrollIntoViewIfNeeded = (container: HTMLElement | null, selector: string) => {
+  if (!container) {
+    return;
+  }
+  const target = container.querySelector<HTMLElement>(selector);
+  if (target) {
+    target.scrollIntoView({ block: "nearest" });
+  }
+};
+
 const confirmAction = async (message: string) => {
   try {
     const result = window.confirm(message);
@@ -75,6 +96,7 @@ function buildTreeItems(node: FolderNode): TreeItem[] {
   return node.children.map((child) => ({
     id: child.path,
     name: child.name,
+    noteCount: child.notes.length,
     children: buildTreeItems(child),
   }));
 }
@@ -342,6 +364,7 @@ function App() {
   const [lastSelectedNote, setLastSelectedNote] = useState<string>("");
   const [activeNote, setActiveNote] = useState<string | null>(null);
   const [noteContent, setNoteContent] = useState<string>("");
+  const [noteDirty, setNoteDirty] = useState(false);
   const [noteMeta, setNoteMeta] = useState<NoteMeta | null>(null);
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState<string>("");
@@ -421,12 +444,14 @@ function App() {
     if (!activeNote) {
       setNoteContent("");
       setNoteMeta(null);
+      setNoteDirty(false);
       return;
     }
     let cancelled = false;
     invokeLogged<string>("read_note", { path: activeNote }).then((content) => {
       if (!cancelled) {
         setNoteContent(content);
+        setNoteDirty(false);
       }
     });
     invokeLogged<NoteMeta>("get_note_meta", { path: activeNote }).then((meta) => {
@@ -440,7 +465,7 @@ function App() {
   }, [activeNote]);
 
   useEffect(() => {
-    if (!activeNote) {
+    if (!activeNote || !noteDirty) {
       return;
     }
     if (saveTimer.current) {
@@ -449,6 +474,7 @@ function App() {
     saveTimer.current = window.setTimeout(() => {
       invokeLogged("write_note", { path: activeNote, content: noteContent }).then(() => {
         setNoteMeta((prev) => (prev ? { ...prev, updated_ms: Date.now() } : prev));
+        setNoteDirty(false);
       });
     }, 400);
     return () => {
@@ -456,7 +482,7 @@ function App() {
         window.clearTimeout(saveTimer.current);
       }
     };
-  }, [activeNote, noteContent]);
+  }, [activeNote, noteContent, noteDirty]);
 
   const handleFolderClick = (
     event: MouseEvent | { stopPropagation?: () => void },
@@ -988,6 +1014,7 @@ function App() {
         ref={setNodeRef}
         className={`item-row note-row ${isSelected ? "selected" : ""}`}
         style={style}
+        data-note={note.path}
         onClick={(event) => handleNoteClick(note.path, event)}
         onContextMenu={(event) => {
           event.preventDefault();
@@ -1014,7 +1041,7 @@ function App() {
 
   const handleNotesKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
-      if (event.key === "ArrowLeft") {
+      if ((event.metaKey || event.ctrlKey) && event.key === "ArrowLeft") {
         event.preventDefault();
         foldersPanelRef.current?.focus();
       }
@@ -1035,12 +1062,102 @@ function App() {
     setSelectedNotes(new Set([nextPath]));
     setLastSelectedNote(nextPath);
     setActiveNote(nextPath);
+    requestAnimationFrame(() => {
+      scrollIntoViewIfNeeded(notesPanelRef.current, `[data-note="${CSS.escape(nextPath)}"]`);
+    });
   };
 
   const handleFoldersKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "ArrowRight") {
+    if ((event.metaKey || event.ctrlKey) && event.key === "ArrowRight") {
       event.preventDefault();
-      notesPanelRef.current?.focus();
+      focusNoScroll(notesPanelRef.current);
+      return;
+    }
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown" && event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+      return;
+    }
+    if (visibleItems.length === 0) {
+      return;
+    }
+    event.preventDefault();
+
+    const current =
+      lastSelectedFolder && orderedIds.includes(lastSelectedFolder)
+        ? lastSelectedFolder
+        : activeFolder || orderedIds[0];
+    const currentIndex = orderedIds.indexOf(current);
+    const currentItem = flatItems.find((item) => item.id === current);
+    const parentId = currentItem?.parentId ?? null;
+    const hasChildren = currentItem ? currentItem.children.length > 0 : false;
+    const isExpanded = current ? expanded.has(current) : false;
+
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      const delta = event.key === "ArrowUp" ? -1 : 1;
+      const nextIndex = Math.max(0, Math.min(orderedIds.length - 1, currentIndex + delta));
+      const nextPath = orderedIds[nextIndex];
+      setSelectedFolders(new Set([nextPath]));
+      setLastSelectedFolder(nextPath);
+      setActiveFolder(nextPath);
+      setSelectedNotes(new Set());
+      setActiveNote(null);
+      requestAnimationFrame(() => {
+        scrollIntoViewIfNeeded(foldersPanelRef.current, `[data-folder="${CSS.escape(nextPath)}"]`);
+      });
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      if (currentItem && hasChildren) {
+        if (!isExpanded) {
+          setExpanded((prev) => {
+            const next = new Set(prev);
+            next.add(currentItem.id);
+            return next;
+          });
+          return;
+        }
+        const firstChild = currentItem.children[0];
+        if (firstChild) {
+          setSelectedFolders(new Set([firstChild.id]));
+          setLastSelectedFolder(firstChild.id);
+          setActiveFolder(firstChild.id);
+          setSelectedNotes(new Set());
+          setActiveNote(null);
+          requestAnimationFrame(() => {
+            scrollIntoViewIfNeeded(
+              foldersPanelRef.current,
+              `[data-folder="${CSS.escape(firstChild.id)}"]`
+            );
+          });
+        }
+      }
+      return;
+    }
+
+    if (event.key === "ArrowLeft") {
+      if (currentItem && hasChildren && isExpanded) {
+        setExpanded((prev) => {
+          const next = new Set(prev);
+          next.delete(currentItem.id);
+          return next;
+        });
+        return;
+      }
+      if (parentId) {
+        setExpanded((prev) => {
+          const next = new Set(prev);
+          next.delete(parentId);
+          return next;
+        });
+        setSelectedFolders(new Set([parentId]));
+        setLastSelectedFolder(parentId);
+        setActiveFolder(parentId);
+        setSelectedNotes(new Set());
+        setActiveNote(null);
+        requestAnimationFrame(() => {
+          scrollIntoViewIfNeeded(foldersPanelRef.current, `[data-folder="${CSS.escape(parentId)}"]`);
+        });
+      }
     }
   };
 
@@ -1064,7 +1181,7 @@ function App() {
           onToggle={handleToggle}
           onPaneKeyDown={handleFoldersKeyDown}
           onPaneClick={() => {
-            foldersPanelRef.current?.focus();
+            focusNoScroll(foldersPanelRef.current);
           }}
           paneBodyRef={foldersPanelRef}
           onClearSelection={() => {
@@ -1092,7 +1209,7 @@ function App() {
             onKeyDown={handleNotesKeyDown}
             onClick={() => {
               setNoteMenu({ visible: false, x: 0, y: 0 });
-              notesPanelRef.current?.focus();
+              focusNoScroll(notesPanelRef.current);
             }}
           >
             {notes.length === 0 && <div className="empty">No notes</div>}
@@ -1131,7 +1248,10 @@ function App() {
               <textarea
                 className="editor"
                 value={noteContent}
-                onChange={(event) => setNoteContent(event.target.value)}
+                onChange={(event) => {
+                  setNoteContent(event.target.value);
+                  setNoteDirty(true);
+                }}
               />
             ) : (
               <div className="empty">Select a note to edit</div>

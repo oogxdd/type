@@ -99,6 +99,7 @@ function TreeRow({
       }${isOver && !edgePosition ? " drop-inside" : ""}${
         edgePosition === "before" ? " drop-before" : ""
       }${edgePosition === "after" ? " drop-after" : ""}`}
+      data-folder={node.id}
       onClick={(event) => {
         const target = event.target as HTMLElement | null;
         if (target && target.closest(".row-actions, .tree-toggle, .rename-input")) {
@@ -149,6 +150,11 @@ function TreeRow({
       ) : (
         <span className="item-label">{node.name}</span>
       )}
+      {!renaming && node.noteCount ? (
+        <span className="note-count" title={`${node.noteCount} notes`}>
+          {node.noteCount}
+        </span>
+      ) : null}
       {!renaming && (
         <div
           className="row-actions"

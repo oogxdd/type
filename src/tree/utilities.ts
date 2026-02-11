@@ -5,7 +5,12 @@ export function buildTree(items: FlattenedItem[]): TreeItem[] {
   const nodes = new Map<string, TreeItem>();
 
   for (const item of items) {
-    nodes.set(item.id, { id: item.id, name: item.name, children: [] });
+    nodes.set(item.id, {
+      id: item.id,
+      name: item.name,
+      noteCount: item.noteCount,
+      children: [],
+    });
   }
 
   for (const item of items) {
@@ -32,7 +37,14 @@ export function flattenTree(
   depth = 0
 ): FlattenedItem[] {
   return items.flatMap((item) => [
-    { id: item.id, name: item.name, parentId, depth, children: item.children },
+    {
+      id: item.id,
+      name: item.name,
+      parentId,
+      depth,
+      children: item.children,
+      noteCount: item.noteCount,
+    },
     ...flattenTree(item.children, item.id, depth + 1),
   ]);
 }

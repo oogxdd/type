@@ -244,6 +244,18 @@ body {
   font-weight: 600;
 }
 
+.tree-pane .note-count {
+  font-size: 11px;
+  color: var(--tree-muted);
+  background: rgba(235, 229, 221, 0.9);
+  border: 1px solid rgba(205, 196, 184, 0.6);
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-left: 6px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .tree-pane .icon-btn {
   color: var(--tree-muted);
   border-radius: 8px;

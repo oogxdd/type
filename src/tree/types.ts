@@ -2,6 +2,7 @@ export type TreeItem = {
   id: string;
   name: string;
   children: TreeItem[];
+  noteCount?: number;
   collapsed?: boolean;
 };
 
@@ -11,6 +12,7 @@ export type FlattenedItem = {
   parentId: string | null;
   depth: number;
   children: TreeItem[];
+  noteCount?: number;
   collapsed?: boolean;
 };
 

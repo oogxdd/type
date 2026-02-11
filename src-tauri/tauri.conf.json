@@ -5,7 +5,7 @@
   "identifier": "com.digital.notes-reviewer",
   "build": {
     "beforeDevCommand": "yarn dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:1430",
     "beforeBuildCommand": "yarn build",
     "frontendDist": "../dist"
   },
