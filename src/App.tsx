@@ -2052,7 +2052,7 @@ function App() {
               >
                 {renderMiddlePane()}
               </ResizablePanel>
-              <ResizableHandle className="app-resize-handle" />
+              <ResizableHandle className="app-resize-handle app-resize-handle-editor" />
               <ResizablePanel defaultSize="53%" minSize="30%" className="min-w-0 h-full min-h-0">
                 {renderRightPane()}
               </ResizablePanel>

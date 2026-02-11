@@ -141,10 +141,23 @@ body {
 }
 
 .app-resize-handle {
-  width: 1px;
-  background: var(--ui-border);
+  position: relative;
+  width: 0;
+  background: transparent;
   z-index: 6;
   cursor: col-resize;
+}
+
+.app-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--ui-border) 12%, transparent);
+  pointer-events: none;
 }
 
 .app-resize-handle::after {
@@ -152,7 +165,11 @@ body {
 }
 
 .app-resize-handle:hover {
-  background: var(--ui-border-strong);
+  background: transparent;
+}
+
+.app-resize-handle:hover::before {
+  background: color-mix(in srgb, var(--ui-border-strong) 22%, transparent);
 }
 
 .tree-pane .pane-top {
@@ -173,7 +190,7 @@ body {
 }
 
 .app-panels [data-slot="resizable-panel"]:not(:last-child) .pane {
-  border-right: 1px solid var(--ui-border);
+  border-right: none;
 }
 
 .tree-pane,
@@ -947,6 +964,7 @@ body {
   height: 100%;
   min-height: 0;
   border: 1px solid var(--ui-border);
+  border-left: none;
   border-radius: 0;
   overflow: hidden;
 }
@@ -1150,7 +1168,7 @@ body {
 }
 
 .app.theme-dark .app-panels [data-slot="resizable-panel"]:not(:last-child) .pane {
-  border-right: 1px solid var(--ui-border);
+  border-right: none;
 }
 
 .app.theme-dark .sidebar-toggle-btn {
@@ -1163,7 +1181,39 @@ body {
 }
 
 .app.theme-dark .app-resize-handle:hover {
-  background: #5a616b;
+  background: transparent;
+}
+
+.app.theme-dark .app-resize-handle::before {
+  background: rgba(157, 166, 178, 0.09);
+}
+
+.app.theme-dark .app-resize-handle:hover::before {
+  background: rgba(188, 196, 206, 0.18);
+}
+
+.app-resize-handle-editor::before {
+  width: 0;
+  background: transparent;
+}
+
+.app-resize-handle-editor:hover::before {
+  width: 0;
+  background: transparent;
+}
+
+.app.theme-dark .app-resize-handle-editor::before {
+  width: 0;
+  background: transparent;
+}
+
+.app.theme-dark .app-resize-handle-editor:hover::before {
+  width: 0;
+  background: transparent;
+}
+
+.app-resize-handle-editor::after {
+  width: 0;
 }
 
 .app.theme-dark .pane-header {
