@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import {
@@ -482,6 +483,12 @@ const getNextNoteFileName = (existingNames: string[]) => {
 function App() {
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [panelLayout, setPanelLayout] = useState<Record<string, number>>({
+    nav: 22,
+    middle: 25,
+    content: 53,
+  });
+  const [editorFontSize, setEditorFontSize] = useState(14);
   const [appMode, setAppMode] = useState<AppMode>("notes");
   const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("general");
   const [tree, setTree] = useState<FolderNode | null>(null);
@@ -732,10 +739,43 @@ function App() {
         return;
       }
       const code = event.code;
-      if (code !== "KeyT" && code !== "KeyW" && code !== "KeyK" && code !== "KeyJ" && code !== "KeyN") {
+      if (
+        code !== "KeyT" &&
+        code !== "KeyW" &&
+        code !== "KeyK" &&
+        code !== "KeyJ" &&
+        code !== "KeyN" &&
+        code !== "Equal" &&
+        code !== "Minus" &&
+        code !== "Digit0" &&
+        code !== "NumpadAdd" &&
+        code !== "NumpadSubtract" &&
+        code !== "Numpad0"
+      ) {
         return;
       }
       event.preventDefault();
+
+      if (code === "Equal" || code === "NumpadAdd") {
+        if (appMode === "notes") {
+          setEditorFontSize((prev) => Math.min(28, prev + 1));
+        }
+        return;
+      }
+
+      if (code === "Minus" || code === "NumpadSubtract") {
+        if (appMode === "notes") {
+          setEditorFontSize((prev) => Math.max(12, prev - 1));
+        }
+        return;
+      }
+
+      if (code === "Digit0" || code === "Numpad0") {
+        if (appMode === "notes") {
+          setEditorFontSize(14);
+        }
+        return;
+      }
 
       if (code === "KeyN") {
         void createNewNote();
@@ -789,6 +829,14 @@ function App() {
       window.removeEventListener("keydown", handleGlobalKeyDown);
     };
   }, [appMode, createNewNote, sidebarCollapsed]);
+
+  const appStyle = useMemo(
+    () =>
+      ({
+        "--editor-font-size": `${editorFontSize}px`,
+      }) as CSSProperties,
+    [editorFontSize]
+  );
 
   const handleFolderClick = (event: ReactMouseEvent, path: string) => {
     event.stopPropagation();
@@ -2007,7 +2055,10 @@ function App() {
       onDragCancel={handleDragCancel}
     >
       <div className={`window-shell theme-${theme}`}>
-        <div className={`app theme-${theme}${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
+        <div
+          className={`app theme-${theme}${sidebarCollapsed ? " sidebar-collapsed" : ""}`}
+          style={appStyle}
+        >
           <button
             type="button"
             className="sidebar-toggle-btn"
@@ -2034,8 +2085,11 @@ function App() {
             <ResizablePanelGroup
               orientation="horizontal"
               className="app-panels"
+              defaultLayout={panelLayout}
+              onLayoutChanged={(layout) => setPanelLayout(layout)}
             >
               <ResizablePanel
+                id="nav"
                 defaultSize="22%"
                 minSize="16%"
                 maxSize="34%"
@@ -2045,6 +2099,7 @@ function App() {
               </ResizablePanel>
               <ResizableHandle className="app-resize-handle" />
               <ResizablePanel
+                id="middle"
                 defaultSize="25%"
                 minSize="18%"
                 maxSize="40%"
@@ -2053,7 +2108,12 @@ function App() {
                 {renderMiddlePane()}
               </ResizablePanel>
               <ResizableHandle className="app-resize-handle app-resize-handle-editor" />
-              <ResizablePanel defaultSize="53%" minSize="30%" className="min-w-0 h-full min-h-0">
+              <ResizablePanel
+                id="content"
+                defaultSize="53%"
+                minSize="30%"
+                className="min-w-0 h-full min-h-0"
+              >
                 {renderRightPane()}
               </ResizablePanel>
             </ResizablePanelGroup>

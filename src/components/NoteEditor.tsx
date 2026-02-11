@@ -16,12 +16,38 @@ const turndown = new TurndownService({
   bulletListMarker: "-",
 });
 
+const EMPTY_LINE_TOKEN = "NV_EMPTY_LINE_TOKEN_9f3a1";
+
+const expandExtraBlankLines = (markdown: string) =>
+  markdown.replace(/\n{3,}/g, (match) => {
+    const extraBlankLines = Math.max(0, match.length - 2);
+    if (extraBlankLines === 0) {
+      return match;
+    }
+    return `\n\n${`${EMPTY_LINE_TOKEN}\n\n`.repeat(extraBlankLines)}`;
+  });
+
+const restoreEmptyLineTokens = (html: string) =>
+  html.replace(
+    new RegExp(`<p>\\s*${EMPTY_LINE_TOKEN}\\s*<\\/p>`, "g"),
+    "<p><br></p>"
+  );
+
 const markdownToHtml = (markdown: string) => {
-  const parsed = marked.parse(markdown || "", { breaks: true, gfm: true });
-  return typeof parsed === "string" ? parsed : "";
+  const parsed = marked.parse(expandExtraBlankLines(markdown || ""), {
+    breaks: true,
+    gfm: true,
+  });
+  return typeof parsed === "string" ? restoreEmptyLineTokens(parsed) : "";
 };
 
-const htmlToMarkdown = (html: string) => turndown.turndown(html).trimEnd();
+const htmlToMarkdown = (html: string) => {
+  const normalized = html.replace(
+    /<p>\s*(?:<br\s*\/?>|&nbsp;)?\s*<\/p>/gi,
+    `<p>${EMPTY_LINE_TOKEN}</p>`
+  );
+  return turndown.turndown(normalized).replace(new RegExp(EMPTY_LINE_TOKEN, "g"), "");
+};
 
 const toolbarButton =
   "rounded-md border border-transparent px-2 py-1 text-xs font-medium text-[var(--ui-muted)] transition-colors hover:border-[var(--ui-border)] hover:bg-[var(--ui-select)] hover:text-[var(--ui-text)]";
@@ -29,6 +55,29 @@ const toolbarButton =
 export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
   const isSyncing = useRef(false);
   const latestMarkdown = useRef(markdown);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const keepCaretBreathingRoom = (currentEditor: NonNullable<ReturnType<typeof useEditor>>) => {
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) {
+      return;
+    }
+    const position = currentEditor.state.selection.$anchor.pos;
+    let coords: { top: number; bottom: number };
+    try {
+      coords = currentEditor.view.coordsAtPos(position);
+    } catch {
+      return;
+    }
+    const rect = scrollEl.getBoundingClientRect();
+    const bottomLimit = rect.bottom - rect.height * 0.2;
+    if (coords.bottom <= bottomLimit) {
+      return;
+    }
+    const delta = coords.bottom - bottomLimit;
+    const maxScrollTop = scrollEl.scrollHeight - scrollEl.clientHeight;
+    scrollEl.scrollTop = Math.min(maxScrollTop, scrollEl.scrollTop + delta);
+  };
 
   const extensions = useMemo(
     () => [
@@ -58,6 +107,7 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
       const nextMarkdown = htmlToMarkdown(currentEditor.getHTML());
       latestMarkdown.current = nextMarkdown;
       onChange(nextMarkdown);
+      requestAnimationFrame(() => keepCaretBreathingRoom(currentEditor));
     },
   });
 
@@ -147,7 +197,14 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
           Redo
         </button>
       </div>
-      <EditorContent editor={editor} className="tiptap-scroll" />
+      <div
+        className="tiptap-scroll"
+        ref={(node) => {
+          scrollRef.current = node;
+        }}
+      >
+        <EditorContent editor={editor} />
+      </div>
     </div>
   );
 }
