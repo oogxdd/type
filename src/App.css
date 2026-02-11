@@ -1,16 +1,17 @@
 :root {
-  font-family: "JetBrains Mono", "IBM Plex Mono", "SF Mono", Menlo, Monaco, Consolas, monospace;
+  font-family: "IBM Plex Mono", "SF Mono", Menlo, Monaco, Consolas, monospace;
   font-size: 14px;
-  line-height: 1.4;
-  color: #1f2933;
-  background-color: #f8fafb;
-  --ui-bg: #f8fafb;
+  line-height: 1.35;
+  color: #101418;
+  background-color: #ffffff;
+  --ui-bg: #ffffff;
   --ui-pane: #ffffff;
-  --ui-border: #d6dee5;
-  --ui-border-strong: #c6d1db;
-  --ui-text: #24313d;
-  --ui-muted: #5e6f80;
-  --ui-select: #edf2f8;
+  --ui-border: #d3d9df;
+  --ui-border-strong: #9ba6b1;
+  --ui-text: #101418;
+  --ui-muted: #66717c;
+  --ui-select: #f2f5f7;
+  --ui-accent: #1f6feb;
 }
 
 * {
@@ -19,11 +20,12 @@
 
 body {
   margin: 0;
+  background: #fff;
 }
 
 .app {
   display: grid;
-  grid-template-columns: 280px 320px 1fr;
+  grid-template-columns: 260px 300px 1fr;
   height: 100vh;
   overflow: hidden;
 }
@@ -42,18 +44,18 @@ body {
 }
 
 .pane-header {
-  padding: 8px 12px;
+  padding: 6px 10px;
   font-weight: 500;
-  text-transform: none;
-  font-size: 12px;
-  letter-spacing: 0;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.08em;
   color: var(--ui-muted);
   border-bottom: 1px solid var(--ui-border);
-  background: #f7f9fb;
+  background: #fff;
 }
 
 .pane-body {
-  padding: 8px 0;
+  padding: 4px 0;
   overflow: auto;
   position: relative;
   flex: 1;
@@ -63,8 +65,8 @@ body {
 .item-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 6px;
+  padding: 4px 10px;
   padding-right: 72px;
   cursor: pointer;
   user-select: none;
@@ -109,7 +111,7 @@ body {
 }
 
 .tree-root.drop-inside {
-  outline: 1px dashed #356ae6;
+  outline: 1px dashed #9aaec1;
   outline-offset: -6px;
 }
 
@@ -126,7 +128,7 @@ body {
   padding: 4px 8px;
   background: #fff;
   border: 1px solid var(--ui-border);
-  border-radius: 6px;
+  border-radius: 0;
   font-size: 11px;
   font-weight: 500;
   color: var(--ui-text);
@@ -155,12 +157,12 @@ body {
   font-size: 12px;
   color: var(--ui-muted);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 0;
 }
 
 .icon-btn:hover {
   color: var(--ui-text);
-  background: #eff3f6;
+  background: #f3f5f7;
 }
 
 .tree-pane {
@@ -171,32 +173,34 @@ body {
 
 .tree-pane .pane-header {
   color: var(--ui-muted);
-  background: #f7f9fb;
+  background: #fff;
   border-bottom: 1px solid var(--ui-border);
 }
 
 .tree-pane .pane-body {
-  padding: 8px 6px 12px;
+  padding: 2px 0 8px;
 }
 
 .tree-pane .item-row {
-  border-radius: 4px;
-  margin: 3px 2px;
-  min-height: 28px;
-  padding: 6px 10px;
+  border-radius: 0;
+  margin: 0;
+  min-height: 24px;
+  padding: 4px 10px;
   padding-right: 12px;
-  transition: background 0.12s ease, border-color 0.12s ease;
-  border: 1px solid transparent;
+  transition: background 0.1s ease, border-color 0.1s ease;
+  border: none;
+  border-bottom: 1px solid #f0f3f5;
 }
 
 .tree-pane .item-row:hover {
-  background: #f6f8fa;
-  border-color: var(--ui-border);
+  background: #f7f9fb;
+  border-color: #e8edf1;
 }
 
 .tree-pane .item-row.selected {
-  background: var(--ui-select);
-  border-color: var(--ui-border-strong);
+  background: #f4f8ff;
+  border-bottom-color: #d9e6ff;
+  box-shadow: inset 2px 0 0 var(--ui-accent);
 }
 
 .tree-pane .item-row:hover,
@@ -235,11 +239,11 @@ body {
 }
 
 .tree-pane .note-count {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--ui-muted);
   background: #f3f6f9;
   border: 1px solid var(--ui-border);
-  border-radius: 999px;
+  border-radius: 0;
   padding: 1px 7px;
   margin-left: 6px;
   line-height: 1.3;
@@ -249,7 +253,7 @@ body {
 
 .tree-pane .icon-btn {
   color: var(--ui-muted);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 2px 6px;
 }
 
@@ -318,7 +322,7 @@ body {
   flex: 1;
   border: 1px solid var(--ui-border-strong);
   background: #fff;
-  border-radius: 4px;
+  border-radius: 0;
   padding: 4px 8px;
   font-size: 13px;
   font-family: inherit;
@@ -332,34 +336,36 @@ body {
 }
 
 .notes-pane .pane-body {
-  padding: 8px 8px 12px;
-  background: #fafcfd;
+  padding: 2px 0 8px;
+  background: #fff;
   color: var(--ui-text);
 }
 
 .notes-pane .pane-header {
-  background: #f7f9fb;
+  background: #fff;
   color: var(--ui-muted);
   border-bottom: 1px solid var(--ui-border);
 }
 
 .note-row {
-  padding: 8px 10px;
-  border-radius: 4px;
-  margin: 0 2px 8px;
-  border: 1px solid var(--ui-border);
-  background: #ffffff;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  padding: 6px 10px;
+  border-radius: 0;
+  margin: 0;
+  border: none;
+  border-bottom: 1px solid #eef2f5;
+  background: #fff;
+  transition: background 0.1s ease, border-color 0.1s ease;
 }
 
 .note-row:hover {
-  background: #f6f8fa;
-  border-color: var(--ui-border-strong);
+  background: #f7f9fb;
+  border-bottom-color: #e6ecf1;
 }
 
 .note-row.selected {
-  background: var(--ui-select);
-  border-color: var(--ui-border-strong);
+  background: #f4f8ff;
+  border-bottom-color: #d9e6ff;
+  box-shadow: inset 2px 0 0 var(--ui-accent);
 }
 
 .note-row-main {
@@ -372,7 +378,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--ui-text);
 }
@@ -380,13 +386,13 @@ body {
 .note-row-subline {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 2px;
+  gap: 6px;
+  margin-top: 1px;
 }
 
 .note-row-date {
   color: var(--ui-muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -398,7 +404,7 @@ body {
 
 .note-row-snippet {
   color: var(--ui-muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -410,7 +416,7 @@ body {
   position: fixed;
   background: #ffffff;
   border: 1px solid var(--ui-border-strong);
-  border-radius: 4px;
+  border-radius: 0;
   box-shadow: none;
   padding: 6px;
   z-index: 20;
@@ -429,17 +435,17 @@ body {
 }
 
 .editor-pane {
-  background: #fbfdfe;
+  background: #fff;
 }
 
 .editor-body {
-  padding: 12px;
+  padding: 8px;
 }
 
 .note-meta {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--ui-muted);
   margin-bottom: 8px;
   gap: 12px;
@@ -453,7 +459,7 @@ body {
 .editor-host {
   height: 100%;
   border: 1px solid var(--ui-border);
-  border-radius: 4px;
+  border-radius: 0;
   overflow: hidden;
 }
 
