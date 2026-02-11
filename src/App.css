@@ -885,6 +885,9 @@ body {
 .app.theme-dark {
   --ui-bg: #12161b;
   --ui-pane: rgba(24, 29, 35, 0.58);
+  --ui-pane-right: rgba(20, 24, 30, 0.78);
+  --ui-editor-surface: rgba(23, 28, 34, 0.86);
+  --ui-editor-border: #343c47;
   --ui-border: #2a313b;
   --ui-border-strong: #3a4450;
   --ui-text: #e6ebf2;
@@ -1072,7 +1075,7 @@ body {
 }
 
 .app.theme-dark .settings-detail-pane .pane-body {
-  background: rgba(21, 26, 32, 0.56);
+  background: rgba(25, 25, 27, 0.88);
   padding: 20px 22px;
 }
 
@@ -1114,17 +1117,29 @@ body {
 }
 
 .app.theme-dark .editor-body {
-  background: rgba(21, 26, 32, 0.56);
+  background: rgba(25, 25, 27, 0.88);
+  padding: 0;
 }
 
 .app.theme-dark .tiptap-editor {
-  border-color: #2d3744;
-  background: rgba(22, 28, 36, 0.74);
+  border-color: #3a3a3e;
+  border-top-color: transparent;
+  background: rgba(31, 31, 33, 0.94);
 }
 
 .app.theme-dark .tiptap-toolbar {
-  background: rgba(22, 28, 36, 0.74);
-  border-bottom-color: #2d3744;
+  background: rgba(31, 31, 33, 0.94);
+  border-bottom-color: #3a3a3e;
+}
+
+.app.theme-dark .tiptap-content {
+  padding-top: calc(10px + var(--left-panels-drag-height));
+}
+
+.app.theme-dark .editor-pane,
+.app.theme-dark .settings-detail-pane {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .app.theme-dark .tiptap-content pre {
@@ -1146,6 +1161,10 @@ body {
 
   .sidebar-toggle-btn {
     display: none;
+  }
+
+  .app.theme-dark .tiptap-content {
+    padding-top: 10px;
   }
 
   .app {
