@@ -6,7 +6,9 @@ declare module "@toast-ui/editor" {
   type EditorOptions = {
     el: HTMLElement;
     initialEditType?: "markdown" | "wysiwyg";
+    toolbarItems?: unknown[];
     hideModeSwitch?: boolean;
+    autofocus?: boolean;
     usageStatistics?: boolean;
     initialValue?: string;
     height?: string;

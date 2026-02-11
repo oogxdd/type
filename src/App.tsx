@@ -526,7 +526,9 @@ function App() {
       el: editorHostRef.current,
       initialEditType: "wysiwyg",
       hideModeSwitch: true,
+      toolbarItems: [],
       usageStatistics: false,
+      autofocus: false,
       initialValue: noteContent,
       height: "100%",
       events: {
