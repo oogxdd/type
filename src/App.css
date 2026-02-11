@@ -77,20 +77,36 @@ body {
 
 .app {
   position: relative;
-  display: grid;
-  grid-template-columns: 260px 300px 1fr;
-  height: 100%;
+  display: flex;
+  height: 100vh;
   overflow: hidden;
 }
 
-.left-panels-drag-region {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 560px;
-  height: var(--left-panels-drag-height);
-  z-index: 30;
-  background: transparent;
+.app-panels {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-height: 100vh;
+}
+
+.app-panels [data-slot="resizable-panel"] {
+  min-height: 0;
+  min-height: 100vh;
+}
+
+.app-panels [data-panel] {
+  height: 100%;
+  min-height: 0;
+  min-height: 100vh;
+}
+
+.app-single-pane {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-height: 100vh;
 }
 
 .sidebar-toggle-btn {
@@ -124,22 +140,19 @@ body {
   background: rgba(120, 128, 138, 0.18);
 }
 
-.app.sidebar-collapsed {
-  grid-template-columns: 0 0 1fr;
+.app-resize-handle {
+  width: 1px;
+  background: var(--ui-border);
+  z-index: 6;
+  cursor: col-resize;
 }
 
-.app.sidebar-collapsed .left-panels-drag-region {
-  width: 0;
+.app-resize-handle::after {
+  width: 6px;
 }
 
-.app.sidebar-collapsed .tree-pane,
-.app.sidebar-collapsed .notes-pane,
-.app.sidebar-collapsed .settings-sections-pane {
-  width: 0;
-  min-width: 0;
-  border-right: none;
-  overflow: hidden;
-  pointer-events: none;
+.app-resize-handle:hover {
+  background: var(--ui-border-strong);
 }
 
 .tree-pane .pane-top {
@@ -147,7 +160,8 @@ body {
 }
 
 .pane {
-  border-right: 1px solid var(--ui-border);
+  position: relative;
+  border-right: none;
   background: var(--ui-pane);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -155,10 +169,38 @@ body {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  min-height: 100vh;
 }
 
-.pane:last-child {
-  border-right: none;
+.app-panels [data-slot="resizable-panel"]:not(:last-child) .pane {
+  border-right: 1px solid var(--ui-border);
+}
+
+.tree-pane,
+.notes-pane,
+.settings-sections-pane,
+.editor-pane,
+.settings-detail-pane {
+  height: 100%;
+  min-height: 0;
+}
+
+.pane-with-drag {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-height: 100vh;
+}
+
+.pane-drag-region {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--left-panels-drag-height);
+  z-index: 30;
+  background: transparent;
 }
 
 .pane-header {
@@ -772,8 +814,21 @@ body {
 }
 
 .settings-control select,
-.settings-control input[type="range"] {
+.settings-control input[type="range"],
+.settings-control input[type="password"],
+.settings-control input[type="text"] {
   width: 100%;
+}
+
+.settings-control select,
+.settings-control input[type="password"],
+.settings-control input[type="text"] {
+  background: #fdfefe;
+  color: var(--ui-text);
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  min-height: 34px;
+  padding: 0 10px;
 }
 
 .settings-toggle {
@@ -784,6 +839,56 @@ body {
 
 .settings-toggle input[type="checkbox"] {
   margin: 0;
+}
+
+.settings-subsection {
+  margin-bottom: 20px;
+}
+
+.settings-subtitle {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ui-text);
+}
+
+.settings-radio-group {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+}
+
+.settings-radio-group legend {
+  padding: 0 6px;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.settings-radio-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ui-text);
+}
+
+.settings-radio-row input[type="radio"] {
+  margin: 0;
+}
+
+.settings-warning-zone {
+  border: 1px solid #f0d8d8;
+  border-radius: 10px;
+  padding: 12px;
+  background: rgba(255, 240, 240, 0.32);
+}
+
+.settings-warning-text {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: #7d3e3e;
 }
 
 .settings-info-grid {
@@ -822,16 +927,25 @@ body {
 }
 
 .editor-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   padding: 0;
 }
 
 .editor-single {
+  flex: 1;
   height: 100%;
   min-height: 0;
 }
 
 .tiptap-editor {
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  min-height: 0;
   border: 1px solid var(--ui-border);
   border-radius: 0;
   overflow: hidden;
@@ -848,7 +962,9 @@ body {
 }
 
 .tiptap-scroll {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+  height: auto;
   overflow: auto;
 }
 
@@ -1030,6 +1146,10 @@ body {
 
 .app.theme-dark .pane {
   background: var(--ui-pane);
+  border-right: none;
+}
+
+.app.theme-dark .app-panels [data-slot="resizable-panel"]:not(:last-child) .pane {
   border-right: 1px solid var(--ui-border);
 }
 
@@ -1040,6 +1160,10 @@ body {
 .app.theme-dark .sidebar-toggle-btn:hover {
   background: rgba(236, 243, 252, 0.1);
   color: rgba(228, 234, 242, 0.95);
+}
+
+.app.theme-dark .app-resize-handle:hover {
+  background: #5a616b;
 }
 
 .app.theme-dark .pane-header {
@@ -1260,7 +1384,9 @@ body {
 }
 
 .app.theme-dark .settings-control select,
-.app.theme-dark .settings-control input[type="range"] {
+.app.theme-dark .settings-control input[type="range"],
+.app.theme-dark .settings-control input[type="password"],
+.app.theme-dark .settings-control input[type="text"] {
   background: #1b222b;
   color: #dbe2eb;
   border: 1px solid #313a47;
@@ -1282,6 +1408,32 @@ body {
 
 .app.theme-dark .settings-info-row code {
   color: #e2e8f2;
+}
+
+.app.theme-dark .settings-subtitle {
+  color: #edf2f8;
+}
+
+.app.theme-dark .settings-radio-group {
+  border-color: #313a47;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.app.theme-dark .settings-radio-group legend {
+  color: #a8b1be;
+}
+
+.app.theme-dark .settings-radio-row {
+  color: #d8e0ea;
+}
+
+.app.theme-dark .settings-warning-zone {
+  border-color: #5c3a3a;
+  background: rgba(88, 45, 45, 0.2);
+}
+
+.app.theme-dark .settings-warning-text {
+  color: #e7bcbc;
 }
 
 .app.theme-dark .settings-action-row [data-slot="button"][data-variant="outline"] {
@@ -1346,7 +1498,7 @@ body {
 }
 
 @media (max-width: 1000px) {
-  .left-panels-drag-region {
+  .pane-drag-region {
     display: none;
   }
 
@@ -1356,20 +1508,6 @@ body {
 
   .app.theme-dark .tiptap-content {
     padding-top: 24px;
-  }
-
-  .app {
-    grid-template-columns: 1fr;
-    grid-template-rows: 240px 220px 1fr;
-  }
-
-  .pane {
-    border-right: none;
-    border-bottom: 1px solid #d7dce2;
-  }
-
-  .pane:last-child {
-    border-bottom: none;
   }
 
 }

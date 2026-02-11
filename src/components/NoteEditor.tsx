@@ -36,7 +36,7 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
         heading: { levels: [1, 2, 3] },
       }),
       Placeholder.configure({
-        placeholder: "What's on your mind",
+        placeholder: "What's on your mind?",
       }),
     ],
     []

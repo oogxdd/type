@@ -29,6 +29,7 @@ import { Settings } from "lucide-react";
 import "./App.css";
 import { DROP_PREFIX, ROOT_ID, FoldersPanel } from "./components/FoldersPanel";
 import { Button } from "./components/ui/button";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "./components/ui/resizable";
 import { NoteEditor } from "./components/NoteEditor";
 import type { DragData, FolderNode, NoteEntry, NoteMeta } from "./types";
 import type { TreeItem } from "./tree/types";
@@ -52,6 +53,7 @@ type SettingsSectionId =
   | "appearance"
   | "editor"
   | "sync"
+  | "security"
   | "privacy"
   | "about";
 
@@ -66,6 +68,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "appearance", title: "Appearance", description: "Typography, spacing, and theme accents." },
   { id: "editor", title: "Editor", description: "Editing, autosave, and preview behavior." },
   { id: "sync", title: "Sync", description: "Cloud sync, refresh policy, and conflict rules." },
+  { id: "security", title: "Security", description: "App lock and emergency wipe options (dummy)." },
   { id: "privacy", title: "Privacy", description: "Data collection and local-only controls." },
   { id: "about", title: "About", description: "Version, diagnostics, and support links." },
 ];
@@ -1552,6 +1555,92 @@ function App() {
         </>
       );
     }
+    if (activeSettingsSection === "security") {
+      return (
+        <>
+          <h2 className="settings-detail-title">Security</h2>
+          <p className="settings-detail-text">
+            Sample configuration only. Real lock and wipe logic will be implemented later.
+          </p>
+
+          <div className="settings-subsection">
+            <h3 className="settings-subtitle">App lock</h3>
+            <label className="settings-control settings-toggle">
+              <input type="checkbox" defaultChecked />
+              <span>Enable PIN/password lock</span>
+            </label>
+            <label className="settings-control">
+              <span>Lock method</span>
+              <select defaultValue="pin">
+                <option value="pin">PIN (4-8 digits)</option>
+                <option value="password">Password</option>
+              </select>
+            </label>
+            <label className="settings-control">
+              <span>PIN / password</span>
+              <input type="password" placeholder="Enter value" />
+            </label>
+            <label className="settings-control">
+              <span>Confirm PIN / password</span>
+              <input type="password" placeholder="Repeat value" />
+            </label>
+            <fieldset className="settings-radio-group">
+              <legend>Auto-lock trigger</legend>
+              <label className="settings-radio-row">
+                <input type="radio" name="auto-lock-trigger" defaultChecked />
+                <span>After inactivity interval</span>
+              </label>
+              <label className="settings-radio-row">
+                <input type="radio" name="auto-lock-trigger" />
+                <span>Immediately when app loses focus</span>
+              </label>
+              <label className="settings-radio-row">
+                <input type="radio" name="auto-lock-trigger" />
+                <span>Only when I press Lock now</span>
+              </label>
+            </fieldset>
+            <label className="settings-control">
+              <span>Inactivity interval</span>
+              <select defaultValue="5m">
+                <option value="1m">1 minute</option>
+                <option value="5m">5 minutes</option>
+                <option value="15m">15 minutes</option>
+                <option value="30m">30 minutes</option>
+              </select>
+            </label>
+            <div className="settings-action-row">
+              <Button variant="outline" size="sm" type="button">
+                Lock now
+              </Button>
+            </div>
+          </div>
+
+          <div className="settings-subsection settings-warning-zone">
+            <h3 className="settings-subtitle">Panic wipe code</h3>
+            <p className="settings-warning-text">
+              Entering this code on unlock will erase all local data. This screen is visual-only for now.
+            </p>
+            <label className="settings-control settings-toggle">
+              <input type="checkbox" />
+              <span>Enable panic wipe code</span>
+            </label>
+            <label className="settings-control">
+              <span>Wipe PIN / password</span>
+              <input type="password" placeholder="Enter emergency code" />
+            </label>
+            <label className="settings-control">
+              <span>Confirm wipe PIN / password</span>
+              <input type="password" placeholder="Repeat emergency code" />
+            </label>
+            <div className="settings-action-row">
+              <Button variant="destructive" size="sm" type="button">
+                Test wipe flow (dummy)
+              </Button>
+            </div>
+          </div>
+        </>
+      );
+    }
     if (activeSettingsSection === "privacy") {
       return (
         <>
@@ -1752,6 +1841,161 @@ function App() {
     }
   };
 
+  const renderMiddlePane = () =>
+    appMode === "notes" ? (
+      <div className="pane notes-pane min-w-0">
+        <div className="pane-drag-region" data-tauri-drag-region aria-hidden />
+        <div
+          className="pane-body focus:outline-none"
+          ref={(node) => {
+            notesPanelRef.current = node;
+            middlePaneRef.current = node;
+          }}
+          tabIndex={0}
+          onKeyDown={handleNotesKeyDown}
+          onClick={() => {
+            lastLeftPaneFocusRef.current = "middle";
+            focusNoScroll(middlePaneRef.current);
+          }}
+        >
+          {notes.length === 0 && <div className="empty">No notes</div>}
+          <SortableContext
+            items={notes.map((note) => note.path)}
+            strategy={verticalListSortingStrategy}
+          >
+            {notes.map((note) => (
+              <NoteRow key={note.path} note={note} preview={notePreviews[note.path]} />
+            ))}
+          </SortableContext>
+        </div>
+      </div>
+    ) : (
+      <div className="pane settings-sections-pane min-w-0">
+        <div className="pane-drag-region" data-tauri-drag-region aria-hidden />
+        <div
+          className="pane-body settings-sections-body"
+          ref={(node) => {
+            middlePaneRef.current = node;
+          }}
+          tabIndex={0}
+          onClick={() => {
+            lastLeftPaneFocusRef.current = "middle";
+            focusNoScroll(middlePaneRef.current);
+          }}
+        >
+          {SETTINGS_SECTIONS.map((section) => (
+            <SettingsRow key={section.id} section={section} />
+          ))}
+        </div>
+      </div>
+    );
+
+  const renderRightPane = () =>
+    appMode === "notes" ? (
+      <div className="pane editor-pane min-w-0">
+        <div
+          className="pane-body editor-body"
+          ref={rightPaneRef}
+          tabIndex={0}
+          onClick={() => {
+            const editorElement =
+              rightPaneRef.current?.querySelector<HTMLElement>(".tiptap-content[contenteditable='true']") ||
+              rightPaneRef.current;
+            focusNoScroll(editorElement);
+          }}
+        >
+          <div className="editor-single">
+            <NoteEditor
+              markdown={activeNote ? noteContent : draftNoteContent}
+              onChange={handleEditorChange}
+            />
+          </div>
+        </div>
+      </div>
+    ) : (
+      <div className="pane settings-detail-pane min-w-0">
+        <div
+          className="pane-body settings-detail-body"
+          ref={rightPaneRef}
+          tabIndex={0}
+          onClick={() => focusNoScroll(rightPaneRef.current)}
+        >
+          {renderSettingsDetail()}
+        </div>
+      </div>
+    );
+
+  const renderLeftPane = () => (
+    <div className="pane-with-drag">
+      <div className="pane-drag-region" data-tauri-drag-region aria-hidden />
+      <FoldersPanel
+        treeData={treeData}
+        selectedIds={selectedFolders}
+        onSelect={handleFolderClick}
+        edgeSnap={edgeSnap}
+        expanded={expanded}
+        onToggle={handleToggle}
+        onPaneKeyDown={handleFoldersKeyDown}
+        onPaneClick={() => {
+          lastLeftPaneFocusRef.current = "folders";
+          focusNoScroll(foldersPanelRef.current);
+        }}
+        paneBodyRef={foldersPanelRef}
+        onClearSelection={() => {
+          setSelectedFolders(new Set());
+          setLastSelectedFolder("");
+        }}
+        renamingFolder={renamingFolder}
+        renameValue={renameValue}
+        setRenameValue={setRenameValue}
+        submitRenameFolder={submitRenameFolder}
+        cancelRenameFolder={() => {
+          setRenamingFolder(null);
+          setRenameValue("");
+        }}
+        onContextMenu={handleFolderContextMenu}
+        indentationWidth={indentationWidth}
+        sectionTitle="Folders"
+        topAction={
+          <button
+            type="button"
+            className="nav-action nav-action-new rounded-xl px-3 py-2 transition-colors"
+            onClick={(event) => {
+              event.stopPropagation();
+              void createNewNote();
+            }}
+          >
+            <span className="nav-action-icon" aria-hidden>
+              +
+            </span>
+            <span>New note</span>
+          </button>
+        }
+        footer={
+          <button
+            type="button"
+            className={`nav-action nav-action-settings rounded-xl px-3 py-2 transition-colors${
+              appMode === "settings" ? " active" : ""
+            }`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setAppMode((prev) => (prev === "notes" ? "settings" : "notes"));
+            }}
+          >
+            <span className="nav-action-icon text-base leading-none" aria-hidden>
+              {appMode === "settings" ? (
+                "←"
+              ) : (
+                <Settings className="h-4 w-4 shrink-0" strokeWidth={1.9} />
+              )}
+            </span>
+            <span>{appMode === "settings" ? "Back to notes" : "Settings"}</span>
+          </button>
+        }
+      />
+    </div>
+  );
+
   return (
     <DndContext
       sensors={sensors}
@@ -1764,7 +2008,6 @@ function App() {
     >
       <div className={`window-shell theme-${theme}`}>
         <div className={`app theme-${theme}${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
-          <div className="left-panels-drag-region" data-tauri-drag-region aria-hidden />
           <button
             type="button"
             className="sidebar-toggle-btn"
@@ -1785,148 +2028,35 @@ function App() {
               <path d="M5.8 2.9v10.2" fill="none" stroke="currentColor" strokeWidth="1.25" />
             </svg>
           </button>
-          <FoldersPanel
-            treeData={treeData}
-            selectedIds={selectedFolders}
-            onSelect={handleFolderClick}
-            edgeSnap={edgeSnap}
-            expanded={expanded}
-            onToggle={handleToggle}
-            onPaneKeyDown={handleFoldersKeyDown}
-            onPaneClick={() => {
-              lastLeftPaneFocusRef.current = "folders";
-              focusNoScroll(foldersPanelRef.current);
-            }}
-            paneBodyRef={foldersPanelRef}
-            onClearSelection={() => {
-              setSelectedFolders(new Set());
-              setLastSelectedFolder("");
-            }}
-            renamingFolder={renamingFolder}
-            renameValue={renameValue}
-            setRenameValue={setRenameValue}
-            submitRenameFolder={submitRenameFolder}
-            cancelRenameFolder={() => {
-              setRenamingFolder(null);
-              setRenameValue("");
-            }}
-            onContextMenu={handleFolderContextMenu}
-            indentationWidth={indentationWidth}
-            sectionTitle="Folders"
-            topAction={
-              <button
-                type="button"
-                className="nav-action nav-action-new rounded-xl px-3 py-2 transition-colors"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void createNewNote();
-                }}
-              >
-                <span className="nav-action-icon" aria-hidden>
-                  +
-                </span>
-                <span>New note</span>
-              </button>
-            }
-            footer={
-              <button
-                type="button"
-                className={`nav-action nav-action-settings rounded-xl px-3 py-2 transition-colors${
-                  appMode === "settings" ? " active" : ""
-                }`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setAppMode((prev) => (prev === "notes" ? "settings" : "notes"));
-                }}
-              >
-                <span className="nav-action-icon text-base leading-none" aria-hidden>
-                  {appMode === "settings" ? (
-                    "←"
-                  ) : (
-                    <Settings className="h-4 w-4 shrink-0" strokeWidth={1.9} />
-                  )}
-                </span>
-                <span>{appMode === "settings" ? "Back to notes" : "Settings"}</span>
-              </button>
-            }
-          />
-          {appMode === "notes" ? (
-            <div className="pane notes-pane min-w-0">
-              <div
-                className="pane-body focus:outline-none"
-                ref={(node) => {
-                  notesPanelRef.current = node;
-                  middlePaneRef.current = node;
-                }}
-                tabIndex={0}
-                onKeyDown={handleNotesKeyDown}
-                onClick={() => {
-                  lastLeftPaneFocusRef.current = "middle";
-                  focusNoScroll(middlePaneRef.current);
-                }}
-              >
-                {notes.length === 0 && <div className="empty">No notes</div>}
-                <SortableContext
-                  items={notes.map((note) => note.path)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {notes.map((note) => (
-                    <NoteRow key={note.path} note={note} preview={notePreviews[note.path]} />
-                  ))}
-                </SortableContext>
-              </div>
-            </div>
+          {sidebarCollapsed ? (
+            <div className="app-single-pane">{renderRightPane()}</div>
           ) : (
-            <div className="pane settings-sections-pane min-w-0">
-              <div
-                className="pane-body settings-sections-body"
-                ref={(node) => {
-                  middlePaneRef.current = node;
-                }}
-                tabIndex={0}
-                onClick={() => {
-                  lastLeftPaneFocusRef.current = "middle";
-                  focusNoScroll(middlePaneRef.current);
-                }}
+            <ResizablePanelGroup
+              orientation="horizontal"
+              className="app-panels"
+            >
+              <ResizablePanel
+                defaultSize="22%"
+                minSize="16%"
+                maxSize="34%"
+                className="min-w-0 h-full min-h-0"
               >
-                {SETTINGS_SECTIONS.map((section) => (
-                  <SettingsRow key={section.id} section={section} />
-                ))}
-              </div>
-            </div>
-          )}
-          {appMode === "notes" ? (
-            <div className="pane editor-pane min-w-0">
-              <div
-                className="pane-body editor-body"
-                ref={rightPaneRef}
-                tabIndex={0}
-                onClick={() => {
-                  const editorElement =
-                    rightPaneRef.current?.querySelector<HTMLElement>(".tiptap-content[contenteditable='true']") ||
-                    rightPaneRef.current;
-                  focusNoScroll(editorElement);
-                }}
+                {renderLeftPane()}
+              </ResizablePanel>
+              <ResizableHandle className="app-resize-handle" />
+              <ResizablePanel
+                defaultSize="25%"
+                minSize="18%"
+                maxSize="40%"
+                className="min-w-0 h-full min-h-0"
               >
-                <div className="editor-single">
-                  <NoteEditor
-                    markdown={activeNote ? noteContent : draftNoteContent}
-                    onChange={handleEditorChange}
-                  />
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="pane settings-detail-pane min-w-0">
-              <div
-                className="pane-body settings-detail-body"
-                ref={rightPaneRef}
-                tabIndex={0}
-                onClick={() => focusNoScroll(rightPaneRef.current)}
-              >
-                {renderSettingsDetail()}
-              </div>
-            </div>
+                {renderMiddlePane()}
+              </ResizablePanel>
+              <ResizableHandle className="app-resize-handle" />
+              <ResizablePanel defaultSize="53%" minSize="30%" className="min-w-0 h-full min-h-0">
+                {renderRightPane()}
+              </ResizablePanel>
+            </ResizablePanelGroup>
           )}
         </div>
       </div>
