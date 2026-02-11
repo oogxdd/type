@@ -58,8 +58,7 @@
 
 body {
   margin: 0;
-  background: var(--ui-bg);
-  color: var(--ui-text);
+  background: #fff;
 }
 
 .app {
@@ -67,7 +66,6 @@ body {
   grid-template-columns: 260px 300px 1fr;
   height: 100vh;
   overflow: hidden;
-  background: var(--ui-bg);
 }
 
 .pane {
@@ -106,55 +104,6 @@ body {
   border-top: 1px solid var(--ui-border);
   padding: 8px;
   background: #fff;
-}
-
-.nav-pane {
-  display: flex;
-  flex-direction: column;
-}
-
-.pane-top {
-  padding: 10px 10px 8px;
-}
-
-.pane-section {
-  min-height: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.pane-section-title {
-  padding: 10px 14px 6px;
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  color: var(--ui-muted);
-}
-
-.nav-action {
-  width: 100%;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--ui-text);
-  padding: 8px 10px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.nav-action-icon {
-  width: 18px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  line-height: 1;
-  opacity: 0.9;
 }
 
 .settings-trigger {
@@ -665,22 +614,13 @@ body {
 
 .tiptap-editor {
   height: 100%;
-  display: flex;
-  flex-direction: column;
-  margin: 8px;
   border: 1px solid var(--ui-border);
-  border-radius: 10px;
-  background: var(--ui-pane);
+  border-radius: 0;
   overflow: hidden;
 }
 
 .tiptap-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px;
-  border-bottom: 1px solid var(--ui-border);
-  background: var(--ui-pane);
+  display: none;
 }
 
 .tiptap-toolbar .is-active {
@@ -690,14 +630,13 @@ body {
 }
 
 .tiptap-scroll {
-  flex: 1;
-  min-height: 0;
+  height: 100%;
   overflow: auto;
 }
 
 .tiptap-content {
   min-height: 100%;
-  padding: 14px 16px 24px;
+  padding: 10px 12px;
   color: var(--ui-text);
   font-size: 14px;
   line-height: 1.6;
@@ -768,8 +707,28 @@ body {
 }
 
 .app.theme-light .nav-pane {
+  display: flex;
+  flex-direction: column;
   background: linear-gradient(180deg, #e7ebf0 0%, #dde3ea 46%, #d6dde7 100%);
   border-right: 1px solid #c8d2dc;
+}
+
+.app.theme-light .pane-top {
+  padding: 10px 10px 8px;
+}
+
+.app.theme-light .pane-section {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.app.theme-light .pane-section-title {
+  padding: 10px 14px 6px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: #5f6b79;
 }
 
 .app.theme-light .pane-footer {
@@ -777,7 +736,29 @@ body {
 }
 
 .app.theme-light .nav-action {
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
   color: #1e2732;
+  padding: 8px 10px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app.theme-light .nav-action-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.9;
 }
 
 .app.theme-light .nav-action:hover {
@@ -818,11 +799,27 @@ body {
 }
 
 .app.theme-dark .nav-pane {
+  display: flex;
+  flex-direction: column;
   background: linear-gradient(180deg, #3a3f46 0%, #2f353d 46%, #2a3138 100%);
   border-right: 1px solid #3f4752;
 }
 
+.app.theme-dark .pane-top {
+  padding: 10px 10px 8px;
+}
+
+.app.theme-dark .pane-section {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
 .app.theme-dark .pane-section-title {
+  padding: 10px 14px 6px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
   color: #b6bec8;
 }
 
@@ -831,7 +828,29 @@ body {
 }
 
 .app.theme-dark .nav-action {
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
   color: #e8ecf2;
+  padding: 8px 10px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app.theme-dark .nav-action-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.9;
 }
 
 .app.theme-dark .nav-action:hover {
@@ -905,7 +924,7 @@ body {
 
 .app.theme-dark .note-row.selected,
 .app.theme-dark .settings-row.selected {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.12);
   box-shadow: none;
 }
 

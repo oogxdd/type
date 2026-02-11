@@ -68,7 +68,7 @@ const getInitialTheme = (): ThemeMode => {
   if (stored === "dark" || stored === "light") {
     return stored;
   }
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return "dark";
 };
 
 const logGroup = (label: string, data?: Record<string, unknown>) => {
