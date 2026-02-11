@@ -462,7 +462,7 @@ export function FoldersPanel({
                 Recent
               </TabsTrigger>
               <TabsTrigger value="folders" className="folders-tab-trigger">
-                Folders
+                {sectionTitle}
               </TabsTrigger>
             </TabsList>
           </div>

@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import {
   DndContext,
   DragOverlay,
@@ -38,6 +45,7 @@ type NotePreview = {
 
 type AppMode = "notes" | "settings";
 type ThemeMode = "light" | "dark";
+type PaneId = "folders" | "middle" | "right";
 
 type SettingsSectionId =
   | "general"
@@ -456,6 +464,18 @@ const parseNotePreview = (noteName: string, content: string, updatedMs: number |
   return { title, dateLabel: formatNoteDateLabel(updatedMs), secondLine };
 };
 
+const getNextNoteFileName = (existingNames: string[]) => {
+  const used = new Set(existingNames.map((name) => name.toLowerCase()));
+  let index = 1;
+  while (true) {
+    const candidate = index === 1 ? "New note.md" : `New note ${index}.md`;
+    if (!used.has(candidate.toLowerCase())) {
+      return candidate;
+    }
+    index += 1;
+  }
+};
+
 function App() {
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -486,6 +506,9 @@ function App() {
   const expandTargetRef = useRef<string | null>(null);
   const notesPanelRef = useRef<HTMLDivElement | null>(null);
   const foldersPanelRef = useRef<HTMLDivElement | null>(null);
+  const middlePaneRef = useRef<HTMLDivElement | null>(null);
+  const rightPaneRef = useRef<HTMLDivElement | null>(null);
+  const lastLeftPaneFocusRef = useRef<"folders" | "middle">("middle");
   const folderContextPathRef = useRef<string | null>(null);
   const noteContextPathRef = useRef<string | null>(null);
   const selectedFoldersRef = useRef<Set<string>>(new Set());
@@ -517,14 +540,14 @@ function App() {
     selectedNotesRef.current = selectedNotes;
   }, [selectedNotes]);
 
-  const refreshTree = async () => {
+  const refreshTree = useCallback(async () => {
     const data = await invokeLogged<FolderNode>("get_tree");
     setTree(data);
-  };
+  }, []);
 
   useEffect(() => {
-    refreshTree();
-  }, []);
+    void refreshTree();
+  }, [refreshTree]);
 
   const treeData = useMemo(() => {
     if (!tree) {
@@ -612,6 +635,157 @@ function App() {
       }
     };
   }, [activeNote, noteContent, noteDirty]);
+
+  const createNewNote = useCallback(async () => {
+    if (appMode !== "notes") {
+      setAppMode("notes");
+    }
+    const folderPath = activeFolder;
+    const targetNode = activeNode ?? findNode(tree, folderPath);
+    if (!targetNode) {
+      return;
+    }
+
+    const fileName = getNextNoteFileName(targetNode.notes.map((note) => note.name));
+    const path = folderPath ? `${folderPath}/${fileName}` : fileName;
+
+    await invokeLogged("write_note", { path, content: "" });
+    await invokeLogged("set_order", {
+      args: {
+        parent: folderPath,
+        folderOrder: targetNode.children.map((child) => child.name),
+        noteOrder: [...targetNode.notes.map((note) => note.name), fileName],
+      },
+    });
+    await refreshTree();
+
+    if (folderPath) {
+      setSelectedFolders(new Set([folderPath]));
+      setLastSelectedFolder(folderPath);
+      setActiveFolder(folderPath);
+    } else {
+      setSelectedFolders(new Set());
+      setLastSelectedFolder("");
+      setActiveFolder("");
+    }
+    setSelectedNotes(new Set([path]));
+    setLastSelectedNote(path);
+    setActiveNote(path);
+
+    requestAnimationFrame(() => {
+      const editorElement =
+        rightPaneRef.current?.querySelector<HTMLElement>(".tiptap-content[contenteditable='true']") ||
+        rightPaneRef.current;
+      focusNoScroll(editorElement);
+    });
+  }, [activeFolder, activeNode, appMode, refreshTree, tree]);
+
+  useEffect(() => {
+    const getFocusedPane = (): PaneId | null => {
+      const activeElement = document.activeElement as HTMLElement | null;
+      if (!activeElement) {
+        return null;
+      }
+      if (
+        foldersPanelRef.current &&
+        (activeElement === foldersPanelRef.current || foldersPanelRef.current.contains(activeElement))
+      ) {
+        return "folders";
+      }
+      if (
+        middlePaneRef.current &&
+        (activeElement === middlePaneRef.current || middlePaneRef.current.contains(activeElement))
+      ) {
+        return "middle";
+      }
+      if (
+        rightPaneRef.current &&
+        (activeElement === rightPaneRef.current || rightPaneRef.current.contains(activeElement))
+      ) {
+        return "right";
+      }
+      return null;
+    };
+
+    const focusPane = (pane: PaneId) => {
+      if (pane === "folders") {
+        focusNoScroll(foldersPanelRef.current);
+        return;
+      }
+      if (pane === "middle") {
+        focusNoScroll(middlePaneRef.current);
+        return;
+      }
+      const editorElement =
+        appMode === "notes"
+          ? rightPaneRef.current?.querySelector<HTMLElement>(".tiptap-content[contenteditable='true']") ||
+            rightPaneRef.current
+          : rightPaneRef.current;
+      focusNoScroll(editorElement);
+    };
+
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.repeat) {
+        return;
+      }
+      const code = event.code;
+      if (code !== "KeyT" && code !== "KeyW" && code !== "KeyK" && code !== "KeyJ" && code !== "KeyN") {
+        return;
+      }
+      event.preventDefault();
+
+      if (code === "KeyN") {
+        void createNewNote();
+        return;
+      }
+
+      if (code === "KeyT") {
+        const currentPane = getFocusedPane();
+        setSidebarCollapsed((prev) => {
+          const next = !prev;
+          if (next) {
+            if (currentPane === "folders" || currentPane === "middle") {
+              lastLeftPaneFocusRef.current = currentPane;
+            }
+            requestAnimationFrame(() => focusPane("right"));
+          } else {
+            requestAnimationFrame(() => focusPane(lastLeftPaneFocusRef.current));
+          }
+          return next;
+        });
+        return;
+      }
+
+      if (code === "KeyW") {
+        if (sidebarCollapsed) {
+          setSidebarCollapsed(false);
+          requestAnimationFrame(() => focusPane(lastLeftPaneFocusRef.current));
+          return;
+        }
+        const currentPane = getFocusedPane();
+        const targetPane: "folders" | "middle" = currentPane === "folders" ? "middle" : "folders";
+        lastLeftPaneFocusRef.current = targetPane;
+        focusPane(targetPane);
+        return;
+      }
+
+      const panes: PaneId[] = sidebarCollapsed ? ["right"] : ["folders", "middle", "right"];
+      const currentPane = getFocusedPane();
+      const startPane = currentPane && panes.includes(currentPane) ? currentPane : "middle";
+      const delta = code === "KeyK" ? 1 : -1;
+      const nextIndex = Math.max(0, Math.min(panes.length - 1, panes.indexOf(startPane) + delta));
+      const targetPane = panes[nextIndex];
+      if (targetPane === "folders" || targetPane === "middle") {
+        lastLeftPaneFocusRef.current = targetPane;
+      }
+      focusPane(targetPane);
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+    };
+  }, [appMode, createNewNote, sidebarCollapsed]);
 
   const handleFolderClick = (event: ReactMouseEvent, path: string) => {
     event.stopPropagation();
@@ -1458,7 +1632,8 @@ function App() {
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
       if ((event.metaKey || event.ctrlKey) && event.key === "ArrowLeft") {
         event.preventDefault();
-        foldersPanelRef.current?.focus();
+        lastLeftPaneFocusRef.current = "folders";
+        focusNoScroll(foldersPanelRef.current);
       }
       return;
     }
@@ -1485,7 +1660,8 @@ function App() {
   const handleFoldersKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "ArrowRight") {
       event.preventDefault();
-      focusNoScroll(notesPanelRef.current);
+      lastLeftPaneFocusRef.current = "middle";
+      focusNoScroll(middlePaneRef.current);
       return;
     }
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown" && event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
@@ -1576,13 +1752,6 @@ function App() {
     }
   };
 
-  const handleNewNoteNavigation = () => {
-    if (appMode !== "notes") {
-      setAppMode("notes");
-    }
-    focusNoScroll(notesPanelRef.current);
-  };
-
   return (
     <DndContext
       sensors={sensors}
@@ -1625,6 +1794,7 @@ function App() {
             onToggle={handleToggle}
             onPaneKeyDown={handleFoldersKeyDown}
             onPaneClick={() => {
+              lastLeftPaneFocusRef.current = "folders";
               focusNoScroll(foldersPanelRef.current);
             }}
             paneBodyRef={foldersPanelRef}
@@ -1649,7 +1819,7 @@ function App() {
                 className="nav-action nav-action-new rounded-xl px-3 py-2 transition-colors"
                 onClick={(event) => {
                   event.stopPropagation();
-                  handleNewNoteNavigation();
+                  void createNewNote();
                 }}
               >
                 <span className="nav-action-icon" aria-hidden>
@@ -1684,11 +1854,15 @@ function App() {
             <div className="pane notes-pane min-w-0">
               <div
                 className="pane-body focus:outline-none"
-                ref={notesPanelRef}
+                ref={(node) => {
+                  notesPanelRef.current = node;
+                  middlePaneRef.current = node;
+                }}
                 tabIndex={0}
                 onKeyDown={handleNotesKeyDown}
                 onClick={() => {
-                  focusNoScroll(notesPanelRef.current);
+                  lastLeftPaneFocusRef.current = "middle";
+                  focusNoScroll(middlePaneRef.current);
                 }}
               >
                 {notes.length === 0 && <div className="empty">No notes</div>}
@@ -1704,7 +1878,17 @@ function App() {
             </div>
           ) : (
             <div className="pane settings-sections-pane min-w-0">
-              <div className="pane-body settings-sections-body">
+              <div
+                className="pane-body settings-sections-body"
+                ref={(node) => {
+                  middlePaneRef.current = node;
+                }}
+                tabIndex={0}
+                onClick={() => {
+                  lastLeftPaneFocusRef.current = "middle";
+                  focusNoScroll(middlePaneRef.current);
+                }}
+              >
                 {SETTINGS_SECTIONS.map((section) => (
                   <SettingsRow key={section.id} section={section} />
                 ))}
@@ -1713,7 +1897,17 @@ function App() {
           )}
           {appMode === "notes" ? (
             <div className="pane editor-pane min-w-0">
-              <div className="pane-body editor-body">
+              <div
+                className="pane-body editor-body"
+                ref={rightPaneRef}
+                tabIndex={0}
+                onClick={() => {
+                  const editorElement =
+                    rightPaneRef.current?.querySelector<HTMLElement>(".tiptap-content[contenteditable='true']") ||
+                    rightPaneRef.current;
+                  focusNoScroll(editorElement);
+                }}
+              >
                 <div className="editor-single">
                   <NoteEditor
                     markdown={activeNote ? noteContent : draftNoteContent}
@@ -1724,7 +1918,14 @@ function App() {
             </div>
           ) : (
             <div className="pane settings-detail-pane min-w-0">
-              <div className="pane-body settings-detail-body">{renderSettingsDetail()}</div>
+              <div
+                className="pane-body settings-detail-body"
+                ref={rightPaneRef}
+                tabIndex={0}
+                onClick={() => focusNoScroll(rightPaneRef.current)}
+              >
+                {renderSettingsDetail()}
+              </div>
             </div>
           )}
         </div>
