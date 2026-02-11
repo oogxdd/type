@@ -884,7 +884,7 @@ body {
 
 .app.theme-dark {
   --ui-bg: #171a1f;
-  --ui-pane: rgba(28, 31, 36, 0.62);
+  --ui-pane: rgba(28, 31, 36, 0.9);
   --ui-pane-right: rgba(20, 24, 30, 0.78);
   --ui-editor-surface: rgba(23, 28, 34, 0.86);
   --ui-editor-border: #343c47;
@@ -928,8 +928,15 @@ body {
 .app.theme-dark .nav-pane {
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #3b4049 0%, #333842 46%, #2c3139 100%);
-  border-right: 1px solid #434953;
+  background: linear-gradient(
+    180deg,
+    rgba(52, 57, 67, 0.94) 0%,
+    rgba(40, 45, 54, 0.93) 46%,
+    rgba(33, 38, 46, 0.92) 100%
+  );
+  border-right: 1px solid #444c57;
+  backdrop-filter: blur(2px) saturate(110%);
+  -webkit-backdrop-filter: blur(2px) saturate(110%);
 }
 
 .app.theme-dark .pane-top {
@@ -952,7 +959,7 @@ body {
   padding: 10px 14px 6px;
   font-size: 12px;
   letter-spacing: 0.02em;
-  color: #b6bec8;
+  color: #c2cbd7;
 }
 
 .app.theme-dark .pane-footer {
@@ -1039,7 +1046,7 @@ body {
 
 .app.theme-dark .notes-pane .pane-body,
 .app.theme-dark .settings-sections-pane .pane-body {
-  background: rgba(28, 31, 36, 0.62);
+  background: rgba(28, 31, 36, 0.86);
   padding: calc(8px + var(--left-panels-drag-height)) 8px 10px;
 }
 

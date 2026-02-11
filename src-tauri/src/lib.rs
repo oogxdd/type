@@ -4,8 +4,26 @@ use std::{
     fs,
     path::{Component, Path, PathBuf},
 };
+use tauri::Manager;
 
 const ORDER_FILE: &str = ".notes-order.json";
+#[cfg(target_os = "macos")]
+const MACOS_WINDOW_ALPHA: f64 = 0.9;
+
+#[cfg(target_os = "macos")]
+fn apply_macos_window_alpha(window: &tauri::WebviewWindow, alpha: f64) -> tauri::Result<()> {
+    use objc::{class, msg_send, sel, sel_impl};
+    use objc::runtime::Object;
+
+    let ns_window = window.ns_window()? as *mut Object;
+    unsafe {
+        let _: () = msg_send![ns_window, setOpaque: false];
+        let ns_color: *mut Object = msg_send![class!(NSColor), clearColor];
+        let _: () = msg_send![ns_window, setBackgroundColor: ns_color];
+        let _: () = msg_send![ns_window, setAlphaValue: alpha];
+    }
+    Ok(())
+}
 
 #[derive(Serialize)]
 struct NoteEntry {
@@ -472,6 +490,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = apply_macos_window_alpha(&window, MACOS_WINDOW_ALPHA);
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_tree,
             read_note,
