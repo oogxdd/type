@@ -386,10 +386,19 @@ const formatNoteDateLabel = (timestamp: number | null) => {
 };
 
 const parseNotePreview = (noteName: string, content: string, updatedMs: number | null): NotePreview => {
+  const stripMarkdown = (line: string) =>
+    line
+      .replace(/^#{1,6}\s+/, "")
+      .replace(/^[>\-+*]\s+/, "")
+      .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/[*_~`]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
   const lines = content.split(/\r?\n/);
   const fallbackTitle = noteName.replace(/\.md$/i, "");
-  const title = lines[0]?.trim() || fallbackTitle;
-  const secondLine = lines[1]?.trim() || "";
+  const title = stripMarkdown(lines[0] || "") || fallbackTitle;
+  const secondLine = stripMarkdown(lines[1] || "");
   return { title, dateLabel: formatNoteDateLabel(updatedMs), secondLine };
 };
 
@@ -404,15 +413,9 @@ function App() {
   const [activeNote, setActiveNote] = useState<string | null>(null);
   const [noteContent, setNoteContent] = useState<string>("");
   const [noteDirty, setNoteDirty] = useState(false);
-  const [noteMeta, setNoteMeta] = useState<NoteMeta | null>(null);
   const [notePreviews, setNotePreviews] = useState<Record<string, NotePreview>>({});
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState<string>("");
-  const [noteMenu, setNoteMenu] = useState<{
-    visible: boolean;
-    x: number;
-    y: number;
-  }>({ visible: false, x: 0, y: 0 });
   const [activeId, setActiveId] = useState<string | null>(null);
   const [edgeSnap, setEdgeSnap] = useState<{ id: string; position: "before" | "after" } | null>(
     null
@@ -425,8 +428,11 @@ function App() {
   const notesPanelRef = useRef<HTMLDivElement | null>(null);
   const foldersPanelRef = useRef<HTMLDivElement | null>(null);
   const folderContextPathRef = useRef<string | null>(null);
+  const noteContextPathRef = useRef<string | null>(null);
   const selectedFoldersRef = useRef<Set<string>>(new Set());
+  const selectedNotesRef = useRef<Set<string>>(new Set());
   const folderMenuPromiseRef = useRef<Promise<Menu> | null>(null);
+  const noteMenuPromiseRef = useRef<Promise<Menu> | null>(null);
   const editorHostRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<ToastEditor | null>(null);
   const editorSyncRef = useRef(false);
@@ -445,6 +451,10 @@ function App() {
   useEffect(() => {
     console.log("[folders] activeFolder", activeFolder);
   }, [activeFolder]);
+
+  useEffect(() => {
+    selectedNotesRef.current = selectedNotes;
+  }, [selectedNotes]);
 
   const refreshTree = async () => {
     const data = await invokeLogged<FolderNode>("get_tree");
@@ -490,7 +500,6 @@ function App() {
   useEffect(() => {
     if (!activeNote) {
       setNoteContent("");
-      setNoteMeta(null);
       setNoteDirty(false);
       return;
     }
@@ -499,11 +508,6 @@ function App() {
       if (!cancelled) {
         setNoteContent(content);
         setNoteDirty(false);
-      }
-    });
-    invokeLogged<NoteMeta>("get_note_meta", { path: activeNote }).then((meta) => {
-      if (!cancelled) {
-        setNoteMeta(meta);
       }
     });
     return () => {
@@ -573,7 +577,6 @@ function App() {
     }
     saveTimer.current = window.setTimeout(() => {
       invokeLogged("write_note", { path: activeNote, content: noteContent }).then(() => {
-        setNoteMeta((prev) => (prev ? { ...prev, updated_ms: Date.now() } : prev));
         setNoteDirty(false);
       });
     }, 400);
@@ -762,7 +765,6 @@ function App() {
   const handleFolderContextMenu = async (event: MouseEvent, path: string) => {
     event.preventDefault();
     event.stopPropagation();
-    setNoteMenu({ visible: false, x: 0, y: 0 });
     if (!selectedFolders.has(path)) {
       setSelectedFolders(new Set([path]));
       setLastSelectedFolder(path);
@@ -772,6 +774,65 @@ function App() {
     setActiveNote(null);
     folderContextPathRef.current = path;
     const menu = await getFolderNativeMenu();
+    await menu.popup(new LogicalPosition(event.clientX, event.clientY));
+  };
+
+  const showNoteInfo = async (path: string) => {
+    try {
+      const meta = await invokeLogged<NoteMeta>("get_note_meta", { path });
+      const createdLabel = meta.created_ms ? new Date(meta.created_ms).toLocaleString() : "—";
+      const updatedLabel = meta.updated_ms ? new Date(meta.updated_ms).toLocaleString() : "—";
+      window.alert(`Created: ${createdLabel}\nUpdated: ${updatedLabel}`);
+    } catch (error) {
+      console.error("[notes] failed to show note info", error);
+    }
+  };
+
+  const getNoteNativeMenu = () => {
+    if (!noteMenuPromiseRef.current) {
+      noteMenuPromiseRef.current = Menu.new({
+        items: [
+          {
+            id: "note.info",
+            text: "See info",
+            action: () => {
+              const path = noteContextPathRef.current;
+              if (!path) {
+                return;
+              }
+              void showNoteInfo(path);
+            },
+          },
+          {
+            id: "note.delete",
+            text: "Delete selected",
+            action: () => {
+              const path = noteContextPathRef.current;
+              if (!path) {
+                return;
+              }
+              const selected = selectedNotesRef.current;
+              const paths =
+                selected.size > 1 && selected.has(path) ? Array.from(selected) : [path];
+              void deleteNotes(paths);
+            },
+          },
+        ],
+      });
+    }
+    return noteMenuPromiseRef.current;
+  };
+
+  const handleNoteContextMenu = async (event: MouseEvent, path: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!selectedNotes.has(path)) {
+      setSelectedNotes(new Set([path]));
+      setLastSelectedNote(path);
+    }
+    setActiveNote(path);
+    noteContextPathRef.current = path;
+    const menu = await getNoteNativeMenu();
     await menu.popup(new LogicalPosition(event.clientX, event.clientY));
   };
 
@@ -1101,7 +1162,6 @@ function App() {
         if (selectedList.includes(activeNote || "")) {
           setActiveNote(null);
           setNoteContent("");
-          setNoteMeta(null);
         }
         setSelectedNotes(new Set());
         await refreshTree();
@@ -1167,13 +1227,7 @@ function App() {
         style={style}
         data-note={note.path}
         onClick={(event) => handleNoteClick(note.path, event)}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          if (!selectedNotes.has(note.path)) {
-            setSelectedNotes(new Set([note.path]));
-          }
-          setNoteMenu({ visible: true, x: event.clientX, y: event.clientY });
-        }}
+        onContextMenu={(event) => void handleNoteContextMenu(event, note.path)}
         {...attributes}
         {...listeners}
       >
@@ -1190,12 +1244,6 @@ function App() {
   };
 
   const notes = activeNode?.notes || [];
-  const createdLabel = noteMeta?.created_ms
-    ? new Date(noteMeta.created_ms).toLocaleString()
-    : "—";
-  const updatedLabel = noteMeta?.updated_ms
-    ? new Date(noteMeta.updated_ms).toLocaleString()
-    : "—";
 
   useEffect(() => {
     if (notes.length === 0) {
@@ -1357,14 +1405,7 @@ function App() {
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div
-        className="app"
-        onClick={() => {
-          if (noteMenu.visible) {
-            setNoteMenu({ visible: false, x: 0, y: 0 });
-          }
-        }}
-      >
+      <div className="app">
         <FoldersPanel
           treeData={treeData}
           selectedIds={selectedFolders}
@@ -1374,7 +1415,6 @@ function App() {
           onToggle={handleToggle}
           onPaneKeyDown={handleFoldersKeyDown}
           onPaneClick={() => {
-            setNoteMenu({ visible: false, x: 0, y: 0 });
             focusNoScroll(foldersPanelRef.current);
           }}
           paneBodyRef={foldersPanelRef}
@@ -1401,7 +1441,6 @@ function App() {
             tabIndex={0}
             onKeyDown={handleNotesKeyDown}
             onClick={() => {
-              setNoteMenu({ visible: false, x: 0, y: 0 });
               focusNoScroll(notesPanelRef.current);
             }}
           >
@@ -1414,29 +1453,10 @@ function App() {
                 <NoteRow key={note.path} note={note} preview={notePreviews[note.path]} />
               ))}
             </SortableContext>
-            {noteMenu.visible && (
-              <div className="context-menu" style={{ top: noteMenu.y, left: noteMenu.x }}>
-                <button
-                  onClick={async () => {
-                    await deleteNotes([...selectedNotes]);
-                    setNoteMenu({ visible: false, x: 0, y: 0 });
-                  }}
-                >
-                  Delete selected
-                </button>
-              </div>
-            )}
           </div>
         </div>
         <div className="pane editor-pane">
-          <div className="pane-header">Editor</div>
           <div className="pane-body editor-body">
-            {activeNote && (
-              <div className="note-meta">
-                <div>Created: {createdLabel}</div>
-                <div>Updated: {updatedLabel}</div>
-              </div>
-            )}
             {activeNote ? (
               <div className="editor-single">
                 <div className="editor-host" ref={editorHostRef} />

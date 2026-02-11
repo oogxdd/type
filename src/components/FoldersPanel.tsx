@@ -132,15 +132,35 @@ function TreeRow({
       )}
       {!renaming && (
         <span className="folder-glyph" aria-hidden>
-          <svg viewBox="0 0 24 24">
-            <path
-              d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9z"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinejoin="round"
-            />
-          </svg>
+          {node.children.length > 0 && !isCollapsed ? (
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M3 8a2.5 2.5 0 0 1 2.5-2.5h4L11.4 7h7.1A2.5 2.5 0 0 1 21 9.5V11"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M2.8 10.5h18.4a1 1 0 0 1 .96 1.28l-1.65 5.5A2.5 2.5 0 0 1 18.1 19H5.9a2.5 2.5 0 0 1-2.4-1.72l-1.65-5.5a1 1 0 0 1 .95-1.28z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
         </span>
       )}
       {renaming ? (
