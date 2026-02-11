@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -13,15 +13,14 @@ import {
 } from "@dnd-kit/core";
 import { snapCenterToCursor } from "@dnd-kit/modifiers";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { CSS as DndCSS } from "@dnd-kit/utilities";
 import { invoke } from "@tauri-apps/api/core";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu } from "@tauri-apps/api/menu";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
-import ToastEditor from "@toast-ui/editor";
-import "@toast-ui/editor/dist/toastui-editor.css";
 import "./App.css";
 import { DROP_PREFIX, ROOT_ID, FoldersPanel } from "./components/FoldersPanel";
+import { NoteEditor } from "./components/NoteEditor";
 import type { DragData, FolderNode, NoteEntry, NoteMeta } from "./types";
 import type { TreeItem } from "./tree/types";
 import { flattenTree, removeChildrenOf } from "./tree/utilities";
@@ -33,6 +32,43 @@ type NotePreview = {
   title: string;
   dateLabel: string;
   secondLine: string;
+};
+
+type AppMode = "notes" | "settings";
+type ThemeMode = "light" | "dark";
+
+type SettingsSectionId =
+  | "general"
+  | "appearance"
+  | "editor"
+  | "sync"
+  | "privacy"
+  | "about";
+
+type SettingsSection = {
+  id: SettingsSectionId;
+  title: string;
+  description: string;
+};
+
+const SETTINGS_SECTIONS: SettingsSection[] = [
+  { id: "general", title: "General", description: "Basic app behavior and defaults." },
+  { id: "appearance", title: "Appearance", description: "Typography, spacing, and theme accents." },
+  { id: "editor", title: "Editor", description: "Editing, autosave, and preview behavior." },
+  { id: "sync", title: "Sync", description: "Cloud sync, refresh policy, and conflict rules." },
+  { id: "privacy", title: "Privacy", description: "Data collection and local-only controls." },
+  { id: "about", title: "About", description: "Version, diagnostics, and support links." },
+];
+
+const getInitialTheme = (): ThemeMode => {
+  if (typeof window === "undefined") {
+    return "dark";
+  }
+  const stored = window.localStorage.getItem("notes-viewer-theme");
+  if (stored === "dark" || stored === "light") {
+    return stored;
+  }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 };
 
 const logGroup = (label: string, data?: Record<string, unknown>) => {
@@ -82,6 +118,13 @@ const scrollIntoViewIfNeeded = (container: HTMLElement | null, selector: string)
   if (target) {
     target.scrollIntoView({ block: "nearest" });
   }
+};
+
+const escapeSelectorValue = (value: string) => {
+  if (typeof window !== "undefined" && window.CSS?.escape) {
+    return window.CSS.escape(value);
+  }
+  return value.replace(/["\\]/g, "\\$&");
 };
 
 const confirmAction = async (message: string) => {
@@ -148,7 +191,7 @@ const buildFolderOrderMap = (nodes: TreeItem[], parentId: string | null, map: Re
   nodes.forEach((node) => buildFolderOrderMap(node.children, node.id, map));
 };
 
-const applyFolderOrder = (node: FolderNode, orderMap: Record<string, string[]>) => {
+const applyFolderOrder = (node: FolderNode, orderMap: Record<string, string[]>): FolderNode => {
   const key = node.path || "";
   const order = orderMap[key];
   let children = node.children;
@@ -245,7 +288,7 @@ const insertNodes = (
   parentId: string | null,
   index: number,
   items: TreeItem[]
-) => {
+): TreeItem[] => {
   if (parentId === null) {
     const before = nodes.slice(0, index);
     const after = nodes.slice(index);
@@ -274,7 +317,11 @@ const insertNodes = (
   return changed ? next : nodes;
 };
 
-const parseDropTargetId = (id: string | number | null) => {
+type DropTarget =
+  | { type: "root"; position: "inside" }
+  | { type: "item"; itemId: string; position: "inside" | "before" | "after" };
+
+const parseDropTargetId = (id: string | number | null): DropTarget | null => {
   if (typeof id !== "string") {
     return null;
   }
@@ -282,10 +329,15 @@ const parseDropTargetId = (id: string | number | null) => {
   if (parts.length !== 3 || parts[0] !== DROP_PREFIX) {
     return null;
   }
-  if (parts[1] === ROOT_ID) {
-    return { type: "root", position: parts[2] };
+  const itemId = parts[1];
+  const position = parts[2];
+  if (!itemId || !position || (position !== "inside" && position !== "before" && position !== "after")) {
+    return null;
   }
-  return { type: "item", itemId: parts[1], position: parts[2] };
+  if (itemId === ROOT_ID) {
+    return position === "inside" ? { type: "root", position } : null;
+  }
+  return { type: "item", itemId, position };
 };
 
 const sortIdsByTreeOrder = (ids: string[], orderedIds: string[]) => {
@@ -403,6 +455,9 @@ const parseNotePreview = (noteName: string, content: string, updatedMs: number |
 };
 
 function App() {
+  const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
+  const [appMode, setAppMode] = useState<AppMode>("notes");
+  const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("general");
   const [tree, setTree] = useState<FolderNode | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set([""]));
   const [selectedFolders, setSelectedFolders] = useState<Set<string>>(new Set());
@@ -433,9 +488,6 @@ function App() {
   const selectedNotesRef = useRef<Set<string>>(new Set());
   const folderMenuPromiseRef = useRef<Promise<Menu> | null>(null);
   const noteMenuPromiseRef = useRef<Promise<Menu> | null>(null);
-  const editorHostRef = useRef<HTMLDivElement | null>(null);
-  const editorRef = useRef<ToastEditor | null>(null);
-  const editorSyncRef = useRef(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -447,6 +499,11 @@ function App() {
     console.log("[folders] selectedFolders", Array.from(selectedFolders));
     selectedFoldersRef.current = selectedFolders;
   }, [selectedFolders]);
+
+  useEffect(() => {
+    window.localStorage.setItem("notes-viewer-theme", theme);
+    document.documentElement.classList.toggle("dark", theme === "dark");
+  }, [theme]);
 
   useEffect(() => {
     console.log("[folders] activeFolder", activeFolder);
@@ -515,58 +572,15 @@ function App() {
     };
   }, [activeNote]);
 
-  useEffect(() => {
-    if (!activeNote) {
-      if (editorRef.current) {
-        editorRef.current.destroy();
-        editorRef.current = null;
+  const handleEditorChange = (markdown: string) => {
+    setNoteContent((prev) => {
+      if (prev === markdown) {
+        return prev;
       }
-      return;
-    }
-    if (!editorHostRef.current || editorRef.current) {
-      return;
-    }
-    const editor = new ToastEditor({
-      el: editorHostRef.current,
-      initialEditType: "wysiwyg",
-      hideModeSwitch: true,
-      toolbarItems: [],
-      usageStatistics: false,
-      autofocus: false,
-      initialValue: noteContent,
-      height: "100%",
-      events: {
-        change: () => {
-          if (editorSyncRef.current) {
-            return;
-          }
-          const markdown = editor.getMarkdown();
-          setNoteContent((prev) => {
-            if (prev === markdown) {
-              return prev;
-            }
-            return markdown;
-          });
-          setNoteDirty(true);
-        },
-      },
+      return markdown;
     });
-    editorRef.current = editor;
-    return () => {
-      editor.destroy();
-      editorRef.current = null;
-    };
-  }, [activeNote]);
-
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor || editor.getMarkdown() === noteContent) {
-      return;
-    }
-    editorSyncRef.current = true;
-    editor.setMarkdown(noteContent, false);
-    editorSyncRef.current = false;
-  }, [noteContent]);
+    setNoteDirty(true);
+  };
 
   useEffect(() => {
     if (!activeNote || !noteDirty) {
@@ -587,13 +601,8 @@ function App() {
     };
   }, [activeNote, noteContent, noteDirty]);
 
-  const handleFolderClick = (
-    event: MouseEvent | { stopPropagation?: () => void },
-    path: string
-  ) => {
-    if (event && typeof event.stopPropagation === "function") {
-      event.stopPropagation();
-    }
+  const handleFolderClick = (event: ReactMouseEvent, path: string) => {
+    event.stopPropagation();
     console.log("[folders] onSelect handler", path);
     const nextSelected = new Set(selectedFolders);
     if (event.shiftKey && lastSelectedFolder) {
@@ -625,7 +634,7 @@ function App() {
     setActiveNote(null);
   };
 
-  const handleNoteClick = (notePath: string, event: MouseEvent) => {
+  const handleNoteClick = (notePath: string, event: ReactMouseEvent) => {
     if (!activeNode) {
       return;
     }
@@ -657,7 +666,7 @@ function App() {
     setActiveNote(notePath);
   };
 
-  const handleToggle = (event: MouseEvent, id: string) => {
+  const handleToggle = (event: ReactMouseEvent, id: string) => {
     event.stopPropagation();
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -762,7 +771,7 @@ function App() {
     return folderMenuPromiseRef.current;
   };
 
-  const handleFolderContextMenu = async (event: MouseEvent, path: string) => {
+  const handleFolderContextMenu = async (event: ReactMouseEvent, path: string) => {
     event.preventDefault();
     event.stopPropagation();
     if (!selectedFolders.has(path)) {
@@ -823,7 +832,7 @@ function App() {
     return noteMenuPromiseRef.current;
   };
 
-  const handleNoteContextMenu = async (event: MouseEvent, path: string) => {
+  const handleNoteContextMenu = async (event: ReactMouseEvent, path: string) => {
     event.preventDefault();
     event.stopPropagation();
     if (!selectedNotes.has(path)) {
@@ -866,10 +875,10 @@ function App() {
     });
     if (data.type === "folder") {
       const point =
-        activatorEvent && typeof (activatorEvent as MouseEvent).clientX === "number"
+        activatorEvent instanceof globalThis.MouseEvent
           ? {
-              x: (activatorEvent as MouseEvent).clientX,
-              y: (activatorEvent as MouseEvent).clientY,
+              x: activatorEvent.clientX,
+              y: activatorEvent.clientY,
             }
           : null;
       dragStartPoint.current = point;
@@ -1216,14 +1225,14 @@ function App() {
       });
 
     const style: React.CSSProperties = {
-      transform: !isDragging ? CSS.Transform.toString(transform) : undefined,
+      transform: !isDragging ? DndCSS.Transform.toString(transform) : undefined,
       transition: !isDragging ? transition : undefined,
     };
 
     return (
       <div
         ref={setNodeRef}
-        className={`item-row note-row ${isSelected ? "selected" : ""}`}
+        className={`item-row note-row transition-colors ${isSelected ? "selected" : ""}`}
         style={style}
         data-note={note.path}
         onClick={(event) => handleNoteClick(note.path, event)}
@@ -1240,6 +1249,156 @@ function App() {
           </div>
         </div>
       </div>
+    );
+  };
+
+  const SettingsRow = ({ section }: { section: SettingsSection }) => {
+    const isSelected = activeSettingsSection === section.id;
+    return (
+      <button
+        type="button"
+        className={`item-row settings-row transition-colors${isSelected ? " selected" : ""}`}
+        onClick={() => setActiveSettingsSection(section.id)}
+      >
+        <div className="settings-row-main">
+          <div className="settings-row-title">{section.title}</div>
+          <div className="settings-row-subline">{section.description}</div>
+        </div>
+      </button>
+    );
+  };
+
+  const renderSettingsDetail = () => {
+    if (activeSettingsSection === "general") {
+      return (
+        <>
+          <h2 className="settings-detail-title">General</h2>
+          <p className="settings-detail-text">Default behavior and opening workflow.</p>
+          <label className="settings-control">
+            <span>Start in folder</span>
+            <select defaultValue="last">
+              <option value="last">Last opened</option>
+              <option value="inbox">Inbox</option>
+              <option value="none">No auto-open</option>
+            </select>
+          </label>
+          <label className="settings-control settings-toggle">
+            <input type="checkbox" defaultChecked />
+            <span>Auto-focus first note in selected folder</span>
+          </label>
+        </>
+      );
+    }
+    if (activeSettingsSection === "appearance") {
+      return (
+        <>
+          <h2 className="settings-detail-title">Appearance</h2>
+          <p className="settings-detail-text">Visual style options (dummy).</p>
+          <label className="settings-control">
+            <span>Theme</span>
+            <select value={theme} onChange={(event) => setTheme(event.target.value as ThemeMode)}>
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
+          </label>
+          <label className="settings-control">
+            <span>UI density</span>
+            <select defaultValue="comfortable">
+              <option value="compact">Compact</option>
+              <option value="comfortable">Comfortable</option>
+              <option value="spacious">Spacious</option>
+            </select>
+          </label>
+          <label className="settings-control">
+            <span>Accent intensity</span>
+            <input type="range" min="0" max="100" defaultValue="45" />
+          </label>
+          <label className="settings-control settings-toggle">
+            <input type="checkbox" defaultChecked />
+            <span>Show subtle separators in lists</span>
+          </label>
+        </>
+      );
+    }
+    if (activeSettingsSection === "editor") {
+      return (
+        <>
+          <h2 className="settings-detail-title">Editor</h2>
+          <p className="settings-detail-text">Editing and autosave behavior.</p>
+          <label className="settings-control">
+            <span>Autosave interval</span>
+            <select defaultValue="400">
+              <option value="250">250 ms</option>
+              <option value="400">400 ms</option>
+              <option value="1000">1 sec</option>
+            </select>
+          </label>
+          <label className="settings-control settings-toggle">
+            <input type="checkbox" defaultChecked />
+            <span>Strip markdown in list previews</span>
+          </label>
+          <label className="settings-control settings-toggle">
+            <input type="checkbox" />
+            <span>Always open in markdown mode</span>
+          </label>
+        </>
+      );
+    }
+    if (activeSettingsSection === "sync") {
+      return (
+        <>
+          <h2 className="settings-detail-title">Sync</h2>
+          <p className="settings-detail-text">Connection and refresh policy.</p>
+          <label className="settings-control">
+            <span>Sync provider</span>
+            <select defaultValue="icloud">
+              <option value="icloud">iCloud</option>
+              <option value="local">Local filesystem</option>
+              <option value="none">Disabled</option>
+            </select>
+          </label>
+          <label className="settings-control settings-toggle">
+            <input type="checkbox" defaultChecked />
+            <span>Background refresh every 5 minutes</span>
+          </label>
+        </>
+      );
+    }
+    if (activeSettingsSection === "privacy") {
+      return (
+        <>
+          <h2 className="settings-detail-title">Privacy</h2>
+          <p className="settings-detail-text">Telemetry and local diagnostics.</p>
+          <label className="settings-control settings-toggle">
+            <input type="checkbox" />
+            <span>Send anonymous crash reports</span>
+          </label>
+          <label className="settings-control settings-toggle">
+            <input type="checkbox" defaultChecked />
+            <span>Keep all metadata local-only</span>
+          </label>
+        </>
+      );
+    }
+    return (
+      <>
+        <h2 className="settings-detail-title">About</h2>
+        <p className="settings-detail-text">Dummy system info for layout preview.</p>
+        <div className="settings-info-grid">
+          <div className="settings-info-row">
+            <span>Version</span>
+            <code>0.1.0-design</code>
+          </div>
+          <div className="settings-info-row">
+            <span>Storage root</span>
+            <code>~/notes</code>
+          </div>
+          <div className="settings-info-row">
+            <span>Renderer</span>
+            <code>Tauri + React</code>
+          </div>
+        </div>
+      </>
     );
   };
 
@@ -1297,7 +1456,7 @@ function App() {
     setLastSelectedNote(nextPath);
     setActiveNote(nextPath);
     requestAnimationFrame(() => {
-      scrollIntoViewIfNeeded(notesPanelRef.current, `[data-note="${CSS.escape(nextPath)}"]`);
+      scrollIntoViewIfNeeded(notesPanelRef.current, `[data-note="${escapeSelectorValue(nextPath)}"]`);
     });
   };
 
@@ -1335,7 +1494,7 @@ function App() {
       setSelectedNotes(new Set());
       setActiveNote(null);
       requestAnimationFrame(() => {
-        scrollIntoViewIfNeeded(foldersPanelRef.current, `[data-folder="${CSS.escape(nextPath)}"]`);
+        scrollIntoViewIfNeeded(foldersPanelRef.current, `[data-folder="${escapeSelectorValue(nextPath)}"]`);
       });
       return;
     }
@@ -1360,7 +1519,7 @@ function App() {
           requestAnimationFrame(() => {
             scrollIntoViewIfNeeded(
               foldersPanelRef.current,
-              `[data-folder="${CSS.escape(firstChild.id)}"]`
+              `[data-folder="${escapeSelectorValue(firstChild.id)}"]`
             );
           });
         }
@@ -1389,10 +1548,17 @@ function App() {
         setSelectedNotes(new Set());
         setActiveNote(null);
         requestAnimationFrame(() => {
-          scrollIntoViewIfNeeded(foldersPanelRef.current, `[data-folder="${CSS.escape(parentId)}"]`);
+          scrollIntoViewIfNeeded(foldersPanelRef.current, `[data-folder="${escapeSelectorValue(parentId)}"]`);
         });
       }
     }
+  };
+
+  const handleNewNoteNavigation = () => {
+    if (appMode !== "notes") {
+      setAppMode("notes");
+    }
+    focusNoScroll(notesPanelRef.current);
   };
 
   return (
@@ -1405,7 +1571,7 @@ function App() {
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="app">
+      <div className={`app theme-${theme} min-h-screen`}>
         <FoldersPanel
           treeData={treeData}
           selectedIds={selectedFolders}
@@ -1432,39 +1598,88 @@ function App() {
           }}
           onContextMenu={handleFolderContextMenu}
           indentationWidth={indentationWidth}
-        />
-        <div className="pane notes-pane">
-          <div
-            className="pane-body"
-            ref={notesPanelRef}
-            tabIndex={0}
-            onKeyDown={handleNotesKeyDown}
-            onClick={() => {
-              focusNoScroll(notesPanelRef.current);
-            }}
-          >
-            {notes.length === 0 && <div className="empty">No notes</div>}
-            <SortableContext
-              items={notes.map((note) => note.path)}
-              strategy={verticalListSortingStrategy}
+          sectionTitle="Folders"
+          topAction={
+            <button
+              type="button"
+              className="nav-action nav-action-new rounded-xl px-3 py-2 transition-colors"
+              onClick={(event) => {
+                event.stopPropagation();
+                handleNewNoteNavigation();
+              }}
             >
-              {notes.map((note) => (
-                <NoteRow key={note.path} note={note} preview={notePreviews[note.path]} />
+              <span className="nav-action-icon" aria-hidden>
+                +
+              </span>
+              <span>New note</span>
+            </button>
+          }
+          footer={
+            <button
+              type="button"
+              className={`nav-action nav-action-settings rounded-xl px-3 py-2 transition-colors${
+                appMode === "settings" ? " active" : ""
+              }`}
+              onClick={(event) => {
+                event.stopPropagation();
+                setAppMode((prev) => (prev === "notes" ? "settings" : "notes"));
+              }}
+            >
+              <span className="nav-action-icon" aria-hidden>
+                {appMode === "settings" ? "←" : "⚙"}
+              </span>
+              <span>{appMode === "settings" ? "Back to notes" : "Settings"}</span>
+            </button>
+          }
+        />
+        {appMode === "notes" ? (
+          <div className="pane notes-pane min-w-0">
+            <div
+              className="pane-body focus:outline-none"
+              ref={notesPanelRef}
+              tabIndex={0}
+              onKeyDown={handleNotesKeyDown}
+              onClick={() => {
+                focusNoScroll(notesPanelRef.current);
+              }}
+            >
+              {notes.length === 0 && <div className="empty">No notes</div>}
+              <SortableContext
+                items={notes.map((note) => note.path)}
+                strategy={verticalListSortingStrategy}
+              >
+                {notes.map((note) => (
+                  <NoteRow key={note.path} note={note} preview={notePreviews[note.path]} />
+                ))}
+              </SortableContext>
+            </div>
+          </div>
+        ) : (
+          <div className="pane settings-sections-pane min-w-0">
+            <div className="pane-body settings-sections-body">
+              {SETTINGS_SECTIONS.map((section) => (
+                <SettingsRow key={section.id} section={section} />
               ))}
-            </SortableContext>
+            </div>
           </div>
-        </div>
-        <div className="pane editor-pane">
-          <div className="pane-body editor-body">
-            {activeNote ? (
-              <div className="editor-single">
-                <div className="editor-host" ref={editorHostRef} />
-              </div>
-            ) : (
-              <div className="empty">Select a note to edit</div>
-            )}
+        )}
+        {appMode === "notes" ? (
+          <div className="pane editor-pane min-w-0">
+            <div className="pane-body editor-body">
+              {activeNote ? (
+                <div className="editor-single">
+                  <NoteEditor markdown={noteContent} onChange={handleEditorChange} />
+                </div>
+              ) : (
+                <div className="empty">Select a note to edit</div>
+              )}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="pane settings-detail-pane min-w-0">
+            <div className="pane-body settings-detail-body">{renderSettingsDetail()}</div>
+          </div>
+        )}
       </div>
       <DragOverlay modifiers={[snapCenterToCursor]}>
         {activeId ? (

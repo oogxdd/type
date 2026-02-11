@@ -30,6 +30,9 @@ type FoldersPanelProps = {
   cancelRenameFolder: () => void;
   onContextMenu: (event: MouseEvent, id: string) => void;
   indentationWidth: number;
+  topAction?: React.ReactNode;
+  sectionTitle?: string;
+  footer?: React.ReactNode;
 };
 
 type TreeRowProps = {
@@ -305,54 +308,62 @@ export function FoldersPanel({
   cancelRenameFolder,
   onContextMenu,
   indentationWidth,
+  topAction,
+  sectionTitle,
+  footer,
 }: FoldersPanelProps) {
   const { setNodeRef: setRootDropRef, isOver } = useDroppable({
     id: dropId(ROOT_ID, "inside"),
   });
 
   return (
-    <div className="pane tree-pane">
-      <div
-        ref={(node) => {
-          setRootDropRef(node);
-          if (typeof paneBodyRef === "function") {
-            paneBodyRef(node);
-          } else if (paneBodyRef && "current" in paneBodyRef) {
-            paneBodyRef.current = node;
-          }
-        }}
-        className={`pane-body tree-root${isOver ? " drop-inside" : ""}`}
-        tabIndex={0}
-        onKeyDown={onPaneKeyDown}
-        onClick={(event) => {
-          if (onPaneClick) {
-            onPaneClick();
-          }
-          if (event.target === event.currentTarget) {
-            onClearSelection();
-          }
-        }}
-      >
-        {treeData.map((node) => (
-          <TreeNode
-            key={node.id}
-            node={node}
-            depth={0}
-            edgeSnap={edgeSnap}
-            expanded={expanded}
-            onToggle={onToggle}
-            selectedIds={selectedIds}
-            onSelect={onSelect}
-            renamingFolder={renamingFolder}
-            renameValue={renameValue}
-            setRenameValue={setRenameValue}
-            submitRenameFolder={submitRenameFolder}
-            cancelRenameFolder={cancelRenameFolder}
-            onContextMenu={onContextMenu}
-            indentationWidth={indentationWidth}
-          />
-        ))}
+    <div className="pane tree-pane nav-pane">
+      {topAction ? <div className="pane-top">{topAction}</div> : null}
+      <div className="pane-section">
+        {sectionTitle ? <div className="pane-section-title">{sectionTitle}</div> : null}
+        <div
+          ref={(node) => {
+            setRootDropRef(node);
+            if (typeof paneBodyRef === "function") {
+              paneBodyRef(node);
+            } else if (paneBodyRef && "current" in paneBodyRef) {
+              paneBodyRef.current = node;
+            }
+          }}
+          className={`pane-body tree-root${isOver ? " drop-inside" : ""}`}
+          tabIndex={0}
+          onKeyDown={onPaneKeyDown}
+          onClick={(event) => {
+            if (onPaneClick) {
+              onPaneClick();
+            }
+            if (event.target === event.currentTarget) {
+              onClearSelection();
+            }
+          }}
+        >
+          {treeData.map((node) => (
+            <TreeNode
+              key={node.id}
+              node={node}
+              depth={0}
+              edgeSnap={edgeSnap}
+              expanded={expanded}
+              onToggle={onToggle}
+              selectedIds={selectedIds}
+              onSelect={onSelect}
+              renamingFolder={renamingFolder}
+              renameValue={renameValue}
+              setRenameValue={setRenameValue}
+              submitRenameFolder={submitRenameFolder}
+              cancelRenameFolder={cancelRenameFolder}
+              onContextMenu={onContextMenu}
+              indentationWidth={indentationWidth}
+            />
+          ))}
+        </div>
       </div>
+      {footer ? <div className="pane-footer">{footer}</div> : null}
     </div>
   );
 }

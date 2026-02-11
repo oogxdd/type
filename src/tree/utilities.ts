@@ -126,7 +126,7 @@ export function setProperty(
   id: string,
   property: keyof TreeItem,
   setter: (value: boolean) => boolean
-) {
+): TreeItem[] {
   return items.map((item) => {
     if (item.id === id) {
       return { ...item, [property]: setter(Boolean(item[property])) };
@@ -149,7 +149,7 @@ function findParentId(
   items: FlattenedItem[],
   overIndex: number,
   depth: number
-) {
+): string | null {
   if (depth === 0) {
     return null;
   }
