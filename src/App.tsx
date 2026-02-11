@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -18,6 +18,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu } from "@tauri-apps/api/menu";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
+import ToastEditor from "@toast-ui/editor";
+import "@toast-ui/editor/dist/toastui-editor.css";
 import "./App.css";
 import { DROP_PREFIX, ROOT_ID, FoldersPanel } from "./components/FoldersPanel";
 import type { DragData, FolderNode, NoteEntry, NoteMeta } from "./types";
@@ -29,10 +31,8 @@ const LOG_PREFIX = "[notes]";
 
 type NotePreview = {
   title: string;
-  snippet: string;
-  timeLabel: string;
-  dayKey: string;
-  dayLabel: string;
+  dateLabel: string;
+  secondLine: string;
 };
 
 const logGroup = (label: string, data?: Record<string, unknown>) => {
@@ -364,83 +364,33 @@ function reorderList(list: string[], moving: string[], target: string) {
   ];
 }
 
-const getDayGroup = (timestamp: number | null) => {
+const formatNoteDateLabel = (timestamp: number | null) => {
   if (!timestamp) {
-    return { dayKey: "unknown", dayLabel: "No date" };
+    return "";
   }
   const value = new Date(timestamp);
-  const today = new Date();
-  const dayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const yesterdayStart = new Date(dayStart);
-  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const itemStart = new Date(value.getFullYear(), value.getMonth(), value.getDate());
-  if (itemStart.getTime() === dayStart.getTime()) {
-    return { dayKey: `d-${itemStart.getTime()}`, dayLabel: "Today" };
+  const diffDays = Math.floor((todayStart.getTime() - itemStart.getTime()) / 86_400_000);
+  if (diffDays <= 0) {
+    return value.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
-  if (itemStart.getTime() === yesterdayStart.getTime()) {
-    return { dayKey: `d-${itemStart.getTime()}`, dayLabel: "Yesterday" };
+  if (diffDays === 1) {
+    return "yesterday";
   }
-  return {
-    dayKey: `d-${itemStart.getTime()}`,
-    dayLabel: value.toLocaleDateString([], { day: "numeric", month: "long" }),
-  };
+  if (diffDays < 7) {
+    return value.toLocaleDateString([], { weekday: "long" }).toLowerCase();
+  }
+  return value.toLocaleDateString([], { month: "numeric", day: "numeric", year: "2-digit" });
 };
 
 const parseNotePreview = (noteName: string, content: string, updatedMs: number | null): NotePreview => {
-  const lines = content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const titleFromText = lines[0]?.replace(/^#{1,6}\s+/, "") || "";
+  const lines = content.split(/\r?\n/);
   const fallbackTitle = noteName.replace(/\.md$/i, "");
-  const title = titleFromText || fallbackTitle;
-  const snippet = (lines.find((line) => line !== lines[0]) || "").replace(/^[-*]\s+/, "");
-  const timeLabel = updatedMs
-    ? new Date(updatedMs).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-    : "";
-  const { dayKey, dayLabel } = getDayGroup(updatedMs);
-  return { title, snippet, timeLabel, dayKey, dayLabel };
-};
-
-const renderMarkdownPreview = (value: string): ReactNode[] => {
-  return value.split(/\r?\n/).map((line, index) => {
-    if (line.startsWith("### ")) {
-      return (
-        <h3 className="md-h3" key={`line-${index}`}>
-          {line.slice(4)}
-        </h3>
-      );
-    }
-    if (line.startsWith("## ")) {
-      return (
-        <h2 className="md-h2" key={`line-${index}`}>
-          {line.slice(3)}
-        </h2>
-      );
-    }
-    if (line.startsWith("# ")) {
-      return (
-        <h1 className="md-h1" key={`line-${index}`}>
-          {line.slice(2)}
-        </h1>
-      );
-    }
-    if (line.startsWith("- ") || line.startsWith("* ")) {
-      return (
-        <p className="md-li" key={`line-${index}`}>
-          {line.slice(2)}
-        </p>
-      );
-    }
-    if (line.trim() === "") {
-      return <div className="md-space" key={`line-${index}`} aria-hidden />;
-    }
-    return (
-      <p className="md-p" key={`line-${index}`}>
-        {line}
-      </p>
-    );
-  });
+  const title = lines[0]?.trim() || fallbackTitle;
+  const secondLine = lines[1]?.trim() || "";
+  return { title, dateLabel: formatNoteDateLabel(updatedMs), secondLine };
 };
 
 function App() {
@@ -477,6 +427,9 @@ function App() {
   const folderContextPathRef = useRef<string | null>(null);
   const selectedFoldersRef = useRef<Set<string>>(new Set());
   const folderMenuPromiseRef = useRef<Promise<Menu> | null>(null);
+  const editorHostRef = useRef<HTMLDivElement | null>(null);
+  const editorRef = useRef<ToastEditor | null>(null);
+  const editorSyncRef = useRef(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -557,6 +510,57 @@ function App() {
       cancelled = true;
     };
   }, [activeNote]);
+
+  useEffect(() => {
+    if (!activeNote) {
+      if (editorRef.current) {
+        editorRef.current.destroy();
+        editorRef.current = null;
+      }
+      return;
+    }
+    if (!editorHostRef.current || editorRef.current) {
+      return;
+    }
+    const editor = new ToastEditor({
+      el: editorHostRef.current,
+      initialEditType: "wysiwyg",
+      hideModeSwitch: true,
+      usageStatistics: false,
+      initialValue: noteContent,
+      height: "100%",
+      events: {
+        change: () => {
+          if (editorSyncRef.current) {
+            return;
+          }
+          const markdown = editor.getMarkdown();
+          setNoteContent((prev) => {
+            if (prev === markdown) {
+              return prev;
+            }
+            return markdown;
+          });
+          setNoteDirty(true);
+        },
+      },
+    });
+    editorRef.current = editor;
+    return () => {
+      editor.destroy();
+      editorRef.current = null;
+    };
+  }, [activeNote]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || editor.getMarkdown() === noteContent) {
+      return;
+    }
+    editorSyncRef.current = true;
+    editor.setMarkdown(noteContent, false);
+    editorSyncRef.current = false;
+  }, [noteContent]);
 
   useEffect(() => {
     if (!activeNote || !noteDirty) {
@@ -1172,28 +1176,18 @@ function App() {
         {...listeners}
       >
         <div className="note-row-main">
-          <div className="note-row-top">
-            <span className="note-row-title">{preview?.title || note.name.replace(/\.md$/i, "")}</span>
-            <span className="note-row-time">{preview?.timeLabel || ""}</span>
+          <div className="note-row-title">{preview?.title || note.name.replace(/\.md$/i, "")}</div>
+          <div className="note-row-subline">
+            <span className="note-row-date">{preview?.dateLabel || ""}</span>
+            {preview?.dateLabel && preview?.secondLine && <span className="note-row-dot"> </span>}
+            <span className="note-row-snippet">{preview?.secondLine || ""}</span>
           </div>
-          <div className="note-row-snippet">{preview?.snippet || "No additional text"}</div>
         </div>
       </div>
     );
   };
 
   const notes = activeNode?.notes || [];
-  const groupedNotes = useMemo(() => {
-    let lastDay = "";
-    return notes.map((note) => {
-      const preview = notePreviews[note.path];
-      const dayKey = preview?.dayKey || "unknown";
-      const dayLabel = preview?.dayLabel || "No date";
-      const showDayHeader = dayKey !== lastDay;
-      lastDay = dayKey;
-      return { note, preview, dayKey, dayLabel, showDayHeader };
-    });
-  }, [notes, notePreviews]);
   const createdLabel = noteMeta?.created_ms
     ? new Date(noteMeta.created_ms).toLocaleString()
     : "—";
@@ -1414,15 +1408,8 @@ function App() {
               items={notes.map((note) => note.path)}
               strategy={verticalListSortingStrategy}
             >
-              {groupedNotes.map(({ note, preview, dayKey, dayLabel, showDayHeader }) => (
-                <div key={note.path}>
-                  {showDayHeader && (
-                    <div className="notes-day-header" data-day={dayKey}>
-                      {dayLabel}
-                    </div>
-                  )}
-                  <NoteRow note={note} preview={preview} />
-                </div>
+              {notes.map((note) => (
+                <NoteRow key={note.path} note={note} preview={notePreviews[note.path]} />
               ))}
             </SortableContext>
             {noteMenu.visible && (
@@ -1449,19 +1436,8 @@ function App() {
               </div>
             )}
             {activeNote ? (
-              <div className="editor-split">
-                <textarea
-                  className="editor"
-                  value={noteContent}
-                  onChange={(event) => {
-                    setNoteContent(event.target.value);
-                    setNoteDirty(true);
-                  }}
-                />
-                <div className="editor-live-preview">
-                  <div className="editor-live-label">Preview</div>
-                  <div className="markdown-preview">{renderMarkdownPreview(noteContent)}</div>
-                </div>
+              <div className="editor-single">
+                <div className="editor-host" ref={editorHostRef} />
               </div>
             ) : (
               <div className="empty">Select a note to edit</div>
