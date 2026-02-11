@@ -468,6 +468,7 @@ function App() {
   const [lastSelectedNote, setLastSelectedNote] = useState<string>("");
   const [activeNote, setActiveNote] = useState<string | null>(null);
   const [noteContent, setNoteContent] = useState<string>("");
+  const [draftNoteContent, setDraftNoteContent] = useState<string>("");
   const [noteDirty, setNoteDirty] = useState(false);
   const [notePreviews, setNotePreviews] = useState<Record<string, NotePreview>>({});
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
@@ -557,7 +558,6 @@ function App() {
 
   useEffect(() => {
     if (!activeNote) {
-      setNoteContent("");
       setNoteDirty(false);
       return;
     }
@@ -574,6 +574,15 @@ function App() {
   }, [activeNote]);
 
   const handleEditorChange = (markdown: string) => {
+    if (!activeNote) {
+      setDraftNoteContent((prev) => {
+        if (prev === markdown) {
+          return prev;
+        }
+        return markdown;
+      });
+      return;
+    }
     setNoteContent((prev) => {
       if (prev === markdown) {
         return prev;
@@ -1582,8 +1591,17 @@ function App() {
             onClick={() => setSidebarCollapsed((prev) => !prev)}
           >
             <svg viewBox="0 0 16 16" aria-hidden>
-              <rect x="1.5" y="2" width="13" height="12" rx="3" fill="none" stroke="currentColor" />
-              <path d="M6 2.8v10.4" fill="none" stroke="currentColor" />
+              <rect
+                x="1.25"
+                y="1.75"
+                width="13.5"
+                height="12.5"
+                rx="3.25"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.25"
+              />
+              <path d="M5.8 2.9v10.2" fill="none" stroke="currentColor" strokeWidth="1.25" />
             </svg>
           </button>
           <FoldersPanel
@@ -1648,9 +1666,6 @@ function App() {
           />
           {appMode === "notes" ? (
             <div className="pane notes-pane min-w-0">
-              <div className="notes-count-label" aria-live="polite">
-                {notes.length} notes
-              </div>
               <div
                 className="pane-body focus:outline-none"
                 ref={notesPanelRef}
@@ -1683,13 +1698,12 @@ function App() {
           {appMode === "notes" ? (
             <div className="pane editor-pane min-w-0">
               <div className="pane-body editor-body">
-                {activeNote ? (
-                  <div className="editor-single">
-                    <NoteEditor markdown={noteContent} onChange={handleEditorChange} />
-                  </div>
-                ) : (
-                  <div className="empty">Select a note to edit</div>
-                )}
+                <div className="editor-single">
+                  <NoteEditor
+                    markdown={activeNote ? noteContent : draftNoteContent}
+                    onChange={handleEditorChange}
+                  />
+                </div>
               </div>
             </div>
           ) : (
