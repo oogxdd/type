@@ -883,21 +883,21 @@ body {
 }
 
 .app.theme-dark {
-  --ui-bg: #171a1e;
-  --ui-pane: rgba(27, 29, 34, 0.94);
+  --ui-bg: #14171b;
+  --ui-pane: rgba(29, 31, 35, 0.93);
   --ui-pane-right: rgba(20, 24, 30, 0.78);
   --ui-editor-surface: rgba(23, 28, 34, 0.86);
   --ui-editor-border: #343c47;
-  --ui-border: #373b43;
-  --ui-border-strong: #444954;
+  --ui-border: #3b3e45;
+  --ui-border-strong: #484d56;
   --ui-text: #e6ebf2;
   --ui-muted: #9da6b2;
-  --ui-select: #353941;
+  --ui-select: #373b43;
   --ui-accent: #84a7ff;
   background: radial-gradient(
     1400px 700px at -200px -80px,
-    rgba(50, 54, 62, 0.7) 0%,
-    rgba(20, 22, 28, 0.56) 56%
+    rgba(54, 58, 66, 0.7) 0%,
+    rgba(21, 24, 30, 0.58) 56%
   );
 }
 
@@ -930,9 +930,9 @@ body {
   flex-direction: column;
   background: linear-gradient(
     180deg,
-    rgba(40, 43, 50, 0.95) 0%,
-    rgba(34, 37, 44, 0.94) 46%,
-    rgba(29, 32, 38, 0.93) 100%
+    rgba(40, 44, 52, 0.95) 0%,
+    rgba(35, 39, 46, 0.94) 46%,
+    rgba(30, 34, 40, 0.93) 100%
   );
   border-right: 1px solid #474c56;
   backdrop-filter: blur(2px) saturate(110%);
@@ -1039,17 +1039,17 @@ body {
 
 .app.theme-dark .notes-pane,
 .app.theme-dark .settings-sections-pane {
-  background: rgba(30, 32, 37, 0.76);
+  background: rgba(33, 35, 40, 0.74);
 }
 
 .app.theme-dark .settings-detail-pane,
 .app.theme-dark .editor-pane {
-  background: rgba(27, 29, 34, 0.78);
+  background: rgba(26, 28, 33, 0.8);
 }
 
 .app.theme-dark .notes-pane .pane-body,
 .app.theme-dark .settings-sections-pane .pane-body {
-  background: rgba(31, 33, 38, 0.92);
+  background: rgba(34, 36, 41, 0.9);
   padding: calc(8px + var(--left-panels-drag-height)) 8px 10px;
 }
 
@@ -1085,7 +1085,7 @@ body {
 }
 
 .app.theme-dark .settings-detail-pane .pane-body {
-  background: rgba(23, 25, 29, 0.9);
+  background: rgba(24, 26, 30, 0.92);
   padding: 20px 22px;
 }
 
@@ -1127,18 +1127,18 @@ body {
 }
 
 .app.theme-dark .editor-body {
-  background: rgba(23, 25, 29, 0.9);
+  background: rgba(24, 26, 30, 0.92);
   padding: 0;
 }
 
 .app.theme-dark .tiptap-editor {
   border-color: #3a3a3e;
   border-top-color: transparent;
-  background: rgba(27, 29, 33, 0.95);
+  background: rgba(28, 30, 34, 0.95);
 }
 
 .app.theme-dark .tiptap-toolbar {
-  background: rgba(27, 29, 33, 0.95);
+  background: rgba(28, 30, 34, 0.95);
   border-bottom-color: #3a3a3e;
 }
 
