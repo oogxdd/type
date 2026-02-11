@@ -963,8 +963,7 @@ body {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  border: 1px solid var(--ui-border);
-  border-left: none;
+  border: none;
   border-radius: 0;
   overflow: hidden;
 }
@@ -1511,8 +1510,6 @@ body {
 }
 
 .app.theme-dark .tiptap-editor {
-  border-color: #3a3a3e;
-  border-top-color: transparent;
   background: rgba(28, 30, 34, 0.95);
 }
 
