@@ -240,8 +240,6 @@ const RECENT_PRIMARY_NODES: RecentNode[] = [
 ];
 
 const RECENT_EXPANDED_NODES: RecentNode[] = [
-  { id: "recent:february", name: "February" },
-  { id: "recent:january", name: "January" },
   {
     id: "recent:2025",
     name: "2025",
@@ -430,6 +428,7 @@ export function FoldersPanel({
       "recent:2025:q1",
       "recent:2025:q1:january",
       "recent:2025:q1:january:w1",
+      "recent:2025:q1:january:w2",
     ])
   );
   const { setNodeRef: setRootDropRef, isOver } = useDroppable({
@@ -530,7 +529,7 @@ export function FoldersPanel({
                   className="recent-show-more"
                   onClick={() => setShowMoreRecent((prev) => !prev)}
                 >
-                  {showMoreRecent ? "Show less" : "...show more"}
+                  {showMoreRecent ? "Show less" : "Show more"}
                 </button>
                 {showMoreRecent
                   ? RECENT_EXPANDED_NODES.map((node) => (
