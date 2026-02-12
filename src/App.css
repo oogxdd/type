@@ -111,11 +111,11 @@ body {
 
 .sidebar-toggle-btn {
   position: absolute;
-  top: 2px;
-  left: 204px;
+  top: 5.5px;
+  left: 82px;
   z-index: 32;
-  width: 28px;
-  height: 24px;
+  width: 24px;
+  height: 22px;
   border: none;
   background: transparent;
   color: rgba(112, 119, 128, 0.9);
