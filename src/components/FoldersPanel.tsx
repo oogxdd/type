@@ -594,7 +594,12 @@ export function FoldersPanel({
 
   return (
     <div className="pane tree-pane nav-pane">
-      {topAction ? <div className="pane-top">{topAction}</div> : null}
+      {topAction ? (
+        <div className="pane-top pane-top-draggable">
+          <div className="pane-top-drag-region" data-tauri-drag-region aria-hidden />
+          <div className="pane-top-content">{topAction}</div>
+        </div>
+      ) : null}
       <div className="pane-section">
         <Tabs
           value={activeTab}

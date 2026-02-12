@@ -176,6 +176,21 @@ body {
   padding-top: calc(10px + var(--left-panels-drag-height));
 }
 
+.pane-top-draggable {
+  position: relative;
+}
+
+.pane-top-drag-region {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.pane-top-content {
+  position: relative;
+  z-index: 1;
+}
+
 .pane {
   position: relative;
   border-right: none;
