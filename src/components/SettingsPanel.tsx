@@ -1,6 +1,7 @@
 import { Button } from "./ui/button";
 
 export type ThemeMode = "light" | "dark";
+export type NotesListMode = "separate" | "nested";
 
 type SettingsSectionId =
   | "general"
@@ -56,10 +57,14 @@ function SettingsDetail({
   sectionId,
   theme,
   onThemeChange,
+  notesListMode,
+  onNotesListModeChange,
 }: {
   sectionId: SettingsSectionId;
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
+  notesListMode: NotesListMode;
+  onNotesListModeChange: (mode: NotesListMode) => void;
 }) {
   if (sectionId === "general") {
     return (
@@ -72,6 +77,18 @@ function SettingsDetail({
             <option value="last">Last opened</option>
             <option value="inbox">Inbox</option>
             <option value="none">No auto-open</option>
+          </select>
+        </label>
+        <label className="settings-control">
+          <span>Notes list location</span>
+          <select
+            value={notesListMode}
+            onChange={(event) =>
+              onNotesListModeChange(event.target.value as NotesListMode)
+            }
+          >
+            <option value="separate">Separate notes panel</option>
+            <option value="nested">Inside folders navigation</option>
           </select>
         </label>
         <label className="settings-control settings-toggle">
@@ -329,12 +346,16 @@ export function SettingsDetailPane({
   activeSection,
   theme,
   onThemeChange,
+  notesListMode,
+  onNotesListModeChange,
   rightPaneRef,
   onPaneClick,
 }: {
   activeSection: string;
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
+  notesListMode: NotesListMode;
+  onNotesListModeChange: (mode: NotesListMode) => void;
   rightPaneRef: React.RefObject<HTMLDivElement | null>;
   onPaneClick: () => void;
 }) {
@@ -350,6 +371,8 @@ export function SettingsDetailPane({
           sectionId={activeSection as SettingsSectionId}
           theme={theme}
           onThemeChange={onThemeChange}
+          notesListMode={notesListMode}
+          onNotesListModeChange={onNotesListModeChange}
         />
       </div>
     </div>

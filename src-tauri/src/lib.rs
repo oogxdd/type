@@ -7,6 +7,9 @@ use std::{
 use tauri::Manager;
 
 const ORDER_FILE: &str = ".notes-order.json";
+const UNSORTED_FOLDER: &str = "Unsorted";
+const ARCHIEVE_FOLDER: &str = "Archieve";
+const SYSTEM_FOLDERS: [&str; 2] = [UNSORTED_FOLDER, ARCHIEVE_FOLDER];
 #[cfg(target_os = "macos")]
 const MACOS_WINDOW_ALPHA: f64 = 1.0;
 
@@ -146,6 +149,50 @@ fn strip_root(root: &Path, path: &Path) -> String {
         .replace('\\', "/")
 }
 
+fn is_system_folder_name(name: &str) -> bool {
+    SYSTEM_FOLDERS.iter().any(|folder| *folder == name)
+}
+
+fn is_system_folder_path(root: &Path, path: &Path) -> bool {
+    if path.parent() != Some(root) {
+        return false;
+    }
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(is_system_folder_name)
+}
+
+fn ensure_system_folders(root: &Path) -> Result<(), String> {
+    for folder in SYSTEM_FOLDERS {
+        let path = root.join(folder);
+        if path.exists() {
+            continue;
+        }
+        fs::create_dir_all(&path).map_err(|err| {
+            format!(
+                "Failed to create system folder {}: {}",
+                path.to_string_lossy(),
+                err
+            )
+        })?;
+    }
+
+    let mut order = read_order_file(root);
+    let mut changed = false;
+    for folder in SYSTEM_FOLDERS {
+        if !order.folder_order.iter().any(|name| name == folder) {
+            order.folder_order.push(folder.to_string());
+            changed = true;
+        }
+    }
+
+    if changed {
+        write_order_file(root, &order)?;
+    }
+
+    Ok(())
+}
+
 fn build_folder_node(dir: &Path, rel_path: &str) -> Result<FolderNode, String> {
     let order = read_order_file(dir);
     let mut folders = Vec::new();
@@ -256,6 +303,7 @@ fn update_order_rename(
 #[tauri::command]
 fn get_tree(app: tauri::AppHandle) -> Result<FolderNode, String> {
     let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
     build_folder_node(&root, "")
 }
 
@@ -268,6 +316,9 @@ fn read_note(app: tauri::AppHandle, path: String) -> Result<String, String> {
 #[tauri::command]
 fn write_note(app: tauri::AppHandle, path: String, content: String) -> Result<(), String> {
     let full_path = resolve_path(&app, &path)?;
+    if let Some(parent) = full_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
     fs::write(full_path, content).map_err(|err| err.to_string())
 }
 
@@ -295,6 +346,7 @@ fn move_items(
     destination: String,
 ) -> Result<(), String> {
     let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
     println!(
         "[move_items] root={} destination={}",
         root.to_string_lossy(),
@@ -319,6 +371,12 @@ fn move_items(
 
     for item in items {
         let source = resolve_path(&app, &item)?;
+        if is_system_folder_path(&root, &source) {
+            return Err(format!(
+                "Cannot move system folder: {}",
+                source.to_string_lossy()
+            ));
+        }
         if !source.exists() {
             return Err(format!(
                 "Source does not exist: {}",
@@ -404,11 +462,18 @@ fn move_items(
 #[tauri::command]
 fn delete_items(app: tauri::AppHandle, items: Vec<String>) -> Result<(), String> {
     let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
     let mut parent_folder_groups: HashMap<PathBuf, Vec<String>> = HashMap::new();
     let mut parent_note_groups: HashMap<PathBuf, Vec<String>> = HashMap::new();
 
     for item in items {
         let full_path = resolve_path(&app, &item)?;
+        if is_system_folder_path(&root, &full_path) {
+            return Err(format!(
+                "Cannot delete system folder: {}",
+                full_path.to_string_lossy()
+            ));
+        }
         let name = full_path
             .file_name()
             .and_then(|n| n.to_str())
@@ -445,7 +510,15 @@ fn delete_items(app: tauri::AppHandle, items: Vec<String>) -> Result<(), String>
 
 #[tauri::command]
 fn rename_item(app: tauri::AppHandle, path: String, new_name: String) -> Result<String, String> {
+    let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
     let full_path = resolve_path(&app, &path)?;
+    if is_system_folder_path(&root, &full_path) {
+        return Err(format!(
+            "Cannot rename system folder: {}",
+            full_path.to_string_lossy()
+        ));
+    }
     println!(
         "[rename_item] path={} new_name={}",
         full_path.to_string_lossy(),
@@ -464,7 +537,6 @@ fn rename_item(app: tauri::AppHandle, path: String, new_name: String) -> Result<
         is_folder,
     )?;
 
-    let root = notes_root(&app)?;
     Ok(strip_root(&root, &new_path))
 }
 

@@ -8,6 +8,7 @@ export function buildTreeItems(node: FolderNode): TreeItem[] {
     id: child.path,
     name: child.name,
     noteCount: child.notes.length,
+    notes: child.notes,
     children: buildTreeItems(child),
   }));
 }

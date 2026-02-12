@@ -391,8 +391,8 @@ body {
 .nav-scroll-area {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .nav-scroll-area .pane-body {
@@ -402,6 +402,8 @@ body {
 
 .folders-tabs {
   gap: 0;
+  flex: 1;
+  min-height: 0;
 }
 
 .pane-tabs-wrap {
@@ -446,6 +448,9 @@ body {
 
 .folders-tab-content {
   margin-top: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .recent-pane-body {
@@ -528,6 +533,33 @@ body {
 
 .tree-pane .folder-row {
   position: relative;
+}
+
+.tree-pane .nav-note-row {
+  min-height: 28px;
+}
+
+.tree-pane .nav-note-row .item-label {
+  font-size: 13px;
+  font-weight: 450;
+}
+
+.tree-pane .nav-note-row.is-dragging {
+  opacity: 0.5;
+}
+
+.tree-pane .nav-note-glyph {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #8092a4;
+}
+
+.tree-pane .nav-note-glyph svg {
+  width: 13px;
+  height: 13px;
 }
 
 .tree-pane .tree-guides {
@@ -1360,6 +1392,11 @@ body {
   font-weight: 500;
 }
 
+.app.theme-dark .tree-pane .nav-note-row .item-label {
+  color: #d3dbe5;
+  font-weight: 450;
+}
+
 .app.theme-dark .tree-pane .note-count {
   color: #a2acb8;
   opacity: 0.72;
@@ -1367,7 +1404,8 @@ body {
 
 .app.theme-dark .tree-pane .icon-btn,
 .app.theme-dark .tree-pane .folder-glyph,
-.app.theme-dark .tree-pane .tree-guide-vert {
+.app.theme-dark .tree-pane .tree-guide-vert,
+.app.theme-dark .tree-pane .nav-note-glyph {
   color: #bcc5cf;
 }
 

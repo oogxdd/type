@@ -9,6 +9,7 @@ export function buildTree(items: FlattenedItem[]): TreeItem[] {
       id: item.id,
       name: item.name,
       noteCount: item.noteCount,
+      notes: item.notes,
       children: [],
     });
   }
@@ -44,6 +45,7 @@ export function flattenTree(
       depth,
       children: item.children,
       noteCount: item.noteCount,
+      notes: item.notes,
     },
     ...flattenTree(item.children, item.id, depth + 1),
   ]);

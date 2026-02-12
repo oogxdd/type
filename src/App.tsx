@@ -40,6 +40,7 @@ import { NoteEditor } from "./components/NoteEditor";
 import {
   SettingsMiddlePane,
   SettingsDetailPane,
+  type NotesListMode,
   type ThemeMode,
 } from "./components/SettingsPanel";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "./components/ui/resizable";
@@ -72,9 +73,23 @@ import type { TreeItem } from "./tree/types";
 import { removeChildrenOf } from "./tree/utilities";
 
 const indentationWidth = 18;
+const UNSORTED_FOLDER_PATH = "Unsorted";
+const ARCHIEVE_FOLDER_PATH = "Archieve";
+const SYSTEM_FOLDER_PATHS = new Set([UNSORTED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH]);
 
 type AppMode = "notes" | "settings";
 type PaneId = "folders" | "middle" | "right";
+type VisibleNavigationItem =
+  | {
+      type: "folder";
+      id: string;
+      parentId: string | null;
+    }
+  | {
+      type: "note";
+      id: string;
+      parentId: string;
+    };
 
 const getInitialTheme = (): ThemeMode => {
   if (typeof window === "undefined") {
@@ -87,6 +102,24 @@ const getInitialTheme = (): ThemeMode => {
   return "dark";
 };
 
+const getInitialNotesListMode = (): NotesListMode => {
+  if (typeof window === "undefined") {
+    return "separate";
+  }
+  const stored = window.localStorage.getItem("notes-viewer-notes-list-mode");
+  if (stored === "nested" || stored === "separate") {
+    return stored;
+  }
+  return "separate";
+};
+
+const getNoteParentPath = (notePath: string) => {
+  const slashIndex = notePath.lastIndexOf("/");
+  return slashIndex === -1 ? "" : notePath.slice(0, slashIndex);
+};
+
+const isSystemFolder = (path: string) => SYSTEM_FOLDER_PATHS.has(path);
+
 // ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
@@ -94,11 +127,17 @@ const getInitialTheme = (): ThemeMode => {
 function App() {
   // -- Theme & layout -------------------------------------------------------
   const [theme, setTheme] = useState<ThemeMode>(getInitialTheme);
+  const [notesListMode, setNotesListMode] =
+    useState<NotesListMode>(getInitialNotesListMode);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [panelLayout, setPanelLayout] = useState<Record<string, number>>({
+  const [threePaneLayout, setThreePaneLayout] = useState<Record<string, number>>({
     nav: 22,
     middle: 25,
     content: 53,
+  });
+  const [twoPaneLayout, setTwoPaneLayout] = useState<Record<string, number>>({
+    nav: 29,
+    content: 71,
   });
   const [editorFontSize, setEditorFontSize] = useState(14);
   const [appMode, setAppMode] = useState<AppMode>("notes");
@@ -168,6 +207,10 @@ function App() {
     document.documentElement.classList.toggle("dark", theme === "dark");
   }, [theme]);
 
+  useEffect(() => {
+    window.localStorage.setItem("notes-viewer-notes-list-mode", notesListMode);
+  }, [notesListMode]);
+
   // -- Debug logging --------------------------------------------------------
   useEffect(() => {
     console.log("[folders] activeFolder", activeFolder);
@@ -182,6 +225,9 @@ function App() {
   useEffect(() => {
     void refreshTree();
   }, [refreshTree]);
+
+  const shouldNestNotesInNavigation =
+    appMode === "notes" && notesListMode === "nested";
 
   const treeData = useMemo(() => {
     if (!tree) return [] as TreeItem[];
@@ -198,6 +244,42 @@ function App() {
   }, [flatItems, expanded]);
 
   const orderedIds = useMemo(() => visibleItems.map((item) => item.id), [visibleItems]);
+  const flatItemById = useMemo(
+    () => new Map(flatItems.map((item) => [item.id, item] as const)),
+    [flatItems]
+  );
+
+  const visibleNavigationItems = useMemo(() => {
+    if (!shouldNestNotesInNavigation) {
+      return [] as VisibleNavigationItem[];
+    }
+
+    const items: VisibleNavigationItem[] = [];
+    const walk = (nodes: TreeItem[], parentId: string | null) => {
+      nodes.forEach((node) => {
+        items.push({
+          type: "folder",
+          id: node.id,
+          parentId,
+        });
+        const notesInNode = node.notes || [];
+        const hasNestedItems = node.children.length > 0 || notesInNode.length > 0;
+        if (!hasNestedItems || !expanded.has(node.id)) {
+          return;
+        }
+        notesInNode.forEach((note) => {
+          items.push({
+            type: "note",
+            id: note.path,
+            parentId: node.id,
+          });
+        });
+        walk(node.children, node.id);
+      });
+    };
+    walk(treeData, null);
+    return items;
+  }, [expanded, shouldNestNotesInNavigation, treeData]);
 
   const parentById = useMemo(() => {
     const map: Record<string, string | null> = {};
@@ -219,12 +301,13 @@ function App() {
   // -- Create new note ------------------------------------------------------
   const createNewNote = useCallback(async () => {
     if (appMode !== "notes") setAppMode("notes");
-    const folderPath = activeFolder;
-    const targetNode = activeNode ?? findNode(tree, folderPath);
+    const treeSnapshot = tree ?? (await api.getTree());
+    const folderPath = UNSORTED_FOLDER_PATH;
+    const targetNode = findNode(treeSnapshot, folderPath);
     if (!targetNode) return;
 
     const fileName = getNextNoteFileName(targetNode.notes.map((n) => n.name));
-    const path = folderPath ? `${folderPath}/${fileName}` : fileName;
+    const path = `${folderPath}/${fileName}`;
 
     await api.writeNote(path, "");
     await api.setOrder({
@@ -234,15 +317,9 @@ function App() {
     });
     await refreshTree();
 
-    if (folderPath) {
-      setSelectedFolders(new Set([folderPath]));
-      setLastSelectedFolder(folderPath);
-      setActiveFolder(folderPath);
-    } else {
-      setSelectedFolders(new Set());
-      setLastSelectedFolder("");
-      setActiveFolder("");
-    }
+    setSelectedFolders(new Set([folderPath]));
+    setLastSelectedFolder(folderPath);
+    setActiveFolder(folderPath);
     setSelectedNotes(new Set([path]));
     setLastSelectedNote(path);
     setActiveNote(path);
@@ -254,7 +331,7 @@ function App() {
         ) || rightPaneRef.current;
       focusNoScroll(editorElement);
     });
-  }, [activeFolder, activeNode, appMode, refreshTree, tree]);
+  }, [appMode, refreshTree, tree]);
 
   // -- App style ------------------------------------------------------------
   const appStyle = useMemo(
@@ -289,7 +366,9 @@ function App() {
     setLastSelectedFolder(path);
     setActiveFolder(path);
     setSelectedNotes(new Set());
+    setLastSelectedNote("");
     setActiveNote(null);
+    focusNoScroll(foldersPanelRef.current);
   };
 
   const handleToggle = (event: ReactMouseEvent, id: string) => {
@@ -303,6 +382,10 @@ function App() {
   };
 
   const startRenameFolder = (path: string) => {
+    if (isSystemFolder(path)) {
+      window.alert(`"${path}" is a fixed folder and cannot be renamed.`);
+      return;
+    }
     const name = path.split("/").pop() || "";
     setRenamingFolder(path);
     setRenameValue(name);
@@ -331,6 +414,10 @@ function App() {
 
   const deleteFolders = async (paths: string[]) => {
     if (paths.length === 0) return;
+    if (paths.some(isSystemFolder)) {
+      window.alert('"Unsorted" and "Archieve" are fixed folders and cannot be deleted.');
+      return;
+    }
     const confirmed = await confirmAction(`Delete ${paths.length} folder(s)?`);
     if (!confirmed) return;
     await api.deleteItems(paths);
@@ -381,16 +468,24 @@ function App() {
     }
     setActiveFolder(path);
     setSelectedNotes(new Set());
+    setLastSelectedNote("");
     setActiveNote(null);
+    focusNoScroll(foldersPanelRef.current);
     folderContextPathRef.current = path;
     const menu = await getFolderNativeMenu();
     await menu.popup(new LogicalPosition(event.clientX, event.clientY));
   };
 
   // -- Note handlers --------------------------------------------------------
-  const handleNoteClick = (notePath: string, event: ReactMouseEvent) => {
-    if (!activeNode) return;
-    const notePaths = activeNode.notes.map((n) => n.path);
+  const handleNoteClick = (
+    notePath: string,
+    event: ReactMouseEvent,
+    parentPath?: string
+  ) => {
+    const noteParentPath = parentPath ?? getNoteParentPath(notePath);
+    const parentNode = findNode(tree, noteParentPath);
+    if (!parentNode) return;
+    const notePaths = parentNode.notes.map((n) => n.path);
     const nextSelected = new Set(selectedNotes);
     if (event.shiftKey && lastSelectedNote) {
       const start = notePaths.indexOf(lastSelectedNote);
@@ -412,7 +507,13 @@ function App() {
     }
     setSelectedNotes(nextSelected);
     setLastSelectedNote(notePath);
+    setSelectedFolders(new Set(noteParentPath ? [noteParentPath] : []));
+    setLastSelectedFolder(noteParentPath);
+    setActiveFolder(noteParentPath);
     setActiveNote(notePath);
+    if (parentPath !== undefined || shouldNestNotesInNavigation) {
+      focusNoScroll(foldersPanelRef.current);
+    }
   };
 
   const deleteNotes = async (paths: string[]) => {
@@ -421,10 +522,24 @@ function App() {
     if (!confirmed) return;
     await api.deleteItems(paths);
     setSelectedNotes(new Set());
+    setLastSelectedNote("");
     if (paths.includes(activeNote || "")) {
       setActiveNote(null);
       clearNote();
     }
+    await refreshTree();
+  };
+
+  const moveNotesToArchieve = async (paths: string[]) => {
+    if (paths.length === 0) return;
+    await api.moveItems(paths, ARCHIEVE_FOLDER_PATH);
+    setSelectedNotes(new Set());
+    setLastSelectedNote("");
+    setActiveNote(null);
+    clearNote();
+    setSelectedFolders(new Set([ARCHIEVE_FOLDER_PATH]));
+    setLastSelectedFolder(ARCHIEVE_FOLDER_PATH);
+    setActiveFolder(ARCHIEVE_FOLDER_PATH);
     await refreshTree();
   };
 
@@ -470,20 +585,45 @@ function App() {
               void deleteNotes(paths);
             },
           },
+          {
+            id: "note.move.archieve",
+            text: "Move to Archieve",
+            action: () => {
+              const path = noteContextPathRef.current;
+              if (!path) return;
+              const selected = selectedNotesRef.current;
+              const paths =
+                selected.size > 1 && selected.has(path)
+                  ? Array.from(selected)
+                  : [path];
+              void moveNotesToArchieve(paths);
+            },
+          },
         ],
       });
     }
     return noteMenuPromiseRef.current;
   };
 
-  const handleNoteContextMenu = async (event: ReactMouseEvent, path: string) => {
+  const handleNoteContextMenu = async (
+    event: ReactMouseEvent,
+    path: string,
+    parentPath?: string
+  ) => {
     event.preventDefault();
     event.stopPropagation();
+    const noteParentPath = parentPath ?? getNoteParentPath(path);
+    setSelectedFolders(new Set(noteParentPath ? [noteParentPath] : []));
+    setLastSelectedFolder(noteParentPath);
+    setActiveFolder(noteParentPath);
     if (!selectedNotes.has(path)) {
       setSelectedNotes(new Set([path]));
       setLastSelectedNote(path);
     }
     setActiveNote(path);
+    if (parentPath !== undefined || shouldNestNotesInNavigation) {
+      focusNoScroll(foldersPanelRef.current);
+    }
     noteContextPathRef.current = path;
     const menu = await getNoteNativeMenu();
     await menu.popup(new LogicalPosition(event.clientX, event.clientY));
@@ -661,6 +801,10 @@ function App() {
       }
 
       const orderedDraggingIds = sortIdsByTreeOrder(draggingIds, orderedIds);
+      if (orderedDraggingIds.some(isSystemFolder)) {
+        api.logGroup("drop ignored", { reason: "system folder drag blocked" });
+        return;
+      }
       const { tree: prunedTree, removed } = removeNodes(treeData, orderedDraggingIds);
       const removedMap = new Map(removed.map((node) => [node.id, node]));
       const nodesToInsert = orderedDraggingIds
@@ -756,6 +900,7 @@ function App() {
       const selectedList = selectedNotes.has(data.path)
         ? Array.from(selectedNotes)
         : [data.path];
+      const sourceParentPath = getNoteParentPath(data.path);
       if (overData.type === "folder") {
         api.logGroup("note move to folder", {
           notes: selectedList,
@@ -767,24 +912,58 @@ function App() {
           clearNote();
         }
         setSelectedNotes(new Set());
+        setLastSelectedNote("");
         await refreshTree();
         return;
       }
-      if (overData.type === "note" && activeNode) {
-        if (selectedList.includes(overData.path)) return;
-        const notePaths = activeNode.notes.map((n) => n.path);
-        const newOrder = reorderList(notePaths, selectedList, overData.path);
-        const folderOrder = activeNode.children.map((c) => c.name);
+      if (overData.type === "note") {
+        const destinationParentPath = getNoteParentPath(overData.path);
+        if (destinationParentPath !== sourceParentPath) {
+          api.logGroup("note move to note parent", {
+            notes: selectedList,
+            destination: destinationParentPath,
+            over: overData.path,
+          });
+          await api.moveItems(selectedList, destinationParentPath);
+          if (selectedList.includes(activeNote || "")) {
+            setActiveNote(null);
+            clearNote();
+          }
+          setSelectedNotes(new Set());
+          setLastSelectedNote("");
+          await refreshTree();
+          return;
+        }
+
+        const parentNode = findNode(tree, destinationParentPath);
+        if (!parentNode) {
+          api.logGroup("note drop ignored", {
+            reason: "missing destination parent",
+            destinationParentPath,
+          });
+          return;
+        }
+
+        const movingInParent = selectedList.filter(
+          (notePath) => getNoteParentPath(notePath) === destinationParentPath
+        );
+        const movingNotes =
+          movingInParent.length > 0 ? movingInParent : [data.path];
+        if (movingNotes.includes(overData.path)) return;
+
+        const notePaths = parentNode.notes.map((n) => n.path);
+        const newOrder = reorderList(notePaths, movingNotes, overData.path);
+        const folderOrder = parentNode.children.map((c) => c.name);
         const noteOrder = newOrder.map((p) => p.split("/").pop() || p);
         api.logGroup("note reorder", {
-          parent: activeNode.path,
-          dragging: selectedList,
+          parent: parentNode.path,
+          dragging: movingNotes,
           over: overData.path,
           noteOrder,
           folderOrder,
         });
         await api.setOrder({
-          parent: activeNode.path,
+          parent: parentNode.path,
           folderOrder,
           noteOrder,
         });
@@ -808,6 +987,8 @@ function App() {
 
   // -- Keyboard navigation --------------------------------------------------
   useEffect(() => {
+    const hasMiddlePane = appMode !== "notes" || !shouldNestNotesInNavigation;
+
     const getFocusedPane = (): PaneId | null => {
       const activeElement = document.activeElement as HTMLElement | null;
       if (!activeElement) return null;
@@ -838,6 +1019,10 @@ function App() {
         return;
       }
       if (pane === "middle") {
+        if (!hasMiddlePane) {
+          focusNoScroll(foldersPanelRef.current);
+          return;
+        }
         focusNoScroll(middlePaneRef.current);
         return;
       }
@@ -903,7 +1088,14 @@ function App() {
       if (code === "KeyW") {
         if (sidebarCollapsed) {
           setSidebarCollapsed(false);
-          requestAnimationFrame(() => focusPane(lastLeftPaneFocusRef.current));
+          requestAnimationFrame(() =>
+            focusPane(hasMiddlePane ? lastLeftPaneFocusRef.current : "folders")
+          );
+          return;
+        }
+        if (!hasMiddlePane) {
+          lastLeftPaneFocusRef.current = "folders";
+          focusPane("folders");
           return;
         }
         const currentPane = getFocusedPane();
@@ -916,10 +1108,16 @@ function App() {
 
       const panes: PaneId[] = sidebarCollapsed
         ? ["right"]
-        : ["folders", "middle", "right"];
+        : hasMiddlePane
+          ? ["folders", "middle", "right"]
+          : ["folders", "right"];
       const currentPane = getFocusedPane();
       const startPane =
-        currentPane && panes.includes(currentPane) ? currentPane : "middle";
+        currentPane && panes.includes(currentPane)
+          ? currentPane
+          : hasMiddlePane
+            ? "middle"
+            : "folders";
       const delta = code === "KeyK" ? 1 : -1;
       const nextIndex = Math.max(
         0,
@@ -933,7 +1131,7 @@ function App() {
 
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [appMode, createNewNote, sidebarCollapsed]);
+  }, [appMode, createNewNote, shouldNestNotesInNavigation, sidebarCollapsed]);
 
   const handleNotesKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
@@ -969,8 +1167,16 @@ function App() {
   const handleFoldersKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "ArrowRight") {
       event.preventDefault();
-      lastLeftPaneFocusRef.current = "middle";
-      focusNoScroll(middlePaneRef.current);
+      if (appMode === "notes" && shouldNestNotesInNavigation) {
+        const editorElement =
+          rightPaneRef.current?.querySelector<HTMLElement>(
+            ".tiptap-content[contenteditable='true']"
+          ) || rightPaneRef.current;
+        focusNoScroll(editorElement);
+      } else {
+        lastLeftPaneFocusRef.current = "middle";
+        focusNoScroll(middlePaneRef.current);
+      }
       return;
     }
     if (
@@ -980,6 +1186,128 @@ function App() {
       event.key !== "ArrowRight"
     )
       return;
+    if (shouldNestNotesInNavigation) {
+      if (visibleNavigationItems.length === 0) return;
+      event.preventDefault();
+
+      const navIds = visibleNavigationItems.map((item) => item.id);
+      const current =
+        lastSelectedNote && navIds.includes(lastSelectedNote)
+          ? lastSelectedNote
+          : lastSelectedFolder && navIds.includes(lastSelectedFolder)
+            ? lastSelectedFolder
+            : activeNote && navIds.includes(activeNote)
+              ? activeNote
+              : activeFolder && navIds.includes(activeFolder)
+                ? activeFolder
+                : navIds[0];
+      const currentIndex = navIds.indexOf(current);
+      const currentEntry = visibleNavigationItems[currentIndex];
+      if (!currentEntry) return;
+
+      const selectFolder = (folderPath: string) => {
+        setSelectedFolders(new Set([folderPath]));
+        setLastSelectedFolder(folderPath);
+        setActiveFolder(folderPath);
+        setSelectedNotes(new Set());
+        setLastSelectedNote("");
+        setActiveNote(null);
+        focusNoScroll(foldersPanelRef.current);
+        requestAnimationFrame(() => {
+          scrollIntoViewIfNeeded(
+            foldersPanelRef.current,
+            `[data-folder="${escapeSelectorValue(folderPath)}"]`
+          );
+        });
+      };
+
+      const selectNote = (notePath: string, parentPath: string) => {
+        setSelectedFolders(new Set(parentPath ? [parentPath] : []));
+        setLastSelectedFolder(parentPath);
+        setActiveFolder(parentPath);
+        setSelectedNotes(new Set([notePath]));
+        setLastSelectedNote(notePath);
+        setActiveNote(notePath);
+        focusNoScroll(foldersPanelRef.current);
+        requestAnimationFrame(() => {
+          scrollIntoViewIfNeeded(
+            foldersPanelRef.current,
+            `[data-note="${escapeSelectorValue(notePath)}"]`
+          );
+        });
+      };
+
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        const delta = event.key === "ArrowUp" ? -1 : 1;
+        const nextIndex = Math.max(
+          0,
+          Math.min(visibleNavigationItems.length - 1, currentIndex + delta)
+        );
+        const nextEntry = visibleNavigationItems[nextIndex];
+        if (!nextEntry) return;
+        if (nextEntry.type === "folder") {
+          selectFolder(nextEntry.id);
+          return;
+        }
+        selectNote(nextEntry.id, nextEntry.parentId);
+        return;
+      }
+
+      if (event.key === "ArrowRight") {
+        if (currentEntry.type !== "folder") return;
+        const folderItem = flatItemById.get(currentEntry.id);
+        const noteCount = folderItem?.notes?.length || 0;
+        const childCount = folderItem?.children.length || 0;
+        const hasNestedItems = childCount > 0 || noteCount > 0;
+        if (!hasNestedItems) return;
+        if (!expanded.has(currentEntry.id)) {
+          setExpanded((prev) => {
+            const next = new Set(prev);
+            next.add(currentEntry.id);
+            return next;
+          });
+          return;
+        }
+        const firstChildEntry = visibleNavigationItems[currentIndex + 1];
+        if (!firstChildEntry || firstChildEntry.parentId !== currentEntry.id) return;
+        if (firstChildEntry.type === "folder") {
+          selectFolder(firstChildEntry.id);
+          return;
+        }
+        selectNote(firstChildEntry.id, firstChildEntry.parentId);
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        if (currentEntry.type === "note") {
+          selectFolder(currentEntry.parentId);
+          return;
+        }
+
+        const folderItem = flatItemById.get(currentEntry.id);
+        const noteCount = folderItem?.notes?.length || 0;
+        const childCount = folderItem?.children.length || 0;
+        const hasNestedItems = childCount > 0 || noteCount > 0;
+        if (hasNestedItems && expanded.has(currentEntry.id)) {
+          setExpanded((prev) => {
+            const next = new Set(prev);
+            next.delete(currentEntry.id);
+            return next;
+          });
+          return;
+        }
+        const parentFolderId = currentEntry.parentId;
+        if (!parentFolderId) return;
+        setExpanded((prev) => {
+          const next = new Set(prev);
+          next.delete(parentFolderId);
+          return next;
+        });
+        selectFolder(parentFolderId);
+      }
+      return;
+    }
+
     if (visibleItems.length === 0) return;
     event.preventDefault();
 
@@ -1004,6 +1332,7 @@ function App() {
       setLastSelectedFolder(nextPath);
       setActiveFolder(nextPath);
       setSelectedNotes(new Set());
+      setLastSelectedNote("");
       setActiveNote(null);
       requestAnimationFrame(() => {
         scrollIntoViewIfNeeded(
@@ -1030,6 +1359,7 @@ function App() {
           setLastSelectedFolder(firstChild.id);
           setActiveFolder(firstChild.id);
           setSelectedNotes(new Set());
+          setLastSelectedNote("");
           setActiveNote(null);
           requestAnimationFrame(() => {
             scrollIntoViewIfNeeded(
@@ -1061,6 +1391,7 @@ function App() {
         setLastSelectedFolder(parentId);
         setActiveFolder(parentId);
         setSelectedNotes(new Set());
+        setLastSelectedNote("");
         setActiveNote(null);
         requestAnimationFrame(() => {
           scrollIntoViewIfNeeded(
@@ -1148,6 +1479,8 @@ function App() {
         activeSection={activeSettingsSection}
         theme={theme}
         onThemeChange={setTheme}
+        notesListMode={notesListMode}
+        onNotesListModeChange={setNotesListMode}
         rightPaneRef={rightPaneRef}
         onPaneClick={() => focusNoScroll(rightPaneRef.current)}
       />
@@ -1163,6 +1496,10 @@ function App() {
         edgeSnap={edgeSnap}
         expanded={expanded}
         onToggle={handleToggle}
+        showNotesAsChildren={shouldNestNotesInNavigation}
+        selectedNoteIds={selectedNotes}
+        onNoteSelect={handleNoteClick}
+        onNoteContextMenu={handleNoteContextMenu}
         onPaneKeyDown={handleFoldersKeyDown}
         onPaneClick={() => {
           lastLeftPaneFocusRef.current = "folders";
@@ -1172,6 +1509,11 @@ function App() {
         onClearSelection={() => {
           setSelectedFolders(new Set());
           setLastSelectedFolder("");
+          setSelectedNotes(new Set());
+          setLastSelectedNote("");
+          if (shouldNestNotesInNavigation) {
+            setActiveNote(null);
+          }
         }}
         renamingFolder={renamingFolder}
         renameValue={renameValue}
@@ -1267,12 +1609,38 @@ function App() {
           </button>
           {sidebarCollapsed ? (
             <div className="app-single-pane">{renderRightPane()}</div>
+          ) : shouldNestNotesInNavigation ? (
+            <ResizablePanelGroup
+              orientation="horizontal"
+              className="app-panels"
+              defaultLayout={twoPaneLayout}
+              onLayoutChanged={(layout) => setTwoPaneLayout(layout)}
+            >
+              <ResizablePanel
+                id="nav"
+                defaultSize="29%"
+                minSize="18%"
+                maxSize="44%"
+                className="min-w-0 h-full min-h-0"
+              >
+                {renderLeftPane()}
+              </ResizablePanel>
+              <ResizableHandle className="app-resize-handle" />
+              <ResizablePanel
+                id="content"
+                defaultSize="71%"
+                minSize="35%"
+                className="min-w-0 h-full min-h-0"
+              >
+                {renderRightPane()}
+              </ResizablePanel>
+            </ResizablePanelGroup>
           ) : (
             <ResizablePanelGroup
               orientation="horizontal"
               className="app-panels"
-              defaultLayout={panelLayout}
-              onLayoutChanged={(layout) => setPanelLayout(layout)}
+              defaultLayout={threePaneLayout}
+              onLayoutChanged={(layout) => setThreePaneLayout(layout)}
             >
               <ResizablePanel
                 id="nav"

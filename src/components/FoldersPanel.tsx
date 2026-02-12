@@ -1,13 +1,14 @@
-import type { MouseEvent } from "react";
-import { useCallback, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { TreeItem } from "../tree/types";
-import type { DragData } from "../types";
+import type { DragData, NoteEntry } from "../types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 
 const DROP_PREFIX = "drop";
 const ROOT_ID = "root";
+const EMPTY_STRING_SET = new Set<string>();
 
 const dropId = (id: string, position: "inside") => `${DROP_PREFIX}:${id}:${position}`;
 
@@ -16,10 +17,10 @@ type EdgeSnap = { id: string; position: "before" | "after" } | null;
 type FoldersPanelProps = {
   treeData: TreeItem[];
   selectedIds: Set<string>;
-  onSelect: (event: MouseEvent, id: string) => void;
+  onSelect: (event: ReactMouseEvent, id: string) => void;
   edgeSnap: EdgeSnap;
   expanded: Set<string>;
-  onToggle: (event: MouseEvent, id: string) => void;
+  onToggle: (event: ReactMouseEvent, id: string) => void;
   onClearSelection: () => void;
   onPaneKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   onPaneClick?: () => void;
@@ -29,7 +30,15 @@ type FoldersPanelProps = {
   setRenameValue: (value: string) => void;
   submitRenameFolder: () => void;
   cancelRenameFolder: () => void;
-  onContextMenu: (event: MouseEvent, id: string) => void;
+  onContextMenu: (event: ReactMouseEvent, id: string) => void;
+  showNotesAsChildren?: boolean;
+  selectedNoteIds?: Set<string>;
+  onNoteSelect?: (notePath: string, event: ReactMouseEvent, parentPath: string) => void;
+  onNoteContextMenu?: (
+    event: ReactMouseEvent,
+    notePath: string,
+    parentPath: string
+  ) => void;
   indentationWidth: number;
   topAction?: React.ReactNode;
   sectionTitle?: string;
@@ -40,16 +49,17 @@ type TreeRowProps = {
   node: TreeItem;
   depth: number;
   isSelected: boolean;
+  hasNestedItems: boolean;
   edgePosition: "before" | "after" | null;
   isCollapsed: boolean;
-  onSelect: (event: MouseEvent, id: string) => void;
-  onToggle: (event: MouseEvent, id: string) => void;
+  onSelect: (event: ReactMouseEvent, id: string) => void;
+  onToggle: (event: ReactMouseEvent, id: string) => void;
   renaming: boolean;
   renameValue: string;
   setRenameValue: (value: string) => void;
   submitRenameFolder: () => void;
   cancelRenameFolder: () => void;
-  onContextMenu: (event: MouseEvent, id: string) => void;
+  onContextMenu: (event: ReactMouseEvent, id: string) => void;
   indentationWidth: number;
 };
 
@@ -57,6 +67,7 @@ function TreeRow({
   node,
   depth,
   isSelected,
+  hasNestedItems,
   edgePosition,
   isCollapsed,
   onSelect,
@@ -127,7 +138,7 @@ function TreeRow({
           ))}
         </span>
       )}
-      {node.children.length > 0 ? (
+      {hasNestedItems ? (
         <button
           type="button"
           className={`icon-btn tree-toggle${isCollapsed ? " is-collapsed" : ""}`}
@@ -148,7 +159,7 @@ function TreeRow({
       )}
       {!renaming && (
         <span className="folder-glyph" aria-hidden>
-          {node.children.length > 0 && !isCollapsed ? (
+          {hasNestedItems && !isCollapsed ? (
             <svg viewBox="0 0 24 24">
               <path
                 d="M3 8a2.5 2.5 0 0 1 2.5-2.5h4L11.4 7h7.1A2.5 2.5 0 0 1 21 9.5V11"
@@ -214,18 +225,107 @@ type TreeNodeProps = {
   node: TreeItem;
   depth: number;
   selectedIds: Set<string>;
+  selectedNoteIds: Set<string>;
+  showNotesAsChildren: boolean;
   edgeSnap: EdgeSnap;
   expanded: Set<string>;
-  onSelect: (event: MouseEvent, id: string) => void;
-  onToggle: (event: MouseEvent, id: string) => void;
+  onSelect: (event: ReactMouseEvent, id: string) => void;
+  onToggle: (event: ReactMouseEvent, id: string) => void;
+  onNoteSelect: (notePath: string, event: ReactMouseEvent, parentPath: string) => void;
+  onNoteContextMenu: (
+    event: ReactMouseEvent,
+    notePath: string,
+    parentPath: string
+  ) => void;
   renamingFolder: string | null;
   renameValue: string;
   setRenameValue: (value: string) => void;
   submitRenameFolder: () => void;
   cancelRenameFolder: () => void;
-  onContextMenu: (event: MouseEvent, id: string) => void;
+  onContextMenu: (event: ReactMouseEvent, id: string) => void;
   indentationWidth: number;
 };
+
+type NavNoteRowProps = {
+  note: NoteEntry;
+  parentPath: string;
+  depth: number;
+  indentationWidth: number;
+  isSelected: boolean;
+  onSelect: (notePath: string, event: ReactMouseEvent, parentPath: string) => void;
+  onContextMenu: (
+    event: ReactMouseEvent,
+    notePath: string,
+    parentPath: string
+  ) => void;
+};
+
+function NavNoteRow({
+  note,
+  parentPath,
+  depth,
+  indentationWidth,
+  isSelected,
+  onSelect,
+  onContextMenu,
+}: NavNoteRowProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: note.path,
+    data: { type: "note", path: note.path } satisfies DragData,
+  });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: note.path,
+    data: { type: "note", path: note.path } satisfies DragData,
+  });
+  const setRefs = useCallback(
+    (element: HTMLDivElement | null) => {
+      setNodeRef(element);
+      setDropRef(element);
+    },
+    [setDropRef, setNodeRef]
+  );
+  const style = {
+    transform: isDragging ? undefined : CSS.Translate.toString(transform),
+    paddingLeft: 12 + depth * indentationWidth,
+  } as React.CSSProperties;
+
+  return (
+    <div
+      ref={setRefs}
+      style={style}
+      className={`item-row nav-note-row${isSelected ? " selected" : ""}${
+        isOver ? " drop-inside" : ""
+      }${isDragging ? " is-dragging" : ""}`}
+      data-note={note.path}
+      onClick={(event) => onSelect(note.path, event, parentPath)}
+      onContextMenu={(event) => onContextMenu(event, note.path, parentPath)}
+      {...listeners}
+      {...attributes}
+    >
+      <span className="icon-spacer" aria-hidden />
+      <span className="nav-note-glyph" aria-hidden>
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M7 3.8h7l3.2 3.2V19a1.2 1.2 0 0 1-1.2 1.2H7A1.2 1.2 0 0 1 5.8 19V5A1.2 1.2 0 0 1 7 3.8z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M13.9 3.8V7h3.3"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </span>
+      <span className="item-label">{note.name.replace(/\.md$/i, "")}</span>
+    </div>
+  );
+}
 
 type RecentNode = {
   id: string;
@@ -338,10 +438,14 @@ function TreeNode({
   node,
   depth,
   selectedIds,
+  selectedNoteIds,
+  showNotesAsChildren,
   edgeSnap,
   expanded,
   onSelect,
   onToggle,
+  onNoteSelect,
+  onNoteContextMenu,
   renamingFolder,
   renameValue,
   setRenameValue,
@@ -351,7 +455,9 @@ function TreeNode({
   indentationWidth,
 }: TreeNodeProps) {
   const edgePosition = edgeSnap?.id === node.id ? edgeSnap.position : null;
-  const isCollapsed = node.children.length > 0 && !expanded.has(node.id);
+  const notes = showNotesAsChildren ? node.notes || [] : [];
+  const hasNestedItems = node.children.length > 0 || notes.length > 0;
+  const isCollapsed = hasNestedItems && !expanded.has(node.id);
 
   return (
     <div className="tree-node">
@@ -359,6 +465,7 @@ function TreeNode({
         node={node}
         depth={depth}
         isSelected={selectedIds.has(node.id)}
+        hasNestedItems={hasNestedItems}
         edgePosition={edgePosition}
         isCollapsed={isCollapsed}
         onSelect={onSelect}
@@ -371,17 +478,33 @@ function TreeNode({
         onContextMenu={onContextMenu}
         indentationWidth={indentationWidth}
       />
-      {node.children.length > 0 && !isCollapsed && (
+      {hasNestedItems && !isCollapsed && (
         <div className="tree-children">
+          {notes.map((note) => (
+            <NavNoteRow
+              key={note.path}
+              note={note}
+              parentPath={node.id}
+              depth={depth + 1}
+              indentationWidth={indentationWidth}
+              isSelected={selectedNoteIds.has(note.path)}
+              onSelect={onNoteSelect}
+              onContextMenu={onNoteContextMenu}
+            />
+          ))}
           {node.children.map((child) => (
             <TreeNode
               key={child.id}
               node={child}
               depth={depth + 1}
+              showNotesAsChildren={showNotesAsChildren}
+              selectedNoteIds={selectedNoteIds}
               edgeSnap={edgeSnap}
               expanded={expanded}
               onSelect={onSelect}
               onToggle={onToggle}
+              onNoteSelect={onNoteSelect}
+              onNoteContextMenu={onNoteContextMenu}
               selectedIds={selectedIds}
               renamingFolder={renamingFolder}
               renameValue={renameValue}
@@ -415,12 +538,18 @@ export function FoldersPanel({
   submitRenameFolder,
   cancelRenameFolder,
   onContextMenu,
+  showNotesAsChildren = false,
+  selectedNoteIds = EMPTY_STRING_SET,
+  onNoteSelect,
+  onNoteContextMenu,
   indentationWidth,
   topAction,
   sectionTitle,
   footer,
 }: FoldersPanelProps) {
-  const [activeTab, setActiveTab] = useState<"recent" | "folders">("recent");
+  const [activeTab, setActiveTab] = useState<"recent" | "folders">(
+    showNotesAsChildren ? "folders" : "recent"
+  );
   const [showMoreRecent, setShowMoreRecent] = useState(false);
   const [expandedRecent, setExpandedRecent] = useState<Set<string>>(
     new Set([
@@ -434,6 +563,22 @@ export function FoldersPanel({
   const { setNodeRef: setRootDropRef, isOver } = useDroppable({
     id: dropId(ROOT_ID, "inside"),
   });
+  const handleNoteSelect =
+    onNoteSelect ??
+    (() => {
+      return;
+    });
+  const handleNoteContextMenu =
+    onNoteContextMenu ??
+    (() => {
+      return;
+    });
+
+  useEffect(() => {
+    if (showNotesAsChildren) {
+      setActiveTab("folders");
+    }
+  }, [showNotesAsChildren]);
 
   const toggleRecentNode = (id: string) => {
     setExpandedRecent((prev) => {
@@ -479,7 +624,7 @@ export function FoldersPanel({
                 }}
                 className={`pane-body tree-root${isOver ? " drop-inside" : ""}`}
                 tabIndex={0}
-                onKeyDown={onPaneKeyDown}
+                onKeyDownCapture={onPaneKeyDown}
                 onClick={(event) => {
                   if (onPaneClick) {
                     onPaneClick();
@@ -494,11 +639,15 @@ export function FoldersPanel({
                     key={node.id}
                     node={node}
                     depth={0}
+                    showNotesAsChildren={showNotesAsChildren}
+                    selectedNoteIds={selectedNoteIds}
                     edgeSnap={edgeSnap}
                     expanded={expanded}
                     onToggle={onToggle}
                     selectedIds={selectedIds}
                     onSelect={onSelect}
+                    onNoteSelect={handleNoteSelect}
+                    onNoteContextMenu={handleNoteContextMenu}
                     renamingFolder={renamingFolder}
                     renameValue={renameValue}
                     setRenameValue={setRenameValue}
