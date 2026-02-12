@@ -1,0 +1,62 @@
+import { invoke } from "@tauri-apps/api/core";
+import type { FolderNode, NoteMeta } from "../types";
+
+const LOG_PREFIX = "[notes]";
+
+const invokeLogged = async <T,>(
+  command: string,
+  args?: Record<string, unknown>
+): Promise<T> => {
+  console.groupCollapsed(`${LOG_PREFIX} invoke ${command}`);
+  if (args) {
+    console.log("args", args);
+  }
+  try {
+    const result = await invoke<T>(command, args);
+    console.log("result", result);
+    console.groupEnd();
+    return result;
+  } catch (error) {
+    console.error("error", error);
+    console.groupEnd();
+    throw error;
+  }
+};
+
+export const logGroup = (label: string, data?: Record<string, unknown>) => {
+  console.groupCollapsed(`${LOG_PREFIX} ${label}`);
+  if (data) {
+    console.log(data);
+  }
+  console.groupEnd();
+};
+
+export const getTree = (): Promise<FolderNode> =>
+  invokeLogged<FolderNode>("get_tree");
+
+export const readNote = (path: string): Promise<string> =>
+  invokeLogged<string>("read_note", { path });
+
+export const writeNote = (path: string, content: string): Promise<void> =>
+  invokeLogged("write_note", { path, content });
+
+export const getNoteMeta = (path: string): Promise<NoteMeta> =>
+  invokeLogged<NoteMeta>("get_note_meta", { path });
+
+export const deleteItems = (items: string[]): Promise<void> =>
+  invokeLogged("delete_items", { items });
+
+export const moveItems = (items: string[], destination: string): Promise<void> =>
+  invokeLogged("move_items", { items, destination });
+
+export const renameItem = (path: string, newName: string): Promise<string> =>
+  invokeLogged<string>("rename_item", { path, newName });
+
+export type SetOrderArgs = {
+  parent: string;
+  folderOrder: string[];
+  noteOrder: string[];
+};
+
+export const setOrder = (args: SetOrderArgs): Promise<void> =>
+  invokeLogged("set_order", { args });
