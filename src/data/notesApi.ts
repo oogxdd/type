@@ -2,6 +2,25 @@ import { invoke } from "@tauri-apps/api/core";
 import type { FolderNode, GitSyncStatus, NoteMeta } from "../types";
 
 const LOG_PREFIX = "[notes]";
+const SENSITIVE_PATTERN = /(password|token|secret)/i;
+
+const sanitizeForLog = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeForLog);
+  }
+  if (value && typeof value === "object") {
+    const next: Record<string, unknown> = {};
+    Object.entries(value as Record<string, unknown>).forEach(([key, nested]) => {
+      if (SENSITIVE_PATTERN.test(key)) {
+        next[key] = "[REDACTED]";
+      } else {
+        next[key] = sanitizeForLog(nested);
+      }
+    });
+    return next;
+  }
+  return value;
+};
 
 const invokeLogged = async <T,>(
   command: string,
@@ -9,7 +28,7 @@ const invokeLogged = async <T,>(
 ): Promise<T> => {
   console.groupCollapsed(`${LOG_PREFIX} invoke ${command}`);
   if (args) {
-    console.log("args", args);
+    console.log("args", sanitizeForLog(args));
   }
   try {
     const result = await invoke<T>(command, args);

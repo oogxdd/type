@@ -4,7 +4,7 @@ import type { GitSyncStatus } from "../types";
 export type ThemeMode = "light" | "dark";
 export type NotesListMode = "separate" | "nested";
 
-type SettingsSectionId =
+export type SettingsSectionId =
   | "general"
   | "appearance"
   | "sync";

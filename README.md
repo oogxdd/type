@@ -1,120 +1,197 @@
 # Apple Notes Viewer (Tauri + React + TypeScript)
 
-Local markdown notes app with optional Git sync, backed by filesystem storage through Tauri commands.
+Local markdown notes app with filesystem storage and optional Git sync across desktop and iOS.
 
-## Git Sync (Full Setup and Usage)
+## Architecture
 
-This app syncs notes through Git using embedded `libgit2` bindings (no shell `git` command required in the app).
+### UI shells
 
-### What Gets Synced
+- `src/App.tsx` is the shared orchestrator (state, data loading, editor lifecycle, git sync actions).
+- `src/desktop/DesktopShell.tsx` contains desktop layout and behavior.
+- `src/mobile/MobileShell.tsx` contains phone/tablet-native navigation and interactions.
 
-The entire notes root is versioned, including:
+### Layout mode breakpoints
 
-- note files (`.md`)
-- folders
-- per-folder ordering files (`.notes-order.json`)
+- `phone`: `< 768px`
+- `tablet`: `768px - 1024px`
+- `desktop`: `> 1024px`
 
-### Notes Root Used for Sync
+### Mobile modules
 
-The app uses the first path that exists in this order:
+- `src/mobile/navigation.ts` — mobile route types + reducer.
+- `src/mobile/useLayoutMode.ts` — breakpoint/orientation layout detection.
+- `src/mobile/useKeyboardInsets.ts` — keyboard/viewport insets (VisualViewport).
+- `src/mobile/components/*` — mobile navigation, screens, action sheets, prompt sheets, tab bar, toast.
+- `src/mobile/mobile.css` — mobile-specific design tokens and styles.
 
-1. `NOTES_ROOT` env var
+## Notes Storage
+
+Notes are stored in a local folder tree. The app uses the first existing root:
+
+1. `NOTES_ROOT` environment variable
 2. `./notes`
 3. `../notes`
 4. app data fallback (`<app-data>/notes`)
 
-Git repo initialization and all pull/push operations run in that notes root.
+Each folder has its own `.notes-order.json` to persist ordering of:
+
+- child folders
+- notes in that folder
+
+So yes, `.notes-order.json` is per directory.
+
+## Git Sync Setup (Initial + Daily Use)
+
+The app uses `libgit2` (embedded Git) from Tauri commands. You do not need shell `git` inside the app.
+
+### What gets synced
+
+- all note markdown files (`.md`)
+- folder structure
+- all `.notes-order.json` files
 
 ### Prerequisites
 
-- A remote Git repository (GitHub/GitLab/etc.)
-- Recommended for iOS/mobile: HTTPS remote URL + personal access token (PAT)
+- remote Git repository (GitHub/GitLab/etc.)
+- for iOS: recommended `HTTPS + PAT`
 
-### One-Time Setup Per Device
+### One-time setup per device
 
-In the app, open `Settings -> Sync` and set:
+Open `Settings -> Sync`, then fill:
 
-- `Remote repository URL`:
-  - Example: `https://github.com/<you>/<repo>.git`
-- `Branch`:
-  - Usually `main`
-- `Commit message`:
-  - Used as default message for sync commits
-- `Git username` + `Git token/password`:
-  - Recommended for iOS and HTTPS remotes
-  - For GitHub, username is your GitHub username, password is your PAT
+- `Remote URL` (for example: `https://github.com/<user>/<repo>.git`)
+- `Branch` (usually `main`)
+- `Commit message` (default auto-commit message for push)
+- `Username` and `Token/Password` (for HTTPS auth)
 
 Then:
 
-1. Press `Connect repo`
-2. If this is your first device with new local notes:
-   - Press `Push` to create the remote branch/content
-3. If this device should download existing notes:
-   - Press `Pull` first, then start editing
+1. Tap `Connect repo`
+2. If this is the first device with local notes: tap `Push`
+3. If this device should download existing notes: tap `Pull` first
 
-### Daily Workflow (Desktop + iOS)
-
-Recommended cycle on each device:
+### Recommended daily flow (all devices)
 
 1. `Pull`
 2. Edit notes
 3. `Push`
 
-This minimizes divergence and sync errors.
+This keeps histories aligned and avoids pull conflicts.
 
-### Example Multi-Device Flow
+### Multi-device example
 
-1. Desktop: create/edit notes -> `Push`
-2. iOS: `Pull` -> edit notes -> `Push`
+1. Desktop: edit -> `Push`
+2. iOS: `Pull` -> edit -> `Push`
 3. Desktop: `Pull`
 
-### Authentication Notes
+### Pull / Push behavior
 
-- HTTPS:
-  - Use username + token/password fields
-  - If account has 2FA, use a token (not your account password)
-- SSH:
-  - Supported where an SSH agent is available
-  - On iOS, HTTPS token auth is usually the practical option
+- `Pull` allows up-to-date and fast-forward updates.
+- If local changes exist, pull is blocked until you push/commit.
+- If remote requires merge commit (diverged history), pull is blocked with a clear error. Resolve on desktop, push, then pull on mobile.
+- `Push` auto-commits local changes with your message, then pushes to remote.
 
-### Current Pull Behavior and Conflict Handling
+### Security note (current implementation)
 
-- `Pull` supports:
-  - up-to-date
-  - fast-forward updates
-- If pull requires a merge commit (history diverged), app returns an error:
-  - Resolve once on desktop (merge/rebase and push)
-  - Then pull again on mobile
-- If local uncommitted changes exist, pull is blocked until you push/commit first
+- Git username/token are currently stored in local storage on the device.
+- Sensitive fields are redacted from frontend invoke logs.
+- Prefer least-privilege tokens and rotate/revoke when needed.
 
-### Security Note
+## iOS (Tauri v2)
 
-- `Git username` and `Git token/password` are currently stored in app local storage on that device.
-- Use a least-privilege token and rotate/revoke it if needed.
+### One-time project init
 
-### Troubleshooting
+```bash
+yarn tauri:ios:init
+```
+
+### Run in simulator/device
+
+```bash
+yarn tauri:ios:dev
+```
+
+### Build release
+
+```bash
+yarn tauri:ios:build
+```
+
+## Mobile UX Behavior
+
+### Phone mode
+
+- Stack navigation:
+  - `Folders -> Notes -> Editor -> Settings`
+- Back navigation:
+  - back button
+  - edge-swipe back gesture
+- Long-press on note/folder opens native-style action sheet.
+- Notes list supports:
+  - pull-to-refresh (`tree + git status`)
+  - swipe left actions (`Archive`, `Delete`)
+
+### Tablet mode
+
+- Split view shell:
+  - left: folders/settings switch
+  - right: notes + editor (or settings content)
+- Portrait uses adaptive split with stable content and no desktop resizable panels.
+
+### Editor mobile ergonomics
+
+- save status line (`Saving...`, `Saved`, `Save failed + Retry`)
+- debounced autosave
+- guaranteed `flushSave()` on editor back navigation and app background/unload
+- keyboard inset handling with VisualViewport to avoid cursor/content being hidden
+
+### Mobile sync UX
+
+- dedicated mobile sync cards:
+  - Repository
+  - Authentication
+  - Sync actions
+  - Sync status
+- explicit blocking feedback for common pull/push issues
+- local `last successful sync` timestamp shown in status
+
+## Validation Matrix
+
+### Build/static
+
+```bash
+yarn build
+cargo check --manifest-path src-tauri/Cargo.toml
+```
+
+### Manual phone checks
+
+1. Open app on iPhone viewport -> folders root appears.
+2. Folder -> notes -> editor flow works with back navigation.
+3. Back from editor preserves edits (flush save).
+4. Keyboard does not cover editing content.
+5. Swipe note actions and long-press action sheet work.
+6. Sync actions show busy/error/status states clearly.
+
+### Manual tablet checks
+
+1. Split view works in portrait and landscape.
+2. Rotate device -> no state loss.
+3. Settings + notes/editor switching is stable.
+
+### Desktop regression checks
+
+1. Existing desktop layout and DnD still work.
+2. Desktop context menus still work.
+3. Desktop settings and editor behavior unchanged.
+
+## Troubleshooting
 
 - `Repository is not initialized. Connect a remote first.`
-  - Run `Connect repo` in Settings -> Sync.
-- `No matching Git credentials available for this remote.`
-  - Fill `Git username` and `Git token/password`.
-- Pull says merge/fast-forward issue:
-  - Pull/merge on desktop, push, then pull on iOS.
-- Remote URL changed:
-  - Update URL and press `Connect repo` again.
-
-## iOS Support (Tauri v2)
-
-This project includes mobile entrypoint support and iOS icon assets. To run on iOS:
-
-1. Install Apple/Xcode prerequisites (Xcode + command line tools, CocoaPods, Rust iOS targets).
-2. Initialize iOS project files:
-   - `yarn tauri:ios:init`
-3. Run on simulator/device:
-   - `yarn tauri:ios:dev`
-4. Build release:
-   - `yarn tauri:ios:build`
-
-## Recommended IDE Setup
-
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+  - run `Connect repo` in Sync settings.
+- `No matching Git credentials available...`
+  - check username/token for HTTPS remote.
+- Pull blocked by local changes
+  - push first, then pull.
+- Pull requires merge commit
+  - resolve divergence on desktop, push, then pull on mobile.
