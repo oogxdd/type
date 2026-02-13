@@ -997,6 +997,11 @@ body {
   gap: 8px;
 }
 
+.nav-action-group {
+  display: grid;
+  gap: 8px;
+}
+
 .editor-pane {
   background: #fff;
 }

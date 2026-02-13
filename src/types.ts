@@ -31,4 +31,18 @@ export type GitSyncStatus = {
   notes_root: string;
 };
 
+export type RecordingWriteResult = {
+  recording_folder: string;
+  audio_path: string;
+  transcript_path: string;
+  status_path: string;
+};
+
+export type RecordingTranscriptionQueueResult = {
+  scanned: number;
+  queued: number;
+  skipped: number;
+  in_flight: number;
+};
+
  

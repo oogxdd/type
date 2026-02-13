@@ -33,6 +33,7 @@ import * as api from "./data/notesApi";
 // Hooks
 import { useNoteEditor } from "./hooks/useNoteEditor";
 import { useNotePreviews } from "./hooks/useNotePreviews";
+import { useAudioRecorder } from "./hooks/useAudioRecorder";
 
 // Components
 import { DROP_PREFIX, FoldersPanel } from "./components/FoldersPanel";
@@ -80,7 +81,12 @@ import { removeChildrenOf } from "./tree/utilities";
 const indentationWidth = 18;
 const UNSORTED_FOLDER_PATH = "Unsorted";
 const ARCHIEVE_FOLDER_PATH = "Archieve";
-const SYSTEM_FOLDER_PATHS = new Set([UNSORTED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH]);
+const RECORDINGS_FOLDER_PATH = "Recordings";
+const SYSTEM_FOLDER_PATHS = new Set([
+  UNSORTED_FOLDER_PATH,
+  ARCHIEVE_FOLDER_PATH,
+  RECORDINGS_FOLDER_PATH,
+]);
 
 type AppMode = "notes" | "settings";
 type PaneId = "folders" | "middle" | "right";
@@ -131,11 +137,22 @@ const getNoteParentPath = (notePath: string) => {
   return slashIndex === -1 ? "" : notePath.slice(0, slashIndex);
 };
 
+const toBase64 = (bytes: Uint8Array) => {
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+};
+
 const isSystemFolder = (path: string) => SYSTEM_FOLDER_PATHS.has(path);
 const MOBILE_SETTINGS_SECTIONS: Array<{ id: SettingsSectionId; label: string }> = [
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },
   { id: "sync", label: "Sync" },
+  { id: "recordings", label: "Recordings" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -179,9 +196,14 @@ function App() {
   const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState(() =>
     getStoredSyncValue("notes-viewer-git-last-sync-at", "")
   );
+  const [assemblyAiApiKey, setAssemblyAiApiKey] = useState(() =>
+    getStoredSyncValue("notes-viewer-assemblyai-api-key", "")
+  );
   const [gitStatus, setGitStatus] = useState<GitSyncStatus | null>(null);
   const [gitSyncBusy, setGitSyncBusy] = useState(false);
   const [gitSyncError, setGitSyncError] = useState<string | null>(null);
+  const [recordingStatusMessage, setRecordingStatusMessage] = useState<string | null>(null);
+  const [transcriptionQueueBusy, setTranscriptionQueueBusy] = useState(false);
 
   const layoutMode = useLayoutMode();
   const { keyboardInset } = useKeyboardInsets();
@@ -225,6 +247,7 @@ function App() {
   const selectedNotesRef = useRef<Set<string>>(new Set());
   const folderMenuPromiseRef = useRef<Promise<Menu> | null>(null);
   const noteMenuPromiseRef = useRef<Promise<Menu> | null>(null);
+  const transcriptionQueueBusyRef = useRef(false);
 
   // -- Hooks ----------------------------------------------------------------
   const {
@@ -286,6 +309,10 @@ function App() {
     window.localStorage.setItem("notes-viewer-git-last-sync-at", lastSuccessfulSyncAt);
   }, [lastSuccessfulSyncAt]);
 
+  useEffect(() => {
+    window.localStorage.setItem("notes-viewer-assemblyai-api-key", assemblyAiApiKey);
+  }, [assemblyAiApiKey]);
+
   // -- Debug logging --------------------------------------------------------
   useEffect(() => {
     console.log("[folders] activeFolder", activeFolder);
@@ -308,6 +335,70 @@ function App() {
     }
   }, []);
 
+  const queueRecordingTranscriptions = useCallback(
+    async (trigger: "manual" | "auto" = "manual") => {
+      if (transcriptionQueueBusyRef.current) {
+        return;
+      }
+      const apiKey = assemblyAiApiKey.trim();
+      if (!apiKey) {
+        if (trigger === "manual") {
+          setRecordingStatusMessage("AssemblyAI API key is required.");
+        }
+        return;
+      }
+
+      transcriptionQueueBusyRef.current = true;
+      setTranscriptionQueueBusy(true);
+      try {
+        const result = await api.queueRecordingTranscriptions(apiKey);
+        const label =
+          trigger === "manual"
+            ? `Scanned ${result.scanned}, queued ${result.queued}, in-flight ${result.in_flight}.`
+            : `Auto queue: scanned ${result.scanned}, queued ${result.queued}.`;
+        setRecordingStatusMessage(label);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setRecordingStatusMessage(message);
+      } finally {
+        transcriptionQueueBusyRef.current = false;
+        setTranscriptionQueueBusy(false);
+      }
+    },
+    [assemblyAiApiKey]
+  );
+
+  const handleRecordingReady = useCallback(
+    async (blob: Blob, mimeType: string) => {
+      const buffer = await blob.arrayBuffer();
+      const audioBase64 = toBase64(new Uint8Array(buffer));
+      const result = await api.saveAudioRecording(audioBase64, mimeType || undefined);
+      await refreshTree();
+      setSelectedFolders(new Set([result.recording_folder]));
+      setLastSelectedFolder(result.recording_folder);
+      setActiveFolder(result.recording_folder);
+      setSelectedNotes(new Set());
+      setLastSelectedNote("");
+      setActiveNote(null);
+      setRecordingStatusMessage(`Saved ${result.audio_path}.`);
+      if (layoutMode === "desktop") {
+        await queueRecordingTranscriptions("auto");
+      }
+    },
+    [layoutMode, queueRecordingTranscriptions, refreshTree]
+  );
+
+  const {
+    isSupported: recordingSupported,
+    isRecording: isRecordingAudio,
+    isFinalizing: isRecordingFinalizing,
+    error: recorderError,
+    startRecording,
+    stopRecording,
+  } = useAudioRecorder({
+    onRecordingReady: handleRecordingReady,
+  });
+
   useEffect(() => {
     void refreshTree();
   }, [refreshTree]);
@@ -315,6 +406,17 @@ function App() {
   useEffect(() => {
     void refreshGitStatus();
   }, [refreshGitStatus]);
+
+  useEffect(() => {
+    if (layoutMode !== "desktop" || !assemblyAiApiKey.trim()) {
+      return;
+    }
+    void queueRecordingTranscriptions("auto");
+    const timer = window.setInterval(() => {
+      void queueRecordingTranscriptions("auto");
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [assemblyAiApiKey, layoutMode, queueRecordingTranscriptions]);
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -385,13 +487,24 @@ function App() {
       setGitSyncError(null);
       setLastSuccessfulSyncAt(new Date().toISOString());
       await refreshTree();
+      if (layoutMode === "desktop") {
+        await queueRecordingTranscriptions("auto");
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setGitSyncError(message);
     } finally {
       setGitSyncBusy(false);
     }
-  }, [flushSave, gitBranch, gitPassword, gitUsername, refreshTree]);
+  }, [
+    flushSave,
+    gitBranch,
+    gitPassword,
+    gitUsername,
+    layoutMode,
+    queueRecordingTranscriptions,
+    refreshTree,
+  ]);
 
   const handleGitPush = useCallback(async () => {
     await flushSave();
@@ -630,7 +743,9 @@ function App() {
   const deleteFolders = async (paths: string[]) => {
     if (paths.length === 0) return;
     if (paths.some(isSystemFolder)) {
-      window.alert('"Unsorted" and "Archieve" are fixed folders and cannot be deleted.');
+      window.alert(
+        '"Unsorted", "Archieve", and "Recordings" are fixed folders and cannot be deleted.'
+      );
       return;
     }
     const confirmed = await confirmAction(`Delete ${paths.length} folder(s)?`);
@@ -804,7 +919,10 @@ function App() {
 
   const refreshAll = useCallback(async () => {
     await Promise.all([refreshTree(), refreshGitStatus()]);
-  }, [refreshGitStatus, refreshTree]);
+    if (layoutMode === "desktop") {
+      await queueRecordingTranscriptions("auto");
+    }
+  }, [layoutMode, queueRecordingTranscriptions, refreshGitStatus, refreshTree]);
 
   // -- Note context menu ----------------------------------------------------
   const getNoteNativeMenu = () => {
@@ -1755,6 +1873,20 @@ function App() {
         onGitConnect={() => void handleConnectGitRepo()}
         onGitPull={() => void handleGitPull()}
         onGitPush={() => void handleGitPush()}
+        assemblyAiApiKey={assemblyAiApiKey}
+        onAssemblyAiApiKeyChange={setAssemblyAiApiKey}
+        recordingSupported={recordingSupported}
+        isRecordingAudio={isRecordingAudio}
+        isRecordingBusy={isRecordingFinalizing || transcriptionQueueBusy}
+        recordingError={recorderError}
+        recordingStatus={recordingStatusMessage}
+        onStartAudioRecording={() => {
+          void startRecording();
+        }}
+        onStopAudioRecording={stopRecording}
+        onQueueRecordings={() => {
+          void queueRecordingTranscriptions("manual");
+        }}
         rightPaneRef={rightPaneRef}
         onPaneClick={() => focusNoScroll(rightPaneRef.current)}
       />
@@ -1801,19 +1933,41 @@ function App() {
         indentationWidth={indentationWidth}
         sectionTitle="Folders"
         topAction={
-          <button
-            type="button"
-            className="nav-action nav-action-new rounded-xl px-3 py-2 transition-colors"
-            onClick={(event) => {
-              event.stopPropagation();
-              void createNewNote();
-            }}
-          >
-            <span className="nav-action-icon" aria-hidden>
-              +
-            </span>
-            <span>New note</span>
-          </button>
+          <div className="nav-action-group">
+            <button
+              type="button"
+              className="nav-action nav-action-new rounded-xl px-3 py-2 transition-colors"
+              onClick={(event) => {
+                event.stopPropagation();
+                void createNewNote();
+              }}
+            >
+              <span className="nav-action-icon" aria-hidden>
+                +
+              </span>
+              <span>New note</span>
+            </button>
+            <button
+              type="button"
+              className={`nav-action nav-action-record rounded-xl px-3 py-2 transition-colors${
+                isRecordingAudio ? " active" : ""
+              }`}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (isRecordingAudio) {
+                  stopRecording();
+                } else {
+                  void startRecording();
+                }
+              }}
+              disabled={!recordingSupported || isRecordingFinalizing}
+            >
+              <span className="nav-action-icon" aria-hidden>
+                {isRecordingAudio ? "■" : "●"}
+              </span>
+              <span>{isRecordingAudio ? "Stop recording" : "Record audio"}</span>
+            </button>
+          </div>
         }
         footer={
           <button
@@ -1940,6 +2094,20 @@ function App() {
             onGitPull={() => void handleGitPull()}
             onGitPush={() => void handleGitPush()}
             lastSuccessfulSyncAt={lastSuccessfulSyncLabel}
+            assemblyAiApiKey={assemblyAiApiKey}
+            onAssemblyAiApiKeyChange={setAssemblyAiApiKey}
+            recordingSupported={recordingSupported}
+            isRecordingAudio={isRecordingAudio}
+            isRecordingBusy={isRecordingFinalizing || transcriptionQueueBusy}
+            recordingError={recorderError}
+            recordingStatus={recordingStatusMessage}
+            onStartAudioRecording={() => {
+              void startRecording();
+            }}
+            onStopAudioRecording={stopRecording}
+            onQueueRecordings={() => {
+              void queueRecordingTranscriptions("manual");
+            }}
           />
         )}
       </div>

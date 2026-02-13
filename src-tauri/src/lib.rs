@@ -2,18 +2,31 @@ use git2::{
     build::CheckoutBuilder, AnnotatedCommit, Cred, CredentialType, Direction, FetchOptions,
     IndexAddOption, Oid, PushOptions, RemoteCallbacks, Repository, Signature, StatusOptions,
 };
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet, VecDeque},
     fs,
     path::{Component, Path, PathBuf},
+    sync::{Mutex, OnceLock},
+    thread,
+    time::Duration,
 };
 use tauri::Manager;
 
 const ORDER_FILE: &str = ".notes-order.json";
 const UNSORTED_FOLDER: &str = "Unsorted";
 const ARCHIEVE_FOLDER: &str = "Archieve";
-const SYSTEM_FOLDERS: [&str; 2] = [UNSORTED_FOLDER, ARCHIEVE_FOLDER];
+const RECORDINGS_FOLDER: &str = "Recordings";
+const TRANSCRIPT_FILE_NAME: &str = "transcript.md";
+const TRANSCRIPTION_STATUS_FILE: &str = ".transcription-status.json";
+const AUDIO_FILE_NAME_PREFIX: &str = "audio";
+const ASSEMBLY_UPLOAD_URL: &str = "https://api.assemblyai.com/v2/upload";
+const ASSEMBLY_TRANSCRIPT_URL: &str = "https://api.assemblyai.com/v2/transcript";
+const ASSEMBLY_POLL_INTERVAL: Duration = Duration::from_secs(2);
+const ASSEMBLY_MAX_POLL_ATTEMPTS: usize = 180;
+const SYSTEM_FOLDERS: [&str; 3] = [UNSORTED_FOLDER, ARCHIEVE_FOLDER, RECORDINGS_FOLDER];
 #[cfg(target_os = "macos")]
 const MACOS_WINDOW_ALPHA: f64 = 1.0;
 
@@ -104,6 +117,74 @@ struct GitSyncStatus {
     notes_root: String,
 }
 
+#[derive(Deserialize)]
+struct SaveRecordingArgs {
+    audio_base64: String,
+    mime_type: Option<String>,
+}
+
+#[derive(Serialize)]
+struct RecordingWriteResult {
+    recording_folder: String,
+    audio_path: String,
+    transcript_path: String,
+    status_path: String,
+}
+
+#[derive(Deserialize)]
+struct QueueRecordingsArgs {
+    assembly_api_key: String,
+}
+
+#[derive(Serialize)]
+struct RecordingTranscriptionQueueResult {
+    scanned: usize,
+    queued: usize,
+    skipped: usize,
+    in_flight: usize,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+struct RecordingTranscriptionState {
+    status: String,
+    audio_file: String,
+    transcript_file: String,
+    transcript_id: Option<String>,
+    error: Option<String>,
+    updated_ms: Option<i64>,
+}
+
+#[derive(Clone)]
+struct QueuedTranscriptionJob {
+    recording_rel: String,
+    audio_path: PathBuf,
+    status_path: PathBuf,
+    transcript_path: PathBuf,
+    api_key: String,
+}
+
+#[derive(Default)]
+struct TranscriptionQueueState {
+    running: bool,
+    pending: VecDeque<QueuedTranscriptionJob>,
+    known_recordings: HashSet<String>,
+}
+
+#[derive(Deserialize)]
+struct AssemblyUploadResponse {
+    upload_url: String,
+}
+
+#[derive(Deserialize)]
+struct AssemblyTranscriptResponse {
+    id: String,
+    status: String,
+    text: Option<String>,
+    error: Option<String>,
+}
+
+static TRANSCRIPTION_QUEUE: OnceLock<Mutex<TranscriptionQueueState>> = OnceLock::new();
+
 fn notes_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     if let Ok(path) = std::env::var("NOTES_ROOT") {
         let root = PathBuf::from(path);
@@ -153,6 +234,302 @@ fn resolve_path(app: &tauri::AppHandle, rel: &str) -> Result<PathBuf, String> {
     let root = notes_root(app)?;
     let rel_path = sanitize_relative(rel)?;
     Ok(root.join(rel_path))
+}
+
+fn transcription_queue_state() -> &'static Mutex<TranscriptionQueueState> {
+    TRANSCRIPTION_QUEUE.get_or_init(|| Mutex::new(TranscriptionQueueState::default()))
+}
+
+fn now_ms() -> Option<i64> {
+    let duration = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?;
+    i64::try_from(duration.as_millis()).ok()
+}
+
+fn audio_extension_from_mime(mime_type: Option<&str>) -> &'static str {
+    let Some(raw) = mime_type else {
+        return "webm";
+    };
+    let normalized = raw.to_lowercase();
+    if normalized.contains("mp4") || normalized.contains("aac") {
+        return "m4a";
+    }
+    if normalized.contains("mpeg") || normalized.contains("mp3") {
+        return "mp3";
+    }
+    if normalized.contains("wav") {
+        return "wav";
+    }
+    if normalized.contains("ogg") {
+        return "ogg";
+    }
+    if normalized.contains("flac") {
+        return "flac";
+    }
+    "webm"
+}
+
+fn decode_audio_base64(payload: &str) -> Result<Vec<u8>, String> {
+    let trimmed = payload.trim();
+    if trimmed.is_empty() {
+        return Err("Audio payload is empty.".to_string());
+    }
+    let body = trimmed
+        .split_once(',')
+        .map(|(_, value)| value)
+        .unwrap_or(trimmed);
+    BASE64
+        .decode(body)
+        .map_err(|error| format!("Invalid base64 audio payload: {}", error))
+}
+
+fn response_error(status: reqwest::StatusCode, body: String, context: &str) -> String {
+    let compact = body.replace('\n', " ");
+    if compact.trim().is_empty() {
+        format!("{} failed (HTTP {}).", context, status)
+    } else {
+        format!("{} failed (HTTP {}): {}", context, status, compact)
+    }
+}
+
+fn read_transcription_state(path: &Path) -> Option<RecordingTranscriptionState> {
+    let contents = fs::read_to_string(path).ok()?;
+    serde_json::from_str::<RecordingTranscriptionState>(&contents).ok()
+}
+
+fn write_transcription_state(path: &Path, state: &RecordingTranscriptionState) -> Result<(), String> {
+    let contents = serde_json::to_string_pretty(state).map_err(|error| error.to_string())?;
+    fs::write(path, contents).map_err(|error| error.to_string())
+}
+
+fn update_transcription_state(
+    status_path: &Path,
+    audio_name: &str,
+    status: &str,
+    transcript_id: Option<String>,
+    error: Option<String>,
+) -> Result<(), String> {
+    let mut next = read_transcription_state(status_path).unwrap_or(RecordingTranscriptionState {
+        status: "pending".to_string(),
+        audio_file: audio_name.to_string(),
+        transcript_file: TRANSCRIPT_FILE_NAME.to_string(),
+        transcript_id: None,
+        error: None,
+        updated_ms: None,
+    });
+    next.status = status.to_string();
+    next.audio_file = audio_name.to_string();
+    next.transcript_file = TRANSCRIPT_FILE_NAME.to_string();
+    next.transcript_id = transcript_id;
+    next.error = error;
+    next.updated_ms = now_ms();
+    write_transcription_state(status_path, &next)
+}
+
+fn is_audio_extension(ext: &str) -> bool {
+    matches!(
+        ext,
+        "m4a" | "mp3" | "wav" | "ogg" | "webm" | "aac" | "mp4" | "flac"
+    )
+}
+
+fn find_recording_audio_file(recording_dir: &Path) -> Option<PathBuf> {
+    let mut files: Vec<PathBuf> = fs::read_dir(recording_dir)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file())
+        .filter(|path| {
+            let file_name = path.file_name().and_then(|value| value.to_str()).unwrap_or("");
+            if file_name == TRANSCRIPTION_STATUS_FILE || file_name == TRANSCRIPT_FILE_NAME {
+                return false;
+            }
+            let Some(ext) = path.extension().and_then(|value| value.to_str()) else {
+                return false;
+            };
+            is_audio_extension(&ext.to_lowercase())
+        })
+        .collect();
+    files.sort();
+    files.into_iter().next()
+}
+
+fn render_transcript_markdown(text: &str) -> String {
+    let body = text.trim();
+    if body.is_empty() {
+        return "# Transcript\n\n(AssemblyAI returned an empty transcript.)\n".to_string();
+    }
+    format!("# Transcript\n\n{}\n", body)
+}
+
+fn transcribe_audio_bytes_with_assembly(
+    audio_bytes: Vec<u8>,
+    api_key: &str,
+) -> Result<(String, String), String> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(120))
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let upload_response = client
+        .post(ASSEMBLY_UPLOAD_URL)
+        .header("authorization", api_key)
+        .header("content-type", "application/octet-stream")
+        .body(audio_bytes)
+        .send()
+        .map_err(|error| format!("AssemblyAI upload request failed: {}", error))?;
+
+    if !upload_response.status().is_success() {
+        let status = upload_response.status();
+        let body = upload_response.text().unwrap_or_default();
+        return Err(response_error(status, body, "AssemblyAI upload"));
+    }
+    let upload_payload = upload_response
+        .json::<AssemblyUploadResponse>()
+        .map_err(|error| format!("AssemblyAI upload response parse failed: {}", error))?;
+
+    let transcript_create_response = client
+        .post(ASSEMBLY_TRANSCRIPT_URL)
+        .header("authorization", api_key)
+        .json(&serde_json::json!({ "audio_url": upload_payload.upload_url }))
+        .send()
+        .map_err(|error| format!("AssemblyAI transcript request failed: {}", error))?;
+
+    if !transcript_create_response.status().is_success() {
+        let status = transcript_create_response.status();
+        let body = transcript_create_response.text().unwrap_or_default();
+        return Err(response_error(status, body, "AssemblyAI transcript request"));
+    }
+
+    let transcript_create_payload = transcript_create_response
+        .json::<AssemblyTranscriptResponse>()
+        .map_err(|error| format!("AssemblyAI transcript response parse failed: {}", error))?;
+    let transcript_id = transcript_create_payload.id;
+
+    for _ in 0..ASSEMBLY_MAX_POLL_ATTEMPTS {
+        thread::sleep(ASSEMBLY_POLL_INTERVAL);
+        let poll_response = client
+            .get(format!("{}/{}", ASSEMBLY_TRANSCRIPT_URL, transcript_id))
+            .header("authorization", api_key)
+            .send()
+            .map_err(|error| format!("AssemblyAI polling request failed: {}", error))?;
+
+        if !poll_response.status().is_success() {
+            let status = poll_response.status();
+            let body = poll_response.text().unwrap_or_default();
+            return Err(response_error(status, body, "AssemblyAI polling"));
+        }
+
+        let poll_payload = poll_response
+            .json::<AssemblyTranscriptResponse>()
+            .map_err(|error| format!("AssemblyAI polling response parse failed: {}", error))?;
+
+        match poll_payload.status.as_str() {
+            "completed" => {
+                let transcript_text = poll_payload.text.unwrap_or_default();
+                return Ok((transcript_text, transcript_id));
+            }
+            "error" => {
+                return Err(
+                    poll_payload
+                        .error
+                        .unwrap_or_else(|| "AssemblyAI reported a transcription error.".to_string()),
+                );
+            }
+            _ => {}
+        }
+    }
+
+    Err("AssemblyAI transcription timed out.".to_string())
+}
+
+fn process_transcription_job(job: QueuedTranscriptionJob) {
+    let audio_name = job
+        .audio_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(AUDIO_FILE_NAME_PREFIX)
+        .to_string();
+
+    if let Err(error) =
+        update_transcription_state(&job.status_path, &audio_name, "processing", None, None)
+    {
+        eprintln!(
+            "[recordings] failed to mark processing for {}: {}",
+            job.recording_rel, error
+        );
+    }
+
+    let run = || -> Result<String, String> {
+        let audio_bytes = fs::read(&job.audio_path).map_err(|error| error.to_string())?;
+        let (transcript, transcript_id) =
+            transcribe_audio_bytes_with_assembly(audio_bytes, &job.api_key)?;
+        fs::write(&job.transcript_path, render_transcript_markdown(&transcript))
+            .map_err(|error| error.to_string())?;
+        update_transcription_state(
+            &job.status_path,
+            &audio_name,
+            "completed",
+            Some(transcript_id),
+            None,
+        )?;
+        Ok(transcript)
+    };
+
+    if let Err(error) = run() {
+        let _ = update_transcription_state(
+            &job.status_path,
+            &audio_name,
+            "failed",
+            None,
+            Some(error.clone()),
+        );
+        eprintln!(
+            "[recordings] transcription failed for {}: {}",
+            job.recording_rel, error
+        );
+    }
+}
+
+fn spawn_transcription_worker_if_needed() {
+    let should_spawn = {
+        let queue = transcription_queue_state();
+        let mut state = queue.lock().expect("transcription queue poisoned");
+        if state.running || state.pending.is_empty() {
+            false
+        } else {
+            state.running = true;
+            true
+        }
+    };
+
+    if !should_spawn {
+        return;
+    }
+
+    thread::spawn(move || loop {
+        let maybe_job = {
+            let queue = transcription_queue_state();
+            let mut state = queue.lock().expect("transcription queue poisoned");
+            match state.pending.pop_front() {
+                Some(job) => Some(job),
+                None => {
+                    state.running = false;
+                    None
+                }
+            }
+        };
+
+        let Some(job) = maybe_job else {
+            break;
+        };
+
+        process_transcription_job(job.clone());
+        let queue = transcription_queue_state();
+        let mut state = queue.lock().expect("transcription queue poisoned");
+        state.known_recordings.remove(&job.recording_rel);
+    });
 }
 
 fn read_order_file(dir: &Path) -> OrderFile {
@@ -744,6 +1121,156 @@ fn write_note(app: tauri::AppHandle, path: String, content: String) -> Result<()
     fs::write(full_path, content).map_err(|err| err.to_string())
 }
 
+#[tauri::command]
+fn save_audio_recording(
+    app: tauri::AppHandle,
+    args: SaveRecordingArgs,
+) -> Result<RecordingWriteResult, String> {
+    let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
+    let recordings_root = root.join(RECORDINGS_FOLDER);
+    fs::create_dir_all(&recordings_root).map_err(|error| error.to_string())?;
+
+    let audio_bytes = decode_audio_base64(&args.audio_base64)?;
+    if audio_bytes.is_empty() {
+        return Err("Audio payload is empty.".to_string());
+    }
+
+    let timestamp = now_ms().unwrap_or(0);
+    let mut attempt = 0usize;
+    let recording_dir = loop {
+        let suffix = if attempt == 0 {
+            format!("recording-{}", timestamp)
+        } else {
+            format!("recording-{}-{}", timestamp, attempt)
+        };
+        let candidate = recordings_root.join(suffix);
+        if !candidate.exists() {
+            break candidate;
+        }
+        attempt += 1;
+        if attempt > 2048 {
+            return Err("Failed to allocate recording folder name.".to_string());
+        }
+    };
+
+    fs::create_dir_all(&recording_dir).map_err(|error| error.to_string())?;
+    let extension = audio_extension_from_mime(args.mime_type.as_deref());
+    let audio_file_name = format!("{}.{}", AUDIO_FILE_NAME_PREFIX, extension);
+    let audio_path = recording_dir.join(&audio_file_name);
+    fs::write(&audio_path, audio_bytes).map_err(|error| error.to_string())?;
+
+    let transcript_path = recording_dir.join(TRANSCRIPT_FILE_NAME);
+    let status_path = recording_dir.join(TRANSCRIPTION_STATUS_FILE);
+    update_transcription_state(&status_path, &audio_file_name, "pending", None, None)?;
+
+    Ok(RecordingWriteResult {
+        recording_folder: strip_root(&root, &recording_dir),
+        audio_path: strip_root(&root, &audio_path),
+        transcript_path: strip_root(&root, &transcript_path),
+        status_path: strip_root(&root, &status_path),
+    })
+}
+
+#[tauri::command]
+fn queue_recording_transcriptions(
+    app: tauri::AppHandle,
+    args: QueueRecordingsArgs,
+) -> Result<RecordingTranscriptionQueueResult, String> {
+    let api_key = args.assembly_api_key.trim();
+    if api_key.is_empty() {
+        return Err("AssemblyAI API key is required.".to_string());
+    }
+
+    let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
+    let recordings_root = root.join(RECORDINGS_FOLDER);
+    fs::create_dir_all(&recordings_root).map_err(|error| error.to_string())?;
+
+    let mut scanned = 0usize;
+    let mut skipped = 0usize;
+    let mut candidates = Vec::new();
+
+    for entry in fs::read_dir(&recordings_root).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let recording_dir = entry.path();
+        if !recording_dir.is_dir() {
+            continue;
+        }
+
+        scanned += 1;
+        let Some(audio_path) = find_recording_audio_file(&recording_dir) else {
+            skipped += 1;
+            continue;
+        };
+        let transcript_path = recording_dir.join(TRANSCRIPT_FILE_NAME);
+        let status_path = recording_dir.join(TRANSCRIPTION_STATUS_FILE);
+        let audio_name = audio_path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or(AUDIO_FILE_NAME_PREFIX)
+            .to_string();
+
+        if transcript_path.exists() {
+            let _ = update_transcription_state(
+                &status_path,
+                &audio_name,
+                "completed",
+                None,
+                None,
+            );
+            skipped += 1;
+            continue;
+        }
+
+        if let Some(current) = read_transcription_state(&status_path) {
+            if matches!(current.status.as_str(), "queued" | "processing") {
+                skipped += 1;
+                continue;
+            }
+        }
+
+        update_transcription_state(&status_path, &audio_name, "queued", None, None)?;
+        candidates.push(QueuedTranscriptionJob {
+            recording_rel: strip_root(&root, &recording_dir),
+            audio_path,
+            status_path,
+            transcript_path,
+            api_key: api_key.to_string(),
+        });
+    }
+
+    let queued = {
+        let queue = transcription_queue_state();
+        let mut state = queue.lock().expect("transcription queue poisoned");
+        let mut added = 0usize;
+        for job in candidates {
+            if state.known_recordings.contains(&job.recording_rel) {
+                continue;
+            }
+            state.known_recordings.insert(job.recording_rel.clone());
+            state.pending.push_back(job);
+            added += 1;
+        }
+        added
+    };
+
+    spawn_transcription_worker_if_needed();
+
+    let in_flight = {
+        let queue = transcription_queue_state();
+        let state = queue.lock().expect("transcription queue poisoned");
+        state.pending.len() + usize::from(state.running)
+    };
+
+    Ok(RecordingTranscriptionQueueResult {
+        scanned,
+        queued,
+        skipped,
+        in_flight,
+    })
+}
+
 fn time_to_ms(time: std::time::SystemTime) -> Option<i64> {
     let duration = time.duration_since(std::time::UNIX_EPOCH).ok()?;
     i64::try_from(duration.as_millis()).ok()
@@ -996,6 +1523,8 @@ pub fn run() {
             read_note,
             get_note_meta,
             write_note,
+            save_audio_recording,
+            queue_recording_transcriptions,
             move_items,
             delete_items,
             rename_item,

@@ -90,6 +90,16 @@ type MobileShellProps = {
   onGitPull: () => void;
   onGitPush: () => void;
   lastSuccessfulSyncAt: string | null;
+  assemblyAiApiKey: string;
+  onAssemblyAiApiKeyChange: (value: string) => void;
+  recordingSupported: boolean;
+  isRecordingAudio: boolean;
+  isRecordingBusy: boolean;
+  recordingError: string | null;
+  recordingStatus: string | null;
+  onStartAudioRecording: () => void;
+  onStopAudioRecording: () => void;
+  onQueueRecordings: () => void;
 };
 
 type SheetContext =
@@ -100,7 +110,7 @@ const TABLET_LEFT_ITEMS = [
   { id: "folders", label: "Folders", icon: <Folder size={16} /> },
   { id: "settings", label: "Settings", icon: <Settings size={16} /> },
 ] as const;
-const SYSTEM_FOLDER_PATHS = new Set(["Unsorted", "Archieve"]);
+const SYSTEM_FOLDER_PATHS = new Set(["Unsorted", "Archieve", "Recordings"]);
 
 const getDisplayFolderName = (rawName: string) =>
   rawName === "Archieve" ? "Archive" : rawName;
@@ -161,6 +171,16 @@ export function MobileShell({
   onGitPull,
   onGitPush,
   lastSuccessfulSyncAt,
+  assemblyAiApiKey,
+  onAssemblyAiApiKeyChange,
+  recordingSupported,
+  isRecordingAudio,
+  isRecordingBusy,
+  recordingError,
+  recordingStatus,
+  onStartAudioRecording,
+  onStopAudioRecording,
+  onQueueRecordings,
 }: MobileShellProps) {
   const [navigationState, dispatch] = useReducer(
     mobileNavigationReducer,
@@ -399,6 +419,16 @@ export function MobileShell({
       onGitPull={onGitPull}
       onGitPush={onGitPush}
       lastSuccessfulSyncAt={lastSuccessfulSyncAt}
+      assemblyAiApiKey={assemblyAiApiKey}
+      onAssemblyAiApiKeyChange={onAssemblyAiApiKeyChange}
+      recordingSupported={recordingSupported}
+      isRecordingAudio={isRecordingAudio}
+      isRecordingBusy={isRecordingBusy}
+      recordingError={recordingError}
+      recordingStatus={recordingStatus}
+      onStartAudioRecording={onStartAudioRecording}
+      onStopAudioRecording={onStopAudioRecording}
+      onQueueRecordings={onQueueRecordings}
     />
   );
 

@@ -47,6 +47,9 @@ The app uses `libgit2` (embedded Git) from Tauri commands. You do not need shell
 ### What gets synced
 
 - all note markdown files (`.md`)
+- recording audio files (`Recordings/recording-*/audio.*`)
+- recording transcripts (`Recordings/recording-*/transcript.md`)
+- recording transcription state (`Recordings/recording-*/.transcription-status.json`)
 - folder structure
 - all `.notes-order.json` files
 
@@ -118,6 +121,17 @@ yarn tauri:ios:build
 ```
 
 ## Mobile UX Behavior
+
+## Audio Recording + Transcription
+
+- Recordings are saved in `Recordings/recording-<timestamp>/`.
+- Each recording folder contains:
+  - `audio.*` (captured file)
+  - `transcript.md` (written after successful transcription)
+  - `.transcription-status.json` (queue/progress/error state)
+- Start/stop recording from `Settings -> Recordings` (desktop + mobile).
+- Add your AssemblyAI key in `Settings -> Recordings`.
+- Desktop auto-scans and queues pending recordings for transcription when a key is present.
 
 ### Phone mode
 

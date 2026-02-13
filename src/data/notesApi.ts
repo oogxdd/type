@@ -1,8 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { FolderNode, GitSyncStatus, NoteMeta } from "../types";
+import type {
+  FolderNode,
+  GitSyncStatus,
+  NoteMeta,
+  RecordingTranscriptionQueueResult,
+  RecordingWriteResult,
+} from "../types";
 
 const LOG_PREFIX = "[notes]";
-const SENSITIVE_PATTERN = /(password|token|secret)/i;
+const SENSITIVE_PATTERN = /(password|token|secret|api.?key|authorization)/i;
 
 const sanitizeForLog = (value: unknown): unknown => {
   if (Array.isArray(value)) {
@@ -58,6 +64,26 @@ export const readNote = (path: string): Promise<string> =>
 
 export const writeNote = (path: string, content: string): Promise<void> =>
   invokeLogged("write_note", { path, content });
+
+export const saveAudioRecording = (
+  audioBase64: string,
+  mimeType?: string
+): Promise<RecordingWriteResult> =>
+  invokeLogged<RecordingWriteResult>("save_audio_recording", {
+    args: {
+      audio_base64: audioBase64,
+      mime_type: mimeType,
+    },
+  });
+
+export const queueRecordingTranscriptions = (
+  assemblyApiKey: string
+): Promise<RecordingTranscriptionQueueResult> =>
+  invokeLogged<RecordingTranscriptionQueueResult>("queue_recording_transcriptions", {
+    args: {
+      assembly_api_key: assemblyApiKey,
+    },
+  });
 
 export const getNoteMeta = (path: string): Promise<NoteMeta> =>
   invokeLogged<NoteMeta>("get_note_meta", { path });

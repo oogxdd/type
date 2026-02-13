@@ -7,7 +7,8 @@ export type NotesListMode = "separate" | "nested";
 export type SettingsSectionId =
   | "general"
   | "appearance"
-  | "sync";
+  | "sync"
+  | "recordings";
 
 type SettingsSection = {
   id: SettingsSectionId;
@@ -19,6 +20,11 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "general", title: "General", description: "Basic app behavior and defaults." },
   { id: "appearance", title: "Appearance", description: "Theme and visual style." },
   { id: "sync", title: "Sync", description: "Cloud sync, refresh policy, and conflict rules." },
+  {
+    id: "recordings",
+    title: "Recordings",
+    description: "Audio capture, transcription queue, and AssemblyAI settings.",
+  },
 ];
 
 function SettingsRow({
@@ -69,6 +75,16 @@ function SettingsDetail({
   onGitConnect,
   onGitPull,
   onGitPush,
+  assemblyAiApiKey,
+  onAssemblyAiApiKeyChange,
+  recordingSupported,
+  isRecordingAudio,
+  isRecordingBusy,
+  recordingError,
+  recordingStatus,
+  onStartAudioRecording,
+  onStopAudioRecording,
+  onQueueRecordings,
 }: {
   sectionId: SettingsSectionId;
   theme: ThemeMode;
@@ -92,6 +108,16 @@ function SettingsDetail({
   onGitConnect: () => void;
   onGitPull: () => void;
   onGitPush: () => void;
+  assemblyAiApiKey: string;
+  onAssemblyAiApiKeyChange: (value: string) => void;
+  recordingSupported: boolean;
+  isRecordingAudio: boolean;
+  isRecordingBusy: boolean;
+  recordingError: string | null;
+  recordingStatus: string | null;
+  onStartAudioRecording: () => void;
+  onStopAudioRecording: () => void;
+  onQueueRecordings: () => void;
 }) {
   if (sectionId === "general") {
     return (
@@ -241,6 +267,84 @@ function SettingsDetail({
       </>
     );
   }
+  if (sectionId === "recordings") {
+    return (
+      <>
+        <h2 className="settings-detail-title">Recordings</h2>
+        <p className="settings-detail-text">
+          Records are stored as <code>Recordings/recording-*/audio.*</code>.
+          <br />
+          On desktop, pending recordings can be queued for AssemblyAI transcription.
+        </p>
+        <label className="settings-control">
+          <span>AssemblyAI API key</span>
+          <input
+            type="password"
+            value={assemblyAiApiKey}
+            onChange={(event) => onAssemblyAiApiKeyChange(event.target.value)}
+            placeholder="Paste AssemblyAI key"
+            autoCapitalize="off"
+            autoCorrect="off"
+          />
+        </label>
+        <div className="settings-info-grid">
+          <div className="settings-info-row">
+            <span>Recorder</span>
+            <code>
+              {!recordingSupported
+                ? "unsupported"
+                : isRecordingAudio
+                  ? "recording"
+                  : isRecordingBusy
+                    ? "saving"
+                    : "idle"}
+            </code>
+          </div>
+          <div className="settings-info-row">
+            <span>Transcription mode</span>
+            <code>{assemblyAiApiKey.trim() ? "enabled" : "api key required"}</code>
+          </div>
+        </div>
+        {recordingStatus ? (
+          <label className="settings-control">
+            <span>Last queue result</span>
+            <span className="settings-inline-help">{recordingStatus}</span>
+          </label>
+        ) : null}
+        {recordingError ? (
+          <p className="settings-warning-text settings-inline-warning">{recordingError}</p>
+        ) : null}
+        <div className="settings-action-row">
+          <Button
+            variant="outline"
+            size="sm"
+            type="button"
+            onClick={onStartAudioRecording}
+            disabled={!recordingSupported || isRecordingAudio || isRecordingBusy}
+          >
+            Start recording
+          </Button>
+          <Button
+            size="sm"
+            type="button"
+            onClick={onStopAudioRecording}
+            disabled={!recordingSupported || !isRecordingAudio}
+          >
+            Stop and save
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            type="button"
+            onClick={onQueueRecordings}
+            disabled={!assemblyAiApiKey.trim() || isRecordingBusy}
+          >
+            Queue transcription
+          </Button>
+        </div>
+      </>
+    );
+  }
   return null;
 }
 
@@ -300,6 +404,16 @@ export function SettingsDetailPane({
   onGitConnect,
   onGitPull,
   onGitPush,
+  assemblyAiApiKey,
+  onAssemblyAiApiKeyChange,
+  recordingSupported,
+  isRecordingAudio,
+  isRecordingBusy,
+  recordingError,
+  recordingStatus,
+  onStartAudioRecording,
+  onStopAudioRecording,
+  onQueueRecordings,
   rightPaneRef,
   onPaneClick,
 }: {
@@ -325,6 +439,16 @@ export function SettingsDetailPane({
   onGitConnect: () => void;
   onGitPull: () => void;
   onGitPush: () => void;
+  assemblyAiApiKey: string;
+  onAssemblyAiApiKeyChange: (value: string) => void;
+  recordingSupported: boolean;
+  isRecordingAudio: boolean;
+  isRecordingBusy: boolean;
+  recordingError: string | null;
+  recordingStatus: string | null;
+  onStartAudioRecording: () => void;
+  onStopAudioRecording: () => void;
+  onQueueRecordings: () => void;
   rightPaneRef: React.RefObject<HTMLDivElement | null>;
   onPaneClick: () => void;
 }) {
@@ -359,6 +483,16 @@ export function SettingsDetailPane({
           onGitConnect={onGitConnect}
           onGitPull={onGitPull}
           onGitPush={onGitPush}
+          assemblyAiApiKey={assemblyAiApiKey}
+          onAssemblyAiApiKeyChange={onAssemblyAiApiKeyChange}
+          recordingSupported={recordingSupported}
+          isRecordingAudio={isRecordingAudio}
+          isRecordingBusy={isRecordingBusy}
+          recordingError={recordingError}
+          recordingStatus={recordingStatus}
+          onStartAudioRecording={onStartAudioRecording}
+          onStopAudioRecording={onStopAudioRecording}
+          onQueueRecordings={onQueueRecordings}
         />
       </div>
     </div>

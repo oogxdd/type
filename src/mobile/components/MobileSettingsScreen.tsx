@@ -27,6 +27,16 @@ type MobileSettingsScreenProps = {
   onGitPull: () => void;
   onGitPush: () => void;
   lastSuccessfulSyncAt: string | null;
+  assemblyAiApiKey: string;
+  onAssemblyAiApiKeyChange: (value: string) => void;
+  recordingSupported: boolean;
+  isRecordingAudio: boolean;
+  isRecordingBusy: boolean;
+  recordingError: string | null;
+  recordingStatus: string | null;
+  onStartAudioRecording: () => void;
+  onStopAudioRecording: () => void;
+  onQueueRecordings: () => void;
 };
 
 const getSyncHint = (error: string | null): string | null => {
@@ -75,11 +85,22 @@ export function MobileSettingsScreen({
   onGitPull,
   onGitPush,
   lastSuccessfulSyncAt,
+  assemblyAiApiKey,
+  onAssemblyAiApiKeyChange,
+  recordingSupported,
+  isRecordingAudio,
+  isRecordingBusy,
+  recordingError,
+  recordingStatus,
+  onStartAudioRecording,
+  onStopAudioRecording,
+  onQueueRecordings,
 }: MobileSettingsScreenProps) {
   const syncHint = getSyncHint(gitSyncError);
   const canPull = !gitSyncBusy && Boolean(gitStatus?.repo_initialized) && !gitStatus?.has_uncommitted_changes;
   const canPush = !gitSyncBusy && Boolean(gitStatus?.repo_initialized);
   const canConnect = !gitSyncBusy && gitRemoteUrl.trim().length > 0;
+  const canQueue = !isRecordingBusy && assemblyAiApiKey.trim().length > 0;
 
   return (
     <div className="mobile-settings-screen">
@@ -280,6 +301,92 @@ export function MobileSettingsScreen({
                 <strong>Sync error</strong>
                 <p>{gitSyncError}</p>
                 {syncHint ? <p className="hint">{syncHint}</p> : null}
+              </section>
+            ) : null}
+          </>
+        ) : null}
+
+        {activeSection === "recordings" ? (
+          <>
+            <section className="mobile-settings-card" aria-label="Recording settings">
+              <h2>Recording</h2>
+              <p>
+                Audio files are stored under <code>Recordings/recording-*/audio.*</code>.
+              </p>
+              <div className="mobile-sync-actions">
+                <button
+                  type="button"
+                  className="mobile-primary-btn"
+                  onClick={onStartAudioRecording}
+                  disabled={!recordingSupported || isRecordingAudio || isRecordingBusy}
+                >
+                  Start recording
+                </button>
+                <button
+                  type="button"
+                  className="mobile-secondary-btn"
+                  onClick={onStopAudioRecording}
+                  disabled={!recordingSupported || !isRecordingAudio}
+                >
+                  Stop and save
+                </button>
+              </div>
+              <div className="mobile-status-grid">
+                <div>
+                  <span className="label">Recorder state</span>
+                  <span className="value">
+                    {!recordingSupported
+                      ? "Unsupported"
+                      : isRecordingAudio
+                        ? "Recording"
+                        : isRecordingBusy
+                          ? "Saving"
+                          : "Idle"}
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            <section className="mobile-settings-card" aria-label="AssemblyAI settings">
+              <h2>Transcription</h2>
+              <p>
+                Desktop can auto-queue pending recordings for AssemblyAI.
+              </p>
+              <label className="mobile-form-field">
+                <span>AssemblyAI API key</span>
+                <input
+                  type="password"
+                  value={assemblyAiApiKey}
+                  onChange={(event) => onAssemblyAiApiKeyChange(event.target.value)}
+                  placeholder="Paste AssemblyAI key"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                />
+              </label>
+              <div className="mobile-sync-actions">
+                <button
+                  type="button"
+                  className="mobile-secondary-btn"
+                  onClick={onQueueRecordings}
+                  disabled={!canQueue}
+                >
+                  Queue transcription
+                </button>
+              </div>
+              {recordingStatus ? (
+                <div className="mobile-status-grid">
+                  <div>
+                    <span className="label">Last queue result</span>
+                    <span className="value">{recordingStatus}</span>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+
+            {recordingError ? (
+              <section className="mobile-sync-error" role="alert">
+                <strong>Recording error</strong>
+                <p>{recordingError}</p>
               </section>
             ) : null}
           </>
