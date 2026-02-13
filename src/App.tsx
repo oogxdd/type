@@ -23,7 +23,15 @@ import { snapCenterToCursor } from "@dnd-kit/modifiers";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu } from "@tauri-apps/api/menu";
-import { Settings } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  Folder,
+  Plus,
+  Settings,
+  SquarePen,
+} from "lucide-react";
 import "./App.css";
 
 // Data layer
@@ -79,6 +87,7 @@ const SYSTEM_FOLDER_PATHS = new Set([UNSORTED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH]
 
 type AppMode = "notes" | "settings";
 type PaneId = "folders" | "middle" | "right";
+type MobileTab = "folders" | "notes" | "editor" | "settings";
 type VisibleNavigationItem =
   | {
       type: "folder";
@@ -127,6 +136,23 @@ const getNoteParentPath = (notePath: string) => {
 };
 
 const isSystemFolder = (path: string) => SYSTEM_FOLDER_PATHS.has(path);
+const MOBILE_LAYOUT_QUERY = "(max-width: 900px)";
+const MOBILE_SETTINGS_SECTIONS: Array<{ id: string; label: string }> = [
+  { id: "general", label: "General" },
+  { id: "appearance", label: "Appearance" },
+  { id: "editor", label: "Editor" },
+  { id: "sync", label: "Sync" },
+  { id: "security", label: "Security" },
+  { id: "privacy", label: "Privacy" },
+  { id: "about", label: "About" },
+];
+
+const getInitialIsMobileLayout = () => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
+};
 
 // ---------------------------------------------------------------------------
 // App
@@ -150,6 +176,8 @@ function App() {
   const [editorFontSize, setEditorFontSize] = useState(14);
   const [appMode, setAppMode] = useState<AppMode>("notes");
   const [activeSettingsSection, setActiveSettingsSection] = useState("general");
+  const [isMobileLayout, setIsMobileLayout] = useState(getInitialIsMobileLayout);
+  const [mobileTab, setMobileTab] = useState<MobileTab>("notes");
   const [gitRemoteUrl, setGitRemoteUrl] = useState(() =>
     getStoredSyncValue("notes-viewer-git-remote", "")
   );
@@ -238,6 +266,28 @@ function App() {
   }, [notesListMode]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const media = window.matchMedia(MOBILE_LAYOUT_QUERY);
+    const update = () => setIsMobileLayout(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileLayout) {
+      return;
+    }
+    if (appMode === "settings") {
+      setMobileTab("settings");
+    } else if (mobileTab === "settings") {
+      setMobileTab("notes");
+    }
+  }, [appMode, isMobileLayout, mobileTab]);
+
+  useEffect(() => {
     window.localStorage.setItem("notes-viewer-git-remote", gitRemoteUrl);
   }, [gitRemoteUrl]);
 
@@ -286,6 +336,20 @@ function App() {
   useEffect(() => {
     void refreshGitStatus();
   }, [refreshGitStatus]);
+
+  useEffect(() => {
+    if (!isMobileLayout || !tree || activeFolder) {
+      return;
+    }
+    const unsorted = findNode(tree, UNSORTED_FOLDER_PATH);
+    const firstFolderPath = unsorted?.path || tree.children[0]?.path || "";
+    if (!firstFolderPath) {
+      return;
+    }
+    setSelectedFolders(new Set([firstFolderPath]));
+    setLastSelectedFolder(firstFolderPath);
+    setActiveFolder(firstFolderPath);
+  }, [activeFolder, isMobileLayout, tree]);
 
   const handleConnectGitRepo = useCallback(async () => {
     const remoteUrl = gitRemoteUrl.trim();
@@ -462,6 +526,46 @@ function App() {
     () => ({ "--editor-font-size": `${editorFontSize}px` }) as CSSProperties,
     [editorFontSize]
   );
+
+  const handleMobileTabSelect = useCallback((tab: MobileTab) => {
+    setMobileTab(tab);
+    setAppMode(tab === "settings" ? "settings" : "notes");
+  }, []);
+
+  const handleMobileFolderSelect = useCallback(
+    (path: string) => {
+      if (!path) {
+        return;
+      }
+      setSelectedFolders(new Set([path]));
+      setLastSelectedFolder(path);
+      setActiveFolder(path);
+      setSelectedNotes(new Set());
+      setLastSelectedNote("");
+      setActiveNote(null);
+      handleMobileTabSelect("notes");
+    },
+    [handleMobileTabSelect]
+  );
+
+  const handleMobileNoteSelect = useCallback(
+    (path: string) => {
+      const parentPath = getNoteParentPath(path);
+      setSelectedFolders(new Set(parentPath ? [parentPath] : []));
+      setLastSelectedFolder(parentPath);
+      setActiveFolder(parentPath);
+      setSelectedNotes(new Set([path]));
+      setLastSelectedNote(path);
+      setActiveNote(path);
+      handleMobileTabSelect("editor");
+    },
+    [handleMobileTabSelect]
+  );
+
+  const handleMobileCreateNote = useCallback(async () => {
+    await createNewNote();
+    handleMobileTabSelect("editor");
+  }, [createNewNote, handleMobileTabSelect]);
 
   // -- Folder handlers ------------------------------------------------------
   const handleFolderClick = (event: ReactMouseEvent, path: string) => {
@@ -1527,6 +1631,304 @@ function App() {
     }
   };
 
+  const activeFolderTitle = activeNode?.name || activeFolder || "Notes";
+  const activeNoteTitle =
+    (activeNote ? notePreviews[activeNote]?.title : null) ||
+    (activeNote ? activeNote.split("/").pop()?.replace(/\.md$/i, "") : null) ||
+    "Note";
+
+  const renderMobileFoldersTab = () => (
+    <div className="mobile-scroll">
+      {visibleItems.length === 0 ? (
+        <div className="mobile-empty">No folders yet</div>
+      ) : (
+        visibleItems.map((item) => {
+          const hasChildren = item.children.length > 0;
+          const isExpanded = expanded.has(item.id);
+          const isSelected = activeFolder === item.id;
+          return (
+            <div
+              key={item.id}
+              className={`mobile-folder-row${isSelected ? " selected" : ""}`}
+              style={{ paddingLeft: 12 + item.depth * 14 }}
+            >
+              {hasChildren ? (
+                <button
+                  type="button"
+                  className={`mobile-folder-toggle${isExpanded ? " is-expanded" : ""}`}
+                  onClick={() =>
+                    setExpanded((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(item.id)) {
+                        next.delete(item.id);
+                      } else {
+                        next.add(item.id);
+                      }
+                      return next;
+                    })
+                  }
+                  aria-label={isExpanded ? "Collapse folder" : "Expand folder"}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              ) : (
+                <span className="mobile-folder-toggle-spacer" aria-hidden />
+              )}
+              <button
+                type="button"
+                className="mobile-folder-main"
+                onClick={() => handleMobileFolderSelect(item.id)}
+              >
+                <span className="mobile-folder-name">{item.name}</span>
+                <span className="mobile-folder-meta">
+                  {typeof item.noteCount === "number" ? `${item.noteCount}` : ""}
+                </span>
+              </button>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+
+  const renderMobileNotesTab = () => {
+    if (!activeNode) {
+      return (
+        <div className="mobile-empty">
+          <p>Select a folder to see notes.</p>
+          <button
+            type="button"
+            className="mobile-primary-btn"
+            onClick={() => handleMobileTabSelect("folders")}
+          >
+            Open folders
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div className="mobile-scroll">
+        {notes.length === 0 ? (
+          <div className="mobile-empty">
+            <p>No notes in this folder.</p>
+            <button
+              type="button"
+              className="mobile-primary-btn"
+              onClick={() => void handleMobileCreateNote()}
+            >
+              Create note
+            </button>
+          </div>
+        ) : (
+          notes.map((note) => {
+            const preview = notePreviews[note.path];
+            return (
+              <button
+                key={note.path}
+                type="button"
+                className={`mobile-note-row${selectedNotes.has(note.path) ? " selected" : ""}`}
+                onClick={() => handleMobileNoteSelect(note.path)}
+              >
+                <span className="mobile-note-title">
+                  {preview?.title || note.name.replace(/\.md$/i, "")}
+                </span>
+                <span className="mobile-note-subline">
+                  <span>{preview?.dateLabel || ""}</span>
+                  {preview?.dateLabel && preview?.secondLine ? <span> · </span> : null}
+                  <span>{preview?.secondLine || ""}</span>
+                </span>
+              </button>
+            );
+          })
+        )}
+      </div>
+    );
+  };
+
+  const renderMobileEditorTab = () => {
+    if (!activeNote) {
+      return (
+        <div className="mobile-empty">
+          <p>Select a note to start editing.</p>
+          <button
+            type="button"
+            className="mobile-primary-btn"
+            onClick={() => handleMobileTabSelect("notes")}
+          >
+            Open notes
+          </button>
+        </div>
+      );
+    }
+    return (
+      <div className="mobile-editor-pane">
+        <NoteEditor
+          markdown={activeNote ? noteContent : draftNoteContent}
+          onChange={handleEditorChange}
+        />
+      </div>
+    );
+  };
+
+  const renderMobileSettingsTab = () => (
+    <div className="mobile-settings-pane">
+      <div className="mobile-settings-tabs" role="tablist" aria-label="Settings sections">
+        {MOBILE_SETTINGS_SECTIONS.map((section) => (
+          <button
+            key={section.id}
+            type="button"
+            className={`mobile-settings-tab${
+              activeSettingsSection === section.id ? " active" : ""
+            }`}
+            onClick={() => setActiveSettingsSection(section.id)}
+          >
+            {section.label}
+          </button>
+        ))}
+      </div>
+      <div className="mobile-settings-detail">
+        <SettingsDetailPane
+          activeSection={activeSettingsSection}
+          theme={theme}
+          onThemeChange={setTheme}
+          notesListMode={notesListMode}
+          onNotesListModeChange={setNotesListMode}
+          gitRemoteUrl={gitRemoteUrl}
+          onGitRemoteUrlChange={setGitRemoteUrl}
+          gitBranch={gitBranch}
+          onGitBranchChange={setGitBranch}
+          gitUsername={gitUsername}
+          onGitUsernameChange={setGitUsername}
+          gitPassword={gitPassword}
+          onGitPasswordChange={setGitPassword}
+          gitCommitMessage={gitCommitMessage}
+          onGitCommitMessageChange={setGitCommitMessage}
+          gitStatus={gitStatus}
+          gitSyncBusy={gitSyncBusy}
+          gitSyncError={gitSyncError}
+          onGitRefresh={() => void refreshGitStatus()}
+          onGitConnect={() => void handleConnectGitRepo()}
+          onGitPull={() => void handleGitPull()}
+          onGitPush={() => void handleGitPush()}
+          rightPaneRef={rightPaneRef}
+          onPaneClick={() => focusNoScroll(rightPaneRef.current)}
+        />
+      </div>
+    </div>
+  );
+
+  const renderMobileContent = () => {
+    if (mobileTab === "folders") {
+      return renderMobileFoldersTab();
+    }
+    if (mobileTab === "notes") {
+      return renderMobileNotesTab();
+    }
+    if (mobileTab === "editor") {
+      return renderMobileEditorTab();
+    }
+    return renderMobileSettingsTab();
+  };
+
+  const renderMobileShell = () => (
+    <div className={`mobile-shell theme-${theme}`} style={appStyle}>
+      <header className="mobile-header">
+        <div className="mobile-header-side">
+          {mobileTab === "notes" ? (
+            <button
+              type="button"
+              className="mobile-icon-btn"
+              onClick={() => handleMobileTabSelect("folders")}
+              aria-label="Back to folders"
+            >
+              <ChevronLeft size={17} />
+            </button>
+          ) : mobileTab === "editor" ? (
+            <button
+              type="button"
+              className="mobile-icon-btn"
+              onClick={() => handleMobileTabSelect("notes")}
+              aria-label="Back to notes"
+            >
+              <ChevronLeft size={17} />
+            </button>
+          ) : mobileTab === "settings" ? (
+            <button
+              type="button"
+              className="mobile-icon-btn"
+              onClick={() => handleMobileTabSelect("notes")}
+              aria-label="Back to notes"
+            >
+              <ChevronLeft size={17} />
+            </button>
+          ) : (
+            <span className="mobile-icon-spacer" aria-hidden />
+          )}
+        </div>
+        <div className="mobile-header-title-wrap">
+          <h1 className="mobile-header-title">
+            {mobileTab === "folders"
+              ? "Folders"
+              : mobileTab === "notes"
+                ? activeFolderTitle
+                : mobileTab === "editor"
+                  ? activeNoteTitle
+                  : "Settings"}
+          </h1>
+        </div>
+        <div className="mobile-header-side mobile-header-side-end">
+          {mobileTab === "notes" ? (
+            <button
+              type="button"
+              className="mobile-icon-btn"
+              onClick={() => void handleMobileCreateNote()}
+              aria-label="Create new note"
+            >
+              <Plus size={17} />
+            </button>
+          ) : (
+            <span className="mobile-icon-spacer" aria-hidden />
+          )}
+        </div>
+      </header>
+      <div className="mobile-main">{renderMobileContent()}</div>
+      <nav className="mobile-tabbar" aria-label="Main tabs">
+        <button
+          type="button"
+          className={`mobile-tab-btn${mobileTab === "folders" ? " active" : ""}`}
+          onClick={() => handleMobileTabSelect("folders")}
+        >
+          <Folder size={16} />
+          <span>Folders</span>
+        </button>
+        <button
+          type="button"
+          className={`mobile-tab-btn${mobileTab === "notes" ? " active" : ""}`}
+          onClick={() => handleMobileTabSelect("notes")}
+        >
+          <FileText size={16} />
+          <span>Notes</span>
+        </button>
+        <button
+          type="button"
+          className={`mobile-tab-btn${mobileTab === "editor" ? " active" : ""}`}
+          onClick={() => handleMobileTabSelect("editor")}
+        >
+          <SquarePen size={16} />
+          <span>Editor</span>
+        </button>
+        <button
+          type="button"
+          className={`mobile-tab-btn${mobileTab === "settings" ? " active" : ""}`}
+          onClick={() => handleMobileTabSelect("settings")}
+        >
+          <Settings size={16} />
+          <span>Settings</span>
+        </button>
+      </nav>
+    </div>
+  );
+
   // -- Render helpers -------------------------------------------------------
   const renderMiddlePane = () =>
     appMode === "notes" ? (
@@ -1707,10 +2109,12 @@ function App() {
     </div>
   );
 
+  const dndSensors = isMobileLayout ? [] : sensors;
+
   // -- Main render ----------------------------------------------------------
   return (
     <DndContext
-      sensors={sensors}
+      sensors={dndSensors}
       collisionDetection={pointerWithin}
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
@@ -1719,106 +2123,110 @@ function App() {
       onDragCancel={handleDragCancel}
     >
       <div className={`window-shell theme-${theme}`}>
-        <div
-          className={`app theme-${theme}${sidebarCollapsed ? " sidebar-collapsed" : ""}`}
-          style={appStyle}
-        >
-          {!sidebarCollapsed ? (
-            <button
-              type="button"
-              className="sidebar-toggle-btn"
-              aria-label="Hide sidebar"
-              onClick={() => setSidebarCollapsed((prev) => !prev)}
-            >
-              <svg viewBox="0 0 16 16" aria-hidden>
-                <rect
-                  x="1.25"
-                  y="1.75"
-                  width="13.5"
-                  height="12.5"
-                  rx="3.25"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.25"
-                />
-                <path
-                  d="M5.8 2.9v10.2"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.25"
-                />
-              </svg>
-            </button>
-          ) : null}
-          {sidebarCollapsed ? (
-            <div className="app-single-pane">{renderRightPane()}</div>
-          ) : shouldNestNotesInNavigation ? (
-            <ResizablePanelGroup
-              orientation="horizontal"
-              className="app-panels"
-              defaultLayout={twoPaneLayout}
-              onLayoutChanged={(layout) => setTwoPaneLayout(layout)}
-            >
-              <ResizablePanel
-                id="nav"
-                defaultSize="29%"
-                minSize="18%"
-                maxSize="44%"
-                className="min-w-0 h-full min-h-0"
+        {isMobileLayout ? (
+          renderMobileShell()
+        ) : (
+          <div
+            className={`app theme-${theme}${sidebarCollapsed ? " sidebar-collapsed" : ""}`}
+            style={appStyle}
+          >
+            {!sidebarCollapsed ? (
+              <button
+                type="button"
+                className="sidebar-toggle-btn"
+                aria-label="Hide sidebar"
+                onClick={() => setSidebarCollapsed((prev) => !prev)}
               >
-                {renderLeftPane()}
-              </ResizablePanel>
-              <ResizableHandle className="app-resize-handle" />
-              <ResizablePanel
-                id="content"
-                defaultSize="71%"
-                minSize="35%"
-                className="min-w-0 h-full min-h-0"
+                <svg viewBox="0 0 16 16" aria-hidden>
+                  <rect
+                    x="1.25"
+                    y="1.75"
+                    width="13.5"
+                    height="12.5"
+                    rx="3.25"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.25"
+                  />
+                  <path
+                    d="M5.8 2.9v10.2"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.25"
+                  />
+                </svg>
+              </button>
+            ) : null}
+            {sidebarCollapsed ? (
+              <div className="app-single-pane">{renderRightPane()}</div>
+            ) : shouldNestNotesInNavigation ? (
+              <ResizablePanelGroup
+                orientation="horizontal"
+                className="app-panels"
+                defaultLayout={twoPaneLayout}
+                onLayoutChanged={(layout) => setTwoPaneLayout(layout)}
               >
-                {renderRightPane()}
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          ) : (
-            <ResizablePanelGroup
-              orientation="horizontal"
-              className="app-panels"
-              defaultLayout={threePaneLayout}
-              onLayoutChanged={(layout) => setThreePaneLayout(layout)}
-            >
-              <ResizablePanel
-                id="nav"
-                defaultSize="22%"
-                minSize="16%"
-                maxSize="34%"
-                className="min-w-0 h-full min-h-0"
+                <ResizablePanel
+                  id="nav"
+                  defaultSize="29%"
+                  minSize="18%"
+                  maxSize="44%"
+                  className="min-w-0 h-full min-h-0"
+                >
+                  {renderLeftPane()}
+                </ResizablePanel>
+                <ResizableHandle className="app-resize-handle" />
+                <ResizablePanel
+                  id="content"
+                  defaultSize="71%"
+                  minSize="35%"
+                  className="min-w-0 h-full min-h-0"
+                >
+                  {renderRightPane()}
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            ) : (
+              <ResizablePanelGroup
+                orientation="horizontal"
+                className="app-panels"
+                defaultLayout={threePaneLayout}
+                onLayoutChanged={(layout) => setThreePaneLayout(layout)}
               >
-                {renderLeftPane()}
-              </ResizablePanel>
-              <ResizableHandle className="app-resize-handle" />
-              <ResizablePanel
-                id="middle"
-                defaultSize="25%"
-                minSize="18%"
-                maxSize="40%"
-                className="min-w-0 h-full min-h-0"
-              >
-                {renderMiddlePane()}
-              </ResizablePanel>
-              <ResizableHandle className="app-resize-handle app-resize-handle-editor" />
-              <ResizablePanel
-                id="content"
-                defaultSize="53%"
-                minSize="30%"
-                className="min-w-0 h-full min-h-0"
-              >
-                {renderRightPane()}
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          )}
-        </div>
+                <ResizablePanel
+                  id="nav"
+                  defaultSize="22%"
+                  minSize="16%"
+                  maxSize="34%"
+                  className="min-w-0 h-full min-h-0"
+                >
+                  {renderLeftPane()}
+                </ResizablePanel>
+                <ResizableHandle className="app-resize-handle" />
+                <ResizablePanel
+                  id="middle"
+                  defaultSize="25%"
+                  minSize="18%"
+                  maxSize="40%"
+                  className="min-w-0 h-full min-h-0"
+                >
+                  {renderMiddlePane()}
+                </ResizablePanel>
+                <ResizableHandle className="app-resize-handle app-resize-handle-editor" />
+                <ResizablePanel
+                  id="content"
+                  defaultSize="53%"
+                  minSize="30%"
+                  className="min-w-0 h-full min-h-0"
+                >
+                  {renderRightPane()}
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            )}
+          </div>
+        )}
       </div>
       <DragOverlay modifiers={[snapCenterToCursor]}>
-        {activeId ? (
+        {!isMobileLayout && activeId ? (
           <div className="drag-ghost">{activeId.split("/").pop() || activeId}</div>
         ) : null}
       </DragOverlay>
