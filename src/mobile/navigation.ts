@@ -7,6 +7,7 @@ export type MobileRoute =
   | { kind: "folders" }
   | { kind: "notes"; folderPath: string }
   | { kind: "editor"; folderPath: string; notePath: string }
+  | { kind: "recording"; folderPath: string }
   | { kind: "settings"; section?: SettingsSectionId };
 
 export type MobileNavigationState = {

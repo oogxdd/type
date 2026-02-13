@@ -12,7 +12,9 @@ type MobileNotesScreenProps = {
   onDelete: (notePath: string) => void;
   onArchive: (notePath: string) => void;
   onLongPress: (notePath: string) => void;
-  onPullCreate: () => Promise<void>;
+  onPullCreate?: () => Promise<void>;
+  emptyStateText?: string;
+  createButtonLabel?: string;
 };
 
 export function MobileNotesScreen({
@@ -26,6 +28,8 @@ export function MobileNotesScreen({
   onArchive,
   onLongPress,
   onPullCreate,
+  emptyStateText,
+  createButtonLabel = "Create note",
 }: MobileNotesScreenProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const touchStartYRef = useRef<number | null>(null);
@@ -34,7 +38,7 @@ export function MobileNotesScreen({
 
   const startPull = (clientY: number) => {
     const scrollTop = scrollRef.current?.scrollTop ?? 0;
-    if (scrollTop > 0 || creating) {
+    if (!onPullCreate || scrollTop > 0 || creating) {
       touchStartYRef.current = null;
       return;
     }
@@ -60,7 +64,7 @@ export function MobileNotesScreen({
     touchStartYRef.current = null;
     const shouldCreate = pullDistance >= 74;
     setPullDistance(0);
-    if (!shouldCreate) {
+    if (!shouldCreate || !onPullCreate) {
       return;
     }
     setCreating(true);
@@ -74,9 +78,9 @@ export function MobileNotesScreen({
   if (notes.length === 0) {
     return (
       <div className="mobile-screen-empty with-action">
-        <p>No notes in {folderTitle}.</p>
+        <p>{emptyStateText || `No notes in ${folderTitle}.`}</p>
         <button type="button" className="mobile-primary-btn" onClick={onCreate}>
-          Create note
+          {createButtonLabel}
         </button>
       </div>
     );
@@ -97,13 +101,15 @@ export function MobileNotesScreen({
       }}
       aria-label="Notes list"
     >
-      <div className="mobile-pull-indicator" style={{ height: pullDistance }}>
-        {creating
-          ? "Creating note..."
-          : pullDistance >= 74
-            ? "Release to create note"
-            : "Pull down to create note"}
-      </div>
+      {onPullCreate ? (
+        <div className="mobile-pull-indicator" style={{ height: pullDistance }}>
+          {creating
+            ? "Creating note..."
+            : pullDistance >= 74
+              ? "Release to create note"
+              : "Pull down to create note"}
+        </div>
+      ) : null}
       {notes.map((note) => (
         <SwipeableNoteRow
           key={note.path}

@@ -2,6 +2,7 @@ import {
   ChevronLeft,
   Folder,
   Menu,
+  Mic,
   Plus,
   Settings,
   X,
@@ -32,6 +33,7 @@ import { MobileEditorScreen } from "./components/MobileEditorScreen";
 import { MobileFoldersScreen } from "./components/MobileFoldersScreen";
 import { MobileNavBar } from "./components/MobileNavBar";
 import { MobileNotesScreen } from "./components/MobileNotesScreen";
+import { MobileRecordingScreen } from "./components/MobileRecordingScreen";
 import { MobileSettingsScreen } from "./components/MobileSettingsScreen";
 import { MobileTabBar } from "./components/MobileTabBar";
 import { MobileToast } from "./components/MobileToast";
@@ -54,7 +56,8 @@ type MobileShellProps = {
   activeNote: string | null;
   activeNoteTitle: string;
   onSelectNote: (notePath: string) => void;
-  onCreateNote: (folderPath?: string) => Promise<string | null>;
+  onCreateNote: (folderPath?: string, initialContent?: string) => Promise<string | null>;
+  onEnterHome: () => void;
   onDeleteNote: (notePath: string) => Promise<void>;
   onArchiveNote: (notePath: string) => Promise<void>;
   onShowNoteInfo: (notePath: string) => Promise<void>;
@@ -110,6 +113,7 @@ const TABLET_LEFT_ITEMS = [
   { id: "folders", label: "Folders", icon: <Folder size={16} /> },
   { id: "settings", label: "Settings", icon: <Settings size={16} /> },
 ] as const;
+const RECORDINGS_FOLDER_PATH = "Recordings";
 const SYSTEM_FOLDER_PATHS = new Set(["Unsorted", "Archieve", "Recordings"]);
 
 const getDisplayFolderName = (rawName: string) =>
@@ -135,6 +139,7 @@ export function MobileShell({
   activeNoteTitle,
   onSelectNote,
   onCreateNote,
+  onEnterHome,
   onDeleteNote,
   onArchiveNote,
   onShowNoteInfo,
@@ -194,9 +199,10 @@ export function MobileShell({
     null
   );
   const previousStackDepthRef = useRef(navigationState.stack.length);
-  const [phoneTransitionDirection, setPhoneTransitionDirection] = useState<"forward" | "backward">(
-    "forward"
-  );
+  const nextTransitionRef = useRef<"forward" | "backward" | "up" | null>(null);
+  const [phoneTransitionDirection, setPhoneTransitionDirection] = useState<
+    "forward" | "backward" | "up"
+  >("forward");
 
   const edgeSwipeStart = useRef<{ x: number; y: number } | null>(null);
   const edgeSwipeTriggered = useRef(false);
@@ -209,7 +215,10 @@ export function MobileShell({
     }
     const previousDepth = previousStackDepthRef.current;
     const nextDepth = navigationState.stack.length;
-    if (nextDepth > previousDepth) {
+    if (nextTransitionRef.current) {
+      setPhoneTransitionDirection(nextTransitionRef.current);
+      nextTransitionRef.current = null;
+    } else if (nextDepth > previousDepth) {
       setPhoneTransitionDirection("forward");
     } else if (nextDepth < previousDepth) {
       setPhoneTransitionDirection("backward");
@@ -221,7 +230,11 @@ export function MobileShell({
     if (layoutMode !== "phone") {
       return;
     }
-    if (currentRoute.kind === "notes" || currentRoute.kind === "editor") {
+    if (
+      currentRoute.kind === "notes" ||
+      currentRoute.kind === "editor" ||
+      currentRoute.kind === "recording"
+    ) {
       if (currentRoute.folderPath && currentRoute.folderPath !== activeFolder) {
         onSelectFolder(currentRoute.folderPath);
       }
@@ -242,6 +255,13 @@ export function MobileShell({
       setFoldersDrawerOpen(false);
     }
   }, [layoutMode]);
+
+  useEffect(() => {
+    if (layoutMode !== "phone" || currentRoute.kind !== "home") {
+      return;
+    }
+    onEnterHome();
+  }, [currentRoute.kind, layoutMode, onEnterHome]);
 
   useEffect(() => {
     if (!foldersDrawerOpen) {
@@ -279,6 +299,16 @@ export function MobileShell({
     (folderPath: string) => {
       onSelectFolder(folderPath);
       dispatch({ type: "push", route: { kind: "notes", folderPath } });
+      setFoldersDrawerOpen(false);
+    },
+    [onSelectFolder]
+  );
+
+  const openRecordingRoute = useCallback(
+    (folderPath: string = RECORDINGS_FOLDER_PATH) => {
+      onSelectFolder(folderPath);
+      nextTransitionRef.current = "up";
+      dispatch({ type: "push", route: { kind: "recording", folderPath } });
       setFoldersDrawerOpen(false);
     },
     [onSelectFolder]
@@ -464,13 +494,31 @@ export function MobileShell({
     if (currentRoute.kind === "home") {
       return (
         <MobileEditorScreen
-          markdown=""
+          markdown={editorMarkdown}
           onChange={onEditorChange}
           hasActiveNote={false}
           isSaving={false}
           saveError={null}
           keyboardInset={keyboardInset}
           onRetrySave={() => Promise.resolve()}
+          draftMode
+          onPullUpCreate={async () => {
+            const draft = editorMarkdown.trimEnd();
+            const path = await onCreateNote(undefined, draft);
+            if (!path) {
+              return;
+            }
+            const folderPath = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+            nextTransitionRef.current = "up";
+            dispatch({
+              type: "push",
+              route: {
+                kind: "editor",
+                folderPath,
+                notePath: path,
+              },
+            });
+          }}
         />
       );
     }
@@ -489,6 +537,7 @@ export function MobileShell({
     }
 
     if (currentRoute.kind === "notes") {
+      const isRecordingsFolder = currentRoute.folderPath === RECORDINGS_FOLDER_PATH;
       return (
         <MobileNotesScreen
           folderTitle={activeFolderTitle}
@@ -508,6 +557,10 @@ export function MobileShell({
           }}
           onCreate={() => {
             void (async () => {
+              if (isRecordingsFolder) {
+                openRecordingRoute(currentRoute.folderPath);
+                return;
+              }
               const path = await onCreateNote(currentRoute.folderPath);
               if (!path) {
                 return;
@@ -521,20 +574,6 @@ export function MobileShell({
                 },
               });
             })();
-          }}
-          onPullCreate={async () => {
-            const path = await onCreateNote(currentRoute.folderPath);
-            if (!path) {
-              return;
-            }
-            dispatch({
-              type: "push",
-              route: {
-                kind: "editor",
-                folderPath: currentRoute.folderPath,
-                notePath: path,
-              },
-            });
           }}
           onDelete={(path) => {
             void (async () => {
@@ -559,6 +598,28 @@ export function MobileShell({
             })();
           }}
           onLongPress={openNoteActionSheet}
+          emptyStateText={
+            isRecordingsFolder
+              ? "No recordings yet."
+              : `No notes in ${getDisplayRouteTitle(activeFolderTitle)}.`
+          }
+          createButtonLabel={isRecordingsFolder ? "Open recorder" : "Create note"}
+        />
+      );
+    }
+
+    if (currentRoute.kind === "recording") {
+      return (
+        <MobileRecordingScreen
+          recordingSupported={recordingSupported}
+          isRecording={isRecordingAudio}
+          isBusy={isRecordingBusy}
+          recordingError={recordingError}
+          recordingStatus={recordingStatus}
+          hasAssemblyApiKey={assemblyAiApiKey.trim().length > 0}
+          onStart={onStartAudioRecording}
+          onStop={onStopAudioRecording}
+          onQueue={onQueueRecordings}
         />
       );
     }
@@ -575,6 +636,22 @@ export function MobileShell({
           onRetrySave={() => {
             void onRetrySave();
           }}
+          onPullUpCreate={async () => {
+            const path = await onCreateNote(currentRoute.folderPath);
+            if (!path) {
+              return;
+            }
+            const folderPath = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+            nextTransitionRef.current = "up";
+            dispatch({
+              type: "replace",
+              route: {
+                kind: "editor",
+                folderPath,
+                notePath: path,
+              },
+            });
+          }}
         />
       );
     }
@@ -584,10 +661,13 @@ export function MobileShell({
     activeFolder,
     activeFolderTitle,
     activeNote,
+    assemblyAiApiKey,
     currentRoute,
     editorMarkdown,
     expanded,
     hasActiveNote,
+    isRecordingAudio,
+    isRecordingBusy,
     isSaving,
     keyboardInset,
     notePreviews,
@@ -596,12 +676,18 @@ export function MobileShell({
     onCreateNote,
     onDeleteNote,
     onEditorChange,
+    onQueueRecordings,
+    onStartAudioRecording,
+    onStopAudioRecording,
     openNotesRoute,
+    openRecordingRoute,
     onRetrySave,
     onSelectNote,
     onToggleFolder,
     openFolderActionSheet,
     openNoteActionSheet,
+    recordingError,
+    recordingStatus,
     saveError,
     settingsScreen,
     showToast,
@@ -615,6 +701,8 @@ export function MobileShell({
       ? "Folders"
       : currentRoute.kind === "notes"
         ? getDisplayRouteTitle(activeFolderTitle)
+        : currentRoute.kind === "recording"
+          ? "New recording"
         : currentRoute.kind === "editor"
           ? activeNoteTitle
           : "Settings";
@@ -640,6 +728,9 @@ export function MobileShell({
           },
         };
 
+  const isRecordingsNotesRoute =
+    currentRoute.kind === "notes" && currentRoute.folderPath === RECORDINGS_FOLDER_PATH;
+
   const phoneRightAction =
     currentRoute.kind === "home"
       ? {
@@ -655,10 +746,14 @@ export function MobileShell({
           }
       : currentRoute.kind === "notes"
         ? {
-            label: "New note",
-            icon: <Plus size={18} />,
+            label: isRecordingsNotesRoute ? "Record" : "New note",
+            icon: isRecordingsNotesRoute ? <Mic size={18} /> : <Plus size={18} />,
             onPress: () => {
               void (async () => {
+                if (isRecordingsNotesRoute) {
+                  openRecordingRoute(currentRoute.folderPath);
+                  return;
+                }
                 const path = await onCreateNote(currentRoute.folderPath);
                 if (!path) {
                   return;
@@ -714,13 +809,6 @@ export function MobileShell({
             onSelect={onSelectNote}
             onCreate={() => {
               void onCreateNote(activeFolder);
-            }}
-            onPullCreate={async () => {
-              const path = await onCreateNote(activeFolder);
-              if (!path) {
-                return;
-              }
-              onSelectNote(path);
             }}
             onDelete={(path) => {
               void (async () => {
@@ -786,9 +874,11 @@ export function MobileShell({
                     ? `notes:${currentRoute.folderPath}`
                     : currentRoute.kind === "editor"
                       ? `editor:${currentRoute.notePath}`
+                      : currentRoute.kind === "recording"
+                        ? `recording:${currentRoute.folderPath}`
                       : `settings:${currentRoute.section || "root"}`
               }
-              className={`mobile-screen-stage ${phoneTransitionDirection === "forward" ? "forward" : "backward"}`}
+              className={`mobile-screen-stage ${phoneTransitionDirection === "forward" ? "forward" : phoneTransitionDirection === "up" ? "up" : "backward"}`}
             >
               {phoneContent}
             </div>

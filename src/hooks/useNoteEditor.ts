@@ -120,6 +120,10 @@ export function useNoteEditor(activeNote: string | null) {
     noteDirtyRef.current = false;
   };
 
+  const clearDraft = () => {
+    setDraftNoteContent("");
+  };
+
   const flushSave = useCallback(async () => {
     if (saveTimer.current) {
       window.clearTimeout(saveTimer.current);
@@ -157,6 +161,7 @@ export function useNoteEditor(activeNote: string | null) {
     isSaved,
     handleEditorChange,
     clearNote,
+    clearDraft,
     flushSave,
     retrySave,
   };

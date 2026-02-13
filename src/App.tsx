@@ -257,6 +257,7 @@ function App() {
     saveError: noteSaveError,
     handleEditorChange,
     clearNote,
+    clearDraft,
     flushSave,
     retrySave,
   } = useNoteEditor(activeNote);
@@ -600,7 +601,7 @@ function App() {
   const notePreviews = useNotePreviews(notes);
 
   // -- Create new note ------------------------------------------------------
-  const createNewNote = useCallback(async (preferredFolderPath?: string) => {
+  const createNewNote = useCallback(async (preferredFolderPath?: string, initialContent = "") => {
     if (appMode !== "notes") setAppMode("notes");
     const treeSnapshot = tree ?? (await api.getTree());
     const initialFolderPath = preferredFolderPath?.trim() || UNSORTED_FOLDER_PATH;
@@ -612,7 +613,7 @@ function App() {
     const fileName = getNextNoteFileName(targetNode.notes.map((n) => n.name));
     const path = `${folderPath}/${fileName}`;
 
-    await api.writeNote(path, "");
+    await api.writeNote(path, initialContent);
     await api.setOrder({
       parent: folderPath,
       folderOrder: targetNode.children.map((c) => c.name),
@@ -626,6 +627,7 @@ function App() {
     setSelectedNotes(new Set([path]));
     setLastSelectedNote(path);
     setActiveNote(path);
+    clearDraft();
 
     requestAnimationFrame(() => {
       const editorElement =
@@ -636,7 +638,15 @@ function App() {
     });
 
     return path;
-  }, [appMode, refreshTree, tree]);
+  }, [appMode, clearDraft, refreshTree, tree]);
+
+  const enterMobileHome = useCallback(() => {
+    setSelectedNotes(new Set());
+    setLastSelectedNote("");
+    setActiveNote(null);
+    clearNote();
+    clearDraft();
+  }, [clearDraft, clearNote]);
 
   // -- App style ------------------------------------------------------------
   const appStyle = useMemo(
@@ -2047,6 +2057,7 @@ function App() {
             activeNoteTitle={activeNoteTitle}
             onSelectNote={selectNoteForMobile}
             onCreateNote={createNewNote}
+            onEnterHome={enterMobileHome}
             onDeleteNote={async (path) => {
               await deleteNotes([path]);
             }}
