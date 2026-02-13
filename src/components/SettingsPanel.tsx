@@ -7,11 +7,7 @@ export type NotesListMode = "separate" | "nested";
 type SettingsSectionId =
   | "general"
   | "appearance"
-  | "editor"
-  | "sync"
-  | "security"
-  | "privacy"
-  | "about";
+  | "sync";
 
 type SettingsSection = {
   id: SettingsSectionId;
@@ -21,12 +17,8 @@ type SettingsSection = {
 
 const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "general", title: "General", description: "Basic app behavior and defaults." },
-  { id: "appearance", title: "Appearance", description: "Typography, spacing, and theme accents." },
-  { id: "editor", title: "Editor", description: "Editing, autosave, and preview behavior." },
+  { id: "appearance", title: "Appearance", description: "Theme and visual style." },
   { id: "sync", title: "Sync", description: "Cloud sync, refresh policy, and conflict rules." },
-  { id: "security", title: "Security", description: "App lock and emergency wipe options (dummy)." },
-  { id: "privacy", title: "Privacy", description: "Data collection and local-only controls." },
-  { id: "about", title: "About", description: "Version, diagnostics, and support links." },
 ];
 
 function SettingsRow({
@@ -64,6 +56,10 @@ function SettingsDetail({
   onGitRemoteUrlChange,
   gitBranch,
   onGitBranchChange,
+  gitUsername,
+  onGitUsernameChange,
+  gitPassword,
+  onGitPasswordChange,
   gitCommitMessage,
   onGitCommitMessageChange,
   gitStatus,
@@ -83,6 +79,10 @@ function SettingsDetail({
   onGitRemoteUrlChange: (value: string) => void;
   gitBranch: string;
   onGitBranchChange: (value: string) => void;
+  gitUsername: string;
+  onGitUsernameChange: (value: string) => void;
+  gitPassword: string;
+  onGitPasswordChange: (value: string) => void;
   gitCommitMessage: string;
   onGitCommitMessageChange: (value: string) => void;
   gitStatus: GitSyncStatus | null;
@@ -97,15 +97,7 @@ function SettingsDetail({
     return (
       <>
         <h2 className="settings-detail-title">General</h2>
-        <p className="settings-detail-text">Default behavior and opening workflow.</p>
-        <label className="settings-control">
-          <span>Start in folder</span>
-          <select defaultValue="last">
-            <option value="last">Last opened</option>
-            <option value="inbox">Inbox</option>
-            <option value="none">No auto-open</option>
-          </select>
-        </label>
+        <p className="settings-detail-text">Default behavior.</p>
         <label className="settings-control">
           <span>Notes list location</span>
           <select
@@ -118,10 +110,6 @@ function SettingsDetail({
             <option value="nested">Inside folders navigation</option>
           </select>
         </label>
-        <label className="settings-control settings-toggle">
-          <input type="checkbox" defaultChecked />
-          <span>Auto-focus first note in selected folder</span>
-        </label>
       </>
     );
   }
@@ -129,7 +117,7 @@ function SettingsDetail({
     return (
       <>
         <h2 className="settings-detail-title">Appearance</h2>
-        <p className="settings-detail-text">Visual style options (dummy).</p>
+        <p className="settings-detail-text">Visual style options.</p>
         <label className="settings-control">
           <span>Theme</span>
           <select
@@ -139,46 +127,6 @@ function SettingsDetail({
             <option value="dark">Dark</option>
             <option value="light">Light</option>
           </select>
-        </label>
-        <label className="settings-control">
-          <span>UI density</span>
-          <select defaultValue="comfortable">
-            <option value="compact">Compact</option>
-            <option value="comfortable">Comfortable</option>
-            <option value="spacious">Spacious</option>
-          </select>
-        </label>
-        <label className="settings-control">
-          <span>Accent intensity</span>
-          <input type="range" min="0" max="100" defaultValue="45" />
-        </label>
-        <label className="settings-control settings-toggle">
-          <input type="checkbox" defaultChecked />
-          <span>Show subtle separators in lists</span>
-        </label>
-      </>
-    );
-  }
-  if (sectionId === "editor") {
-    return (
-      <>
-        <h2 className="settings-detail-title">Editor</h2>
-        <p className="settings-detail-text">Editing and autosave behavior.</p>
-        <label className="settings-control">
-          <span>Autosave interval</span>
-          <select defaultValue="400">
-            <option value="250">250 ms</option>
-            <option value="400">400 ms</option>
-            <option value="1000">1 sec</option>
-          </select>
-        </label>
-        <label className="settings-control settings-toggle">
-          <input type="checkbox" defaultChecked />
-          <span>Strip markdown in list previews</span>
-        </label>
-        <label className="settings-control settings-toggle">
-          <input type="checkbox" />
-          <span>Always open in markdown mode</span>
         </label>
       </>
     );
@@ -215,6 +163,24 @@ function SettingsDetail({
             value={gitCommitMessage}
             onChange={(event) => onGitCommitMessageChange(event.target.value)}
             placeholder="Sync notes"
+          />
+        </label>
+        <label className="settings-control">
+          <span>Git username (optional, for HTTPS auth)</span>
+          <input
+            type="text"
+            value={gitUsername}
+            onChange={(event) => onGitUsernameChange(event.target.value)}
+            placeholder="your-github-username"
+          />
+        </label>
+        <label className="settings-control">
+          <span>Git token/password (optional)</span>
+          <input
+            type="password"
+            value={gitPassword}
+            onChange={(event) => onGitPasswordChange(event.target.value)}
+            placeholder="Personal access token"
           />
         </label>
         <div className="settings-info-grid">
@@ -275,137 +241,7 @@ function SettingsDetail({
       </>
     );
   }
-  if (sectionId === "security") {
-    return (
-      <>
-        <h2 className="settings-detail-title">Security</h2>
-        <p className="settings-detail-text">
-          Sample configuration only. Real lock and wipe logic will be implemented later.
-        </p>
-
-        <div className="settings-subsection">
-          <h3 className="settings-subtitle">App lock</h3>
-          <label className="settings-control settings-toggle">
-            <input type="checkbox" defaultChecked />
-            <span>Enable PIN/password lock</span>
-          </label>
-          <label className="settings-control">
-            <span>Lock method</span>
-            <select defaultValue="pin">
-              <option value="pin">PIN (4-8 digits)</option>
-              <option value="password">Password</option>
-            </select>
-          </label>
-          <label className="settings-control">
-            <span>PIN / password</span>
-            <input type="password" placeholder="Enter value" />
-          </label>
-          <label className="settings-control">
-            <span>Confirm PIN / password</span>
-            <input type="password" placeholder="Repeat value" />
-          </label>
-          <fieldset className="settings-radio-group">
-            <legend>Auto-lock trigger</legend>
-            <label className="settings-radio-row">
-              <input type="radio" name="auto-lock-trigger" defaultChecked />
-              <span>After inactivity interval</span>
-            </label>
-            <label className="settings-radio-row">
-              <input type="radio" name="auto-lock-trigger" />
-              <span>Immediately when app loses focus</span>
-            </label>
-            <label className="settings-radio-row">
-              <input type="radio" name="auto-lock-trigger" />
-              <span>Only when I press Lock now</span>
-            </label>
-          </fieldset>
-          <label className="settings-control">
-            <span>Inactivity interval</span>
-            <select defaultValue="5m">
-              <option value="1m">1 minute</option>
-              <option value="5m">5 minutes</option>
-              <option value="15m">15 minutes</option>
-              <option value="30m">30 minutes</option>
-            </select>
-          </label>
-          <div className="settings-action-row">
-            <Button variant="outline" size="sm" type="button">
-              Lock now
-            </Button>
-          </div>
-        </div>
-
-        <div className="settings-subsection settings-warning-zone">
-          <h3 className="settings-subtitle">Panic wipe code</h3>
-          <p className="settings-warning-text">
-            Entering this code on unlock will erase all local data. This screen is
-            visual-only for now.
-          </p>
-          <label className="settings-control settings-toggle">
-            <input type="checkbox" />
-            <span>Enable panic wipe code</span>
-          </label>
-          <label className="settings-control">
-            <span>Wipe PIN / password</span>
-            <input type="password" placeholder="Enter emergency code" />
-          </label>
-          <label className="settings-control">
-            <span>Confirm wipe PIN / password</span>
-            <input type="password" placeholder="Repeat emergency code" />
-          </label>
-          <div className="settings-action-row">
-            <Button variant="destructive" size="sm" type="button">
-              Test wipe flow (dummy)
-            </Button>
-          </div>
-        </div>
-      </>
-    );
-  }
-  if (sectionId === "privacy") {
-    return (
-      <>
-        <h2 className="settings-detail-title">Privacy</h2>
-        <p className="settings-detail-text">Telemetry and local diagnostics.</p>
-        <label className="settings-control settings-toggle">
-          <input type="checkbox" />
-          <span>Send anonymous crash reports</span>
-        </label>
-        <label className="settings-control settings-toggle">
-          <input type="checkbox" defaultChecked />
-          <span>Keep all metadata local-only</span>
-        </label>
-      </>
-    );
-  }
-  return (
-    <>
-      <h2 className="settings-detail-title">About</h2>
-      <p className="settings-detail-text">Dummy system info for layout preview.</p>
-      <div className="settings-info-grid">
-        <div className="settings-info-row">
-          <span>Version</span>
-          <code>0.1.0-design</code>
-        </div>
-        <div className="settings-info-row">
-          <span>Storage root</span>
-          <code>~/notes</code>
-        </div>
-        <div className="settings-info-row">
-          <span>Renderer</span>
-          <code>Tauri + React</code>
-        </div>
-      </div>
-      <div className="settings-action-row">
-        <Button variant="outline" size="sm" type="button">
-          Check updates
-        </Button>
-        <Button variant="secondary" size="sm" type="button">
-          Reset demo values
-        </Button>
-      </div>
-    </>
-  );
+  return null;
 }
 
 export function SettingsMiddlePane({
@@ -451,6 +287,10 @@ export function SettingsDetailPane({
   onGitRemoteUrlChange,
   gitBranch,
   onGitBranchChange,
+  gitUsername,
+  onGitUsernameChange,
+  gitPassword,
+  onGitPasswordChange,
   gitCommitMessage,
   onGitCommitMessageChange,
   gitStatus,
@@ -472,6 +312,10 @@ export function SettingsDetailPane({
   onGitRemoteUrlChange: (value: string) => void;
   gitBranch: string;
   onGitBranchChange: (value: string) => void;
+  gitUsername: string;
+  onGitUsernameChange: (value: string) => void;
+  gitPassword: string;
+  onGitPasswordChange: (value: string) => void;
   gitCommitMessage: string;
   onGitCommitMessageChange: (value: string) => void;
   gitStatus: GitSyncStatus | null;
@@ -502,6 +346,10 @@ export function SettingsDetailPane({
           onGitRemoteUrlChange={onGitRemoteUrlChange}
           gitBranch={gitBranch}
           onGitBranchChange={onGitBranchChange}
+          gitUsername={gitUsername}
+          onGitUsernameChange={onGitUsernameChange}
+          gitPassword={gitPassword}
+          onGitPasswordChange={onGitPasswordChange}
           gitCommitMessage={gitCommitMessage}
           onGitCommitMessageChange={onGitCommitMessageChange}
           gitStatus={gitStatus}

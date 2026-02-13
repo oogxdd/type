@@ -66,25 +66,43 @@ export const getGitStatus = (): Promise<GitSyncStatus> =>
 
 export const connectGitRepo = (
   remoteUrl: string,
-  branch?: string
+  branch?: string,
+  username?: string,
+  password?: string
 ): Promise<GitSyncStatus> =>
   invokeLogged<GitSyncStatus>("connect_git_repo", {
     args: {
       remote_url: remoteUrl,
       branch,
+      username,
+      password,
     },
   });
 
-export const gitPull = (branch?: string): Promise<GitSyncStatus> =>
-  invokeLogged<GitSyncStatus>("git_pull", { branch });
+export const gitPull = (
+  branch?: string,
+  username?: string,
+  password?: string
+): Promise<GitSyncStatus> =>
+  invokeLogged<GitSyncStatus>("git_pull", {
+    args: {
+      branch,
+      username,
+      password,
+    },
+  });
 
 export const gitPush = (
   message?: string,
-  branch?: string
+  branch?: string,
+  username?: string,
+  password?: string
 ): Promise<GitSyncStatus> =>
   invokeLogged<GitSyncStatus>("git_push", {
     args: {
       message,
       branch,
+      username,
+      password,
     },
   });

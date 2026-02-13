@@ -156,6 +156,12 @@ function App() {
   const [gitBranch, setGitBranch] = useState(() =>
     getStoredSyncValue("notes-viewer-git-branch", "main")
   );
+  const [gitUsername, setGitUsername] = useState(() =>
+    getStoredSyncValue("notes-viewer-git-username", "")
+  );
+  const [gitPassword, setGitPassword] = useState(() =>
+    getStoredSyncValue("notes-viewer-git-password", "")
+  );
   const [gitCommitMessage, setGitCommitMessage] = useState(() =>
     getStoredSyncValue("notes-viewer-git-commit-message", "Sync notes")
   );
@@ -240,6 +246,14 @@ function App() {
   }, [gitBranch]);
 
   useEffect(() => {
+    window.localStorage.setItem("notes-viewer-git-username", gitUsername);
+  }, [gitUsername]);
+
+  useEffect(() => {
+    window.localStorage.setItem("notes-viewer-git-password", gitPassword);
+  }, [gitPassword]);
+
+  useEffect(() => {
     window.localStorage.setItem("notes-viewer-git-commit-message", gitCommitMessage);
   }, [gitCommitMessage]);
 
@@ -280,40 +294,13 @@ function App() {
       setGitSyncError("Remote repository URL is required.");
       return;
     }
-    setGitSyncBusy(true);
-    try {
-      const status = await api.connectGitRepo(remoteUrl, branch || undefined);
-      setGitStatus(status);
-      setGitSyncError(null);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setGitSyncError(message);
-    } finally {
-      setGitSyncBusy(false);
-    }
-  }, [gitBranch, gitRemoteUrl]);
-
-  const handleGitPull = useCallback(async () => {
-    setGitSyncBusy(true);
-    try {
-      const status = await api.gitPull(gitBranch.trim() || undefined);
-      setGitStatus(status);
-      setGitSyncError(null);
-      await refreshTree();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setGitSyncError(message);
-    } finally {
-      setGitSyncBusy(false);
-    }
-  }, [gitBranch, refreshTree]);
-
-  const handleGitPush = useCallback(async () => {
-    setGitSyncBusy(true);
-    try {
-      const status = await api.gitPush(
-        gitCommitMessage.trim() || undefined,
-        gitBranch.trim() || undefined
+      setGitSyncBusy(true);
+      try {
+      const status = await api.connectGitRepo(
+        remoteUrl,
+        branch || undefined,
+        gitUsername.trim() || undefined,
+        gitPassword || undefined
       );
       setGitStatus(status);
       setGitSyncError(null);
@@ -323,7 +310,45 @@ function App() {
     } finally {
       setGitSyncBusy(false);
     }
-  }, [gitBranch, gitCommitMessage]);
+  }, [gitBranch, gitPassword, gitRemoteUrl, gitUsername]);
+
+  const handleGitPull = useCallback(async () => {
+    setGitSyncBusy(true);
+    try {
+      const status = await api.gitPull(
+        gitBranch.trim() || undefined,
+        gitUsername.trim() || undefined,
+        gitPassword || undefined
+      );
+      setGitStatus(status);
+      setGitSyncError(null);
+      await refreshTree();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setGitSyncError(message);
+    } finally {
+      setGitSyncBusy(false);
+    }
+  }, [gitBranch, gitPassword, gitUsername, refreshTree]);
+
+  const handleGitPush = useCallback(async () => {
+    setGitSyncBusy(true);
+    try {
+      const status = await api.gitPush(
+        gitCommitMessage.trim() || undefined,
+        gitBranch.trim() || undefined,
+        gitUsername.trim() || undefined,
+        gitPassword || undefined
+      );
+      setGitStatus(status);
+      setGitSyncError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setGitSyncError(message);
+    } finally {
+      setGitSyncBusy(false);
+    }
+  }, [gitBranch, gitCommitMessage, gitPassword, gitUsername]);
 
   const shouldNestNotesInNavigation =
     appMode === "notes" && notesListMode === "nested";
@@ -1584,6 +1609,10 @@ function App() {
         onGitRemoteUrlChange={setGitRemoteUrl}
         gitBranch={gitBranch}
         onGitBranchChange={setGitBranch}
+        gitUsername={gitUsername}
+        onGitUsernameChange={setGitUsername}
+        gitPassword={gitPassword}
+        onGitPasswordChange={setGitPassword}
         gitCommitMessage={gitCommitMessage}
         onGitCommitMessageChange={setGitCommitMessage}
         gitStatus={gitStatus}

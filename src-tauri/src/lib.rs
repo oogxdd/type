@@ -1,9 +1,12 @@
+use git2::{
+    build::CheckoutBuilder, AnnotatedCommit, Cred, CredentialType, Direction, FetchOptions,
+    IndexAddOption, Oid, PushOptions, RemoteCallbacks, Repository, Signature, StatusOptions,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fs,
     path::{Component, Path, PathBuf},
-    process::Command,
 };
 use tauri::Manager;
 
@@ -54,12 +57,23 @@ struct SetOrderArgs {
 struct ConnectGitArgs {
     remote_url: String,
     branch: Option<String>,
+    username: Option<String>,
+    password: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct GitSyncArgs {
+    branch: Option<String>,
+    username: Option<String>,
+    password: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct GitPushArgs {
     message: Option<String>,
     branch: Option<String>,
+    username: Option<String>,
+    password: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -157,104 +171,78 @@ fn write_order_file(dir: &Path, order: &OrderFile) -> Result<(), String> {
     fs::write(file_path, contents).map_err(|err| err.to_string())
 }
 
-fn run_git_output(root: &Path, args: &[&str]) -> Result<std::process::Output, String> {
-    Command::new("git")
-        .args(args)
-        .current_dir(root)
-        .output()
-        .map_err(|err| {
-            if err.kind() == std::io::ErrorKind::NotFound {
-                "Git executable not found. Install Git or use a device with Git support.".to_string()
-            } else {
-                format!("Failed to run git {}: {}", args.join(" "), err)
-            }
-        })
+fn map_git_error(error: git2::Error) -> String {
+    error.message().to_string()
 }
 
-fn run_git(root: &Path, args: &[&str]) -> Result<String, String> {
-    let output = run_git_output(root, args)?;
-    if output.status.success() {
-        return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
-    }
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let detail = if !stderr.is_empty() { stderr } else { stdout };
-    Err(format!("git {} failed: {}", args.join(" "), detail))
-}
-
-fn git_available(root: &Path) -> bool {
-    match run_git_output(root, &["--version"]) {
-        Ok(output) => output.status.success(),
-        Err(_) => false,
-    }
+fn open_repo(root: &Path) -> Result<Repository, String> {
+    Repository::open(root).map_err(map_git_error)
 }
 
 fn git_repo_initialized(root: &Path) -> bool {
-    root.join(".git").exists()
+    Repository::open(root).is_ok()
 }
 
-fn git_current_branch(root: &Path) -> Option<String> {
-    run_git(root, &["rev-parse", "--abbrev-ref", "HEAD"]).ok()
-}
-
-fn git_remote_url(root: &Path) -> Option<String> {
-    run_git(root, &["config", "--get", "remote.origin.url"]).ok()
-}
-
-fn git_has_changes(root: &Path) -> bool {
-    match run_git(root, &["status", "--porcelain"]) {
-        Ok(lines) => !lines.trim().is_empty(),
-        Err(_) => false,
+fn git_current_branch(repo: &Repository) -> Option<String> {
+    let head = repo.head().ok()?;
+    if !head.is_branch() {
+        return None;
     }
+    head.shorthand().map(|value| value.to_string())
 }
 
-fn git_ahead_behind(root: &Path) -> (usize, usize) {
-    match run_git(root, &["rev-list", "--left-right", "--count", "@{upstream}...HEAD"]) {
-        Ok(value) => {
-            let mut parts = value.split_whitespace();
-            let behind = parts
-                .next()
-                .and_then(|v| v.parse::<usize>().ok())
-                .unwrap_or(0);
-            let ahead = parts
-                .next()
-                .and_then(|v| v.parse::<usize>().ok())
-                .unwrap_or(0);
-            (ahead, behind)
-        }
-        Err(_) => (0, 0),
-    }
+fn git_remote_url(repo: &Repository) -> Option<String> {
+    let remote = repo.find_remote("origin").ok()?;
+    remote.url().map(|value| value.to_string())
+}
+
+fn git_has_changes(repo: &Repository) -> bool {
+    let mut status_opts = StatusOptions::new();
+    status_opts
+        .include_untracked(true)
+        .recurse_untracked_dirs(true)
+        .renames_head_to_index(true);
+    repo.statuses(Some(&mut status_opts))
+        .map(|statuses| !statuses.is_empty())
+        .unwrap_or(false)
+}
+
+fn git_ahead_behind(repo: &Repository, branch: Option<&str>) -> (usize, usize) {
+    let branch_name = match branch {
+        Some(value) => value,
+        None => return (0, 0),
+    };
+    let local = match repo.find_branch(branch_name, git2::BranchType::Local) {
+        Ok(branch) => branch,
+        Err(_) => return (0, 0),
+    };
+    let upstream = match local.upstream() {
+        Ok(branch) => branch,
+        Err(_) => return (0, 0),
+    };
+    let local_oid = match local.get().target() {
+        Some(value) => value,
+        None => return (0, 0),
+    };
+    let upstream_oid = match upstream.get().target() {
+        Some(value) => value,
+        None => return (0, 0),
+    };
+    repo.graph_ahead_behind(local_oid, upstream_oid).unwrap_or((0, 0))
 }
 
 fn build_git_status(root: &Path) -> GitSyncStatus {
-    let available = git_available(root);
-    let repo_initialized = if available {
-        git_repo_initialized(root)
-    } else {
-        false
-    };
-    let current_branch = if repo_initialized {
-        git_current_branch(root)
-    } else {
-        None
-    };
-    let remote_url = if repo_initialized {
-        git_remote_url(root)
-    } else {
-        None
-    };
-    let has_uncommitted_changes = if repo_initialized {
-        git_has_changes(root)
-    } else {
-        false
-    };
-    let (ahead, behind) = if repo_initialized {
-        git_ahead_behind(root)
-    } else {
-        (0, 0)
-    };
+    let repo = Repository::open(root).ok();
+    let repo_initialized = repo.is_some();
+    let current_branch = repo.as_ref().and_then(git_current_branch);
+    let remote_url = repo.as_ref().and_then(git_remote_url);
+    let has_uncommitted_changes = repo.as_ref().is_some_and(git_has_changes);
+    let (ahead, behind) = repo
+        .as_ref()
+        .map(|repository| git_ahead_behind(repository, current_branch.as_deref()))
+        .unwrap_or((0, 0));
     GitSyncStatus {
-        git_available: available,
+        git_available: true,
         repo_initialized,
         current_branch,
         remote_url,
@@ -265,50 +253,14 @@ fn build_git_status(root: &Path) -> GitSyncStatus {
     }
 }
 
-fn ensure_git_repo(root: &Path) -> Result<(), String> {
-    if git_repo_initialized(root) {
-        return Ok(());
+fn ensure_git_repo(root: &Path) -> Result<Repository, String> {
+    if let Ok(repo) = Repository::open(root) {
+        return Ok(repo);
     }
-    run_git(root, &["init"])?;
-    Ok(())
+    Repository::init(root).map_err(map_git_error)
 }
 
-fn checkout_or_create_branch(root: &Path, branch: &str) -> Result<(), String> {
-    let name = branch.trim();
-    if name.is_empty() {
-        return Ok(());
-    }
-    let branch_exists = run_git_output(root, &["rev-parse", "--verify", name])
-        .map(|output| output.status.success())
-        .unwrap_or(false);
-    if branch_exists {
-        run_git(root, &["checkout", name])?;
-    } else {
-        run_git(root, &["checkout", "-b", name])?;
-    }
-    Ok(())
-}
-
-fn set_origin_remote(root: &Path, remote_url: &str) -> Result<(), String> {
-    let url = remote_url.trim();
-    if url.is_empty() {
-        return Err("Remote repository URL is required.".to_string());
-    }
-    let existing = git_remote_url(root);
-    match existing {
-        Some(current) => {
-            if current != url {
-                run_git(root, &["remote", "set-url", "origin", url])?;
-            }
-        }
-        None => {
-            run_git(root, &["remote", "add", "origin", url])?;
-        }
-    }
-    Ok(())
-}
-
-fn resolve_target_branch(root: &Path, branch: Option<String>) -> String {
+fn resolve_target_branch(repo: &Repository, branch: Option<String>) -> String {
     let requested = branch
         .as_ref()
         .map(|value| value.trim())
@@ -317,7 +269,164 @@ fn resolve_target_branch(root: &Path, branch: Option<String>) -> String {
     if let Some(value) = requested {
         return value;
     }
-    git_current_branch(root).unwrap_or_else(|| "main".to_string())
+    git_current_branch(repo).unwrap_or_else(|| "main".to_string())
+}
+
+fn build_callbacks(username: Option<&str>, password: Option<&str>) -> RemoteCallbacks<'static> {
+    let user = username.map(str::to_string);
+    let pass = password.map(str::to_string);
+    let mut callbacks = RemoteCallbacks::new();
+    callbacks.credentials(move |_url, username_from_url, allowed| {
+        if allowed.contains(CredentialType::USER_PASS_PLAINTEXT) {
+            if let (Some(user), Some(pass)) = (user.as_deref(), pass.as_deref()) {
+                return Cred::userpass_plaintext(user, pass);
+            }
+        }
+        if allowed.contains(CredentialType::SSH_KEY) {
+            if let Some(name) = username_from_url {
+                if let Ok(cred) = Cred::ssh_key_from_agent(name) {
+                    return Ok(cred);
+                }
+            }
+            if let Some(user) = user.as_deref() {
+                if let Ok(cred) = Cred::ssh_key_from_agent(user) {
+                    return Ok(cred);
+                }
+            }
+        }
+        if allowed.contains(CredentialType::DEFAULT) {
+            return Cred::default();
+        }
+        Err(git2::Error::from_str(
+            "No matching Git credentials available for this remote.",
+        ))
+    });
+    callbacks
+}
+
+fn ensure_origin_remote(repo: &Repository, remote_url: &str) -> Result<(), String> {
+    let url = remote_url.trim();
+    if url.is_empty() {
+        return Err("Remote repository URL is required.".to_string());
+    }
+    match repo.find_remote("origin") {
+        Ok(_) => repo
+            .remote_set_url("origin", url)
+            .map_err(map_git_error)?,
+        Err(_) => {
+            repo.remote("origin", url).map_err(map_git_error)?;
+        }
+    }
+    Ok(())
+}
+
+fn switch_or_prepare_branch(repo: &Repository, branch: &str) -> Result<(), String> {
+    let name = branch.trim();
+    if name.is_empty() {
+        return Ok(());
+    }
+    let local_ref = format!("refs/heads/{}", name);
+    if repo.find_reference(&local_ref).is_ok() {
+        repo.set_head(&local_ref).map_err(map_git_error)?;
+        repo.checkout_head(Some(CheckoutBuilder::new().safe()))
+            .map_err(map_git_error)?;
+        return Ok(());
+    }
+    if let Ok(head) = repo.head() {
+        if let Some(head_oid) = head.target() {
+            let commit = repo.find_commit(head_oid).map_err(map_git_error)?;
+            repo.branch(name, &commit, false).map_err(map_git_error)?;
+            repo.set_head(&local_ref).map_err(map_git_error)?;
+            repo.checkout_head(Some(CheckoutBuilder::new().safe()))
+                .map_err(map_git_error)?;
+            return Ok(());
+        }
+    }
+    repo.set_head(&local_ref).map_err(map_git_error)
+}
+
+fn default_signature(repo: &Repository) -> Result<Signature<'_>, String> {
+    if let Ok(sig) = repo.signature() {
+        return Ok(sig);
+    }
+    Signature::now("Type Notes Sync", "sync@local").map_err(map_git_error)
+}
+
+fn commit_all_changes(repo: &Repository, message: &str, branch: &str) -> Result<Option<Oid>, String> {
+    let mut index = repo.index().map_err(map_git_error)?;
+    index
+        .add_all(["*"].iter(), IndexAddOption::DEFAULT, None)
+        .map_err(map_git_error)?;
+    index.write().map_err(map_git_error)?;
+    if index.is_empty() && !git_has_changes(repo) {
+        return Ok(None);
+    }
+    let tree_id = index.write_tree().map_err(map_git_error)?;
+    let tree = repo.find_tree(tree_id).map_err(map_git_error)?;
+    let sig = default_signature(repo)?;
+    let update_ref = format!("refs/heads/{}", branch);
+    let oid = match repo.head() {
+        Ok(head) => {
+            if let Some(head_oid) = head.target() {
+                let parent = repo.find_commit(head_oid).map_err(map_git_error)?;
+                repo.commit(Some(&update_ref), &sig, &sig, message, &tree, &[&parent])
+                    .map_err(map_git_error)?
+            } else {
+                repo.commit(Some(&update_ref), &sig, &sig, message, &tree, &[])
+                    .map_err(map_git_error)?
+            }
+        }
+        Err(_) => repo
+            .commit(Some(&update_ref), &sig, &sig, message, &tree, &[])
+            .map_err(map_git_error)?,
+    };
+    repo.set_head(&update_ref).map_err(map_git_error)?;
+    Ok(Some(oid))
+}
+
+fn perform_fetch<'a>(
+    repo: &'a Repository,
+    branch: &str,
+    username: Option<&str>,
+    password: Option<&str>,
+) -> Result<AnnotatedCommit<'a>, String> {
+    let mut remote = repo.find_remote("origin").map_err(map_git_error)?;
+    let callbacks = build_callbacks(username, password);
+    let mut fetch_options = FetchOptions::new();
+    fetch_options.remote_callbacks(callbacks);
+    remote
+        .fetch(&[branch], Some(&mut fetch_options), None)
+        .map_err(map_git_error)?;
+    let fetch_head = repo.find_reference("FETCH_HEAD").map_err(map_git_error)?;
+    repo.reference_to_annotated_commit(&fetch_head)
+        .map_err(map_git_error)
+}
+
+fn fast_forward_to(
+    repo: &Repository,
+    branch: &str,
+    fetch_commit: &AnnotatedCommit<'_>,
+) -> Result<(), String> {
+    let target_oid = fetch_commit.id();
+    let local_ref_name = format!("refs/heads/{}", branch);
+    match repo.find_reference(&local_ref_name) {
+        Ok(mut local_ref) => {
+            local_ref
+                .set_target(target_oid, "Fast-forward")
+                .map_err(map_git_error)?;
+            repo.set_head(&local_ref_name).map_err(map_git_error)?;
+            repo.checkout_head(Some(CheckoutBuilder::new().safe()))
+                .map_err(map_git_error)?;
+        }
+        Err(_) => {
+            let commit = repo.find_commit(target_oid).map_err(map_git_error)?;
+            repo.branch(branch, &commit, false).map_err(map_git_error)?;
+            repo.set_head(&local_ref_name).map_err(map_git_error)?;
+            repo.checkout_head(Some(CheckoutBuilder::new().safe()))
+                .map_err(map_git_error)?;
+        }
+    }
+    Ok(())
 }
 
 fn sort_by_order(mut names: Vec<String>, order: &[String]) -> Vec<String> {
@@ -504,56 +613,112 @@ fn get_git_status(app: tauri::AppHandle) -> Result<GitSyncStatus, String> {
 fn connect_git_repo(app: tauri::AppHandle, args: ConnectGitArgs) -> Result<GitSyncStatus, String> {
     let root = notes_root(&app)?;
     ensure_system_folders(&root)?;
-    if !git_available(&root) {
-        return Err("Git is not available on this device. Install Git to enable sync.".to_string());
-    }
-    ensure_git_repo(&root)?;
-    set_origin_remote(&root, &args.remote_url)?;
-    if let Some(branch) = args.branch.as_ref() {
-        checkout_or_create_branch(&root, branch)?;
+    let repo = ensure_git_repo(&root)?;
+    ensure_origin_remote(&repo, &args.remote_url)?;
+    let target_branch = resolve_target_branch(&repo, args.branch.clone());
+    switch_or_prepare_branch(&repo, &target_branch)?;
+    let has_remote_ref = repo
+        .find_reference(&format!("refs/remotes/origin/{}", target_branch))
+        .is_ok();
+    if has_remote_ref {
+        let fetched = perform_fetch(
+            &repo,
+            &target_branch,
+            args.username.as_deref(),
+            args.password.as_deref(),
+        )?;
+        let analysis = repo
+            .merge_analysis(&[&fetched])
+            .map_err(map_git_error)?
+            .0;
+        if analysis.is_fast_forward() || analysis.is_up_to_date() {
+            fast_forward_to(&repo, &target_branch, &fetched)?;
+        }
     }
     Ok(build_git_status(&root))
 }
 
 #[tauri::command]
-fn git_pull(app: tauri::AppHandle, branch: Option<String>) -> Result<GitSyncStatus, String> {
+fn git_pull(app: tauri::AppHandle, args: GitSyncArgs) -> Result<GitSyncStatus, String> {
     let root = notes_root(&app)?;
     ensure_system_folders(&root)?;
-    if !git_available(&root) {
-        return Err("Git is not available on this device. Install Git to enable sync.".to_string());
-    }
     if !git_repo_initialized(&root) {
         return Err("Repository is not initialized. Connect a remote first.".to_string());
     }
-    let target_branch = resolve_target_branch(&root, branch);
-    checkout_or_create_branch(&root, &target_branch)?;
-    run_git(&root, &["pull", "--rebase", "origin", &target_branch])?;
-    Ok(build_git_status(&root))
+    let repo = open_repo(&root)?;
+    if git_has_changes(&repo) {
+        return Err("Local changes detected. Push or commit before pulling.".to_string());
+    }
+    let target_branch = resolve_target_branch(&repo, args.branch.clone());
+    switch_or_prepare_branch(&repo, &target_branch)?;
+    let fetched = perform_fetch(
+        &repo,
+        &target_branch,
+        args.username.as_deref(),
+        args.password.as_deref(),
+    )?;
+    let (analysis, _) = repo.merge_analysis(&[&fetched]).map_err(map_git_error)?;
+    if analysis.is_up_to_date() {
+        return Ok(build_git_status(&root));
+    }
+    if analysis.is_fast_forward() {
+        fast_forward_to(&repo, &target_branch, &fetched)?;
+        return Ok(build_git_status(&root));
+    }
+    Err("Pull requires a merge commit. Resolve it on desktop, then pull again on mobile.".to_string())
+}
+
+fn remote_push(
+    repo: &Repository,
+    branch: &str,
+    username: Option<&str>,
+    password: Option<&str>,
+) -> Result<(), String> {
+    let callbacks = build_callbacks(username, password);
+    let mut push_options = PushOptions::new();
+    push_options.remote_callbacks(callbacks);
+    let mut remote = repo.find_remote("origin").map_err(map_git_error)?;
+    remote
+        .connect_auth(Direction::Push, Some(build_callbacks(username, password)), None)
+        .map_err(map_git_error)?;
+    remote
+        .push(
+            &[&format!("refs/heads/{0}:refs/heads/{0}", branch)],
+            Some(&mut push_options),
+        )
+        .map_err(map_git_error)?;
+    let mut local = repo
+        .find_branch(branch, git2::BranchType::Local)
+        .map_err(map_git_error)?;
+    local
+        .set_upstream(Some(&format!("origin/{}", branch)))
+        .map_err(map_git_error)?;
+    Ok(())
 }
 
 #[tauri::command]
 fn git_push(app: tauri::AppHandle, args: GitPushArgs) -> Result<GitSyncStatus, String> {
     let root = notes_root(&app)?;
     ensure_system_folders(&root)?;
-    if !git_available(&root) {
-        return Err("Git is not available on this device. Install Git to enable sync.".to_string());
-    }
     if !git_repo_initialized(&root) {
         return Err("Repository is not initialized. Connect a remote first.".to_string());
     }
-    let target_branch = resolve_target_branch(&root, args.branch.clone());
-    checkout_or_create_branch(&root, &target_branch)?;
-    run_git(&root, &["add", "-A"])?;
-    if git_has_changes(&root) {
-        let message = args
-            .message
-            .as_ref()
-            .map(|value| value.trim())
-            .filter(|value| !value.is_empty())
-            .unwrap_or("Sync notes");
-        run_git(&root, &["commit", "-m", message])?;
-    }
-    run_git(&root, &["push", "-u", "origin", &target_branch])?;
+    let repo = open_repo(&root)?;
+    let target_branch = resolve_target_branch(&repo, args.branch.clone());
+    switch_or_prepare_branch(&repo, &target_branch)?;
+    let message = args
+        .message
+        .as_ref()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("Sync notes");
+    let _ = commit_all_changes(&repo, message, &target_branch)?;
+    remote_push(
+        &repo,
+        &target_branch,
+        args.username.as_deref(),
+        args.password.as_deref(),
+    )?;
     Ok(build_git_status(&root))
 }
 

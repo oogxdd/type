@@ -19,8 +19,8 @@ Actions:
 Notes:
 
 - Sync runs against the app's notes root directory.
-- Desktop requires Git to be installed and available in `PATH`.
-- Authentication relies on your configured Git credentials (credential helper, SSH, PAT, etc.).
+- On desktop, sync no longer depends on shelling out to `git`; it uses embedded Git bindings.
+- For iOS/Android (and any environment without credential helpers), set `Git username` + `Git token/password` in Settings -> Sync.
 
 ## iOS Support (Tauri v2)
 
