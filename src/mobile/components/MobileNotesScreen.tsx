@@ -12,7 +12,7 @@ type MobileNotesScreenProps = {
   onDelete: (notePath: string) => void;
   onArchive: (notePath: string) => void;
   onLongPress: (notePath: string) => void;
-  onRefresh: () => Promise<void>;
+  onPullCreate: () => Promise<void>;
 };
 
 export function MobileNotesScreen({
@@ -25,16 +25,16 @@ export function MobileNotesScreen({
   onDelete,
   onArchive,
   onLongPress,
-  onRefresh,
+  onPullCreate,
 }: MobileNotesScreenProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const touchStartYRef = useRef<number | null>(null);
   const [pullDistance, setPullDistance] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const startPull = (clientY: number) => {
     const scrollTop = scrollRef.current?.scrollTop ?? 0;
-    if (scrollTop > 0 || refreshing) {
+    if (scrollTop > 0 || creating) {
       touchStartYRef.current = null;
       return;
     }
@@ -58,16 +58,16 @@ export function MobileNotesScreen({
       return;
     }
     touchStartYRef.current = null;
-    const shouldRefresh = pullDistance >= 64;
+    const shouldCreate = pullDistance >= 74;
     setPullDistance(0);
-    if (!shouldRefresh) {
+    if (!shouldCreate) {
       return;
     }
-    setRefreshing(true);
+    setCreating(true);
     try {
-      await onRefresh();
+      await onPullCreate();
     } finally {
-      setRefreshing(false);
+      setCreating(false);
     }
   };
 
@@ -98,7 +98,11 @@ export function MobileNotesScreen({
       aria-label="Notes list"
     >
       <div className="mobile-pull-indicator" style={{ height: pullDistance }}>
-        {refreshing ? "Refreshing..." : pullDistance >= 64 ? "Release to refresh" : "Pull to refresh"}
+        {creating
+          ? "Creating note..."
+          : pullDistance >= 74
+            ? "Release to create note"
+            : "Pull down to create note"}
       </div>
       {notes.map((note) => (
         <SwipeableNoteRow

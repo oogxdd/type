@@ -20,7 +20,14 @@ export function MobileEditorScreen({
   onRetrySave,
 }: MobileEditorScreenProps) {
   if (!hasActiveNote) {
-    return <div className="mobile-screen-empty">Select a note to start editing.</div>;
+    return (
+      <div className="mobile-editor-screen mobile-editor-screen-empty">
+        <div className="mobile-empty-note">
+          <h2>Empty note</h2>
+          <p>Open folders from the menu, then choose a note or pull down in a folder to create one.</p>
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -120,8 +120,6 @@ yarn tauri:ios:dev
 yarn tauri:ios:build
 ```
 
-## Mobile UX Behavior
-
 ## Audio Recording + Transcription
 
 - Recordings are saved in `Recordings/recording-<timestamp>/`.
@@ -132,6 +130,8 @@ yarn tauri:ios:build
 - Start/stop recording from `Settings -> Recordings` (desktop + mobile).
 - Add your AssemblyAI key in `Settings -> Recordings`.
 - Desktop auto-scans and queues pending recordings for transcription when a key is present.
+
+## Mobile UX Behavior
 
 ### Phone mode
 

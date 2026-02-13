@@ -917,13 +917,6 @@ function App() {
     [activeFolder, refreshTree, selectedFolders]
   );
 
-  const refreshAll = useCallback(async () => {
-    await Promise.all([refreshTree(), refreshGitStatus()]);
-    if (layoutMode === "desktop") {
-      await queueRecordingTranscriptions("auto");
-    }
-  }, [layoutMode, queueRecordingTranscriptions, refreshGitStatus, refreshTree]);
-
   // -- Note context menu ----------------------------------------------------
   const getNoteNativeMenu = () => {
     if (!noteMenuPromiseRef.current) {
@@ -2061,7 +2054,6 @@ function App() {
               await moveNotesToArchieve([path]);
             }}
             onShowNoteInfo={showNoteInfo}
-            onRefreshAll={refreshAll}
             editorMarkdown={activeNote ? noteContent : draftNoteContent}
             onEditorChange={handleEditorChange}
             hasActiveNote={Boolean(activeNote)}

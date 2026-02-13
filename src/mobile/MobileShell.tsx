@@ -1,9 +1,10 @@
 import {
   ChevronLeft,
   Folder,
+  Menu,
   Plus,
-  RefreshCw,
   Settings,
+  X,
 } from "lucide-react";
 import {
   useCallback,
@@ -57,7 +58,6 @@ type MobileShellProps = {
   onDeleteNote: (notePath: string) => Promise<void>;
   onArchiveNote: (notePath: string) => Promise<void>;
   onShowNoteInfo: (notePath: string) => Promise<void>;
-  onRefreshAll: () => Promise<void>;
   editorMarkdown: string;
   onEditorChange: (markdown: string) => void;
   hasActiveNote: boolean;
@@ -138,7 +138,6 @@ export function MobileShell({
   onDeleteNote,
   onArchiveNote,
   onShowNoteInfo,
-  onRefreshAll,
   editorMarkdown,
   onEditorChange,
   hasActiveNote,
@@ -190,6 +189,7 @@ export function MobileShell({
   const [sheetState, setSheetState] = useState<MobileActionSheetState | null>(null);
   const [sheetContext, setSheetContext] = useState<SheetContext | null>(null);
   const [toast, setToast] = useState<MobileToastState | null>(null);
+  const [foldersDrawerOpen, setFoldersDrawerOpen] = useState(false);
   const [renamePrompt, setRenamePrompt] = useState<{ path: string; currentName: string } | null>(
     null
   );
@@ -234,8 +234,27 @@ export function MobileShell({
   useEffect(() => {
     if (layoutMode === "tablet") {
       dispatch({ type: "reset", route: { kind: "folders" } });
+      setFoldersDrawerOpen(false);
+      return;
+    }
+    if (layoutMode === "phone") {
+      dispatch({ type: "reset", route: { kind: "home" } });
+      setFoldersDrawerOpen(false);
     }
   }, [layoutMode]);
+
+  useEffect(() => {
+    if (!foldersDrawerOpen) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setFoldersDrawerOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [foldersDrawerOpen]);
 
   const showToast = useCallback((message: string, tone: MobileToastState["tone"] = "info") => {
     setToast({ id: Date.now(), message, tone });
@@ -256,9 +275,18 @@ export function MobileShell({
     dispatch({ type: "pop" });
   }, [currentRoute.kind, flushSave, layoutMode]);
 
+  const openNotesRoute = useCallback(
+    (folderPath: string) => {
+      onSelectFolder(folderPath);
+      dispatch({ type: "push", route: { kind: "notes", folderPath } });
+      setFoldersDrawerOpen(false);
+    },
+    [onSelectFolder]
+  );
+
   const handleEdgeSwipeStart = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (layoutMode !== "phone") {
+      if (layoutMode !== "phone" || foldersDrawerOpen) {
         return;
       }
       if (event.clientX > 24) {
@@ -268,12 +296,12 @@ export function MobileShell({
       edgeSwipeTriggered.current = false;
       edgeSwipeStart.current = { x: event.clientX, y: event.clientY };
     },
-    [layoutMode]
+    [foldersDrawerOpen, layoutMode]
   );
 
   const handleEdgeSwipeMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (layoutMode !== "phone") {
+      if (layoutMode !== "phone" || foldersDrawerOpen) {
         return;
       }
       const start = edgeSwipeStart.current;
@@ -287,7 +315,7 @@ export function MobileShell({
         void popRoute();
       }
     },
-    [layoutMode, popRoute]
+    [foldersDrawerOpen, layoutMode, popRoute]
   );
 
   const handleEdgeSwipeEnd = useCallback(() => {
@@ -433,6 +461,20 @@ export function MobileShell({
   );
 
   const phoneContent = useMemo(() => {
+    if (currentRoute.kind === "home") {
+      return (
+        <MobileEditorScreen
+          markdown=""
+          onChange={onEditorChange}
+          hasActiveNote={false}
+          isSaving={false}
+          saveError={null}
+          keyboardInset={keyboardInset}
+          onRetrySave={() => Promise.resolve()}
+        />
+      );
+    }
+
     if (currentRoute.kind === "folders") {
       return (
         <MobileFoldersScreen
@@ -440,10 +482,7 @@ export function MobileShell({
           activeFolder={activeFolder}
           expanded={expanded}
           onToggle={onToggleFolder}
-          onSelect={(path) => {
-            onSelectFolder(path);
-            dispatch({ type: "push", route: { kind: "notes", folderPath: path } });
-          }}
+          onSelect={openNotesRoute}
           onLongPress={openFolderActionSheet}
         />
       );
@@ -483,6 +522,20 @@ export function MobileShell({
               });
             })();
           }}
+          onPullCreate={async () => {
+            const path = await onCreateNote(currentRoute.folderPath);
+            if (!path) {
+              return;
+            }
+            dispatch({
+              type: "push",
+              route: {
+                kind: "editor",
+                folderPath: currentRoute.folderPath,
+                notePath: path,
+              },
+            });
+          }}
           onDelete={(path) => {
             void (async () => {
               try {
@@ -506,7 +559,6 @@ export function MobileShell({
             })();
           }}
           onLongPress={openNoteActionSheet}
-          onRefresh={onRefreshAll}
         />
       );
     }
@@ -544,9 +596,8 @@ export function MobileShell({
     onCreateNote,
     onDeleteNote,
     onEditorChange,
-    onRefreshAll,
+    openNotesRoute,
     onRetrySave,
-    onSelectFolder,
     onSelectNote,
     onToggleFolder,
     openFolderActionSheet,
@@ -558,7 +609,9 @@ export function MobileShell({
   ]);
 
   const phoneTitle =
-    currentRoute.kind === "folders"
+    currentRoute.kind === "home"
+      ? "Notes"
+      : currentRoute.kind === "folders"
       ? "Folders"
       : currentRoute.kind === "notes"
         ? getDisplayRouteTitle(activeFolderTitle)
@@ -567,8 +620,18 @@ export function MobileShell({
           : "Settings";
 
   const phoneLeftAction =
-    currentRoute.kind === "folders"
-      ? undefined
+    currentRoute.kind === "home"
+      ? {
+          label: "Folders",
+          icon: <Menu size={18} />,
+          onPress: () => setFoldersDrawerOpen(true),
+        }
+      : currentRoute.kind === "folders"
+        ? {
+            label: "Back",
+            icon: <ChevronLeft size={18} />,
+            onPress: () => dispatch({ type: "replace", route: { kind: "home" } }),
+          }
       : {
           label: "Back",
           icon: <ChevronLeft size={18} />,
@@ -578,12 +641,18 @@ export function MobileShell({
         };
 
   const phoneRightAction =
-    currentRoute.kind === "folders"
+    currentRoute.kind === "home"
       ? {
           label: "Settings",
           icon: <Settings size={18} />,
           onPress: () => dispatch({ type: "push", route: { kind: "settings" } }),
         }
+      : currentRoute.kind === "folders"
+        ? {
+            label: "Settings",
+            icon: <Settings size={18} />,
+            onPress: () => dispatch({ type: "push", route: { kind: "settings" } }),
+          }
       : currentRoute.kind === "notes"
         ? {
             label: "New note",
@@ -601,15 +670,7 @@ export function MobileShell({
               })();
             },
           }
-        : currentRoute.kind === "editor"
-          ? {
-              label: "Refresh",
-              icon: <RefreshCw size={17} />,
-              onPress: () => {
-                void onRefreshAll();
-              },
-            }
-          : undefined;
+        : undefined;
 
   const tabletFoldersPane = (
     tabletLeftMode === "folders" ? (
@@ -654,6 +715,13 @@ export function MobileShell({
             onCreate={() => {
               void onCreateNote(activeFolder);
             }}
+            onPullCreate={async () => {
+              const path = await onCreateNote(activeFolder);
+              if (!path) {
+                return;
+              }
+              onSelectNote(path);
+            }}
             onDelete={(path) => {
               void (async () => {
                 try {
@@ -677,7 +745,6 @@ export function MobileShell({
               })();
             }}
             onLongPress={openNoteActionSheet}
-            onRefresh={onRefreshAll}
           />
         </div>
         <div className="mobile-tablet-editor-pane">
@@ -711,7 +778,9 @@ export function MobileShell({
           <main className="mobile-screen">
             <div
               key={
-                currentRoute.kind === "folders"
+                currentRoute.kind === "home"
+                  ? "home"
+                  : currentRoute.kind === "folders"
                   ? "folders"
                   : currentRoute.kind === "notes"
                     ? `notes:${currentRoute.folderPath}`
@@ -724,6 +793,39 @@ export function MobileShell({
               {phoneContent}
             </div>
           </main>
+          {foldersDrawerOpen ? (
+            <div className="mobile-drawer-overlay" role="dialog" aria-modal="true" aria-label="Folders">
+              <button
+                type="button"
+                className="mobile-drawer-backdrop"
+                onClick={() => setFoldersDrawerOpen(false)}
+                aria-label="Close folders"
+              />
+              <aside className="mobile-drawer-panel">
+                <div className="mobile-drawer-header">
+                  <h2>Folders</h2>
+                  <button
+                    type="button"
+                    className="mobile-drawer-close"
+                    onClick={() => setFoldersDrawerOpen(false)}
+                    aria-label="Close folders"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+                <div className="mobile-drawer-content">
+                  <MobileFoldersScreen
+                    items={visibleFolders}
+                    activeFolder={activeFolder}
+                    expanded={expanded}
+                    onToggle={onToggleFolder}
+                    onSelect={openNotesRoute}
+                    onLongPress={openFolderActionSheet}
+                  />
+                </div>
+              </aside>
+            </div>
+          ) : null}
         </>
       ) : (
         <div className="mobile-tablet-shell">

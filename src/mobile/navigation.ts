@@ -3,6 +3,7 @@ import type { SettingsSectionId } from "../components/SettingsPanel";
 export type LayoutMode = "desktop" | "tablet" | "phone";
 
 export type MobileRoute =
+  | { kind: "home" }
   | { kind: "folders" }
   | { kind: "notes"; folderPath: string }
   | { kind: "editor"; folderPath: string; notePath: string }
@@ -38,7 +39,7 @@ export type MobileToastState = {
   tone?: "info" | "success" | "error";
 };
 
-const DEFAULT_ROUTE: MobileRoute = { kind: "folders" };
+const DEFAULT_ROUTE: MobileRoute = { kind: "home" };
 
 export const getInitialMobileNavigationState = (
   initialRoute: MobileRoute = DEFAULT_ROUTE
