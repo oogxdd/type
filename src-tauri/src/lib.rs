@@ -3,6 +3,7 @@ use std::{
     collections::HashMap,
     fs,
     path::{Component, Path, PathBuf},
+    process::Command,
 };
 use tauri::Manager;
 
@@ -49,6 +50,18 @@ struct SetOrderArgs {
     note_order: Vec<String>,
 }
 
+#[derive(Deserialize)]
+struct ConnectGitArgs {
+    remote_url: String,
+    branch: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct GitPushArgs {
+    message: Option<String>,
+    branch: Option<String>,
+}
+
 #[derive(Serialize)]
 struct FolderNode {
     name: String,
@@ -65,7 +78,19 @@ struct OrderFile {
     note_order: Vec<String>,
 }
 
-fn notes_root(_app: &tauri::AppHandle) -> Result<PathBuf, String> {
+#[derive(Serialize)]
+struct GitSyncStatus {
+    git_available: bool,
+    repo_initialized: bool,
+    current_branch: Option<String>,
+    remote_url: Option<String>,
+    has_uncommitted_changes: bool,
+    ahead: usize,
+    behind: usize,
+    notes_root: String,
+}
+
+fn notes_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     if let Ok(path) = std::env::var("NOTES_ROOT") {
         let root = PathBuf::from(path);
         if root.exists() {
@@ -83,7 +108,12 @@ fn notes_root(_app: &tauri::AppHandle) -> Result<PathBuf, String> {
         return Ok(parent);
     }
 
-    Err("Notes root not found. Set NOTES_ROOT env var or place a ./notes folder.".to_string())
+    let app_data = app.path().app_data_dir().map_err(|err| err.to_string())?;
+    let root = app_data.join("notes");
+    if !root.exists() {
+        fs::create_dir_all(&root).map_err(|err| err.to_string())?;
+    }
+    Ok(root)
 }
 
 fn sanitize_relative(path: &str) -> Result<PathBuf, String> {
@@ -125,6 +155,169 @@ fn write_order_file(dir: &Path, order: &OrderFile) -> Result<(), String> {
     let file_path = dir.join(ORDER_FILE);
     let contents = serde_json::to_string_pretty(order).map_err(|err| err.to_string())?;
     fs::write(file_path, contents).map_err(|err| err.to_string())
+}
+
+fn run_git_output(root: &Path, args: &[&str]) -> Result<std::process::Output, String> {
+    Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .output()
+        .map_err(|err| {
+            if err.kind() == std::io::ErrorKind::NotFound {
+                "Git executable not found. Install Git or use a device with Git support.".to_string()
+            } else {
+                format!("Failed to run git {}: {}", args.join(" "), err)
+            }
+        })
+}
+
+fn run_git(root: &Path, args: &[&str]) -> Result<String, String> {
+    let output = run_git_output(root, args)?;
+    if output.status.success() {
+        return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let detail = if !stderr.is_empty() { stderr } else { stdout };
+    Err(format!("git {} failed: {}", args.join(" "), detail))
+}
+
+fn git_available(root: &Path) -> bool {
+    match run_git_output(root, &["--version"]) {
+        Ok(output) => output.status.success(),
+        Err(_) => false,
+    }
+}
+
+fn git_repo_initialized(root: &Path) -> bool {
+    root.join(".git").exists()
+}
+
+fn git_current_branch(root: &Path) -> Option<String> {
+    run_git(root, &["rev-parse", "--abbrev-ref", "HEAD"]).ok()
+}
+
+fn git_remote_url(root: &Path) -> Option<String> {
+    run_git(root, &["config", "--get", "remote.origin.url"]).ok()
+}
+
+fn git_has_changes(root: &Path) -> bool {
+    match run_git(root, &["status", "--porcelain"]) {
+        Ok(lines) => !lines.trim().is_empty(),
+        Err(_) => false,
+    }
+}
+
+fn git_ahead_behind(root: &Path) -> (usize, usize) {
+    match run_git(root, &["rev-list", "--left-right", "--count", "@{upstream}...HEAD"]) {
+        Ok(value) => {
+            let mut parts = value.split_whitespace();
+            let behind = parts
+                .next()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(0);
+            let ahead = parts
+                .next()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(0);
+            (ahead, behind)
+        }
+        Err(_) => (0, 0),
+    }
+}
+
+fn build_git_status(root: &Path) -> GitSyncStatus {
+    let available = git_available(root);
+    let repo_initialized = if available {
+        git_repo_initialized(root)
+    } else {
+        false
+    };
+    let current_branch = if repo_initialized {
+        git_current_branch(root)
+    } else {
+        None
+    };
+    let remote_url = if repo_initialized {
+        git_remote_url(root)
+    } else {
+        None
+    };
+    let has_uncommitted_changes = if repo_initialized {
+        git_has_changes(root)
+    } else {
+        false
+    };
+    let (ahead, behind) = if repo_initialized {
+        git_ahead_behind(root)
+    } else {
+        (0, 0)
+    };
+    GitSyncStatus {
+        git_available: available,
+        repo_initialized,
+        current_branch,
+        remote_url,
+        has_uncommitted_changes,
+        ahead,
+        behind,
+        notes_root: root.to_string_lossy().to_string(),
+    }
+}
+
+fn ensure_git_repo(root: &Path) -> Result<(), String> {
+    if git_repo_initialized(root) {
+        return Ok(());
+    }
+    run_git(root, &["init"])?;
+    Ok(())
+}
+
+fn checkout_or_create_branch(root: &Path, branch: &str) -> Result<(), String> {
+    let name = branch.trim();
+    if name.is_empty() {
+        return Ok(());
+    }
+    let branch_exists = run_git_output(root, &["rev-parse", "--verify", name])
+        .map(|output| output.status.success())
+        .unwrap_or(false);
+    if branch_exists {
+        run_git(root, &["checkout", name])?;
+    } else {
+        run_git(root, &["checkout", "-b", name])?;
+    }
+    Ok(())
+}
+
+fn set_origin_remote(root: &Path, remote_url: &str) -> Result<(), String> {
+    let url = remote_url.trim();
+    if url.is_empty() {
+        return Err("Remote repository URL is required.".to_string());
+    }
+    let existing = git_remote_url(root);
+    match existing {
+        Some(current) => {
+            if current != url {
+                run_git(root, &["remote", "set-url", "origin", url])?;
+            }
+        }
+        None => {
+            run_git(root, &["remote", "add", "origin", url])?;
+        }
+    }
+    Ok(())
+}
+
+fn resolve_target_branch(root: &Path, branch: Option<String>) -> String {
+    let requested = branch
+        .as_ref()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string());
+    if let Some(value) = requested {
+        return value;
+    }
+    git_current_branch(root).unwrap_or_else(|| "main".to_string())
 }
 
 fn sort_by_order(mut names: Vec<String>, order: &[String]) -> Vec<String> {
@@ -298,6 +491,70 @@ fn update_order_rename(
         list[pos] = new_name.to_string();
     }
     write_order_file(dir, &order)
+}
+
+#[tauri::command]
+fn get_git_status(app: tauri::AppHandle) -> Result<GitSyncStatus, String> {
+    let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
+    Ok(build_git_status(&root))
+}
+
+#[tauri::command]
+fn connect_git_repo(app: tauri::AppHandle, args: ConnectGitArgs) -> Result<GitSyncStatus, String> {
+    let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
+    if !git_available(&root) {
+        return Err("Git is not available on this device. Install Git to enable sync.".to_string());
+    }
+    ensure_git_repo(&root)?;
+    set_origin_remote(&root, &args.remote_url)?;
+    if let Some(branch) = args.branch.as_ref() {
+        checkout_or_create_branch(&root, branch)?;
+    }
+    Ok(build_git_status(&root))
+}
+
+#[tauri::command]
+fn git_pull(app: tauri::AppHandle, branch: Option<String>) -> Result<GitSyncStatus, String> {
+    let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
+    if !git_available(&root) {
+        return Err("Git is not available on this device. Install Git to enable sync.".to_string());
+    }
+    if !git_repo_initialized(&root) {
+        return Err("Repository is not initialized. Connect a remote first.".to_string());
+    }
+    let target_branch = resolve_target_branch(&root, branch);
+    checkout_or_create_branch(&root, &target_branch)?;
+    run_git(&root, &["pull", "--rebase", "origin", &target_branch])?;
+    Ok(build_git_status(&root))
+}
+
+#[tauri::command]
+fn git_push(app: tauri::AppHandle, args: GitPushArgs) -> Result<GitSyncStatus, String> {
+    let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
+    if !git_available(&root) {
+        return Err("Git is not available on this device. Install Git to enable sync.".to_string());
+    }
+    if !git_repo_initialized(&root) {
+        return Err("Repository is not initialized. Connect a remote first.".to_string());
+    }
+    let target_branch = resolve_target_branch(&root, args.branch.clone());
+    checkout_or_create_branch(&root, &target_branch)?;
+    run_git(&root, &["add", "-A"])?;
+    if git_has_changes(&root) {
+        let message = args
+            .message
+            .as_ref()
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("Sync notes");
+        run_git(&root, &["commit", "-m", message])?;
+    }
+    run_git(&root, &["push", "-u", "origin", &target_branch])?;
+    Ok(build_git_status(&root))
 }
 
 #[tauri::command]
@@ -577,7 +834,11 @@ pub fn run() {
             move_items,
             delete_items,
             rename_item,
-            set_order
+            set_order,
+            get_git_status,
+            connect_git_repo,
+            git_pull,
+            git_push
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

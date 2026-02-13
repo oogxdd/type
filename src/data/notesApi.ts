@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { FolderNode, NoteMeta } from "../types";
+import type { FolderNode, GitSyncStatus, NoteMeta } from "../types";
 
 const LOG_PREFIX = "[notes]";
 
@@ -60,3 +60,31 @@ export type SetOrderArgs = {
 
 export const setOrder = (args: SetOrderArgs): Promise<void> =>
   invokeLogged("set_order", { args });
+
+export const getGitStatus = (): Promise<GitSyncStatus> =>
+  invokeLogged<GitSyncStatus>("get_git_status");
+
+export const connectGitRepo = (
+  remoteUrl: string,
+  branch?: string
+): Promise<GitSyncStatus> =>
+  invokeLogged<GitSyncStatus>("connect_git_repo", {
+    args: {
+      remote_url: remoteUrl,
+      branch,
+    },
+  });
+
+export const gitPull = (branch?: string): Promise<GitSyncStatus> =>
+  invokeLogged<GitSyncStatus>("git_pull", { branch });
+
+export const gitPush = (
+  message?: string,
+  branch?: string
+): Promise<GitSyncStatus> =>
+  invokeLogged<GitSyncStatus>("git_push", {
+    args: {
+      message,
+      branch,
+    },
+  });

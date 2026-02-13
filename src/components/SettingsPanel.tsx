@@ -1,4 +1,5 @@
 import { Button } from "./ui/button";
+import type { GitSyncStatus } from "../types";
 
 export type ThemeMode = "light" | "dark";
 export type NotesListMode = "separate" | "nested";
@@ -59,12 +60,38 @@ function SettingsDetail({
   onThemeChange,
   notesListMode,
   onNotesListModeChange,
+  gitRemoteUrl,
+  onGitRemoteUrlChange,
+  gitBranch,
+  onGitBranchChange,
+  gitCommitMessage,
+  onGitCommitMessageChange,
+  gitStatus,
+  gitSyncBusy,
+  gitSyncError,
+  onGitRefresh,
+  onGitConnect,
+  onGitPull,
+  onGitPush,
 }: {
   sectionId: SettingsSectionId;
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
   notesListMode: NotesListMode;
   onNotesListModeChange: (mode: NotesListMode) => void;
+  gitRemoteUrl: string;
+  onGitRemoteUrlChange: (value: string) => void;
+  gitBranch: string;
+  onGitBranchChange: (value: string) => void;
+  gitCommitMessage: string;
+  onGitCommitMessageChange: (value: string) => void;
+  gitStatus: GitSyncStatus | null;
+  gitSyncBusy: boolean;
+  gitSyncError: string | null;
+  onGitRefresh: () => void;
+  onGitConnect: () => void;
+  onGitPull: () => void;
+  onGitPush: () => void;
 }) {
   if (sectionId === "general") {
     return (
@@ -160,19 +187,91 @@ function SettingsDetail({
     return (
       <>
         <h2 className="settings-detail-title">Sync</h2>
-        <p className="settings-detail-text">Connection and refresh policy.</p>
+        <p className="settings-detail-text">
+          Git-based sync. Your notes stay local and can be pushed/pulled to a remote repo.
+        </p>
         <label className="settings-control">
-          <span>Sync provider</span>
-          <select defaultValue="icloud">
-            <option value="icloud">iCloud</option>
-            <option value="local">Local filesystem</option>
-            <option value="none">Disabled</option>
-          </select>
+          <span>Remote repository URL</span>
+          <input
+            type="text"
+            value={gitRemoteUrl}
+            onChange={(event) => onGitRemoteUrlChange(event.target.value)}
+            placeholder="https://github.com/you/notes.git"
+          />
         </label>
-        <label className="settings-control settings-toggle">
-          <input type="checkbox" defaultChecked />
-          <span>Background refresh every 5 minutes</span>
+        <label className="settings-control">
+          <span>Branch</span>
+          <input
+            type="text"
+            value={gitBranch}
+            onChange={(event) => onGitBranchChange(event.target.value)}
+            placeholder="main"
+          />
         </label>
+        <label className="settings-control">
+          <span>Commit message</span>
+          <input
+            type="text"
+            value={gitCommitMessage}
+            onChange={(event) => onGitCommitMessageChange(event.target.value)}
+            placeholder="Sync notes"
+          />
+        </label>
+        <div className="settings-info-grid">
+          <div className="settings-info-row">
+            <span>Git available</span>
+            <code>{gitStatus?.git_available ? "yes" : "no"}</code>
+          </div>
+          <div className="settings-info-row">
+            <span>Repository</span>
+            <code>{gitStatus?.repo_initialized ? "initialized" : "not initialized"}</code>
+          </div>
+          <div className="settings-info-row">
+            <span>Current branch</span>
+            <code>{gitStatus?.current_branch ?? "-"}</code>
+          </div>
+          <div className="settings-info-row">
+            <span>Remote URL</span>
+            <code>{gitStatus?.remote_url ?? "-"}</code>
+          </div>
+          <div className="settings-info-row">
+            <span>Working tree</span>
+            <code>{gitStatus?.has_uncommitted_changes ? "changes pending" : "clean"}</code>
+          </div>
+          <div className="settings-info-row">
+            <span>Ahead / behind</span>
+            <code>
+              {gitStatus ? `${gitStatus.ahead} ahead / ${gitStatus.behind} behind` : "-"}
+            </code>
+          </div>
+          <div className="settings-info-row">
+            <span>Notes root</span>
+            <code>{gitStatus?.notes_root ?? "-"}</code>
+          </div>
+        </div>
+        {gitSyncError ? (
+          <p className="settings-warning-text settings-inline-warning">{gitSyncError}</p>
+        ) : null}
+        <label className="settings-control">
+          <span>Recommended flow</span>
+          <span className="settings-inline-help">
+            Desktop and iOS point to the same repo and branch. Pull before editing, push after.
+          </span>
+        </label>
+        <div className="settings-action-row">
+          <Button variant="outline" size="sm" type="button" onClick={onGitRefresh} disabled={gitSyncBusy}>
+            Refresh status
+          </Button>
+          <Button size="sm" type="button" onClick={onGitConnect} disabled={gitSyncBusy}>
+            Connect repo
+          </Button>
+          <Button variant="secondary" size="sm" type="button" onClick={onGitPull} disabled={gitSyncBusy}>
+            Pull
+          </Button>
+          <Button variant="secondary" size="sm" type="button" onClick={onGitPush} disabled={gitSyncBusy}>
+            Push
+          </Button>
+        </div>
       </>
     );
   }
@@ -348,6 +447,19 @@ export function SettingsDetailPane({
   onThemeChange,
   notesListMode,
   onNotesListModeChange,
+  gitRemoteUrl,
+  onGitRemoteUrlChange,
+  gitBranch,
+  onGitBranchChange,
+  gitCommitMessage,
+  onGitCommitMessageChange,
+  gitStatus,
+  gitSyncBusy,
+  gitSyncError,
+  onGitRefresh,
+  onGitConnect,
+  onGitPull,
+  onGitPush,
   rightPaneRef,
   onPaneClick,
 }: {
@@ -356,6 +468,19 @@ export function SettingsDetailPane({
   onThemeChange: (theme: ThemeMode) => void;
   notesListMode: NotesListMode;
   onNotesListModeChange: (mode: NotesListMode) => void;
+  gitRemoteUrl: string;
+  onGitRemoteUrlChange: (value: string) => void;
+  gitBranch: string;
+  onGitBranchChange: (value: string) => void;
+  gitCommitMessage: string;
+  onGitCommitMessageChange: (value: string) => void;
+  gitStatus: GitSyncStatus | null;
+  gitSyncBusy: boolean;
+  gitSyncError: string | null;
+  onGitRefresh: () => void;
+  onGitConnect: () => void;
+  onGitPull: () => void;
+  onGitPush: () => void;
   rightPaneRef: React.RefObject<HTMLDivElement | null>;
   onPaneClick: () => void;
 }) {
@@ -373,6 +498,19 @@ export function SettingsDetailPane({
           onThemeChange={onThemeChange}
           notesListMode={notesListMode}
           onNotesListModeChange={onNotesListModeChange}
+          gitRemoteUrl={gitRemoteUrl}
+          onGitRemoteUrlChange={onGitRemoteUrlChange}
+          gitBranch={gitBranch}
+          onGitBranchChange={onGitBranchChange}
+          gitCommitMessage={gitCommitMessage}
+          onGitCommitMessageChange={onGitCommitMessageChange}
+          gitStatus={gitStatus}
+          gitSyncBusy={gitSyncBusy}
+          gitSyncError={gitSyncError}
+          onGitRefresh={onGitRefresh}
+          onGitConnect={onGitConnect}
+          onGitPull={onGitPull}
+          onGitPush={onGitPush}
         />
       </div>
     </div>

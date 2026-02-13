@@ -68,7 +68,7 @@ import { focusNoScroll, scrollIntoViewIfNeeded, escapeSelectorValue, confirmActi
 import { getNextNoteFileName } from "./utils/format";
 
 // Types
-import type { DragData, FolderNode } from "./types";
+import type { DragData, FolderNode, GitSyncStatus } from "./types";
 import type { TreeItem } from "./tree/types";
 import { removeChildrenOf } from "./tree/utilities";
 
@@ -113,6 +113,14 @@ const getInitialNotesListMode = (): NotesListMode => {
   return "separate";
 };
 
+const getStoredSyncValue = (key: string, fallback: string) => {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+  const stored = window.localStorage.getItem(key);
+  return stored && stored.trim().length > 0 ? stored : fallback;
+};
+
 const getNoteParentPath = (notePath: string) => {
   const slashIndex = notePath.lastIndexOf("/");
   return slashIndex === -1 ? "" : notePath.slice(0, slashIndex);
@@ -142,6 +150,18 @@ function App() {
   const [editorFontSize, setEditorFontSize] = useState(14);
   const [appMode, setAppMode] = useState<AppMode>("notes");
   const [activeSettingsSection, setActiveSettingsSection] = useState("general");
+  const [gitRemoteUrl, setGitRemoteUrl] = useState(() =>
+    getStoredSyncValue("notes-viewer-git-remote", "")
+  );
+  const [gitBranch, setGitBranch] = useState(() =>
+    getStoredSyncValue("notes-viewer-git-branch", "main")
+  );
+  const [gitCommitMessage, setGitCommitMessage] = useState(() =>
+    getStoredSyncValue("notes-viewer-git-commit-message", "Sync notes")
+  );
+  const [gitStatus, setGitStatus] = useState<GitSyncStatus | null>(null);
+  const [gitSyncBusy, setGitSyncBusy] = useState(false);
+  const [gitSyncError, setGitSyncError] = useState<string | null>(null);
 
   // -- Folder tree state ----------------------------------------------------
   const [tree, setTree] = useState<FolderNode | null>(null);
@@ -211,6 +231,18 @@ function App() {
     window.localStorage.setItem("notes-viewer-notes-list-mode", notesListMode);
   }, [notesListMode]);
 
+  useEffect(() => {
+    window.localStorage.setItem("notes-viewer-git-remote", gitRemoteUrl);
+  }, [gitRemoteUrl]);
+
+  useEffect(() => {
+    window.localStorage.setItem("notes-viewer-git-branch", gitBranch);
+  }, [gitBranch]);
+
+  useEffect(() => {
+    window.localStorage.setItem("notes-viewer-git-commit-message", gitCommitMessage);
+  }, [gitCommitMessage]);
+
   // -- Debug logging --------------------------------------------------------
   useEffect(() => {
     console.log("[folders] activeFolder", activeFolder);
@@ -222,9 +254,76 @@ function App() {
     setTree(data);
   }, []);
 
+  const refreshGitStatus = useCallback(async () => {
+    try {
+      const status = await api.getGitStatus();
+      setGitStatus(status);
+      setGitSyncError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setGitSyncError(message);
+    }
+  }, []);
+
   useEffect(() => {
     void refreshTree();
   }, [refreshTree]);
+
+  useEffect(() => {
+    void refreshGitStatus();
+  }, [refreshGitStatus]);
+
+  const handleConnectGitRepo = useCallback(async () => {
+    const remoteUrl = gitRemoteUrl.trim();
+    const branch = gitBranch.trim();
+    if (!remoteUrl) {
+      setGitSyncError("Remote repository URL is required.");
+      return;
+    }
+    setGitSyncBusy(true);
+    try {
+      const status = await api.connectGitRepo(remoteUrl, branch || undefined);
+      setGitStatus(status);
+      setGitSyncError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setGitSyncError(message);
+    } finally {
+      setGitSyncBusy(false);
+    }
+  }, [gitBranch, gitRemoteUrl]);
+
+  const handleGitPull = useCallback(async () => {
+    setGitSyncBusy(true);
+    try {
+      const status = await api.gitPull(gitBranch.trim() || undefined);
+      setGitStatus(status);
+      setGitSyncError(null);
+      await refreshTree();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setGitSyncError(message);
+    } finally {
+      setGitSyncBusy(false);
+    }
+  }, [gitBranch, refreshTree]);
+
+  const handleGitPush = useCallback(async () => {
+    setGitSyncBusy(true);
+    try {
+      const status = await api.gitPush(
+        gitCommitMessage.trim() || undefined,
+        gitBranch.trim() || undefined
+      );
+      setGitStatus(status);
+      setGitSyncError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setGitSyncError(message);
+    } finally {
+      setGitSyncBusy(false);
+    }
+  }, [gitBranch, gitCommitMessage]);
 
   const shouldNestNotesInNavigation =
     appMode === "notes" && notesListMode === "nested";
@@ -1481,6 +1580,19 @@ function App() {
         onThemeChange={setTheme}
         notesListMode={notesListMode}
         onNotesListModeChange={setNotesListMode}
+        gitRemoteUrl={gitRemoteUrl}
+        onGitRemoteUrlChange={setGitRemoteUrl}
+        gitBranch={gitBranch}
+        onGitBranchChange={setGitBranch}
+        gitCommitMessage={gitCommitMessage}
+        onGitCommitMessageChange={setGitCommitMessage}
+        gitStatus={gitStatus}
+        gitSyncBusy={gitSyncBusy}
+        gitSyncError={gitSyncError}
+        onGitRefresh={() => void refreshGitStatus()}
+        onGitConnect={() => void handleConnectGitRepo()}
+        onGitPull={() => void handleGitPull()}
+        onGitPush={() => void handleGitPush()}
         rightPaneRef={rightPaneRef}
         onPaneClick={() => focusNoScroll(rightPaneRef.current)}
       />

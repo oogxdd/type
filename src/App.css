@@ -955,6 +955,17 @@ body {
   color: #7d3e3e;
 }
 
+.settings-inline-warning {
+  margin-top: 10px;
+}
+
+.settings-inline-help {
+  margin-top: -2px;
+  font-size: 12px;
+  color: var(--ui-muted);
+  line-height: 1.45;
+}
+
 .settings-info-grid {
   border: 1px solid var(--ui-border);
   background: #fbfdff;
@@ -1550,6 +1561,10 @@ body {
 
 .app.theme-dark .settings-warning-text {
   color: #e7bcbc;
+}
+
+.app.theme-dark .settings-inline-help {
+  color: #a8b1be;
 }
 
 .app.theme-dark .settings-action-row [data-slot="button"][data-variant="outline"] {
