@@ -1907,6 +1907,9 @@ body {
 }
 
 .mobile-shell.theme-dark {
+  --ui-pane: #161a1f;
+  --ui-text: #e6ebf2;
+  --ui-muted: #9da6b2;
   background: #161a1f;
   color: #ebf0f7;
 }
@@ -1953,6 +1956,10 @@ body {
 
 .mobile-shell.theme-dark .mobile-note-title {
   color: #edf2f9;
+}
+
+.mobile-shell.theme-dark .mobile-editor-pane .tiptap-content {
+  color: var(--ui-text);
 }
 
 .mobile-shell.theme-dark .mobile-settings-tabs {
