@@ -458,13 +458,15 @@ function TreeNode({
   const notes = showNotesAsChildren ? node.notes || [] : [];
   const hasNestedItems = node.children.length > 0 || notes.length > 0;
   const isCollapsed = hasNestedItems && !expanded.has(node.id);
+  const hasSelectedNote = showNotesAsChildren && selectedNoteIds.size > 0;
+  const isFolderVisuallySelected = !hasSelectedNote && selectedIds.has(node.id);
 
   return (
     <div className="tree-node">
       <TreeRow
         node={node}
         depth={depth}
-        isSelected={selectedIds.has(node.id)}
+        isSelected={isFolderVisuallySelected}
         hasNestedItems={hasNestedItems}
         edgePosition={edgePosition}
         isCollapsed={isCollapsed}
