@@ -10,21 +10,21 @@
 		0BAECF0DF100A347A61466A5 /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 429FDD41C92B6829C0F049D4 /* assets */; };
 		0C832D0F48FB435BBFFAAC71 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F14FDD66F483BDD656C1976D /* UIKit.framework */; };
 		0F9A570C2B2EEBB0F951030B /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7F9F1133DA9D5478D99F9D3F /* QuartzCore.framework */; };
-			19BA41CD004A58CD3A5E6E6E /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B8921620DBFFFCF663B6C335 /* libapp.a */; };
-			1A4F66D7A9E24A77B19E30C1 /* libiconv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = C1E3437F7BC743E2A54AB7E1 /* libiconv.tbd */; };
-			1EAC1A9C7E55B94A7DD48B42 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 39A58D26D8834391B9AD977C /* LaunchScreen.storyboard */; };
-			74008850CEE528C379EBAB5E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1CC960537191C1BA8B54E74 /* Assets.xcassets */; };
-			8EF63C31345C84D7F7920097 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F0A9E875FA9B7F4C4A0C638E /* Metal.framework */; };
-			A7367CC7F41B9BCAE6D71A5A /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 75D85C92F6C9288DB742562E /* CoreGraphics.framework */; };
-			B4E1C9A47CE24824A5E15E02 /* libz.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = E625A36A9F164148A92B6D05 /* libz.tbd */; };
-			DDFA4F18F7470195E4407314 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C6BA4748D98C5030B5666779 /* Security.framework */; };
+		19BA41CD004A58CD3A5E6E6E /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B8921620DBFFFCF663B6C335 /* libapp.a */; };
+		1A4F66D7A9E24A77B19E30C1 /* libiconv.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = C1E3437F7BC743E2A54AB7E1 /* libiconv.tbd */; };
+		1EAC1A9C7E55B94A7DD48B42 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 39A58D26D8834391B9AD977C /* LaunchScreen.storyboard */; };
+		74008850CEE528C379EBAB5E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1CC960537191C1BA8B54E74 /* Assets.xcassets */; };
+		8EF63C31345C84D7F7920097 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F0A9E875FA9B7F4C4A0C638E /* Metal.framework */; };
+		A7367CC7F41B9BCAE6D71A5A /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 75D85C92F6C9288DB742562E /* CoreGraphics.framework */; };
+		B4E1C9A47CE24824A5E15E02 /* libz.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = E625A36A9F164148A92B6D05 /* libz.tbd */; };
+		DDFA4F18F7470195E4407314 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C6BA4748D98C5030B5666779 /* Security.framework */; };
 		F524468C415EF043E0321B90 /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 891095A1D06292DEB36C937A /* main.mm */; };
 		FD8A77078AF785F9172A2BD7 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 512816C197674F4C9D0421FB /* MetalKit.framework */; };
 		FE46577680F81F9A8D7A26AB /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3876ADB6D7585DA36D402042 /* WebKit.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		32844DF62567F103CCD9DC7A /* type_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; name = type_iOS.app; path = Type.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		32844DF62567F103CCD9DC7A /* Type.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Type.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3876ADB6D7585DA36D402042 /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
 		39A58D26D8834391B9AD977C /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		429FDD41C92B6829C0F049D4 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
@@ -36,14 +36,14 @@
 		7F9F1133DA9D5478D99F9D3F /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
 		891095A1D06292DEB36C937A /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
 		A1CC960537191C1BA8B54E74 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-			B0168266CE8E8E0410B640E2 /* main.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = main.rs; sourceTree = "<group>"; };
-			B8921620DBFFFCF663B6C335 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
-			C6BA4748D98C5030B5666779 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
-			C1E3437F7BC743E2A54AB7E1 /* libiconv.tbd */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.text-based-dylib-definition; name = libiconv.tbd; path = usr/lib/libiconv.tbd; sourceTree = SDKROOT; };
-			D1406F88567BD6CE6C0A35D3 /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
-			E625A36A9F164148A92B6D05 /* libz.tbd */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.text-based-dylib-definition; name = libz.tbd; path = usr/lib/libz.tbd; sourceTree = SDKROOT; };
-			F0A9E875FA9B7F4C4A0C638E /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
-			F14FDD66F483BDD656C1976D /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
+		B0168266CE8E8E0410B640E2 /* main.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = main.rs; sourceTree = "<group>"; };
+		B8921620DBFFFCF663B6C335 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
+		C1E3437F7BC743E2A54AB7E1 /* libiconv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libiconv.tbd; path = usr/lib/libiconv.tbd; sourceTree = SDKROOT; };
+		C6BA4748D98C5030B5666779 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		D1406F88567BD6CE6C0A35D3 /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
+		E625A36A9F164148A92B6D05 /* libz.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libz.tbd; path = usr/lib/libz.tbd; sourceTree = SDKROOT; };
+		F0A9E875FA9B7F4C4A0C638E /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		F14FDD66F483BDD656C1976D /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -56,14 +56,14 @@
 				8EF63C31345C84D7F7920097 /* Metal.framework in Frameworks */,
 				FD8A77078AF785F9172A2BD7 /* MetalKit.framework in Frameworks */,
 				0F9A570C2B2EEBB0F951030B /* QuartzCore.framework in Frameworks */,
-					DDFA4F18F7470195E4407314 /* Security.framework in Frameworks */,
-					0C832D0F48FB435BBFFAAC71 /* UIKit.framework in Frameworks */,
-					FE46577680F81F9A8D7A26AB /* WebKit.framework in Frameworks */,
-					1A4F66D7A9E24A77B19E30C1 /* libiconv.tbd in Frameworks */,
-					B4E1C9A47CE24824A5E15E02 /* libz.tbd in Frameworks */,
-				);
-				runOnlyForDeploymentPostprocessing = 0;
-			};
+				DDFA4F18F7470195E4407314 /* Security.framework in Frameworks */,
+				0C832D0F48FB435BBFFAAC71 /* UIKit.framework in Frameworks */,
+				FE46577680F81F9A8D7A26AB /* WebKit.framework in Frameworks */,
+				1A4F66D7A9E24A77B19E30C1 /* libiconv.tbd in Frameworks */,
+				B4E1C9A47CE24824A5E15E02 /* libz.tbd in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -123,14 +123,14 @@
 				F0A9E875FA9B7F4C4A0C638E /* Metal.framework */,
 				512816C197674F4C9D0421FB /* MetalKit.framework */,
 				7F9F1133DA9D5478D99F9D3F /* QuartzCore.framework */,
-					C6BA4748D98C5030B5666779 /* Security.framework */,
-					F14FDD66F483BDD656C1976D /* UIKit.framework */,
-					3876ADB6D7585DA36D402042 /* WebKit.framework */,
-					C1E3437F7BC743E2A54AB7E1 /* libiconv.tbd */,
-					E625A36A9F164148A92B6D05 /* libz.tbd */,
-				);
-				name = Frameworks;
-				sourceTree = "<group>";
+				C6BA4748D98C5030B5666779 /* Security.framework */,
+				F14FDD66F483BDD656C1976D /* UIKit.framework */,
+				3876ADB6D7585DA36D402042 /* WebKit.framework */,
+				C1E3437F7BC743E2A54AB7E1 /* libiconv.tbd */,
+				E625A36A9F164148A92B6D05 /* libz.tbd */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
 		};
 		9FD45597F4F67A9ACFF91704 /* type */ = {
 			isa = PBXGroup;
@@ -144,7 +144,7 @@
 		A9527843C021BF01454B775E /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				32844DF62567F103CCD9DC7A /* type_iOS.app */,
+				32844DF62567F103CCD9DC7A /* Type.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -178,7 +178,7 @@
 			packageProductDependencies = (
 			);
 			productName = type_iOS;
-			productReference = 32844DF62567F103CCD9DC7A /* type_iOS.app */;
+			productReference = 32844DF62567F103CCD9DC7A /* Type.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -265,6 +265,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = type_iOS/type_iOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = Y377P5XKGJ;
 				ENABLE_BITCODE = NO;
 				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -290,8 +291,8 @@
 					"$(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
 					"$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.digital.type;
-				PRODUCT_NAME = Type;
+				PRODUCT_BUNDLE_IDENTIFIER = com.digital.type2;
+				PRODUCT_NAME = "Type";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;
@@ -306,6 +307,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = type_iOS/type_iOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = Y377P5XKGJ;
 				ENABLE_BITCODE = NO;
 				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -331,8 +333,8 @@
 					"$(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
 					"$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.digital.type;
-				PRODUCT_NAME = Type;
+				PRODUCT_BUNDLE_IDENTIFIER = com.digital.type2;
+				PRODUCT_NAME = "Type";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;

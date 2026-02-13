@@ -1,6 +1,6 @@
 name: type
 options:
-  bundleIdPrefix: com.digital.type
+  bundleIdPrefix: com.digital.type2
   deploymentTarget:
     iOS: 14.0
 fileGroups: [../../src]
@@ -11,7 +11,7 @@ settingGroups:
   app:
     base:
       PRODUCT_NAME: Type
-      PRODUCT_BUNDLE_IDENTIFIER: com.digital.type
+      PRODUCT_BUNDLE_IDENTIFIER: com.digital.type2
 targetTemplates:
   app:
     type: application
