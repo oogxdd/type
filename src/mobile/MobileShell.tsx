@@ -112,6 +112,7 @@ type MobileShellProps = {
   recordingsError: string | null;
   activeAudioPath: string | null;
   activeAudioSrc: string | null;
+  onRefreshTree: () => Promise<void>;
   onRefreshRecordings: () => void;
   onPlayRecording: (audioPath: string) => void;
   onStartAudioRecording: () => void;
@@ -203,6 +204,7 @@ export function MobileShell({
   recordingsError,
   activeAudioPath,
   activeAudioSrc,
+  onRefreshTree,
   onRefreshRecordings,
   onPlayRecording,
   onStartAudioRecording,
@@ -307,6 +309,18 @@ export function MobileShell({
     setSheetState(null);
     setSheetContext(null);
   }, []);
+
+  const refreshNotesFeed = useCallback(
+    async (folderPath: string) => {
+      if (folderPath === RECORDINGS_FOLDER_PATH) {
+        await onRefreshTree();
+        onRefreshRecordings();
+        return;
+      }
+      await onRefreshTree();
+    },
+    [onRefreshRecordings, onRefreshTree]
+  );
 
   const popRoute = useCallback(async () => {
     if (layoutMode !== "phone") {
@@ -630,6 +644,9 @@ export function MobileShell({
             })();
           }}
           onLongPress={openNoteActionSheet}
+          onPullRefresh={async () => {
+            await refreshNotesFeed(currentRoute.folderPath);
+          }}
           emptyStateText={
             isRecordingsFolder
               ? "No recordings yet."
@@ -720,6 +737,7 @@ export function MobileShell({
     openNoteActionSheet,
     recordingError,
     recordingStatus,
+    refreshNotesFeed,
     saveError,
     settingsScreen,
     showToast,
@@ -799,18 +817,89 @@ export function MobileShell({
           }
         : undefined;
 
+  const isTabletRecordingsFolder = activeFolder === RECORDINGS_FOLDER_PATH;
+
+  const tabletNotesPane = (
+    <MobileNotesScreen
+      folderTitle={activeFolderTitle}
+      notes={notes}
+      previews={notePreviews}
+      activeNote={activeNote}
+      onSelect={onSelectNote}
+      onCreate={() => {
+        void (async () => {
+          if (isTabletRecordingsFolder) {
+            setTabletLeftMode("settings");
+            onSettingsSectionChange("recordings");
+            showToast("Recorder moved to Settings > Recordings", "info");
+            return;
+          }
+          await onCreateNote(activeFolder);
+        })();
+      }}
+      onDelete={(path) => {
+        void (async () => {
+          try {
+            await onDeleteNote(path);
+            showToast("Note deleted", "success");
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            showToast(message, "error");
+          }
+        })();
+      }}
+      onArchive={(path) => {
+        void (async () => {
+          try {
+            await onArchiveNote(path);
+            showToast("Moved to Archive", "success");
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            showToast(message, "error");
+          }
+        })();
+      }}
+      onLongPress={openNoteActionSheet}
+      onPullRefresh={async () => {
+        await refreshNotesFeed(activeFolder);
+      }}
+      emptyStateText={
+        isTabletRecordingsFolder
+          ? "No recordings yet."
+          : `No notes in ${getDisplayRouteTitle(activeFolderTitle)}.`
+      }
+      createButtonLabel={isTabletRecordingsFolder ? "Open recorder" : "Create note"}
+    />
+  );
+
   const tabletFoldersPane = (
     tabletLeftMode === "folders" ? (
-      <div className="mobile-tablet-left-content">
-        <MobileFoldersScreen
-          items={visibleFolders}
-          activeFolder={activeFolder}
-          expanded={expanded}
-          onToggle={onToggleFolder}
-          onSelect={onSelectFolder}
-          onLongPress={openFolderActionSheet}
-        />
-      </div>
+      notesListMode === "nested" ? (
+        <div className="mobile-tablet-left-content mobile-tablet-left-content-nested">
+          <div className="mobile-tablet-left-folders">
+            <MobileFoldersScreen
+              items={visibleFolders}
+              activeFolder={activeFolder}
+              expanded={expanded}
+              onToggle={onToggleFolder}
+              onSelect={onSelectFolder}
+              onLongPress={openFolderActionSheet}
+            />
+          </div>
+          <div className="mobile-tablet-left-notes">{tabletNotesPane}</div>
+        </div>
+      ) : (
+        <div className="mobile-tablet-left-content">
+          <MobileFoldersScreen
+            items={visibleFolders}
+            activeFolder={activeFolder}
+            expanded={expanded}
+            onToggle={onToggleFolder}
+            onSelect={onSelectFolder}
+            onLongPress={openFolderActionSheet}
+          />
+        </div>
+      )
     ) : (
       <div className="mobile-tablet-settings-sections" role="tablist" aria-label="Settings sections">
         {settingsSections.map((section) => (
@@ -829,45 +918,25 @@ export function MobileShell({
 
   const tabletRightContent =
     tabletLeftMode === "settings" ? (
-      settingsScreen
+      <div className="mobile-tablet-settings-content">{settingsScreen}</div>
+    ) : notesListMode === "nested" ? (
+      <div className="mobile-tablet-editor-only mobile-tablet-pane">
+        <MobileEditorScreen
+          markdown={editorMarkdown}
+          onChange={onEditorChange}
+          hasActiveNote={hasActiveNote}
+          isSaving={isSaving}
+          saveError={saveError}
+          keyboardInset={keyboardInset}
+          onRetrySave={() => {
+            void onRetrySave();
+          }}
+        />
+      </div>
     ) : (
-      <div className="mobile-tablet-right-split">
-        <div className="mobile-tablet-notes-pane">
-          <MobileNotesScreen
-            folderTitle={activeFolderTitle}
-            notes={notes}
-            previews={notePreviews}
-            activeNote={activeNote}
-            onSelect={onSelectNote}
-            onCreate={() => {
-              void onCreateNote(activeFolder);
-            }}
-            onDelete={(path) => {
-              void (async () => {
-                try {
-                  await onDeleteNote(path);
-                  showToast("Note deleted", "success");
-                } catch (error) {
-                  const message = error instanceof Error ? error.message : String(error);
-                  showToast(message, "error");
-                }
-              })();
-            }}
-            onArchive={(path) => {
-              void (async () => {
-                try {
-                  await onArchiveNote(path);
-                  showToast("Moved to Archive", "success");
-                } catch (error) {
-                  const message = error instanceof Error ? error.message : String(error);
-                  showToast(message, "error");
-                }
-              })();
-            }}
-            onLongPress={openNoteActionSheet}
-          />
-        </div>
-        <div className="mobile-tablet-editor-pane">
+      <div className="mobile-tablet-right-split mobile-tablet-right-split-notes">
+        <div className="mobile-tablet-notes-pane mobile-tablet-pane">{tabletNotesPane}</div>
+        <div className="mobile-tablet-editor-pane mobile-tablet-pane">
           <MobileEditorScreen
             markdown={editorMarkdown}
             onChange={onEditorChange}
@@ -886,6 +955,7 @@ export function MobileShell({
   return (
     <div
       className={`mobile-root theme-${theme}`}
+      data-layout={layoutMode}
       style={appStyle}
       onPointerDown={handleEdgeSwipeStart}
       onPointerMove={handleEdgeSwipeMove}
@@ -950,7 +1020,9 @@ export function MobileShell({
           ) : null}
         </>
       ) : (
-        <div className="mobile-tablet-shell">
+        <div
+          className={`mobile-tablet-shell mobile-tablet-shell-${tabletLeftMode} mobile-tablet-mode-${notesListMode}`}
+        >
           <aside className="mobile-tablet-left">
             <MobileNavBar title="Navigation" />
             <MobileTabBar
@@ -968,7 +1040,11 @@ export function MobileShell({
             />
             {tabletFoldersPane}
           </aside>
-          <section className="mobile-tablet-right">{tabletRightContent}</section>
+          <section
+            className={`mobile-tablet-right mobile-tablet-right-${tabletLeftMode} mobile-tablet-right-mode-${notesListMode}`}
+          >
+            {tabletRightContent}
+          </section>
         </div>
       )}
 

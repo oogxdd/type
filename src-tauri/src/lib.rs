@@ -415,6 +415,38 @@ fn find_recording_audio_file(recording_dir: &Path) -> Option<PathBuf> {
     files.into_iter().next()
 }
 
+fn is_recording_container(path: &Path) -> bool {
+    if !path.is_dir() {
+        return false;
+    }
+    if find_recording_audio_file(path).is_some() {
+        return true;
+    }
+    path.join(TRANSCRIPT_FILE_NAME).exists() || path.join(TRANSCRIPTION_STATUS_FILE).exists()
+}
+
+fn resolve_recording_note_file(root: &Path, full_path: &Path) -> PathBuf {
+    let recordings_root = root.join(RECORDINGS_FOLDER);
+    if full_path.starts_with(&recordings_root) && full_path.is_dir() {
+        return full_path.join(TRANSCRIPT_FILE_NAME);
+    }
+    full_path.to_path_buf()
+}
+
+fn pending_transcript_placeholder(recording_dir: &Path) -> String {
+    let folder_name = recording_dir
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("recording");
+    let status = read_transcription_state(&recording_dir.join(TRANSCRIPTION_STATUS_FILE))
+        .map(|value| value.status)
+        .unwrap_or_else(|| "pending".to_string());
+    format!(
+        "# {}\n\nTranscript is not ready yet.\n\nStatus: `{}`\n",
+        folder_name, status
+    )
+}
+
 fn render_transcript_markdown(text: &str) -> String {
     let body = text.trim();
     if body.is_empty() {
@@ -989,7 +1021,11 @@ fn build_folder_node(dir: &Path, rel_path: &str) -> Result<FolderNode, String> {
         }
         let meta = entry.metadata().map_err(|err| err.to_string())?;
         if meta.is_dir() {
-            folders.push(name);
+            if rel_path == RECORDINGS_FOLDER && is_recording_container(&path) {
+                notes.push(name);
+            } else {
+                folders.push(name);
+            }
         } else if meta.is_file() {
             if path.extension().and_then(|ext| ext.to_str()) == Some("md") {
                 notes.push(name);
@@ -1245,17 +1281,27 @@ fn get_tree(app: tauri::AppHandle) -> Result<FolderNode, String> {
 
 #[tauri::command]
 fn read_note(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    let root = notes_root(&app)?;
     let full_path = resolve_path(&app, &path)?;
-    fs::read_to_string(full_path).map_err(|err| err.to_string())
+    let note_file_path = resolve_recording_note_file(&root, &full_path);
+    if note_file_path.exists() {
+        return fs::read_to_string(note_file_path).map_err(|err| err.to_string());
+    }
+    if full_path.is_dir() && full_path.starts_with(root.join(RECORDINGS_FOLDER)) {
+        return Ok(pending_transcript_placeholder(&full_path));
+    }
+    Err("Note file does not exist.".to_string())
 }
 
 #[tauri::command]
 fn write_note(app: tauri::AppHandle, path: String, content: String) -> Result<(), String> {
+    let root = notes_root(&app)?;
     let full_path = resolve_path(&app, &path)?;
-    if let Some(parent) = full_path.parent() {
+    let note_file_path = resolve_recording_note_file(&root, &full_path);
+    if let Some(parent) = note_file_path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
-    fs::write(full_path, content).map_err(|err| err.to_string())
+    fs::write(note_file_path, content).map_err(|err| err.to_string())
 }
 
 #[tauri::command]
@@ -1526,8 +1572,14 @@ fn time_to_ms(time: std::time::SystemTime) -> Option<i64> {
 
 #[tauri::command]
 fn get_note_meta(app: tauri::AppHandle, path: String) -> Result<NoteMeta, String> {
+    let root = notes_root(&app)?;
     let full_path = resolve_path(&app, &path)?;
-    let metadata = fs::metadata(full_path).map_err(|err| err.to_string())?;
+    let note_file_path = resolve_recording_note_file(&root, &full_path);
+    let metadata = if note_file_path.exists() {
+        fs::metadata(note_file_path).map_err(|err| err.to_string())?
+    } else {
+        fs::metadata(full_path).map_err(|err| err.to_string())?
+    };
     let created_ms = metadata.created().ok().and_then(time_to_ms);
     let updated_ms = metadata.modified().ok().and_then(time_to_ms);
     Ok(NoteMeta {

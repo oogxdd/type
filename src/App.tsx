@@ -78,6 +78,7 @@ import type {
   DragData,
   FolderNode,
   GitSyncStatus,
+  NoteEntry,
   RecordingListItem,
   RecordingQueueSnapshot,
 } from "./types";
@@ -166,6 +167,35 @@ const MOBILE_SETTINGS_SECTIONS: Array<{ id: SettingsSectionId; label: string }> 
   { id: "sync", label: "Sync" },
   { id: "recordings", label: "Recordings" },
 ];
+
+const getRecordingTimestampFromName = (name: string): number | null => {
+  const normalized = name.replace(/\.md$/i, "");
+  const match = normalized.match(/^recording-(\d+)(?:-\d+)?$/i);
+  if (!match) {
+    return null;
+  }
+  const value = Number.parseInt(match[1], 10);
+  return Number.isFinite(value) ? value : null;
+};
+
+const sortRecordingsNewestFirst = (entries: NoteEntry[]) =>
+  [...entries].sort((left, right) => {
+    const leftTs = getRecordingTimestampFromName(left.name);
+    const rightTs = getRecordingTimestampFromName(right.name);
+    if (leftTs !== null && rightTs !== null && leftTs !== rightTs) {
+      return rightTs - leftTs;
+    }
+    if (leftTs !== null && rightTs === null) {
+      return -1;
+    }
+    if (leftTs === null && rightTs !== null) {
+      return 1;
+    }
+    return right.name.localeCompare(left.name, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+  });
 
 // ---------------------------------------------------------------------------
 // App
@@ -677,7 +707,13 @@ function App() {
     console.log("[folders] activeNode", activeNode?.path || null);
   }, [activeNode]);
 
-  const notes = activeNode?.notes || [];
+  const notes = useMemo(() => {
+    const source = activeNode?.notes || [];
+    if (activeFolder !== RECORDINGS_FOLDER_PATH) {
+      return source;
+    }
+    return sortRecordingsNewestFirst(source);
+  }, [activeFolder, activeNode]);
   const notePreviews = useNotePreviews(notes);
 
   // -- Create new note ------------------------------------------------------
@@ -2205,6 +2241,9 @@ function App() {
             recordingsError={recordingsError}
             activeAudioPath={activeAudioPath}
             activeAudioSrc={activeAudioSrc}
+            onRefreshTree={async () => {
+              await refreshTree();
+            }}
             onRefreshRecordings={() => {
               void refreshRecordings();
             }}

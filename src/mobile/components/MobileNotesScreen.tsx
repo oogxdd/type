@@ -13,6 +13,7 @@ type MobileNotesScreenProps = {
   onArchive: (notePath: string) => void;
   onLongPress: (notePath: string) => void;
   onPullCreate?: () => Promise<void>;
+  onPullRefresh?: () => Promise<void>;
   emptyStateText?: string;
   createButtonLabel?: string;
 };
@@ -28,6 +29,7 @@ export function MobileNotesScreen({
   onArchive,
   onLongPress,
   onPullCreate,
+  onPullRefresh,
   emptyStateText,
   createButtonLabel = "Create note",
 }: MobileNotesScreenProps) {
@@ -35,10 +37,12 @@ export function MobileNotesScreen({
   const touchStartYRef = useRef<number | null>(null);
   const [pullDistance, setPullDistance] = useState(0);
   const [creating, setCreating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const pullEnabled = Boolean(onPullCreate || onPullRefresh);
 
   const startPull = (clientY: number) => {
     const scrollTop = scrollRef.current?.scrollTop ?? 0;
-    if (!onPullCreate || scrollTop > 0 || creating) {
+    if (!pullEnabled || scrollTop > 0 || creating || refreshing) {
       touchStartYRef.current = null;
       return;
     }
@@ -63,15 +67,30 @@ export function MobileNotesScreen({
     }
     touchStartYRef.current = null;
     const shouldCreate = pullDistance >= 74;
+    const shouldRefresh = pullDistance >= 70;
     setPullDistance(0);
-    if (!shouldCreate || !onPullCreate) {
+    if (onPullRefresh) {
+      if (!shouldRefresh) {
+        return;
+      }
+      setRefreshing(true);
+      try {
+        await onPullRefresh();
+      } finally {
+        setRefreshing(false);
+      }
       return;
     }
-    setCreating(true);
-    try {
-      await onPullCreate();
-    } finally {
-      setCreating(false);
+    if (onPullCreate) {
+      if (!shouldCreate) {
+        return;
+      }
+      setCreating(true);
+      try {
+        await onPullCreate();
+      } finally {
+        setCreating(false);
+      }
     }
   };
 
@@ -101,13 +120,19 @@ export function MobileNotesScreen({
       }}
       aria-label="Notes list"
     >
-      {onPullCreate ? (
+      {pullEnabled ? (
         <div className="mobile-pull-indicator" style={{ height: pullDistance }}>
-          {creating
-            ? "Creating note..."
-            : pullDistance >= 74
-              ? "Release to create note"
-              : "Pull down to create note"}
+          {onPullRefresh
+            ? refreshing
+              ? "Refreshing..."
+              : pullDistance >= 70
+                ? "Release to refresh"
+                : "Pull down to refresh"
+            : creating
+              ? "Creating note..."
+              : pullDistance >= 74
+                ? "Release to create note"
+                : "Pull down to create note"}
         </div>
       ) : null}
       {notes.map((note) => (
