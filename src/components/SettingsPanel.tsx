@@ -181,6 +181,12 @@ function SettingsDetail({
       <>
         <h2 className="settings-detail-title">General</h2>
         <p className="settings-detail-text">Default behavior.</p>
+        <div className="settings-info-grid">
+          <div className="settings-info-row">
+            <span>Notes source folder</span>
+            <code>{gitStatus?.notes_root || "-"}</code>
+          </div>
+        </div>
         <label className="settings-control">
           <span>Notes list location</span>
           <select

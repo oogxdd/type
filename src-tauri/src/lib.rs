@@ -24,6 +24,7 @@ const TRANSCRIPTION_STATUS_FILE: &str = ".transcription-status.json";
 const AUDIO_FILE_NAME_PREFIX: &str = "audio";
 const ASSEMBLY_UPLOAD_URL: &str = "https://api.assemblyai.com/v2/upload";
 const ASSEMBLY_TRANSCRIPT_URL: &str = "https://api.assemblyai.com/v2/transcript";
+const ASSEMBLY_SPEECH_MODEL: &str = "universal-2";
 const ASSEMBLY_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const ASSEMBLY_MAX_POLL_ATTEMPTS: usize = 180;
 const SYSTEM_FOLDERS: [&str; 3] = [UNSORTED_FOLDER, ARCHIEVE_FOLDER, RECORDINGS_FOLDER];
@@ -451,7 +452,10 @@ fn transcribe_audio_bytes_with_assembly(
     let transcript_create_response = client
         .post(ASSEMBLY_TRANSCRIPT_URL)
         .header("authorization", api_key)
-        .json(&serde_json::json!({ "audio_url": upload_payload.upload_url }))
+        .json(&serde_json::json!({
+            "audio_url": upload_payload.upload_url,
+            "speech_models": [ASSEMBLY_SPEECH_MODEL]
+        }))
         .send()
         .map_err(|error| format!("AssemblyAI transcript request failed: {}", error))?;
 
