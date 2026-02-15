@@ -18,7 +18,12 @@ import {
 } from "react";
 import type { SettingsSectionId, ThemeMode, NotesListMode } from "../components/SettingsPanel";
 import type { FlattenedItem } from "../tree/types";
-import type { GitSyncStatus, NoteEntry } from "../types";
+import type {
+  GitSyncStatus,
+  NoteEntry,
+  RecordingListItem,
+  RecordingQueueSnapshot,
+} from "../types";
 import type { NotePreview } from "../utils/format";
 import {
   getCurrentRoute,
@@ -87,6 +92,7 @@ type MobileShellProps = {
   onGitCommitMessageChange: (value: string) => void;
   gitStatus: GitSyncStatus | null;
   gitSyncBusy: boolean;
+  gitSyncAction: "idle" | "refresh" | "connect" | "pull" | "push";
   gitSyncError: string | null;
   onGitRefresh: () => void;
   onGitConnect: () => void;
@@ -100,6 +106,14 @@ type MobileShellProps = {
   isRecordingBusy: boolean;
   recordingError: string | null;
   recordingStatus: string | null;
+  recordingsQueue: RecordingQueueSnapshot | null;
+  recordings: RecordingListItem[];
+  recordingsBusy: boolean;
+  recordingsError: string | null;
+  activeAudioPath: string | null;
+  activeAudioSrc: string | null;
+  onRefreshRecordings: () => void;
+  onPlayRecording: (audioPath: string) => void;
   onStartAudioRecording: () => void;
   onStopAudioRecording: () => void;
   onQueueRecordings: () => void;
@@ -169,6 +183,7 @@ export function MobileShell({
   onGitCommitMessageChange,
   gitStatus,
   gitSyncBusy,
+  gitSyncAction,
   gitSyncError,
   onGitRefresh,
   onGitConnect,
@@ -182,6 +197,14 @@ export function MobileShell({
   isRecordingBusy,
   recordingError,
   recordingStatus,
+  recordingsQueue,
+  recordings,
+  recordingsBusy,
+  recordingsError,
+  activeAudioPath,
+  activeAudioSrc,
+  onRefreshRecordings,
+  onPlayRecording,
   onStartAudioRecording,
   onStopAudioRecording,
   onQueueRecordings,
@@ -471,6 +494,7 @@ export function MobileShell({
       onGitCommitMessageChange={onGitCommitMessageChange}
       gitStatus={gitStatus}
       gitSyncBusy={gitSyncBusy}
+      gitSyncAction={gitSyncAction}
       gitSyncError={gitSyncError}
       onGitRefresh={onGitRefresh}
       onGitConnect={onGitConnect}
@@ -484,6 +508,14 @@ export function MobileShell({
       isRecordingBusy={isRecordingBusy}
       recordingError={recordingError}
       recordingStatus={recordingStatus}
+      recordingsQueue={recordingsQueue}
+      recordings={recordings}
+      recordingsBusy={recordingsBusy}
+      recordingsError={recordingsError}
+      activeAudioPath={activeAudioPath}
+      activeAudioSrc={activeAudioSrc}
+      onRefreshRecordings={onRefreshRecordings}
+      onPlayRecording={onPlayRecording}
       onStartAudioRecording={onStartAudioRecording}
       onStopAudioRecording={onStopAudioRecording}
       onQueueRecordings={onQueueRecordings}

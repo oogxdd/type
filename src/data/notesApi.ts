@@ -3,6 +3,8 @@ import type {
   FolderNode,
   GitSyncStatus,
   NoteMeta,
+  RecordingAudioPayload,
+  RecordingsListResult,
   RecordingTranscriptionQueueResult,
   RecordingWriteResult,
 } from "../types";
@@ -83,6 +85,16 @@ export const queueRecordingTranscriptions = (
     args: {
       assembly_api_key: assemblyApiKey,
     },
+  });
+
+export const listRecordings = (): Promise<RecordingsListResult> =>
+  invokeLogged<RecordingsListResult>("list_recordings");
+
+export const readRecordingAudio = (
+  path: string
+): Promise<RecordingAudioPayload> =>
+  invokeLogged<RecordingAudioPayload>("read_recording_audio", {
+    args: { path },
   });
 
 export const getNoteMeta = (path: string): Promise<NoteMeta> =>

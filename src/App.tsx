@@ -74,7 +74,13 @@ import { focusNoScroll, scrollIntoViewIfNeeded, escapeSelectorValue, confirmActi
 import { getNextNoteFileName } from "./utils/format";
 
 // Types
-import type { DragData, FolderNode, GitSyncStatus } from "./types";
+import type {
+  DragData,
+  FolderNode,
+  GitSyncStatus,
+  RecordingListItem,
+  RecordingQueueSnapshot,
+} from "./types";
 import type { TreeItem } from "./tree/types";
 import { removeChildrenOf } from "./tree/utilities";
 
@@ -90,6 +96,7 @@ const SYSTEM_FOLDER_PATHS = new Set([
 
 type AppMode = "notes" | "settings";
 type PaneId = "folders" | "middle" | "right";
+type GitSyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
 type VisibleNavigationItem =
   | {
       type: "folder";
@@ -136,6 +143,11 @@ const getNoteParentPath = (notePath: string) => {
   const slashIndex = notePath.lastIndexOf("/");
   return slashIndex === -1 ? "" : notePath.slice(0, slashIndex);
 };
+
+const yieldToUi = () =>
+  new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
 
 const toBase64 = (bytes: Uint8Array) => {
   const chunkSize = 0x8000;
@@ -200,10 +212,16 @@ function App() {
     getStoredSyncValue("notes-viewer-assemblyai-api-key", "")
   );
   const [gitStatus, setGitStatus] = useState<GitSyncStatus | null>(null);
-  const [gitSyncBusy, setGitSyncBusy] = useState(false);
+  const [gitSyncAction, setGitSyncAction] = useState<GitSyncAction>("idle");
   const [gitSyncError, setGitSyncError] = useState<string | null>(null);
   const [recordingStatusMessage, setRecordingStatusMessage] = useState<string | null>(null);
   const [transcriptionQueueBusy, setTranscriptionQueueBusy] = useState(false);
+  const [recordingsQueue, setRecordingsQueue] = useState<RecordingQueueSnapshot | null>(null);
+  const [recordingsList, setRecordingsList] = useState<RecordingListItem[]>([]);
+  const [recordingsBusy, setRecordingsBusy] = useState(false);
+  const [recordingsError, setRecordingsError] = useState<string | null>(null);
+  const [activeAudioPath, setActiveAudioPath] = useState<string | null>(null);
+  const [activeAudioSrc, setActiveAudioSrc] = useState<string | null>(null);
 
   const layoutMode = useLayoutMode();
   const { keyboardInset } = useKeyboardInsets();
@@ -326,6 +344,8 @@ function App() {
   }, []);
 
   const refreshGitStatus = useCallback(async () => {
+    setGitSyncAction("refresh");
+    await yieldToUi();
     try {
       const status = await api.getGitStatus();
       setGitStatus(status);
@@ -333,6 +353,44 @@ function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setGitSyncError(message);
+    } finally {
+      setGitSyncAction("idle");
+    }
+  }, []);
+
+  const refreshRecordings = useCallback(async () => {
+    setRecordingsBusy(true);
+    try {
+      const snapshot = await api.listRecordings();
+      setRecordingsQueue(snapshot.queue);
+      setRecordingsList(snapshot.recordings);
+      if (activeAudioPath) {
+        const stillExists = snapshot.recordings.some(
+          (item) => item.audio_path === activeAudioPath
+        );
+        if (!stillExists) {
+          setActiveAudioPath(null);
+          setActiveAudioSrc(null);
+        }
+      }
+      setRecordingsError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setRecordingsError(message);
+    } finally {
+      setRecordingsBusy(false);
+    }
+  }, [activeAudioPath]);
+
+  const playRecording = useCallback(async (audioPath: string) => {
+    try {
+      const payload = await api.readRecordingAudio(audioPath);
+      setActiveAudioPath(audioPath);
+      setActiveAudioSrc(`data:${payload.mime_type};base64,${payload.audio_base64}`);
+      setRecordingsError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setRecordingsError(message);
     }
   }, []);
 
@@ -364,9 +422,10 @@ function App() {
       } finally {
         transcriptionQueueBusyRef.current = false;
         setTranscriptionQueueBusy(false);
+        void refreshRecordings();
       }
     },
-    [assemblyAiApiKey]
+    [assemblyAiApiKey, refreshRecordings]
   );
 
   const handleRecordingReady = useCallback(
@@ -382,11 +441,12 @@ function App() {
       setLastSelectedNote("");
       setActiveNote(null);
       setRecordingStatusMessage(`Saved ${result.audio_path}.`);
+      void refreshRecordings();
       if (layoutMode === "desktop") {
         await queueRecordingTranscriptions("auto");
       }
     },
-    [layoutMode, queueRecordingTranscriptions, refreshTree]
+    [layoutMode, queueRecordingTranscriptions, refreshRecordings, refreshTree]
   );
 
   const {
@@ -407,6 +467,17 @@ function App() {
   useEffect(() => {
     void refreshGitStatus();
   }, [refreshGitStatus]);
+
+  useEffect(() => {
+    if (appMode !== "settings" || activeSettingsSection !== "recordings") {
+      return;
+    }
+    void refreshRecordings();
+    const timer = window.setInterval(() => {
+      void refreshRecordings();
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [activeSettingsSection, appMode, refreshRecordings]);
 
   useEffect(() => {
     if (layoutMode !== "desktop" || !assemblyAiApiKey.trim()) {
@@ -457,8 +528,9 @@ function App() {
       setGitSyncError("Remote repository URL is required.");
       return;
     }
-      setGitSyncBusy(true);
-      try {
+    setGitSyncAction("connect");
+    await yieldToUi();
+    try {
       const status = await api.connectGitRepo(
         remoteUrl,
         branch || undefined,
@@ -471,13 +543,14 @@ function App() {
       const message = error instanceof Error ? error.message : String(error);
       setGitSyncError(message);
     } finally {
-      setGitSyncBusy(false);
+      setGitSyncAction("idle");
     }
   }, [gitBranch, gitPassword, gitRemoteUrl, gitUsername]);
 
   const handleGitPull = useCallback(async () => {
     await flushSave();
-    setGitSyncBusy(true);
+    setGitSyncAction("pull");
+    await yieldToUi();
     try {
       const status = await api.gitPull(
         gitBranch.trim() || undefined,
@@ -495,7 +568,7 @@ function App() {
       const message = error instanceof Error ? error.message : String(error);
       setGitSyncError(message);
     } finally {
-      setGitSyncBusy(false);
+      setGitSyncAction("idle");
     }
   }, [
     flushSave,
@@ -509,8 +582,15 @@ function App() {
 
   const handleGitPush = useCallback(async () => {
     await flushSave();
-    setGitSyncBusy(true);
+    setGitSyncAction("push");
+    await yieldToUi();
     try {
+      const statusBeforePush = await api.getGitStatus();
+      setGitStatus(statusBeforePush);
+      if (!statusBeforePush.push_required) {
+        setGitSyncError(null);
+        return;
+      }
       const status = await api.gitPush(
         gitCommitMessage.trim() || undefined,
         gitBranch.trim() || undefined,
@@ -524,7 +604,7 @@ function App() {
       const message = error instanceof Error ? error.message : String(error);
       setGitSyncError(message);
     } finally {
-      setGitSyncBusy(false);
+      setGitSyncAction("idle");
     }
   }, [flushSave, gitBranch, gitCommitMessage, gitPassword, gitUsername]);
 
@@ -1871,6 +1951,7 @@ function App() {
         onGitCommitMessageChange={setGitCommitMessage}
         gitStatus={gitStatus}
         gitSyncBusy={gitSyncBusy}
+        gitSyncAction={gitSyncAction}
         gitSyncError={gitSyncError}
         onGitRefresh={() => void refreshGitStatus()}
         onGitConnect={() => void handleConnectGitRepo()}
@@ -1883,6 +1964,18 @@ function App() {
         isRecordingBusy={isRecordingFinalizing || transcriptionQueueBusy}
         recordingError={recorderError}
         recordingStatus={recordingStatusMessage}
+        recordingsQueue={recordingsQueue}
+        recordings={recordingsList}
+        recordingsBusy={recordingsBusy}
+        recordingsError={recordingsError}
+        activeAudioPath={activeAudioPath}
+        activeAudioSrc={activeAudioSrc}
+        onRefreshRecordings={() => {
+          void refreshRecordings();
+        }}
+        onPlayRecording={(audioPath) => {
+          void playRecording(audioPath);
+        }}
         onStartAudioRecording={() => {
           void startRecording();
         }}
@@ -1998,6 +2091,7 @@ function App() {
   );
 
   const dndSensors = layoutMode === "desktop" ? sensors : [];
+  const gitSyncBusy = gitSyncAction !== "idle";
   const lastSuccessfulSyncLabel = lastSuccessfulSyncAt
     ? new Date(lastSuccessfulSyncAt).toLocaleString()
     : null;
@@ -2091,6 +2185,7 @@ function App() {
             onGitCommitMessageChange={setGitCommitMessage}
             gitStatus={gitStatus}
             gitSyncBusy={gitSyncBusy}
+            gitSyncAction={gitSyncAction}
             gitSyncError={gitSyncError}
             onGitRefresh={() => void refreshGitStatus()}
             onGitConnect={() => void handleConnectGitRepo()}
@@ -2104,6 +2199,18 @@ function App() {
             isRecordingBusy={isRecordingFinalizing || transcriptionQueueBusy}
             recordingError={recorderError}
             recordingStatus={recordingStatusMessage}
+            recordingsQueue={recordingsQueue}
+            recordings={recordingsList}
+            recordingsBusy={recordingsBusy}
+            recordingsError={recordingsError}
+            activeAudioPath={activeAudioPath}
+            activeAudioSrc={activeAudioSrc}
+            onRefreshRecordings={() => {
+              void refreshRecordings();
+            }}
+            onPlayRecording={(audioPath) => {
+              void playRecording(audioPath);
+            }}
             onStartAudioRecording={() => {
               void startRecording();
             }}

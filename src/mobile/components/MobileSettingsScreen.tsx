@@ -1,5 +1,6 @@
 import type { NotesListMode, SettingsSectionId, ThemeMode } from "../../components/SettingsPanel";
-import type { GitSyncStatus } from "../../types";
+import type { GitSyncStatus, RecordingListItem, RecordingQueueSnapshot } from "../../types";
+type GitSyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
 
 type MobileSettingsScreenProps = {
   activeSection: SettingsSectionId;
@@ -21,6 +22,7 @@ type MobileSettingsScreenProps = {
   onGitCommitMessageChange: (value: string) => void;
   gitStatus: GitSyncStatus | null;
   gitSyncBusy: boolean;
+  gitSyncAction: GitSyncAction;
   gitSyncError: string | null;
   onGitRefresh: () => void;
   onGitConnect: () => void;
@@ -34,9 +36,27 @@ type MobileSettingsScreenProps = {
   isRecordingBusy: boolean;
   recordingError: string | null;
   recordingStatus: string | null;
+  recordingsQueue: RecordingQueueSnapshot | null;
+  recordings: RecordingListItem[];
+  recordingsBusy: boolean;
+  recordingsError: string | null;
+  activeAudioPath: string | null;
+  activeAudioSrc: string | null;
+  onRefreshRecordings: () => void;
+  onPlayRecording: (audioPath: string) => void;
   onStartAudioRecording: () => void;
   onStopAudioRecording: () => void;
   onQueueRecordings: () => void;
+};
+
+const formatRecordingStatus = (item: RecordingListItem) => {
+  if (item.is_processing) {
+    return "processing";
+  }
+  if (item.is_queued) {
+    return "queued";
+  }
+  return item.status;
 };
 
 const getSyncHint = (error: string | null): string | null => {
@@ -45,73 +65,93 @@ const getSyncHint = (error: string | null): string | null => {
   }
   const lower = error.toLowerCase();
   if (lower.includes("local changes detected")) {
-    return "Pull is blocked because local changes are pending. Push first.";
+    return "Pull blocked. Push local changes first.";
   }
   if (lower.includes("merge commit")) {
-    return "History diverged. Resolve on desktop, push, then pull on mobile.";
+    return "Diverged history. Resolve on desktop, then pull on mobile.";
   }
   if (lower.includes("credentials")) {
-    return "Authentication failed. Check username and token/password.";
+    return "Authentication failed. Verify username and token.";
   }
   if (lower.includes("not initialized")) {
-    return "Repository is not connected yet. Use Connect repo first.";
+    return "Repository is not connected yet.";
   }
-  return "Sync failed. Verify remote settings and network, then retry.";
+  return "Sync failed. Verify settings and retry.";
 };
 
-const sectionMeta: Record<SettingsSectionId, { title: string; subtitle: string }> = {
-  general: {
-    title: "General",
-    subtitle: "Control default navigation behavior and note list layout.",
-  },
-  appearance: {
-    title: "Appearance",
-    subtitle: "Tune this device for readability and comfort.",
-  },
-  sync: {
-    title: "Sync",
-    subtitle: "Git-based two-way sync across desktop and iOS.",
-  },
-  recordings: {
-    title: "Recordings",
-    subtitle: "Capture audio notes and queue transcription.",
-  },
-};
-
-function SettingsChip({
-  label,
-  tone = "neutral",
+function Group({
+  title,
+  children,
 }: {
-  label: string;
-  tone?: "neutral" | "good" | "warn" | "bad" | "info";
+  title: string;
+  children: React.ReactNode;
 }) {
-  return <span className={`mobile-settings-chip tone-${tone}`}>{label}</span>;
+  return (
+    <section className="mobile-native-group-wrap" aria-label={title}>
+      <h3 className="mobile-native-group-title">{title}</h3>
+      <div className="mobile-native-group">{children}</div>
+    </section>
+  );
 }
 
-function OptionTile({
+function ChoiceRow({
   label,
-  description,
-  active,
+  subtitle,
+  selected,
   onClick,
 }: {
   label: string;
-  description: string;
-  active: boolean;
+  subtitle?: string;
+  selected: boolean;
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      className={`mobile-option-tile${active ? " active" : ""}`}
-      onClick={onClick}
-      aria-pressed={active}
-    >
-      <span className="tile-title">{label}</span>
-      <span className="tile-description">{description}</span>
-      <span className="tile-check" aria-hidden>
-        {active ? "Selected" : "Tap to select"}
+    <button type="button" className="mobile-native-row choice" onClick={onClick} aria-pressed={selected}>
+      <span className="mobile-native-row-main">
+        <span className="mobile-native-row-label">{label}</span>
+        {subtitle ? <span className="mobile-native-row-sub">{subtitle}</span> : null}
+      </span>
+      <span className={`mobile-native-check${selected ? " active" : ""}`} aria-hidden>
+        {selected ? "✓" : ""}
       </span>
     </button>
+  );
+}
+
+function InputRow({
+  label,
+  value,
+  onChange,
+  placeholder,
+  password,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  password?: boolean;
+}) {
+  return (
+    <label className="mobile-native-input-row">
+      <span className="mobile-native-input-label">{label}</span>
+      <input
+        type={password ? "password" : "text"}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        autoCapitalize="off"
+        autoCorrect="off"
+      />
+    </label>
+  );
+}
+
+function StatRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="mobile-native-row stat">
+      <span className="mobile-native-row-label">{label}</span>
+      <span className="mobile-native-row-value">{value}</span>
+    </div>
   );
 }
 
@@ -135,6 +175,7 @@ export function MobileSettingsScreen({
   onGitCommitMessageChange,
   gitStatus,
   gitSyncBusy,
+  gitSyncAction,
   gitSyncError,
   onGitRefresh,
   onGitConnect,
@@ -148,6 +189,14 @@ export function MobileSettingsScreen({
   isRecordingBusy,
   recordingError,
   recordingStatus,
+  recordingsQueue,
+  recordings,
+  recordingsBusy,
+  recordingsError,
+  activeAudioPath,
+  activeAudioSrc,
+  onRefreshRecordings,
+  onPlayRecording,
   onStartAudioRecording,
   onStopAudioRecording,
   onQueueRecordings,
@@ -157,6 +206,16 @@ export function MobileSettingsScreen({
   const canPush = !gitSyncBusy && Boolean(gitStatus?.repo_initialized);
   const canConnect = !gitSyncBusy && gitRemoteUrl.trim().length > 0;
   const canQueue = !isRecordingBusy && assemblyAiApiKey.trim().length > 0;
+  const syncActionLabel =
+    gitSyncAction === "connect"
+      ? "Connecting..."
+      : gitSyncAction === "pull"
+        ? "Pulling..."
+        : gitSyncAction === "push"
+          ? "Pushing..."
+          : gitSyncAction === "refresh"
+            ? "Refreshing..."
+            : "Idle";
 
   const recorderState = !recordingSupported
     ? "Unsupported"
@@ -165,14 +224,6 @@ export function MobileSettingsScreen({
       : isRecordingBusy
         ? "Saving"
         : "Idle";
-
-  const syncTone: "neutral" | "good" | "warn" | "bad" | "info" = gitSyncError
-    ? "bad"
-    : gitSyncBusy
-      ? "info"
-      : gitStatus?.repo_initialized
-        ? "good"
-        : "warn";
 
   return (
     <div className="mobile-settings-screen">
@@ -190,256 +241,86 @@ export function MobileSettingsScreen({
         ))}
       </div>
 
-      <div className="mobile-settings-scroll">
-        <section className="mobile-settings-hero">
-          <h2>{sectionMeta[activeSection].title}</h2>
-          <p>{sectionMeta[activeSection].subtitle}</p>
-          <div className="mobile-settings-chip-row">
-            {activeSection === "sync" ? (
-              <>
-                <SettingsChip
-                  label={
-                    gitStatus?.repo_initialized
-                      ? `Branch ${gitStatus.current_branch || gitBranch || "-"}`
-                      : "Repository not connected"
-                  }
-                  tone={syncTone}
-                />
-                <SettingsChip
-                  label={
-                    gitStatus?.has_uncommitted_changes ? "Working tree: changes" : "Working tree: clean"
-                  }
-                  tone={gitStatus?.has_uncommitted_changes ? "warn" : "good"}
-                />
-              </>
-            ) : null}
-
-            {activeSection === "recordings" ? (
-              <>
-                <SettingsChip label={`Recorder: ${recorderState}`} tone={isRecordingAudio ? "info" : "neutral"} />
-                <SettingsChip
-                  label={assemblyAiApiKey.trim() ? "Transcription enabled" : "Transcription key missing"}
-                  tone={assemblyAiApiKey.trim() ? "good" : "warn"}
-                />
-              </>
-            ) : null}
-
-            {activeSection === "appearance" ? (
-              <SettingsChip label={`Theme: ${theme === "dark" ? "Dark" : "Light"}`} tone="neutral" />
-            ) : null}
-
-            {activeSection === "general" ? (
-              <SettingsChip
-                label={`Notes list: ${notesListMode === "nested" ? "Nested in folders" : "Separate panel"}`}
-                tone="neutral"
-              />
-            ) : null}
-          </div>
-        </section>
-
+      <div className="mobile-settings-scroll mobile-settings-native">
         {activeSection === "general" ? (
-          <section className="mobile-settings-card" aria-label="General settings">
-            <div className="mobile-card-title-row">
-              <h3>Notes list location</h3>
-              <span>How notes are shown in navigation</span>
-            </div>
-            <div className="mobile-option-grid">
-              <OptionTile
-                label="Separate panel"
-                description="Classic two-column browsing with dedicated notes list."
-                active={notesListMode === "separate"}
-                onClick={() => onNotesListModeChange("separate")}
-              />
-              <OptionTile
-                label="Nested in folders"
-                description="Display notes inline under folders in the navigation tree."
-                active={notesListMode === "nested"}
-                onClick={() => onNotesListModeChange("nested")}
-              />
-            </div>
-          </section>
+          <Group title="Notes List">
+            <ChoiceRow
+              label="Separate panel"
+              subtitle="Show notes in a dedicated list."
+              selected={notesListMode === "separate"}
+              onClick={() => onNotesListModeChange("separate")}
+            />
+            <ChoiceRow
+              label="Nested in folders"
+              subtitle="Show notes inside folder tree."
+              selected={notesListMode === "nested"}
+              onClick={() => onNotesListModeChange("nested")}
+            />
+          </Group>
         ) : null}
 
         {activeSection === "appearance" ? (
-          <section className="mobile-settings-card" aria-label="Appearance settings">
-            <div className="mobile-card-title-row">
-              <h3>Theme</h3>
-              <span>Applies only to this device</span>
-            </div>
-            <div className="mobile-option-grid compact">
-              <OptionTile
-                label="Light"
-                description="High contrast on bright background."
-                active={theme === "light"}
-                onClick={() => onThemeChange("light")}
-              />
-              <OptionTile
-                label="Dark"
-                description="Reduced glare in low-light environments."
-                active={theme === "dark"}
-                onClick={() => onThemeChange("dark")}
-              />
-            </div>
-          </section>
+          <Group title="Theme">
+            <ChoiceRow
+              label="Light"
+              selected={theme === "light"}
+              onClick={() => onThemeChange("light")}
+            />
+            <ChoiceRow
+              label="Dark"
+              selected={theme === "dark"}
+              onClick={() => onThemeChange("dark")}
+            />
+          </Group>
         ) : null}
 
         {activeSection === "sync" ? (
           <>
-            <section className="mobile-settings-card" aria-label="Repository">
-              <div className="mobile-card-title-row">
-                <h3>Repository</h3>
-                <span>Use same remote and branch on all devices</span>
-              </div>
-              <label className="mobile-form-field">
-                <span>Remote URL</span>
-                <input
-                  type="text"
-                  value={gitRemoteUrl}
-                  onChange={(event) => onGitRemoteUrlChange(event.target.value)}
-                  placeholder="https://github.com/you/notes.git"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                />
-              </label>
-              <label className="mobile-form-field">
-                <span>Branch</span>
-                <input
-                  type="text"
-                  value={gitBranch}
-                  onChange={(event) => onGitBranchChange(event.target.value)}
-                  placeholder="main"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                />
-              </label>
-              <label className="mobile-form-field">
-                <span>Commit message</span>
-                <input
-                  type="text"
-                  value={gitCommitMessage}
-                  onChange={(event) => onGitCommitMessageChange(event.target.value)}
-                  placeholder="Sync notes"
-                />
-              </label>
-            </section>
+            <Group title="Repository">
+              <InputRow label="Remote URL" value={gitRemoteUrl} onChange={onGitRemoteUrlChange} placeholder="https://github.com/you/notes.git" />
+              <InputRow label="Branch" value={gitBranch} onChange={onGitBranchChange} placeholder="main" />
+              <InputRow label="Commit message" value={gitCommitMessage} onChange={onGitCommitMessageChange} placeholder="Sync notes" />
+            </Group>
 
-            <section className="mobile-settings-card" aria-label="Authentication">
-              <div className="mobile-card-title-row">
-                <h3>Authentication</h3>
-                <span>Recommended on iOS: HTTPS + personal access token</span>
-              </div>
-              <label className="mobile-form-field">
-                <span>Username</span>
-                <input
-                  type="text"
-                  value={gitUsername}
-                  onChange={(event) => onGitUsernameChange(event.target.value)}
-                  placeholder="Git username"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                />
-              </label>
-              <label className="mobile-form-field">
-                <span>Token / password</span>
-                <input
-                  type="password"
-                  value={gitPassword}
-                  onChange={(event) => onGitPasswordChange(event.target.value)}
-                  placeholder="Personal access token"
-                />
-              </label>
-            </section>
+            <Group title="Authentication">
+              <InputRow label="Username" value={gitUsername} onChange={onGitUsernameChange} placeholder="Git username" />
+              <InputRow label="Token / password" value={gitPassword} onChange={onGitPasswordChange} placeholder="Personal access token" password />
+            </Group>
 
-            <section className="mobile-settings-card" aria-label="Sync actions">
-              <div className="mobile-card-title-row">
-                <h3>Sync actions</h3>
-                <span>Recommended flow: Pull → edit → Push</span>
-              </div>
-              <div className="mobile-sync-actions stacked">
-                <button
-                  type="button"
-                  className="mobile-primary-btn"
-                  disabled={!canConnect}
-                  onClick={onGitConnect}
-                >
-                  {gitSyncBusy ? "Working..." : "Connect repo"}
+            <Group title="Actions">
+              <div className="mobile-native-actions">
+                <button type="button" className="mobile-primary-btn" onClick={onGitConnect} disabled={!canConnect}>
+                  {gitSyncAction === "connect" ? "Connecting..." : "Connect repo"}
                 </button>
-                <div className="mobile-sync-actions">
-                  <button
-                    type="button"
-                    className="mobile-secondary-btn"
-                    onClick={onGitPull}
-                    disabled={!canPull}
-                  >
-                    {gitSyncBusy ? "Working..." : gitStatus?.has_uncommitted_changes ? "Pull (Push first)" : "Pull"}
-                  </button>
-                  <button type="button" className="mobile-secondary-btn" onClick={onGitPush} disabled={!canPush}>
-                    {gitSyncBusy ? "Working..." : "Push"}
-                  </button>
-                  <button
-                    type="button"
-                    className="mobile-secondary-btn full"
-                    onClick={onGitRefresh}
-                    disabled={gitSyncBusy}
-                  >
-                    Refresh status
-                  </button>
-                </div>
+                <button type="button" className="mobile-secondary-btn" onClick={onGitPull} disabled={!canPull}>
+                  {gitSyncAction === "pull" ? "Pulling..." : "Pull"}
+                </button>
+                <button type="button" className="mobile-secondary-btn" onClick={onGitPush} disabled={!canPush}>
+                  {gitSyncAction === "push" ? "Pushing..." : "Push"}
+                </button>
+                <button type="button" className="mobile-secondary-btn" onClick={onGitRefresh} disabled={gitSyncBusy}>
+                  {gitSyncAction === "refresh" ? "Refreshing..." : "Refresh status"}
+                </button>
               </div>
-            </section>
+            </Group>
 
-            <section className="mobile-settings-card mobile-status-card" aria-label="Sync status" role="status">
-              <div className="mobile-card-title-row">
-                <h3>Sync status</h3>
-                <span>Current repository state</span>
-              </div>
-              <div className="mobile-status-grid two-col">
-                <div>
-                  <span className="label">Last successful sync</span>
-                  <span className="value">{lastSuccessfulSyncAt ?? "Never"}</span>
-                </div>
-                <div>
-                  <span className="label">Repository</span>
-                  <span className="value">{gitStatus?.repo_initialized ? "Connected" : "Not connected"}</span>
-                </div>
-                <div>
-                  <span className="label">Branch</span>
-                  <span className="value">{gitStatus?.current_branch || gitBranch || "-"}</span>
-                </div>
-                <div>
-                  <span className="label">Git available</span>
-                  <span className="value">{gitStatus?.git_available ? "Yes" : "No"}</span>
-                </div>
-                <div>
-                  <span className="label">Working tree</span>
-                  <span className="value">{gitStatus?.has_uncommitted_changes ? "Changes pending" : "Clean"}</span>
-                </div>
-                <div>
-                  <span className="label">Ahead / behind</span>
-                  <span className="value">
-                    {gitStatus ? `${gitStatus.ahead} ahead / ${gitStatus.behind} behind` : "-"}
-                  </span>
-                </div>
-                <div className="wide">
-                  <span className="label">Remote URL</span>
-                  <span className="value">{gitStatus?.remote_url ?? "Not connected"}</span>
-                </div>
-                <div className="wide">
-                  <span className="label">Notes root</span>
-                  <span className="value">{gitStatus?.notes_root ?? "-"}</span>
-                </div>
-              </div>
-            </section>
+            <Group title="Status">
+              <StatRow label="Last successful sync" value={lastSuccessfulSyncAt ?? "Never"} />
+              <StatRow label="Repository" value={gitStatus?.repo_initialized ? "Connected" : "Not connected"} />
+              <StatRow label="Branch" value={gitStatus?.current_branch || gitBranch || "-"} />
+              <StatRow label="Remote URL" value={gitStatus?.remote_url ?? "-"} />
+              <StatRow label="Working tree" value={gitStatus?.has_uncommitted_changes ? "Changes pending" : "Clean"} />
+              <StatRow label="Push status" value={gitStatus?.push_required ? "Ready to push" : "Up to date"} />
+              <StatRow
+                label="Ahead / behind"
+                value={gitStatus ? `${gitStatus.ahead} ahead / ${gitStatus.behind} behind` : "-"}
+              />
+              <StatRow label="Sync action" value={syncActionLabel} />
+            </Group>
 
-            <section className="mobile-settings-card mobile-security-card" aria-label="Security">
-              <div className="mobile-card-title-row">
-                <h3>Security note</h3>
-                <span>Current implementation detail</span>
-              </div>
-              <p>
-                Credentials are stored locally on this device. Use least-privilege tokens and rotate regularly.
-              </p>
-            </section>
+            <p className="mobile-native-note">
+              Credentials are currently stored on this device. Use least-privilege tokens.
+            </p>
 
             {gitSyncError ? (
               <section className="mobile-sync-error" role="alert">
@@ -453,22 +334,10 @@ export function MobileSettingsScreen({
 
         {activeSection === "recordings" ? (
           <>
-            <section className="mobile-settings-card" aria-label="Recorder">
-              <div className="mobile-card-title-row">
-                <h3>Recorder</h3>
-                <span>Audio files are saved under Recordings/recording-*/audio.*</span>
-              </div>
-              <div className="mobile-status-grid two-col">
-                <div>
-                  <span className="label">Recorder state</span>
-                  <span className="value">{recorderState}</span>
-                </div>
-                <div>
-                  <span className="label">Device support</span>
-                  <span className="value">{recordingSupported ? "Supported" : "Unsupported"}</span>
-                </div>
-              </div>
-              <div className="mobile-sync-actions">
+            <Group title="Recorder">
+              <StatRow label="Recorder state" value={recorderState} />
+              <StatRow label="Device support" value={recordingSupported ? "Supported" : "Unsupported"} />
+              <div className="mobile-native-actions">
                 <button
                   type="button"
                   className="mobile-primary-btn"
@@ -486,43 +355,63 @@ export function MobileSettingsScreen({
                   Stop and save
                 </button>
               </div>
-            </section>
+            </Group>
 
-            <section className="mobile-settings-card" aria-label="Transcription">
-              <div className="mobile-card-title-row">
-                <h3>Transcription</h3>
-                <span>Queue pending recordings for AssemblyAI on demand</span>
-              </div>
-              <label className="mobile-form-field">
-                <span>AssemblyAI API key</span>
-                <input
-                  type="password"
-                  value={assemblyAiApiKey}
-                  onChange={(event) => onAssemblyAiApiKeyChange(event.target.value)}
-                  placeholder="Paste AssemblyAI key"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                />
-              </label>
-              <div className="mobile-sync-actions">
-                <button type="button" className="mobile-secondary-btn full" onClick={onQueueRecordings} disabled={!canQueue}>
+            <Group title="Transcription">
+              <InputRow
+                label="AssemblyAI API key"
+                value={assemblyAiApiKey}
+                onChange={onAssemblyAiApiKeyChange}
+                placeholder="Paste AssemblyAI key"
+                password
+              />
+              <div className="mobile-native-actions single">
+                <button type="button" className="mobile-secondary-btn" onClick={onQueueRecordings} disabled={!canQueue}>
                   Queue transcription
                 </button>
+                <button type="button" className="mobile-secondary-btn" onClick={onRefreshRecordings} disabled={recordingsBusy}>
+                  {recordingsBusy ? "Refreshing..." : "Refresh queue"}
+                </button>
               </div>
-              {recordingStatus ? (
-                <div className="mobile-status-grid">
-                  <div>
-                    <span className="label">Last queue result</span>
-                    <span className="value">{recordingStatus}</span>
+              <StatRow label="In-flight" value={String(recordingsQueue?.in_flight ?? 0)} />
+              <StatRow label="Current job" value={recordingsQueue?.current_recording ?? "-"} />
+              {recordingStatus ? <p className="mobile-native-note">{recordingStatus}</p> : null}
+            </Group>
+
+            <Group title="Recordings monitor">
+              {recordings.length === 0 ? (
+                <p className="mobile-native-note">No recordings yet.</p>
+              ) : (
+                recordings.map((item) => (
+                  <div key={item.recording_folder} className="mobile-native-row stat mobile-recording-row">
+                    <span className="mobile-native-row-main">
+                      <span className="mobile-native-row-label">{item.recording_folder}</span>
+                      <span className="mobile-native-row-sub">{formatRecordingStatus(item)}</span>
+                    </span>
+                    <button
+                      type="button"
+                      className="mobile-secondary-btn mobile-recording-play"
+                      onClick={() => item.audio_path && onPlayRecording(item.audio_path)}
+                      disabled={!item.audio_path}
+                    >
+                      {activeAudioPath && activeAudioPath === item.audio_path ? "Playing" : "Play"}
+                    </button>
                   </div>
-                </div>
-              ) : null}
-            </section>
+                ))
+              )}
+              {activeAudioSrc ? <audio className="mobile-recording-player" controls src={activeAudioSrc} /> : null}
+            </Group>
 
             {recordingError ? (
               <section className="mobile-sync-error" role="alert">
                 <strong>Recording error</strong>
                 <p>{recordingError}</p>
+              </section>
+            ) : null}
+            {recordingsError ? (
+              <section className="mobile-sync-error" role="alert">
+                <strong>Queue error</strong>
+                <p>{recordingsError}</p>
               </section>
             ) : null}
           </>

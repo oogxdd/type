@@ -997,6 +997,60 @@ body {
   gap: 8px;
 }
 
+.settings-recordings-list {
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.settings-recording-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.settings-recording-row:last-child {
+  border-bottom: none;
+}
+
+.settings-recording-row.empty {
+  color: var(--ui-muted);
+  font-size: 12px;
+}
+
+.settings-recording-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.settings-recording-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-text);
+  overflow-wrap: anywhere;
+}
+
+.settings-recording-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--ui-muted);
+}
+
+.settings-recording-actions {
+  display: flex;
+  align-items: center;
+}
+
+.settings-recording-player {
+  width: 100%;
+  margin-top: 8px;
+}
+
 .nav-action-group {
   display: grid;
   gap: 8px;
@@ -1585,6 +1639,22 @@ body {
 .app.theme-dark .settings-action-row [data-slot="button"][data-variant="secondary"] {
   background: rgba(255, 255, 255, 0.12);
   color: #e8edf4;
+}
+
+.app.theme-dark .settings-recordings-list {
+  border-color: #2f3946;
+}
+
+.app.theme-dark .settings-recording-row {
+  border-bottom-color: #26303c;
+}
+
+.app.theme-dark .settings-recording-title {
+  color: #e8edf4;
+}
+
+.app.theme-dark .settings-recording-meta {
+  color: #a8b1be;
 }
 
 .app.theme-dark .settings-action-row [data-slot="button"][data-variant="secondary"]:hover {

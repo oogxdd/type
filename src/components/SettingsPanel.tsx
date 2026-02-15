@@ -1,5 +1,5 @@
 import { Button } from "./ui/button";
-import type { GitSyncStatus } from "../types";
+import type { GitSyncStatus, RecordingListItem, RecordingQueueSnapshot } from "../types";
 
 export type ThemeMode = "light" | "dark";
 export type NotesListMode = "separate" | "nested";
@@ -9,6 +9,7 @@ export type SettingsSectionId =
   | "appearance"
   | "sync"
   | "recordings";
+type GitSyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
 
 type SettingsSection = {
   id: SettingsSectionId;
@@ -26,6 +27,27 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     description: "Audio capture, transcription queue, and AssemblyAI settings.",
   },
 ];
+
+const formatRecordingStatus = (item: RecordingListItem) => {
+  if (item.is_processing) {
+    return "processing";
+  }
+  if (item.is_queued) {
+    return "queued";
+  }
+  return item.status;
+};
+
+const formatUpdatedAt = (updatedMs: number | null) => {
+  if (!updatedMs) {
+    return "never";
+  }
+  const date = new Date(updatedMs);
+  if (Number.isNaN(date.getTime())) {
+    return "never";
+  }
+  return date.toLocaleString();
+};
 
 function SettingsRow({
   section,
@@ -70,6 +92,7 @@ function SettingsDetail({
   onGitCommitMessageChange,
   gitStatus,
   gitSyncBusy,
+  gitSyncAction,
   gitSyncError,
   onGitRefresh,
   onGitConnect,
@@ -82,6 +105,14 @@ function SettingsDetail({
   isRecordingBusy,
   recordingError,
   recordingStatus,
+  recordingsQueue,
+  recordings,
+  recordingsBusy,
+  recordingsError,
+  activeAudioPath,
+  activeAudioSrc,
+  onRefreshRecordings,
+  onPlayRecording,
   onStartAudioRecording,
   onStopAudioRecording,
   onQueueRecordings,
@@ -103,6 +134,7 @@ function SettingsDetail({
   onGitCommitMessageChange: (value: string) => void;
   gitStatus: GitSyncStatus | null;
   gitSyncBusy: boolean;
+  gitSyncAction: GitSyncAction;
   gitSyncError: string | null;
   onGitRefresh: () => void;
   onGitConnect: () => void;
@@ -115,10 +147,35 @@ function SettingsDetail({
   isRecordingBusy: boolean;
   recordingError: string | null;
   recordingStatus: string | null;
+  recordingsQueue: RecordingQueueSnapshot | null;
+  recordings: RecordingListItem[];
+  recordingsBusy: boolean;
+  recordingsError: string | null;
+  activeAudioPath: string | null;
+  activeAudioSrc: string | null;
+  onRefreshRecordings: () => void;
+  onPlayRecording: (audioPath: string) => void;
   onStartAudioRecording: () => void;
   onStopAudioRecording: () => void;
   onQueueRecordings: () => void;
 }) {
+  const canPull =
+    !gitSyncBusy &&
+    Boolean(gitStatus?.repo_initialized) &&
+    !gitStatus?.has_uncommitted_changes;
+  const canPush = !gitSyncBusy && Boolean(gitStatus?.repo_initialized);
+  const canConnect = !gitSyncBusy && gitRemoteUrl.trim().length > 0;
+  const syncActionLabel =
+    gitSyncAction === "connect"
+      ? "Connecting..."
+      : gitSyncAction === "pull"
+        ? "Pulling..."
+        : gitSyncAction === "push"
+          ? "Pushing..."
+          : gitSyncAction === "refresh"
+            ? "Refreshing..."
+            : "Idle";
+
   if (sectionId === "general") {
     return (
       <>
@@ -231,10 +288,18 @@ function SettingsDetail({
             <code>{gitStatus?.has_uncommitted_changes ? "changes pending" : "clean"}</code>
           </div>
           <div className="settings-info-row">
+            <span>Push status</span>
+            <code>{gitStatus?.push_required ? "ready to push" : "up to date"}</code>
+          </div>
+          <div className="settings-info-row">
             <span>Ahead / behind</span>
             <code>
               {gitStatus ? `${gitStatus.ahead} ahead / ${gitStatus.behind} behind` : "-"}
             </code>
+          </div>
+          <div className="settings-info-row">
+            <span>Sync action</span>
+            <code>{syncActionLabel}</code>
           </div>
           <div className="settings-info-row">
             <span>Notes root</span>
@@ -252,16 +317,16 @@ function SettingsDetail({
         </label>
         <div className="settings-action-row">
           <Button variant="outline" size="sm" type="button" onClick={onGitRefresh} disabled={gitSyncBusy}>
-            Refresh status
+            {gitSyncAction === "refresh" ? "Refreshing..." : "Refresh status"}
           </Button>
-          <Button size="sm" type="button" onClick={onGitConnect} disabled={gitSyncBusy}>
-            Connect repo
+          <Button size="sm" type="button" onClick={onGitConnect} disabled={!canConnect}>
+            {gitSyncAction === "connect" ? "Connecting..." : "Connect repo"}
           </Button>
-          <Button variant="secondary" size="sm" type="button" onClick={onGitPull} disabled={gitSyncBusy}>
-            Pull
+          <Button variant="secondary" size="sm" type="button" onClick={onGitPull} disabled={!canPull}>
+            {gitSyncAction === "pull" ? "Pulling..." : "Pull"}
           </Button>
-          <Button variant="secondary" size="sm" type="button" onClick={onGitPush} disabled={gitSyncBusy}>
-            Push
+          <Button variant="secondary" size="sm" type="button" onClick={onGitPush} disabled={!canPush}>
+            {gitSyncAction === "push" ? "Pushing..." : "Push"}
           </Button>
         </div>
       </>
@@ -304,6 +369,14 @@ function SettingsDetail({
             <span>Transcription mode</span>
             <code>{assemblyAiApiKey.trim() ? "enabled" : "api key required"}</code>
           </div>
+          <div className="settings-info-row">
+            <span>Queue in-flight</span>
+            <code>{recordingsQueue?.in_flight ?? 0}</code>
+          </div>
+          <div className="settings-info-row">
+            <span>Queue active job</span>
+            <code>{recordingsQueue?.current_recording ?? "-"}</code>
+          </div>
         </div>
         {recordingStatus ? (
           <label className="settings-control">
@@ -336,11 +409,62 @@ function SettingsDetail({
             variant="secondary"
             size="sm"
             type="button"
+            onClick={onRefreshRecordings}
+            disabled={recordingsBusy}
+          >
+            {recordingsBusy ? "Refreshing..." : "Refresh queue"}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            type="button"
             onClick={onQueueRecordings}
             disabled={!assemblyAiApiKey.trim() || isRecordingBusy}
           >
             Queue transcription
           </Button>
+        </div>
+        {recordingsError ? (
+          <p className="settings-warning-text settings-inline-warning">{recordingsError}</p>
+        ) : null}
+        <div className="settings-control">
+          <span>Recordings monitor</span>
+          <div className="settings-recordings-list">
+            {recordings.length === 0 ? (
+              <div className="settings-recording-row empty">No recordings yet.</div>
+            ) : (
+              recordings.map((item) => {
+                const currentStatus = formatRecordingStatus(item);
+                const canPlay = Boolean(item.audio_path);
+                return (
+                  <div key={item.recording_folder} className="settings-recording-row">
+                    <div className="settings-recording-main">
+                      <div className="settings-recording-title">{item.recording_folder}</div>
+                      <div className="settings-recording-meta">
+                        <code>{currentStatus}</code>
+                        <span>updated {formatUpdatedAt(item.updated_ms)}</span>
+                      </div>
+                      {item.error ? (
+                        <p className="settings-warning-text settings-inline-warning">{item.error}</p>
+                      ) : null}
+                    </div>
+                    <div className="settings-recording-actions">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        onClick={() => item.audio_path && onPlayRecording(item.audio_path)}
+                        disabled={!canPlay}
+                      >
+                        {activeAudioPath && activeAudioPath === item.audio_path ? "Playing" : "Play"}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+          {activeAudioSrc ? <audio className="settings-recording-player" controls src={activeAudioSrc} /> : null}
         </div>
       </>
     );
@@ -399,6 +523,7 @@ export function SettingsDetailPane({
   onGitCommitMessageChange,
   gitStatus,
   gitSyncBusy,
+  gitSyncAction,
   gitSyncError,
   onGitRefresh,
   onGitConnect,
@@ -411,6 +536,14 @@ export function SettingsDetailPane({
   isRecordingBusy,
   recordingError,
   recordingStatus,
+  recordingsQueue,
+  recordings,
+  recordingsBusy,
+  recordingsError,
+  activeAudioPath,
+  activeAudioSrc,
+  onRefreshRecordings,
+  onPlayRecording,
   onStartAudioRecording,
   onStopAudioRecording,
   onQueueRecordings,
@@ -434,6 +567,7 @@ export function SettingsDetailPane({
   onGitCommitMessageChange: (value: string) => void;
   gitStatus: GitSyncStatus | null;
   gitSyncBusy: boolean;
+  gitSyncAction: GitSyncAction;
   gitSyncError: string | null;
   onGitRefresh: () => void;
   onGitConnect: () => void;
@@ -446,6 +580,14 @@ export function SettingsDetailPane({
   isRecordingBusy: boolean;
   recordingError: string | null;
   recordingStatus: string | null;
+  recordingsQueue: RecordingQueueSnapshot | null;
+  recordings: RecordingListItem[];
+  recordingsBusy: boolean;
+  recordingsError: string | null;
+  activeAudioPath: string | null;
+  activeAudioSrc: string | null;
+  onRefreshRecordings: () => void;
+  onPlayRecording: (audioPath: string) => void;
   onStartAudioRecording: () => void;
   onStopAudioRecording: () => void;
   onQueueRecordings: () => void;
@@ -478,6 +620,7 @@ export function SettingsDetailPane({
           onGitCommitMessageChange={onGitCommitMessageChange}
           gitStatus={gitStatus}
           gitSyncBusy={gitSyncBusy}
+          gitSyncAction={gitSyncAction}
           gitSyncError={gitSyncError}
           onGitRefresh={onGitRefresh}
           onGitConnect={onGitConnect}
@@ -490,6 +633,14 @@ export function SettingsDetailPane({
           isRecordingBusy={isRecordingBusy}
           recordingError={recordingError}
           recordingStatus={recordingStatus}
+          recordingsQueue={recordingsQueue}
+          recordings={recordings}
+          recordingsBusy={recordingsBusy}
+          recordingsError={recordingsError}
+          activeAudioPath={activeAudioPath}
+          activeAudioSrc={activeAudioSrc}
+          onRefreshRecordings={onRefreshRecordings}
+          onPlayRecording={onPlayRecording}
           onStartAudioRecording={onStartAudioRecording}
           onStopAudioRecording={onStopAudioRecording}
           onQueueRecordings={onQueueRecordings}

@@ -979,6 +979,175 @@
   border-style: dashed;
 }
 
+.mobile-settings-native {
+  background: color-mix(in srgb, var(--mobile-surface-muted) 72%, var(--mobile-surface-light));
+}
+
+.mobile-root.theme-dark .mobile-settings-native {
+  background: color-mix(in srgb, var(--mobile-surface-muted-dark) 76%, var(--mobile-surface-dark));
+}
+
+.mobile-native-group-wrap {
+  display: grid;
+  gap: 6px;
+}
+
+.mobile-native-group-title {
+  margin: 0;
+  padding: 2px 4px 0;
+  color: var(--mobile-text-muted-light);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.mobile-root.theme-dark .mobile-native-group-title {
+  color: var(--mobile-text-muted-dark);
+}
+
+.mobile-native-group {
+  background: var(--mobile-surface-light);
+  border: 1px solid var(--mobile-separator-light);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.mobile-root.theme-dark .mobile-native-group {
+  background: var(--mobile-surface-dark);
+  border-color: var(--mobile-separator-dark);
+}
+
+.mobile-native-row {
+  width: 100%;
+  min-height: var(--mobile-touch-min);
+  border: none;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--mobile-separator-light);
+}
+
+.mobile-root.theme-dark .mobile-native-row {
+  border-color: var(--mobile-separator-dark);
+}
+
+.mobile-native-group > :last-child {
+  border-bottom: none;
+}
+
+.mobile-native-row.choice {
+  text-align: left;
+}
+
+.mobile-native-row-main {
+  display: grid;
+  gap: 2px;
+}
+
+.mobile-native-row-label {
+  font-size: 14px;
+  font-weight: 520;
+}
+
+.mobile-native-row-sub {
+  color: var(--mobile-text-muted-light);
+  font-size: 12px;
+}
+
+.mobile-root.theme-dark .mobile-native-row-sub {
+  color: var(--mobile-text-muted-dark);
+}
+
+.mobile-native-row-value {
+  font-size: 12px;
+  color: var(--mobile-text-muted-light);
+  text-align: right;
+  word-break: break-word;
+}
+
+.mobile-root.theme-dark .mobile-native-row-value {
+  color: var(--mobile-text-muted-dark);
+}
+
+.mobile-native-check {
+  width: 18px;
+  min-width: 18px;
+  color: transparent;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.mobile-native-check.active {
+  color: var(--ui-accent);
+}
+
+.mobile-native-input-row {
+  display: grid;
+  gap: 6px;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--mobile-separator-light);
+}
+
+.mobile-root.theme-dark .mobile-native-input-row {
+  border-color: var(--mobile-separator-dark);
+}
+
+.mobile-native-group > .mobile-native-input-row:last-child {
+  border-bottom: none;
+}
+
+.mobile-native-input-label {
+  font-size: 12px;
+  color: var(--mobile-text-muted-light);
+}
+
+.mobile-root.theme-dark .mobile-native-input-label {
+  color: var(--mobile-text-muted-dark);
+}
+
+.mobile-native-input-row input {
+  min-height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--mobile-separator-light);
+  background: var(--mobile-surface-muted);
+  color: inherit;
+  padding: 0 12px;
+  font-size: 16px;
+}
+
+.mobile-root.theme-dark .mobile-native-input-row input {
+  border-color: var(--mobile-separator-dark);
+  background: var(--mobile-surface-muted-dark);
+}
+
+.mobile-native-actions {
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mobile-native-actions.single {
+  grid-template-columns: 1fr;
+}
+
+.mobile-native-note {
+  margin: 0;
+  padding: 0 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mobile-text-muted-light);
+}
+
+.mobile-root.theme-dark .mobile-native-note {
+  color: var(--mobile-text-muted-dark);
+}
+
 .mobile-root.theme-dark .mobile-sync-error {
   border-color: #7d4b4b;
   background: rgba(126, 71, 71, 0.28);
@@ -986,6 +1155,20 @@
 
 .mobile-root.theme-dark .mobile-sync-error .hint {
   color: #ebb7b7;
+}
+
+.mobile-recording-row {
+  align-items: center;
+}
+
+.mobile-recording-play {
+  min-height: 36px;
+  min-width: 84px;
+}
+
+.mobile-recording-player {
+  width: calc(100% - 24px);
+  margin: 8px 12px 12px;
 }
 
 .mobile-drawer-overlay {

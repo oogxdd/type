@@ -112,6 +112,7 @@ struct GitSyncStatus {
     current_branch: Option<String>,
     remote_url: Option<String>,
     has_uncommitted_changes: bool,
+    push_required: bool,
     ahead: usize,
     behind: usize,
     notes_root: String,
@@ -144,6 +145,44 @@ struct RecordingTranscriptionQueueResult {
     in_flight: usize,
 }
 
+#[derive(Serialize)]
+struct RecordingQueueSnapshot {
+    running: bool,
+    current_recording: Option<String>,
+    pending: Vec<String>,
+    in_flight: usize,
+}
+
+#[derive(Serialize)]
+struct RecordingListItem {
+    recording_folder: String,
+    audio_path: Option<String>,
+    transcript_path: String,
+    status_path: String,
+    status: String,
+    error: Option<String>,
+    updated_ms: Option<i64>,
+    is_queued: bool,
+    is_processing: bool,
+}
+
+#[derive(Serialize)]
+struct RecordingsListResult {
+    queue: RecordingQueueSnapshot,
+    recordings: Vec<RecordingListItem>,
+}
+
+#[derive(Deserialize)]
+struct ReadRecordingAudioArgs {
+    path: String,
+}
+
+#[derive(Serialize)]
+struct RecordingAudioPayload {
+    mime_type: String,
+    audio_base64: String,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 struct RecordingTranscriptionState {
     status: String,
@@ -166,6 +205,7 @@ struct QueuedTranscriptionJob {
 #[derive(Default)]
 struct TranscriptionQueueState {
     running: bool,
+    current_recording: Option<String>,
     pending: VecDeque<QueuedTranscriptionJob>,
     known_recordings: HashSet<String>,
 }
@@ -268,6 +308,25 @@ fn audio_extension_from_mime(mime_type: Option<&str>) -> &'static str {
         return "flac";
     }
     "webm"
+}
+
+fn audio_mime_from_path(path: &Path) -> &'static str {
+    let ext = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    match ext.as_str() {
+        "m4a" => "audio/mp4",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "ogg" => "audio/ogg",
+        "webm" => "audio/webm",
+        "aac" => "audio/aac",
+        "mp4" => "audio/mp4",
+        "flac" => "audio/flac",
+        _ => "application/octet-stream",
+    }
 }
 
 fn decode_audio_base64(payload: &str) -> Result<Vec<u8>, String> {
@@ -513,9 +572,13 @@ fn spawn_transcription_worker_if_needed() {
             let queue = transcription_queue_state();
             let mut state = queue.lock().expect("transcription queue poisoned");
             match state.pending.pop_front() {
-                Some(job) => Some(job),
+                Some(job) => {
+                    state.current_recording = Some(job.recording_rel.clone());
+                    Some(job)
+                }
                 None => {
                     state.running = false;
+                    state.current_recording = None;
                     None
                 }
             }
@@ -529,6 +592,9 @@ fn spawn_transcription_worker_if_needed() {
         let queue = transcription_queue_state();
         let mut state = queue.lock().expect("transcription queue poisoned");
         state.known_recordings.remove(&job.recording_rel);
+        if state.current_recording.as_deref() == Some(job.recording_rel.as_str()) {
+            state.current_recording = None;
+        }
     });
 }
 
@@ -608,6 +674,26 @@ fn git_ahead_behind(repo: &Repository, branch: Option<&str>) -> (usize, usize) {
     repo.graph_ahead_behind(local_oid, upstream_oid).unwrap_or((0, 0))
 }
 
+fn git_branch_has_local_commit(repo: &Repository, branch: Option<&str>) -> bool {
+    let Some(branch_name) = branch else {
+        return false;
+    };
+    repo.find_branch(branch_name, git2::BranchType::Local)
+        .ok()
+        .and_then(|branch_ref| branch_ref.get().target())
+        .is_some()
+}
+
+fn git_branch_has_upstream(repo: &Repository, branch: Option<&str>) -> bool {
+    let Some(branch_name) = branch else {
+        return false;
+    };
+    repo.find_branch(branch_name, git2::BranchType::Local)
+        .ok()
+        .and_then(|branch_ref| branch_ref.upstream().ok())
+        .is_some()
+}
+
 fn build_git_status(root: &Path) -> GitSyncStatus {
     let repo = Repository::open(root).ok();
     let repo_initialized = repo.is_some();
@@ -618,12 +704,25 @@ fn build_git_status(root: &Path) -> GitSyncStatus {
         .as_ref()
         .map(|repository| git_ahead_behind(repository, current_branch.as_deref()))
         .unwrap_or((0, 0));
+    let push_required = repo
+        .as_ref()
+        .map(|repository| {
+            if has_uncommitted_changes || ahead > 0 {
+                return true;
+            }
+            let branch = current_branch.as_deref();
+            let has_local_commit = git_branch_has_local_commit(repository, branch);
+            let has_upstream = git_branch_has_upstream(repository, branch);
+            has_local_commit && !has_upstream
+        })
+        .unwrap_or(false);
     GitSyncStatus {
         git_available: true,
         repo_initialized,
         current_branch,
         remote_url,
         has_uncommitted_changes,
+        push_required,
         ahead,
         behind,
         notes_root: root.to_string_lossy().to_string(),
@@ -980,14 +1079,32 @@ fn update_order_rename(
 }
 
 #[tauri::command]
-fn get_git_status(app: tauri::AppHandle) -> Result<GitSyncStatus, String> {
+async fn get_git_status(app: tauri::AppHandle) -> Result<GitSyncStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || get_git_status_blocking(app))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn get_git_status_blocking(app: tauri::AppHandle) -> Result<GitSyncStatus, String> {
     let root = notes_root(&app)?;
     ensure_system_folders(&root)?;
     Ok(build_git_status(&root))
 }
 
 #[tauri::command]
-fn connect_git_repo(app: tauri::AppHandle, args: ConnectGitArgs) -> Result<GitSyncStatus, String> {
+async fn connect_git_repo(
+    app: tauri::AppHandle,
+    args: ConnectGitArgs,
+) -> Result<GitSyncStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || connect_git_repo_blocking(app, args))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn connect_git_repo_blocking(
+    app: tauri::AppHandle,
+    args: ConnectGitArgs,
+) -> Result<GitSyncStatus, String> {
     let root = notes_root(&app)?;
     ensure_system_folders(&root)?;
     let repo = ensure_git_repo(&root)?;
@@ -1016,7 +1133,13 @@ fn connect_git_repo(app: tauri::AppHandle, args: ConnectGitArgs) -> Result<GitSy
 }
 
 #[tauri::command]
-fn git_pull(app: tauri::AppHandle, args: GitSyncArgs) -> Result<GitSyncStatus, String> {
+async fn git_pull(app: tauri::AppHandle, args: GitSyncArgs) -> Result<GitSyncStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || git_pull_blocking(app, args))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn git_pull_blocking(app: tauri::AppHandle, args: GitSyncArgs) -> Result<GitSyncStatus, String> {
     let root = notes_root(&app)?;
     ensure_system_folders(&root)?;
     if !git_repo_initialized(&root) {
@@ -1074,7 +1197,13 @@ fn remote_push(
 }
 
 #[tauri::command]
-fn git_push(app: tauri::AppHandle, args: GitPushArgs) -> Result<GitSyncStatus, String> {
+async fn git_push(app: tauri::AppHandle, args: GitPushArgs) -> Result<GitSyncStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || git_push_blocking(app, args))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn git_push_blocking(app: tauri::AppHandle, args: GitPushArgs) -> Result<GitSyncStatus, String> {
     let root = notes_root(&app)?;
     ensure_system_folders(&root)?;
     if !git_repo_initialized(&root) {
@@ -1089,6 +1218,10 @@ fn git_push(app: tauri::AppHandle, args: GitPushArgs) -> Result<GitSyncStatus, S
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
         .unwrap_or("Sync notes");
+    let status_before_push = build_git_status(&root);
+    if !status_before_push.push_required {
+        return Ok(status_before_push);
+    }
     let _ = commit_all_changes(&repo, message, &target_branch)?;
     remote_push(
         &repo,
@@ -1268,6 +1401,117 @@ fn queue_recording_transcriptions(
         queued,
         skipped,
         in_flight,
+    })
+}
+
+#[tauri::command]
+fn list_recordings(app: tauri::AppHandle) -> Result<RecordingsListResult, String> {
+    let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
+    let recordings_root = root.join(RECORDINGS_FOLDER);
+    fs::create_dir_all(&recordings_root).map_err(|error| error.to_string())?;
+
+    let (queue_running, current_recording, pending, in_flight) = {
+        let queue = transcription_queue_state();
+        let state = queue.lock().expect("transcription queue poisoned");
+        let pending = state
+            .pending
+            .iter()
+            .map(|job| job.recording_rel.clone())
+            .collect::<Vec<_>>();
+        (
+            state.running,
+            state.current_recording.clone(),
+            pending,
+            state.pending.len() + usize::from(state.running),
+        )
+    };
+
+    let mut recordings = Vec::new();
+    for entry in fs::read_dir(&recordings_root).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let recording_dir = entry.path();
+        if !recording_dir.is_dir() {
+            continue;
+        }
+
+        let recording_rel = strip_root(&root, &recording_dir);
+        let transcript_path = recording_dir.join(TRANSCRIPT_FILE_NAME);
+        let status_path = recording_dir.join(TRANSCRIPTION_STATUS_FILE);
+        let audio_path = find_recording_audio_file(&recording_dir);
+        let state = read_transcription_state(&status_path);
+
+        let default_audio_name = audio_path
+            .as_ref()
+            .and_then(|path| path.file_name())
+            .and_then(|value| value.to_str())
+            .unwrap_or(AUDIO_FILE_NAME_PREFIX)
+            .to_string();
+        let status = if transcript_path.exists() {
+            "completed".to_string()
+        } else {
+            state
+                .as_ref()
+                .map(|value| value.status.clone())
+                .unwrap_or_else(|| "pending".to_string())
+        };
+
+        recordings.push(RecordingListItem {
+            recording_folder: recording_rel.clone(),
+            audio_path: audio_path.as_ref().map(|path| strip_root(&root, path)),
+            transcript_path: strip_root(&root, &transcript_path),
+            status_path: strip_root(&root, &status_path),
+            status,
+            error: state.as_ref().and_then(|value| value.error.clone()),
+            updated_ms: state.as_ref().and_then(|value| value.updated_ms),
+            is_queued: pending.iter().any(|value| value == &recording_rel),
+            is_processing: current_recording.as_deref() == Some(recording_rel.as_str()),
+        });
+
+        if state.is_none() && audio_path.is_some() {
+            let _ = update_transcription_state(
+                &status_path,
+                &default_audio_name,
+                "pending",
+                None,
+                None,
+            );
+        }
+    }
+
+    recordings.sort_by(|a, b| b.updated_ms.unwrap_or(0).cmp(&a.updated_ms.unwrap_or(0)));
+
+    Ok(RecordingsListResult {
+        queue: RecordingQueueSnapshot {
+            running: queue_running,
+            current_recording,
+            pending,
+            in_flight,
+        },
+        recordings,
+    })
+}
+
+#[tauri::command]
+fn read_recording_audio(
+    app: tauri::AppHandle,
+    args: ReadRecordingAudioArgs,
+) -> Result<RecordingAudioPayload, String> {
+    let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
+    let recordings_root = root.join(RECORDINGS_FOLDER);
+    let path_rel = sanitize_relative(&args.path)?;
+    let audio_path = root.join(path_rel);
+    if !audio_path.starts_with(&recordings_root) {
+        return Err("Only files inside Recordings are allowed.".to_string());
+    }
+    if !audio_path.exists() || !audio_path.is_file() {
+        return Err("Audio file not found.".to_string());
+    }
+    let bytes = fs::read(&audio_path).map_err(|error| error.to_string())?;
+    Ok(RecordingAudioPayload {
+        mime_type: audio_mime_from_path(&audio_path).to_string(),
+        audio_base64: BASE64.encode(bytes),
     })
 }
 
@@ -1525,6 +1769,8 @@ pub fn run() {
             write_note,
             save_audio_recording,
             queue_recording_transcriptions,
+            list_recordings,
+            read_recording_audio,
             move_items,
             delete_items,
             rename_item,
