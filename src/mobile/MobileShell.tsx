@@ -119,6 +119,7 @@ type MobileShellProps = {
   isRecordingBusy: boolean;
   recordingError: string | null;
   recordingStatus: string | null;
+  recordingLiveStatus: string | null;
   recordingsQueue: RecordingQueueSnapshot | null;
   recordings: RecordingListItem[];
   recordingsBusy: boolean;
@@ -218,6 +219,7 @@ export function MobileShell({
   isRecordingBusy,
   recordingError,
   recordingStatus,
+  recordingLiveStatus,
   recordingsQueue,
   recordings,
   recordingsBusy,
@@ -548,6 +550,7 @@ export function MobileShell({
       isRecordingBusy={isRecordingBusy}
       recordingError={recordingError}
       recordingStatus={recordingStatus}
+      recordingLiveStatus={recordingLiveStatus}
       recordingsQueue={recordingsQueue}
       recordings={recordings}
       recordingsBusy={recordingsBusy}
@@ -694,6 +697,7 @@ export function MobileShell({
           isBusy={isRecordingBusy}
           recordingError={recordingError}
           recordingStatus={recordingStatus}
+          recordingLiveStatus={recordingLiveStatus}
           hasAssemblyApiKey={assemblyAiApiKey.trim().length > 0}
           onStart={onStartAudioRecording}
           onStop={onStopAudioRecording}
@@ -766,6 +770,7 @@ export function MobileShell({
     openFolderActionSheet,
     openNoteActionSheet,
     recordingError,
+    recordingLiveStatus,
     recordingStatus,
     refreshNotesFeed,
     saveError,

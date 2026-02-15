@@ -4,6 +4,7 @@ type MobileRecordingScreenProps = {
   isBusy: boolean;
   recordingError: string | null;
   recordingStatus: string | null;
+  recordingLiveStatus: string | null;
   hasAssemblyApiKey: boolean;
   onStart: () => void;
   onStop: () => void;
@@ -16,6 +17,7 @@ export function MobileRecordingScreen({
   isBusy,
   recordingError,
   recordingStatus,
+  recordingLiveStatus,
   hasAssemblyApiKey,
   onStart,
   onStop,
@@ -46,6 +48,9 @@ export function MobileRecordingScreen({
                 ? "Saving audio..."
                 : "Ready"}
         </div>
+        {recordingLiveStatus ? (
+          <p className="mobile-native-note">{recordingLiveStatus}</p>
+        ) : null}
       </section>
 
       <section className="mobile-recording-card" aria-label="Transcription queue">

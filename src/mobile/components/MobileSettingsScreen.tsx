@@ -47,6 +47,7 @@ type MobileSettingsScreenProps = {
   isRecordingBusy: boolean;
   recordingError: string | null;
   recordingStatus: string | null;
+  recordingLiveStatus: string | null;
   recordingsQueue: RecordingQueueSnapshot | null;
   recordings: RecordingListItem[];
   recordingsBusy: boolean;
@@ -206,6 +207,7 @@ export function MobileSettingsScreen({
   isRecordingBusy,
   recordingError,
   recordingStatus,
+  recordingLiveStatus,
   recordingsQueue,
   recordings,
   recordingsBusy,
@@ -422,6 +424,9 @@ export function MobileSettingsScreen({
               <StatRow label="In-flight" value={String(recordingsQueue?.in_flight ?? 0)} />
               <StatRow label="Current job" value={recordingsQueue?.current_recording ?? "-"} />
               {recordingStatus ? <p className="mobile-native-note">{recordingStatus}</p> : null}
+              {recordingLiveStatus ? (
+                <p className="mobile-native-note">{recordingLiveStatus}</p>
+              ) : null}
             </Group>
 
             <Group title="Recordings monitor">

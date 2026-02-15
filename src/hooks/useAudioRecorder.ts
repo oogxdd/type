@@ -57,16 +57,31 @@ const decodeBase64 = (raw: string): Uint8Array => {
   return bytes;
 };
 
+const formatElapsed = (durationMs: number): string => {
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+};
+
 export const useAudioRecorder = ({ onRecordingReady }: UseAudioRecorderArgs) => {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const mimeTypeRef = useRef<string>("");
+  const isRecordingRef = useRef(false);
 
   const [nativeSupported, setNativeSupported] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recordingStartedAtMs, setRecordingStartedAtMs] = useState<number | null>(null);
+  const [clockNowMs, setClockNowMs] = useState(() => Date.now());
+  const [nativeRecoveryNotice, setNativeRecoveryNotice] = useState<string | null>(null);
 
   const webSupported =
     typeof window !== "undefined" &&
@@ -80,26 +95,77 @@ export const useAudioRecorder = ({ onRecordingReady }: UseAudioRecorderArgs) => 
   }, []);
 
   useEffect(() => {
-    let mounted = true;
-    void api
-      .nativeRecorderCapabilities()
-      .then((caps) => {
-        if (!mounted) {
-          return;
-        }
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
+
+  const syncNativeCapabilities = useCallback(
+    async (reason: "init" | "foreground") => {
+      try {
+        const caps = await api.nativeRecorderCapabilities();
         setNativeSupported(caps.supported);
-        setIsRecording(caps.recording);
-      })
-      .catch(() => {
-        if (!mounted) {
+        if (!caps.supported) {
           return;
         }
+
+        if (!caps.recording) {
+          setIsRecording(false);
+          setRecordingStartedAtMs(null);
+          setNativeRecoveryNotice(null);
+          return;
+        }
+
+        if (reason === "foreground") {
+          setNativeRecoveryNotice(
+            isRecordingRef.current
+              ? "Native recording is still active after return."
+              : "Native recording resumed after return."
+          );
+        } else if (!isRecordingRef.current && reason === "init") {
+          setNativeRecoveryNotice("Native recording resumed after return.");
+        }
+        setIsRecording(true);
+        setClockNowMs(Date.now());
+        setRecordingStartedAtMs(caps.started_ms ?? Date.now());
+      } catch {
         setNativeSupported(false);
-      });
-    return () => {
-      mounted = false;
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    void syncNativeCapabilities("init");
+  }, [syncNativeCapabilities]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void syncNativeCapabilities("foreground");
+      }
     };
-  }, []);
+    const handleWindowFocus = () => {
+      void syncNativeCapabilities("foreground");
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleWindowFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, [syncNativeCapabilities]);
+
+  useEffect(() => {
+    if (!isRecording || !recordingStartedAtMs) {
+      return;
+    }
+    setClockNowMs(Date.now());
+    const timer = window.setInterval(() => {
+      setClockNowMs(Date.now());
+    }, 1000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [isRecording, recordingStartedAtMs]);
 
   const saveBlob = useCallback(
     async (blob: Blob, mimeType: string) => {
@@ -168,6 +234,8 @@ export const useAudioRecorder = ({ onRecordingReady }: UseAudioRecorderArgs) => 
         .stopNativeAudioRecording()
         .then(async (payload) => {
           setIsRecording(false);
+          setRecordingStartedAtMs(null);
+          setNativeRecoveryNotice(null);
           const bytes = decodeBase64(payload.audio_base64);
           const mimeType = payload.mime_type || "audio/mp4";
           const blob = new Blob([bytes], { type: mimeType });
@@ -180,6 +248,7 @@ export const useAudioRecorder = ({ onRecordingReady }: UseAudioRecorderArgs) => 
         })
         .catch((cause) => {
           setError(toErrorMessage(cause));
+          void syncNativeCapabilities("foreground");
         })
         .finally(() => {
           setIsFinalizing(false);
@@ -192,7 +261,13 @@ export const useAudioRecorder = ({ onRecordingReady }: UseAudioRecorderArgs) => 
       return;
     }
     recorder.stop();
-  }, [isFinalizing, isRecording, nativeSupported, onRecordingReady]);
+  }, [
+    isFinalizing,
+    isRecording,
+    nativeSupported,
+    onRecordingReady,
+    syncNativeCapabilities,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -204,11 +279,20 @@ export const useAudioRecorder = ({ onRecordingReady }: UseAudioRecorderArgs) => 
     };
   }, [stopStream]);
 
+  const recordingElapsedMs =
+    isRecording && recordingStartedAtMs
+      ? Math.max(0, clockNowMs - recordingStartedAtMs)
+      : null;
+  const recordingElapsedLabel =
+    recordingElapsedMs !== null ? formatElapsed(recordingElapsedMs) : null;
+
   return {
     isSupported,
     isRecording,
     isFinalizing,
     error,
+    nativeRecoveryNotice,
+    recordingElapsedLabel,
     startRecording: async () => {
       try {
         if (nativeSupported) {
@@ -218,6 +302,9 @@ export const useAudioRecorder = ({ onRecordingReady }: UseAudioRecorderArgs) => 
           setError(null);
           await api.startNativeAudioRecording();
           setIsRecording(true);
+          setClockNowMs(Date.now());
+          setRecordingStartedAtMs(Date.now());
+          setNativeRecoveryNotice(null);
           return;
         }
         if (!webSupported) {

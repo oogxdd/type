@@ -598,11 +598,18 @@ function App() {
     isRecording: isRecordingAudio,
     isFinalizing: isRecordingFinalizing,
     error: recorderError,
+    nativeRecoveryNotice,
+    recordingElapsedLabel,
     startRecording,
     stopRecording,
   } = useAudioRecorder({
     onRecordingReady: handleRecordingReady,
   });
+
+  const recordingLiveStatus =
+    isRecordingAudio && recordingElapsedLabel
+      ? `${nativeRecoveryNotice ? `${nativeRecoveryNotice} ` : "Recording in progress. "}Elapsed ${recordingElapsedLabel}.`
+      : null;
 
   useEffect(() => {
     void (async () => {
@@ -2216,6 +2223,7 @@ function App() {
         isRecordingBusy={isRecordingFinalizing || transcriptionQueueBusy}
         recordingError={recorderError}
         recordingStatus={recordingStatusMessage}
+        recordingLiveStatus={recordingLiveStatus}
         recordingsQueue={recordingsQueue}
         recordings={recordingsList}
         recordingsBusy={recordingsBusy}
@@ -2462,6 +2470,7 @@ function App() {
             isRecordingBusy={isRecordingFinalizing || transcriptionQueueBusy}
             recordingError={recorderError}
             recordingStatus={recordingStatusMessage}
+            recordingLiveStatus={recordingLiveStatus}
             recordingsQueue={recordingsQueue}
             recordings={recordingsList}
             recordingsBusy={recordingsBusy}

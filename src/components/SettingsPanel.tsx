@@ -116,6 +116,7 @@ function SettingsDetail({
   isRecordingBusy,
   recordingError,
   recordingStatus,
+  recordingLiveStatus,
   recordingsQueue,
   recordings,
   recordingsBusy,
@@ -164,6 +165,7 @@ function SettingsDetail({
   isRecordingBusy: boolean;
   recordingError: string | null;
   recordingStatus: string | null;
+  recordingLiveStatus: string | null;
   recordingsQueue: RecordingQueueSnapshot | null;
   recordings: RecordingListItem[];
   recordingsBusy: boolean;
@@ -438,6 +440,12 @@ function SettingsDetail({
             <span className="settings-inline-help">{recordingStatus}</span>
           </label>
         ) : null}
+        {recordingLiveStatus ? (
+          <label className="settings-control">
+            <span>Live recorder</span>
+            <span className="settings-inline-help">{recordingLiveStatus}</span>
+          </label>
+        ) : null}
         {recordingError ? (
           <p className="settings-warning-text settings-inline-warning">{recordingError}</p>
         ) : null}
@@ -596,6 +604,7 @@ export function SettingsDetailPane({
   isRecordingBusy,
   recordingError,
   recordingStatus,
+  recordingLiveStatus,
   recordingsQueue,
   recordings,
   recordingsBusy,
@@ -646,6 +655,7 @@ export function SettingsDetailPane({
   isRecordingBusy: boolean;
   recordingError: string | null;
   recordingStatus: string | null;
+  recordingLiveStatus: string | null;
   recordingsQueue: RecordingQueueSnapshot | null;
   recordings: RecordingListItem[];
   recordingsBusy: boolean;
@@ -705,6 +715,7 @@ export function SettingsDetailPane({
           isRecordingBusy={isRecordingBusy}
           recordingError={recordingError}
           recordingStatus={recordingStatus}
+          recordingLiveStatus={recordingLiveStatus}
           recordingsQueue={recordingsQueue}
           recordings={recordings}
           recordingsBusy={recordingsBusy}

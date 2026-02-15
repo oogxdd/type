@@ -237,6 +237,7 @@ struct RecordingAudioPayload {
 struct NativeRecorderCapabilities {
     supported: bool,
     recording: bool,
+    started_ms: Option<i64>,
 }
 
 #[cfg(target_os = "ios")]
@@ -244,6 +245,7 @@ struct IosNativeRecorderState {
     recorder_ptr: usize,
     output_path: PathBuf,
     mime_type: String,
+    started_ms: Option<i64>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -2092,11 +2094,15 @@ fn native_audio_recorder_capabilities() -> NativeRecorderCapabilities {
     {
         let recording = ios_native_recorder_state()
             .lock()
-            .map(|guard| guard.is_some())
-            .unwrap_or(false);
+            .map(|guard| {
+                let started_ms = guard.as_ref().and_then(|state| state.started_ms);
+                (guard.is_some(), started_ms)
+            })
+            .unwrap_or((false, None));
         return NativeRecorderCapabilities {
             supported: true,
-            recording,
+            recording: recording.0,
+            started_ms: recording.1,
         };
     }
 
@@ -2105,6 +2111,7 @@ fn native_audio_recorder_capabilities() -> NativeRecorderCapabilities {
         NativeRecorderCapabilities {
             supported: false,
             recording: false,
+            started_ms: None,
         }
     }
 }
@@ -2130,6 +2137,7 @@ fn start_native_audio_recording(app: tauri::AppHandle) -> Result<(), String> {
             recorder_ptr: recorder as usize,
             output_path,
             mime_type: IOS_AUDIO_MIME_TYPE.to_string(),
+            started_ms: now_ms(),
         });
         Ok(())
     }

@@ -89,6 +89,7 @@ export type RecordingAudioPayload = {
 export type NativeRecorderCapabilities = {
   supported: boolean;
   recording: boolean;
+  started_ms: number | null;
 };
 
  

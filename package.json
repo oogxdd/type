@@ -10,8 +10,10 @@
     "tauri": "tauri",
     "tauri:ios:init": "tauri ios init",
     "tauri:ios:sync-icons": "rsync -a src-tauri/icons/ios/ src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/",
-    "tauri:ios:dev": "npm run tauri:ios:sync-icons && tauri ios dev",
-    "tauri:ios:build": "npm run tauri:ios:sync-icons && tauri ios build"
+    "tauri:ios:sync-splash": "mkdir -p src-tauri/gen/apple/Assets.xcassets/SplashLogo.imageset && rsync -a src-tauri/icons/ios-splash/SplashLogo.imageset/ src-tauri/gen/apple/Assets.xcassets/SplashLogo.imageset/ && cp src-tauri/icons/ios-splash/LaunchScreen.storyboard src-tauri/gen/apple/LaunchScreen.storyboard",
+    "tauri:ios:sync-assets": "npm run tauri:ios:sync-icons && npm run tauri:ios:sync-splash",
+    "tauri:ios:dev": "npm run tauri:ios:sync-assets && tauri ios dev",
+    "tauri:ios:build": "npm run tauri:ios:sync-assets && tauri ios build"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
