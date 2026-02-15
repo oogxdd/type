@@ -1697,13 +1697,22 @@
 }
 
 .mobile-folder-row,
-.mobile-note-row-shell,
-.mobile-note-row,
 .mobile-settings-card,
 .mobile-recording-card,
 .mobile-empty-note {
   border-color: var(--ui-border);
   background: color-mix(in srgb, var(--ui-pane) 96%, transparent);
+}
+
+.mobile-note-row-shell,
+.mobile-note-row {
+  border-color: var(--ui-border);
+  background: #ffffff;
+}
+
+.mobile-root.theme-dark .mobile-note-row-shell,
+.mobile-root.theme-dark .mobile-note-row {
+  background: #1d2026;
 }
 
 .mobile-folder-row.active,
@@ -1950,6 +1959,16 @@
 .mobile-root.theme-dark[data-layout="tablet"] .mobile-folder-row,
 .mobile-root.theme-dark[data-layout="tablet"] .mobile-note-row-shell {
   border-color: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mobile-note-row-actions {
+    display: none;
+  }
+
+  .mobile-note-row {
+    transform: none !important;
+  }
 }
 
 @media (max-width: 900px) {
