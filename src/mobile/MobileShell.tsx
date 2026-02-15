@@ -3,7 +3,6 @@ import {
   Folder,
   Menu,
   Mic,
-  Plus,
   Settings,
   X,
 } from "lucide-react";
@@ -129,7 +128,7 @@ type MobileShellProps = {
   onRefreshTree: () => Promise<void>;
   onRefreshRecordings: () => void;
   onPlayRecording: (audioPath: string) => void;
-  onStartAudioRecording: () => void;
+  onStartAudioRecording: (folderPath?: string) => void;
   onStopAudioRecording: () => void;
   onQueueRecordings: () => void;
 };
@@ -142,8 +141,8 @@ const TABLET_LEFT_ITEMS = [
   { id: "folders", label: "Folders", icon: <Folder size={16} /> },
   { id: "settings", label: "Settings", icon: <Settings size={16} /> },
 ] as const;
-const RECORDINGS_FOLDER_PATH = "Recordings";
-const SYSTEM_FOLDER_PATHS = new Set(["Unsorted", "Archieve", "Recordings"]);
+const UNSORTED_FOLDER_PATH = "Unsorted";
+const SYSTEM_FOLDER_PATHS = new Set(["Unsorted", "Archieve"]);
 
 const getDisplayFolderName = (rawName: string) =>
   rawName === "Archieve" ? "Archive" : rawName;
@@ -333,15 +332,10 @@ export function MobileShell({
   }, []);
 
   const refreshNotesFeed = useCallback(
-    async (folderPath: string) => {
-      if (folderPath === RECORDINGS_FOLDER_PATH) {
-        await onRefreshTree();
-        onRefreshRecordings();
-        return;
-      }
+    async (_folderPath: string) => {
       await onRefreshTree();
     },
-    [onRefreshRecordings, onRefreshTree]
+    [onRefreshTree]
   );
 
   const popRoute = useCallback(async () => {
@@ -364,7 +358,7 @@ export function MobileShell({
   );
 
   const openRecordingRoute = useCallback(
-    (folderPath: string = RECORDINGS_FOLDER_PATH) => {
+    (folderPath: string = UNSORTED_FOLDER_PATH) => {
       onSelectFolder(folderPath);
       nextTransitionRef.current = "up";
       dispatch({ type: "push", route: { kind: "recording", folderPath } });
@@ -559,7 +553,7 @@ export function MobileShell({
       activeAudioSrc={activeAudioSrc}
       onRefreshRecordings={onRefreshRecordings}
       onPlayRecording={onPlayRecording}
-      onStartAudioRecording={onStartAudioRecording}
+      onStartAudioRecording={() => onStartAudioRecording(activeFolder || undefined)}
       onStopAudioRecording={onStopAudioRecording}
       onQueueRecordings={onQueueRecordings}
     />
@@ -612,7 +606,6 @@ export function MobileShell({
     }
 
     if (currentRoute.kind === "notes") {
-      const isRecordingsFolder = currentRoute.folderPath === RECORDINGS_FOLDER_PATH;
       return (
         <MobileNotesScreen
           folderTitle={activeFolderTitle}
@@ -632,10 +625,6 @@ export function MobileShell({
           }}
           onCreate={() => {
             void (async () => {
-              if (isRecordingsFolder) {
-                openRecordingRoute(currentRoute.folderPath);
-                return;
-              }
               const path = await onCreateNote(currentRoute.folderPath);
               if (!path) {
                 return;
@@ -679,12 +668,8 @@ export function MobileShell({
           onPullRefresh={async () => {
             await refreshNotesFeed(currentRoute.folderPath);
           }}
-          emptyStateText={
-            isRecordingsFolder
-              ? "No recordings yet."
-              : `No notes in ${getDisplayRouteTitle(activeFolderTitle)}.`
-          }
-          createButtonLabel={isRecordingsFolder ? "Open recorder" : "Create note"}
+          emptyStateText={`No notes in ${getDisplayRouteTitle(activeFolderTitle)}.`}
+          createButtonLabel="Create note"
         />
       );
     }
@@ -699,7 +684,7 @@ export function MobileShell({
           recordingStatus={recordingStatus}
           recordingLiveStatus={recordingLiveStatus}
           hasAssemblyApiKey={assemblyAiApiKey.trim().length > 0}
-          onStart={onStartAudioRecording}
+          onStart={() => onStartAudioRecording(currentRoute.folderPath)}
           onStop={onStopAudioRecording}
           onQueue={onQueueRecordings}
         />
@@ -813,9 +798,6 @@ export function MobileShell({
           },
         };
 
-  const isRecordingsNotesRoute =
-    currentRoute.kind === "notes" && currentRoute.folderPath === RECORDINGS_FOLDER_PATH;
-
   const phoneRightAction =
     currentRoute.kind === "home"
       ? {
@@ -831,28 +813,13 @@ export function MobileShell({
           }
       : currentRoute.kind === "notes"
         ? {
-            label: isRecordingsNotesRoute ? "Record" : "New note",
-            icon: isRecordingsNotesRoute ? <Mic size={18} /> : <Plus size={18} />,
+            label: "Record",
+            icon: <Mic size={18} />,
             onPress: () => {
-              void (async () => {
-                if (isRecordingsNotesRoute) {
-                  openRecordingRoute(currentRoute.folderPath);
-                  return;
-                }
-                const path = await onCreateNote(currentRoute.folderPath);
-                if (!path) {
-                  return;
-                }
-                dispatch({
-                  type: "push",
-                  route: { kind: "editor", folderPath: currentRoute.folderPath, notePath: path },
-                });
-              })();
+              openRecordingRoute(currentRoute.folderPath);
             },
           }
         : undefined;
-
-  const isTabletRecordingsFolder = activeFolder === RECORDINGS_FOLDER_PATH;
 
   const tabletNotesPane = (
     <MobileNotesScreen
@@ -863,12 +830,6 @@ export function MobileShell({
       onSelect={onSelectNote}
       onCreate={() => {
         void (async () => {
-          if (isTabletRecordingsFolder) {
-            setTabletLeftMode("settings");
-            onSettingsSectionChange("recordings");
-            showToast("Recorder moved to Settings > Recordings", "info");
-            return;
-          }
           await onCreateNote(activeFolder);
         })();
       }}
@@ -901,12 +862,8 @@ export function MobileShell({
       onPullRefresh={async () => {
         await refreshNotesFeed(activeFolder);
       }}
-      emptyStateText={
-        isTabletRecordingsFolder
-          ? "No recordings yet."
-          : `No notes in ${getDisplayRouteTitle(activeFolderTitle)}.`
-      }
-      createButtonLabel={isTabletRecordingsFolder ? "Open recorder" : "Create note"}
+      emptyStateText={`No notes in ${getDisplayRouteTitle(activeFolderTitle)}.`}
+      createButtonLabel="Create note"
     />
   );
 

@@ -393,7 +393,9 @@ function SettingsDetail({
       <>
         <h2 className="settings-detail-title">Recordings</h2>
         <p className="settings-detail-text">
-          Records are stored as <code>Recordings/recording-*/audio.*</code>.
+          Recordings are saved as regular notes with front matter metadata.
+          <br />
+          Audio files are stored in <code>_Recordings</code>.
           <br />
           On desktop, pending recordings can be queued for AssemblyAI transcription.
         </p>
@@ -499,9 +501,9 @@ function SettingsDetail({
                 const currentStatus = formatRecordingStatus(item);
                 const canPlay = Boolean(item.audio_path);
                 return (
-                  <div key={item.recording_folder} className="settings-recording-row">
+                  <div key={item.note_path} className="settings-recording-row">
                     <div className="settings-recording-main">
-                      <div className="settings-recording-title">{item.recording_folder}</div>
+                      <div className="settings-recording-title">{item.note_path}</div>
                       <div className="settings-recording-meta">
                         <code>{currentStatus}</code>
                         <span>updated {formatUpdatedAt(item.updated_ms)}</span>

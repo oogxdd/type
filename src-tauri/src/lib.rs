@@ -30,16 +30,32 @@ const ORDER_FILE: &str = ".notes-order.json";
 const SESSIONS_FILE: &str = ".notes-sessions.json";
 const UNSORTED_FOLDER: &str = "Unsorted";
 const ARCHIEVE_FOLDER: &str = "Archieve";
-const RECORDINGS_FOLDER: &str = "Recordings";
-const TRANSCRIPT_FILE_NAME: &str = "transcript.md";
-const TRANSCRIPTION_STATUS_FILE: &str = ".transcription-status.json";
+const RECORDINGS_STORAGE_FOLDER: &str = "_Recordings";
+const LEGACY_RECORDINGS_FOLDER: &str = "Recordings";
 const AUDIO_FILE_NAME_PREFIX: &str = "audio";
+const RECORDING_FRONTMATTER_TYPE: &str = "audio_recording";
+const RECORDING_STATUS_PENDING: &str = "pending";
+const RECORDING_STATUS_QUEUED: &str = "queued";
+const RECORDING_STATUS_PROCESSING: &str = "processing";
+const RECORDING_STATUS_COMPLETED: &str = "completed";
+const RECORDING_STATUS_FAILED: &str = "failed";
+const TRANSCRIPT_START_MARKER: &str = "<!-- recording-transcript:start -->";
+const TRANSCRIPT_END_MARKER: &str = "<!-- recording-transcript:end -->";
 const ASSEMBLY_UPLOAD_URL: &str = "https://api.assemblyai.com/v2/upload";
 const ASSEMBLY_TRANSCRIPT_URL: &str = "https://api.assemblyai.com/v2/transcript";
 const ASSEMBLY_SPEECH_MODEL: &str = "universal-2";
 const ASSEMBLY_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const ASSEMBLY_MAX_POLL_ATTEMPTS: usize = 180;
-const SYSTEM_FOLDERS: [&str; 3] = [UNSORTED_FOLDER, ARCHIEVE_FOLDER, RECORDINGS_FOLDER];
+const VISIBLE_SYSTEM_FOLDERS: [&str; 2] = [UNSORTED_FOLDER, ARCHIEVE_FOLDER];
+const REQUIRED_SYSTEM_FOLDERS: [&str; 3] =
+    [UNSORTED_FOLDER, ARCHIEVE_FOLDER, RECORDINGS_STORAGE_FOLDER];
+const PROTECTED_SYSTEM_FOLDERS: [&str; 4] = [
+    UNSORTED_FOLDER,
+    ARCHIEVE_FOLDER,
+    RECORDINGS_STORAGE_FOLDER,
+    LEGACY_RECORDINGS_FOLDER,
+];
+const HIDDEN_ROOT_FOLDERS: [&str; 2] = [RECORDINGS_STORAGE_FOLDER, LEGACY_RECORDINGS_FOLDER];
 #[cfg(target_os = "macos")]
 const MACOS_WINDOW_ALPHA: f64 = 1.0;
 
@@ -75,6 +91,12 @@ struct NoteFrontMatter {
     id: Option<String>,
     created_ms: Option<i64>,
     updated_ms: Option<i64>,
+    note_type: Option<String>,
+    recording_audio_path: Option<String>,
+    transcription_status: Option<String>,
+    transcription_error: Option<String>,
+    transcription_updated_ms: Option<i64>,
+    transcription_id: Option<String>,
     passthrough_lines: Vec<String>,
 }
 
@@ -172,14 +194,14 @@ struct SetActiveSessionArgs {
 struct SaveRecordingArgs {
     audio_base64: String,
     mime_type: Option<String>,
+    folder_path: Option<String>,
 }
 
 #[derive(Serialize)]
 struct RecordingWriteResult {
-    recording_folder: String,
+    folder_path: String,
+    note_path: String,
     audio_path: String,
-    transcript_path: String,
-    status_path: String,
 }
 
 #[derive(Deserialize)]
@@ -205,10 +227,9 @@ struct RecordingQueueSnapshot {
 
 #[derive(Serialize)]
 struct RecordingListItem {
-    recording_folder: String,
+    note_path: String,
+    folder_path: String,
     audio_path: Option<String>,
-    transcript_path: String,
-    status_path: String,
     status: String,
     error: Option<String>,
     updated_ms: Option<i64>,
@@ -248,23 +269,23 @@ struct IosNativeRecorderState {
     started_ms: Option<i64>,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
-struct RecordingTranscriptionState {
-    status: String,
-    audio_file: String,
-    transcript_file: String,
-    transcript_id: Option<String>,
-    error: Option<String>,
-    updated_ms: Option<i64>,
+#[derive(Clone)]
+struct QueuedTranscriptionJob {
+    note_rel: String,
+    note_path: PathBuf,
+    audio_path: PathBuf,
+    api_key: String,
 }
 
 #[derive(Clone)]
-struct QueuedTranscriptionJob {
-    recording_rel: String,
+struct RecordingNoteInfo {
+    note_rel: String,
+    note_path: PathBuf,
+    audio_rel: String,
     audio_path: PathBuf,
-    status_path: PathBuf,
-    transcript_path: PathBuf,
-    api_key: String,
+    status: String,
+    error: Option<String>,
+    updated_ms: Option<i64>,
 }
 
 #[derive(Default)]
@@ -826,6 +847,38 @@ fn parse_note_front_matter(raw: &str) -> (NoteFrontMatter, String) {
                     meta.passthrough_lines.push(trimmed.to_string());
                 }
             }
+            "type" => {
+                if !value.is_empty() {
+                    meta.note_type = Some(value);
+                }
+            }
+            "recording_audio_path" => {
+                if !value.is_empty() {
+                    meta.recording_audio_path = Some(value);
+                }
+            }
+            "transcription_status" => {
+                if !value.is_empty() {
+                    meta.transcription_status = Some(value);
+                }
+            }
+            "transcription_error" => {
+                if !value.is_empty() {
+                    meta.transcription_error = Some(value);
+                }
+            }
+            "transcription_updated_ms" => {
+                if let Ok(parsed) = value.parse::<i64>() {
+                    meta.transcription_updated_ms = Some(parsed);
+                } else {
+                    meta.passthrough_lines.push(trimmed.to_string());
+                }
+            }
+            "transcription_id" => {
+                if !value.is_empty() {
+                    meta.transcription_id = Some(value);
+                }
+            }
             _ => meta.passthrough_lines.push(trimmed.to_string()),
         }
     }
@@ -855,6 +908,36 @@ fn render_note_with_front_matter(meta: &NoteFrontMatter, body: &str) -> String {
     }
     if let Some(updated_ms) = meta.updated_ms {
         output.push_str(&format!("updated_ms: {}\n", updated_ms));
+    }
+    if let Some(note_type) = &meta.note_type {
+        output.push_str(&format!("type: {}\n", front_matter_safe_value(note_type)));
+    }
+    if let Some(audio_path) = &meta.recording_audio_path {
+        output.push_str(&format!(
+            "recording_audio_path: {}\n",
+            front_matter_safe_value(audio_path)
+        ));
+    }
+    if let Some(status) = &meta.transcription_status {
+        output.push_str(&format!(
+            "transcription_status: {}\n",
+            front_matter_safe_value(status)
+        ));
+    }
+    if let Some(error) = &meta.transcription_error {
+        output.push_str(&format!(
+            "transcription_error: {}\n",
+            front_matter_safe_value(error)
+        ));
+    }
+    if let Some(updated_ms) = meta.transcription_updated_ms {
+        output.push_str(&format!("transcription_updated_ms: {}\n", updated_ms));
+    }
+    if let Some(transcription_id) = &meta.transcription_id {
+        output.push_str(&format!(
+            "transcription_id: {}\n",
+            front_matter_safe_value(transcription_id)
+        ));
     }
     for line in &meta.passthrough_lines {
         output.push_str(line);
@@ -934,112 +1017,202 @@ fn response_error(status: reqwest::StatusCode, body: String, context: &str) -> S
     }
 }
 
-fn read_transcription_state(path: &Path) -> Option<RecordingTranscriptionState> {
-    let contents = fs::read_to_string(path).ok()?;
-    serde_json::from_str::<RecordingTranscriptionState>(&contents).ok()
-}
-
-fn write_transcription_state(
-    path: &Path,
-    state: &RecordingTranscriptionState,
-) -> Result<(), String> {
-    let contents = serde_json::to_string_pretty(state).map_err(|error| error.to_string())?;
-    fs::write(path, contents).map_err(|error| error.to_string())
-}
-
-fn update_transcription_state(
-    status_path: &Path,
-    audio_name: &str,
-    status: &str,
-    transcript_id: Option<String>,
-    error: Option<String>,
-) -> Result<(), String> {
-    let mut next = read_transcription_state(status_path).unwrap_or(RecordingTranscriptionState {
-        status: "pending".to_string(),
-        audio_file: audio_name.to_string(),
-        transcript_file: TRANSCRIPT_FILE_NAME.to_string(),
-        transcript_id: None,
-        error: None,
-        updated_ms: None,
-    });
-    next.status = status.to_string();
-    next.audio_file = audio_name.to_string();
-    next.transcript_file = TRANSCRIPT_FILE_NAME.to_string();
-    next.transcript_id = transcript_id;
-    next.error = error;
-    next.updated_ms = now_ms();
-    write_transcription_state(status_path, &next)
-}
-
-fn is_audio_extension(ext: &str) -> bool {
-    matches!(
-        ext,
-        "m4a" | "mp3" | "wav" | "ogg" | "webm" | "aac" | "mp4" | "flac"
-    )
-}
-
-fn find_recording_audio_file(recording_dir: &Path) -> Option<PathBuf> {
-    let mut files: Vec<PathBuf> = fs::read_dir(recording_dir)
-        .ok()?
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| path.is_file())
-        .filter(|path| {
-            let file_name = path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or("");
-            if file_name == TRANSCRIPTION_STATUS_FILE || file_name == TRANSCRIPT_FILE_NAME {
-                return false;
-            }
-            let Some(ext) = path.extension().and_then(|value| value.to_str()) else {
-                return false;
-            };
-            is_audio_extension(&ext.to_lowercase())
-        })
-        .collect();
-    files.sort();
-    files.into_iter().next()
-}
-
-fn is_recording_container(path: &Path) -> bool {
-    if !path.is_dir() {
-        return false;
+fn recording_status_label(status: &str) -> &str {
+    match status {
+        RECORDING_STATUS_QUEUED => "Transcription is queued.",
+        RECORDING_STATUS_PROCESSING => "Transcription is processing.",
+        RECORDING_STATUS_COMPLETED => "Transcription completed.",
+        RECORDING_STATUS_FAILED => "Transcription failed.",
+        _ => "Transcription is pending.",
     }
-    if find_recording_audio_file(path).is_some() {
-        return true;
-    }
-    path.join(TRANSCRIPT_FILE_NAME).exists() || path.join(TRANSCRIPTION_STATUS_FILE).exists()
 }
 
-fn resolve_recording_note_file(root: &Path, full_path: &Path) -> PathBuf {
-    let recordings_root = root.join(RECORDINGS_FOLDER);
-    if full_path.starts_with(&recordings_root) && full_path.is_dir() {
-        return full_path.join(TRANSCRIPT_FILE_NAME);
+fn recording_transcript_section(status: &str, transcript: Option<&str>, error: Option<&str>) -> String {
+    if status == RECORDING_STATUS_COMPLETED {
+        let body = transcript.unwrap_or_default().trim();
+        if body.is_empty() {
+            return "## Transcript\n\n(AssemblyAI returned an empty transcript.)\n".to_string();
+        }
+        return format!("## Transcript\n\n{}\n", body);
     }
-    full_path.to_path_buf()
-}
-
-fn pending_transcript_placeholder(recording_dir: &Path) -> String {
-    let folder_name = recording_dir
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or("recording");
-    let status = read_transcription_state(&recording_dir.join(TRANSCRIPTION_STATUS_FILE))
-        .map(|value| value.status)
-        .unwrap_or_else(|| "pending".to_string());
+    if status == RECORDING_STATUS_FAILED {
+        let details = error
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("Unknown transcription error.");
+        return format!(
+            "## Transcript\n\n(Transcription failed.)\n\nError: {}\n",
+            details
+        );
+    }
     format!(
-        "# {}\n\nTranscript is not ready yet.\n\nStatus: `{}`\n",
-        folder_name, status
+        "## Transcript\n\n({})\n",
+        recording_status_label(status)
     )
 }
 
-fn render_transcript_markdown(text: &str) -> String {
-    let body = text.trim();
-    if body.is_empty() {
-        return "# Transcript\n\n(AssemblyAI returned an empty transcript.)\n".to_string();
+fn upsert_recording_transcript_section(body: &str, section: &str) -> String {
+    let start_index = body.find(TRANSCRIPT_START_MARKER);
+    let end_index = start_index.and_then(|start| {
+        body[(start + TRANSCRIPT_START_MARKER.len())..]
+            .find(TRANSCRIPT_END_MARKER)
+            .map(|relative| start + TRANSCRIPT_START_MARKER.len() + relative)
+    });
+
+    if let (Some(start), Some(end)) = (start_index, end_index) {
+        let prefix = &body[..start + TRANSCRIPT_START_MARKER.len()];
+        let suffix = &body[end..];
+        return format!(
+            "{}\n\n{}\n\n{}",
+            prefix.trim_end(),
+            section.trim(),
+            suffix.trim_start()
+        );
     }
-    format!("# Transcript\n\n{}\n", body)
+
+    if body.trim().is_empty() {
+        return format!(
+            "# Recording\n\n{}\n\n{}\n\n{}\n",
+            TRANSCRIPT_START_MARKER,
+            section.trim(),
+            TRANSCRIPT_END_MARKER
+        );
+    }
+
+    format!(
+        "{}\n\n{}\n\n{}\n\n{}\n",
+        body.trim_end(),
+        TRANSCRIPT_START_MARKER,
+        section.trim(),
+        TRANSCRIPT_END_MARKER
+    )
+}
+
+fn recording_storage_root(root: &Path) -> PathBuf {
+    root.join(RECORDINGS_STORAGE_FOLDER)
+}
+
+fn is_recording_audio_path_allowed(root: &Path, audio_path: &Path) -> bool {
+    audio_path.starts_with(recording_storage_root(root))
+        || audio_path.starts_with(root.join(LEGACY_RECORDINGS_FOLDER))
+}
+
+fn recording_info_from_note_meta(
+    root: &Path,
+    note_path: &Path,
+    note_rel: &str,
+    meta: &NoteFrontMatter,
+) -> Option<RecordingNoteInfo> {
+    if meta.note_type.as_deref() != Some(RECORDING_FRONTMATTER_TYPE) {
+        return None;
+    }
+
+    let audio_rel = meta.recording_audio_path.as_ref()?.trim();
+    if audio_rel.is_empty() {
+        return None;
+    }
+
+    let audio_rel_path = sanitize_relative(audio_rel).ok()?;
+    let audio_path = root.join(&audio_rel_path);
+    if !is_recording_audio_path_allowed(root, &audio_path) {
+        return None;
+    }
+
+    let status = meta
+        .transcription_status
+        .as_deref()
+        .unwrap_or(RECORDING_STATUS_PENDING)
+        .to_string();
+
+    Some(RecordingNoteInfo {
+        note_rel: note_rel.to_string(),
+        note_path: note_path.to_path_buf(),
+        audio_rel: audio_rel_path.to_string_lossy().replace('\\', "/"),
+        audio_path,
+        status,
+        error: meta.transcription_error.clone(),
+        updated_ms: meta.transcription_updated_ms.or(meta.updated_ms),
+    })
+}
+
+fn collect_markdown_note_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
+    for entry in fs::read_dir(dir).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name == ORDER_FILE {
+            continue;
+        }
+        let metadata = entry.metadata().map_err(|error| error.to_string())?;
+        if metadata.is_dir() {
+            if name.starts_with('.') {
+                continue;
+            }
+            if dir == root {
+                if HIDDEN_ROOT_FOLDERS.iter().any(|hidden| *hidden == name) {
+                    continue;
+                }
+            }
+            collect_markdown_note_files(root, &path, files)?;
+            continue;
+        }
+        if metadata.is_file() && path.extension().and_then(|value| value.to_str()) == Some("md") {
+            files.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn collect_recording_notes(root: &Path) -> Result<Vec<RecordingNoteInfo>, String> {
+    let mut note_files = Vec::new();
+    collect_markdown_note_files(root, root, &mut note_files)?;
+
+    let mut recordings = Vec::new();
+    for note_path in note_files {
+        let raw = match fs::read_to_string(&note_path) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let (meta, _) = parse_note_front_matter(&raw);
+        let note_rel = strip_root(root, &note_path);
+        if let Some(info) = recording_info_from_note_meta(root, &note_path, &note_rel, &meta) {
+            recordings.push(info);
+        }
+    }
+    Ok(recordings)
+}
+
+fn write_note_with_front_matter(path: &Path, meta: &NoteFrontMatter, body: &str) -> Result<(), String> {
+    let serialized = render_note_with_front_matter(meta, body);
+    fs::write(path, serialized).map_err(|error| error.to_string())
+}
+
+fn update_recording_note_status(
+    note_path: &Path,
+    status: &str,
+    error: Option<String>,
+    transcript_id: Option<String>,
+    transcript_text: Option<&str>,
+) -> Result<(), String> {
+    let raw = fs::read_to_string(note_path).map_err(|issue| issue.to_string())?;
+    let (mut meta, body) = parse_note_front_matter(&raw);
+    if meta.id.is_none() {
+        meta.id = Some(generate_note_id());
+    }
+    let now = now_ms();
+    if meta.created_ms.is_none() {
+        meta.created_ms = now;
+    }
+    meta.updated_ms = now.or(meta.updated_ms);
+    meta.note_type = Some(RECORDING_FRONTMATTER_TYPE.to_string());
+    meta.transcription_status = Some(status.to_string());
+    meta.transcription_error = error.clone();
+    meta.transcription_updated_ms = now.or(meta.transcription_updated_ms);
+    meta.transcription_id = transcript_id;
+
+    let section = recording_transcript_section(status, transcript_text, error.as_deref());
+    let next_body = upsert_recording_transcript_section(&body, &section);
+    write_note_with_front_matter(note_path, &meta, &next_body)
 }
 
 fn transcribe_audio_bytes_with_assembly(
@@ -1129,53 +1302,52 @@ fn transcribe_audio_bytes_with_assembly(
 }
 
 fn process_transcription_job(job: QueuedTranscriptionJob) {
-    let audio_name = job
-        .audio_path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or(AUDIO_FILE_NAME_PREFIX)
-        .to_string();
-
-    if let Err(error) =
-        update_transcription_state(&job.status_path, &audio_name, "processing", None, None)
-    {
+    if let Err(error) = update_recording_note_status(
+        &job.note_path,
+        RECORDING_STATUS_PROCESSING,
+        None,
+        None,
+        None,
+    ) {
         eprintln!(
             "[recordings] failed to mark processing for {}: {}",
-            job.recording_rel, error
+            job.note_rel, error
         );
     }
 
-    let run = || -> Result<String, String> {
+    let run = || -> Result<(String, String), String> {
         let audio_bytes = fs::read(&job.audio_path).map_err(|error| error.to_string())?;
-        let (transcript, transcript_id) =
-            transcribe_audio_bytes_with_assembly(audio_bytes, &job.api_key)?;
-        fs::write(
-            &job.transcript_path,
-            render_transcript_markdown(&transcript),
-        )
-        .map_err(|error| error.to_string())?;
-        update_transcription_state(
-            &job.status_path,
-            &audio_name,
-            "completed",
-            Some(transcript_id),
-            None,
-        )?;
-        Ok(transcript)
+        transcribe_audio_bytes_with_assembly(audio_bytes, &job.api_key)
     };
 
-    if let Err(error) = run() {
-        let _ = update_transcription_state(
-            &job.status_path,
-            &audio_name,
-            "failed",
-            None,
-            Some(error.clone()),
-        );
-        eprintln!(
-            "[recordings] transcription failed for {}: {}",
-            job.recording_rel, error
-        );
+    match run() {
+        Ok((transcript, transcript_id)) => {
+            if let Err(error) = update_recording_note_status(
+                &job.note_path,
+                RECORDING_STATUS_COMPLETED,
+                None,
+                Some(transcript_id),
+                Some(&transcript),
+            ) {
+                eprintln!(
+                    "[recordings] failed to write transcript for {}: {}",
+                    job.note_rel, error
+                );
+            }
+        }
+        Err(error) => {
+            let _ = update_recording_note_status(
+                &job.note_path,
+                RECORDING_STATUS_FAILED,
+                Some(error.clone()),
+                None,
+                None,
+            );
+            eprintln!(
+                "[recordings] transcription failed for {}: {}",
+                job.note_rel, error
+            );
+        }
     }
 }
 
@@ -1201,7 +1373,7 @@ fn spawn_transcription_worker_if_needed() {
             let mut state = queue.lock().expect("transcription queue poisoned");
             match state.pending.pop_front() {
                 Some(job) => {
-                    state.current_recording = Some(job.recording_rel.clone());
+                    state.current_recording = Some(job.note_rel.clone());
                     Some(job)
                 }
                 None => {
@@ -1219,11 +1391,70 @@ fn spawn_transcription_worker_if_needed() {
         process_transcription_job(job.clone());
         let queue = transcription_queue_state();
         let mut state = queue.lock().expect("transcription queue poisoned");
-        state.known_recordings.remove(&job.recording_rel);
-        if state.current_recording.as_deref() == Some(job.recording_rel.as_str()) {
+        state.known_recordings.remove(&job.note_rel);
+        if state.current_recording.as_deref() == Some(job.note_rel.as_str()) {
             state.current_recording = None;
         }
     });
+}
+
+fn recording_initial_body() -> String {
+    let section = recording_transcript_section(RECORDING_STATUS_PENDING, None, None);
+    format!(
+        "# Recording\n\n{}\n\n{}\n\n{}\n",
+        TRANSCRIPT_START_MARKER,
+        section.trim(),
+        TRANSCRIPT_END_MARKER
+    )
+}
+
+fn recording_note_file_name(folder: &Path) -> Result<String, String> {
+    let timestamp = now_ms().unwrap_or(0);
+    for attempt in 0..=512usize {
+        let base = if attempt == 0 {
+            format!("recording-{}", timestamp)
+        } else {
+            format!("recording-{}-{}", timestamp, attempt)
+        };
+        let candidate = format!("{}.md", base);
+        if !folder.join(&candidate).exists() {
+            return Ok(candidate);
+        }
+    }
+    Err("Failed to allocate recording note name.".to_string())
+}
+
+fn recording_audio_file_path(root: &Path, extension: &str) -> Result<PathBuf, String> {
+    let storage = recording_storage_root(root);
+    fs::create_dir_all(&storage).map_err(|error| error.to_string())?;
+    for _ in 0..=512usize {
+        let candidate = storage.join(format!("{}-{}.{}", AUDIO_FILE_NAME_PREFIX, Uuid::now_v7(), extension));
+        if !candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+    Err("Failed to allocate recording audio filename.".to_string())
+}
+
+fn resolve_recording_target_folder(
+    app: &tauri::AppHandle,
+    requested: Option<&str>,
+) -> Result<(String, PathBuf), String> {
+    let root = notes_root(app)?;
+    let candidate = requested.unwrap_or("").trim();
+    if !candidate.is_empty() {
+        let path = resolve_path(app, candidate)?;
+        if path.exists()
+            && path.is_dir()
+            && !path.starts_with(recording_storage_root(&root))
+            && !path.starts_with(root.join(LEGACY_RECORDINGS_FOLDER))
+        {
+            return Ok((strip_root(&root, &path), path));
+        }
+    }
+
+    let fallback = root.join(UNSORTED_FOLDER);
+    Ok((UNSORTED_FOLDER.to_string(), fallback))
 }
 
 fn read_order_file(dir: &Path) -> OrderFile {
@@ -1385,7 +1616,7 @@ fn clear_bootstrap_artifacts(root: &Path) -> Result<(), String> {
     if order_path.exists() {
         fs::remove_file(&order_path).map_err(|err| err.to_string())?;
     }
-    for folder in SYSTEM_FOLDERS {
+    for folder in PROTECTED_SYSTEM_FOLDERS {
         let path = root.join(folder);
         if !path.exists() {
             continue;
@@ -1690,7 +1921,11 @@ fn strip_root(root: &Path, path: &Path) -> String {
 }
 
 fn is_system_folder_name(name: &str) -> bool {
-    SYSTEM_FOLDERS.iter().any(|folder| *folder == name)
+    PROTECTED_SYSTEM_FOLDERS.iter().any(|folder| *folder == name)
+}
+
+fn is_hidden_root_folder_name(name: &str) -> bool {
+    HIDDEN_ROOT_FOLDERS.iter().any(|folder| *folder == name)
 }
 
 fn is_system_folder_path(root: &Path, path: &Path) -> bool {
@@ -1703,7 +1938,7 @@ fn is_system_folder_path(root: &Path, path: &Path) -> bool {
 }
 
 fn ensure_system_folders(root: &Path) -> Result<(), String> {
-    for folder in SYSTEM_FOLDERS {
+    for folder in REQUIRED_SYSTEM_FOLDERS {
         let path = root.join(folder);
         if path.exists() {
             continue;
@@ -1719,7 +1954,7 @@ fn ensure_system_folders(root: &Path) -> Result<(), String> {
 
     let mut order = read_order_file(root);
     let mut changed = false;
-    for folder in SYSTEM_FOLDERS {
+    for folder in VISIBLE_SYSTEM_FOLDERS {
         if !order.folder_order.iter().any(|name| name == folder) {
             order.folder_order.push(folder.to_string());
             changed = true;
@@ -1745,13 +1980,12 @@ fn build_folder_node(dir: &Path, rel_path: &str) -> Result<FolderNode, String> {
         if name == ORDER_FILE {
             continue;
         }
+        if rel_path.is_empty() && is_hidden_root_folder_name(&name) {
+            continue;
+        }
         let meta = entry.metadata().map_err(|err| err.to_string())?;
         if meta.is_dir() {
-            if rel_path == RECORDINGS_FOLDER && is_recording_container(&path) {
-                notes.push(name);
-            } else {
-                folders.push(name);
-            }
+            folders.push(name);
         } else if meta.is_file() {
             if path.extension().and_then(|ext| ext.to_str()) == Some("md") {
                 notes.push(name);
@@ -2047,30 +2281,23 @@ fn get_tree(app: tauri::AppHandle) -> Result<FolderNode, String> {
 
 #[tauri::command]
 fn read_note(app: tauri::AppHandle, path: String) -> Result<String, String> {
-    let root = notes_root(&app)?;
     let full_path = resolve_path(&app, &path)?;
-    let note_file_path = resolve_recording_note_file(&root, &full_path);
-    if note_file_path.exists() {
-        let raw = fs::read_to_string(note_file_path).map_err(|err| err.to_string())?;
-        let (_, body) = parse_note_front_matter(&raw);
-        return Ok(body);
+    if !full_path.exists() || !full_path.is_file() {
+        return Err("Note file does not exist.".to_string());
     }
-    if full_path.is_dir() && full_path.starts_with(root.join(RECORDINGS_FOLDER)) {
-        return Ok(pending_transcript_placeholder(&full_path));
-    }
-    Err("Note file does not exist.".to_string())
+    let raw = fs::read_to_string(full_path).map_err(|err| err.to_string())?;
+    let (_, body) = parse_note_front_matter(&raw);
+    Ok(body)
 }
 
 #[tauri::command]
 fn write_note(app: tauri::AppHandle, path: String, content: String) -> Result<(), String> {
-    let root = notes_root(&app)?;
     let full_path = resolve_path(&app, &path)?;
-    let note_file_path = resolve_recording_note_file(&root, &full_path);
-    if let Some(parent) = note_file_path.parent() {
+    if let Some(parent) = full_path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
-    let mut meta = if note_file_path.exists() {
-        let existing = fs::read_to_string(&note_file_path).map_err(|err| err.to_string())?;
+    let mut meta = if full_path.exists() {
+        let existing = fs::read_to_string(&full_path).map_err(|err| err.to_string())?;
         let (parsed, _) = parse_note_front_matter(&existing);
         parsed
     } else {
@@ -2084,8 +2311,7 @@ fn write_note(app: tauri::AppHandle, path: String, content: String) -> Result<()
         meta.created_ms = now;
     }
     meta.updated_ms = now.or(meta.updated_ms);
-    let serialized = render_note_with_front_matter(&meta, &content);
-    fs::write(note_file_path, serialized).map_err(|err| err.to_string())
+    write_note_with_front_matter(&full_path, &meta, &content)
 }
 
 #[tauri::command]
@@ -2194,47 +2420,38 @@ fn save_audio_recording(
 ) -> Result<RecordingWriteResult, String> {
     let root = notes_root(&app)?;
     ensure_system_folders(&root)?;
-    let recordings_root = root.join(RECORDINGS_FOLDER);
-    fs::create_dir_all(&recordings_root).map_err(|error| error.to_string())?;
-
     let audio_bytes = decode_audio_base64(&args.audio_base64)?;
     if audio_bytes.is_empty() {
         return Err("Audio payload is empty.".to_string());
     }
 
-    let timestamp = now_ms().unwrap_or(0);
-    let mut attempt = 0usize;
-    let recording_dir = loop {
-        let suffix = if attempt == 0 {
-            format!("recording-{}", timestamp)
-        } else {
-            format!("recording-{}-{}", timestamp, attempt)
-        };
-        let candidate = recordings_root.join(suffix);
-        if !candidate.exists() {
-            break candidate;
-        }
-        attempt += 1;
-        if attempt > 2048 {
-            return Err("Failed to allocate recording folder name.".to_string());
-        }
-    };
-
-    fs::create_dir_all(&recording_dir).map_err(|error| error.to_string())?;
+    let (target_folder_rel, target_folder_path) =
+        resolve_recording_target_folder(&app, args.folder_path.as_deref())?;
     let extension = audio_extension_from_mime(args.mime_type.as_deref());
-    let audio_file_name = format!("{}.{}", AUDIO_FILE_NAME_PREFIX, extension);
-    let audio_path = recording_dir.join(&audio_file_name);
+    let audio_path = recording_audio_file_path(&root, extension)?;
     fs::write(&audio_path, audio_bytes).map_err(|error| error.to_string())?;
 
-    let transcript_path = recording_dir.join(TRANSCRIPT_FILE_NAME);
-    let status_path = recording_dir.join(TRANSCRIPTION_STATUS_FILE);
-    update_transcription_state(&status_path, &audio_file_name, "pending", None, None)?;
+    let note_file_name = recording_note_file_name(&target_folder_path)?;
+    let note_path = target_folder_path.join(&note_file_name);
+    let now = now_ms();
+    let mut meta = NoteFrontMatter::default();
+    meta.id = Some(generate_note_id());
+    meta.created_ms = now;
+    meta.updated_ms = now;
+    meta.note_type = Some(RECORDING_FRONTMATTER_TYPE.to_string());
+    meta.recording_audio_path = Some(strip_root(&root, &audio_path));
+    meta.transcription_status = Some(RECORDING_STATUS_PENDING.to_string());
+    meta.transcription_error = None;
+    meta.transcription_updated_ms = now;
+    meta.transcription_id = None;
+
+    write_note_with_front_matter(&note_path, &meta, &recording_initial_body())?;
+    update_order_append(&target_folder_path, &[note_file_name], false)?;
 
     Ok(RecordingWriteResult {
-        recording_folder: strip_root(&root, &recording_dir),
+        folder_path: target_folder_rel,
+        note_path: strip_root(&root, &note_path),
         audio_path: strip_root(&root, &audio_path),
-        transcript_path: strip_root(&root, &transcript_path),
-        status_path: strip_root(&root, &status_path),
     })
 }
 
@@ -2250,52 +2467,44 @@ fn queue_recording_transcriptions(
 
     let root = notes_root(&app)?;
     ensure_system_folders(&root)?;
-    let recordings_root = root.join(RECORDINGS_FOLDER);
-    fs::create_dir_all(&recordings_root).map_err(|error| error.to_string())?;
-
+    let recordings = collect_recording_notes(&root)?;
     let mut scanned = 0usize;
     let mut skipped = 0usize;
     let mut candidates = Vec::new();
 
-    for entry in fs::read_dir(&recordings_root).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let recording_dir = entry.path();
-        if !recording_dir.is_dir() {
-            continue;
-        }
-
+    for recording in recordings {
         scanned += 1;
-        let Some(audio_path) = find_recording_audio_file(&recording_dir) else {
-            skipped += 1;
-            continue;
-        };
-        let transcript_path = recording_dir.join(TRANSCRIPT_FILE_NAME);
-        let status_path = recording_dir.join(TRANSCRIPTION_STATUS_FILE);
-        let audio_name = audio_path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or(AUDIO_FILE_NAME_PREFIX)
-            .to_string();
-
-        if transcript_path.exists() {
-            let _ = update_transcription_state(&status_path, &audio_name, "completed", None, None);
+        if !recording.audio_path.exists() {
+            let _ = update_recording_note_status(
+                &recording.note_path,
+                RECORDING_STATUS_FAILED,
+                Some("Audio file is missing.".to_string()),
+                None,
+                None,
+            );
             skipped += 1;
             continue;
         }
 
-        if let Some(current) = read_transcription_state(&status_path) {
-            if matches!(current.status.as_str(), "queued" | "processing") {
-                skipped += 1;
-                continue;
-            }
+        if matches!(
+            recording.status.as_str(),
+            RECORDING_STATUS_QUEUED | RECORDING_STATUS_PROCESSING | RECORDING_STATUS_COMPLETED
+        ) {
+            skipped += 1;
+            continue;
         }
 
-        update_transcription_state(&status_path, &audio_name, "queued", None, None)?;
+        update_recording_note_status(
+            &recording.note_path,
+            RECORDING_STATUS_QUEUED,
+            None,
+            None,
+            None,
+        )?;
         candidates.push(QueuedTranscriptionJob {
-            recording_rel: strip_root(&root, &recording_dir),
-            audio_path,
-            status_path,
-            transcript_path,
+            note_rel: recording.note_rel,
+            note_path: recording.note_path,
+            audio_path: recording.audio_path,
             api_key: api_key.to_string(),
         });
     }
@@ -2305,10 +2514,10 @@ fn queue_recording_transcriptions(
         let mut state = queue.lock().expect("transcription queue poisoned");
         let mut added = 0usize;
         for job in candidates {
-            if state.known_recordings.contains(&job.recording_rel) {
+            if state.known_recordings.contains(&job.note_rel) {
                 continue;
             }
-            state.known_recordings.insert(job.recording_rel.clone());
+            state.known_recordings.insert(job.note_rel.clone());
             state.pending.push_back(job);
             added += 1;
         }
@@ -2335,8 +2544,6 @@ fn queue_recording_transcriptions(
 fn list_recordings(app: tauri::AppHandle) -> Result<RecordingsListResult, String> {
     let root = notes_root(&app)?;
     ensure_system_folders(&root)?;
-    let recordings_root = root.join(RECORDINGS_FOLDER);
-    fs::create_dir_all(&recordings_root).map_err(|error| error.to_string())?;
 
     let (queue_running, current_recording, pending, in_flight) = {
         let queue = transcription_queue_state();
@@ -2344,7 +2551,7 @@ fn list_recordings(app: tauri::AppHandle) -> Result<RecordingsListResult, String
         let pending = state
             .pending
             .iter()
-            .map(|job| job.recording_rel.clone())
+            .map(|job| job.note_rel.clone())
             .collect::<Vec<_>>();
         (
             state.running,
@@ -2354,57 +2561,35 @@ fn list_recordings(app: tauri::AppHandle) -> Result<RecordingsListResult, String
         )
     };
 
-    let mut recordings = Vec::new();
-    for entry in fs::read_dir(&recordings_root).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let recording_dir = entry.path();
-        if !recording_dir.is_dir() {
-            continue;
-        }
-
-        let recording_rel = strip_root(&root, &recording_dir);
-        let transcript_path = recording_dir.join(TRANSCRIPT_FILE_NAME);
-        let status_path = recording_dir.join(TRANSCRIPTION_STATUS_FILE);
-        let audio_path = find_recording_audio_file(&recording_dir);
-        let state = read_transcription_state(&status_path);
-
-        let default_audio_name = audio_path
-            .as_ref()
-            .and_then(|path| path.file_name())
-            .and_then(|value| value.to_str())
-            .unwrap_or(AUDIO_FILE_NAME_PREFIX)
-            .to_string();
-        let status = if transcript_path.exists() {
-            "completed".to_string()
-        } else {
-            state
-                .as_ref()
-                .map(|value| value.status.clone())
-                .unwrap_or_else(|| "pending".to_string())
-        };
-
-        recordings.push(RecordingListItem {
-            recording_folder: recording_rel.clone(),
-            audio_path: audio_path.as_ref().map(|path| strip_root(&root, path)),
-            transcript_path: strip_root(&root, &transcript_path),
-            status_path: strip_root(&root, &status_path),
-            status,
-            error: state.as_ref().and_then(|value| value.error.clone()),
-            updated_ms: state.as_ref().and_then(|value| value.updated_ms),
-            is_queued: pending.iter().any(|value| value == &recording_rel),
-            is_processing: current_recording.as_deref() == Some(recording_rel.as_str()),
-        });
-
-        if state.is_none() && audio_path.is_some() {
-            let _ = update_transcription_state(
-                &status_path,
-                &default_audio_name,
-                "pending",
-                None,
-                None,
-            );
-        }
-    }
+    let mut recordings = collect_recording_notes(&root)?
+        .into_iter()
+        .map(|recording| {
+            let folder_path = recording
+                .note_rel
+                .rsplit_once('/')
+                .map(|(parent, _)| parent.to_string())
+                .unwrap_or_default();
+            let audio_exists = recording.audio_path.exists();
+            let mut error = recording.error.clone();
+            if !audio_exists {
+                error = Some("Audio file is missing.".to_string());
+            }
+            RecordingListItem {
+                note_path: recording.note_rel.clone(),
+                folder_path,
+                audio_path: if audio_exists {
+                    Some(recording.audio_rel.clone())
+                } else {
+                    None
+                },
+                status: recording.status.clone(),
+                error,
+                updated_ms: recording.updated_ms,
+                is_queued: pending.iter().any(|value| value == &recording.note_rel),
+                is_processing: current_recording.as_deref() == Some(recording.note_rel.as_str()),
+            }
+        })
+        .collect::<Vec<_>>();
 
     recordings.sort_by(|a, b| b.updated_ms.unwrap_or(0).cmp(&a.updated_ms.unwrap_or(0)));
 
@@ -2426,11 +2611,10 @@ fn read_recording_audio(
 ) -> Result<RecordingAudioPayload, String> {
     let root = notes_root(&app)?;
     ensure_system_folders(&root)?;
-    let recordings_root = root.join(RECORDINGS_FOLDER);
     let path_rel = sanitize_relative(&args.path)?;
     let audio_path = root.join(path_rel);
-    if !audio_path.starts_with(&recordings_root) {
-        return Err("Only files inside Recordings are allowed.".to_string());
+    if !is_recording_audio_path_allowed(&root, &audio_path) {
+        return Err("Only files inside _Recordings are allowed.".to_string());
     }
     if !audio_path.exists() || !audio_path.is_file() {
         return Err("Audio file not found.".to_string());
@@ -2451,21 +2635,20 @@ fn time_to_ms(time: std::time::SystemTime) -> Option<i64> {
 fn get_note_meta(app: tauri::AppHandle, path: String) -> Result<NoteMeta, String> {
     let root = notes_root(&app)?;
     let full_path = resolve_path(&app, &path)?;
-    let note_file_path = resolve_recording_note_file(&root, &full_path);
-    let (front_matter_meta, metadata) = if note_file_path.exists() {
-        let raw = fs::read_to_string(&note_file_path).map_err(|err| err.to_string())?;
+    let (front_matter_meta, metadata) = if full_path.exists() {
+        let raw = fs::read_to_string(&full_path).map_err(|err| err.to_string())?;
         let (front_matter_meta, _) = parse_note_front_matter(&raw);
         (
             front_matter_meta,
-            fs::metadata(&note_file_path).map_err(|err| err.to_string())?,
+            fs::metadata(&full_path).map_err(|err| err.to_string())?,
         )
     } else {
         (
             NoteFrontMatter::default(),
-            fs::metadata(full_path).map_err(|err| err.to_string())?,
+            fs::metadata(&full_path).map_err(|err| err.to_string())?,
         )
     };
-    let note_rel = strip_root(&root, &note_file_path);
+    let note_rel = strip_root(&root, &full_path);
     let (history_created_ms, history_updated_ms) =
         git_note_timestamps_from_history(&root, &note_rel).unwrap_or((None, None));
 

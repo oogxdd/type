@@ -71,12 +71,14 @@ export const writeNote = (path: string, content: string): Promise<void> =>
 
 export const saveAudioRecording = (
   audioBase64: string,
-  mimeType?: string
+  mimeType?: string,
+  folderPath?: string
 ): Promise<RecordingWriteResult> =>
   invokeLogged<RecordingWriteResult>("save_audio_recording", {
     args: {
       audio_base64: audioBase64,
       mime_type: mimeType,
+      folder_path: folderPath,
     },
   });
 

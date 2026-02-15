@@ -78,7 +78,6 @@ import type {
   DragData,
   FolderNode,
   GitSyncStatus,
-  NoteEntry,
   NotesSessionSnapshot,
   RecordingListItem,
   RecordingQueueSnapshot,
@@ -89,12 +88,7 @@ import { removeChildrenOf } from "./tree/utilities";
 const indentationWidth = 18;
 const UNSORTED_FOLDER_PATH = "Unsorted";
 const ARCHIEVE_FOLDER_PATH = "Archieve";
-const RECORDINGS_FOLDER_PATH = "Recordings";
-const SYSTEM_FOLDER_PATHS = new Set([
-  UNSORTED_FOLDER_PATH,
-  ARCHIEVE_FOLDER_PATH,
-  RECORDINGS_FOLDER_PATH,
-]);
+const SYSTEM_FOLDER_PATHS = new Set([UNSORTED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH]);
 
 type AppMode = "notes" | "settings";
 type PaneId = "folders" | "middle" | "right";
@@ -253,35 +247,6 @@ const MOBILE_SETTINGS_SECTIONS: Array<{ id: SettingsSectionId; label: string }> 
   { id: "recordings", label: "Recordings" },
 ];
 
-const getRecordingTimestampFromName = (name: string): number | null => {
-  const normalized = name.replace(/\.md$/i, "");
-  const match = normalized.match(/^recording-(\d+)(?:-\d+)?$/i);
-  if (!match) {
-    return null;
-  }
-  const value = Number.parseInt(match[1], 10);
-  return Number.isFinite(value) ? value : null;
-};
-
-const sortRecordingsNewestFirst = (entries: NoteEntry[]) =>
-  [...entries].sort((left, right) => {
-    const leftTs = getRecordingTimestampFromName(left.name);
-    const rightTs = getRecordingTimestampFromName(right.name);
-    if (leftTs !== null && rightTs !== null && leftTs !== rightTs) {
-      return rightTs - leftTs;
-    }
-    if (leftTs !== null && rightTs === null) {
-      return -1;
-    }
-    if (leftTs === null && rightTs !== null) {
-      return 1;
-    }
-    return right.name.localeCompare(left.name, undefined, {
-      numeric: true,
-      sensitivity: "base",
-    });
-  });
-
 // ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
@@ -390,6 +355,7 @@ function App() {
   const folderMenuPromiseRef = useRef<Promise<Menu> | null>(null);
   const noteMenuPromiseRef = useRef<Promise<Menu> | null>(null);
   const transcriptionQueueBusyRef = useRef(false);
+  const recordingTargetFolderRef = useRef<string>(UNSORTED_FOLDER_PATH);
 
   // -- Hooks ----------------------------------------------------------------
   const {
@@ -572,25 +538,49 @@ function App() {
     [assemblyAiApiKey, refreshRecordings]
   );
 
+  const resolveRecordingTargetFolder = useCallback(
+    (preferredFolderPath?: string | null) => {
+      const preferred = preferredFolderPath?.trim();
+      if (preferred) {
+        return preferred;
+      }
+      const active = activeFolder.trim();
+      return active || UNSORTED_FOLDER_PATH;
+    },
+    [activeFolder]
+  );
+
   const handleRecordingReady = useCallback(
     async (blob: Blob, mimeType: string) => {
       const buffer = await blob.arrayBuffer();
       const audioBase64 = toBase64(new Uint8Array(buffer));
-      const result = await api.saveAudioRecording(audioBase64, mimeType || undefined);
+      const targetFolder = recordingTargetFolderRef.current || UNSORTED_FOLDER_PATH;
+      const result = await api.saveAudioRecording(
+        audioBase64,
+        mimeType || undefined,
+        targetFolder
+      );
       await refreshTree();
-      setSelectedFolders(new Set([result.recording_folder]));
-      setLastSelectedFolder(result.recording_folder);
-      setActiveFolder(result.recording_folder);
-      setSelectedNotes(new Set());
-      setLastSelectedNote("");
-      setActiveNote(null);
-      setRecordingStatusMessage(`Saved ${result.audio_path}.`);
+      setSelectedFolders(new Set([result.folder_path]));
+      setLastSelectedFolder(result.folder_path);
+      setActiveFolder(result.folder_path);
+      setSelectedNotes(new Set([result.note_path]));
+      setLastSelectedNote(result.note_path);
+      setActiveNote(result.note_path);
+      clearDraft();
+      setRecordingStatusMessage(`Saved ${result.note_path}.`);
       void refreshRecordings();
       if (layoutMode === "desktop") {
         await queueRecordingTranscriptions("auto");
       }
     },
-    [layoutMode, queueRecordingTranscriptions, refreshRecordings, refreshTree]
+    [
+      clearDraft,
+      layoutMode,
+      queueRecordingTranscriptions,
+      refreshRecordings,
+      refreshTree,
+    ]
   );
 
   const {
@@ -600,11 +590,24 @@ function App() {
     error: recorderError,
     nativeRecoveryNotice,
     recordingElapsedLabel,
-    startRecording,
-    stopRecording,
+    startRecording: startRecordingRaw,
+    stopRecording: stopRecordingRaw,
   } = useAudioRecorder({
     onRecordingReady: handleRecordingReady,
   });
+
+  const startRecording = useCallback(
+    (preferredFolderPath?: string | null) => {
+      recordingTargetFolderRef.current =
+        resolveRecordingTargetFolder(preferredFolderPath);
+      void startRecordingRaw();
+    },
+    [resolveRecordingTargetFolder, startRecordingRaw]
+  );
+
+  const stopRecording = useCallback(() => {
+    stopRecordingRaw();
+  }, [stopRecordingRaw]);
 
   const recordingLiveStatus =
     isRecordingAudio && recordingElapsedLabel
@@ -643,6 +646,7 @@ function App() {
       setSelectedNotes(new Set());
       setLastSelectedNote("");
       setActiveNote(null);
+      recordingTargetFolderRef.current = UNSORTED_FOLDER_PATH;
       clearNote();
       clearDraft();
     }
@@ -920,13 +924,7 @@ function App() {
     console.log("[folders] activeNode", activeNode?.path || null);
   }, [activeNode]);
 
-  const notes = useMemo(() => {
-    const source = activeNode?.notes || [];
-    if (activeFolder !== RECORDINGS_FOLDER_PATH) {
-      return source;
-    }
-    return sortRecordingsNewestFirst(source);
-  }, [activeFolder, activeNode]);
+  const notes = useMemo(() => activeNode?.notes || [], [activeNode]);
   const notePreviews = useNotePreviews(notes);
 
   // -- Create new note ------------------------------------------------------
@@ -970,6 +968,9 @@ function App() {
   }, [appMode, clearDraft, refreshTree, tree]);
 
   const enterMobileHome = useCallback(() => {
+    setSelectedFolders(new Set());
+    setLastSelectedFolder("");
+    setActiveFolder("");
     setSelectedNotes(new Set());
     setLastSelectedNote("");
     setActiveNote(null);
@@ -1083,7 +1084,7 @@ function App() {
     if (paths.length === 0) return;
     if (paths.some(isSystemFolder)) {
       window.alert(
-        '"Unsorted", "Archieve", and "Recordings" are fixed folders and cannot be deleted.'
+        '"Unsorted" and "Archieve" are fixed folders and cannot be deleted.'
       );
       return;
     }
@@ -2313,7 +2314,7 @@ function App() {
                 if (isRecordingAudio) {
                   stopRecording();
                 } else {
-                  void startRecording();
+                  void startRecording(activeFolder || undefined);
                 }
               }}
               disabled={!recordingSupported || isRecordingFinalizing}
@@ -2486,8 +2487,8 @@ function App() {
             onPlayRecording={(audioPath) => {
               void playRecording(audioPath);
             }}
-            onStartAudioRecording={() => {
-              void startRecording();
+            onStartAudioRecording={(folderPath) => {
+              void startRecording(folderPath);
             }}
             onStopAudioRecording={stopRecording}
             onQueueRecordings={() => {

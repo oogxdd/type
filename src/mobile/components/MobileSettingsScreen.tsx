@@ -434,9 +434,9 @@ export function MobileSettingsScreen({
                 <p className="mobile-native-note">No recordings yet.</p>
               ) : (
                 recordings.map((item) => (
-                  <div key={item.recording_folder} className="mobile-native-row stat mobile-recording-row">
+                  <div key={item.note_path} className="mobile-native-row stat mobile-recording-row">
                     <span className="mobile-native-row-main">
-                      <span className="mobile-native-row-label">{item.recording_folder}</span>
+                      <span className="mobile-native-row-label">{item.note_path}</span>
                       <span className="mobile-native-row-sub">{formatRecordingStatus(item)}</span>
                     </span>
                     <button

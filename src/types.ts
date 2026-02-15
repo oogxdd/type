@@ -44,10 +44,9 @@ export type NotesSessionSnapshot = {
 };
 
 export type RecordingWriteResult = {
-  recording_folder: string;
+  folder_path: string;
+  note_path: string;
   audio_path: string;
-  transcript_path: string;
-  status_path: string;
 };
 
 export type RecordingTranscriptionQueueResult = {
@@ -65,10 +64,9 @@ export type RecordingQueueSnapshot = {
 };
 
 export type RecordingListItem = {
-  recording_folder: string;
+  note_path: string;
+  folder_path: string;
   audio_path: string | null;
-  transcript_path: string;
-  status_path: string;
   status: string;
   error: string | null;
   updated_ms: number | null;

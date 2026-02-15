@@ -29,7 +29,7 @@ export function MobileRecordingScreen({
     <div className="mobile-recording-screen">
       <section className="mobile-recording-card hero" aria-label="Recorder">
         <h2>Recorder</h2>
-        <p>Tap once to start. Tap again to finish and save into Recordings.</p>
+        <p>Tap once to start. Tap again to finish and save into the selected folder.</p>
         <button
           type="button"
           className={`mobile-recording-toggle${isRecording ? " active" : ""}`}
