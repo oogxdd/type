@@ -992,8 +992,21 @@ function App() {
     console.log("[folders] activeNode", activeNode?.path || null);
   }, [activeNode]);
 
-  const notes = useMemo(() => activeNode?.notes || [], [activeNode]);
-  const notePreviews = useNotePreviews(notes);
+  const rawNotes = useMemo(() => activeNode?.notes || [], [activeNode]);
+  const notePreviews = useNotePreviews(rawNotes);
+  const notes = useMemo(() => {
+    if (rawNotes.length <= 1) {
+      return rawNotes;
+    }
+    return rawNotes.slice().sort((a, b) => {
+      const aCreated = notePreviews[a.path]?.createdAtMs ?? 0;
+      const bCreated = notePreviews[b.path]?.createdAtMs ?? 0;
+      if (bCreated !== aCreated) {
+        return bCreated - aCreated;
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [notePreviews, rawNotes]);
 
   // -- Create new note ------------------------------------------------------
   const createNewNote = useCallback(async (preferredFolderPath?: string, initialContent = "") => {
@@ -1223,7 +1236,8 @@ function App() {
     const noteParentPath = parentPath ?? getNoteParentPath(notePath);
     const parentNode = findNode(tree, noteParentPath);
     if (!parentNode) return;
-    const notePaths = parentNode.notes.map((n) => n.path);
+    const notePaths =
+      noteParentPath === activeFolder ? notes.map((n) => n.path) : parentNode.notes.map((n) => n.path);
     const nextSelected = new Set(selectedNotes);
     if (event.shiftKey && lastSelectedNote) {
       const start = notePaths.indexOf(lastSelectedNote);
@@ -1718,7 +1732,10 @@ function App() {
           movingInParent.length > 0 ? movingInParent : [data.path];
         if (movingNotes.includes(overData.path)) return;
 
-        const notePaths = parentNode.notes.map((n) => n.path);
+        const notePaths =
+          destinationParentPath === activeFolder
+            ? notes.map((n) => n.path)
+            : parentNode.notes.map((n) => n.path);
         const newOrder = reorderList(notePaths, movingNotes, overData.path);
         const folderOrder = parentNode.children.map((c) => c.name);
         const noteOrder = newOrder.map((p) => p.split("/").pop() || p);

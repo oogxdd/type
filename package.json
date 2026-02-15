@@ -1,7 +1,7 @@
 {
   "name": "type",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,7 +15,11 @@
     "tauri:ios:dev": "npm run tauri:ios:sync-assets && tauri ios dev",
     "tauri:ios:build": "npm run tauri:ios:sync-assets && tauri ios build",
     "ios:build": "npm run tauri:ios:build -- --export-method app-store-connect",
-    "ios:push": "xcrun altool --upload-app --type ios --file /Users/digital/Projects/type2/apple-notes-viewer/src-tauri/gen/apple/build/arm64/Type.ipa --apiKey W2Y52J5N33 --apiIssuer bd0c62da-fcbf-4770-a10d-2ee30da0963e"
+    "ios:push": "xcrun altool --upload-app --type ios --file /Users/digital/Projects/type2/apple-notes-viewer/src-tauri/gen/apple/build/arm64/Type.ipa --apiKey W2Y52J5N33 --apiIssuer bd0c62da-fcbf-4770-a10d-2ee30da0963e",
+    "version:sync": "./scripts/sync-version.sh",
+    "release:patch": "npm version patch && yarn version:sync && yarn ios:build && yarn ios:push",
+    "release:minor": "npm version minor && yarn version:sync && yarn ios:build && yarn ios:push",
+    "release:major": "npm version major && yarn version:sync && yarn ios:build && yarn ios:push"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

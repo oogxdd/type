@@ -2,6 +2,73 @@ export type NotePreview = {
   title: string;
   dateLabel: string;
   secondLine: string;
+  createdAtMs: number | null;
+};
+
+const FRONT_MATTER_PATTERN = /^---\s*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
+const FRONT_MATTER_CREATED_KEYS = new Set([
+  "createdat",
+  "created",
+  "date",
+  "createdtime",
+]);
+
+const normalizeFrontMatterKey = (value: string) =>
+  value.toLowerCase().replace(/[\s_-]+/g, "");
+
+const parseTimestamp = (rawValue: string) => {
+  const value = rawValue.trim().replace(/^['"]|['"]$/g, "");
+  if (!value) {
+    return null;
+  }
+
+  if (/^\d+$/.test(value)) {
+    if (value.length === 10) {
+      const seconds = Number(value);
+      return Number.isFinite(seconds) ? seconds * 1000 : null;
+    }
+    if (value.length === 13) {
+      const millis = Number(value);
+      return Number.isFinite(millis) ? millis : null;
+    }
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+export const extractCreatedAtFromFrontMatter = (content: string) => {
+  const match = content.match(FRONT_MATTER_PATTERN);
+  if (!match) {
+    return null;
+  }
+
+  const frontMatter = match[1];
+  const lines = frontMatter.split(/\r?\n/);
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    const separatorIndex = line.indexOf(":");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+    const rawKey = line.slice(0, separatorIndex).trim().replace(/^['"]|['"]$/g, "");
+    const rawValue = line.slice(separatorIndex + 1).trim();
+    if (!rawValue) {
+      continue;
+    }
+    if (!FRONT_MATTER_CREATED_KEYS.has(normalizeFrontMatterKey(rawKey))) {
+      continue;
+    }
+    const timestamp = parseTimestamp(rawValue);
+    if (timestamp != null) {
+      return timestamp;
+    }
+  }
+
+  return null;
 };
 
 export const formatNoteDateLabel = (timestamp: number | null) => {
@@ -38,7 +105,8 @@ export const formatNoteDateLabel = (timestamp: number | null) => {
 export const parseNotePreview = (
   noteName: string,
   content: string,
-  updatedMs: number | null
+  updatedMs: number | null,
+  createdAtMs: number | null = null
 ): NotePreview => {
   const stripMarkdown = (line: string) =>
     line
@@ -53,7 +121,12 @@ export const parseNotePreview = (
   const fallbackTitle = noteName.replace(/\.md$/i, "");
   const title = stripMarkdown(lines[0] || "") || fallbackTitle;
   const secondLine = stripMarkdown(lines[1] || "");
-  return { title, dateLabel: formatNoteDateLabel(updatedMs), secondLine };
+  return {
+    title,
+    dateLabel: formatNoteDateLabel(updatedMs),
+    secondLine,
+    createdAtMs,
+  };
 };
 
 export const getNextNoteFileName = (existingNames: string[]) => {
