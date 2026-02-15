@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import * as api from "../data/notesApi";
 
 type UseAudioRecorderArgs = {
   onRecordingReady: (blob: Blob, mimeType: string) => Promise<void>;
@@ -33,10 +34,27 @@ const toErrorMessage = (error: unknown) => {
     }
     return error.message || "Audio recording failed.";
   }
+  if (
+    typeof error === "object" &&
+    error &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message;
+  }
   if (error instanceof Error) {
     return error.message;
   }
   return String(error);
+};
+
+const decodeBase64 = (raw: string): Uint8Array => {
+  const binary = atob(raw);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 };
 
 export const useAudioRecorder = ({ onRecordingReady }: UseAudioRecorderArgs) => {
@@ -45,37 +63,64 @@ export const useAudioRecorder = ({ onRecordingReady }: UseAudioRecorderArgs) => 
   const chunksRef = useRef<Blob[]>([]);
   const mimeTypeRef = useRef<string>("");
 
+  const [nativeSupported, setNativeSupported] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isSupported =
+  const webSupported =
     typeof window !== "undefined" &&
     typeof MediaRecorder !== "undefined" &&
     Boolean(navigator.mediaDevices?.getUserMedia);
+  const isSupported = nativeSupported || webSupported;
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
   }, []);
 
-  const stopRecording = useCallback(() => {
-    const recorder = recorderRef.current;
-    if (!recorder || recorder.state === "inactive") {
-      return;
-    }
-    recorder.stop();
+  useEffect(() => {
+    let mounted = true;
+    void api
+      .nativeRecorderCapabilities()
+      .then((caps) => {
+        if (!mounted) {
+          return;
+        }
+        setNativeSupported(caps.supported);
+        setIsRecording(caps.recording);
+      })
+      .catch(() => {
+        if (!mounted) {
+          return;
+        }
+        setNativeSupported(false);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const startRecording = useCallback(async () => {
-    if (!isSupported) {
-      setError("This device does not support audio recording in-app.");
-      return;
-    }
-    if (isRecording || isFinalizing) {
-      return;
-    }
+  const saveBlob = useCallback(
+    async (blob: Blob, mimeType: string) => {
+      if (blob.size === 0) {
+        setError("No audio captured. Try recording again.");
+        return;
+      }
+      setIsFinalizing(true);
+      try {
+        await onRecordingReady(blob, mimeType || blob.type);
+        setError(null);
+      } catch (cause) {
+        setError(toErrorMessage(cause));
+      } finally {
+        setIsFinalizing(false);
+      }
+    },
+    [onRecordingReady]
+  );
 
+  const startWebRecording = useCallback(async () => {
     setError(null);
     chunksRef.current = [];
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -105,14 +150,32 @@ export const useAudioRecorder = ({ onRecordingReady }: UseAudioRecorderArgs) => 
       const blobType = mimeTypeRef.current || "audio/webm";
       const blob = new Blob(chunksRef.current, { type: blobType });
       chunksRef.current = [];
-      if (blob.size === 0) {
-        setError("No audio captured. Try recording again.");
+      void saveBlob(blob, mimeTypeRef.current || blob.type);
+    };
+
+    recorderRef.current = recorder;
+    recorder.start(200);
+    setIsRecording(true);
+  }, [saveBlob, stopStream]);
+
+  const stopRecording = useCallback(() => {
+    if (nativeSupported) {
+      if (!isRecording || isFinalizing) {
         return;
       }
-
       setIsFinalizing(true);
-      void onRecordingReady(blob, mimeTypeRef.current || blob.type)
-        .then(() => {
+      void api
+        .stopNativeAudioRecording()
+        .then(async (payload) => {
+          setIsRecording(false);
+          const bytes = decodeBase64(payload.audio_base64);
+          const mimeType = payload.mime_type || "audio/mp4";
+          const blob = new Blob([bytes], { type: mimeType });
+          if (blob.size === 0) {
+            setError("No audio captured. Try recording again.");
+            return;
+          }
+          await onRecordingReady(blob, mimeType);
           setError(null);
         })
         .catch((cause) => {
@@ -121,12 +184,15 @@ export const useAudioRecorder = ({ onRecordingReady }: UseAudioRecorderArgs) => 
         .finally(() => {
           setIsFinalizing(false);
         });
-    };
+      return;
+    }
 
-    recorderRef.current = recorder;
-    recorder.start(200);
-    setIsRecording(true);
-  }, [isFinalizing, isRecording, isSupported, onRecordingReady, stopStream]);
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state === "inactive") {
+      return;
+    }
+    recorder.stop();
+  }, [isFinalizing, isRecording, nativeSupported, onRecordingReady]);
 
   useEffect(() => {
     return () => {
@@ -145,7 +211,23 @@ export const useAudioRecorder = ({ onRecordingReady }: UseAudioRecorderArgs) => 
     error,
     startRecording: async () => {
       try {
-        await startRecording();
+        if (nativeSupported) {
+          if (isRecording || isFinalizing) {
+            return;
+          }
+          setError(null);
+          await api.startNativeAudioRecording();
+          setIsRecording(true);
+          return;
+        }
+        if (!webSupported) {
+          setError("This device does not support audio recording in-app.");
+          return;
+        }
+        if (isRecording || isFinalizing) {
+          return;
+        }
+        await startWebRecording();
       } catch (cause) {
         setError(toErrorMessage(cause));
         stopStream();

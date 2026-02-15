@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   FolderNode,
   GitSyncStatus,
+  NativeRecorderCapabilities,
   NoteMeta,
   NotesSessionSnapshot,
   RecordingAudioPayload,
@@ -97,6 +98,18 @@ export const readRecordingAudio = (
   invokeLogged<RecordingAudioPayload>("read_recording_audio", {
     args: { path },
   });
+
+export const nativeRecorderCapabilities =
+  (): Promise<NativeRecorderCapabilities> =>
+    invokeLogged<NativeRecorderCapabilities>(
+      "native_audio_recorder_capabilities"
+    );
+
+export const startNativeAudioRecording = (): Promise<void> =>
+  invokeLogged<void>("start_native_audio_recording");
+
+export const stopNativeAudioRecording = (): Promise<RecordingAudioPayload> =>
+  invokeLogged<RecordingAudioPayload>("stop_native_audio_recording");
 
 export const getNoteMeta = (path: string): Promise<NoteMeta> =>
   invokeLogged<NoteMeta>("get_note_meta", { path });

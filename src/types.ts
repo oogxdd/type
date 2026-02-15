@@ -86,4 +86,9 @@ export type RecordingAudioPayload = {
   audio_base64: string;
 };
 
+export type NativeRecorderCapabilities = {
+  supported: boolean;
+  recording: boolean;
+};
+
  

@@ -1,8 +1,12 @@
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use git2::{
     build::CheckoutBuilder, AnnotatedCommit, Cred, CredentialType, Direction, FetchOptions,
     IndexAddOption, Oid, PushOptions, RemoteCallbacks, Repository, Signature, StatusOptions,
 };
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+#[cfg(target_os = "ios")]
+use objc::runtime::{Class, Object, BOOL, NO, YES};
+#[cfg(target_os = "ios")]
+use objc::{msg_send, sel, sel_impl};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -12,6 +16,12 @@ use std::{
     sync::{Mutex, OnceLock},
     thread,
     time::Duration,
+};
+#[cfg(target_os = "ios")]
+use std::{
+    ffi::{CStr, CString},
+    os::raw::{c_char, c_int},
+    ptr,
 };
 use tauri::Manager;
 use uuid::Uuid;
@@ -35,8 +45,8 @@ const MACOS_WINDOW_ALPHA: f64 = 1.0;
 
 #[cfg(target_os = "macos")]
 fn apply_macos_window_alpha(window: &tauri::WebviewWindow, alpha: f64) -> tauri::Result<()> {
-    use objc::{class, msg_send, sel, sel_impl};
     use objc::runtime::Object;
+    use objc::{class, msg_send, sel, sel_impl};
 
     let ns_window = window.ns_window()? as *mut Object;
     unsafe {
@@ -223,6 +233,19 @@ struct RecordingAudioPayload {
     audio_base64: String,
 }
 
+#[derive(Serialize)]
+struct NativeRecorderCapabilities {
+    supported: bool,
+    recording: bool,
+}
+
+#[cfg(target_os = "ios")]
+struct IosNativeRecorderState {
+    recorder_ptr: usize,
+    output_path: PathBuf,
+    mime_type: String,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 struct RecordingTranscriptionState {
     status: String,
@@ -266,6 +289,8 @@ struct AssemblyTranscriptResponse {
 static TRANSCRIPTION_QUEUE: OnceLock<Mutex<TranscriptionQueueState>> = OnceLock::new();
 static GIT_NOTE_TIMESTAMPS_CACHE: OnceLock<Mutex<HashMap<String, (Option<i64>, Option<i64>)>>> =
     OnceLock::new();
+#[cfg(target_os = "ios")]
+static IOS_NATIVE_RECORDER: OnceLock<Mutex<Option<IosNativeRecorderState>>> = OnceLock::new();
 
 fn app_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let path = app.path().app_data_dir().map_err(|err| err.to_string())?;
@@ -436,8 +461,14 @@ fn sessions_snapshot(state: &NotesSessionsFile) -> NotesSessionsSnapshot {
     }
 }
 
-fn find_session<'a>(state: &'a NotesSessionsFile, session_id: &str) -> Option<&'a NotesSessionEntry> {
-    state.sessions.iter().find(|session| session.id == session_id)
+fn find_session<'a>(
+    state: &'a NotesSessionsFile,
+    session_id: &str,
+) -> Option<&'a NotesSessionEntry> {
+    state
+        .sessions
+        .iter()
+        .find(|session| session.id == session_id)
 }
 
 fn set_active_session_state(
@@ -461,7 +492,11 @@ fn create_session_state(app: &tauri::AppHandle, name: &str) -> Result<NotesSessi
     let mut state = ensure_sessions_state(app)?;
     let session_name = normalize_session_name(name);
     let base_id = slugify_session_id(&session_name);
-    let existing: HashSet<String> = state.sessions.iter().map(|session| session.id.clone()).collect();
+    let existing: HashSet<String> = state
+        .sessions
+        .iter()
+        .map(|session| session.id.clone())
+        .collect();
     let mut session_id = base_id.clone();
     let mut suffix = 2usize;
     while existing.contains(&session_id) {
@@ -534,6 +569,211 @@ fn now_ms() -> Option<i64> {
         .duration_since(std::time::UNIX_EPOCH)
         .ok()?;
     i64::try_from(duration.as_millis()).ok()
+}
+
+#[cfg(target_os = "ios")]
+fn ios_native_recorder_state() -> &'static Mutex<Option<IosNativeRecorderState>> {
+    IOS_NATIVE_RECORDER.get_or_init(|| Mutex::new(None))
+}
+
+#[cfg(target_os = "ios")]
+const IOS_AUDIO_MIME_TYPE: &str = "audio/mp4";
+#[cfg(target_os = "ios")]
+const IOS_AUDIO_FILE_EXT: &str = "m4a";
+#[cfg(target_os = "ios")]
+const K_AUDIO_FORMAT_MPEG4AAC: u32 = 0x6161_6320;
+#[cfg(target_os = "ios")]
+const RTLD_NOW: c_int = 2;
+
+#[cfg(target_os = "ios")]
+unsafe extern "C" {
+    fn dlopen(filename: *const c_char, flag: c_int) -> *mut core::ffi::c_void;
+    fn dlerror() -> *const c_char;
+}
+
+#[cfg(target_os = "ios")]
+fn ensure_avfoundation_loaded() -> Result<(), String> {
+    let framework_path =
+        CString::new("/System/Library/Frameworks/AVFoundation.framework/AVFoundation")
+            .map_err(|_| "Failed to load AVFoundation framework path.".to_string())?;
+    unsafe {
+        let handle = dlopen(framework_path.as_ptr(), RTLD_NOW);
+        if !handle.is_null() {
+            return Ok(());
+        }
+        let error_ptr = dlerror();
+        if error_ptr.is_null() {
+            return Err("Failed to load AVFoundation framework.".to_string());
+        }
+        let message = CStr::from_ptr(error_ptr).to_string_lossy().to_string();
+        Err(format!(
+            "Failed to load AVFoundation framework: {}",
+            message
+        ))
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn ns_class(name: &str) -> Result<&'static Class, String> {
+    Class::get(name).ok_or_else(|| format!("Missing iOS runtime class: {}", name))
+}
+
+#[cfg(target_os = "ios")]
+fn ns_string(value: &str) -> Result<*mut Object, String> {
+    let c_value =
+        CString::new(value).map_err(|_| "Failed to convert string for iOS runtime.".to_string())?;
+    unsafe {
+        let class = ns_class("NSString")?;
+        let result: *mut Object = msg_send![class, stringWithUTF8String: c_value.as_ptr()];
+        if result.is_null() {
+            return Err("Failed to create NSString.".to_string());
+        }
+        Ok(result)
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn ns_error_message(error: *mut Object, fallback: &str) -> String {
+    if error.is_null() {
+        return fallback.to_string();
+    }
+    unsafe {
+        let localized: *mut Object = msg_send![error, localizedDescription];
+        if localized.is_null() {
+            return fallback.to_string();
+        }
+        let c_message: *const c_char = msg_send![localized, UTF8String];
+        if c_message.is_null() {
+            return fallback.to_string();
+        }
+        CStr::from_ptr(c_message).to_string_lossy().to_string()
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn configure_ios_audio_session_for_recording() -> Result<(), String> {
+    unsafe {
+        let session_class = ns_class("AVAudioSession")?;
+        let session: *mut Object = msg_send![session_class, sharedInstance];
+        if session.is_null() {
+            return Err("Failed to access AVAudioSession.".to_string());
+        }
+        let category = ns_string("AVAudioSessionCategoryPlayAndRecord")?;
+        let mut error: *mut Object = ptr::null_mut();
+        let category_ok: BOOL = msg_send![session, setCategory: category error: &mut error];
+        if category_ok == NO {
+            return Err(ns_error_message(
+                error,
+                "Failed to set AVAudioSession category.",
+            ));
+        }
+        let active_ok: BOOL = msg_send![session, setActive: YES error: &mut error];
+        if active_ok == NO {
+            return Err(ns_error_message(
+                error,
+                "Failed to activate AVAudioSession.",
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "ios")]
+fn deactivate_ios_audio_session() {
+    unsafe {
+        if let Some(session_class) = Class::get("AVAudioSession") {
+            let session: *mut Object = msg_send![session_class, sharedInstance];
+            if session.is_null() {
+                return;
+            }
+            let mut error: *mut Object = ptr::null_mut();
+            let _: BOOL = msg_send![session, setActive: NO error: &mut error];
+        }
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn create_ios_audio_recorder(output_path: &Path) -> Result<*mut Object, String> {
+    unsafe {
+        let dictionary_class = ns_class("NSMutableDictionary")?;
+        let settings: *mut Object = msg_send![dictionary_class, dictionary];
+        if settings.is_null() {
+            return Err("Failed to create recorder settings.".to_string());
+        }
+
+        let number_class = ns_class("NSNumber")?;
+        let format_key = ns_string("AVFormatIDKey")?;
+        let sample_rate_key = ns_string("AVSampleRateKey")?;
+        let channels_key = ns_string("AVNumberOfChannelsKey")?;
+        let bitrate_key = ns_string("AVEncoderBitRateKey")?;
+        let quality_key = ns_string("AVEncoderAudioQualityKey")?;
+
+        let format_value: *mut Object =
+            msg_send![number_class, numberWithUnsignedInt: K_AUDIO_FORMAT_MPEG4AAC];
+        let sample_rate_value: *mut Object = msg_send![number_class, numberWithDouble: 44_100.0f64];
+        let channels_value: *mut Object = msg_send![number_class, numberWithInt: 1i32];
+        let bitrate_value: *mut Object = msg_send![number_class, numberWithInt: 128_000i32];
+        let quality_value: *mut Object = msg_send![number_class, numberWithInt: 96i32];
+
+        let _: () = msg_send![settings, setObject: format_value forKey: format_key];
+        let _: () = msg_send![settings, setObject: sample_rate_value forKey: sample_rate_key];
+        let _: () = msg_send![settings, setObject: channels_value forKey: channels_key];
+        let _: () = msg_send![settings, setObject: bitrate_value forKey: bitrate_key];
+        let _: () = msg_send![settings, setObject: quality_value forKey: quality_key];
+
+        let path_ns = ns_string(&output_path.to_string_lossy())?;
+        let url_class = ns_class("NSURL")?;
+        let url: *mut Object = msg_send![url_class, fileURLWithPath: path_ns];
+        if url.is_null() {
+            return Err("Failed to build native recorder output URL.".to_string());
+        }
+
+        let recorder_class = ns_class("AVAudioRecorder")?;
+        let alloc: *mut Object = msg_send![recorder_class, alloc];
+        if alloc.is_null() {
+            return Err("Failed to allocate AVAudioRecorder.".to_string());
+        }
+        let mut error: *mut Object = ptr::null_mut();
+        let recorder: *mut Object =
+            msg_send![alloc, initWithURL: url settings: settings error: &mut error];
+        if recorder.is_null() {
+            return Err(ns_error_message(
+                error,
+                "Failed to initialize AVAudioRecorder.",
+            ));
+        }
+
+        let prepared: BOOL = msg_send![recorder, prepareToRecord];
+        if prepared == NO {
+            let _: () = msg_send![recorder, release];
+            return Err("Failed to prepare AVAudioRecorder.".to_string());
+        }
+        let started: BOOL = msg_send![recorder, record];
+        if started == NO {
+            let _: () = msg_send![recorder, release];
+            return Err("Failed to start AVAudioRecorder.".to_string());
+        }
+        Ok(recorder)
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn next_native_recording_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let root = app_data_dir(app)?.join("native-recordings");
+    fs::create_dir_all(&root).map_err(|error| error.to_string())?;
+    let timestamp = now_ms().unwrap_or(0);
+    for attempt in 0..=512usize {
+        let suffix = if attempt == 0 {
+            format!("recording-{}", timestamp)
+        } else {
+            format!("recording-{}-{}", timestamp, attempt)
+        };
+        let path = root.join(format!("{}.{}", suffix, IOS_AUDIO_FILE_EXT));
+        if !path.exists() {
+            return Ok(path);
+        }
+    }
+    Err("Failed to allocate native recording filename.".to_string())
 }
 
 fn parse_note_front_matter(raw: &str) -> (NoteFrontMatter, String) {
@@ -697,7 +937,10 @@ fn read_transcription_state(path: &Path) -> Option<RecordingTranscriptionState> 
     serde_json::from_str::<RecordingTranscriptionState>(&contents).ok()
 }
 
-fn write_transcription_state(path: &Path, state: &RecordingTranscriptionState) -> Result<(), String> {
+fn write_transcription_state(
+    path: &Path,
+    state: &RecordingTranscriptionState,
+) -> Result<(), String> {
     let contents = serde_json::to_string_pretty(state).map_err(|error| error.to_string())?;
     fs::write(path, contents).map_err(|error| error.to_string())
 }
@@ -740,7 +983,10 @@ fn find_recording_audio_file(recording_dir: &Path) -> Option<PathBuf> {
         .map(|entry| entry.path())
         .filter(|path| path.is_file())
         .filter(|path| {
-            let file_name = path.file_name().and_then(|value| value.to_str()).unwrap_or("");
+            let file_name = path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("");
             if file_name == TRANSCRIPTION_STATUS_FILE || file_name == TRANSCRIPT_FILE_NAME {
                 return false;
             }
@@ -833,7 +1079,11 @@ fn transcribe_audio_bytes_with_assembly(
     if !transcript_create_response.status().is_success() {
         let status = transcript_create_response.status();
         let body = transcript_create_response.text().unwrap_or_default();
-        return Err(response_error(status, body, "AssemblyAI transcript request"));
+        return Err(response_error(
+            status,
+            body,
+            "AssemblyAI transcript request",
+        ));
     }
 
     let transcript_create_payload = transcript_create_response
@@ -865,11 +1115,9 @@ fn transcribe_audio_bytes_with_assembly(
                 return Ok((transcript_text, transcript_id));
             }
             "error" => {
-                return Err(
-                    poll_payload
-                        .error
-                        .unwrap_or_else(|| "AssemblyAI reported a transcription error.".to_string()),
-                );
+                return Err(poll_payload
+                    .error
+                    .unwrap_or_else(|| "AssemblyAI reported a transcription error.".to_string()));
             }
             _ => {}
         }
@@ -899,8 +1147,11 @@ fn process_transcription_job(job: QueuedTranscriptionJob) {
         let audio_bytes = fs::read(&job.audio_path).map_err(|error| error.to_string())?;
         let (transcript, transcript_id) =
             transcribe_audio_bytes_with_assembly(audio_bytes, &job.api_key)?;
-        fs::write(&job.transcript_path, render_transcript_markdown(&transcript))
-            .map_err(|error| error.to_string())?;
+        fs::write(
+            &job.transcript_path,
+            render_transcript_markdown(&transcript),
+        )
+        .map_err(|error| error.to_string())?;
         update_transcription_state(
             &job.status_path,
             &audio_name,
@@ -1037,7 +1288,10 @@ fn git_tree_blob_oid(tree: &git2::Tree<'_>, path: &Path) -> Option<Oid> {
     tree.get_path(path).ok().map(|entry| entry.id())
 }
 
-fn git_note_timestamps_from_history(root: &Path, note_rel: &str) -> Option<(Option<i64>, Option<i64>)> {
+fn git_note_timestamps_from_history(
+    root: &Path,
+    note_rel: &str,
+) -> Option<(Option<i64>, Option<i64>)> {
     let repo = Repository::open(root).ok()?;
     let head_oid = repo.head().ok()?.target()?;
     let cache_key = format!("{}|{}|{}", root.to_string_lossy(), head_oid, note_rel);
@@ -1174,7 +1428,8 @@ fn git_ahead_behind(repo: &Repository, branch: Option<&str>) -> (usize, usize) {
         Some(value) => value,
         None => return (0, 0),
     };
-    repo.graph_ahead_behind(local_oid, upstream_oid).unwrap_or((0, 0))
+    repo.graph_ahead_behind(local_oid, upstream_oid)
+        .unwrap_or((0, 0))
 }
 
 fn git_branch_has_local_commit(repo: &Repository, branch: Option<&str>) -> bool {
@@ -1289,9 +1544,7 @@ fn ensure_origin_remote(repo: &Repository, remote_url: &str) -> Result<(), Strin
         return Err("Remote repository URL is required.".to_string());
     }
     match repo.find_remote("origin") {
-        Ok(_) => repo
-            .remote_set_url("origin", url)
-            .map_err(map_git_error)?,
+        Ok(_) => repo.remote_set_url("origin", url).map_err(map_git_error)?,
         Err(_) => {
             repo.remote("origin", url).map_err(map_git_error)?;
         }
@@ -1331,7 +1584,11 @@ fn default_signature(repo: &Repository) -> Result<Signature<'_>, String> {
     Signature::now("Type Notes Sync", "sync@local").map_err(map_git_error)
 }
 
-fn commit_all_changes(repo: &Repository, message: &str, branch: &str) -> Result<Option<Oid>, String> {
+fn commit_all_changes(
+    repo: &Repository,
+    message: &str,
+    branch: &str,
+) -> Result<Option<Oid>, String> {
     let mut index = repo.index().map_err(map_git_error)?;
     index
         .add_all(["*"].iter(), IndexAddOption::DEFAULT, None)
@@ -1705,7 +1962,10 @@ fn git_pull_blocking(app: tauri::AppHandle, args: GitSyncArgs) -> Result<GitSync
         fast_forward_to(&repo, &target_branch, &fetched)?;
         return Ok(build_git_status(&root));
     }
-    Err("Pull requires a merge commit. Resolve it on desktop, then pull again on mobile.".to_string())
+    Err(
+        "Pull requires a merge commit. Resolve it on desktop, then pull again on mobile."
+            .to_string(),
+    )
 }
 
 fn remote_push(
@@ -1719,7 +1979,11 @@ fn remote_push(
     push_options.remote_callbacks(callbacks);
     let mut remote = repo.find_remote("origin").map_err(map_git_error)?;
     remote
-        .connect_auth(Direction::Push, Some(build_callbacks(username, password)), None)
+        .connect_auth(
+            Direction::Push,
+            Some(build_callbacks(username, password)),
+            None,
+        )
         .map_err(map_git_error)?;
     remote
         .push(
@@ -1823,6 +2087,99 @@ fn write_note(app: tauri::AppHandle, path: String, content: String) -> Result<()
 }
 
 #[tauri::command]
+fn native_audio_recorder_capabilities() -> NativeRecorderCapabilities {
+    #[cfg(target_os = "ios")]
+    {
+        let recording = ios_native_recorder_state()
+            .lock()
+            .map(|guard| guard.is_some())
+            .unwrap_or(false);
+        return NativeRecorderCapabilities {
+            supported: true,
+            recording,
+        };
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    {
+        NativeRecorderCapabilities {
+            supported: false,
+            recording: false,
+        }
+    }
+}
+
+#[tauri::command]
+fn start_native_audio_recording(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        let mut guard = ios_native_recorder_state()
+            .lock()
+            .map_err(|_| "Native recorder state lock poisoned.".to_string())?;
+        if guard.is_some() {
+            return Err("Native audio recorder is already active.".to_string());
+        }
+        let output_path = next_native_recording_path(&app)?;
+        ensure_avfoundation_loaded()?;
+        configure_ios_audio_session_for_recording()?;
+        let recorder = create_ios_audio_recorder(&output_path).inspect_err(|_| {
+            deactivate_ios_audio_session();
+        })?;
+
+        *guard = Some(IosNativeRecorderState {
+            recorder_ptr: recorder as usize,
+            output_path,
+            mime_type: IOS_AUDIO_MIME_TYPE.to_string(),
+        });
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = app;
+        Err("Native iOS audio recorder is unavailable on this platform.".to_string())
+    }
+}
+
+#[tauri::command]
+fn stop_native_audio_recording() -> Result<RecordingAudioPayload, String> {
+    #[cfg(target_os = "ios")]
+    {
+        let state = {
+            let mut guard = ios_native_recorder_state()
+                .lock()
+                .map_err(|_| "Native recorder state lock poisoned.".to_string())?;
+            guard
+                .take()
+                .ok_or_else(|| "Native audio recorder is not active.".to_string())?
+        };
+
+        unsafe {
+            let recorder = state.recorder_ptr as *mut Object;
+            let _: () = msg_send![recorder, stop];
+            let _: () = msg_send![recorder, release];
+        }
+        deactivate_ios_audio_session();
+
+        let audio_bytes = fs::read(&state.output_path).map_err(|error| error.to_string())?;
+        let _ = fs::remove_file(&state.output_path);
+        if audio_bytes.is_empty() {
+            return Err("Native recorder returned an empty audio file.".to_string());
+        }
+
+        return Ok(RecordingAudioPayload {
+            mime_type: state.mime_type,
+            audio_base64: BASE64.encode(audio_bytes),
+        });
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    {
+        Err("Native iOS audio recorder is unavailable on this platform.".to_string())
+    }
+}
+
+#[tauri::command]
 fn save_audio_recording(
     app: tauri::AppHandle,
     args: SaveRecordingArgs,
@@ -1913,13 +2270,7 @@ fn queue_recording_transcriptions(
             .to_string();
 
         if transcript_path.exists() {
-            let _ = update_transcription_state(
-                &status_path,
-                &audio_name,
-                "completed",
-                None,
-                None,
-            );
+            let _ = update_transcription_state(&status_path, &audio_name, "completed", None, None);
             skipped += 1;
             continue;
         }
@@ -2347,9 +2698,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .setup(|app| {
+        .setup(|_app| {
             #[cfg(target_os = "macos")]
-            if let Some(window) = app.get_webview_window("main") {
+            if let Some(window) = _app.get_webview_window("main") {
                 let _ = apply_macos_window_alpha(&window, MACOS_WINDOW_ALPHA);
             }
             Ok(())
@@ -2359,6 +2710,9 @@ pub fn run() {
             read_note,
             get_note_meta,
             write_note,
+            native_audio_recorder_capabilities,
+            start_native_audio_recording,
+            stop_native_audio_recording,
             save_audio_recording,
             queue_recording_transcriptions,
             list_recordings,

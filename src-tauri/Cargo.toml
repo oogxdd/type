@@ -30,3 +30,6 @@ uuid = { version = "1", features = ["v7"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
+
+[target.'cfg(target_os = "ios")'.dependencies]
+objc = "0.2"
