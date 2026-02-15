@@ -108,6 +108,15 @@ export const useAudioRecorder = ({ onRecordingReady }: UseAudioRecorderArgs) => 
         }
 
         if (!caps.recording) {
+          if (caps.started_ms) {
+            setIsRecording(true);
+            setClockNowMs(Date.now());
+            setRecordingStartedAtMs(caps.started_ms);
+            setNativeRecoveryNotice(
+              "Recorder was interrupted after unlock. Tap Stop to save, then start again."
+            );
+            return;
+          }
           setIsRecording(false);
           setRecordingStartedAtMs(null);
           setNativeRecoveryNotice(null);

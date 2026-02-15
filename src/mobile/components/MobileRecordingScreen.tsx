@@ -55,7 +55,7 @@ export function MobileRecordingScreen({
 
       <section className="mobile-recording-card" aria-label="Transcription queue">
         <h2>Transcription</h2>
-        <p>After save, desktop can auto-pick this recording for AssemblyAI.</p>
+        <p>After save, pending recordings can be queued for AssemblyAI.</p>
         <button
           type="button"
           className="mobile-secondary-btn"

@@ -1786,7 +1786,7 @@
 
 .mobile-editor-surface .tiptap-content {
   padding: 10px 14px calc(16px + env(safe-area-inset-bottom));
-  font-size: max(15px, var(--editor-font-size, 14px));
+  font-size: max(16px, var(--editor-font-size, 14px));
 }
 
 .mobile-settings-sections {

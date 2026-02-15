@@ -263,6 +263,15 @@ const toBase64 = (bytes: Uint8Array) => {
   return btoa(binary);
 };
 
+const fromBase64 = (input: string) => {
+  const binary = atob(input);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+};
+
 const isSystemFolder = (path: string) => SYSTEM_FOLDER_PATHS.has(path);
 const MOBILE_SETTINGS_SECTIONS: Array<{ id: SettingsSectionId; label: string }> = [
   { id: "general", label: "General" },
@@ -384,6 +393,7 @@ function App() {
   const noteMenuPromiseRef = useRef<Promise<Menu> | null>(null);
   const transcriptionQueueBusyRef = useRef(false);
   const recordingTargetFolderRef = useRef<string>(UNSORTED_FOLDER_PATH);
+  const activeAudioObjectUrlRef = useRef<string | null>(null);
 
   // -- Hooks ----------------------------------------------------------------
   const {
@@ -510,6 +520,10 @@ function App() {
           (item) => item.audio_path === activeAudioPath
         );
         if (!stillExists) {
+          if (activeAudioObjectUrlRef.current) {
+            URL.revokeObjectURL(activeAudioObjectUrlRef.current);
+            activeAudioObjectUrlRef.current = null;
+          }
           setActiveAudioPath(null);
           setActiveAudioSrc(null);
         }
@@ -526,14 +540,33 @@ function App() {
   const playRecording = useCallback(async (audioPath: string) => {
     try {
       const payload = await api.readRecordingAudio(audioPath);
+      const bytes = fromBase64(payload.audio_base64);
+      const blob = new Blob([bytes], {
+        type: payload.mime_type || "audio/mpeg",
+      });
+      const objectUrl = URL.createObjectURL(blob);
+      if (activeAudioObjectUrlRef.current) {
+        URL.revokeObjectURL(activeAudioObjectUrlRef.current);
+      }
+      activeAudioObjectUrlRef.current = objectUrl;
       setActiveAudioPath(audioPath);
-      setActiveAudioSrc(`data:${payload.mime_type};base64,${payload.audio_base64}`);
+      setActiveAudioSrc(objectUrl);
       setRecordingsError(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setRecordingsError(message);
     }
   }, []);
+
+  useEffect(
+    () => () => {
+      if (activeAudioObjectUrlRef.current) {
+        URL.revokeObjectURL(activeAudioObjectUrlRef.current);
+        activeAudioObjectUrlRef.current = null;
+      }
+    },
+    []
+  );
 
   const queueRecordingTranscriptions = useCallback(
     async (trigger: "manual" | "auto" = "manual") => {
@@ -666,6 +699,10 @@ function App() {
       setGitStatus(null);
       setRecordingsQueue(null);
       setRecordingsList([]);
+      if (activeAudioObjectUrlRef.current) {
+        URL.revokeObjectURL(activeAudioObjectUrlRef.current);
+        activeAudioObjectUrlRef.current = null;
+      }
       setActiveAudioPath(null);
       setActiveAudioSrc(null);
       setRecordingStatusMessage(null);
@@ -975,7 +1012,7 @@ function App() {
     await api.setOrder({
       parent: folderPath,
       folderOrder: targetNode.children.map((c) => c.name),
-      noteOrder: [...targetNode.notes.map((n) => n.name), fileName],
+      noteOrder: [fileName, ...targetNode.notes.map((n) => n.name)],
     });
     await refreshTree();
 

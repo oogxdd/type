@@ -781,6 +781,31 @@ fn create_ios_audio_recorder(output_path: &Path) -> Result<*mut Object, String> 
 }
 
 #[cfg(target_os = "ios")]
+fn ios_recorder_is_recording(recorder: *mut Object) -> bool {
+    if recorder.is_null() {
+        return false;
+    }
+    unsafe {
+        let recording: BOOL = msg_send![recorder, isRecording];
+        recording == YES
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn ios_ensure_recorder_active(recorder: *mut Object) -> bool {
+    if ios_recorder_is_recording(recorder) {
+        return true;
+    }
+    if configure_ios_audio_session_for_recording().is_err() {
+        return false;
+    }
+    unsafe {
+        let resumed: BOOL = msg_send![recorder, record];
+        resumed == YES
+    }
+}
+
+#[cfg(target_os = "ios")]
 fn next_native_recording_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let root = app_data_dir(app)?.join("native-recordings");
     fs::create_dir_all(&root).map_err(|error| error.to_string())?;
@@ -1027,7 +1052,11 @@ fn recording_status_label(status: &str) -> &str {
     }
 }
 
-fn recording_transcript_section(status: &str, transcript: Option<&str>, error: Option<&str>) -> String {
+fn recording_transcript_section(
+    status: &str,
+    transcript: Option<&str>,
+    error: Option<&str>,
+) -> String {
     if status == RECORDING_STATUS_COMPLETED {
         let body = transcript.unwrap_or_default().trim();
         if body.is_empty() {
@@ -1045,10 +1074,7 @@ fn recording_transcript_section(status: &str, transcript: Option<&str>, error: O
             details
         );
     }
-    format!(
-        "## Transcript\n\n({})\n",
-        recording_status_label(status)
-    )
+    format!("## Transcript\n\n({})\n", recording_status_label(status))
 }
 
 fn upsert_recording_transcript_section(body: &str, section: &str) -> String {
@@ -1135,7 +1161,11 @@ fn recording_info_from_note_meta(
     })
 }
 
-fn collect_markdown_note_files(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
+fn collect_markdown_note_files(
+    root: &Path,
+    dir: &Path,
+    files: &mut Vec<PathBuf>,
+) -> Result<(), String> {
     for entry in fs::read_dir(dir).map_err(|error| error.to_string())? {
         let entry = entry.map_err(|error| error.to_string())?;
         let path = entry.path();
@@ -1182,7 +1212,11 @@ fn collect_recording_notes(root: &Path) -> Result<Vec<RecordingNoteInfo>, String
     Ok(recordings)
 }
 
-fn write_note_with_front_matter(path: &Path, meta: &NoteFrontMatter, body: &str) -> Result<(), String> {
+fn write_note_with_front_matter(
+    path: &Path,
+    meta: &NoteFrontMatter,
+    body: &str,
+) -> Result<(), String> {
     let serialized = render_note_with_front_matter(meta, body);
     fs::write(path, serialized).map_err(|error| error.to_string())
 }
@@ -1428,7 +1462,12 @@ fn recording_audio_file_path(root: &Path, extension: &str) -> Result<PathBuf, St
     let storage = recording_storage_root(root);
     fs::create_dir_all(&storage).map_err(|error| error.to_string())?;
     for _ in 0..=512usize {
-        let candidate = storage.join(format!("{}-{}.{}", AUDIO_FILE_NAME_PREFIX, Uuid::now_v7(), extension));
+        let candidate = storage.join(format!(
+            "{}-{}.{}",
+            AUDIO_FILE_NAME_PREFIX,
+            Uuid::now_v7(),
+            extension
+        ));
         if !candidate.exists() {
             return Ok(candidate);
         }
@@ -1921,7 +1960,9 @@ fn strip_root(root: &Path, path: &Path) -> String {
 }
 
 fn is_system_folder_name(name: &str) -> bool {
-    PROTECTED_SYSTEM_FOLDERS.iter().any(|folder| *folder == name)
+    PROTECTED_SYSTEM_FOLDERS
+        .iter()
+        .any(|folder| *folder == name)
 }
 
 fn is_hidden_root_folder_name(name: &str) -> bool {
@@ -2318,17 +2359,21 @@ fn write_note(app: tauri::AppHandle, path: String, content: String) -> Result<()
 fn native_audio_recorder_capabilities() -> NativeRecorderCapabilities {
     #[cfg(target_os = "ios")]
     {
-        let recording = ios_native_recorder_state()
+        let (recording, started_ms) = ios_native_recorder_state()
             .lock()
             .map(|guard| {
-                let started_ms = guard.as_ref().and_then(|state| state.started_ms);
-                (guard.is_some(), started_ms)
+                let Some(state) = guard.as_ref() else {
+                    return (false, None);
+                };
+                let recorder = state.recorder_ptr as *mut Object;
+                let resumed = ios_ensure_recorder_active(recorder);
+                (resumed, state.started_ms)
             })
             .unwrap_or((false, None));
         return NativeRecorderCapabilities {
             supported: true,
-            recording: recording.0,
-            started_ms: recording.1,
+            recording,
+            started_ms,
         };
     }
 
@@ -2468,6 +2513,18 @@ fn queue_recording_transcriptions(
     let root = notes_root(&app)?;
     ensure_system_folders(&root)?;
     let recordings = collect_recording_notes(&root)?;
+    let active_recordings = {
+        let queue = transcription_queue_state();
+        let state = queue.lock().expect("transcription queue poisoned");
+        let mut active = HashSet::new();
+        if let Some(current) = &state.current_recording {
+            active.insert(current.clone());
+        }
+        for job in state.pending.iter() {
+            active.insert(job.note_rel.clone());
+        }
+        active
+    };
     let mut scanned = 0usize;
     let mut skipped = 0usize;
     let mut candidates = Vec::new();
@@ -2486,10 +2543,19 @@ fn queue_recording_transcriptions(
             continue;
         }
 
+        let status = recording.status.as_str();
+        let is_active_recording = active_recordings.contains(&recording.note_rel);
+
+        if status == RECORDING_STATUS_COMPLETED {
+            skipped += 1;
+            continue;
+        }
+
         if matches!(
-            recording.status.as_str(),
-            RECORDING_STATUS_QUEUED | RECORDING_STATUS_PROCESSING | RECORDING_STATUS_COMPLETED
-        ) {
+            status,
+            RECORDING_STATUS_QUEUED | RECORDING_STATUS_PROCESSING
+        ) && is_active_recording
+        {
             skipped += 1;
             continue;
         }

@@ -466,7 +466,15 @@ export function MobileSettingsScreen({
                   </div>
                 ))
               )}
-              {activeAudioSrc ? <audio className="mobile-recording-player" controls src={activeAudioSrc} /> : null}
+              {activeAudioSrc ? (
+                <audio
+                  className="mobile-recording-player"
+                  controls
+                  autoPlay
+                  playsInline
+                  src={activeAudioSrc}
+                />
+              ) : null}
             </Group>
 
             {recordingError ? (
