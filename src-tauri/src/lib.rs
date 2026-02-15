@@ -14,6 +14,7 @@ use std::{
     time::Duration,
 };
 use tauri::Manager;
+use uuid::Uuid;
 
 const ORDER_FILE: &str = ".notes-order.json";
 const SESSIONS_FILE: &str = ".notes-sessions.json";
@@ -57,6 +58,14 @@ struct NoteEntry {
 struct NoteMeta {
     created_ms: Option<i64>,
     updated_ms: Option<i64>,
+}
+
+#[derive(Default)]
+struct NoteFrontMatter {
+    id: Option<String>,
+    created_ms: Option<i64>,
+    updated_ms: Option<i64>,
+    passthrough_lines: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -255,6 +264,8 @@ struct AssemblyTranscriptResponse {
 }
 
 static TRANSCRIPTION_QUEUE: OnceLock<Mutex<TranscriptionQueueState>> = OnceLock::new();
+static GIT_NOTE_TIMESTAMPS_CACHE: OnceLock<Mutex<HashMap<String, (Option<i64>, Option<i64>)>>> =
+    OnceLock::new();
 
 fn app_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let path = app.path().app_data_dir().map_err(|err| err.to_string())?;
@@ -523,6 +534,97 @@ fn now_ms() -> Option<i64> {
         .duration_since(std::time::UNIX_EPOCH)
         .ok()?;
     i64::try_from(duration.as_millis()).ok()
+}
+
+fn parse_note_front_matter(raw: &str) -> (NoteFrontMatter, String) {
+    let mut meta = NoteFrontMatter::default();
+    let normalized = raw.replace("\r\n", "\n");
+    if !normalized.starts_with("---\n") {
+        return (meta, raw.to_string());
+    }
+    let Some(close_marker_index) = normalized[4..].find("\n---\n") else {
+        return (meta, raw.to_string());
+    };
+    let header_end = 4 + close_marker_index;
+    let header = &normalized[4..header_end];
+    let body = &normalized[(header_end + 5)..];
+
+    for line in header.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let Some((key_raw, value_raw)) = trimmed.split_once(':') else {
+            meta.passthrough_lines.push(trimmed.to_string());
+            continue;
+        };
+        let key = key_raw.trim().to_lowercase();
+        let value = value_raw
+            .trim()
+            .trim_matches('"')
+            .trim_matches('\'')
+            .to_string();
+        match key.as_str() {
+            "id" => {
+                if !value.is_empty() {
+                    meta.id = Some(value);
+                }
+            }
+            "created_ms" => {
+                if let Ok(parsed) = value.parse::<i64>() {
+                    meta.created_ms = Some(parsed);
+                } else {
+                    meta.passthrough_lines.push(trimmed.to_string());
+                }
+            }
+            "updated_ms" => {
+                if let Ok(parsed) = value.parse::<i64>() {
+                    meta.updated_ms = Some(parsed);
+                } else {
+                    meta.passthrough_lines.push(trimmed.to_string());
+                }
+            }
+            _ => meta.passthrough_lines.push(trimmed.to_string()),
+        }
+    }
+
+    (meta, body.to_string())
+}
+
+fn front_matter_safe_value(value: &str) -> String {
+    if value
+        .chars()
+        .all(|char| char.is_ascii_alphanumeric() || matches!(char, '-' | '_' | '.'))
+    {
+        value.to_string()
+    } else {
+        format!("{:?}", value)
+    }
+}
+
+fn render_note_with_front_matter(meta: &NoteFrontMatter, body: &str) -> String {
+    let mut output = String::new();
+    output.push_str("---\n");
+    if let Some(id) = &meta.id {
+        output.push_str(&format!("id: {}\n", front_matter_safe_value(id)));
+    }
+    if let Some(created_ms) = meta.created_ms {
+        output.push_str(&format!("created_ms: {}\n", created_ms));
+    }
+    if let Some(updated_ms) = meta.updated_ms {
+        output.push_str(&format!("updated_ms: {}\n", updated_ms));
+    }
+    for line in &meta.passthrough_lines {
+        output.push_str(line);
+        output.push('\n');
+    }
+    output.push_str("---\n\n");
+    output.push_str(body);
+    output
+}
+
+fn generate_note_id() -> String {
+    Uuid::now_v7().to_string()
 }
 
 fn audio_extension_from_mime(mime_type: Option<&str>) -> &'static str {
@@ -921,6 +1023,71 @@ fn git_has_changes(repo: &Repository) -> bool {
     repo.statuses(Some(&mut status_opts))
         .map(|statuses| !statuses.is_empty())
         .unwrap_or(false)
+}
+
+fn git_note_timestamps_cache() -> &'static Mutex<HashMap<String, (Option<i64>, Option<i64>)>> {
+    GIT_NOTE_TIMESTAMPS_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn git_commit_timestamp_ms(commit: &git2::Commit<'_>) -> Option<i64> {
+    commit.time().seconds().checked_mul(1_000)
+}
+
+fn git_tree_blob_oid(tree: &git2::Tree<'_>, path: &Path) -> Option<Oid> {
+    tree.get_path(path).ok().map(|entry| entry.id())
+}
+
+fn git_note_timestamps_from_history(root: &Path, note_rel: &str) -> Option<(Option<i64>, Option<i64>)> {
+    let repo = Repository::open(root).ok()?;
+    let head_oid = repo.head().ok()?.target()?;
+    let cache_key = format!("{}|{}|{}", root.to_string_lossy(), head_oid, note_rel);
+    {
+        let cache = git_note_timestamps_cache();
+        let guard = cache.lock().ok()?;
+        if let Some(cached) = guard.get(&cache_key) {
+            return Some(*cached);
+        }
+    }
+
+    let rel_path = Path::new(note_rel);
+    let mut revwalk = repo.revwalk().ok()?;
+    revwalk.push(head_oid).ok()?;
+
+    let mut created_ms: Option<i64> = None;
+    let mut updated_ms: Option<i64> = None;
+
+    for oid_result in revwalk {
+        let oid = oid_result.ok()?;
+        let commit = repo.find_commit(oid).ok()?;
+        let tree = commit.tree().ok()?;
+        let current_blob = git_tree_blob_oid(&tree, rel_path);
+        if current_blob.is_none() {
+            continue;
+        }
+
+        let parent_blob = if commit.parent_count() > 0 {
+            let parent = commit.parent(0).ok()?;
+            let parent_tree = parent.tree().ok()?;
+            git_tree_blob_oid(&parent_tree, rel_path)
+        } else {
+            None
+        };
+
+        if current_blob != parent_blob {
+            let timestamp = git_commit_timestamp_ms(&commit);
+            if updated_ms.is_none() {
+                updated_ms = timestamp;
+            }
+            created_ms = timestamp;
+        }
+    }
+
+    let result = (created_ms, updated_ms);
+    let cache = git_note_timestamps_cache();
+    if let Ok(mut guard) = cache.lock() {
+        guard.insert(cache_key, result);
+    }
+    Some(result)
 }
 
 fn git_head_has_commit(repo: &Repository) -> bool {
@@ -1618,7 +1785,9 @@ fn read_note(app: tauri::AppHandle, path: String) -> Result<String, String> {
     let full_path = resolve_path(&app, &path)?;
     let note_file_path = resolve_recording_note_file(&root, &full_path);
     if note_file_path.exists() {
-        return fs::read_to_string(note_file_path).map_err(|err| err.to_string());
+        let raw = fs::read_to_string(note_file_path).map_err(|err| err.to_string())?;
+        let (_, body) = parse_note_front_matter(&raw);
+        return Ok(body);
     }
     if full_path.is_dir() && full_path.starts_with(root.join(RECORDINGS_FOLDER)) {
         return Ok(pending_transcript_placeholder(&full_path));
@@ -1634,7 +1803,23 @@ fn write_note(app: tauri::AppHandle, path: String, content: String) -> Result<()
     if let Some(parent) = note_file_path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
-    fs::write(note_file_path, content).map_err(|err| err.to_string())
+    let mut meta = if note_file_path.exists() {
+        let existing = fs::read_to_string(&note_file_path).map_err(|err| err.to_string())?;
+        let (parsed, _) = parse_note_front_matter(&existing);
+        parsed
+    } else {
+        NoteFrontMatter::default()
+    };
+    if meta.id.is_none() {
+        meta.id = Some(generate_note_id());
+    }
+    let now = now_ms();
+    if meta.created_ms.is_none() {
+        meta.created_ms = now;
+    }
+    meta.updated_ms = now.or(meta.updated_ms);
+    let serialized = render_note_with_front_matter(&meta, &content);
+    fs::write(note_file_path, serialized).map_err(|err| err.to_string())
 }
 
 #[tauri::command]
@@ -1908,13 +2093,31 @@ fn get_note_meta(app: tauri::AppHandle, path: String) -> Result<NoteMeta, String
     let root = notes_root(&app)?;
     let full_path = resolve_path(&app, &path)?;
     let note_file_path = resolve_recording_note_file(&root, &full_path);
-    let metadata = if note_file_path.exists() {
-        fs::metadata(note_file_path).map_err(|err| err.to_string())?
+    let (front_matter_meta, metadata) = if note_file_path.exists() {
+        let raw = fs::read_to_string(&note_file_path).map_err(|err| err.to_string())?;
+        let (front_matter_meta, _) = parse_note_front_matter(&raw);
+        (
+            front_matter_meta,
+            fs::metadata(&note_file_path).map_err(|err| err.to_string())?,
+        )
     } else {
-        fs::metadata(full_path).map_err(|err| err.to_string())?
+        (
+            NoteFrontMatter::default(),
+            fs::metadata(full_path).map_err(|err| err.to_string())?,
+        )
     };
-    let created_ms = metadata.created().ok().and_then(time_to_ms);
-    let updated_ms = metadata.modified().ok().and_then(time_to_ms);
+    let note_rel = strip_root(&root, &note_file_path);
+    let (history_created_ms, history_updated_ms) =
+        git_note_timestamps_from_history(&root, &note_rel).unwrap_or((None, None));
+
+    let created_ms = front_matter_meta
+        .created_ms
+        .or(history_created_ms)
+        .or_else(|| metadata.created().ok().and_then(time_to_ms));
+    let updated_ms = front_matter_meta
+        .updated_ms
+        .or(history_updated_ms)
+        .or_else(|| metadata.modified().ok().and_then(time_to_ms));
     Ok(NoteMeta {
         created_ms,
         updated_ms,
