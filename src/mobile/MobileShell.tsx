@@ -113,6 +113,8 @@ type MobileShellProps = {
   lastSuccessfulSyncAt: string | null;
   assemblyAiApiKey: string;
   onAssemblyAiApiKeyChange: (value: string) => void;
+  mobileAutoTranscriptionEnabled: boolean;
+  onMobileAutoTranscriptionChange: (enabled: boolean) => void;
   recordingSupported: boolean;
   isRecordingAudio: boolean;
   isRecordingBusy: boolean;
@@ -213,6 +215,8 @@ export function MobileShell({
   lastSuccessfulSyncAt,
   assemblyAiApiKey,
   onAssemblyAiApiKeyChange,
+  mobileAutoTranscriptionEnabled,
+  onMobileAutoTranscriptionChange,
   recordingSupported,
   isRecordingAudio,
   isRecordingBusy,
@@ -539,6 +543,8 @@ export function MobileShell({
       lastSuccessfulSyncAt={lastSuccessfulSyncAt}
       assemblyAiApiKey={assemblyAiApiKey}
       onAssemblyAiApiKeyChange={onAssemblyAiApiKeyChange}
+      mobileAutoTranscriptionEnabled={mobileAutoTranscriptionEnabled}
+      onMobileAutoTranscriptionChange={onMobileAutoTranscriptionChange}
       recordingSupported={recordingSupported}
       isRecordingAudio={isRecordingAudio}
       isRecordingBusy={isRecordingBusy}

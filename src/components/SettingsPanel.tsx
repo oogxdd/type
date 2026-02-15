@@ -111,6 +111,8 @@ function SettingsDetail({
   onGitPush,
   assemblyAiApiKey,
   onAssemblyAiApiKeyChange,
+  mobileAutoTranscriptionEnabled,
+  onMobileAutoTranscriptionChange,
   recordingSupported,
   isRecordingAudio,
   isRecordingBusy,
@@ -160,6 +162,8 @@ function SettingsDetail({
   onGitPush: () => void;
   assemblyAiApiKey: string;
   onAssemblyAiApiKeyChange: (value: string) => void;
+  mobileAutoTranscriptionEnabled: boolean;
+  onMobileAutoTranscriptionChange: (enabled: boolean) => void;
   recordingSupported: boolean;
   isRecordingAudio: boolean;
   isRecordingBusy: boolean;
@@ -397,7 +401,7 @@ function SettingsDetail({
           <br />
           Audio files are stored in <code>_Recordings</code>.
           <br />
-          On desktop, pending recordings can be queued for AssemblyAI transcription.
+          Pending recordings can be queued for AssemblyAI transcription.
         </p>
         <label className="settings-control">
           <span>AssemblyAI API key</span>
@@ -410,6 +414,22 @@ function SettingsDetail({
             autoCorrect="off"
           />
         </label>
+        <div className="settings-control">
+          <span>Mobile transcription</span>
+          <label className="settings-toggle">
+            <input
+              type="checkbox"
+              checked={mobileAutoTranscriptionEnabled}
+              onChange={(event) =>
+                onMobileAutoTranscriptionChange(event.target.checked)
+              }
+            />
+            <span>Auto-queue on mobile</span>
+          </label>
+          <span className="settings-inline-help">
+            Re-queues unfinished recordings on launch and while the mobile app stays open.
+          </span>
+        </div>
         <div className="settings-info-grid">
           <div className="settings-info-row">
             <span>Recorder</span>
@@ -601,6 +621,8 @@ export function SettingsDetailPane({
   onGitPush,
   assemblyAiApiKey,
   onAssemblyAiApiKeyChange,
+  mobileAutoTranscriptionEnabled,
+  onMobileAutoTranscriptionChange,
   recordingSupported,
   isRecordingAudio,
   isRecordingBusy,
@@ -652,6 +674,8 @@ export function SettingsDetailPane({
   onGitPush: () => void;
   assemblyAiApiKey: string;
   onAssemblyAiApiKeyChange: (value: string) => void;
+  mobileAutoTranscriptionEnabled: boolean;
+  onMobileAutoTranscriptionChange: (enabled: boolean) => void;
   recordingSupported: boolean;
   isRecordingAudio: boolean;
   isRecordingBusy: boolean;
@@ -712,6 +736,8 @@ export function SettingsDetailPane({
           onGitPush={onGitPush}
           assemblyAiApiKey={assemblyAiApiKey}
           onAssemblyAiApiKeyChange={onAssemblyAiApiKeyChange}
+          mobileAutoTranscriptionEnabled={mobileAutoTranscriptionEnabled}
+          onMobileAutoTranscriptionChange={onMobileAutoTranscriptionChange}
           recordingSupported={recordingSupported}
           isRecordingAudio={isRecordingAudio}
           isRecordingBusy={isRecordingBusy}

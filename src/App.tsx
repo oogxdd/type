@@ -135,6 +135,20 @@ const getStoredSyncValue = (key: string, fallback: string) => {
   return stored && stored.trim().length > 0 ? stored : fallback;
 };
 
+const getStoredBooleanValue = (key: string, fallback: boolean) => {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+  const stored = window.localStorage.getItem(key);
+  if (stored === "true") {
+    return true;
+  }
+  if (stored === "false") {
+    return false;
+  }
+  return fallback;
+};
+
 type SessionSyncSettings = {
   gitRemoteUrl: string;
   gitBranch: string;
@@ -143,6 +157,7 @@ type SessionSyncSettings = {
   gitCommitMessage: string;
   lastSuccessfulSyncAt: string;
   assemblyAiApiKey: string;
+  mobileAutoTranscriptionEnabled: boolean;
 };
 
 const SESSION_SYNC_STORAGE_KEY = "notes-viewer-session-sync-settings";
@@ -155,6 +170,7 @@ const DEFAULT_SESSION_SYNC_SETTINGS: SessionSyncSettings = {
   gitCommitMessage: "Sync notes",
   lastSuccessfulSyncAt: "",
   assemblyAiApiKey: "",
+  mobileAutoTranscriptionEnabled: true,
 };
 
 const readSessionSyncStore = (): Record<string, Partial<SessionSyncSettings>> => {
@@ -196,6 +212,10 @@ const getSessionSyncSettings = (sessionId: string): SessionSyncSettings => {
           gitCommitMessage: getStoredSyncValue("notes-viewer-git-commit-message", "Sync notes"),
           lastSuccessfulSyncAt: getStoredSyncValue("notes-viewer-git-last-sync-at", ""),
           assemblyAiApiKey: getStoredSyncValue("notes-viewer-assemblyai-api-key", ""),
+          mobileAutoTranscriptionEnabled: getStoredBooleanValue(
+            "notes-viewer-mobile-auto-transcription-enabled",
+            DEFAULT_SESSION_SYNC_SETTINGS.mobileAutoTranscriptionEnabled
+          ),
         }
       : {};
 
@@ -216,6 +236,10 @@ const getSessionSyncSettings = (sessionId: string): SessionSyncSettings => {
       stored.assemblyAiApiKey ??
       legacyFallback.assemblyAiApiKey ??
       DEFAULT_SESSION_SYNC_SETTINGS.assemblyAiApiKey,
+    mobileAutoTranscriptionEnabled:
+      stored.mobileAutoTranscriptionEnabled ??
+      legacyFallback.mobileAutoTranscriptionEnabled ??
+      DEFAULT_SESSION_SYNC_SETTINGS.mobileAutoTranscriptionEnabled,
   };
 };
 
@@ -298,6 +322,8 @@ function App() {
   const [assemblyAiApiKey, setAssemblyAiApiKey] = useState(
     DEFAULT_SESSION_SYNC_SETTINGS.assemblyAiApiKey
   );
+  const [mobileAutoTranscriptionEnabled, setMobileAutoTranscriptionEnabled] =
+    useState(DEFAULT_SESSION_SYNC_SETTINGS.mobileAutoTranscriptionEnabled);
   const [gitStatus, setGitStatus] = useState<GitSyncStatus | null>(null);
   const [gitSyncAction, setGitSyncAction] = useState<GitSyncAction>("idle");
   const [gitSyncError, setGitSyncError] = useState<string | null>(null);
@@ -314,6 +340,8 @@ function App() {
   const { keyboardInset } = useKeyboardInsets();
   const sessions = sessionsSnapshot?.sessions ?? [];
   const activeSessionId = sessionsSnapshot?.active_session_id ?? null;
+  const shouldAutoQueueTranscriptions =
+    layoutMode === "desktop" || mobileAutoTranscriptionEnabled;
 
   // -- Folder tree state ----------------------------------------------------
   const [tree, setTree] = useState<FolderNode | null>(null);
@@ -406,6 +434,7 @@ function App() {
     setGitCommitMessage(settings.gitCommitMessage);
     setLastSuccessfulSyncAt(settings.lastSuccessfulSyncAt);
     setAssemblyAiApiKey(settings.assemblyAiApiKey);
+    setMobileAutoTranscriptionEnabled(settings.mobileAutoTranscriptionEnabled);
     setSyncSettingsSessionId(activeSessionId);
   }, [activeSessionId]);
 
@@ -422,6 +451,7 @@ function App() {
       gitCommitMessage,
       lastSuccessfulSyncAt,
       assemblyAiApiKey,
+      mobileAutoTranscriptionEnabled,
     };
     writeSessionSyncStore(store);
   }, [
@@ -433,6 +463,7 @@ function App() {
     gitRemoteUrl,
     gitUsername,
     lastSuccessfulSyncAt,
+    mobileAutoTranscriptionEnabled,
     syncSettingsSessionId,
   ]);
 
@@ -570,16 +601,16 @@ function App() {
       clearDraft();
       setRecordingStatusMessage(`Saved ${result.note_path}.`);
       void refreshRecordings();
-      if (layoutMode === "desktop") {
+      if (shouldAutoQueueTranscriptions) {
         await queueRecordingTranscriptions("auto");
       }
     },
     [
       clearDraft,
-      layoutMode,
       queueRecordingTranscriptions,
       refreshRecordings,
       refreshTree,
+      shouldAutoQueueTranscriptions,
     ]
   );
 
@@ -678,7 +709,7 @@ function App() {
   }, [activeSettingsSection, appMode, refreshRecordings]);
 
   useEffect(() => {
-    if (layoutMode !== "desktop" || !assemblyAiApiKey.trim()) {
+    if (!shouldAutoQueueTranscriptions || !assemblyAiApiKey.trim()) {
       return;
     }
     void queueRecordingTranscriptions("auto");
@@ -686,7 +717,7 @@ function App() {
       void queueRecordingTranscriptions("auto");
     }, 15000);
     return () => window.clearInterval(timer);
-  }, [assemblyAiApiKey, layoutMode, queueRecordingTranscriptions]);
+  }, [assemblyAiApiKey, queueRecordingTranscriptions, shouldAutoQueueTranscriptions]);
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -808,7 +839,7 @@ function App() {
       setGitSyncError(null);
       setLastSuccessfulSyncAt(new Date().toISOString());
       await refreshTree();
-      if (layoutMode === "desktop") {
+      if (shouldAutoQueueTranscriptions) {
         await queueRecordingTranscriptions("auto");
       }
     } catch (error) {
@@ -822,9 +853,9 @@ function App() {
     gitBranch,
     gitPassword,
     gitUsername,
-    layoutMode,
     queueRecordingTranscriptions,
     refreshTree,
+    shouldAutoQueueTranscriptions,
   ]);
 
   const handleGitPush = useCallback(async () => {
@@ -2219,6 +2250,8 @@ function App() {
         onGitPush={() => void handleGitPush()}
         assemblyAiApiKey={assemblyAiApiKey}
         onAssemblyAiApiKeyChange={setAssemblyAiApiKey}
+        mobileAutoTranscriptionEnabled={mobileAutoTranscriptionEnabled}
+        onMobileAutoTranscriptionChange={setMobileAutoTranscriptionEnabled}
         recordingSupported={recordingSupported}
         isRecordingAudio={isRecordingAudio}
         isRecordingBusy={isRecordingFinalizing || transcriptionQueueBusy}
@@ -2466,6 +2499,8 @@ function App() {
             lastSuccessfulSyncAt={lastSuccessfulSyncLabel}
             assemblyAiApiKey={assemblyAiApiKey}
             onAssemblyAiApiKeyChange={setAssemblyAiApiKey}
+            mobileAutoTranscriptionEnabled={mobileAutoTranscriptionEnabled}
+            onMobileAutoTranscriptionChange={setMobileAutoTranscriptionEnabled}
             recordingSupported={recordingSupported}
             isRecordingAudio={isRecordingAudio}
             isRecordingBusy={isRecordingFinalizing || transcriptionQueueBusy}

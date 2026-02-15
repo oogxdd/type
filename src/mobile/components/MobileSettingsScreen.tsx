@@ -42,6 +42,8 @@ type MobileSettingsScreenProps = {
   lastSuccessfulSyncAt: string | null;
   assemblyAiApiKey: string;
   onAssemblyAiApiKeyChange: (value: string) => void;
+  mobileAutoTranscriptionEnabled: boolean;
+  onMobileAutoTranscriptionChange: (enabled: boolean) => void;
   recordingSupported: boolean;
   isRecordingAudio: boolean;
   isRecordingBusy: boolean;
@@ -202,6 +204,8 @@ export function MobileSettingsScreen({
   lastSuccessfulSyncAt,
   assemblyAiApiKey,
   onAssemblyAiApiKeyChange,
+  mobileAutoTranscriptionEnabled,
+  onMobileAutoTranscriptionChange,
   recordingSupported,
   isRecordingAudio,
   isRecordingBusy,
@@ -412,6 +416,18 @@ export function MobileSettingsScreen({
                 onChange={onAssemblyAiApiKeyChange}
                 placeholder="Paste AssemblyAI key"
                 password
+              />
+              <ChoiceRow
+                label="Auto queue on mobile"
+                subtitle="Retry unfinished recordings on launch and while app is open."
+                selected={mobileAutoTranscriptionEnabled}
+                onClick={() => onMobileAutoTranscriptionChange(true)}
+              />
+              <ChoiceRow
+                label="Manual queue only"
+                subtitle="Only queue when you tap Queue transcription."
+                selected={!mobileAutoTranscriptionEnabled}
+                onClick={() => onMobileAutoTranscriptionChange(false)}
               />
               <div className="mobile-native-actions single">
                 <button type="button" className="mobile-secondary-btn" onClick={onQueueRecordings} disabled={!canQueue}>
