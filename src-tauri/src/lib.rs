@@ -16,6 +16,7 @@ use std::{
 use tauri::Manager;
 
 const ORDER_FILE: &str = ".notes-order.json";
+const SESSIONS_FILE: &str = ".notes-sessions.json";
 const UNSORTED_FOLDER: &str = "Unsorted";
 const ARCHIEVE_FOLDER: &str = "Archieve";
 const RECORDINGS_FOLDER: &str = "Recordings";
@@ -117,6 +118,35 @@ struct GitSyncStatus {
     ahead: usize,
     behind: usize,
     notes_root: String,
+}
+
+#[derive(Clone, Deserialize, PartialEq, Serialize)]
+struct NotesSessionEntry {
+    id: String,
+    name: String,
+    notes_root: String,
+}
+
+#[derive(Clone, Default, Deserialize, PartialEq, Serialize)]
+struct NotesSessionsFile {
+    active_session_id: String,
+    sessions: Vec<NotesSessionEntry>,
+}
+
+#[derive(Serialize)]
+struct NotesSessionsSnapshot {
+    active_session_id: String,
+    sessions: Vec<NotesSessionEntry>,
+}
+
+#[derive(Deserialize)]
+struct CreateSessionArgs {
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct SetActiveSessionArgs {
+    session_id: String,
 }
 
 #[derive(Deserialize)]
@@ -226,7 +256,23 @@ struct AssemblyTranscriptResponse {
 
 static TRANSCRIPTION_QUEUE: OnceLock<Mutex<TranscriptionQueueState>> = OnceLock::new();
 
-fn notes_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+fn app_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let path = app.path().app_data_dir().map_err(|err| err.to_string())?;
+    if !path.exists() {
+        fs::create_dir_all(&path).map_err(|err| err.to_string())?;
+    }
+    Ok(path)
+}
+
+fn sessions_file_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join(SESSIONS_FILE))
+}
+
+fn session_root_for_id(app: &tauri::AppHandle, id: &str) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join("sessions").join(id).join("notes"))
+}
+
+fn legacy_notes_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     if let Ok(path) = std::env::var("NOTES_ROOT") {
         let root = PathBuf::from(path);
         if root.exists() {
@@ -244,8 +290,199 @@ fn notes_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         return Ok(parent);
     }
 
-    let app_data = app.path().app_data_dir().map_err(|err| err.to_string())?;
+    let app_data = app_data_dir(app)?;
     let root = app_data.join("notes");
+    if !root.exists() {
+        fs::create_dir_all(&root).map_err(|err| err.to_string())?;
+    }
+    Ok(root)
+}
+
+fn normalize_session_name(name: &str) -> String {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        "Session".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn slugify_session_id(name: &str) -> String {
+    let mut slug = String::new();
+    let mut last_dash = false;
+    for ch in name.chars() {
+        let lower = ch.to_ascii_lowercase();
+        if lower.is_ascii_alphanumeric() {
+            slug.push(lower);
+            last_dash = false;
+            continue;
+        }
+        if !last_dash && !slug.is_empty() {
+            slug.push('-');
+            last_dash = true;
+        }
+    }
+    let compact = slug.trim_matches('-').to_string();
+    if compact.is_empty() {
+        "session".to_string()
+    } else {
+        compact
+    }
+}
+
+fn default_sessions_state(app: &tauri::AppHandle) -> Result<NotesSessionsFile, String> {
+    let legacy_root = legacy_notes_root(app)?;
+    if !legacy_root.exists() {
+        fs::create_dir_all(&legacy_root).map_err(|err| err.to_string())?;
+    }
+    Ok(NotesSessionsFile {
+        active_session_id: "default".to_string(),
+        sessions: vec![NotesSessionEntry {
+            id: "default".to_string(),
+            name: "Default".to_string(),
+            notes_root: legacy_root.to_string_lossy().to_string(),
+        }],
+    })
+}
+
+fn write_sessions_state(app: &tauri::AppHandle, state: &NotesSessionsFile) -> Result<(), String> {
+    let path = sessions_file_path(app)?;
+    let content = serde_json::to_string_pretty(state).map_err(|err| err.to_string())?;
+    fs::write(path, content).map_err(|err| err.to_string())
+}
+
+fn normalize_sessions_state(
+    app: &tauri::AppHandle,
+    mut state: NotesSessionsFile,
+) -> Result<NotesSessionsFile, String> {
+    let mut seen = HashSet::new();
+    let mut sessions = Vec::new();
+    for mut session in state.sessions.drain(..) {
+        let id = session.id.trim().to_string();
+        if id.is_empty() || !seen.insert(id.clone()) {
+            continue;
+        }
+        session.id = id.clone();
+        session.name = normalize_session_name(&session.name);
+        if session.notes_root.trim().is_empty() {
+            session.notes_root = session_root_for_id(app, &id)?.to_string_lossy().to_string();
+        }
+        let root = PathBuf::from(&session.notes_root);
+        if !root.exists() {
+            fs::create_dir_all(&root).map_err(|err| err.to_string())?;
+        }
+        sessions.push(session);
+    }
+
+    if sessions.is_empty() {
+        return default_sessions_state(app);
+    }
+
+    let active_session_id = if sessions
+        .iter()
+        .any(|session| session.id == state.active_session_id)
+    {
+        state.active_session_id
+    } else {
+        sessions[0].id.clone()
+    };
+
+    Ok(NotesSessionsFile {
+        active_session_id,
+        sessions,
+    })
+}
+
+fn ensure_sessions_state(app: &tauri::AppHandle) -> Result<NotesSessionsFile, String> {
+    let path = sessions_file_path(app)?;
+    if path.exists() {
+        let content = fs::read_to_string(&path).map_err(|err| err.to_string())?;
+        return match serde_json::from_str::<NotesSessionsFile>(&content) {
+            Ok(parsed) => {
+                let normalized = normalize_sessions_state(app, parsed.clone())?;
+                if normalized != parsed {
+                    write_sessions_state(app, &normalized)?;
+                }
+                Ok(normalized)
+            }
+            Err(_) => {
+                let state = default_sessions_state(app)?;
+                write_sessions_state(app, &state)?;
+                Ok(state)
+            }
+        };
+    }
+
+    let state = default_sessions_state(app)?;
+    write_sessions_state(app, &state)?;
+    Ok(state)
+}
+
+fn sessions_snapshot(state: &NotesSessionsFile) -> NotesSessionsSnapshot {
+    NotesSessionsSnapshot {
+        active_session_id: state.active_session_id.clone(),
+        sessions: state.sessions.clone(),
+    }
+}
+
+fn find_session<'a>(state: &'a NotesSessionsFile, session_id: &str) -> Option<&'a NotesSessionEntry> {
+    state.sessions.iter().find(|session| session.id == session_id)
+}
+
+fn set_active_session_state(
+    app: &tauri::AppHandle,
+    session_id: &str,
+) -> Result<NotesSessionsFile, String> {
+    let mut state = ensure_sessions_state(app)?;
+    let id = session_id.trim();
+    if id.is_empty() {
+        return Err("Session id is required.".to_string());
+    }
+    if find_session(&state, id).is_none() {
+        return Err(format!("Session not found: {}", id));
+    }
+    state.active_session_id = id.to_string();
+    write_sessions_state(app, &state)?;
+    Ok(state)
+}
+
+fn create_session_state(app: &tauri::AppHandle, name: &str) -> Result<NotesSessionsFile, String> {
+    let mut state = ensure_sessions_state(app)?;
+    let session_name = normalize_session_name(name);
+    let base_id = slugify_session_id(&session_name);
+    let existing: HashSet<String> = state.sessions.iter().map(|session| session.id.clone()).collect();
+    let mut session_id = base_id.clone();
+    let mut suffix = 2usize;
+    while existing.contains(&session_id) {
+        session_id = format!("{}-{}", base_id, suffix);
+        suffix += 1;
+    }
+
+    let session_root = session_root_for_id(app, &session_id)?;
+    if !session_root.exists() {
+        fs::create_dir_all(&session_root).map_err(|err| err.to_string())?;
+    }
+
+    state.sessions.push(NotesSessionEntry {
+        id: session_id.clone(),
+        name: session_name,
+        notes_root: session_root.to_string_lossy().to_string(),
+    });
+    state.active_session_id = session_id;
+    write_sessions_state(app, &state)?;
+    Ok(state)
+}
+
+fn notes_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let root = match ensure_sessions_state(app) {
+        Ok(state) => {
+            let active = find_session(&state, &state.active_session_id)
+                .or_else(|| state.sessions.first())
+                .ok_or_else(|| "No sessions configured.".to_string())?;
+            PathBuf::from(&active.notes_root)
+        }
+        Err(_) => legacy_notes_root(app)?,
+    };
     if !root.exists() {
         fs::create_dir_all(&root).map_err(|err| err.to_string())?;
     }
@@ -686,6 +923,69 @@ fn git_has_changes(repo: &Repository) -> bool {
         .unwrap_or(false)
 }
 
+fn git_head_has_commit(repo: &Repository) -> bool {
+    repo.head().ok().and_then(|head| head.target()).is_some()
+}
+
+fn worktree_has_only_bootstrap_artifacts(root: &Path) -> Result<bool, String> {
+    for entry in fs::read_dir(root).map_err(|err| err.to_string())? {
+        let entry = entry.map_err(|err| err.to_string())?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name == ".git" {
+            continue;
+        }
+        let path = entry.path();
+        let metadata = entry.metadata().map_err(|err| err.to_string())?;
+        if metadata.is_file() {
+            if name != ORDER_FILE {
+                return Ok(false);
+            }
+            continue;
+        }
+        if metadata.is_dir() {
+            if !is_system_folder_name(&name) {
+                return Ok(false);
+            }
+            let mut items = fs::read_dir(path).map_err(|err| err.to_string())?;
+            if items.next().is_some() {
+                return Ok(false);
+            }
+            continue;
+        }
+        return Ok(false);
+    }
+    Ok(true)
+}
+
+fn clear_bootstrap_artifacts(root: &Path) -> Result<(), String> {
+    let order_path = root.join(ORDER_FILE);
+    if order_path.exists() {
+        fs::remove_file(&order_path).map_err(|err| err.to_string())?;
+    }
+    for folder in SYSTEM_FOLDERS {
+        let path = root.join(folder);
+        if !path.exists() {
+            continue;
+        }
+        let mut items = fs::read_dir(&path).map_err(|err| err.to_string())?;
+        if items.next().is_none() {
+            fs::remove_dir(&path).map_err(|err| err.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn prepare_bootstrap_worktree_for_sync(root: &Path, repo: &Repository) -> Result<(), String> {
+    if git_head_has_commit(repo) || !git_has_changes(repo) {
+        return Ok(());
+    }
+    if worktree_has_only_bootstrap_artifacts(root)? {
+        clear_bootstrap_artifacts(root)?;
+        return Ok(());
+    }
+    Err("Local changes detected. Push or commit before syncing.".to_string())
+}
+
 fn git_ahead_behind(repo: &Repository, branch: Option<&str>) -> (usize, usize) {
     let branch_name = match branch {
         Some(value) => value,
@@ -1119,6 +1419,30 @@ fn update_order_rename(
 }
 
 #[tauri::command]
+fn get_sessions(app: tauri::AppHandle) -> Result<NotesSessionsSnapshot, String> {
+    let state = ensure_sessions_state(&app).or_else(|_| default_sessions_state(&app))?;
+    Ok(sessions_snapshot(&state))
+}
+
+#[tauri::command]
+fn create_session(
+    app: tauri::AppHandle,
+    args: CreateSessionArgs,
+) -> Result<NotesSessionsSnapshot, String> {
+    let state = create_session_state(&app, &args.name)?;
+    Ok(sessions_snapshot(&state))
+}
+
+#[tauri::command]
+fn set_active_session(
+    app: tauri::AppHandle,
+    args: SetActiveSessionArgs,
+) -> Result<NotesSessionsSnapshot, String> {
+    let state = set_active_session_state(&app, &args.session_id)?;
+    Ok(sessions_snapshot(&state))
+}
+
+#[tauri::command]
 async fn get_git_status(app: tauri::AppHandle) -> Result<GitSyncStatus, String> {
     tauri::async_runtime::spawn_blocking(move || get_git_status_blocking(app))
         .await
@@ -1148,25 +1472,33 @@ fn connect_git_repo_blocking(
     let root = notes_root(&app)?;
     ensure_system_folders(&root)?;
     let repo = ensure_git_repo(&root)?;
+    prepare_bootstrap_worktree_for_sync(&root, &repo)?;
     ensure_origin_remote(&repo, &args.remote_url)?;
     let target_branch = resolve_target_branch(&repo, args.branch.clone());
     switch_or_prepare_branch(&repo, &target_branch)?;
-    let has_remote_ref = repo
-        .find_reference(&format!("refs/remotes/origin/{}", target_branch))
-        .is_ok();
-    if has_remote_ref {
-        let fetched = perform_fetch(
-            &repo,
-            &target_branch,
-            args.username.as_deref(),
-            args.password.as_deref(),
-        )?;
+    let fetched = match perform_fetch(
+        &repo,
+        &target_branch,
+        args.username.as_deref(),
+        args.password.as_deref(),
+    ) {
+        Ok(commit) => Some(commit),
+        Err(error) => {
+            let lower = error.to_lowercase();
+            if lower.contains("couldn't find remote ref") {
+                None
+            } else {
+                return Err(error);
+            }
+        }
+    };
+    if let Some(fetched_commit) = fetched {
         let analysis = repo
-            .merge_analysis(&[&fetched])
+            .merge_analysis(&[&fetched_commit])
             .map_err(map_git_error)?
             .0;
         if analysis.is_fast_forward() || analysis.is_up_to_date() {
-            fast_forward_to(&repo, &target_branch, &fetched)?;
+            fast_forward_to(&repo, &target_branch, &fetched_commit)?;
         }
     }
     Ok(build_git_status(&root))
@@ -1186,6 +1518,7 @@ fn git_pull_blocking(app: tauri::AppHandle, args: GitSyncArgs) -> Result<GitSync
         return Err("Repository is not initialized. Connect a remote first.".to_string());
     }
     let repo = open_repo(&root)?;
+    prepare_bootstrap_worktree_for_sync(&root, &repo)?;
     if git_has_changes(&repo) {
         return Err("Local changes detected. Push or commit before pulling.".to_string());
     }
@@ -1831,6 +2164,9 @@ pub fn run() {
             delete_items,
             rename_item,
             set_order,
+            get_sessions,
+            create_session,
+            set_active_session,
             get_git_status,
             connect_git_repo,
             git_pull,

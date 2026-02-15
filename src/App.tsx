@@ -79,6 +79,7 @@ import type {
   FolderNode,
   GitSyncStatus,
   NoteEntry,
+  NotesSessionSnapshot,
   RecordingListItem,
   RecordingQueueSnapshot,
 } from "./types";
@@ -138,6 +139,90 @@ const getStoredSyncValue = (key: string, fallback: string) => {
   }
   const stored = window.localStorage.getItem(key);
   return stored && stored.trim().length > 0 ? stored : fallback;
+};
+
+type SessionSyncSettings = {
+  gitRemoteUrl: string;
+  gitBranch: string;
+  gitUsername: string;
+  gitPassword: string;
+  gitCommitMessage: string;
+  lastSuccessfulSyncAt: string;
+  assemblyAiApiKey: string;
+};
+
+const SESSION_SYNC_STORAGE_KEY = "notes-viewer-session-sync-settings";
+
+const DEFAULT_SESSION_SYNC_SETTINGS: SessionSyncSettings = {
+  gitRemoteUrl: "",
+  gitBranch: "main",
+  gitUsername: "",
+  gitPassword: "",
+  gitCommitMessage: "Sync notes",
+  lastSuccessfulSyncAt: "",
+  assemblyAiApiKey: "",
+};
+
+const readSessionSyncStore = (): Record<string, Partial<SessionSyncSettings>> => {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  try {
+    const raw = window.localStorage.getItem(SESSION_SYNC_STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, Partial<SessionSyncSettings>>;
+    }
+  } catch {
+    return {};
+  }
+  return {};
+};
+
+const writeSessionSyncStore = (store: Record<string, Partial<SessionSyncSettings>>) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(SESSION_SYNC_STORAGE_KEY, JSON.stringify(store));
+};
+
+const getSessionSyncSettings = (sessionId: string): SessionSyncSettings => {
+  const store = readSessionSyncStore();
+  const stored = store[sessionId] ?? {};
+  const legacyFallback =
+    sessionId === "default"
+      ? {
+          gitRemoteUrl: getStoredSyncValue("notes-viewer-git-remote", ""),
+          gitBranch: getStoredSyncValue("notes-viewer-git-branch", "main"),
+          gitUsername: getStoredSyncValue("notes-viewer-git-username", ""),
+          gitPassword: getStoredSyncValue("notes-viewer-git-password", ""),
+          gitCommitMessage: getStoredSyncValue("notes-viewer-git-commit-message", "Sync notes"),
+          lastSuccessfulSyncAt: getStoredSyncValue("notes-viewer-git-last-sync-at", ""),
+          assemblyAiApiKey: getStoredSyncValue("notes-viewer-assemblyai-api-key", ""),
+        }
+      : {};
+
+  return {
+    gitRemoteUrl: stored.gitRemoteUrl ?? legacyFallback.gitRemoteUrl ?? DEFAULT_SESSION_SYNC_SETTINGS.gitRemoteUrl,
+    gitBranch: stored.gitBranch ?? legacyFallback.gitBranch ?? DEFAULT_SESSION_SYNC_SETTINGS.gitBranch,
+    gitUsername: stored.gitUsername ?? legacyFallback.gitUsername ?? DEFAULT_SESSION_SYNC_SETTINGS.gitUsername,
+    gitPassword: stored.gitPassword ?? legacyFallback.gitPassword ?? DEFAULT_SESSION_SYNC_SETTINGS.gitPassword,
+    gitCommitMessage:
+      stored.gitCommitMessage ??
+      legacyFallback.gitCommitMessage ??
+      DEFAULT_SESSION_SYNC_SETTINGS.gitCommitMessage,
+    lastSuccessfulSyncAt:
+      stored.lastSuccessfulSyncAt ??
+      legacyFallback.lastSuccessfulSyncAt ??
+      DEFAULT_SESSION_SYNC_SETTINGS.lastSuccessfulSyncAt,
+    assemblyAiApiKey:
+      stored.assemblyAiApiKey ??
+      legacyFallback.assemblyAiApiKey ??
+      DEFAULT_SESSION_SYNC_SETTINGS.assemblyAiApiKey,
+  };
 };
 
 const getNoteParentPath = (notePath: string) => {
@@ -220,26 +305,33 @@ function App() {
   const [appMode, setAppMode] = useState<AppMode>("notes");
   const [activeSettingsSection, setActiveSettingsSection] =
     useState<SettingsSectionId>("general");
-  const [gitRemoteUrl, setGitRemoteUrl] = useState(() =>
-    getStoredSyncValue("notes-viewer-git-remote", "")
+  const [sessionsSnapshot, setSessionsSnapshot] =
+    useState<NotesSessionSnapshot | null>(null);
+  const [sessionsBusy, setSessionsBusy] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+  const [syncSettingsSessionId, setSyncSettingsSessionId] = useState<string | null>(
+    null
   );
-  const [gitBranch, setGitBranch] = useState(() =>
-    getStoredSyncValue("notes-viewer-git-branch", "main")
+  const [gitRemoteUrl, setGitRemoteUrl] = useState(
+    DEFAULT_SESSION_SYNC_SETTINGS.gitRemoteUrl
   );
-  const [gitUsername, setGitUsername] = useState(() =>
-    getStoredSyncValue("notes-viewer-git-username", "")
+  const [gitBranch, setGitBranch] = useState(
+    DEFAULT_SESSION_SYNC_SETTINGS.gitBranch
   );
-  const [gitPassword, setGitPassword] = useState(() =>
-    getStoredSyncValue("notes-viewer-git-password", "")
+  const [gitUsername, setGitUsername] = useState(
+    DEFAULT_SESSION_SYNC_SETTINGS.gitUsername
   );
-  const [gitCommitMessage, setGitCommitMessage] = useState(() =>
-    getStoredSyncValue("notes-viewer-git-commit-message", "Sync notes")
+  const [gitPassword, setGitPassword] = useState(
+    DEFAULT_SESSION_SYNC_SETTINGS.gitPassword
   );
-  const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState(() =>
-    getStoredSyncValue("notes-viewer-git-last-sync-at", "")
+  const [gitCommitMessage, setGitCommitMessage] = useState(
+    DEFAULT_SESSION_SYNC_SETTINGS.gitCommitMessage
   );
-  const [assemblyAiApiKey, setAssemblyAiApiKey] = useState(() =>
-    getStoredSyncValue("notes-viewer-assemblyai-api-key", "")
+  const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState(
+    DEFAULT_SESSION_SYNC_SETTINGS.lastSuccessfulSyncAt
+  );
+  const [assemblyAiApiKey, setAssemblyAiApiKey] = useState(
+    DEFAULT_SESSION_SYNC_SETTINGS.assemblyAiApiKey
   );
   const [gitStatus, setGitStatus] = useState<GitSyncStatus | null>(null);
   const [gitSyncAction, setGitSyncAction] = useState<GitSyncAction>("idle");
@@ -255,6 +347,8 @@ function App() {
 
   const layoutMode = useLayoutMode();
   const { keyboardInset } = useKeyboardInsets();
+  const sessions = sessionsSnapshot?.sessions ?? [];
+  const activeSessionId = sessionsSnapshot?.active_session_id ?? null;
 
   // -- Folder tree state ----------------------------------------------------
   const [tree, setTree] = useState<FolderNode | null>(null);
@@ -335,32 +429,46 @@ function App() {
   }, [notesListMode]);
 
   useEffect(() => {
-    window.localStorage.setItem("notes-viewer-git-remote", gitRemoteUrl);
-  }, [gitRemoteUrl]);
+    if (!activeSessionId) {
+      return;
+    }
+    const settings = getSessionSyncSettings(activeSessionId);
+    setGitRemoteUrl(settings.gitRemoteUrl);
+    setGitBranch(settings.gitBranch);
+    setGitUsername(settings.gitUsername);
+    setGitPassword(settings.gitPassword);
+    setGitCommitMessage(settings.gitCommitMessage);
+    setLastSuccessfulSyncAt(settings.lastSuccessfulSyncAt);
+    setAssemblyAiApiKey(settings.assemblyAiApiKey);
+    setSyncSettingsSessionId(activeSessionId);
+  }, [activeSessionId]);
 
   useEffect(() => {
-    window.localStorage.setItem("notes-viewer-git-branch", gitBranch);
-  }, [gitBranch]);
-
-  useEffect(() => {
-    window.localStorage.setItem("notes-viewer-git-username", gitUsername);
-  }, [gitUsername]);
-
-  useEffect(() => {
-    window.localStorage.setItem("notes-viewer-git-password", gitPassword);
-  }, [gitPassword]);
-
-  useEffect(() => {
-    window.localStorage.setItem("notes-viewer-git-commit-message", gitCommitMessage);
-  }, [gitCommitMessage]);
-
-  useEffect(() => {
-    window.localStorage.setItem("notes-viewer-git-last-sync-at", lastSuccessfulSyncAt);
-  }, [lastSuccessfulSyncAt]);
-
-  useEffect(() => {
-    window.localStorage.setItem("notes-viewer-assemblyai-api-key", assemblyAiApiKey);
-  }, [assemblyAiApiKey]);
+    if (!activeSessionId || syncSettingsSessionId !== activeSessionId) {
+      return;
+    }
+    const store = readSessionSyncStore();
+    store[activeSessionId] = {
+      gitRemoteUrl,
+      gitBranch,
+      gitUsername,
+      gitPassword,
+      gitCommitMessage,
+      lastSuccessfulSyncAt,
+      assemblyAiApiKey,
+    };
+    writeSessionSyncStore(store);
+  }, [
+    activeSessionId,
+    assemblyAiApiKey,
+    gitBranch,
+    gitCommitMessage,
+    gitPassword,
+    gitRemoteUrl,
+    gitUsername,
+    lastSuccessfulSyncAt,
+    syncSettingsSessionId,
+  ]);
 
   // -- Debug logging --------------------------------------------------------
   useEffect(() => {
@@ -368,6 +476,12 @@ function App() {
   }, [activeFolder]);
 
   // -- Tree data ------------------------------------------------------------
+  const refreshSessions = useCallback(async () => {
+    const snapshot = await api.getSessions();
+    setSessionsSnapshot(snapshot);
+    return snapshot;
+  }, []);
+
   const refreshTree = useCallback(async () => {
     const data = await api.getTree();
     setTree(data);
@@ -491,12 +605,55 @@ function App() {
   });
 
   useEffect(() => {
-    void refreshTree();
-  }, [refreshTree]);
+    void (async () => {
+      setSessionsBusy(true);
+      try {
+        await refreshSessions();
+        setSessionsError(null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setSessionsError(message);
+      } finally {
+        setSessionsBusy(false);
+      }
+    })();
+  }, [refreshSessions]);
 
   useEffect(() => {
+    if (activeSessionId) {
+      setTree(null);
+      setGitStatus(null);
+      setRecordingsQueue(null);
+      setRecordingsList([]);
+      setActiveAudioPath(null);
+      setActiveAudioSrc(null);
+      setRecordingStatusMessage(null);
+      setRecordingsError(null);
+      setGitSyncError(null);
+      setSelectedFolders(new Set());
+      setLastSelectedFolder("");
+      setActiveFolder("");
+      setSelectedNotes(new Set());
+      setLastSelectedNote("");
+      setActiveNote(null);
+      clearNote();
+      clearDraft();
+    }
+    void refreshTree();
     void refreshGitStatus();
-  }, [refreshGitStatus]);
+    if (appMode === "settings" && activeSettingsSection === "recordings") {
+      void refreshRecordings();
+    }
+  }, [
+    activeSettingsSection,
+    activeSessionId,
+    appMode,
+    clearDraft,
+    clearNote,
+    refreshGitStatus,
+    refreshRecordings,
+    refreshTree,
+  ]);
 
   useEffect(() => {
     if (appMode !== "settings" || activeSettingsSection !== "recordings") {
@@ -550,6 +707,55 @@ function App() {
     setLastSelectedFolder(firstFolderPath);
     setActiveFolder(firstFolderPath);
   }, [activeFolder, layoutMode, tree]);
+
+  const handleSwitchSession = useCallback(
+    async (sessionId: string) => {
+      const normalizedId = sessionId.trim();
+      if (!normalizedId || normalizedId === activeSessionId) {
+        return;
+      }
+      setSessionsBusy(true);
+      try {
+        await flushSave();
+        const snapshot = await api.setActiveSession(normalizedId);
+        setSessionsSnapshot(snapshot);
+        setSessionsError(null);
+        setAppMode("notes");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setSessionsError(message);
+      } finally {
+        setSessionsBusy(false);
+      }
+    },
+    [activeSessionId, flushSave]
+  );
+
+  const handleCreateSession = useCallback(async () => {
+    const existingNames = new Set(
+      sessions.map((session) => session.name.trim().toLowerCase())
+    );
+    let index = 1;
+    let name = "Session";
+    while (existingNames.has(name.toLowerCase())) {
+      index += 1;
+      name = `Session ${index}`;
+    }
+
+    setSessionsBusy(true);
+    try {
+      await flushSave();
+      const snapshot = await api.createSession(name);
+      setSessionsSnapshot(snapshot);
+      setSessionsError(null);
+      setAppMode("notes");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSessionsError(message);
+    } finally {
+      setSessionsBusy(false);
+    }
+  }, [flushSave, sessions]);
 
   const handleConnectGitRepo = useCallback(async () => {
     const remoteUrl = gitRemoteUrl.trim();
@@ -1072,7 +1278,7 @@ function App() {
           },
           {
             id: "note.move.archieve",
-            text: "Move to Archieve",
+            text: "Move to Archive",
             action: () => {
               const path = noteContextPathRef.current;
               if (!path) return;
@@ -1975,6 +2181,16 @@ function App() {
         onThemeChange={setTheme}
         notesListMode={notesListMode}
         onNotesListModeChange={setNotesListMode}
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        sessionBusy={sessionsBusy}
+        sessionError={sessionsError}
+        onSessionChange={(sessionId) => {
+          void handleSwitchSession(sessionId);
+        }}
+        onCreateSession={() => {
+          void handleCreateSession();
+        }}
         gitRemoteUrl={gitRemoteUrl}
         onGitRemoteUrlChange={setGitRemoteUrl}
         gitBranch={gitBranch}
@@ -2195,6 +2411,7 @@ function App() {
               await moveNotesToArchieve([path]);
             }}
             onShowNoteInfo={showNoteInfo}
+            onNoteContextMenu={handleNoteContextMenu}
             editorMarkdown={activeNote ? noteContent : draftNoteContent}
             onEditorChange={handleEditorChange}
             hasActiveNote={Boolean(activeNote)}
@@ -2209,6 +2426,16 @@ function App() {
             notesListMode={notesListMode}
             onNotesListModeChange={setNotesListMode}
             onThemeChange={setTheme}
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            sessionBusy={sessionsBusy}
+            sessionError={sessionsError}
+            onSessionChange={(sessionId) => {
+              void handleSwitchSession(sessionId);
+            }}
+            onCreateSession={() => {
+              void handleCreateSession();
+            }}
             gitRemoteUrl={gitRemoteUrl}
             onGitRemoteUrlChange={setGitRemoteUrl}
             gitBranch={gitBranch}

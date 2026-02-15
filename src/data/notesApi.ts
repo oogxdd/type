@@ -3,6 +3,7 @@ import type {
   FolderNode,
   GitSyncStatus,
   NoteMeta,
+  NotesSessionSnapshot,
   RecordingAudioPayload,
   RecordingsListResult,
   RecordingTranscriptionQueueResult,
@@ -120,6 +121,21 @@ export const setOrder = (args: SetOrderArgs): Promise<void> =>
 
 export const getGitStatus = (): Promise<GitSyncStatus> =>
   invokeLogged<GitSyncStatus>("get_git_status");
+
+export const getSessions = (): Promise<NotesSessionSnapshot> =>
+  invokeLogged<NotesSessionSnapshot>("get_sessions");
+
+export const createSession = (name: string): Promise<NotesSessionSnapshot> =>
+  invokeLogged<NotesSessionSnapshot>("create_session", {
+    args: { name },
+  });
+
+export const setActiveSession = (
+  sessionId: string
+): Promise<NotesSessionSnapshot> =>
+  invokeLogged<NotesSessionSnapshot>("set_active_session", {
+    args: { session_id: sessionId },
+  });
 
 export const connectGitRepo = (
   remoteUrl: string,

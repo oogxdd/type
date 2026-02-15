@@ -1,5 +1,10 @@
 import type { NotesListMode, SettingsSectionId, ThemeMode } from "../../components/SettingsPanel";
-import type { GitSyncStatus, RecordingListItem, RecordingQueueSnapshot } from "../../types";
+import type {
+  GitSyncStatus,
+  NotesSession,
+  RecordingListItem,
+  RecordingQueueSnapshot,
+} from "../../types";
 type GitSyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
 
 type MobileSettingsScreenProps = {
@@ -8,6 +13,12 @@ type MobileSettingsScreenProps = {
   sections: Array<{ id: SettingsSectionId; label: string }>;
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
+  sessions: NotesSession[];
+  activeSessionId: string | null;
+  sessionBusy: boolean;
+  sessionError: string | null;
+  onSessionChange: (sessionId: string) => void;
+  onCreateSession: () => void;
   notesListMode: NotesListMode;
   onNotesListModeChange: (mode: NotesListMode) => void;
   gitRemoteUrl: string;
@@ -161,6 +172,12 @@ export function MobileSettingsScreen({
   sections,
   theme,
   onThemeChange,
+  sessions,
+  activeSessionId,
+  sessionBusy,
+  sessionError,
+  onSessionChange,
+  onCreateSession,
   notesListMode,
   onNotesListModeChange,
   gitRemoteUrl,
@@ -243,20 +260,49 @@ export function MobileSettingsScreen({
 
       <div className="mobile-settings-scroll mobile-settings-native">
         {activeSection === "general" ? (
-          <Group title="Notes List">
-            <ChoiceRow
-              label="Separate panel"
-              subtitle="Show notes in a dedicated list."
-              selected={notesListMode === "separate"}
-              onClick={() => onNotesListModeChange("separate")}
-            />
-            <ChoiceRow
-              label="Nested in folders"
-              subtitle="Show notes inside folder tree."
-              selected={notesListMode === "nested"}
-              onClick={() => onNotesListModeChange("nested")}
-            />
-          </Group>
+          <>
+            <Group title="Sessions">
+              <div className="mobile-native-actions single">
+                <button
+                  type="button"
+                  className="mobile-primary-btn"
+                  onClick={onCreateSession}
+                  disabled={sessionBusy}
+                >
+                  {sessionBusy ? "Working..." : "New session"}
+                </button>
+              </div>
+              {sessions.length === 0 ? (
+                <p className="mobile-native-note">No sessions available.</p>
+              ) : (
+                sessions.map((session) => (
+                  <ChoiceRow
+                    key={session.id}
+                    label={session.name}
+                    subtitle={session.id}
+                    selected={activeSessionId === session.id}
+                    onClick={() => onSessionChange(session.id)}
+                  />
+                ))
+              )}
+              {sessionError ? <p className="mobile-native-note">{sessionError}</p> : null}
+            </Group>
+
+            <Group title="Notes List">
+              <ChoiceRow
+                label="Separate panel"
+                subtitle="Show notes in a dedicated list."
+                selected={notesListMode === "separate"}
+                onClick={() => onNotesListModeChange("separate")}
+              />
+              <ChoiceRow
+                label="Nested in folders"
+                subtitle="Show notes inside folder tree."
+                selected={notesListMode === "nested"}
+                onClick={() => onNotesListModeChange("nested")}
+              />
+            </Group>
+          </>
         ) : null}
 
         {activeSection === "appearance" ? (

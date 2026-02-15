@@ -1590,45 +1590,37 @@
 
 /* Desktop-style harmonization for phone/tablet shells. */
 .mobile-root {
-  --ui-bg: rgba(243, 245, 248, 0.55);
-  --ui-pane: rgba(255, 255, 255, 0.82);
+  --ui-bg: #ffffff;
+  --ui-pane: #ffffff;
   --ui-border: #dbe2e9;
   --ui-border-strong: #a3afbb;
   --ui-text: #11181f;
   --ui-muted: #687684;
   --ui-select: #eef3f8;
   --ui-accent: #2b6ff0;
-  --mobile-surface-light: #f3f6fb;
-  --mobile-surface-muted: #edf1f7;
+  --mobile-surface-light: #ffffff;
+  --mobile-surface-muted: #ffffff;
   --mobile-separator-light: var(--ui-border);
   --mobile-text-light: var(--ui-text);
   --mobile-text-muted-light: var(--ui-muted);
-  background: radial-gradient(
-    1200px 600px at -220px -90px,
-    rgba(217, 224, 234, 0.74) 0%,
-    rgba(243, 245, 248, 0.32) 54%
-  );
+  background: #ffffff;
 }
 
 .mobile-root.theme-dark {
-  --ui-bg: #14171b;
-  --ui-pane: rgba(29, 31, 35, 0.93);
+  --ui-bg: rgba(26, 28, 33, 0.8);
+  --ui-pane: rgba(26, 28, 33, 0.8);
   --ui-border: #3b3e45;
   --ui-border-strong: #484d56;
   --ui-text: #e6ebf2;
   --ui-muted: #9da6b2;
   --ui-select: #373b43;
   --ui-accent: #84a7ff;
-  --mobile-surface-dark: #14171b;
-  --mobile-surface-muted-dark: #23272f;
+  --mobile-surface-dark: rgba(26, 28, 33, 0.8);
+  --mobile-surface-muted-dark: rgba(26, 28, 33, 0.8);
   --mobile-separator-dark: var(--ui-border);
   --mobile-text-dark: var(--ui-text);
   --mobile-text-muted-dark: var(--ui-muted);
-  background: radial-gradient(
-    1400px 700px at -200px -80px,
-    rgba(54, 58, 66, 0.7) 0%,
-    rgba(21, 24, 30, 0.58) 56%
-  );
+  background: rgba(26, 28, 33, 0.8);
 }
 
 .mobile-nav,
@@ -1879,7 +1871,19 @@
 .mobile-root[data-layout="tablet"] .mobile-tablet-left {
   min-width: 0;
   border-right: 1px solid var(--ui-border);
-  background: color-mix(in srgb, var(--ui-pane) 92%, transparent);
+  background: transparent;
+}
+
+.mobile-root[data-layout="tablet"] .mobile-nav,
+.mobile-root[data-layout="tablet"] .mobile-tabbar {
+  border: none;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.mobile-root[data-layout="tablet"] .mobile-tabbar {
+  padding: 4px 10px 6px;
 }
 
 .mobile-root[data-layout="tablet"] .mobile-tablet-right {
@@ -1903,7 +1907,7 @@
 }
 
 .mobile-root[data-layout="tablet"] .mobile-tablet-mode-nested .mobile-tablet-left-notes {
-  border-top: 1px solid var(--ui-border);
+  border-top: none;
   background: color-mix(in srgb, var(--ui-pane) 94%, transparent);
 }
 
@@ -1928,14 +1932,24 @@
 }
 
 .mobile-root[data-layout="tablet"] .mobile-tablet-notes-pane {
-  border-right: 1px solid var(--ui-border);
+  border-right: 1px solid color-mix(in srgb, var(--ui-border) 42%, transparent);
   border-bottom: none;
 }
 
 .mobile-root[data-layout="tablet"] .mobile-tablet-settings-sections {
   padding: 10px 8px;
   gap: 6px;
-  background: color-mix(in srgb, var(--ui-pane) 92%, transparent);
+  background: transparent;
+}
+
+.mobile-root[data-layout="tablet"] .mobile-folder-row,
+.mobile-root[data-layout="tablet"] .mobile-note-row-shell {
+  border-color: color-mix(in srgb, var(--ui-border) 55%, transparent);
+}
+
+.mobile-root.theme-dark[data-layout="tablet"] .mobile-folder-row,
+.mobile-root.theme-dark[data-layout="tablet"] .mobile-note-row-shell {
+  border-color: transparent;
 }
 
 @media (max-width: 900px) {
@@ -1953,7 +1967,7 @@
   }
 
   .mobile-root[data-layout="tablet"] .mobile-tablet-notes-pane {
-    border-right: 1px solid var(--ui-border);
+    border-right: 1px solid color-mix(in srgb, var(--ui-border) 42%, transparent);
     border-bottom: none;
   }
 }

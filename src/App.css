@@ -877,6 +877,16 @@ body {
   color: var(--ui-text);
 }
 
+.settings-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-inline-row select {
+  flex: 1;
+}
+
 .settings-control select,
 .settings-control input[type="range"],
 .settings-control input[type="password"],

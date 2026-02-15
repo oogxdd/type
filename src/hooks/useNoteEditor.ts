@@ -114,15 +114,15 @@ export function useNoteEditor(activeNote: string | null) {
     setSaveError(null);
   };
 
-  const clearNote = () => {
+  const clearNote = useCallback(() => {
     setNoteContent("");
     setNoteDirty(false);
     noteDirtyRef.current = false;
-  };
+  }, []);
 
-  const clearDraft = () => {
+  const clearDraft = useCallback(() => {
     setDraftNoteContent("");
-  };
+  }, []);
 
   const flushSave = useCallback(async () => {
     if (saveTimer.current) {

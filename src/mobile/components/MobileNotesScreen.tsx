@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { NoteEntry } from "../../types";
 import type { NotePreview } from "../../utils/format";
 
@@ -12,6 +12,7 @@ type MobileNotesScreenProps = {
   onDelete: (notePath: string) => void;
   onArchive: (notePath: string) => void;
   onLongPress: (notePath: string) => void;
+  onContextMenu?: (event: ReactMouseEvent<HTMLButtonElement>, notePath: string) => void;
   onPullCreate?: () => Promise<void>;
   onPullRefresh?: () => Promise<void>;
   emptyStateText?: string;
@@ -28,6 +29,7 @@ export function MobileNotesScreen({
   onDelete,
   onArchive,
   onLongPress,
+  onContextMenu,
   onPullCreate,
   onPullRefresh,
   emptyStateText,
@@ -145,6 +147,7 @@ export function MobileNotesScreen({
           onDelete={onDelete}
           onArchive={onArchive}
           onLongPress={onLongPress}
+          onContextMenu={onContextMenu}
         />
       ))}
     </div>
@@ -159,6 +162,7 @@ type SwipeableNoteRowProps = {
   onDelete: (notePath: string) => void;
   onArchive: (notePath: string) => void;
   onLongPress: (notePath: string) => void;
+  onContextMenu?: (event: ReactMouseEvent<HTMLButtonElement>, notePath: string) => void;
 };
 
 function SwipeableNoteRow({
@@ -169,6 +173,7 @@ function SwipeableNoteRow({
   onDelete,
   onArchive,
   onLongPress,
+  onContextMenu,
 }: SwipeableNoteRowProps) {
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -214,6 +219,14 @@ function SwipeableNoteRow({
         style={{ transform: `translateX(${offset}px)` }}
         aria-label={`Open note ${noteTitle}${noteSubline ? `. ${noteSubline}` : ""}`}
         onPointerDown={(event) => {
+          if (event.pointerType === "mouse") {
+            setDragging(false);
+            startRef.current = null;
+            movedRef.current = false;
+            longPressFiredRef.current = false;
+            clearLongPress();
+            return;
+          }
           startRef.current = { x: event.clientX, y: event.clientY };
           movedRef.current = false;
           longPressFiredRef.current = false;
@@ -270,6 +283,13 @@ function SwipeableNoteRow({
           }
           setOffset(0);
           onSelect(note.path);
+        }}
+        onContextMenu={(event) => {
+          if (!onContextMenu) {
+            return;
+          }
+          onContextMenu(event, note.path);
+          setOffset(0);
         }}
       >
         <span className="mobile-note-title">{noteTitle}</span>

@@ -1,5 +1,10 @@
 import { Button } from "./ui/button";
-import type { GitSyncStatus, RecordingListItem, RecordingQueueSnapshot } from "../types";
+import type {
+  GitSyncStatus,
+  NotesSession,
+  RecordingListItem,
+  RecordingQueueSnapshot,
+} from "../types";
 
 export type ThemeMode = "light" | "dark";
 export type NotesListMode = "separate" | "nested";
@@ -80,6 +85,12 @@ function SettingsDetail({
   onThemeChange,
   notesListMode,
   onNotesListModeChange,
+  sessions,
+  activeSessionId,
+  sessionBusy,
+  sessionError,
+  onSessionChange,
+  onCreateSession,
   gitRemoteUrl,
   onGitRemoteUrlChange,
   gitBranch,
@@ -122,6 +133,12 @@ function SettingsDetail({
   onThemeChange: (theme: ThemeMode) => void;
   notesListMode: NotesListMode;
   onNotesListModeChange: (mode: NotesListMode) => void;
+  sessions: NotesSession[];
+  activeSessionId: string | null;
+  sessionBusy: boolean;
+  sessionError: string | null;
+  onSessionChange: (sessionId: string) => void;
+  onCreateSession: () => void;
   gitRemoteUrl: string;
   onGitRemoteUrlChange: (value: string) => void;
   gitBranch: string;
@@ -181,6 +198,37 @@ function SettingsDetail({
       <>
         <h2 className="settings-detail-title">General</h2>
         <p className="settings-detail-text">Default behavior.</p>
+        <label className="settings-control">
+          <span>Active session</span>
+          <div className="settings-inline-row">
+            <select
+              value={activeSessionId ?? ""}
+              onChange={(event) => onSessionChange(event.target.value)}
+              disabled={sessionBusy || sessions.length === 0}
+            >
+              {sessions.map((session) => (
+                <option key={session.id} value={session.id}>
+                  {session.name}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onCreateSession}
+              disabled={sessionBusy}
+            >
+              {sessionBusy ? "Working..." : "New session"}
+            </Button>
+          </div>
+          <span className="settings-inline-help">
+            Each session has its own local notes folder and Git remote.
+          </span>
+        </label>
+        {sessionError ? (
+          <p className="settings-warning-text settings-inline-warning">{sessionError}</p>
+        ) : null}
         <div className="settings-info-grid">
           <div className="settings-info-row">
             <span>Notes source folder</span>
@@ -517,6 +565,12 @@ export function SettingsDetailPane({
   onThemeChange,
   notesListMode,
   onNotesListModeChange,
+  sessions,
+  activeSessionId,
+  sessionBusy,
+  sessionError,
+  onSessionChange,
+  onCreateSession,
   gitRemoteUrl,
   onGitRemoteUrlChange,
   gitBranch,
@@ -561,6 +615,12 @@ export function SettingsDetailPane({
   onThemeChange: (theme: ThemeMode) => void;
   notesListMode: NotesListMode;
   onNotesListModeChange: (mode: NotesListMode) => void;
+  sessions: NotesSession[];
+  activeSessionId: string | null;
+  sessionBusy: boolean;
+  sessionError: string | null;
+  onSessionChange: (sessionId: string) => void;
+  onCreateSession: () => void;
   gitRemoteUrl: string;
   onGitRemoteUrlChange: (value: string) => void;
   gitBranch: string;
@@ -614,6 +674,12 @@ export function SettingsDetailPane({
           onThemeChange={onThemeChange}
           notesListMode={notesListMode}
           onNotesListModeChange={onNotesListModeChange}
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          sessionBusy={sessionBusy}
+          sessionError={sessionError}
+          onSessionChange={onSessionChange}
+          onCreateSession={onCreateSession}
           gitRemoteUrl={gitRemoteUrl}
           onGitRemoteUrlChange={onGitRemoteUrlChange}
           gitBranch={gitBranch}

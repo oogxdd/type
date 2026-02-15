@@ -32,6 +32,17 @@ export type GitSyncStatus = {
   notes_root: string;
 };
 
+export type NotesSession = {
+  id: string;
+  name: string;
+  notes_root: string;
+};
+
+export type NotesSessionSnapshot = {
+  active_session_id: string;
+  sessions: NotesSession[];
+};
+
 export type RecordingWriteResult = {
   recording_folder: string;
   audio_path: string;

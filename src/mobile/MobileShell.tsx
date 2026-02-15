@@ -15,12 +15,14 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import type { SettingsSectionId, ThemeMode, NotesListMode } from "../components/SettingsPanel";
 import type { FlattenedItem } from "../tree/types";
 import type {
   GitSyncStatus,
   NoteEntry,
+  NotesSession,
   RecordingListItem,
   RecordingQueueSnapshot,
 } from "../types";
@@ -66,6 +68,11 @@ type MobileShellProps = {
   onDeleteNote: (notePath: string) => Promise<void>;
   onArchiveNote: (notePath: string) => Promise<void>;
   onShowNoteInfo: (notePath: string) => Promise<void>;
+  onNoteContextMenu: (
+    event: ReactMouseEvent,
+    notePath: string,
+    parentPath?: string
+  ) => Promise<void>;
   editorMarkdown: string;
   onEditorChange: (markdown: string) => void;
   hasActiveNote: boolean;
@@ -80,6 +87,12 @@ type MobileShellProps = {
   notesListMode: NotesListMode;
   onNotesListModeChange: (mode: NotesListMode) => void;
   onThemeChange: (theme: ThemeMode) => void;
+  sessions: NotesSession[];
+  activeSessionId: string | null;
+  sessionBusy: boolean;
+  sessionError: string | null;
+  onSessionChange: (sessionId: string) => void;
+  onCreateSession: () => void;
   gitRemoteUrl: string;
   onGitRemoteUrlChange: (value: string) => void;
   gitBranch: string;
@@ -158,6 +171,7 @@ export function MobileShell({
   onDeleteNote,
   onArchiveNote,
   onShowNoteInfo,
+  onNoteContextMenu,
   editorMarkdown,
   onEditorChange,
   hasActiveNote,
@@ -172,6 +186,12 @@ export function MobileShell({
   notesListMode,
   onNotesListModeChange,
   onThemeChange,
+  sessions,
+  activeSessionId,
+  sessionBusy,
+  sessionError,
+  onSessionChange,
+  onCreateSession,
   gitRemoteUrl,
   onGitRemoteUrlChange,
   gitBranch,
@@ -494,6 +514,12 @@ export function MobileShell({
       sections={settingsSections}
       theme={theme}
       onThemeChange={onThemeChange}
+      sessions={sessions}
+      activeSessionId={activeSessionId}
+      sessionBusy={sessionBusy}
+      sessionError={sessionError}
+      onSessionChange={onSessionChange}
+      onCreateSession={onCreateSession}
       notesListMode={notesListMode}
       onNotesListModeChange={onNotesListModeChange}
       gitRemoteUrl={gitRemoteUrl}
@@ -644,6 +670,9 @@ export function MobileShell({
             })();
           }}
           onLongPress={openNoteActionSheet}
+          onContextMenu={(event, path) => {
+            void onNoteContextMenu(event, path, currentRoute.folderPath);
+          }}
           onPullRefresh={async () => {
             await refreshNotesFeed(currentRoute.folderPath);
           }}
@@ -725,6 +754,7 @@ export function MobileShell({
     onCreateNote,
     onDeleteNote,
     onEditorChange,
+    onNoteContextMenu,
     onQueueRecordings,
     onStartAudioRecording,
     onStopAudioRecording,
@@ -860,6 +890,9 @@ export function MobileShell({
         })();
       }}
       onLongPress={openNoteActionSheet}
+      onContextMenu={(event, path) => {
+        void onNoteContextMenu(event, path, activeFolder);
+      }}
       onPullRefresh={async () => {
         await refreshNotesFeed(activeFolder);
       }}
