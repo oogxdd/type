@@ -4,7 +4,9 @@ use git2::{
     IndexAddOption, Oid, PushOptions, RemoteCallbacks, Repository, Signature, StatusOptions,
 };
 #[cfg(target_os = "ios")]
-use objc::runtime::{Class, Object, BOOL, NO, YES};
+use objc::declare::ClassDecl;
+#[cfg(target_os = "ios")]
+use objc::runtime::{Class, Object, Protocol, Sel, BOOL, NO, YES};
 #[cfg(target_os = "ios")]
 use objc::{msg_send, sel, sel_impl};
 use reqwest::blocking::Client;
@@ -320,6 +322,10 @@ static GIT_NOTE_TIMESTAMPS_CACHE: OnceLock<Mutex<HashMap<String, (Option<i64>, O
     OnceLock::new();
 #[cfg(target_os = "ios")]
 static IOS_NATIVE_RECORDER: OnceLock<Mutex<Option<IosNativeRecorderState>>> = OnceLock::new();
+#[cfg(target_os = "ios")]
+static IOS_WEBVIEW_TERMINATION_PROXIES: OnceLock<Mutex<HashMap<usize, usize>>> = OnceLock::new();
+#[cfg(target_os = "ios")]
+static IOS_WEBVIEW_TERMINATION_PROXY_CLASS_PTR: OnceLock<usize> = OnceLock::new();
 
 fn app_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let path = app.path().app_data_dir().map_err(|err| err.to_string())?;
@@ -606,6 +612,10 @@ fn ios_native_recorder_state() -> &'static Mutex<Option<IosNativeRecorderState>>
 }
 
 #[cfg(target_os = "ios")]
+const IOS_WEBVIEW_TERMINATION_PROXY_CLASS: &str = "TypeWebViewTerminationProxy";
+#[cfg(target_os = "ios")]
+const IOS_WEBVIEW_RELOAD_THROTTLE_MS: i64 = 1_000;
+#[cfg(target_os = "ios")]
 const IOS_AUDIO_MIME_TYPE: &str = "audio/mp4";
 #[cfg(target_os = "ios")]
 const IOS_AUDIO_FILE_EXT: &str = "m4a";
@@ -618,6 +628,259 @@ const RTLD_NOW: c_int = 2;
 unsafe extern "C" {
     fn dlopen(filename: *const c_char, flag: c_int) -> *mut core::ffi::c_void;
     fn dlerror() -> *const c_char;
+}
+
+#[cfg(target_os = "ios")]
+fn ios_webview_termination_proxies() -> &'static Mutex<HashMap<usize, usize>> {
+    IOS_WEBVIEW_TERMINATION_PROXIES.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[cfg(target_os = "ios")]
+fn ios_webview_termination_proxy_class() -> &'static Class {
+    let class_ptr = IOS_WEBVIEW_TERMINATION_PROXY_CLASS_PTR.get_or_init(|| {
+        if let Some(existing) = Class::get(IOS_WEBVIEW_TERMINATION_PROXY_CLASS) {
+            return existing as *const Class as usize;
+        }
+
+        let superclass = Class::get("NSObject")
+            .expect("NSObject missing while installing iOS webview termination proxy");
+        let mut decl = ClassDecl::new(IOS_WEBVIEW_TERMINATION_PROXY_CLASS, superclass)
+            .expect("Failed to declare iOS webview termination proxy class");
+        if let Some(protocol) = Protocol::get("WKNavigationDelegate") {
+            decl.add_protocol(protocol);
+        }
+        decl.add_ivar::<*mut Object>("originalDelegate");
+        decl.add_ivar::<i64>("lastReloadMs");
+        unsafe {
+            decl.add_method(
+                sel!(dealloc),
+                ios_webview_termination_proxy_dealloc as extern "C" fn(&mut Object, Sel),
+            );
+            decl.add_method(
+                sel!(respondsToSelector:),
+                ios_webview_termination_proxy_responds_to_selector
+                    as extern "C" fn(&Object, Sel, Sel) -> BOOL,
+            );
+            decl.add_method(
+                sel!(forwardingTargetForSelector:),
+                ios_webview_termination_proxy_forwarding_target_for_selector
+                    as extern "C" fn(&Object, Sel, Sel) -> *mut Object,
+            );
+            decl.add_method(
+                sel!(webViewWebContentProcessDidTerminate:),
+                ios_webview_termination_proxy_process_did_terminate
+                    as extern "C" fn(&mut Object, Sel, *mut Object),
+            );
+        }
+
+        decl.register() as *const Class as usize
+    });
+
+    unsafe { &*(*class_ptr as *const Class) }
+}
+
+#[cfg(target_os = "ios")]
+extern "C" fn ios_webview_termination_proxy_dealloc(this: &mut Object, _cmd: Sel) {
+    unsafe {
+        let original_delegate = *this.get_ivar::<*mut Object>("originalDelegate");
+        if !original_delegate.is_null() {
+            let _: () = msg_send![original_delegate, release];
+            this.set_ivar("originalDelegate", ptr::null_mut::<Object>());
+        }
+
+        let superclass = this
+            .class()
+            .superclass()
+            .expect("iOS webview termination proxy superclass missing");
+        let _: () = msg_send![super(this, superclass), dealloc];
+    }
+}
+
+#[cfg(target_os = "ios")]
+extern "C" fn ios_webview_termination_proxy_responds_to_selector(
+    this: &Object,
+    _cmd: Sel,
+    selector: Sel,
+) -> BOOL {
+    unsafe {
+        if selector == sel!(webViewWebContentProcessDidTerminate:) {
+            return YES;
+        }
+
+        let original_delegate = *this.get_ivar::<*mut Object>("originalDelegate");
+        if !original_delegate.is_null() {
+            let responds: BOOL = msg_send![original_delegate, respondsToSelector: selector];
+            if responds == YES {
+                return YES;
+            }
+        }
+
+        let superclass = this
+            .class()
+            .superclass()
+            .expect("iOS webview termination proxy superclass missing");
+        msg_send![super(this, superclass), respondsToSelector: selector]
+    }
+}
+
+#[cfg(target_os = "ios")]
+extern "C" fn ios_webview_termination_proxy_forwarding_target_for_selector(
+    this: &Object,
+    _cmd: Sel,
+    selector: Sel,
+) -> *mut Object {
+    unsafe {
+        if selector == sel!(webViewWebContentProcessDidTerminate:) {
+            return ptr::null_mut();
+        }
+
+        let original_delegate = *this.get_ivar::<*mut Object>("originalDelegate");
+        if !original_delegate.is_null() {
+            let responds: BOOL = msg_send![original_delegate, respondsToSelector: selector];
+            if responds == YES {
+                return original_delegate;
+            }
+        }
+
+        let superclass = this
+            .class()
+            .superclass()
+            .expect("iOS webview termination proxy superclass missing");
+        msg_send![super(this, superclass), forwardingTargetForSelector: selector]
+    }
+}
+
+#[cfg(target_os = "ios")]
+extern "C" fn ios_webview_termination_proxy_process_did_terminate(
+    this: &mut Object,
+    _cmd: Sel,
+    webview: *mut Object,
+) {
+    unsafe {
+        if webview.is_null() {
+            return;
+        }
+
+        let now = now_ms().unwrap_or(0);
+        let last_reload_ms = *this.get_ivar::<i64>("lastReloadMs");
+        let should_reload = now <= 0
+            || now.saturating_sub(last_reload_ms) >= IOS_WEBVIEW_RELOAD_THROTTLE_MS;
+        if should_reload {
+            if now > 0 {
+                this.set_ivar("lastReloadMs", now);
+            }
+            let _: () = msg_send![webview, reload];
+            println!("[ios] WKWebView content process terminated. Reload requested.");
+        }
+
+        let original_delegate = *this.get_ivar::<*mut Object>("originalDelegate");
+        if !original_delegate.is_null() {
+            let responds: BOOL = msg_send![
+                original_delegate,
+                respondsToSelector: sel!(webViewWebContentProcessDidTerminate:)
+            ];
+            if responds == YES {
+                let _: () = msg_send![
+                    original_delegate,
+                    webViewWebContentProcessDidTerminate: webview
+                ];
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "ios")]
+unsafe fn install_ios_webview_termination_recovery_for_webview(
+    webview: *mut Object,
+) -> Result<(), String> {
+    if webview.is_null() {
+        return Err("WKWebView handle is null.".to_string());
+    }
+
+    let proxy_class = ios_webview_termination_proxy_class();
+    let current_delegate: *mut Object = msg_send![webview, navigationDelegate];
+    if !current_delegate.is_null() {
+        let delegate_class: *const Class = msg_send![current_delegate, class];
+        if std::ptr::eq(delegate_class, proxy_class as *const Class) {
+            return Ok(());
+        }
+    }
+
+    let proxy_alloc: *mut Object = msg_send![proxy_class, alloc];
+    if proxy_alloc.is_null() {
+        return Err("Failed to allocate iOS webview termination proxy.".to_string());
+    }
+    let proxy: *mut Object = msg_send![proxy_alloc, init];
+    if proxy.is_null() {
+        return Err("Failed to initialize iOS webview termination proxy.".to_string());
+    }
+
+    if !current_delegate.is_null() {
+        let _: *mut Object = msg_send![current_delegate, retain];
+    }
+    (*proxy).set_ivar("originalDelegate", current_delegate);
+    (*proxy).set_ivar("lastReloadMs", 0_i64);
+
+    // WKWebView.navigationDelegate is weak, so keep the proxy alive.
+    let _: *mut Object = msg_send![proxy, retain];
+    let _: () = msg_send![webview, setNavigationDelegate: proxy];
+
+    let mut proxies = ios_webview_termination_proxies()
+        .lock()
+        .map_err(|_| "Failed to lock iOS webview proxy registry.".to_string())?;
+    if let Some(previous_proxy_addr) = proxies.insert(webview as usize, proxy as usize) {
+        if previous_proxy_addr != proxy as usize {
+            let previous_proxy = previous_proxy_addr as *mut Object;
+            if !previous_proxy.is_null() {
+                let _: () = msg_send![previous_proxy, release];
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "ios")]
+fn install_ios_webview_termination_recovery(app: &tauri::AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+
+    if let Err(error) = window.with_webview(|platform_webview| unsafe {
+        let webview = platform_webview.inner() as *mut Object;
+        if let Err(error) = install_ios_webview_termination_recovery_for_webview(webview) {
+            println!(
+                "[ios] Failed to install WKWebView termination recovery: {}",
+                error
+            );
+        }
+    }) {
+        println!(
+            "[ios] Failed to access WKWebView for termination recovery: {}",
+            error
+        );
+    }
+}
+
+#[cfg(target_os = "ios")]
+fn release_ios_webview_termination_proxies() {
+    let Some(proxies) = IOS_WEBVIEW_TERMINATION_PROXIES.get() else {
+        return;
+    };
+    let mut proxies = match proxies.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    for (_, proxy_addr) in proxies.drain() {
+        let proxy = proxy_addr as *mut Object;
+        if proxy.is_null() {
+            continue;
+        }
+        unsafe {
+            let _: () = msg_send![proxy, release];
+        }
+    }
 }
 
 #[cfg(target_os = "ios")]
@@ -2976,7 +3239,7 @@ fn set_order(app: tauri::AppHandle, args: SetOrderArgs) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|_app| {
@@ -3011,6 +3274,22 @@ pub fn run() {
             git_pull,
             git_push
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        #[cfg(target_os = "ios")]
+        match event {
+            tauri::RunEvent::Ready | tauri::RunEvent::Resumed => {
+                install_ios_webview_termination_recovery(app_handle);
+            }
+            tauri::RunEvent::Exit => {
+                release_ios_webview_termination_proxies();
+            }
+            _ => {}
+        }
+
+        #[cfg(not(target_os = "ios"))]
+        let _ = (app_handle, event);
+    });
 }
