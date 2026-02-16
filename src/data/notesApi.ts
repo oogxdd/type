@@ -69,6 +69,14 @@ export const readNote = (path: string): Promise<string> =>
 export const writeNote = (path: string, content: string): Promise<void> =>
   invokeLogged("write_note", { path, content });
 
+export const setNoteTimestamp = (path: string, timestampMs: number): Promise<void> =>
+  invokeLogged("set_note_timestamp", {
+    args: {
+      path,
+      timestamp_ms: timestampMs,
+    },
+  });
+
 export const saveAudioRecording = (
   audioBase64: string,
   mimeType?: string,

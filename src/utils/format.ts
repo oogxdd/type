@@ -2,6 +2,7 @@ export type NotePreview = {
   title: string;
   dateLabel: string;
   secondLine: string;
+  updatedMs: number | null;
 };
 
 export const formatNoteDateLabel = (timestamp: number | null) => {
@@ -53,7 +54,7 @@ export const parseNotePreview = (
   const fallbackTitle = noteName.replace(/\.md$/i, "");
   const title = stripMarkdown(lines[0] || "") || fallbackTitle;
   const secondLine = stripMarkdown(lines[1] || "");
-  return { title, dateLabel: formatNoteDateLabel(updatedMs), secondLine };
+  return { title, dateLabel: formatNoteDateLabel(updatedMs), secondLine, updatedMs };
 };
 
 export const getNextNoteFileName = (existingNames: string[]) => {

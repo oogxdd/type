@@ -132,6 +132,12 @@ struct GitPushArgs {
     password: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct SetNoteTimestampArgs {
+    path: String,
+    timestamp_ms: i64,
+}
+
 #[derive(Serialize)]
 struct FolderNode {
     name: String,
@@ -2356,6 +2362,24 @@ fn write_note(app: tauri::AppHandle, path: String, content: String) -> Result<()
 }
 
 #[tauri::command]
+fn set_note_timestamp(app: tauri::AppHandle, args: SetNoteTimestampArgs) -> Result<(), String> {
+    let full_path = resolve_path(&app, &args.path)?;
+    if !full_path.exists() || !full_path.is_file() {
+        return Err("Note file does not exist.".to_string());
+    }
+    let raw = fs::read_to_string(&full_path).map_err(|err| err.to_string())?;
+    let (mut meta, body) = parse_note_front_matter(&raw);
+    if meta.id.is_none() {
+        meta.id = Some(generate_note_id());
+    }
+    if meta.created_ms.is_none() || meta.created_ms.unwrap_or(i64::MAX) > args.timestamp_ms {
+        meta.created_ms = Some(args.timestamp_ms);
+    }
+    meta.updated_ms = Some(args.timestamp_ms);
+    write_note_with_front_matter(&full_path, &meta, &body)
+}
+
+#[tauri::command]
 fn native_audio_recorder_capabilities() -> NativeRecorderCapabilities {
     #[cfg(target_os = "ios")]
     {
@@ -2967,6 +2991,7 @@ pub fn run() {
             read_note,
             get_note_meta,
             write_note,
+            set_note_timestamp,
             native_audio_recorder_capabilities,
             start_native_audio_recording,
             stop_native_audio_recording,

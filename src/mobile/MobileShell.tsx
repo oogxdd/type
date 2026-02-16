@@ -1,8 +1,11 @@
 import {
+  Archive,
   ChevronLeft,
+  Clock3,
   Folder,
   Menu,
   Mic,
+  Plus,
   Settings,
   X,
 } from "lucide-react";
@@ -19,6 +22,7 @@ import {
 import type { SettingsSectionId, ThemeMode, NotesListMode } from "../components/SettingsPanel";
 import type { FlattenedItem } from "../tree/types";
 import type {
+  GitSyncHistoryEntry,
   GitSyncStatus,
   NoteEntry,
   NotesSession,
@@ -39,6 +43,7 @@ import { MobileEditorScreen } from "./components/MobileEditorScreen";
 import { MobileFoldersScreen } from "./components/MobileFoldersScreen";
 import { MobileNavBar } from "./components/MobileNavBar";
 import { MobileNotesScreen } from "./components/MobileNotesScreen";
+import { MobileRecentScreen } from "./components/MobileRecentScreen";
 import { MobileRecordingScreen } from "./components/MobileRecordingScreen";
 import { MobileSettingsScreen } from "./components/MobileSettingsScreen";
 import { MobileTabBar } from "./components/MobileTabBar";
@@ -59,12 +64,18 @@ type MobileShellProps = {
   onDeleteFolder: (folderPath: string) => Promise<void>;
   notes: NoteEntry[];
   notePreviews: Record<string, NotePreview>;
+  allNotes: NoteEntry[];
+  allNotePreviews: Record<string, NotePreview>;
   activeNote: string | null;
   activeNoteTitle: string;
   onSelectNote: (notePath: string) => void;
-  onCreateNote: (folderPath?: string, initialContent?: string) => Promise<string | null>;
+  onCreateNote: (
+    folderPath?: string,
+    initialContent?: string,
+    targetTimestampMs?: number
+  ) => Promise<string | null>;
   onEnterHome: () => void;
-  onDeleteNote: (notePath: string) => Promise<void>;
+  onDeleteNote: (notePath: string) => Promise<boolean>;
   onArchiveNote: (notePath: string) => Promise<void>;
   onShowNoteInfo: (notePath: string) => Promise<void>;
   onNoteContextMenu: (
@@ -106,6 +117,7 @@ type MobileShellProps = {
   gitSyncBusy: boolean;
   gitSyncAction: "idle" | "refresh" | "connect" | "pull" | "push";
   gitSyncError: string | null;
+  gitSyncHistory: GitSyncHistoryEntry[];
   onGitRefresh: () => void;
   onGitConnect: () => void;
   onGitPull: () => void;
@@ -144,7 +156,17 @@ const TABLET_LEFT_ITEMS = [
   { id: "settings", label: "Settings", icon: <Settings size={16} /> },
 ] as const;
 const UNSORTED_FOLDER_PATH = "Unsorted";
+const ARCHIVE_FOLDER_PATH = "Archieve";
 const SYSTEM_FOLDER_PATHS = new Set(["Unsorted", "Archieve"]);
+const DAY_MS = 86_400_000;
+
+type RecentBucket = {
+  id: string;
+  label: string;
+  subtitle: string;
+  notes: NoteEntry[];
+  dayEndMs: number | null;
+};
 
 const getDisplayFolderName = (rawName: string) =>
   rawName === "Archieve" ? "Archive" : rawName;
@@ -165,6 +187,8 @@ export function MobileShell({
   onDeleteFolder,
   notes,
   notePreviews,
+  allNotes,
+  allNotePreviews,
   activeNote,
   activeNoteTitle,
   onSelectNote,
@@ -208,6 +232,7 @@ export function MobileShell({
   gitSyncBusy,
   gitSyncAction,
   gitSyncError,
+  gitSyncHistory,
   onGitRefresh,
   onGitConnect,
   onGitPull,
@@ -256,8 +281,119 @@ export function MobileShell({
 
   const edgeSwipeStart = useRef<{ x: number; y: number } | null>(null);
   const edgeSwipeTriggered = useRef(false);
+  const [navigationTab, setNavigationTab] = useState<"folders" | "recent">("folders");
 
   const currentRoute = getCurrentRoute(navigationState);
+
+  const navigationFolders = useMemo(() => {
+    const blockedIds = new Set<string>();
+    return visibleFolders.filter((item) => {
+      const parentBlocked = item.parentId ? blockedIds.has(item.parentId) : false;
+      const isHidden = item.name.startsWith(".");
+      const isArchive = item.id === ARCHIVE_FOLDER_PATH;
+      const shouldHide = parentBlocked || isHidden || isArchive;
+      if (shouldHide) {
+        blockedIds.add(item.id);
+        return false;
+      }
+      return true;
+    });
+  }, [visibleFolders]);
+
+  const recentBuckets = useMemo(() => {
+    if (allNotes.length > 0 && Object.keys(allNotePreviews).length === 0) {
+      return [] as RecentBucket[];
+    }
+
+    const groups = new Map<
+      string,
+      {
+        dayStart: number;
+        dayEnd: number;
+        notes: Array<{ note: NoteEntry; updatedMs: number }>;
+      }
+    >();
+    const undated: NoteEntry[] = [];
+
+    allNotes.forEach((note) => {
+      const preview = allNotePreviews[note.path];
+      const updatedMs = preview?.updatedMs ?? null;
+      if (!updatedMs) {
+        undated.push(note);
+        return;
+      }
+      const date = new Date(updatedMs);
+      if (Number.isNaN(date.getTime())) {
+        undated.push(note);
+        return;
+      }
+      const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+      const dayEnd = dayStart + DAY_MS - 1;
+      const dayKey = `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}-${`${date.getDate()}`.padStart(2, "0")}`;
+      const group = groups.get(dayKey);
+      if (!group) {
+        groups.set(dayKey, {
+          dayStart,
+          dayEnd,
+          notes: [{ note, updatedMs }],
+        });
+      } else {
+        group.notes.push({ note, updatedMs });
+      }
+    });
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayStartMs = todayStart.getTime();
+
+    const buckets: RecentBucket[] = Array.from(groups.entries())
+      .sort(([, left], [, right]) => right.dayStart - left.dayStart)
+      .map(([id, group]) => {
+        const diffDays = Math.floor((todayStartMs - group.dayStart) / DAY_MS);
+        const date = new Date(group.dayStart);
+        const label =
+          diffDays === 0
+            ? "Today"
+            : diffDays === 1
+              ? "Yesterday"
+              : date.toLocaleDateString([], {
+                  weekday: "long",
+                  month: "short",
+                  day: "numeric",
+                });
+        const subtitle = date.toLocaleDateString([], {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+        const sortedNotes = [...group.notes]
+          .sort((left, right) => right.updatedMs - left.updatedMs)
+          .map((item) => item.note);
+        return {
+          id,
+          label,
+          subtitle,
+          notes: sortedNotes,
+          dayEndMs: group.dayEnd,
+        };
+      });
+
+    if (undated.length > 0) {
+      buckets.push({
+        id: "undated",
+        label: "Undated",
+        subtitle: "No date metadata",
+        notes: undated,
+        dayEndMs: null,
+      });
+    }
+    return buckets;
+  }, [allNotePreviews, allNotes]);
+
+  const recentBucketById = useMemo(
+    () => new Map(recentBuckets.map((bucket) => [bucket.id, bucket] as const)),
+    [recentBuckets]
+  );
 
   useEffect(() => {
     if (layoutMode !== "phone") {
@@ -360,6 +496,30 @@ export function MobileShell({
     },
     [onSelectFolder]
   );
+
+  const openArchiveRoute = useCallback(() => {
+    openNotesRoute(ARCHIVE_FOLDER_PATH);
+  }, [openNotesRoute]);
+
+  const openRecentBucketRoute = useCallback((bucketId: string) => {
+    dispatch({ type: "push", route: { kind: "recent-date", bucketId } });
+    setFoldersDrawerOpen(false);
+  }, []);
+
+  const openEditorRoute = useCallback((notePath: string, folderPath?: string) => {
+    const resolvedFolderPath =
+      folderPath ??
+      (notePath.includes("/") ? notePath.slice(0, notePath.lastIndexOf("/")) : "");
+    onSelectNote(notePath);
+    dispatch({
+      type: "push",
+      route: {
+        kind: "editor",
+        folderPath: resolvedFolderPath,
+        notePath,
+      },
+    });
+  }, [onSelectNote]);
 
   const openRecordingRoute = useCallback(
     (folderPath: string = UNSORTED_FOLDER_PATH) => {
@@ -488,8 +648,10 @@ export function MobileShell({
           return;
         }
         if (actionId === "note.delete") {
-          await onDeleteNote(context.path);
-          showToast("Note deleted", "success");
+          const deleted = await onDeleteNote(context.path);
+          if (deleted) {
+            showToast("Note deleted", "success");
+          }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -536,6 +698,7 @@ export function MobileShell({
       gitSyncBusy={gitSyncBusy}
       gitSyncAction={gitSyncAction}
       gitSyncError={gitSyncError}
+      gitSyncHistory={gitSyncHistory}
       onGitRefresh={onGitRefresh}
       onGitConnect={onGitConnect}
       onGitPull={onGitPull}
@@ -583,25 +746,30 @@ export function MobileShell({
             if (!path) {
               return;
             }
-            const folderPath = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
             nextTransitionRef.current = "up";
-            dispatch({
-              type: "push",
-              route: {
-                kind: "editor",
-                folderPath,
-                notePath: path,
-              },
-            });
+            openEditorRoute(path);
           }}
         />
       );
     }
 
     if (currentRoute.kind === "folders") {
+      if (navigationTab === "recent") {
+        return (
+          <MobileRecentScreen
+            buckets={recentBuckets.map((bucket) => ({
+              id: bucket.id,
+              label: bucket.label,
+              subtitle: bucket.subtitle,
+              count: bucket.notes.length,
+            }))}
+            onSelect={openRecentBucketRoute}
+          />
+        );
+      }
       return (
         <MobileFoldersScreen
-          items={visibleFolders}
+          items={navigationFolders}
           activeFolder={activeFolder}
           expanded={expanded}
           onToggle={onToggleFolder}
@@ -619,15 +787,7 @@ export function MobileShell({
           previews={notePreviews}
           activeNote={activeNote}
           onSelect={(path) => {
-            onSelectNote(path);
-            dispatch({
-              type: "push",
-              route: {
-                kind: "editor",
-                folderPath: currentRoute.folderPath,
-                notePath: path,
-              },
-            });
+            openEditorRoute(path, currentRoute.folderPath);
           }}
           onCreate={() => {
             void (async () => {
@@ -635,21 +795,16 @@ export function MobileShell({
               if (!path) {
                 return;
               }
-              dispatch({
-                type: "push",
-                route: {
-                  kind: "editor",
-                  folderPath: currentRoute.folderPath,
-                  notePath: path,
-                },
-              });
+              openEditorRoute(path, currentRoute.folderPath);
             })();
           }}
           onDelete={(path) => {
             void (async () => {
               try {
-                await onDeleteNote(path);
-                showToast("Note deleted", "success");
+                const deleted = await onDeleteNote(path);
+                if (deleted) {
+                  showToast("Note deleted", "success");
+                }
               } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 showToast(message, "error");
@@ -675,6 +830,65 @@ export function MobileShell({
             await refreshNotesFeed(currentRoute.folderPath);
           }}
           emptyStateText={`No notes in ${getDisplayRouteTitle(activeFolderTitle)}.`}
+          createButtonLabel="Create note"
+        />
+      );
+    }
+
+    if (currentRoute.kind === "recent-date") {
+      const bucket = recentBucketById.get(currentRoute.bucketId);
+      const bucketNotes = bucket?.notes ?? [];
+      const bucketTitle = bucket?.label ?? "Recent";
+      return (
+        <MobileNotesScreen
+          folderTitle={bucketTitle}
+          notes={bucketNotes}
+          previews={allNotePreviews}
+          activeNote={activeNote}
+          onSelect={(path) => {
+            openEditorRoute(path);
+          }}
+          onCreate={() => {
+            void (async () => {
+              const path = await onCreateNote(undefined, "", bucket?.dayEndMs ?? undefined);
+              if (!path) {
+                return;
+              }
+              openEditorRoute(path);
+            })();
+          }}
+          onDelete={(path) => {
+            void (async () => {
+              try {
+                const deleted = await onDeleteNote(path);
+                if (deleted) {
+                  showToast("Note deleted", "success");
+                }
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                showToast(message, "error");
+              }
+            })();
+          }}
+          onArchive={(path) => {
+            void (async () => {
+              try {
+                await onArchiveNote(path);
+                showToast("Moved to Archive", "success");
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                showToast(message, "error");
+              }
+            })();
+          }}
+          onLongPress={openNoteActionSheet}
+          onContextMenu={(event, path) => {
+            void onNoteContextMenu(event, path);
+          }}
+          onPullRefresh={async () => {
+            await onRefreshTree();
+          }}
+          emptyStateText={`No notes in ${bucketTitle}.`}
           createButtonLabel="Create note"
         />
       );
@@ -734,6 +948,7 @@ export function MobileShell({
     activeFolder,
     activeFolderTitle,
     activeNote,
+    allNotePreviews,
     assemblyAiApiKey,
     currentRoute,
     editorMarkdown,
@@ -743,6 +958,8 @@ export function MobileShell({
     isRecordingBusy,
     isSaving,
     keyboardInset,
+    navigationFolders,
+    navigationTab,
     notePreviews,
     notes,
     onArchiveNote,
@@ -751,15 +968,18 @@ export function MobileShell({
     onEditorChange,
     onNoteContextMenu,
     onQueueRecordings,
+    onRefreshTree,
     onStartAudioRecording,
     onStopAudioRecording,
-    openNotesRoute,
-    openRecordingRoute,
-    onRetrySave,
-    onSelectNote,
-    onToggleFolder,
+    openEditorRoute,
     openFolderActionSheet,
     openNoteActionSheet,
+    openNotesRoute,
+    openRecentBucketRoute,
+    onRetrySave,
+    onToggleFolder,
+    recentBucketById,
+    recentBuckets,
     recordingError,
     recordingLiveStatus,
     recordingStatus,
@@ -767,16 +987,19 @@ export function MobileShell({
     saveError,
     settingsScreen,
     showToast,
-    visibleFolders,
   ]);
 
   const phoneTitle =
     currentRoute.kind === "home"
       ? "Notes"
       : currentRoute.kind === "folders"
-      ? "Folders"
+      ? navigationTab === "recent"
+        ? "Recent"
+        : "Folders"
       : currentRoute.kind === "notes"
         ? getDisplayRouteTitle(activeFolderTitle)
+        : currentRoute.kind === "recent-date"
+          ? recentBucketById.get(currentRoute.bucketId)?.label ?? "Recent"
         : currentRoute.kind === "recording"
           ? "New recording"
         : currentRoute.kind === "editor"
@@ -804,28 +1027,56 @@ export function MobileShell({
           },
         };
 
-  const phoneRightAction =
-    currentRoute.kind === "home"
-      ? {
-          label: "Settings",
-          icon: <Settings size={18} />,
-          onPress: () => dispatch({ type: "push", route: { kind: "settings" } }),
-        }
-      : currentRoute.kind === "folders"
-        ? {
+  const phoneRightActions =
+    currentRoute.kind === "home" || currentRoute.kind === "folders"
+      ? [
+          {
             label: "Settings",
             icon: <Settings size={18} />,
             onPress: () => dispatch({ type: "push", route: { kind: "settings" } }),
-          }
+          },
+        ]
       : currentRoute.kind === "notes"
-        ? {
-            label: "Record",
-            icon: <Mic size={18} />,
-            onPress: () => {
-              openRecordingRoute(currentRoute.folderPath);
+        ? [
+            {
+              label: "New note",
+              icon: <Plus size={18} />,
+              onPress: () => {
+                void (async () => {
+                  const path = await onCreateNote(currentRoute.folderPath);
+                  if (!path) {
+                    return;
+                  }
+                  openEditorRoute(path, currentRoute.folderPath);
+                })();
+              },
             },
-          }
-        : undefined;
+            {
+              label: "Record",
+              icon: <Mic size={18} />,
+              onPress: () => {
+                openRecordingRoute(currentRoute.folderPath);
+              },
+            },
+          ]
+        : currentRoute.kind === "recent-date"
+          ? [
+              {
+                label: "New note",
+                icon: <Plus size={18} />,
+                onPress: () => {
+                  void (async () => {
+                    const bucket = recentBucketById.get(currentRoute.bucketId);
+                    const path = await onCreateNote(undefined, "", bucket?.dayEndMs ?? undefined);
+                    if (!path) {
+                      return;
+                    }
+                    openEditorRoute(path);
+                  })();
+                },
+              },
+            ]
+          : [];
 
   const tabletNotesPane = (
     <MobileNotesScreen
@@ -842,8 +1093,10 @@ export function MobileShell({
       onDelete={(path) => {
         void (async () => {
           try {
-            await onDeleteNote(path);
-            showToast("Note deleted", "success");
+            const deleted = await onDeleteNote(path);
+            if (deleted) {
+              showToast("Note deleted", "success");
+            }
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             showToast(message, "error");
@@ -878,27 +1131,51 @@ export function MobileShell({
       notesListMode === "nested" ? (
         <div className="mobile-tablet-left-content mobile-tablet-left-content-nested">
           <div className="mobile-tablet-left-folders">
-            <MobileFoldersScreen
-              items={visibleFolders}
-              activeFolder={activeFolder}
-              expanded={expanded}
-              onToggle={onToggleFolder}
-              onSelect={onSelectFolder}
-              onLongPress={openFolderActionSheet}
-            />
+            <div className="mobile-tablet-folders-nav">
+              <div className="mobile-tablet-folders-list">
+                <MobileFoldersScreen
+                  items={navigationFolders}
+                  activeFolder={activeFolder}
+                  expanded={expanded}
+                  onToggle={onToggleFolder}
+                  onSelect={onSelectFolder}
+                  onLongPress={openFolderActionSheet}
+                />
+              </div>
+              <button
+                type="button"
+                className={`mobile-tablet-archive-btn${activeFolder === ARCHIVE_FOLDER_PATH ? " active" : ""}`}
+                onClick={() => onSelectFolder(ARCHIVE_FOLDER_PATH)}
+              >
+                <Archive size={16} />
+                <span>Archive</span>
+              </button>
+            </div>
           </div>
           <div className="mobile-tablet-left-notes">{tabletNotesPane}</div>
         </div>
       ) : (
         <div className="mobile-tablet-left-content">
-          <MobileFoldersScreen
-            items={visibleFolders}
-            activeFolder={activeFolder}
-            expanded={expanded}
-            onToggle={onToggleFolder}
-            onSelect={onSelectFolder}
-            onLongPress={openFolderActionSheet}
-          />
+          <div className="mobile-tablet-folders-nav">
+            <div className="mobile-tablet-folders-list">
+              <MobileFoldersScreen
+                items={navigationFolders}
+                activeFolder={activeFolder}
+                expanded={expanded}
+                onToggle={onToggleFolder}
+                onSelect={onSelectFolder}
+                onLongPress={openFolderActionSheet}
+              />
+            </div>
+            <button
+              type="button"
+              className={`mobile-tablet-archive-btn${activeFolder === ARCHIVE_FOLDER_PATH ? " active" : ""}`}
+              onClick={() => onSelectFolder(ARCHIVE_FOLDER_PATH)}
+            >
+              <Archive size={16} />
+              <span>Archive</span>
+            </button>
+          </div>
         </div>
       )
     ) : (
@@ -965,7 +1242,11 @@ export function MobileShell({
     >
       {layoutMode === "phone" ? (
         <>
-          <MobileNavBar title={phoneTitle} leftAction={phoneLeftAction} rightAction={phoneRightAction} />
+          <MobileNavBar
+            title={phoneTitle}
+            leftAction={phoneLeftAction}
+            rightActions={phoneRightActions}
+          />
           <main className="mobile-screen">
             <div
               key={
@@ -975,6 +1256,8 @@ export function MobileShell({
                   ? "folders"
                   : currentRoute.kind === "notes"
                     ? `notes:${currentRoute.folderPath}`
+                    : currentRoute.kind === "recent-date"
+                      ? `recent:${currentRoute.bucketId}`
                     : currentRoute.kind === "editor"
                       ? `editor:${currentRoute.notePath}`
                       : currentRoute.kind === "recording"
@@ -986,35 +1269,89 @@ export function MobileShell({
               {phoneContent}
             </div>
           </main>
+          {currentRoute.kind === "home" ? (
+            <button
+              type="button"
+              className="mobile-home-mic-fab"
+              aria-label="Start recording"
+              onClick={() => {
+                openRecordingRoute();
+              }}
+            >
+              <Mic size={20} />
+            </button>
+          ) : null}
           {foldersDrawerOpen ? (
-            <div className="mobile-drawer-overlay" role="dialog" aria-modal="true" aria-label="Folders">
+            <div className="mobile-drawer-overlay" role="dialog" aria-modal="true" aria-label="Navigation">
               <button
                 type="button"
                 className="mobile-drawer-backdrop"
                 onClick={() => setFoldersDrawerOpen(false)}
-                aria-label="Close folders"
+                aria-label="Close navigation"
               />
               <aside className="mobile-drawer-panel">
                 <div className="mobile-drawer-header">
-                  <h2>Folders</h2>
+                  <h2>Navigation</h2>
                   <button
                     type="button"
                     className="mobile-drawer-close"
                     onClick={() => setFoldersDrawerOpen(false)}
-                    aria-label="Close folders"
+                    aria-label="Close navigation"
                   >
                     <X size={18} />
                   </button>
                 </div>
                 <div className="mobile-drawer-content">
-                  <MobileFoldersScreen
-                    items={visibleFolders}
-                    activeFolder={activeFolder}
-                    expanded={expanded}
-                    onToggle={onToggleFolder}
-                    onSelect={openNotesRoute}
-                    onLongPress={openFolderActionSheet}
-                  />
+                  <div className="mobile-drawer-tabs" role="tablist" aria-label="Navigation tabs">
+                    <button
+                      type="button"
+                      className={`mobile-drawer-tab${navigationTab === "folders" ? " active" : ""}`}
+                      onClick={() => setNavigationTab("folders")}
+                    >
+                      <Folder size={15} />
+                      <span>Folders</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`mobile-drawer-tab${navigationTab === "recent" ? " active" : ""}`}
+                      onClick={() => setNavigationTab("recent")}
+                    >
+                      <Clock3 size={15} />
+                      <span>Recent</span>
+                    </button>
+                  </div>
+                  <div className="mobile-drawer-main">
+                    {navigationTab === "folders" ? (
+                      <MobileFoldersScreen
+                        items={navigationFolders}
+                        activeFolder={activeFolder}
+                        expanded={expanded}
+                        onToggle={onToggleFolder}
+                        onSelect={openNotesRoute}
+                        onLongPress={openFolderActionSheet}
+                      />
+                    ) : (
+                      <MobileRecentScreen
+                        buckets={recentBuckets.map((bucket) => ({
+                          id: bucket.id,
+                          label: bucket.label,
+                          subtitle: bucket.subtitle,
+                          count: bucket.notes.length,
+                        }))}
+                        onSelect={openRecentBucketRoute}
+                      />
+                    )}
+                  </div>
+                  <div className="mobile-drawer-footer">
+                    <button
+                      type="button"
+                      className="mobile-drawer-archive-btn"
+                      onClick={openArchiveRoute}
+                    >
+                      <Archive size={16} />
+                      <span>Archive</span>
+                    </button>
+                  </div>
                 </div>
               </aside>
             </div>

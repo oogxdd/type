@@ -74,6 +74,9 @@ function FolderRow({
     <div
       className={`mobile-folder-row${isActive ? " active" : ""}`}
       style={{ paddingLeft: 12 + item.depth * 15 }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+      }}
       onPointerDown={(event) => {
         longPressedRef.current = false;
         originRef.current = { x: event.clientX, y: event.clientY };

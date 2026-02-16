@@ -13,7 +13,7 @@ export function MobileToast({ toast, onClose }: MobileToastProps) {
     }
     const id = window.setTimeout(() => {
       onClose();
-    }, 2200);
+    }, 3000);
     return () => window.clearTimeout(id);
   }, [onClose, toast]);
 

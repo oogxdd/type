@@ -285,6 +285,7 @@ function SwipeableNoteRow({
           onSelect(note.path);
         }}
         onContextMenu={(event) => {
+          event.preventDefault();
           if (!onContextMenu) {
             return;
           }

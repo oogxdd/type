@@ -1,20 +1,20 @@
 import type { ReactNode } from "react";
 
-type MobileNavBarProps = {
-  title: string;
-  leftAction?: {
-    label: string;
-    icon: ReactNode;
-    onPress: () => void;
-  };
-  rightAction?: {
-    label: string;
-    icon: ReactNode;
-    onPress: () => void;
-  };
+type MobileNavAction = {
+  label: string;
+  icon: ReactNode;
+  onPress: () => void;
 };
 
-export function MobileNavBar({ title, leftAction, rightAction }: MobileNavBarProps) {
+type MobileNavBarProps = {
+  title: string;
+  leftAction?: MobileNavAction;
+  rightActions?: MobileNavAction[];
+};
+
+export function MobileNavBar({ title, leftAction, rightActions }: MobileNavBarProps) {
+  const actions = rightActions?.slice(0, 2) ?? [];
+
   return (
     <header className="mobile-nav" role="banner">
       <div className="mobile-nav-side">
@@ -36,18 +36,21 @@ export function MobileNavBar({ title, leftAction, rightAction }: MobileNavBarPro
       </div>
       <h1 className="mobile-nav-title">{title}</h1>
       <div className="mobile-nav-side end">
-        {rightAction ? (
-          <button
-            type="button"
-            className="mobile-nav-btn"
-            onClick={rightAction.onPress}
-            aria-label={rightAction.label}
-            title={rightAction.label}
-          >
-            <span className="mobile-nav-btn-icon" aria-hidden>
-              {rightAction.icon}
-            </span>
-          </button>
+        {actions.length > 0 ? (
+          actions.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              className="mobile-nav-btn"
+              onClick={action.onPress}
+              aria-label={action.label}
+              title={action.label}
+            >
+              <span className="mobile-nav-btn-icon" aria-hidden>
+                {action.icon}
+              </span>
+            </button>
+          ))
         ) : (
           <span className="mobile-nav-btn-spacer" aria-hidden />
         )}

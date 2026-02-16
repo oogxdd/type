@@ -1,5 +1,7 @@
+import { useEffect, useMemo, useState } from "react";
 import type { NotesListMode, SettingsSectionId, ThemeMode } from "../../components/SettingsPanel";
 import type {
+  GitSyncHistoryEntry,
   GitSyncStatus,
   NotesSession,
   RecordingListItem,
@@ -35,6 +37,7 @@ type MobileSettingsScreenProps = {
   gitSyncBusy: boolean;
   gitSyncAction: GitSyncAction;
   gitSyncError: string | null;
+  gitSyncHistory: GitSyncHistoryEntry[];
   onGitRefresh: () => void;
   onGitConnect: () => void;
   onGitPull: () => void;
@@ -71,6 +74,14 @@ const formatRecordingStatus = (item: RecordingListItem) => {
     return "queued";
   }
   return item.status;
+};
+
+const formatHistoryTime = (value: string) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleString();
 };
 
 const getSyncHint = (error: string | null): string | null => {
@@ -197,6 +208,7 @@ export function MobileSettingsScreen({
   gitSyncBusy,
   gitSyncAction,
   gitSyncError,
+  gitSyncHistory,
   onGitRefresh,
   onGitConnect,
   onGitPull,
@@ -247,6 +259,40 @@ export function MobileSettingsScreen({
       : isRecordingBusy
         ? "Saving"
         : "Idle";
+  const [syncView, setSyncView] = useState<"credentials" | "actions">("actions");
+  const [selectedSyncHistoryId, setSelectedSyncHistoryId] = useState<string | null>(null);
+
+  const visibleSyncHistory = useMemo(
+    () =>
+      gitSyncHistory
+        .filter((item) => item.action === "pull" || item.action === "push")
+        .slice(0, 12),
+    [gitSyncHistory]
+  );
+  const selectedSyncHistory = useMemo(() => {
+    if (visibleSyncHistory.length === 0) {
+      return null;
+    }
+    if (!selectedSyncHistoryId) {
+      return visibleSyncHistory[0];
+    }
+    return visibleSyncHistory.find((item) => item.id === selectedSyncHistoryId) ?? visibleSyncHistory[0];
+  }, [selectedSyncHistoryId, visibleSyncHistory]);
+
+  useEffect(() => {
+    if (activeSection !== "sync") {
+      return;
+    }
+    if (visibleSyncHistory.length === 0) {
+      if (selectedSyncHistoryId) {
+        setSelectedSyncHistoryId(null);
+      }
+      return;
+    }
+    if (!selectedSyncHistoryId || !visibleSyncHistory.some((item) => item.id === selectedSyncHistoryId)) {
+      setSelectedSyncHistoryId(visibleSyncHistory[0].id);
+    }
+  }, [activeSection, selectedSyncHistoryId, visibleSyncHistory]);
 
   return (
     <div className="mobile-settings-screen">
@@ -328,59 +374,196 @@ export function MobileSettingsScreen({
 
         {activeSection === "sync" ? (
           <>
-            <Group title="Repository">
-              <InputRow label="Remote URL" value={gitRemoteUrl} onChange={onGitRemoteUrlChange} placeholder="https://github.com/you/notes.git" />
-              <InputRow label="Branch" value={gitBranch} onChange={onGitBranchChange} placeholder="main" />
-              <InputRow label="Commit message" value={gitCommitMessage} onChange={onGitCommitMessageChange} placeholder="Sync notes" />
-            </Group>
-
-            <Group title="Authentication">
-              <InputRow label="Username" value={gitUsername} onChange={onGitUsernameChange} placeholder="Git username" />
-              <InputRow label="Token / password" value={gitPassword} onChange={onGitPasswordChange} placeholder="Personal access token" password />
-            </Group>
-
-            <Group title="Actions">
-              <div className="mobile-native-actions">
-                <button type="button" className="mobile-primary-btn" onClick={onGitConnect} disabled={!canConnect}>
-                  {gitSyncAction === "connect" ? "Connecting..." : "Connect repo"}
+            <Group title="Sync views">
+              <div className="mobile-segment">
+                <button
+                  type="button"
+                  className={`mobile-segment-btn${syncView === "credentials" ? " active" : ""}`}
+                  onClick={() => setSyncView("credentials")}
+                >
+                  Credentials
                 </button>
-                <button type="button" className="mobile-secondary-btn" onClick={onGitPull} disabled={!canPull}>
-                  {gitSyncAction === "pull" ? "Pulling..." : "Pull"}
-                </button>
-                <button type="button" className="mobile-secondary-btn" onClick={onGitPush} disabled={!canPush}>
-                  {gitSyncAction === "push" ? "Pushing..." : "Push"}
-                </button>
-                <button type="button" className="mobile-secondary-btn" onClick={onGitRefresh} disabled={gitSyncBusy}>
-                  {gitSyncAction === "refresh" ? "Refreshing..." : "Refresh status"}
+                <button
+                  type="button"
+                  className={`mobile-segment-btn${syncView === "actions" ? " active" : ""}`}
+                  onClick={() => setSyncView("actions")}
+                >
+                  Actions
                 </button>
               </div>
             </Group>
 
-            <Group title="Status">
-              <StatRow label="Last successful sync" value={lastSuccessfulSyncAt ?? "Never"} />
-              <StatRow label="Repository" value={gitStatus?.repo_initialized ? "Connected" : "Not connected"} />
-              <StatRow label="Branch" value={gitStatus?.current_branch || gitBranch || "-"} />
-              <StatRow label="Remote URL" value={gitStatus?.remote_url ?? "-"} />
-              <StatRow label="Working tree" value={gitStatus?.has_uncommitted_changes ? "Changes pending" : "Clean"} />
-              <StatRow label="Push status" value={gitStatus?.push_required ? "Ready to push" : "Up to date"} />
-              <StatRow
-                label="Ahead / behind"
-                value={gitStatus ? `${gitStatus.ahead} ahead / ${gitStatus.behind} behind` : "-"}
-              />
-              <StatRow label="Sync action" value={syncActionLabel} />
-            </Group>
+            {syncView === "credentials" ? (
+              <>
+                <Group title="Repository">
+                  <InputRow
+                    label="Remote URL"
+                    value={gitRemoteUrl}
+                    onChange={onGitRemoteUrlChange}
+                    placeholder="https://github.com/you/notes.git"
+                  />
+                  <InputRow label="Branch" value={gitBranch} onChange={onGitBranchChange} placeholder="main" />
+                  <InputRow
+                    label="Commit message"
+                    value={gitCommitMessage}
+                    onChange={onGitCommitMessageChange}
+                    placeholder="Sync notes"
+                  />
+                </Group>
 
-            <p className="mobile-native-note">
-              Credentials are currently stored on this device. Use least-privilege tokens.
-            </p>
+                <Group title="Authentication">
+                  <InputRow
+                    label="Username"
+                    value={gitUsername}
+                    onChange={onGitUsernameChange}
+                    placeholder="Git username"
+                  />
+                  <InputRow
+                    label="Token / password"
+                    value={gitPassword}
+                    onChange={onGitPasswordChange}
+                    placeholder="Personal access token"
+                    password
+                  />
+                </Group>
 
-            {gitSyncError ? (
-              <section className="mobile-sync-error" role="alert">
-                <strong>Sync error</strong>
-                <p>{gitSyncError}</p>
-                {syncHint ? <p className="hint">{syncHint}</p> : null}
-              </section>
-            ) : null}
+                <p className="mobile-native-note">
+                  Credentials are stored on this device. Use least-privilege tokens.
+                </p>
+              </>
+            ) : (
+              <>
+                <Group title="Actions">
+                  <div className="mobile-native-actions">
+                    <button
+                      type="button"
+                      className="mobile-primary-btn"
+                      onClick={onGitConnect}
+                      disabled={!canConnect}
+                    >
+                      {gitSyncAction === "connect" ? "Connecting..." : "Connect repo"}
+                    </button>
+                    <button type="button" className="mobile-secondary-btn" onClick={onGitPull} disabled={!canPull}>
+                      {gitSyncAction === "pull" ? "Pulling..." : "Pull"}
+                    </button>
+                    <button type="button" className="mobile-secondary-btn" onClick={onGitPush} disabled={!canPush}>
+                      {gitSyncAction === "push" ? "Pushing..." : "Push"}
+                    </button>
+                    <button
+                      type="button"
+                      className="mobile-secondary-btn"
+                      onClick={onGitRefresh}
+                      disabled={gitSyncBusy}
+                    >
+                      {gitSyncAction === "refresh" ? "Refreshing..." : "Refresh status"}
+                    </button>
+                  </div>
+                </Group>
+
+                <Group title="Status">
+                  <StatRow label="Last successful sync" value={lastSuccessfulSyncAt ?? "Never"} />
+                  <StatRow label="Repository" value={gitStatus?.repo_initialized ? "Connected" : "Not connected"} />
+                  <StatRow label="Branch" value={gitStatus?.current_branch || gitBranch || "-"} />
+                  <StatRow label="Remote URL" value={gitStatus?.remote_url ?? "-"} />
+                  <StatRow
+                    label="Working tree"
+                    value={gitStatus?.has_uncommitted_changes ? "Changes pending" : "Clean"}
+                  />
+                  <StatRow label="Push status" value={gitStatus?.push_required ? "Ready to push" : "Up to date"} />
+                  <StatRow
+                    label="Ahead / behind"
+                    value={gitStatus ? `${gitStatus.ahead} ahead / ${gitStatus.behind} behind` : "-"}
+                  />
+                  <StatRow label="Sync action" value={syncActionLabel} />
+                </Group>
+
+                <Group title="Recent pull/push">
+                  {visibleSyncHistory.length === 0 ? (
+                    <p className="mobile-native-note">No pull/push history yet.</p>
+                  ) : (
+                    visibleSyncHistory.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`mobile-native-row choice mobile-sync-history-row${selectedSyncHistory?.id === item.id ? " active" : ""}`}
+                        onClick={() => setSelectedSyncHistoryId(item.id)}
+                      >
+                        <span className="mobile-native-row-main">
+                          <span className="mobile-native-row-label">
+                            {item.action === "pull"
+                              ? "Pull"
+                              : item.action === "push"
+                                ? "Push"
+                                : "Connect repo"}
+                          </span>
+                          <span className="mobile-native-row-sub">
+                            {formatHistoryTime(item.finished_at)} · {item.branch || "-"}
+                          </span>
+                        </span>
+                        <span className="mobile-native-row-value">
+                          {item.status === "success" ? "Success" : "Failed"}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </Group>
+
+                {selectedSyncHistory ? (
+                  <Group title="Action details">
+                    <StatRow
+                      label="Action"
+                      value={
+                        selectedSyncHistory.action === "pull"
+                          ? "Pull"
+                          : selectedSyncHistory.action === "push"
+                            ? "Push"
+                            : "Connect repo"
+                      }
+                    />
+                    <StatRow
+                      label="Result"
+                      value={selectedSyncHistory.status === "success" ? "Success" : "Failed"}
+                    />
+                    <StatRow
+                      label="When"
+                      value={`${formatHistoryTime(selectedSyncHistory.started_at)} → ${formatHistoryTime(selectedSyncHistory.finished_at)}`}
+                    />
+                    <StatRow label="Branch" value={selectedSyncHistory.branch || "-"} />
+                    <StatRow label="Remote URL" value={selectedSyncHistory.remote_url || "-"} />
+                    <StatRow
+                      label="Ahead / behind (before)"
+                      value={
+                        selectedSyncHistory.before
+                          ? `${selectedSyncHistory.before.ahead} ahead / ${selectedSyncHistory.before.behind} behind`
+                          : "-"
+                      }
+                    />
+                    <StatRow
+                      label="Ahead / behind (after)"
+                      value={
+                        selectedSyncHistory.after
+                          ? `${selectedSyncHistory.after.ahead} ahead / ${selectedSyncHistory.after.behind} behind`
+                          : "-"
+                      }
+                    />
+                    {selectedSyncHistory.commit_message ? (
+                      <StatRow label="Commit message" value={selectedSyncHistory.commit_message} />
+                    ) : null}
+                    {selectedSyncHistory.error_message ? (
+                      <p className="mobile-native-note">{selectedSyncHistory.error_message}</p>
+                    ) : null}
+                  </Group>
+                ) : null}
+
+                {gitSyncError ? (
+                  <section className="mobile-sync-error" role="alert">
+                    <strong>Sync error</strong>
+                    <p>{gitSyncError}</p>
+                    {syncHint ? <p className="hint">{syncHint}</p> : null}
+                  </section>
+                ) : null}
+              </>
+            )}
           </>
         ) : null}
 

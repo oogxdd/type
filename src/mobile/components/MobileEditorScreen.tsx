@@ -28,6 +28,23 @@ export function MobileEditorScreen({
   const [creating, setCreating] = useState(false);
   const touchStartYRef = useRef<number | null>(null);
 
+  const focusEditorSurface = (container: HTMLDivElement) => {
+    const editable = container.querySelector<HTMLElement>(".tiptap-content[contenteditable='true']");
+    if (!editable || document.activeElement === editable) {
+      return;
+    }
+    editable.focus({ preventScroll: true });
+    const selection = window.getSelection();
+    if (!selection) {
+      return;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(editable);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  };
+
   const startPullUp = (clientY: number, container: HTMLDivElement) => {
     if (!onPullUpCreate || creating) {
       touchStartYRef.current = null;
@@ -77,6 +94,15 @@ export function MobileEditorScreen({
     <div
       className="mobile-editor-screen"
       style={{ paddingBottom: keyboardInset }}
+      onPointerDown={(event) => {
+        const target = event.target as HTMLElement;
+        if (target.closest(".tiptap-content[contenteditable='true']")) {
+          return;
+        }
+        window.requestAnimationFrame(() => {
+          focusEditorSurface(event.currentTarget);
+        });
+      }}
       onTouchStart={(event) => startPullUp(event.touches[0]?.clientY ?? 0, event.currentTarget)}
       onTouchMove={(event) => movePullUp(event.touches[0]?.clientY ?? 0)}
       onTouchEnd={() => {
@@ -87,22 +113,20 @@ export function MobileEditorScreen({
         setPullDistance(0);
       }}
     >
-      <div className="mobile-editor-status" role="status" aria-live="polite">
-        {!hasActiveNote || draftMode ? (
-          <span>Draft note</span>
-        ) : saveError ? (
-          <>
-            <span className="error">Save failed: {saveError}</span>
-            <button type="button" className="mobile-inline-action" onClick={onRetrySave}>
-              Retry
-            </button>
-          </>
-        ) : isSaving ? (
-          <span>Saving...</span>
-        ) : (
-          <span>Saved</span>
-        )}
-      </div>
+      {!draftMode && hasActiveNote && (saveError || isSaving) ? (
+        <div className="mobile-editor-status" role="status" aria-live="polite">
+          {saveError ? (
+            <>
+              <span className="error">Save failed: {saveError}</span>
+              <button type="button" className="mobile-inline-action" onClick={onRetrySave}>
+                Retry
+              </button>
+            </>
+          ) : (
+            <span>Saving...</span>
+          )}
+        </div>
+      ) : null}
       <div className="mobile-editor-surface">
         <NoteEditor markdown={markdown} onChange={onChange} />
       </div>

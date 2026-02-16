@@ -71,13 +71,16 @@ import {
   flattenTree,
 } from "./utils/treeOps";
 import { focusNoScroll, scrollIntoViewIfNeeded, escapeSelectorValue, confirmAction } from "./utils/dom";
-import { getNextNoteFileName } from "./utils/format";
+import { getNextNoteFileName, type NotePreview } from "./utils/format";
 
 // Types
 import type {
   DragData,
   FolderNode,
+  GitSyncHistoryEntry,
+  GitSyncHistoryStatusSnapshot,
   GitSyncStatus,
+  NoteEntry,
   NotesSessionSnapshot,
   RecordingListItem,
   RecordingQueueSnapshot,
@@ -161,6 +164,8 @@ type SessionSyncSettings = {
 };
 
 const SESSION_SYNC_STORAGE_KEY = "notes-viewer-session-sync-settings";
+const GIT_SYNC_HISTORY_STORAGE_KEY = "notes-viewer-git-sync-history";
+const MAX_GIT_SYNC_HISTORY_ITEMS = 30;
 
 const DEFAULT_SESSION_SYNC_SETTINGS: SessionSyncSettings = {
   gitRemoteUrl: "",
@@ -197,6 +202,32 @@ const writeSessionSyncStore = (store: Record<string, Partial<SessionSyncSettings
     return;
   }
   window.localStorage.setItem(SESSION_SYNC_STORAGE_KEY, JSON.stringify(store));
+};
+
+const readGitSyncHistoryStore = (): Record<string, GitSyncHistoryEntry[]> => {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  try {
+    const raw = window.localStorage.getItem(GIT_SYNC_HISTORY_STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, GitSyncHistoryEntry[]>;
+    }
+  } catch {
+    return {};
+  }
+  return {};
+};
+
+const writeGitSyncHistoryStore = (store: Record<string, GitSyncHistoryEntry[]>) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(GIT_SYNC_HISTORY_STORAGE_KEY, JSON.stringify(store));
 };
 
 const getSessionSyncSettings = (sessionId: string): SessionSyncSettings => {
@@ -246,6 +277,19 @@ const getSessionSyncSettings = (sessionId: string): SessionSyncSettings => {
 const getNoteParentPath = (notePath: string) => {
   const slashIndex = notePath.lastIndexOf("/");
   return slashIndex === -1 ? "" : notePath.slice(0, slashIndex);
+};
+
+const collectAllNotes = (node: FolderNode | null): NoteEntry[] => {
+  if (!node) {
+    return [];
+  }
+  const output: NoteEntry[] = [];
+  const walk = (current: FolderNode) => {
+    current.notes.forEach((note) => output.push(note));
+    current.children.forEach((child) => walk(child));
+  };
+  walk(node);
+  return output;
 };
 
 const yieldToUi = () =>
@@ -336,6 +380,10 @@ function App() {
   const [gitStatus, setGitStatus] = useState<GitSyncStatus | null>(null);
   const [gitSyncAction, setGitSyncAction] = useState<GitSyncAction>("idle");
   const [gitSyncError, setGitSyncError] = useState<string | null>(null);
+  const [gitSyncHistory, setGitSyncHistory] = useState<GitSyncHistoryEntry[]>([]);
+  const [gitSyncHistorySessionId, setGitSyncHistorySessionId] = useState<string | null>(
+    null
+  );
   const [recordingStatusMessage, setRecordingStatusMessage] = useState<string | null>(null);
   const [transcriptionQueueBusy, setTranscriptionQueueBusy] = useState(false);
   const [recordingsQueue, setRecordingsQueue] = useState<RecordingQueueSnapshot | null>(null);
@@ -449,6 +497,17 @@ function App() {
   }, [activeSessionId]);
 
   useEffect(() => {
+    if (!activeSessionId) {
+      setGitSyncHistory([]);
+      setGitSyncHistorySessionId(null);
+      return;
+    }
+    const store = readGitSyncHistoryStore();
+    setGitSyncHistory(store[activeSessionId] ?? []);
+    setGitSyncHistorySessionId(activeSessionId);
+  }, [activeSessionId]);
+
+  useEffect(() => {
     if (!activeSessionId || syncSettingsSessionId !== activeSessionId) {
       return;
     }
@@ -476,6 +535,15 @@ function App() {
     mobileAutoTranscriptionEnabled,
     syncSettingsSessionId,
   ]);
+
+  useEffect(() => {
+    if (!activeSessionId || gitSyncHistorySessionId !== activeSessionId) {
+      return;
+    }
+    const store = readGitSyncHistoryStore();
+    store[activeSessionId] = gitSyncHistory.slice(0, MAX_GIT_SYNC_HISTORY_ITEMS);
+    writeGitSyncHistoryStore(store);
+  }, [activeSessionId, gitSyncHistory, gitSyncHistorySessionId]);
 
   // -- Debug logging --------------------------------------------------------
   useEffect(() => {
@@ -508,6 +576,41 @@ function App() {
       setGitSyncAction("idle");
     }
   }, []);
+
+  const snapshotGitStatus = useCallback(
+    (status: GitSyncStatus | null): GitSyncHistoryStatusSnapshot | null => {
+      if (!status) {
+        return null;
+      }
+      return {
+        repo_initialized: status.repo_initialized,
+        current_branch: status.current_branch,
+        remote_url: status.remote_url,
+        has_uncommitted_changes: status.has_uncommitted_changes,
+        push_required: status.push_required,
+        ahead: status.ahead,
+        behind: status.behind,
+      };
+    },
+    []
+  );
+
+  const appendGitSyncHistory = useCallback(
+    (
+      entry: Omit<GitSyncHistoryEntry, "id"> & {
+        id?: string;
+      }
+    ) => {
+      const nextEntry: GitSyncHistoryEntry = {
+        ...entry,
+        id: entry.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      };
+      setGitSyncHistory((previous) =>
+        [nextEntry, ...previous].slice(0, MAX_GIT_SYNC_HISTORY_ITEMS)
+      );
+    },
+    []
+  );
 
   const refreshRecordings = useCallback(async () => {
     setRecordingsBusy(true);
@@ -843,6 +946,8 @@ function App() {
       setGitSyncError("Remote repository URL is required.");
       return;
     }
+    const startedAt = new Date().toISOString();
+    const before = snapshotGitStatus(gitStatus);
     setGitSyncAction("connect");
     await yieldToUi();
     try {
@@ -854,27 +959,70 @@ function App() {
       );
       setGitStatus(status);
       setGitSyncError(null);
+      appendGitSyncHistory({
+        action: "connect",
+        status: "success",
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        branch: branch || status.current_branch || "",
+        remote_url: remoteUrl || status.remote_url || "",
+        before,
+        after: snapshotGitStatus(status),
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setGitSyncError(message);
+      appendGitSyncHistory({
+        action: "connect",
+        status: "error",
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        branch: branch || "",
+        remote_url: remoteUrl,
+        error_message: message,
+        before,
+        after: snapshotGitStatus(gitStatus),
+      });
     } finally {
       setGitSyncAction("idle");
     }
-  }, [gitBranch, gitPassword, gitRemoteUrl, gitUsername]);
+  }, [
+    appendGitSyncHistory,
+    gitBranch,
+    gitPassword,
+    gitRemoteUrl,
+    gitStatus,
+    gitUsername,
+    snapshotGitStatus,
+  ]);
 
   const handleGitPull = useCallback(async () => {
     await flushSave();
+    const branch = gitBranch.trim();
+    const remoteUrl = gitRemoteUrl.trim() || gitStatus?.remote_url || "";
+    const startedAt = new Date().toISOString();
+    const before = snapshotGitStatus(gitStatus);
     setGitSyncAction("pull");
     await yieldToUi();
     try {
       const status = await api.gitPull(
-        gitBranch.trim() || undefined,
+        branch || undefined,
         gitUsername.trim() || undefined,
         gitPassword || undefined
       );
       setGitStatus(status);
       setGitSyncError(null);
       setLastSuccessfulSyncAt(new Date().toISOString());
+      appendGitSyncHistory({
+        action: "pull",
+        status: "success",
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        branch: branch || status.current_branch || "",
+        remote_url: remoteUrl || status.remote_url || "",
+        before,
+        after: snapshotGitStatus(status),
+      });
       await refreshTree();
       if (shouldAutoQueueTranscriptions) {
         await queueRecordingTranscriptions("auto");
@@ -882,46 +1030,111 @@ function App() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setGitSyncError(message);
+      appendGitSyncHistory({
+        action: "pull",
+        status: "error",
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        branch: branch || "",
+        remote_url: remoteUrl,
+        error_message: message,
+        before,
+        after: snapshotGitStatus(gitStatus),
+      });
     } finally {
       setGitSyncAction("idle");
     }
   }, [
+    appendGitSyncHistory,
     flushSave,
     gitBranch,
     gitPassword,
+    gitRemoteUrl,
+    gitStatus,
     gitUsername,
     queueRecordingTranscriptions,
     refreshTree,
+    snapshotGitStatus,
     shouldAutoQueueTranscriptions,
   ]);
 
   const handleGitPush = useCallback(async () => {
     await flushSave();
+    const branch = gitBranch.trim();
+    const remoteUrl = gitRemoteUrl.trim() || gitStatus?.remote_url || "";
+    const commitMessage = gitCommitMessage.trim();
+    const startedAt = new Date().toISOString();
+    let before = snapshotGitStatus(gitStatus);
     setGitSyncAction("push");
     await yieldToUi();
     try {
       const statusBeforePush = await api.getGitStatus();
       setGitStatus(statusBeforePush);
+      before = snapshotGitStatus(statusBeforePush);
       if (!statusBeforePush.push_required) {
         setGitSyncError(null);
+        appendGitSyncHistory({
+          action: "push",
+          status: "success",
+          started_at: startedAt,
+          finished_at: new Date().toISOString(),
+          branch: branch || statusBeforePush.current_branch || "",
+          remote_url: remoteUrl || statusBeforePush.remote_url || "",
+          commit_message: commitMessage || undefined,
+          before,
+          after: snapshotGitStatus(statusBeforePush),
+        });
         return;
       }
       const status = await api.gitPush(
-        gitCommitMessage.trim() || undefined,
-        gitBranch.trim() || undefined,
+        commitMessage || undefined,
+        branch || undefined,
         gitUsername.trim() || undefined,
         gitPassword || undefined
       );
       setGitStatus(status);
       setGitSyncError(null);
       setLastSuccessfulSyncAt(new Date().toISOString());
+      appendGitSyncHistory({
+        action: "push",
+        status: "success",
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        branch: branch || status.current_branch || "",
+        remote_url: remoteUrl || status.remote_url || "",
+        commit_message: commitMessage || undefined,
+        before,
+        after: snapshotGitStatus(status),
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setGitSyncError(message);
+      appendGitSyncHistory({
+        action: "push",
+        status: "error",
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        branch: branch || "",
+        remote_url: remoteUrl,
+        commit_message: commitMessage || undefined,
+        error_message: message,
+        before,
+        after: snapshotGitStatus(gitStatus),
+      });
     } finally {
       setGitSyncAction("idle");
     }
-  }, [flushSave, gitBranch, gitCommitMessage, gitPassword, gitUsername]);
+  }, [
+    appendGitSyncHistory,
+    flushSave,
+    gitBranch,
+    gitCommitMessage,
+    gitPassword,
+    gitRemoteUrl,
+    gitStatus,
+    gitUsername,
+    snapshotGitStatus,
+  ]);
 
   const shouldNestNotesInNavigation =
     appMode === "notes" && notesListMode === "nested";
@@ -993,47 +1206,69 @@ function App() {
   }, [activeNode]);
 
   const notes = useMemo(() => activeNode?.notes || [], [activeNode]);
-  const notePreviews = useNotePreviews(notes);
+  const allNotes = useMemo(() => collectAllNotes(tree), [tree]);
+  const previewSourceNotes = layoutMode === "desktop" ? notes : allNotes;
+  const allNotePreviews = useNotePreviews(previewSourceNotes);
+  const notePreviews = useMemo(() => {
+    const previews: Record<string, NotePreview> = {};
+    notes.forEach((note) => {
+      const preview = allNotePreviews[note.path];
+      if (preview) {
+        previews[note.path] = preview;
+      }
+    });
+    return previews;
+  }, [allNotePreviews, notes]);
 
   // -- Create new note ------------------------------------------------------
-  const createNewNote = useCallback(async (preferredFolderPath?: string, initialContent = "") => {
-    if (appMode !== "notes") setAppMode("notes");
-    const treeSnapshot = tree ?? (await api.getTree());
-    const initialFolderPath = preferredFolderPath?.trim() || UNSORTED_FOLDER_PATH;
-    const targetNode =
-      findNode(treeSnapshot, initialFolderPath) || findNode(treeSnapshot, UNSORTED_FOLDER_PATH);
-    if (!targetNode) return null;
-    const folderPath = targetNode.path;
+  const createNewNote = useCallback(
+    async (
+      preferredFolderPath?: string,
+      initialContent = "",
+      targetTimestampMs?: number
+    ) => {
+      if (appMode !== "notes") setAppMode("notes");
+      const treeSnapshot = tree ?? (await api.getTree());
+      const initialFolderPath = preferredFolderPath?.trim() || UNSORTED_FOLDER_PATH;
+      const targetNode =
+        findNode(treeSnapshot, initialFolderPath) || findNode(treeSnapshot, UNSORTED_FOLDER_PATH);
+      if (!targetNode) return null;
+      const folderPath = targetNode.path;
 
-    const fileName = getNextNoteFileName(targetNode.notes.map((n) => n.name));
-    const path = `${folderPath}/${fileName}`;
+      const fileName = getNextNoteFileName(targetNode.notes.map((n) => n.name));
+      const path = `${folderPath}/${fileName}`;
 
-    await api.writeNote(path, initialContent);
-    await api.setOrder({
-      parent: folderPath,
-      folderOrder: targetNode.children.map((c) => c.name),
-      noteOrder: [fileName, ...targetNode.notes.map((n) => n.name)],
-    });
-    await refreshTree();
+      await api.writeNote(path, initialContent);
+      if (typeof targetTimestampMs === "number") {
+        await api.setNoteTimestamp(path, targetTimestampMs);
+      }
+      await api.setOrder({
+        parent: folderPath,
+        folderOrder: targetNode.children.map((c) => c.name),
+        noteOrder: [fileName, ...targetNode.notes.map((n) => n.name)],
+      });
+      await refreshTree();
 
-    setSelectedFolders(new Set([folderPath]));
-    setLastSelectedFolder(folderPath);
-    setActiveFolder(folderPath);
-    setSelectedNotes(new Set([path]));
-    setLastSelectedNote(path);
-    setActiveNote(path);
-    clearDraft();
+      setSelectedFolders(new Set([folderPath]));
+      setLastSelectedFolder(folderPath);
+      setActiveFolder(folderPath);
+      setSelectedNotes(new Set([path]));
+      setLastSelectedNote(path);
+      setActiveNote(path);
+      clearDraft();
 
-    requestAnimationFrame(() => {
-      const editorElement =
-        rightPaneRef.current?.querySelector<HTMLElement>(
-          ".tiptap-content[contenteditable='true']"
-        ) || rightPaneRef.current;
-      focusNoScroll(editorElement);
-    });
+      requestAnimationFrame(() => {
+        const editorElement =
+          rightPaneRef.current?.querySelector<HTMLElement>(
+            ".tiptap-content[contenteditable='true']"
+          ) || rightPaneRef.current;
+        focusNoScroll(editorElement);
+      });
 
-    return path;
-  }, [appMode, clearDraft, refreshTree, tree]);
+      return path;
+    },
+    [appMode, clearDraft, refreshTree, tree]
+  );
 
   const enterMobileHome = useCallback(() => {
     setSelectedFolders(new Set());
@@ -1255,9 +1490,9 @@ function App() {
   };
 
   const deleteNotes = async (paths: string[]) => {
-    if (paths.length === 0) return;
+    if (paths.length === 0) return false;
     const confirmed = await confirmAction(`Delete ${paths.length} note(s)?`);
-    if (!confirmed) return;
+    if (!confirmed) return false;
     await api.deleteItems(paths);
     setSelectedNotes(new Set());
     setLastSelectedNote("");
@@ -1266,6 +1501,7 @@ function App() {
       clearNote();
     }
     await refreshTree();
+    return true;
   };
 
   const moveNotesToArchieve = async (paths: string[]) => {
@@ -2478,13 +2714,15 @@ function App() {
             }}
             notes={notes}
             notePreviews={notePreviews}
+            allNotes={allNotes}
+            allNotePreviews={allNotePreviews}
             activeNote={activeNote}
             activeNoteTitle={activeNoteTitle}
             onSelectNote={selectNoteForMobile}
             onCreateNote={createNewNote}
             onEnterHome={enterMobileHome}
             onDeleteNote={async (path) => {
-              await deleteNotes([path]);
+              return deleteNotes([path]);
             }}
             onArchiveNote={async (path) => {
               await moveNotesToArchieve([path]);
@@ -2529,6 +2767,7 @@ function App() {
             gitSyncBusy={gitSyncBusy}
             gitSyncAction={gitSyncAction}
             gitSyncError={gitSyncError}
+            gitSyncHistory={gitSyncHistory}
             onGitRefresh={() => void refreshGitStatus()}
             onGitConnect={() => void handleConnectGitRepo()}
             onGitPull={() => void handleGitPull()}
