@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
 import { getNoteMeta, readNote } from "../data/notesApi";
-import {
-  extractCreatedAtFromFrontMatter,
-  parseNotePreview,
-  type NotePreview,
-} from "../utils/format";
+import { parseNotePreview, type NotePreview } from "../utils/format";
 import type { NoteEntry } from "../types";
 
 export function useNotePreviews(notes: NoteEntry[]) {
@@ -23,12 +19,7 @@ export function useNotePreviews(notes: NoteEntry[]) {
           readNote(note.path),
         ]);
         const updatedMs = meta.updated_ms ?? meta.created_ms ?? null;
-        const createdAtMs =
-          extractCreatedAtFromFrontMatter(content) ?? meta.created_ms ?? meta.updated_ms ?? null;
-        return [
-          note.path,
-          parseNotePreview(note.name, content, updatedMs, createdAtMs),
-        ] as const;
+        return [note.path, parseNotePreview(note.name, content, updatedMs)] as const;
       })
     )
       .then((entries) => {
