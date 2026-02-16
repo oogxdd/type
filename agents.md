@@ -1,47 +1,89 @@
-# Project Architecture
+# Architecture
 
-Apple Notes Viewer — a Tauri + React desktop app for browsing and editing markdown notes stored on the local filesystem.
+## Provider tree
 
-## Directory Structure
+```
+ThemeProvider           — theme, notesListMode, editorFontSize
+  SessionsProvider      — sessions, sync settings, session switching
+    GitSyncProvider     — git status, connect/pull/push, history
+      NotesTreeProvider — folder tree, selection, editor, CRUD
+        RecordingsProvider — audio recording, transcription, playback
+          AppShell      — DnD, keyboard nav, rendering
+```
+
+`App.tsx` composes the providers. `AppShell.tsx` consumes all contexts and owns local UI state (appMode, sidebar, pane layouts).
+
+## Directory structure
 
 ```
 src/
-├── data/                    # Data access layer (Tauri IPC)
-│   └── notesApi.ts          # All backend communication
-├── hooks/                   # Custom React hooks
-│   ├── useNoteEditor.ts     # Note content, autosave, dirty state
-│   └── useNotePreviews.ts   # Note list preview generation
-├── utils/                   # Pure utility functions
-│   ├── treeOps.ts           # Tree manipulation (build, flatten, drag ops)
-│   ├── dom.ts               # Focus, scroll, selector helpers
-│   └── format.ts            # Date labels, note preview parsing
-├── components/              # React components
-│   ├── FoldersPanel.tsx     # Folder tree sidebar with tabs
-│   ├── NoteEditor.tsx       # Tiptap markdown editor
-│   ├── NoteRow.tsx          # Single note list item (sortable)
-│   ├── SettingsPanel.tsx    # Settings sections list + detail views
-│   ├── SortableTreeItem.tsx # Draggable folder tree item
-│   └── ui/                  # Shadcn/ui primitives
-├── tree/                    # Tree data structures
-│   ├── types.ts             # TreeItem, FlattenedItem
-│   └── utilities.ts         # Core tree operations
-├── App.tsx                  # Orchestration: state, drag-drop, keyboard, layout
-├── App.css                  # Application styles
-├── types.ts                 # Shared types (FolderNode, NoteEntry, etc.)
-└── main.tsx                 # React entry point
+├── contexts/                    # React contexts (shared state)
+│   ├── ThemeContext.tsx          # Theme, notes list mode, font size
+│   ├── SessionsContext.tsx      # Sessions, per-session sync settings
+│   ├── GitSyncContext.tsx       # Git status, sync operations, history
+│   ├── NotesTreeContext.tsx     # Folder tree, selection, editor, CRUD
+│   └── RecordingsContext.tsx    # Audio recording, transcription, playback
+├── hooks/                       # Custom React hooks
+│   ├── useDragDrop.ts           # Folder/note drag-and-drop (DnD Kit)
+│   ├── useKeyboardNavigation.ts # Global shortcuts + arrow-key navigation
+│   ├── useNoteEditor.ts         # Autosave, dirty tracking, flush-on-switch
+│   ├── useNotePreviews.ts       # Note list preview generation
+│   └── useAudioRecorder.ts      # Web MediaRecorder + native iOS recording
+├── data/                        # Data access layer (Tauri IPC)
+│   └── notesApi.ts              # All backend communication
+├── utils/
+│   ├── treeOps.ts               # Tree manipulation (build, flatten, drag ops)
+│   ├── dom.ts                   # Focus, scroll, selector helpers
+│   ├── format.ts                # Date labels, note preview parsing
+│   ├── storage.ts               # localStorage helpers (theme, sync, history)
+│   └── notes.ts                 # getNoteParentPath, collectAllNotes, base64
+├── components/
+│   ├── FoldersPanel.tsx          # Folder tree sidebar
+│   ├── NoteEditor.tsx            # Tiptap markdown editor
+│   ├── NoteRow.tsx               # Single note list item (sortable)
+│   ├── SettingsPanel.tsx         # Settings sections list + detail views
+│   ├── SortableTreeItem.tsx      # Draggable folder tree item
+│   ├── ErrorBoundary.tsx         # Error boundary with reset
+│   └── ui/                       # Shadcn/ui primitives
+├── desktop/
+│   └── DesktopShell.tsx          # Resizable three-pane desktop layout
+├── mobile/
+│   ├── MobileShell.tsx           # Phone/tablet navigation shell
+│   ├── navigation.ts            # Route types + reducer
+│   ├── useLayoutMode.ts         # Breakpoint detection
+│   ├── useKeyboardInsets.ts     # VisualViewport keyboard inset handling
+│   └── components/              # Mobile screens, nav, action sheets
+├── tree/
+│   ├── types.ts                  # TreeItem, FlattenedItem
+│   └── utilities.ts              # Core tree operations
+├── App.tsx                       # Provider tree (~64 lines)
+├── AppShell.tsx                  # Main UI composition (~890 lines)
+├── constants.ts                  # Shared constants
+└── types.ts                      # Shared types
 ```
 
-## Data Layer (`src/data/notesApi.ts`)
+## Contexts
 
-All backend communication goes through this module. Every function maps to a single Tauri IPC command. The module handles logging automatically.
+| Context | State | Key actions |
+|---------|-------|-------------|
+| `ThemeContext` | theme, notesListMode, editorFontSize | setters, font size increase/decrease/reset |
+| `SessionsContext` | sessionsSnapshot, syncSettings | refreshSessions, switchSession, createSession, updateSyncSettings |
+| `GitSyncContext` | gitStatus, gitSyncAction, gitSyncHistory | refreshGitStatus, connectGitRepo, gitPull, gitPush |
+| `RecordingsContext` | recording status, queue, list, audio playback | startRecording, stopRecording, refreshRecordings, playRecording, queueRecordingTranscriptions |
+| `NotesTreeContext` | tree, expanded, selectedFolders/Notes, activeFolder/Note, editor state | refreshTree, createNewNote, deleteNotes, deleteFolders, moveNotesToArchive, rename, mobile selection helpers |
 
-**To swap the data layer** (e.g. for a web API, local-first DB, or mock):
-1. Create a new file implementing the same exports (`getTree`, `readNote`, `writeNote`, etc.)
-2. Change the single import in `App.tsx`: `import * as api from "./data/newApi"`
-3. Hooks (`useNoteEditor`, `useNotePreviews`) import directly from `data/notesApi` — update those imports too
+## Cross-context bridges
 
-| Function | Tauri Command | Description |
-|----------|--------------|-------------|
+- **FlushSaveBridge**: Connects `NotesTreeContext.flushSave` to `SessionsProvider.flushSaveRef` so session switching can flush the editor.
+- **RecordingsProvider.onRecordingComplete**: Callback wired in `App.tsx` that refreshes the tree and selects the new recording's note after capture.
+- **GitSyncContext.gitPull.onAfterPull**: Optional callback to refresh tree after a successful pull.
+
+## Data layer (`src/data/notesApi.ts`)
+
+All backend communication goes through this module. Every function maps to a single Tauri IPC command.
+
+| Function | Command | Description |
+|----------|---------|-------------|
 | `getTree()` | `get_tree` | Fetch full folder/note tree |
 | `readNote(path)` | `read_note` | Read note markdown content |
 | `writeNote(path, content)` | `write_note` | Save note content |
@@ -50,38 +92,49 @@ All backend communication goes through this module. Every function maps to a sin
 | `moveItems(items, dest)` | `move_items` | Move to different folder |
 | `renameItem(path, name)` | `rename_item` | Rename file/folder |
 | `setOrder(args)` | `set_order` | Persist folder/note ordering |
+| `getGitStatus()` | `git_status` | Git repo status |
+| `connectGitRepo(...)` | `git_connect` | Initialize/connect remote |
+| `gitPull(...)` | `git_pull` | Pull from remote |
+| `gitPush(...)` | `git_push` | Commit + push to remote |
+| `getSessions()` | `get_sessions` | List sessions |
+| `setActiveSession(id)` | `set_active_session` | Switch session |
+| `createSession(name)` | `create_session` | Create new session |
+| `listRecordings()` | `list_recordings` | List recordings + queue state |
+| `saveAudioRecording(...)` | `save_audio_recording` | Save captured audio |
+| `queueRecordingTranscriptions(key)` | `queue_recording_transcriptions` | Queue pending transcriptions |
 
-## Hooks
-
-### `useNoteEditor(activeNote)`
-Manages the editor's content lifecycle: loads note content when `activeNote` changes, debounces autosave (400ms), tracks dirty state. Returns `{ noteContent, draftNoteContent, handleEditorChange, clearNote }`.
-
-### `useNotePreviews(notes)`
-Given an array of `NoteEntry`, fetches each note's meta + content in parallel and generates preview objects (title, date label, second line). Returns `Record<string, NotePreview>`.
-
-## App.tsx — Orchestration
-
-App.tsx is the orchestration layer. It owns:
-- **UI layout state**: theme, sidebar, panel sizes, font size, app mode
-- **Selection state**: selected/active folders and notes
-- **Folder tree**: loads via `api.getTree()`, builds computed tree data
-- **Drag & drop**: all DnD Kit handlers for reordering folders/notes
-- **Keyboard shortcuts**: Cmd+T (toggle sidebar), Cmd+W (switch panes), Cmd+J/K (navigate panes), Cmd+N (new note), Cmd+=/- (zoom)
-- **Context menus**: native Tauri menus for folder/note right-click actions
-
-## Key Data Flow
+## Data flow
 
 ```
-User Action → App.tsx handler → api.* call → Tauri backend → filesystem
-                                    ↓
-                              refreshTree() → setTree() → re-render
+User Action → AppShell handler → context action → api.* call → Tauri backend → filesystem
+                                        ↓
+                                  refreshTree() → setTree() → re-render
 ```
 
-Notes are auto-saved via `useNoteEditor`: content changes trigger a 400ms debounced `writeNote`.
+Notes auto-save via `useNoteEditor`: content changes trigger a 400ms debounced `writeNote`.
 
-## Types (`src/types.ts`)
+## Layout modes
 
-- `FolderNode` — recursive tree from backend: `{ name, path, children, notes }`
-- `NoteEntry` — `{ name, path }`
-- `NoteMeta` — `{ created_ms, updated_ms }`
-- `DragData` — `{ type: "folder" | "note", path }`
+| Mode | Breakpoint | Shell |
+|------|-----------|-------|
+| phone | < 768px | MobileShell (stack nav) |
+| tablet | 768–1024px | MobileShell (split view) |
+| desktop | > 1024px | DesktopShell (resizable panes) |
+
+## Build
+
+```bash
+npm run build                                    # tsc + vite
+cargo check --manifest-path src-tauri/Cargo.toml # rust backend
+```
+
+## Git sync
+
+Uses `libgit2` via Tauri commands — no shell `git` needed. Credentials stored in localStorage per-session. Pull requires clean working state; diverged history blocks pull with an error.
+
+Synced content: markdown files, recording audio/transcripts, `.notes-order.json` files, folder structure.
+
+## Security
+
+- Git tokens in localStorage — use least-privilege tokens, rotate as needed
+- Sensitive fields redacted from frontend invoke logs
