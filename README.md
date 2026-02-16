@@ -5,8 +5,8 @@ Local markdown notes app with filesystem storage and optional Git sync. Runs on 
 ## Features
 
 - **Folder tree** with drag-and-drop reordering
-- **Markdown editor** with autosave
-- **Git sync** — push/pull notes across devices using any Git remote (GitHub, GitLab, etc.)
+- **Markdown editor** (Tiptap) with debounced autosave
+- **Git sync** — push/pull notes across devices using any Git remote
 - **Audio recording + transcription** via AssemblyAI
 - **Multi-session** — separate notes folders with independent sync settings
 - **Desktop** — three-pane layout with keyboard shortcuts
@@ -27,30 +27,124 @@ npm run tauri ios dev    # simulator/device
 npm run tauri ios build  # release
 ```
 
-## Git sync setup
-
-1. Open **Settings → Sync**
-2. Fill in remote URL, branch, username, and token
-3. Tap **Connect repo**
-4. **Push** (first device with notes) or **Pull** (to download existing notes)
-
-Daily flow: Pull → Edit → Push.
-
 ## Notes storage
 
-Notes live in a local folder tree. The app checks these roots in order:
+Notes are stored in a local folder tree. The app uses the first existing root:
 
-1. `NOTES_ROOT` env var
+1. `NOTES_ROOT` environment variable
 2. `./notes`
 3. `../notes`
 4. App data fallback (`<app-data>/notes`)
 
-Each folder has a `.notes-order.json` for persisting sort order.
+Each folder has its own `.notes-order.json` to persist ordering of child folders and notes.
+
+## Git sync setup
+
+The app uses `libgit2` (embedded Git) from Tauri commands. You do not need shell `git`.
+
+### What gets synced
+
+- All note markdown files (`.md`)
+- Recording audio files (`Recordings/recording-*/audio.*`)
+- Recording transcripts (`Recordings/recording-*/transcript.md`)
+- Recording transcription state (`Recordings/recording-*/.transcription-status.json`)
+- Folder structure and all `.notes-order.json` files
+
+### One-time setup per device
+
+Open **Settings → Sync**, then fill in:
+
+- **Remote URL** (e.g. `https://github.com/<user>/<repo>.git`)
+- **Branch** (usually `main`)
+- **Commit message** (default auto-commit message for push)
+- **Username** and **Token/Password** (for HTTPS auth)
+
+Then:
+
+1. Tap **Connect repo**
+2. If this is the first device with local notes: tap **Push**
+3. If this device should download existing notes: tap **Pull** first
+
+### Daily flow
+
+1. **Pull**
+2. Edit notes
+3. **Push**
+
+### Multi-device example
+
+1. Desktop: edit → **Push**
+2. iOS: **Pull** → edit → **Push**
+3. Desktop: **Pull**
+
+### Pull / Push behavior
+
+- **Pull** allows up-to-date and fast-forward updates
+- If local changes exist, pull is blocked until you push/commit
+- If remote requires merge commit (diverged history), pull is blocked with a clear error — resolve on desktop, push, then pull on mobile
+- **Push** auto-commits local changes with your message, then pushes to remote
+
+### Security note
+
+- Git username/token are stored in local storage on the device
+- Sensitive fields are redacted from frontend invoke logs
+- Prefer least-privilege tokens and rotate/revoke when needed
+
+## Audio recording + transcription
+
+- Recordings are saved in `Recordings/recording-<timestamp>/`
+- Each recording folder contains:
+  - `audio.*` (captured file)
+  - `transcript.md` (written after successful transcription)
+  - `.transcription-status.json` (queue/progress/error state)
+- Start/stop recording from the left panel (desktop) or recording screen (mobile)
+- Add your AssemblyAI key in **Settings → Recordings**
+- Desktop auto-queues pending recordings for transcription when a key is present
+
+## Mobile UX
+
+### Phone mode
+
+- Stack navigation: Folders → Notes → Editor → Settings
+- Back button and edge-swipe back gesture
+- Long-press on note/folder opens action sheet
+- Swipe left on notes for Archive / Delete actions
+- Pull-to-refresh on notes list (refreshes tree + git status)
+
+### Tablet mode
+
+- Split view: left panel (folders/settings) + right panel (notes/editor)
+- Portrait uses adaptive split with stable content
+
+### Editor
+
+- Save status line: Saving... / Saved / Save failed + Retry
+- Debounced autosave (400ms)
+- Guaranteed `flushSave()` on back navigation and app background/unload
+- Keyboard inset handling via VisualViewport
+
+## Troubleshooting
+
+- **"Repository is not initialized. Connect a remote first."** — run Connect repo in Sync settings
+- **"No matching Git credentials available..."** — check username/token for HTTPS remote
+- **Pull blocked by local changes** — push first, then pull
+- **Pull requires merge commit** — resolve divergence on desktop, push, then pull on mobile
+
+## Validation
+
+### Build
+
+```bash
+npm run build
+cargo check --manifest-path src-tauri/Cargo.toml
+```
+
+### Manual checks
+
+- Desktop: folder tree, note editing, DnD reorder, context menus, settings, keyboard shortcuts
+- Phone: folders → notes → editor flow, back navigation, swipe actions, action sheets, sync
+- Tablet: split view in portrait/landscape, rotation stability
 
 ## Contributing
 
-```bash
-npm run build        # tsc + vite build
-```
-
-See [AGENTS.md](./AGENTS.md) for architecture details, module map, and implementation patterns.
+See [AGENTS.md](./AGENTS.md) for architecture, module map, and codebase patterns.
