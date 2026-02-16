@@ -116,4 +116,30 @@ export type NativeRecorderCapabilities = {
   started_ms: number | null;
 };
 
- 
+export type AppMode = "notes" | "settings";
+export type PaneId = "folders" | "middle" | "right";
+export type GitSyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
+
+export type VisibleNavigationItem =
+  | {
+      type: "folder";
+      id: string;
+      parentId: string | null;
+    }
+  | {
+      type: "note";
+      id: string;
+      parentId: string;
+    };
+
+export type SessionSyncSettings = {
+  gitRemoteUrl: string;
+  gitBranch: string;
+  gitUsername: string;
+  gitPassword: string;
+  gitCommitMessage: string;
+  lastSuccessfulSyncAt: string;
+  assemblyAiApiKey: string;
+  mobileAutoTranscriptionEnabled: boolean;
+};
+
