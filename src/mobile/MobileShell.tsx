@@ -19,22 +19,12 @@ import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import type { SettingsSectionId, ThemeMode, NotesListMode } from "../components/SettingsPanel";
-import type { FlattenedItem } from "../tree/types";
-import type {
-  GitSyncHistoryEntry,
-  GitSyncStatus,
-  NoteEntry,
-  NotesSession,
-  RecordingListItem,
-  RecordingQueueSnapshot,
-} from "../types";
-import type { NotePreview } from "../utils/format";
+import type { SettingsSectionId } from "../components/SettingsPanel";
+import type { NoteEntry } from "../types";
 import {
   getCurrentRoute,
   getInitialMobileNavigationState,
   mobileNavigationReducer,
-  type LayoutMode,
   type MobileActionSheetState,
   type MobileToastState,
 } from "./navigation";
@@ -50,101 +40,24 @@ import { MobileTabBar } from "./components/MobileTabBar";
 import { MobileToast } from "./components/MobileToast";
 import { MobilePromptSheet } from "./components/MobilePromptSheet";
 
+import { useTheme } from "../contexts/ThemeContext";
+import { useSessions } from "../contexts/SessionsContext";
+import { useRecordings } from "../contexts/RecordingsContext";
+import { useNotesTree } from "../contexts/NotesTreeContext";
+import { useSelection } from "../contexts/SelectionContext";
+import { useEditor } from "../contexts/EditorContext";
+import { useLayoutMode } from "./useLayoutMode";
+import { useKeyboardInsets } from "./useKeyboardInsets";
+import { MOBILE_SETTINGS_SECTIONS } from "../constants";
+
 type MobileShellProps = {
-  layoutMode: Exclude<LayoutMode, "desktop">;
-  theme: ThemeMode;
-  appStyle: CSSProperties;
-  visibleFolders: FlattenedItem[];
-  expanded: Set<string>;
-  onToggleFolder: (folderPath: string) => void;
-  activeFolder: string;
-  activeFolderTitle: string;
-  onSelectFolder: (folderPath: string) => void;
-  onRenameFolder: (folderPath: string, nextName: string) => Promise<void>;
-  onDeleteFolder: (folderPath: string) => Promise<void>;
-  notes: NoteEntry[];
-  notePreviews: Record<string, NotePreview>;
-  allNotes: NoteEntry[];
-  allNotePreviews: Record<string, NotePreview>;
-  activeNote: string | null;
-  activeNoteTitle: string;
-  onSelectNote: (notePath: string) => void;
-  onCreateNote: (
-    folderPath?: string,
-    initialContent?: string,
-    targetTimestampMs?: number
-  ) => Promise<string | null>;
-  onEnterHome: () => void;
-  onDeleteNote: (notePath: string) => Promise<boolean>;
-  onArchiveNote: (notePath: string) => Promise<void>;
-  onShowNoteInfo: (notePath: string) => Promise<void>;
+  activeSettingsSection: SettingsSectionId;
+  onSettingsSectionChange: (section: SettingsSectionId) => void;
   onNoteContextMenu: (
     event: ReactMouseEvent,
     notePath: string,
     parentPath?: string
   ) => Promise<void>;
-  editorMarkdown: string;
-  onEditorChange: (markdown: string) => void;
-  hasActiveNote: boolean;
-  isSaving: boolean;
-  saveError: string | null;
-  onRetrySave: () => Promise<void>;
-  flushSave: () => Promise<void>;
-  keyboardInset: number;
-  settingsSections: Array<{ id: SettingsSectionId; label: string }>;
-  activeSettingsSection: SettingsSectionId;
-  onSettingsSectionChange: (section: SettingsSectionId) => void;
-  notesListMode: NotesListMode;
-  onNotesListModeChange: (mode: NotesListMode) => void;
-  onThemeChange: (theme: ThemeMode) => void;
-  sessions: NotesSession[];
-  activeSessionId: string | null;
-  sessionBusy: boolean;
-  sessionError: string | null;
-  onSessionChange: (sessionId: string) => void;
-  onCreateSession: () => void;
-  gitRemoteUrl: string;
-  onGitRemoteUrlChange: (value: string) => void;
-  gitBranch: string;
-  onGitBranchChange: (value: string) => void;
-  gitUsername: string;
-  onGitUsernameChange: (value: string) => void;
-  gitPassword: string;
-  onGitPasswordChange: (value: string) => void;
-  gitCommitMessage: string;
-  onGitCommitMessageChange: (value: string) => void;
-  gitStatus: GitSyncStatus | null;
-  gitSyncBusy: boolean;
-  gitSyncAction: "idle" | "refresh" | "connect" | "pull" | "push";
-  gitSyncError: string | null;
-  gitSyncHistory: GitSyncHistoryEntry[];
-  onGitRefresh: () => void;
-  onGitConnect: () => void;
-  onGitPull: () => void;
-  onGitPush: () => void;
-  lastSuccessfulSyncAt: string | null;
-  assemblyAiApiKey: string;
-  onAssemblyAiApiKeyChange: (value: string) => void;
-  mobileAutoTranscriptionEnabled: boolean;
-  onMobileAutoTranscriptionChange: (enabled: boolean) => void;
-  recordingSupported: boolean;
-  isRecordingAudio: boolean;
-  isRecordingBusy: boolean;
-  recordingError: string | null;
-  recordingStatus: string | null;
-  recordingLiveStatus: string | null;
-  recordingsQueue: RecordingQueueSnapshot | null;
-  recordings: RecordingListItem[];
-  recordingsBusy: boolean;
-  recordingsError: string | null;
-  activeAudioPath: string | null;
-  activeAudioSrc: string | null;
-  onRefreshTree: () => Promise<void>;
-  onRefreshRecordings: () => void;
-  onPlayRecording: (audioPath: string) => void;
-  onStartAudioRecording: (folderPath?: string) => void;
-  onStopAudioRecording: () => void;
-  onQueueRecordings: () => void;
 };
 
 type SheetContext =
@@ -174,93 +87,78 @@ const getDisplayRouteTitle = (rawTitle: string) =>
   rawTitle === "Archieve" ? "Archive" : rawTitle;
 
 export function MobileShell({
-  layoutMode,
-  theme,
-  appStyle,
-  visibleFolders,
-  expanded,
-  onToggleFolder,
-  activeFolder,
-  activeFolderTitle,
-  onSelectFolder,
-  onRenameFolder,
-  onDeleteFolder,
-  notes,
-  notePreviews,
-  allNotes,
-  allNotePreviews,
-  activeNote,
-  activeNoteTitle,
-  onSelectNote,
-  onCreateNote,
-  onEnterHome,
-  onDeleteNote,
-  onArchiveNote,
-  onShowNoteInfo,
-  onNoteContextMenu,
-  editorMarkdown,
-  onEditorChange,
-  hasActiveNote,
-  isSaving,
-  saveError,
-  onRetrySave,
-  flushSave,
-  keyboardInset,
-  settingsSections,
   activeSettingsSection,
   onSettingsSectionChange,
-  notesListMode,
-  onNotesListModeChange,
-  onThemeChange,
-  sessions,
-  activeSessionId,
-  sessionBusy,
-  sessionError,
-  onSessionChange,
-  onCreateSession,
-  gitRemoteUrl,
-  onGitRemoteUrlChange,
-  gitBranch,
-  onGitBranchChange,
-  gitUsername,
-  onGitUsernameChange,
-  gitPassword,
-  onGitPasswordChange,
-  gitCommitMessage,
-  onGitCommitMessageChange,
-  gitStatus,
-  gitSyncBusy,
-  gitSyncAction,
-  gitSyncError,
-  gitSyncHistory,
-  onGitRefresh,
-  onGitConnect,
-  onGitPull,
-  onGitPush,
-  lastSuccessfulSyncAt,
-  assemblyAiApiKey,
-  onAssemblyAiApiKeyChange,
-  mobileAutoTranscriptionEnabled,
-  onMobileAutoTranscriptionChange,
-  recordingSupported,
-  isRecordingAudio,
-  isRecordingBusy,
-  recordingError,
-  recordingStatus,
-  recordingLiveStatus,
-  recordingsQueue,
-  recordings,
-  recordingsBusy,
-  recordingsError,
-  activeAudioPath,
-  activeAudioSrc,
-  onRefreshTree,
-  onRefreshRecordings,
-  onPlayRecording,
-  onStartAudioRecording,
-  onStopAudioRecording,
-  onQueueRecordings,
+  onNoteContextMenu,
 }: MobileShellProps) {
+  // -- Contexts
+  const layoutMode = useLayoutMode();
+  const { keyboardInset } = useKeyboardInsets();
+  const { theme, editorFontSize, notesListMode } = useTheme();
+  const { syncSettings } = useSessions();
+  const {
+    recordingSupported,
+    isRecordingAudio,
+    isRecordingFinalizing,
+    recorderError,
+    recordingStatusMessage,
+    recordingLiveStatus,
+    transcriptionQueueBusy,
+    startRecording,
+    stopRecording,
+    queueRecordingTranscriptions,
+  } = useRecordings();
+  const {
+    visibleItems,
+    expanded,
+    setExpanded,
+    notes,
+    notePreviews,
+    allNotes,
+    allNotePreviews,
+    activeNode,
+    refreshTree,
+    createNewNote,
+    deleteNotes,
+    deleteFolders,
+    moveNotesToArchive,
+    showNoteInfo,
+    renameFolderFromMobile,
+  } = useNotesTree();
+  const {
+    activeFolder,
+    activeNote,
+    selectFolderForMobile,
+    selectNoteForMobile,
+    enterMobileHome,
+  } = useSelection();
+  const {
+    noteContent,
+    draftNoteContent,
+    isNoteSaving,
+    noteSaveError,
+    handleEditorChange,
+    clearNote,
+    clearDraft,
+    flushSave,
+    retrySave,
+  } = useEditor();
+
+  // -- Derived values (previously computed in AppShell)
+  const appStyle = useMemo(
+    () => ({ "--editor-font-size": `${editorFontSize}px` }) as CSSProperties,
+    [editorFontSize]
+  );
+  const activeFolderTitle = activeNode?.name || activeFolder || "Notes";
+  const activeNoteTitle =
+    (activeNote ? notePreviews[activeNote]?.title : null) ||
+    (activeNote ? activeNote.split("/").pop()?.replace(/\.md$/i, "") : null) ||
+    "Note";
+  const editorMarkdown = activeNote ? noteContent : draftNoteContent;
+  const hasActiveNote = Boolean(activeNote);
+  const isRecordingBusy = isRecordingFinalizing || transcriptionQueueBusy;
+
+  // -- Local UI state
   const [navigationState, dispatch] = useReducer(
     mobileNavigationReducer,
     getInitialMobileNavigationState()
@@ -287,7 +185,7 @@ export function MobileShell({
 
   const navigationFolders = useMemo(() => {
     const blockedIds = new Set<string>();
-    return visibleFolders.filter((item) => {
+    return visibleItems.filter((item) => {
       const parentBlocked = item.parentId ? blockedIds.has(item.parentId) : false;
       const isHidden = item.name.startsWith(".");
       const isArchive = item.id === ARCHIVE_FOLDER_PATH;
@@ -298,7 +196,7 @@ export function MobileShell({
       }
       return true;
     });
-  }, [visibleFolders]);
+  }, [visibleItems]);
 
   const recentBuckets = useMemo(() => {
     if (allNotes.length > 0 && Object.keys(allNotePreviews).length === 0) {
@@ -422,13 +320,13 @@ export function MobileShell({
       currentRoute.kind === "recording"
     ) {
       if (currentRoute.folderPath && currentRoute.folderPath !== activeFolder) {
-        onSelectFolder(currentRoute.folderPath);
+        selectFolderForMobile(currentRoute.folderPath);
       }
     }
     if (currentRoute.kind === "editor" && currentRoute.notePath !== activeNote) {
-      onSelectNote(currentRoute.notePath);
+      selectNoteForMobile(currentRoute.notePath);
     }
-  }, [activeFolder, activeNote, currentRoute, layoutMode, onSelectFolder, onSelectNote]);
+  }, [activeFolder, activeNote, currentRoute, layoutMode, selectFolderForMobile, selectNoteForMobile]);
 
   useEffect(() => {
     if (layoutMode === "tablet") {
@@ -441,6 +339,12 @@ export function MobileShell({
       setFoldersDrawerOpen(false);
     }
   }, [layoutMode]);
+
+  const onEnterHome = useCallback(() => {
+    enterMobileHome();
+    clearNote();
+    clearDraft();
+  }, [enterMobileHome, clearNote, clearDraft]);
 
   useEffect(() => {
     if (layoutMode !== "phone" || currentRoute.kind !== "home") {
@@ -473,9 +377,9 @@ export function MobileShell({
 
   const refreshNotesFeed = useCallback(
     async (_folderPath: string) => {
-      await onRefreshTree();
+      await refreshTree();
     },
-    [onRefreshTree]
+    [refreshTree]
   );
 
   const popRoute = useCallback(async () => {
@@ -490,11 +394,11 @@ export function MobileShell({
 
   const openNotesRoute = useCallback(
     (folderPath: string) => {
-      onSelectFolder(folderPath);
+      selectFolderForMobile(folderPath);
       dispatch({ type: "push", route: { kind: "notes", folderPath } });
       setFoldersDrawerOpen(false);
     },
-    [onSelectFolder]
+    [selectFolderForMobile]
   );
 
   const openArchiveRoute = useCallback(() => {
@@ -510,7 +414,7 @@ export function MobileShell({
     const resolvedFolderPath =
       folderPath ??
       (notePath.includes("/") ? notePath.slice(0, notePath.lastIndexOf("/")) : "");
-    onSelectNote(notePath);
+    selectNoteForMobile(notePath);
     dispatch({
       type: "push",
       route: {
@@ -519,16 +423,16 @@ export function MobileShell({
         notePath,
       },
     });
-  }, [onSelectNote]);
+  }, [selectNoteForMobile]);
 
   const openRecordingRoute = useCallback(
     (folderPath: string = UNSORTED_FOLDER_PATH) => {
-      onSelectFolder(folderPath);
+      selectFolderForMobile(folderPath);
       nextTransitionRef.current = "up";
       dispatch({ type: "push", route: { kind: "recording", folderPath } });
       setFoldersDrawerOpen(false);
     },
-    [onSelectFolder]
+    [selectFolderForMobile]
   );
 
   const handleEdgeSwipeStart = useCallback(
@@ -614,6 +518,27 @@ export function MobileShell({
     []
   );
 
+  const onDeleteFolder = useCallback(async (path: string) => {
+    await deleteFolders([path]);
+  }, [deleteFolders]);
+
+  const onDeleteNote = useCallback(async (path: string) => {
+    return deleteNotes([path]);
+  }, [deleteNotes]);
+
+  const onArchiveNote = useCallback(async (path: string) => {
+    await moveNotesToArchive([path]);
+  }, [moveNotesToArchive]);
+
+  const onToggleFolder = useCallback((path: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, [setExpanded]);
+
   const onSheetSelect = useCallback(
     async (actionId: string) => {
       const context = sheetContext;
@@ -639,7 +564,7 @@ export function MobileShell({
         }
 
         if (actionId === "note.info") {
-          await onShowNoteInfo(context.path);
+          await showNoteInfo(context.path);
           return;
         }
         if (actionId === "note.archive") {
@@ -663,7 +588,7 @@ export function MobileShell({
       onArchiveNote,
       onDeleteFolder,
       onDeleteNote,
-      onShowNoteInfo,
+      showNoteInfo,
       sheetContext,
       showToast,
     ]
@@ -673,58 +598,7 @@ export function MobileShell({
     <MobileSettingsScreen
       activeSection={activeSettingsSection}
       onSectionChange={onSettingsSectionChange}
-      sections={settingsSections}
-      theme={theme}
-      onThemeChange={onThemeChange}
-      sessions={sessions}
-      activeSessionId={activeSessionId}
-      sessionBusy={sessionBusy}
-      sessionError={sessionError}
-      onSessionChange={onSessionChange}
-      onCreateSession={onCreateSession}
-      notesListMode={notesListMode}
-      onNotesListModeChange={onNotesListModeChange}
-      gitRemoteUrl={gitRemoteUrl}
-      onGitRemoteUrlChange={onGitRemoteUrlChange}
-      gitBranch={gitBranch}
-      onGitBranchChange={onGitBranchChange}
-      gitUsername={gitUsername}
-      onGitUsernameChange={onGitUsernameChange}
-      gitPassword={gitPassword}
-      onGitPasswordChange={onGitPasswordChange}
-      gitCommitMessage={gitCommitMessage}
-      onGitCommitMessageChange={onGitCommitMessageChange}
-      gitStatus={gitStatus}
-      gitSyncBusy={gitSyncBusy}
-      gitSyncAction={gitSyncAction}
-      gitSyncError={gitSyncError}
-      gitSyncHistory={gitSyncHistory}
-      onGitRefresh={onGitRefresh}
-      onGitConnect={onGitConnect}
-      onGitPull={onGitPull}
-      onGitPush={onGitPush}
-      lastSuccessfulSyncAt={lastSuccessfulSyncAt}
-      assemblyAiApiKey={assemblyAiApiKey}
-      onAssemblyAiApiKeyChange={onAssemblyAiApiKeyChange}
-      mobileAutoTranscriptionEnabled={mobileAutoTranscriptionEnabled}
-      onMobileAutoTranscriptionChange={onMobileAutoTranscriptionChange}
-      recordingSupported={recordingSupported}
-      isRecordingAudio={isRecordingAudio}
-      isRecordingBusy={isRecordingBusy}
-      recordingError={recordingError}
-      recordingStatus={recordingStatus}
-      recordingLiveStatus={recordingLiveStatus}
-      recordingsQueue={recordingsQueue}
-      recordings={recordings}
-      recordingsBusy={recordingsBusy}
-      recordingsError={recordingsError}
-      activeAudioPath={activeAudioPath}
-      activeAudioSrc={activeAudioSrc}
-      onRefreshRecordings={onRefreshRecordings}
-      onPlayRecording={onPlayRecording}
-      onStartAudioRecording={() => onStartAudioRecording(activeFolder || undefined)}
-      onStopAudioRecording={onStopAudioRecording}
-      onQueueRecordings={onQueueRecordings}
+      sections={MOBILE_SETTINGS_SECTIONS}
     />
   );
 
@@ -733,7 +607,7 @@ export function MobileShell({
       return (
         <MobileEditorScreen
           markdown={editorMarkdown}
-          onChange={onEditorChange}
+          onChange={handleEditorChange}
           hasActiveNote={false}
           isSaving={false}
           saveError={null}
@@ -742,7 +616,7 @@ export function MobileShell({
           draftMode
           onPullUpCreate={async () => {
             const draft = editorMarkdown.trimEnd();
-            const path = await onCreateNote(undefined, draft);
+            const path = await createNewNote(undefined, draft);
             if (!path) {
               return;
             }
@@ -791,7 +665,7 @@ export function MobileShell({
           }}
           onCreate={() => {
             void (async () => {
-              const path = await onCreateNote(currentRoute.folderPath);
+              const path = await createNewNote(currentRoute.folderPath);
               if (!path) {
                 return;
               }
@@ -850,7 +724,7 @@ export function MobileShell({
           }}
           onCreate={() => {
             void (async () => {
-              const path = await onCreateNote(undefined, "", bucket?.dayEndMs ?? undefined);
+              const path = await createNewNote(undefined, "", bucket?.dayEndMs ?? undefined);
               if (!path) {
                 return;
               }
@@ -886,7 +760,7 @@ export function MobileShell({
             void onNoteContextMenu(event, path);
           }}
           onPullRefresh={async () => {
-            await onRefreshTree();
+            await refreshTree();
           }}
           emptyStateText={`No notes in ${bucketTitle}.`}
           createButtonLabel="Create note"
@@ -900,13 +774,13 @@ export function MobileShell({
           recordingSupported={recordingSupported}
           isRecording={isRecordingAudio}
           isBusy={isRecordingBusy}
-          recordingError={recordingError}
-          recordingStatus={recordingStatus}
+          recordingError={recorderError}
+          recordingStatus={recordingStatusMessage}
           recordingLiveStatus={recordingLiveStatus}
-          hasAssemblyApiKey={assemblyAiApiKey.trim().length > 0}
-          onStart={() => onStartAudioRecording(currentRoute.folderPath)}
-          onStop={onStopAudioRecording}
-          onQueue={onQueueRecordings}
+          hasAssemblyApiKey={syncSettings.assemblyAiApiKey.trim().length > 0}
+          onStart={() => startRecording(currentRoute.folderPath)}
+          onStop={stopRecording}
+          onQueue={() => void queueRecordingTranscriptions("manual")}
         />
       );
     }
@@ -915,16 +789,16 @@ export function MobileShell({
       return (
         <MobileEditorScreen
           markdown={editorMarkdown}
-          onChange={onEditorChange}
+          onChange={handleEditorChange}
           hasActiveNote={hasActiveNote}
-          isSaving={isSaving}
-          saveError={saveError}
+          isSaving={isNoteSaving}
+          saveError={noteSaveError}
           keyboardInset={keyboardInset}
           onRetrySave={() => {
-            void onRetrySave();
+            void retrySave();
           }}
           onPullUpCreate={async () => {
-            const path = await onCreateNote(currentRoute.folderPath);
+            const path = await createNewNote(currentRoute.folderPath);
             if (!path) {
               return;
             }
@@ -949,42 +823,42 @@ export function MobileShell({
     activeFolderTitle,
     activeNote,
     allNotePreviews,
-    assemblyAiApiKey,
+    syncSettings.assemblyAiApiKey,
     currentRoute,
     editorMarkdown,
     expanded,
     hasActiveNote,
     isRecordingAudio,
     isRecordingBusy,
-    isSaving,
+    isNoteSaving,
     keyboardInset,
     navigationFolders,
     navigationTab,
     notePreviews,
     notes,
     onArchiveNote,
-    onCreateNote,
+    createNewNote,
     onDeleteNote,
-    onEditorChange,
+    handleEditorChange,
     onNoteContextMenu,
-    onQueueRecordings,
-    onRefreshTree,
-    onStartAudioRecording,
-    onStopAudioRecording,
+    queueRecordingTranscriptions,
+    refreshTree,
+    startRecording,
+    stopRecording,
     openEditorRoute,
     openFolderActionSheet,
     openNoteActionSheet,
     openNotesRoute,
     openRecentBucketRoute,
-    onRetrySave,
+    retrySave,
     onToggleFolder,
     recentBucketById,
     recentBuckets,
-    recordingError,
+    recorderError,
     recordingLiveStatus,
-    recordingStatus,
+    recordingStatusMessage,
     refreshNotesFeed,
-    saveError,
+    noteSaveError,
     settingsScreen,
     showToast,
   ]);
@@ -1043,7 +917,7 @@ export function MobileShell({
               icon: <Plus size={18} />,
               onPress: () => {
                 void (async () => {
-                  const path = await onCreateNote(currentRoute.folderPath);
+                  const path = await createNewNote(currentRoute.folderPath);
                   if (!path) {
                     return;
                   }
@@ -1067,7 +941,7 @@ export function MobileShell({
                 onPress: () => {
                   void (async () => {
                     const bucket = recentBucketById.get(currentRoute.bucketId);
-                    const path = await onCreateNote(undefined, "", bucket?.dayEndMs ?? undefined);
+                    const path = await createNewNote(undefined, "", bucket?.dayEndMs ?? undefined);
                     if (!path) {
                       return;
                     }
@@ -1084,10 +958,10 @@ export function MobileShell({
       notes={notes}
       previews={notePreviews}
       activeNote={activeNote}
-      onSelect={onSelectNote}
+      onSelect={selectNoteForMobile}
       onCreate={() => {
         void (async () => {
-          await onCreateNote(activeFolder);
+          await createNewNote(activeFolder);
         })();
       }}
       onDelete={(path) => {
@@ -1138,14 +1012,14 @@ export function MobileShell({
                   activeFolder={activeFolder}
                   expanded={expanded}
                   onToggle={onToggleFolder}
-                  onSelect={onSelectFolder}
+                  onSelect={selectFolderForMobile}
                   onLongPress={openFolderActionSheet}
                 />
               </div>
               <button
                 type="button"
                 className={`mobile-tablet-archive-btn${activeFolder === ARCHIVE_FOLDER_PATH ? " active" : ""}`}
-                onClick={() => onSelectFolder(ARCHIVE_FOLDER_PATH)}
+                onClick={() => selectFolderForMobile(ARCHIVE_FOLDER_PATH)}
               >
                 <Archive size={16} />
                 <span>Archive</span>
@@ -1163,14 +1037,14 @@ export function MobileShell({
                 activeFolder={activeFolder}
                 expanded={expanded}
                 onToggle={onToggleFolder}
-                onSelect={onSelectFolder}
+                onSelect={selectFolderForMobile}
                 onLongPress={openFolderActionSheet}
               />
             </div>
             <button
               type="button"
               className={`mobile-tablet-archive-btn${activeFolder === ARCHIVE_FOLDER_PATH ? " active" : ""}`}
-              onClick={() => onSelectFolder(ARCHIVE_FOLDER_PATH)}
+              onClick={() => selectFolderForMobile(ARCHIVE_FOLDER_PATH)}
             >
               <Archive size={16} />
               <span>Archive</span>
@@ -1180,7 +1054,7 @@ export function MobileShell({
       )
     ) : (
       <div className="mobile-tablet-settings-sections" role="tablist" aria-label="Settings sections">
-        {settingsSections.map((section) => (
+        {MOBILE_SETTINGS_SECTIONS.map((section) => (
           <button
             key={section.id}
             type="button"
@@ -1201,13 +1075,13 @@ export function MobileShell({
       <div className="mobile-tablet-editor-only mobile-tablet-pane">
         <MobileEditorScreen
           markdown={editorMarkdown}
-          onChange={onEditorChange}
+          onChange={handleEditorChange}
           hasActiveNote={hasActiveNote}
-          isSaving={isSaving}
-          saveError={saveError}
+          isSaving={isNoteSaving}
+          saveError={noteSaveError}
           keyboardInset={keyboardInset}
           onRetrySave={() => {
-            void onRetrySave();
+            void retrySave();
           }}
         />
       </div>
@@ -1217,13 +1091,13 @@ export function MobileShell({
         <div className="mobile-tablet-editor-pane mobile-tablet-pane">
           <MobileEditorScreen
             markdown={editorMarkdown}
-            onChange={onEditorChange}
+            onChange={handleEditorChange}
             hasActiveNote={hasActiveNote}
-            isSaving={isSaving}
-            saveError={saveError}
+            isSaving={isNoteSaving}
+            saveError={noteSaveError}
             keyboardInset={keyboardInset}
             onRetrySave={() => {
-              void onRetrySave();
+              void retrySave();
             }}
           />
         </div>
@@ -1404,7 +1278,7 @@ export function MobileShell({
             return;
           }
           try {
-            await onRenameFolder(renamePrompt.path, nextName);
+            await renameFolderFromMobile(renamePrompt.path, nextName);
             setRenamePrompt(null);
             showToast("Folder renamed", "success");
           } catch (error) {

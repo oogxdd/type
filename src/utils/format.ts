@@ -1,3 +1,5 @@
+import type { RecordingListItem } from "../types";
+
 export type NotePreview = {
   title: string;
   dateLabel: string;
@@ -67,4 +69,53 @@ export const getNextNoteFileName = (existingNames: string[]) => {
     }
     index += 1;
   }
+};
+
+export const formatRecordingStatus = (item: RecordingListItem) => {
+  if (item.is_processing) {
+    return "processing";
+  }
+  if (item.is_queued) {
+    return "queued";
+  }
+  return item.status;
+};
+
+export const formatUpdatedAt = (updatedMs: number | null) => {
+  if (!updatedMs) {
+    return "never";
+  }
+  const date = new Date(updatedMs);
+  if (Number.isNaN(date.getTime())) {
+    return "never";
+  }
+  return date.toLocaleString();
+};
+
+export const formatHistoryTime = (value: string) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleString();
+};
+
+export const getSyncHint = (error: string | null): string | null => {
+  if (!error) {
+    return null;
+  }
+  const lower = error.toLowerCase();
+  if (lower.includes("local changes detected")) {
+    return "Pull blocked. Push local changes first.";
+  }
+  if (lower.includes("merge commit")) {
+    return "Diverged history. Resolve on desktop, then pull on mobile.";
+  }
+  if (lower.includes("credentials")) {
+    return "Authentication failed. Verify username and token.";
+  }
+  if (lower.includes("not initialized")) {
+    return "Repository is not connected yet.";
+  }
+  return "Sync failed. Verify settings and retry.";
 };

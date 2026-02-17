@@ -1,107 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import type { NotesListMode, SettingsSectionId, ThemeMode } from "../../components/SettingsPanel";
-import type {
-  GitSyncHistoryEntry,
-  GitSyncStatus,
-  NotesSession,
-  RecordingListItem,
-  RecordingQueueSnapshot,
-} from "../../types";
-type GitSyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
+import type { SettingsSectionId } from "../../components/SettingsPanel";
+import { formatRecordingStatus, formatHistoryTime, getSyncHint } from "../../utils/format";
+import { useTheme } from "../../contexts/ThemeContext";
+import { useSessions } from "../../contexts/SessionsContext";
+import { useGitSync } from "../../contexts/GitSyncContext";
+import { useRecordings } from "../../contexts/RecordingsContext";
+import { useSelection } from "../../contexts/SelectionContext";
+import { useNotesTree } from "../../contexts/NotesTreeContext";
 
 type MobileSettingsScreenProps = {
   activeSection: SettingsSectionId;
   onSectionChange: (section: SettingsSectionId) => void;
   sections: Array<{ id: SettingsSectionId; label: string }>;
-  theme: ThemeMode;
-  onThemeChange: (theme: ThemeMode) => void;
-  sessions: NotesSession[];
-  activeSessionId: string | null;
-  sessionBusy: boolean;
-  sessionError: string | null;
-  onSessionChange: (sessionId: string) => void;
-  onCreateSession: () => void;
-  notesListMode: NotesListMode;
-  onNotesListModeChange: (mode: NotesListMode) => void;
-  gitRemoteUrl: string;
-  onGitRemoteUrlChange: (value: string) => void;
-  gitBranch: string;
-  onGitBranchChange: (value: string) => void;
-  gitUsername: string;
-  onGitUsernameChange: (value: string) => void;
-  gitPassword: string;
-  onGitPasswordChange: (value: string) => void;
-  gitCommitMessage: string;
-  onGitCommitMessageChange: (value: string) => void;
-  gitStatus: GitSyncStatus | null;
-  gitSyncBusy: boolean;
-  gitSyncAction: GitSyncAction;
-  gitSyncError: string | null;
-  gitSyncHistory: GitSyncHistoryEntry[];
-  onGitRefresh: () => void;
-  onGitConnect: () => void;
-  onGitPull: () => void;
-  onGitPush: () => void;
-  lastSuccessfulSyncAt: string | null;
-  assemblyAiApiKey: string;
-  onAssemblyAiApiKeyChange: (value: string) => void;
-  mobileAutoTranscriptionEnabled: boolean;
-  onMobileAutoTranscriptionChange: (enabled: boolean) => void;
-  recordingSupported: boolean;
-  isRecordingAudio: boolean;
-  isRecordingBusy: boolean;
-  recordingError: string | null;
-  recordingStatus: string | null;
-  recordingLiveStatus: string | null;
-  recordingsQueue: RecordingQueueSnapshot | null;
-  recordings: RecordingListItem[];
-  recordingsBusy: boolean;
-  recordingsError: string | null;
-  activeAudioPath: string | null;
-  activeAudioSrc: string | null;
-  onRefreshRecordings: () => void;
-  onPlayRecording: (audioPath: string) => void;
-  onStartAudioRecording: () => void;
-  onStopAudioRecording: () => void;
-  onQueueRecordings: () => void;
-};
-
-const formatRecordingStatus = (item: RecordingListItem) => {
-  if (item.is_processing) {
-    return "processing";
-  }
-  if (item.is_queued) {
-    return "queued";
-  }
-  return item.status;
-};
-
-const formatHistoryTime = (value: string) => {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  return parsed.toLocaleString();
-};
-
-const getSyncHint = (error: string | null): string | null => {
-  if (!error) {
-    return null;
-  }
-  const lower = error.toLowerCase();
-  if (lower.includes("local changes detected")) {
-    return "Pull blocked. Push local changes first.";
-  }
-  if (lower.includes("merge commit")) {
-    return "Diverged history. Resolve on desktop, then pull on mobile.";
-  }
-  if (lower.includes("credentials")) {
-    return "Authentication failed. Verify username and token.";
-  }
-  if (lower.includes("not initialized")) {
-    return "Repository is not connected yet.";
-  }
-  return "Sync failed. Verify settings and retry.";
 };
 
 function Group({
@@ -184,63 +94,63 @@ export function MobileSettingsScreen({
   activeSection,
   onSectionChange,
   sections,
-  theme,
-  onThemeChange,
-  sessions,
-  activeSessionId,
-  sessionBusy,
-  sessionError,
-  onSessionChange,
-  onCreateSession,
-  notesListMode,
-  onNotesListModeChange,
-  gitRemoteUrl,
-  onGitRemoteUrlChange,
-  gitBranch,
-  onGitBranchChange,
-  gitUsername,
-  onGitUsernameChange,
-  gitPassword,
-  onGitPasswordChange,
-  gitCommitMessage,
-  onGitCommitMessageChange,
-  gitStatus,
-  gitSyncBusy,
-  gitSyncAction,
-  gitSyncError,
-  gitSyncHistory,
-  onGitRefresh,
-  onGitConnect,
-  onGitPull,
-  onGitPush,
-  lastSuccessfulSyncAt,
-  assemblyAiApiKey,
-  onAssemblyAiApiKeyChange,
-  mobileAutoTranscriptionEnabled,
-  onMobileAutoTranscriptionChange,
-  recordingSupported,
-  isRecordingAudio,
-  isRecordingBusy,
-  recordingError,
-  recordingStatus,
-  recordingLiveStatus,
-  recordingsQueue,
-  recordings,
-  recordingsBusy,
-  recordingsError,
-  activeAudioPath,
-  activeAudioSrc,
-  onRefreshRecordings,
-  onPlayRecording,
-  onStartAudioRecording,
-  onStopAudioRecording,
-  onQueueRecordings,
 }: MobileSettingsScreenProps) {
+  const { theme, setTheme, notesListMode, setNotesListMode } = useTheme();
+  const {
+    sessions,
+    activeSessionId,
+    sessionsBusy,
+    sessionsError,
+    switchSession,
+    createSession,
+    syncSettings,
+    updateSyncSettings,
+  } = useSessions();
+  const {
+    gitStatus,
+    gitSyncAction,
+    gitSyncError,
+    gitSyncBusy,
+    gitSyncHistory,
+    refreshGitStatus,
+    connectGitRepo,
+    gitPull,
+    gitPush,
+  } = useGitSync();
+  const {
+    recordingSupported,
+    isRecordingAudio,
+    isRecordingFinalizing,
+    recorderError,
+    recordingStatusMessage,
+    recordingLiveStatus,
+    transcriptionQueueBusy,
+    recordingsQueue,
+    recordingsList,
+    recordingsBusy,
+    recordingsError,
+    activeAudioPath,
+    activeAudioSrc,
+    startRecording,
+    stopRecording,
+    refreshRecordings,
+    playRecording,
+    queueRecordingTranscriptions,
+  } = useRecordings();
+  const { activeFolder } = useSelection();
+  const { refreshTree } = useNotesTree();
+
+  const isRecordingBusy = isRecordingFinalizing || transcriptionQueueBusy;
+
+  const lastSuccessfulSyncAt = syncSettings.lastSuccessfulSyncAt
+    ? new Date(syncSettings.lastSuccessfulSyncAt).toLocaleString()
+    : null;
+
   const syncHint = getSyncHint(gitSyncError);
   const canPull = !gitSyncBusy && Boolean(gitStatus?.repo_initialized) && !gitStatus?.has_uncommitted_changes;
   const canPush = !gitSyncBusy && Boolean(gitStatus?.repo_initialized);
-  const canConnect = !gitSyncBusy && gitRemoteUrl.trim().length > 0;
-  const canQueue = !isRecordingBusy && assemblyAiApiKey.trim().length > 0;
+  const canConnect = !gitSyncBusy && syncSettings.gitRemoteUrl.trim().length > 0;
+  const canQueue = !isRecordingBusy && syncSettings.assemblyAiApiKey.trim().length > 0;
   const syncActionLabel =
     gitSyncAction === "connect"
       ? "Connecting..."
@@ -318,10 +228,10 @@ export function MobileSettingsScreen({
                 <button
                   type="button"
                   className="mobile-primary-btn"
-                  onClick={onCreateSession}
-                  disabled={sessionBusy}
+                  onClick={() => void createSession()}
+                  disabled={sessionsBusy}
                 >
-                  {sessionBusy ? "Working..." : "New session"}
+                  {sessionsBusy ? "Working..." : "New session"}
                 </button>
               </div>
               {sessions.length === 0 ? (
@@ -333,11 +243,11 @@ export function MobileSettingsScreen({
                     label={session.name}
                     subtitle={session.id}
                     selected={activeSessionId === session.id}
-                    onClick={() => onSessionChange(session.id)}
+                    onClick={() => void switchSession(session.id)}
                   />
                 ))
               )}
-              {sessionError ? <p className="mobile-native-note">{sessionError}</p> : null}
+              {sessionsError ? <p className="mobile-native-note">{sessionsError}</p> : null}
             </Group>
 
             <Group title="Notes List">
@@ -345,13 +255,13 @@ export function MobileSettingsScreen({
                 label="Separate panel"
                 subtitle="Show notes in a dedicated list."
                 selected={notesListMode === "separate"}
-                onClick={() => onNotesListModeChange("separate")}
+                onClick={() => setNotesListMode("separate")}
               />
               <ChoiceRow
                 label="Nested in folders"
                 subtitle="Show notes inside folder tree."
                 selected={notesListMode === "nested"}
-                onClick={() => onNotesListModeChange("nested")}
+                onClick={() => setNotesListMode("nested")}
               />
             </Group>
           </>
@@ -362,12 +272,12 @@ export function MobileSettingsScreen({
             <ChoiceRow
               label="Light"
               selected={theme === "light"}
-              onClick={() => onThemeChange("light")}
+              onClick={() => setTheme("light")}
             />
             <ChoiceRow
               label="Dark"
               selected={theme === "dark"}
-              onClick={() => onThemeChange("dark")}
+              onClick={() => setTheme("dark")}
             />
           </Group>
         ) : null}
@@ -398,15 +308,15 @@ export function MobileSettingsScreen({
                 <Group title="Repository">
                   <InputRow
                     label="Remote URL"
-                    value={gitRemoteUrl}
-                    onChange={onGitRemoteUrlChange}
+                    value={syncSettings.gitRemoteUrl}
+                    onChange={(v) => updateSyncSettings({ gitRemoteUrl: v })}
                     placeholder="https://github.com/you/notes.git"
                   />
-                  <InputRow label="Branch" value={gitBranch} onChange={onGitBranchChange} placeholder="main" />
+                  <InputRow label="Branch" value={syncSettings.gitBranch} onChange={(v) => updateSyncSettings({ gitBranch: v })} placeholder="main" />
                   <InputRow
                     label="Commit message"
-                    value={gitCommitMessage}
-                    onChange={onGitCommitMessageChange}
+                    value={syncSettings.gitCommitMessage}
+                    onChange={(v) => updateSyncSettings({ gitCommitMessage: v })}
                     placeholder="Sync notes"
                   />
                 </Group>
@@ -414,14 +324,14 @@ export function MobileSettingsScreen({
                 <Group title="Authentication">
                   <InputRow
                     label="Username"
-                    value={gitUsername}
-                    onChange={onGitUsernameChange}
+                    value={syncSettings.gitUsername}
+                    onChange={(v) => updateSyncSettings({ gitUsername: v })}
                     placeholder="Git username"
                   />
                   <InputRow
                     label="Token / password"
-                    value={gitPassword}
-                    onChange={onGitPasswordChange}
+                    value={syncSettings.gitPassword}
+                    onChange={(v) => updateSyncSettings({ gitPassword: v })}
                     placeholder="Personal access token"
                     password
                   />
@@ -438,21 +348,21 @@ export function MobileSettingsScreen({
                     <button
                       type="button"
                       className="mobile-primary-btn"
-                      onClick={onGitConnect}
+                      onClick={() => void connectGitRepo()}
                       disabled={!canConnect}
                     >
                       {gitSyncAction === "connect" ? "Connecting..." : "Connect repo"}
                     </button>
-                    <button type="button" className="mobile-secondary-btn" onClick={onGitPull} disabled={!canPull}>
+                    <button type="button" className="mobile-secondary-btn" onClick={() => void gitPull({ onAfterPull: () => refreshTree() })} disabled={!canPull}>
                       {gitSyncAction === "pull" ? "Pulling..." : "Pull"}
                     </button>
-                    <button type="button" className="mobile-secondary-btn" onClick={onGitPush} disabled={!canPush}>
+                    <button type="button" className="mobile-secondary-btn" onClick={() => void gitPush()} disabled={!canPush}>
                       {gitSyncAction === "push" ? "Pushing..." : "Push"}
                     </button>
                     <button
                       type="button"
                       className="mobile-secondary-btn"
-                      onClick={onGitRefresh}
+                      onClick={() => void refreshGitStatus()}
                       disabled={gitSyncBusy}
                     >
                       {gitSyncAction === "refresh" ? "Refreshing..." : "Refresh status"}
@@ -463,7 +373,7 @@ export function MobileSettingsScreen({
                 <Group title="Status">
                   <StatRow label="Last successful sync" value={lastSuccessfulSyncAt ?? "Never"} />
                   <StatRow label="Repository" value={gitStatus?.repo_initialized ? "Connected" : "Not connected"} />
-                  <StatRow label="Branch" value={gitStatus?.current_branch || gitBranch || "-"} />
+                  <StatRow label="Branch" value={gitStatus?.current_branch || syncSettings.gitBranch || "-"} />
                   <StatRow label="Remote URL" value={gitStatus?.remote_url ?? "-"} />
                   <StatRow
                     label="Working tree"
@@ -576,7 +486,7 @@ export function MobileSettingsScreen({
                 <button
                   type="button"
                   className="mobile-primary-btn"
-                  onClick={onStartAudioRecording}
+                  onClick={() => void startRecording(activeFolder || undefined)}
                   disabled={!recordingSupported || isRecordingAudio || isRecordingBusy}
                 >
                   Start recording
@@ -584,7 +494,7 @@ export function MobileSettingsScreen({
                 <button
                   type="button"
                   className="mobile-secondary-btn"
-                  onClick={onStopAudioRecording}
+                  onClick={stopRecording}
                   disabled={!recordingSupported || !isRecordingAudio}
                 >
                   Stop and save
@@ -595,44 +505,44 @@ export function MobileSettingsScreen({
             <Group title="Transcription">
               <InputRow
                 label="AssemblyAI API key"
-                value={assemblyAiApiKey}
-                onChange={onAssemblyAiApiKeyChange}
+                value={syncSettings.assemblyAiApiKey}
+                onChange={(v) => updateSyncSettings({ assemblyAiApiKey: v })}
                 placeholder="Paste AssemblyAI key"
                 password
               />
               <ChoiceRow
                 label="Auto queue on mobile"
                 subtitle="Retry unfinished recordings on launch and while app is open."
-                selected={mobileAutoTranscriptionEnabled}
-                onClick={() => onMobileAutoTranscriptionChange(true)}
+                selected={syncSettings.mobileAutoTranscriptionEnabled}
+                onClick={() => updateSyncSettings({ mobileAutoTranscriptionEnabled: true })}
               />
               <ChoiceRow
                 label="Manual queue only"
                 subtitle="Only queue when you tap Queue transcription."
-                selected={!mobileAutoTranscriptionEnabled}
-                onClick={() => onMobileAutoTranscriptionChange(false)}
+                selected={!syncSettings.mobileAutoTranscriptionEnabled}
+                onClick={() => updateSyncSettings({ mobileAutoTranscriptionEnabled: false })}
               />
               <div className="mobile-native-actions single">
-                <button type="button" className="mobile-secondary-btn" onClick={onQueueRecordings} disabled={!canQueue}>
+                <button type="button" className="mobile-secondary-btn" onClick={() => void queueRecordingTranscriptions("manual")} disabled={!canQueue}>
                   Queue transcription
                 </button>
-                <button type="button" className="mobile-secondary-btn" onClick={onRefreshRecordings} disabled={recordingsBusy}>
+                <button type="button" className="mobile-secondary-btn" onClick={() => void refreshRecordings()} disabled={recordingsBusy}>
                   {recordingsBusy ? "Refreshing..." : "Refresh queue"}
                 </button>
               </div>
               <StatRow label="In-flight" value={String(recordingsQueue?.in_flight ?? 0)} />
               <StatRow label="Current job" value={recordingsQueue?.current_recording ?? "-"} />
-              {recordingStatus ? <p className="mobile-native-note">{recordingStatus}</p> : null}
+              {recordingStatusMessage ? <p className="mobile-native-note">{recordingStatusMessage}</p> : null}
               {recordingLiveStatus ? (
                 <p className="mobile-native-note">{recordingLiveStatus}</p>
               ) : null}
             </Group>
 
             <Group title="Recordings monitor">
-              {recordings.length === 0 ? (
+              {recordingsList.length === 0 ? (
                 <p className="mobile-native-note">No recordings yet.</p>
               ) : (
-                recordings.map((item) => (
+                recordingsList.map((item) => (
                   <div key={item.note_path} className="mobile-native-row stat mobile-recording-row">
                     <span className="mobile-native-row-main">
                       <span className="mobile-native-row-label">{item.note_path}</span>
@@ -641,7 +551,7 @@ export function MobileSettingsScreen({
                     <button
                       type="button"
                       className="mobile-secondary-btn mobile-recording-play"
-                      onClick={() => item.audio_path && onPlayRecording(item.audio_path)}
+                      onClick={() => item.audio_path && void playRecording(item.audio_path)}
                       disabled={!item.audio_path}
                     >
                       {activeAudioPath && activeAudioPath === item.audio_path ? "Playing" : "Play"}
@@ -660,10 +570,10 @@ export function MobileSettingsScreen({
               ) : null}
             </Group>
 
-            {recordingError ? (
+            {recorderError ? (
               <section className="mobile-sync-error" role="alert">
                 <strong>Recording error</strong>
-                <p>{recordingError}</p>
+                <p>{recorderError}</p>
               </section>
             ) : null}
             {recordingsError ? (

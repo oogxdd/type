@@ -4,17 +4,17 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
 import * as api from "../data/notesApi";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "../types";
 import { UNSORTED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH, isSystemFolder } from "../constants";
-import { getNoteParentPath, collectAllNotes } from "../utils/notes";
-import { useNoteEditor } from "../hooks/useNoteEditor";
+import { collectAllNotes } from "../utils/notes";
 import { useNotePreviews } from "../hooks/useNotePreviews";
 import { useSessions } from "./SessionsContext";
+import { useSelection } from "./SelectionContext";
+import { useEditor } from "./EditorContext";
 import {
   buildTreeItems,
   findNode,
@@ -37,18 +37,6 @@ type NotesTreeContextValue = {
   flatItemById: Map<string, FlattenedItem>;
   expanded: Set<string>;
   setExpanded: React.Dispatch<React.SetStateAction<Set<string>>>;
-  selectedFolders: Set<string>;
-  setSelectedFolders: React.Dispatch<React.SetStateAction<Set<string>>>;
-  lastSelectedFolder: string;
-  setLastSelectedFolder: (path: string) => void;
-  activeFolder: string;
-  setActiveFolder: (path: string) => void;
-  selectedNotes: Set<string>;
-  setSelectedNotes: React.Dispatch<React.SetStateAction<Set<string>>>;
-  lastSelectedNote: string;
-  setLastSelectedNote: (path: string) => void;
-  activeNote: string | null;
-  setActiveNote: (path: string | null) => void;
   notes: NoteEntry[];
   allNotes: NoteEntry[];
   notePreviews: Record<string, NotePreview>;
@@ -63,16 +51,6 @@ type NotesTreeContextValue = {
   startRenameFolder: (path: string) => void;
   submitRenameFolder: () => Promise<void>;
   cancelRenameFolder: () => void;
-  // Editor
-  noteContent: string;
-  draftNoteContent: string;
-  isNoteSaving: boolean;
-  noteSaveError: string | null;
-  handleEditorChange: (markdown: string) => void;
-  clearNote: () => void;
-  clearDraft: () => void;
-  flushSave: () => Promise<void>;
-  retrySave: () => Promise<void>;
   // Actions
   refreshTree: () => Promise<void>;
   createNewNote: (
@@ -84,13 +62,8 @@ type NotesTreeContextValue = {
   deleteFolders: (paths: string[]) => Promise<void>;
   moveNotesToArchive: (paths: string[]) => Promise<void>;
   showNoteInfo: (path: string) => Promise<void>;
-  selectFolderForMobile: (path: string) => void;
-  selectNoteForMobile: (notePath: string) => void;
-  enterMobileHome: () => void;
   renameFolderFromMobile: (path: string, nextName: string) => Promise<void>;
   shouldNestNotesInNavigation: boolean;
-  // Refs
-  rightPaneRef: React.RefObject<HTMLDivElement | null>;
   setTree: React.Dispatch<React.SetStateAction<FolderNode | null>>;
 };
 
@@ -104,38 +77,26 @@ export function NotesTreeProvider({
   const { activeSessionId } = useSessions();
   const { notesListMode } = useTheme();
   const layoutMode = useLayoutMode();
+  const {
+    selectedFolders,
+    setSelectedFolders,
+    setLastSelectedFolder,
+    activeFolder,
+    setActiveFolder,
+    setSelectedNotes,
+    setLastSelectedNote,
+    activeNote,
+    setActiveNote,
+  } = useSelection();
+  const { clearNote, clearDraft, rightPaneRef } = useEditor();
 
   // -- Folder tree state
   const [tree, setTree] = useState<FolderNode | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set([""]));
-  const [selectedFolders, setSelectedFolders] = useState<Set<string>>(new Set());
-  const [lastSelectedFolder, setLastSelectedFolder] = useState("");
-  const [activeFolder, setActiveFolder] = useState("");
-
-  // -- Note selection state
-  const [selectedNotes, setSelectedNotes] = useState<Set<string>>(new Set());
-  const [lastSelectedNote, setLastSelectedNote] = useState("");
-  const [activeNote, setActiveNote] = useState<string | null>(null);
 
   // -- Rename state
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
-
-  // -- Refs
-  const rightPaneRef = useRef<HTMLDivElement | null>(null);
-
-  // -- Hooks
-  const {
-    noteContent,
-    draftNoteContent,
-    isSaving: isNoteSaving,
-    saveError: noteSaveError,
-    handleEditorChange,
-    clearNote,
-    clearDraft,
-    flushSave,
-    retrySave,
-  } = useNoteEditor(activeNote);
 
   const shouldNestNotesInNavigation = notesListMode === "nested";
 
@@ -222,21 +183,13 @@ export function NotesTreeProvider({
     return items;
   }, [expanded, shouldNestNotesInNavigation, treeData]);
 
-  // -- Session change: reset tree-related state
+  // -- Session change: reset tree state and refresh
   useEffect(() => {
     if (activeSessionId) {
       setTree(null);
-      setSelectedFolders(new Set());
-      setLastSelectedFolder("");
-      setActiveFolder("");
-      setSelectedNotes(new Set());
-      setLastSelectedNote("");
-      setActiveNote(null);
-      clearNote();
-      clearDraft();
     }
     void refreshTree();
-  }, [activeSessionId, clearDraft, clearNote, refreshTree]);
+  }, [activeSessionId, refreshTree]);
 
   // Mobile: auto-select first folder
   useEffect(() => {
@@ -251,35 +204,9 @@ export function NotesTreeProvider({
     setSelectedFolders(new Set([firstFolderPath]));
     setLastSelectedFolder(firstFolderPath);
     setActiveFolder(firstFolderPath);
-  }, [activeFolder, layoutMode, tree]);
-
-  // -- Flush save on visibility/unload
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === "hidden") {
-        void flushSave();
-      }
-    };
-    const handleBeforeUnload = () => {
-      void flushSave();
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
-  }, [flushSave]);
+  }, [activeFolder, layoutMode, setActiveFolder, setLastSelectedFolder, setSelectedFolders, tree]);
 
   // -- Debug logging
-  useEffect(() => {
-    console.log("[folders] selectedFolders", Array.from(selectedFolders));
-  }, [selectedFolders]);
-
-  useEffect(() => {
-    console.log("[folders] activeFolder", activeFolder);
-  }, [activeFolder]);
-
   useEffect(() => {
     console.log("[folders] activeNode", activeNode?.path || null);
   }, [activeNode]);
@@ -330,39 +257,8 @@ export function NotesTreeProvider({
 
       return path;
     },
-    [clearDraft, refreshTree, tree]
+    [clearDraft, refreshTree, rightPaneRef, setActiveFolder, setActiveNote, setLastSelectedFolder, setLastSelectedNote, setSelectedFolders, setSelectedNotes, tree]
   );
-
-  const enterMobileHome = useCallback(() => {
-    setSelectedFolders(new Set());
-    setLastSelectedFolder("");
-    setActiveFolder("");
-    setSelectedNotes(new Set());
-    setLastSelectedNote("");
-    setActiveNote(null);
-    clearNote();
-    clearDraft();
-  }, [clearDraft, clearNote]);
-
-  const selectFolderForMobile = useCallback((path: string) => {
-    if (!path) return;
-    setSelectedFolders(new Set([path]));
-    setLastSelectedFolder(path);
-    setActiveFolder(path);
-    setSelectedNotes(new Set());
-    setLastSelectedNote("");
-    setActiveNote(null);
-  }, []);
-
-  const selectNoteForMobile = useCallback((notePath: string) => {
-    const parentPath = getNoteParentPath(notePath);
-    setSelectedFolders(new Set(parentPath ? [parentPath] : []));
-    setLastSelectedFolder(parentPath);
-    setActiveFolder(parentPath);
-    setSelectedNotes(new Set([notePath]));
-    setLastSelectedNote(notePath);
-    setActiveNote(notePath);
-  }, []);
 
   // -- Rename
   const startRenameFolder = useCallback((path: string) => {
@@ -394,7 +290,7 @@ export function NotesTreeProvider({
       setSelectedFolders(nextSelected);
       setLastSelectedFolder(newPath);
     }
-  }, [activeFolder, refreshTree, renamingFolder, renameValue, selectedFolders]);
+  }, [activeFolder, refreshTree, renamingFolder, renameValue, selectedFolders, setActiveFolder, setLastSelectedFolder, setSelectedFolders]);
 
   const cancelRenameFolder = useCallback(() => {
     setRenamingFolder(null);
@@ -427,7 +323,7 @@ export function NotesTreeProvider({
         setLastSelectedFolder(newPath);
       }
     },
-    [activeFolder, refreshTree, selectedFolders]
+    [activeFolder, refreshTree, selectedFolders, setActiveFolder, setLastSelectedFolder, setSelectedFolders]
   );
 
   // -- Delete
@@ -447,7 +343,7 @@ export function NotesTreeProvider({
       if (paths.includes(activeFolder)) setActiveFolder("");
       await refreshTree();
     },
-    [activeFolder, refreshTree]
+    [activeFolder, refreshTree, setActiveFolder, setSelectedFolders]
   );
 
   const deleteNotes = useCallback(
@@ -465,7 +361,7 @@ export function NotesTreeProvider({
       await refreshTree();
       return true;
     },
-    [activeNote, clearNote, refreshTree]
+    [activeNote, clearNote, refreshTree, setActiveNote, setLastSelectedNote, setSelectedNotes]
   );
 
   const moveNotesToArchive = useCallback(
@@ -481,7 +377,7 @@ export function NotesTreeProvider({
       setActiveFolder(ARCHIEVE_FOLDER_PATH);
       await refreshTree();
     },
-    [clearNote, refreshTree]
+    [clearNote, refreshTree, setActiveFolder, setActiveNote, setLastSelectedFolder, setLastSelectedNote, setSelectedFolders, setSelectedNotes]
   );
 
   const showNoteInfo = useCallback(async (path: string) => {
@@ -510,18 +406,6 @@ export function NotesTreeProvider({
         flatItemById,
         expanded,
         setExpanded,
-        selectedFolders,
-        setSelectedFolders,
-        lastSelectedFolder,
-        setLastSelectedFolder,
-        activeFolder,
-        setActiveFolder,
-        selectedNotes,
-        setSelectedNotes,
-        lastSelectedNote,
-        setLastSelectedNote,
-        activeNote,
-        setActiveNote,
         notes,
         allNotes,
         notePreviews,
@@ -535,27 +419,14 @@ export function NotesTreeProvider({
         startRenameFolder,
         submitRenameFolder,
         cancelRenameFolder,
-        noteContent,
-        draftNoteContent,
-        isNoteSaving,
-        noteSaveError,
-        handleEditorChange,
-        clearNote,
-        clearDraft,
-        flushSave,
-        retrySave,
         refreshTree,
         createNewNote,
         deleteNotes,
         deleteFolders,
         moveNotesToArchive,
         showNoteInfo,
-        selectFolderForMobile,
-        selectNoteForMobile,
-        enterMobileHome,
         renameFolderFromMobile,
         shouldNestNotesInNavigation,
-        rightPaneRef,
         setTree,
       }}
     >

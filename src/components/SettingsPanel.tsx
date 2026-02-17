@@ -1,10 +1,11 @@
 import { Button } from "./ui/button";
-import type {
-  GitSyncStatus,
-  NotesSession,
-  RecordingListItem,
-  RecordingQueueSnapshot,
-} from "../types";
+import { formatRecordingStatus, formatUpdatedAt } from "../utils/format";
+import { useTheme } from "../contexts/ThemeContext";
+import { useSessions } from "../contexts/SessionsContext";
+import { useGitSync } from "../contexts/GitSyncContext";
+import { useRecordings } from "../contexts/RecordingsContext";
+import { useNotesTree } from "../contexts/NotesTreeContext";
+import { useEditor } from "../contexts/EditorContext";
 
 export type ThemeMode = "light" | "dark";
 export type NotesListMode = "separate" | "nested";
@@ -14,8 +15,6 @@ export type SettingsSectionId =
   | "appearance"
   | "sync"
   | "recordings";
-type GitSyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
-
 type SettingsSection = {
   id: SettingsSectionId;
   title: string;
@@ -32,27 +31,6 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     description: "Audio capture, transcription queue, and AssemblyAI settings.",
   },
 ];
-
-const formatRecordingStatus = (item: RecordingListItem) => {
-  if (item.is_processing) {
-    return "processing";
-  }
-  if (item.is_queued) {
-    return "queued";
-  }
-  return item.status;
-};
-
-const formatUpdatedAt = (updatedMs: number | null) => {
-  if (!updatedMs) {
-    return "never";
-  }
-  const date = new Date(updatedMs);
-  if (Number.isNaN(date.getTime())) {
-    return "never";
-  }
-  return date.toLocaleString();
-};
 
 function SettingsRow({
   section,
@@ -81,113 +59,60 @@ function SettingsRow({
 
 function SettingsDetail({
   sectionId,
-  theme,
-  onThemeChange,
-  notesListMode,
-  onNotesListModeChange,
-  sessions,
-  activeSessionId,
-  sessionBusy,
-  sessionError,
-  onSessionChange,
-  onCreateSession,
-  gitRemoteUrl,
-  onGitRemoteUrlChange,
-  gitBranch,
-  onGitBranchChange,
-  gitUsername,
-  onGitUsernameChange,
-  gitPassword,
-  onGitPasswordChange,
-  gitCommitMessage,
-  onGitCommitMessageChange,
-  gitStatus,
-  gitSyncBusy,
-  gitSyncAction,
-  gitSyncError,
-  onGitRefresh,
-  onGitConnect,
-  onGitPull,
-  onGitPush,
-  assemblyAiApiKey,
-  onAssemblyAiApiKeyChange,
-  mobileAutoTranscriptionEnabled,
-  onMobileAutoTranscriptionChange,
-  recordingSupported,
-  isRecordingAudio,
-  isRecordingBusy,
-  recordingError,
-  recordingStatus,
-  recordingLiveStatus,
-  recordingsQueue,
-  recordings,
-  recordingsBusy,
-  recordingsError,
-  activeAudioPath,
-  activeAudioSrc,
-  onRefreshRecordings,
-  onPlayRecording,
-  onStartAudioRecording,
-  onStopAudioRecording,
-  onQueueRecordings,
 }: {
   sectionId: SettingsSectionId;
-  theme: ThemeMode;
-  onThemeChange: (theme: ThemeMode) => void;
-  notesListMode: NotesListMode;
-  onNotesListModeChange: (mode: NotesListMode) => void;
-  sessions: NotesSession[];
-  activeSessionId: string | null;
-  sessionBusy: boolean;
-  sessionError: string | null;
-  onSessionChange: (sessionId: string) => void;
-  onCreateSession: () => void;
-  gitRemoteUrl: string;
-  onGitRemoteUrlChange: (value: string) => void;
-  gitBranch: string;
-  onGitBranchChange: (value: string) => void;
-  gitUsername: string;
-  onGitUsernameChange: (value: string) => void;
-  gitPassword: string;
-  onGitPasswordChange: (value: string) => void;
-  gitCommitMessage: string;
-  onGitCommitMessageChange: (value: string) => void;
-  gitStatus: GitSyncStatus | null;
-  gitSyncBusy: boolean;
-  gitSyncAction: GitSyncAction;
-  gitSyncError: string | null;
-  onGitRefresh: () => void;
-  onGitConnect: () => void;
-  onGitPull: () => void;
-  onGitPush: () => void;
-  assemblyAiApiKey: string;
-  onAssemblyAiApiKeyChange: (value: string) => void;
-  mobileAutoTranscriptionEnabled: boolean;
-  onMobileAutoTranscriptionChange: (enabled: boolean) => void;
-  recordingSupported: boolean;
-  isRecordingAudio: boolean;
-  isRecordingBusy: boolean;
-  recordingError: string | null;
-  recordingStatus: string | null;
-  recordingLiveStatus: string | null;
-  recordingsQueue: RecordingQueueSnapshot | null;
-  recordings: RecordingListItem[];
-  recordingsBusy: boolean;
-  recordingsError: string | null;
-  activeAudioPath: string | null;
-  activeAudioSrc: string | null;
-  onRefreshRecordings: () => void;
-  onPlayRecording: (audioPath: string) => void;
-  onStartAudioRecording: () => void;
-  onStopAudioRecording: () => void;
-  onQueueRecordings: () => void;
 }) {
+  const { theme, setTheme, notesListMode, setNotesListMode } = useTheme();
+  const {
+    sessions,
+    activeSessionId,
+    sessionsBusy,
+    sessionsError,
+    switchSession,
+    createSession,
+    syncSettings,
+    updateSyncSettings,
+  } = useSessions();
+  const {
+    gitStatus,
+    gitSyncAction,
+    gitSyncError,
+    gitSyncBusy,
+    refreshGitStatus,
+    connectGitRepo,
+    gitPull,
+    gitPush,
+  } = useGitSync();
+  const { refreshTree } = useNotesTree();
+  const {
+    recordingSupported,
+    isRecordingAudio,
+    isRecordingFinalizing,
+    recorderError,
+    recordingStatusMessage,
+    recordingLiveStatus,
+    transcriptionQueueBusy,
+    recordingsQueue,
+    recordingsList,
+    recordingsBusy,
+    recordingsError,
+    activeAudioPath,
+    activeAudioSrc,
+    startRecording,
+    stopRecording,
+    refreshRecordings,
+    playRecording,
+    queueRecordingTranscriptions,
+  } = useRecordings();
+
+  const isRecordingBusy = isRecordingFinalizing || transcriptionQueueBusy;
+
   const canPull =
     !gitSyncBusy &&
     Boolean(gitStatus?.repo_initialized) &&
     !gitStatus?.has_uncommitted_changes;
   const canPush = !gitSyncBusy && Boolean(gitStatus?.repo_initialized);
-  const canConnect = !gitSyncBusy && gitRemoteUrl.trim().length > 0;
+  const canConnect = !gitSyncBusy && syncSettings.gitRemoteUrl.trim().length > 0;
   const syncActionLabel =
     gitSyncAction === "connect"
       ? "Connecting..."
@@ -209,8 +134,8 @@ function SettingsDetail({
           <div className="settings-inline-row">
             <select
               value={activeSessionId ?? ""}
-              onChange={(event) => onSessionChange(event.target.value)}
-              disabled={sessionBusy || sessions.length === 0}
+              onChange={(event) => void switchSession(event.target.value)}
+              disabled={sessionsBusy || sessions.length === 0}
             >
               {sessions.map((session) => (
                 <option key={session.id} value={session.id}>
@@ -222,18 +147,18 @@ function SettingsDetail({
               type="button"
               variant="outline"
               size="sm"
-              onClick={onCreateSession}
-              disabled={sessionBusy}
+              onClick={() => void createSession()}
+              disabled={sessionsBusy}
             >
-              {sessionBusy ? "Working..." : "New session"}
+              {sessionsBusy ? "Working..." : "New session"}
             </Button>
           </div>
           <span className="settings-inline-help">
             Each session has its own local notes folder and Git remote.
           </span>
         </label>
-        {sessionError ? (
-          <p className="settings-warning-text settings-inline-warning">{sessionError}</p>
+        {sessionsError ? (
+          <p className="settings-warning-text settings-inline-warning">{sessionsError}</p>
         ) : null}
         <div className="settings-info-grid">
           <div className="settings-info-row">
@@ -246,7 +171,7 @@ function SettingsDetail({
           <select
             value={notesListMode}
             onChange={(event) =>
-              onNotesListModeChange(event.target.value as NotesListMode)
+              setNotesListMode(event.target.value as NotesListMode)
             }
           >
             <option value="separate">Separate notes panel</option>
@@ -265,7 +190,7 @@ function SettingsDetail({
           <span>Theme</span>
           <select
             value={theme}
-            onChange={(event) => onThemeChange(event.target.value as ThemeMode)}
+            onChange={(event) => setTheme(event.target.value as ThemeMode)}
           >
             <option value="dark">Dark</option>
             <option value="light">Light</option>
@@ -285,8 +210,8 @@ function SettingsDetail({
           <span>Remote repository URL</span>
           <input
             type="text"
-            value={gitRemoteUrl}
-            onChange={(event) => onGitRemoteUrlChange(event.target.value)}
+            value={syncSettings.gitRemoteUrl}
+            onChange={(event) => updateSyncSettings({ gitRemoteUrl: event.target.value })}
             placeholder="https://github.com/you/notes.git"
           />
         </label>
@@ -294,8 +219,8 @@ function SettingsDetail({
           <span>Branch</span>
           <input
             type="text"
-            value={gitBranch}
-            onChange={(event) => onGitBranchChange(event.target.value)}
+            value={syncSettings.gitBranch}
+            onChange={(event) => updateSyncSettings({ gitBranch: event.target.value })}
             placeholder="main"
           />
         </label>
@@ -303,8 +228,8 @@ function SettingsDetail({
           <span>Commit message</span>
           <input
             type="text"
-            value={gitCommitMessage}
-            onChange={(event) => onGitCommitMessageChange(event.target.value)}
+            value={syncSettings.gitCommitMessage}
+            onChange={(event) => updateSyncSettings({ gitCommitMessage: event.target.value })}
             placeholder="Sync notes"
           />
         </label>
@@ -312,8 +237,8 @@ function SettingsDetail({
           <span>Git username (optional, for HTTPS auth)</span>
           <input
             type="text"
-            value={gitUsername}
-            onChange={(event) => onGitUsernameChange(event.target.value)}
+            value={syncSettings.gitUsername}
+            onChange={(event) => updateSyncSettings({ gitUsername: event.target.value })}
             placeholder="your-github-username"
           />
         </label>
@@ -321,8 +246,8 @@ function SettingsDetail({
           <span>Git token/password (optional)</span>
           <input
             type="password"
-            value={gitPassword}
-            onChange={(event) => onGitPasswordChange(event.target.value)}
+            value={syncSettings.gitPassword}
+            onChange={(event) => updateSyncSettings({ gitPassword: event.target.value })}
             placeholder="Personal access token"
           />
         </label>
@@ -376,16 +301,16 @@ function SettingsDetail({
           </span>
         </label>
         <div className="settings-action-row">
-          <Button variant="outline" size="sm" type="button" onClick={onGitRefresh} disabled={gitSyncBusy}>
+          <Button variant="outline" size="sm" type="button" onClick={() => void refreshGitStatus()} disabled={gitSyncBusy}>
             {gitSyncAction === "refresh" ? "Refreshing..." : "Refresh status"}
           </Button>
-          <Button size="sm" type="button" onClick={onGitConnect} disabled={!canConnect}>
+          <Button size="sm" type="button" onClick={() => void connectGitRepo()} disabled={!canConnect}>
             {gitSyncAction === "connect" ? "Connecting..." : "Connect repo"}
           </Button>
-          <Button variant="secondary" size="sm" type="button" onClick={onGitPull} disabled={!canPull}>
+          <Button variant="secondary" size="sm" type="button" onClick={() => void gitPull({ onAfterPull: () => refreshTree() })} disabled={!canPull}>
             {gitSyncAction === "pull" ? "Pulling..." : "Pull"}
           </Button>
-          <Button variant="secondary" size="sm" type="button" onClick={onGitPush} disabled={!canPush}>
+          <Button variant="secondary" size="sm" type="button" onClick={() => void gitPush()} disabled={!canPush}>
             {gitSyncAction === "push" ? "Pushing..." : "Push"}
           </Button>
         </div>
@@ -407,8 +332,8 @@ function SettingsDetail({
           <span>AssemblyAI API key</span>
           <input
             type="password"
-            value={assemblyAiApiKey}
-            onChange={(event) => onAssemblyAiApiKeyChange(event.target.value)}
+            value={syncSettings.assemblyAiApiKey}
+            onChange={(event) => updateSyncSettings({ assemblyAiApiKey: event.target.value })}
             placeholder="Paste AssemblyAI key"
             autoCapitalize="off"
             autoCorrect="off"
@@ -419,9 +344,9 @@ function SettingsDetail({
           <label className="settings-toggle">
             <input
               type="checkbox"
-              checked={mobileAutoTranscriptionEnabled}
+              checked={syncSettings.mobileAutoTranscriptionEnabled}
               onChange={(event) =>
-                onMobileAutoTranscriptionChange(event.target.checked)
+                updateSyncSettings({ mobileAutoTranscriptionEnabled: event.target.checked })
               }
             />
             <span>Auto-queue on mobile</span>
@@ -445,7 +370,7 @@ function SettingsDetail({
           </div>
           <div className="settings-info-row">
             <span>Transcription mode</span>
-            <code>{assemblyAiApiKey.trim() ? "enabled" : "api key required"}</code>
+            <code>{syncSettings.assemblyAiApiKey.trim() ? "enabled" : "api key required"}</code>
           </div>
           <div className="settings-info-row">
             <span>Queue in-flight</span>
@@ -456,10 +381,10 @@ function SettingsDetail({
             <code>{recordingsQueue?.current_recording ?? "-"}</code>
           </div>
         </div>
-        {recordingStatus ? (
+        {recordingStatusMessage ? (
           <label className="settings-control">
             <span>Last queue result</span>
-            <span className="settings-inline-help">{recordingStatus}</span>
+            <span className="settings-inline-help">{recordingStatusMessage}</span>
           </label>
         ) : null}
         {recordingLiveStatus ? (
@@ -468,15 +393,15 @@ function SettingsDetail({
             <span className="settings-inline-help">{recordingLiveStatus}</span>
           </label>
         ) : null}
-        {recordingError ? (
-          <p className="settings-warning-text settings-inline-warning">{recordingError}</p>
+        {recorderError ? (
+          <p className="settings-warning-text settings-inline-warning">{recorderError}</p>
         ) : null}
         <div className="settings-action-row">
           <Button
             variant="outline"
             size="sm"
             type="button"
-            onClick={onStartAudioRecording}
+            onClick={() => void startRecording()}
             disabled={!recordingSupported || isRecordingAudio || isRecordingBusy}
           >
             Start recording
@@ -484,7 +409,7 @@ function SettingsDetail({
           <Button
             size="sm"
             type="button"
-            onClick={onStopAudioRecording}
+            onClick={stopRecording}
             disabled={!recordingSupported || !isRecordingAudio}
           >
             Stop and save
@@ -493,7 +418,7 @@ function SettingsDetail({
             variant="secondary"
             size="sm"
             type="button"
-            onClick={onRefreshRecordings}
+            onClick={() => void refreshRecordings()}
             disabled={recordingsBusy}
           >
             {recordingsBusy ? "Refreshing..." : "Refresh queue"}
@@ -502,8 +427,8 @@ function SettingsDetail({
             variant="secondary"
             size="sm"
             type="button"
-            onClick={onQueueRecordings}
-            disabled={!assemblyAiApiKey.trim() || isRecordingBusy}
+            onClick={() => void queueRecordingTranscriptions("manual")}
+            disabled={!syncSettings.assemblyAiApiKey.trim() || isRecordingBusy}
           >
             Queue transcription
           </Button>
@@ -514,10 +439,10 @@ function SettingsDetail({
         <div className="settings-control">
           <span>Recordings monitor</span>
           <div className="settings-recordings-list">
-            {recordings.length === 0 ? (
+            {recordingsList.length === 0 ? (
               <div className="settings-recording-row empty">No recordings yet.</div>
             ) : (
-              recordings.map((item) => {
+              recordingsList.map((item) => {
                 const currentStatus = formatRecordingStatus(item);
                 const canPlay = Boolean(item.audio_path);
                 return (
@@ -537,7 +462,7 @@ function SettingsDetail({
                         variant="outline"
                         size="sm"
                         type="button"
-                        onClick={() => item.audio_path && onPlayRecording(item.audio_path)}
+                        onClick={() => item.audio_path && void playRecording(item.audio_path)}
                         disabled={!canPlay}
                       >
                         {activeAudioPath && activeAudioPath === item.audio_path ? "Playing" : "Play"}
@@ -591,111 +516,13 @@ export function SettingsMiddlePane({
 
 export function SettingsDetailPane({
   activeSection,
-  theme,
-  onThemeChange,
-  notesListMode,
-  onNotesListModeChange,
-  sessions,
-  activeSessionId,
-  sessionBusy,
-  sessionError,
-  onSessionChange,
-  onCreateSession,
-  gitRemoteUrl,
-  onGitRemoteUrlChange,
-  gitBranch,
-  onGitBranchChange,
-  gitUsername,
-  onGitUsernameChange,
-  gitPassword,
-  onGitPasswordChange,
-  gitCommitMessage,
-  onGitCommitMessageChange,
-  gitStatus,
-  gitSyncBusy,
-  gitSyncAction,
-  gitSyncError,
-  onGitRefresh,
-  onGitConnect,
-  onGitPull,
-  onGitPush,
-  assemblyAiApiKey,
-  onAssemblyAiApiKeyChange,
-  mobileAutoTranscriptionEnabled,
-  onMobileAutoTranscriptionChange,
-  recordingSupported,
-  isRecordingAudio,
-  isRecordingBusy,
-  recordingError,
-  recordingStatus,
-  recordingLiveStatus,
-  recordingsQueue,
-  recordings,
-  recordingsBusy,
-  recordingsError,
-  activeAudioPath,
-  activeAudioSrc,
-  onRefreshRecordings,
-  onPlayRecording,
-  onStartAudioRecording,
-  onStopAudioRecording,
-  onQueueRecordings,
-  rightPaneRef,
   onPaneClick,
 }: {
   activeSection: string;
-  theme: ThemeMode;
-  onThemeChange: (theme: ThemeMode) => void;
-  notesListMode: NotesListMode;
-  onNotesListModeChange: (mode: NotesListMode) => void;
-  sessions: NotesSession[];
-  activeSessionId: string | null;
-  sessionBusy: boolean;
-  sessionError: string | null;
-  onSessionChange: (sessionId: string) => void;
-  onCreateSession: () => void;
-  gitRemoteUrl: string;
-  onGitRemoteUrlChange: (value: string) => void;
-  gitBranch: string;
-  onGitBranchChange: (value: string) => void;
-  gitUsername: string;
-  onGitUsernameChange: (value: string) => void;
-  gitPassword: string;
-  onGitPasswordChange: (value: string) => void;
-  gitCommitMessage: string;
-  onGitCommitMessageChange: (value: string) => void;
-  gitStatus: GitSyncStatus | null;
-  gitSyncBusy: boolean;
-  gitSyncAction: GitSyncAction;
-  gitSyncError: string | null;
-  onGitRefresh: () => void;
-  onGitConnect: () => void;
-  onGitPull: () => void;
-  onGitPush: () => void;
-  assemblyAiApiKey: string;
-  onAssemblyAiApiKeyChange: (value: string) => void;
-  mobileAutoTranscriptionEnabled: boolean;
-  onMobileAutoTranscriptionChange: (enabled: boolean) => void;
-  recordingSupported: boolean;
-  isRecordingAudio: boolean;
-  isRecordingBusy: boolean;
-  recordingError: string | null;
-  recordingStatus: string | null;
-  recordingLiveStatus: string | null;
-  recordingsQueue: RecordingQueueSnapshot | null;
-  recordings: RecordingListItem[];
-  recordingsBusy: boolean;
-  recordingsError: string | null;
-  activeAudioPath: string | null;
-  activeAudioSrc: string | null;
-  onRefreshRecordings: () => void;
-  onPlayRecording: (audioPath: string) => void;
-  onStartAudioRecording: () => void;
-  onStopAudioRecording: () => void;
-  onQueueRecordings: () => void;
-  rightPaneRef: React.RefObject<HTMLDivElement | null>;
   onPaneClick: () => void;
 }) {
+  const { rightPaneRef } = useEditor();
+
   return (
     <div className="pane settings-detail-pane min-w-0">
       <div
@@ -706,55 +533,6 @@ export function SettingsDetailPane({
       >
         <SettingsDetail
           sectionId={activeSection as SettingsSectionId}
-          theme={theme}
-          onThemeChange={onThemeChange}
-          notesListMode={notesListMode}
-          onNotesListModeChange={onNotesListModeChange}
-          sessions={sessions}
-          activeSessionId={activeSessionId}
-          sessionBusy={sessionBusy}
-          sessionError={sessionError}
-          onSessionChange={onSessionChange}
-          onCreateSession={onCreateSession}
-          gitRemoteUrl={gitRemoteUrl}
-          onGitRemoteUrlChange={onGitRemoteUrlChange}
-          gitBranch={gitBranch}
-          onGitBranchChange={onGitBranchChange}
-          gitUsername={gitUsername}
-          onGitUsernameChange={onGitUsernameChange}
-          gitPassword={gitPassword}
-          onGitPasswordChange={onGitPasswordChange}
-          gitCommitMessage={gitCommitMessage}
-          onGitCommitMessageChange={onGitCommitMessageChange}
-          gitStatus={gitStatus}
-          gitSyncBusy={gitSyncBusy}
-          gitSyncAction={gitSyncAction}
-          gitSyncError={gitSyncError}
-          onGitRefresh={onGitRefresh}
-          onGitConnect={onGitConnect}
-          onGitPull={onGitPull}
-          onGitPush={onGitPush}
-          assemblyAiApiKey={assemblyAiApiKey}
-          onAssemblyAiApiKeyChange={onAssemblyAiApiKeyChange}
-          mobileAutoTranscriptionEnabled={mobileAutoTranscriptionEnabled}
-          onMobileAutoTranscriptionChange={onMobileAutoTranscriptionChange}
-          recordingSupported={recordingSupported}
-          isRecordingAudio={isRecordingAudio}
-          isRecordingBusy={isRecordingBusy}
-          recordingError={recordingError}
-          recordingStatus={recordingStatus}
-          recordingLiveStatus={recordingLiveStatus}
-          recordingsQueue={recordingsQueue}
-          recordings={recordings}
-          recordingsBusy={recordingsBusy}
-          recordingsError={recordingsError}
-          activeAudioPath={activeAudioPath}
-          activeAudioSrc={activeAudioSrc}
-          onRefreshRecordings={onRefreshRecordings}
-          onPlayRecording={onPlayRecording}
-          onStartAudioRecording={onStartAudioRecording}
-          onStopAudioRecording={onStopAudioRecording}
-          onQueueRecordings={onQueueRecordings}
         />
       </div>
     </div>

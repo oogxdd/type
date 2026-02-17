@@ -14,109 +14,53 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { snapCenterToCursor } from "@dnd-kit/modifiers";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu } from "@tauri-apps/api/menu";
 import { Settings } from "lucide-react";
 
 import { useTheme } from "./contexts/ThemeContext";
 import { useNotesTree } from "./contexts/NotesTreeContext";
+import { useSelection } from "./contexts/SelectionContext";
+import { useEditor } from "./contexts/EditorContext";
 import { useRecordings } from "./contexts/RecordingsContext";
-import { useGitSync } from "./contexts/GitSyncContext";
-import { useSessions } from "./contexts/SessionsContext";
 
 import { useDragDrop } from "./hooks/useDragDrop";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 
 import { FoldersPanel } from "./components/FoldersPanel";
-import { NoteRow } from "./components/NoteRow";
-import { NoteEditor } from "./components/NoteEditor";
-import {
-  SettingsMiddlePane,
-  SettingsDetailPane,
-  type SettingsSectionId,
-} from "./components/SettingsPanel";
+import { type SettingsSectionId } from "./components/SettingsPanel";
 import { DesktopShell } from "./desktop/DesktopShell";
+import { DesktopMiddlePane } from "./desktop/DesktopMiddlePane";
+import { DesktopRightPane } from "./desktop/DesktopRightPane";
 import { MobileShell } from "./mobile/MobileShell";
 import { useLayoutMode } from "./mobile/useLayoutMode";
-import { useKeyboardInsets } from "./mobile/useKeyboardInsets";
 
 import { focusNoScroll } from "./utils/dom";
 import { getNoteParentPath } from "./utils/notes";
-import { indentationWidth, MOBILE_SETTINGS_SECTIONS } from "./constants";
+import { indentationWidth } from "./constants";
 import type { AppMode } from "./types";
 
 export function AppShell() {
   const layoutMode = useLayoutMode();
-  const { keyboardInset } = useKeyboardInsets();
 
   // -- Contexts
   const {
     theme,
     editorFontSize,
-    notesListMode,
-    setNotesListMode,
-    setTheme,
     increaseEditorFontSize,
     decreaseEditorFontSize,
     resetEditorFontSize,
   } = useTheme();
 
   const {
-    sessions,
-    activeSessionId,
-    sessionsBusy,
-    sessionsError,
-    switchSession,
-    createSession,
-    syncSettings,
-    updateSyncSettings,
-  } = useSessions();
-
-  const {
-    gitStatus,
-    gitSyncAction,
-    gitSyncError,
-    gitSyncBusy,
-    gitSyncHistory,
-    refreshGitStatus,
-    connectGitRepo,
-    gitPull,
-    gitPush,
-  } = useGitSync();
-
-  const {
     recordingSupported,
     isRecordingAudio,
     isRecordingFinalizing,
-    recorderError,
-    recordingStatusMessage,
-    recordingLiveStatus,
-    transcriptionQueueBusy,
-    recordingsQueue,
-    recordingsList,
-    recordingsBusy,
-    recordingsError,
-    activeAudioPath,
-    activeAudioSrc,
     startRecording,
     stopRecording,
-    refreshRecordings,
-    playRecording,
-    queueRecordingTranscriptions,
   } = useRecordings();
 
-  const notesTree = useNotesTree();
   const {
-    tree,
-    setTree,
-    treeData,
-    flatItems,
-    visibleItems,
-    orderedIds,
-    flatItemById,
-    expanded,
-    setExpanded,
     selectedFolders,
     setSelectedFolders,
     lastSelectedFolder,
@@ -129,10 +73,24 @@ export function AppShell() {
     setLastSelectedNote,
     activeNote,
     setActiveNote,
+  } = useSelection();
+
+  const {
+    clearNote,
+    rightPaneRef,
+  } = useEditor();
+
+  const {
+    tree,
+    setTree,
+    treeData,
+    flatItems,
+    visibleItems,
+    orderedIds,
+    flatItemById,
+    expanded,
+    setExpanded,
     notes,
-    allNotes,
-    notePreviews,
-    allNotePreviews,
     activeNode,
     visibleNavigationItems,
     parentById,
@@ -142,27 +100,14 @@ export function AppShell() {
     submitRenameFolder,
     cancelRenameFolder,
     startRenameFolder,
-    noteContent,
-    draftNoteContent,
-    isNoteSaving,
-    noteSaveError,
-    handleEditorChange,
-    clearNote,
-    flushSave,
-    retrySave,
     refreshTree,
     createNewNote,
     deleteNotes,
     deleteFolders,
     moveNotesToArchive,
     showNoteInfo,
-    selectFolderForMobile,
-    selectNoteForMobile,
-    enterMobileHome,
-    renameFolderFromMobile,
     shouldNestNotesInNavigation,
-    rightPaneRef,
-  } = notesTree;
+  } = useNotesTree();
 
   // -- Local UI state
   const [appMode, setAppMode] = useState<AppMode>("notes");
@@ -468,164 +413,14 @@ export function AppShell() {
   };
 
   // -- Derived
-  const activeFolderTitle = activeNode?.name || activeFolder || "Notes";
-  const activeNoteTitle =
-    (activeNote ? notePreviews[activeNote]?.title : null) ||
-    (activeNote ? activeNote.split("/").pop()?.replace(/\.md$/i, "") : null) ||
-    "Note";
-
   const appStyle = useMemo(
     () => ({ "--editor-font-size": `${editorFontSize}px` }) as CSSProperties,
     [editorFontSize]
   );
 
   const dndSensors = layoutMode === "desktop" ? sensors : [];
-  const lastSuccessfulSyncLabel = syncSettings.lastSuccessfulSyncAt
-    ? new Date(syncSettings.lastSuccessfulSyncAt).toLocaleString()
-    : null;
 
   // -- Render helpers
-  const renderMiddlePane = () =>
-    appMode === "notes" ? (
-      <div className="pane notes-pane min-w-0">
-        <div className="pane-drag-region" data-tauri-drag-region aria-hidden />
-        <div
-          className="pane-body focus:outline-none"
-          ref={(node) => {
-            notesPanelRef.current = node;
-            middlePaneRef.current = node;
-          }}
-          tabIndex={0}
-          onKeyDown={handleNotesKeyDown}
-          onClick={() => {
-            lastLeftPaneFocusRef.current = "middle";
-            focusNoScroll(middlePaneRef.current);
-          }}
-        >
-          {notes.length === 0 && <div className="empty">No notes</div>}
-          <SortableContext
-            items={notes.map((n) => n.path)}
-            strategy={verticalListSortingStrategy}
-          >
-            {notes.map((note) => (
-              <NoteRow
-                key={note.path}
-                note={note}
-                preview={notePreviews[note.path]}
-                isSelected={selectedNotes.has(note.path)}
-                onClick={handleNoteClick}
-                onContextMenu={handleNoteContextMenu}
-              />
-            ))}
-          </SortableContext>
-        </div>
-      </div>
-    ) : (
-      <SettingsMiddlePane
-        activeSection={activeSettingsSection}
-        onSectionChange={setActiveSettingsSection}
-        middlePaneRef={middlePaneRef}
-        onPaneClick={() => {
-          lastLeftPaneFocusRef.current = "middle";
-          focusNoScroll(middlePaneRef.current);
-        }}
-      />
-    );
-
-  const renderRightPane = () =>
-    appMode === "notes" ? (
-      <div className="pane editor-pane min-w-0">
-        <div
-          className="pane-body editor-body"
-          ref={rightPaneRef}
-          tabIndex={0}
-          onClick={() => {
-            const editorElement =
-              rightPaneRef.current?.querySelector<HTMLElement>(
-                ".tiptap-content[contenteditable='true']"
-              ) || rightPaneRef.current;
-            focusNoScroll(editorElement);
-          }}
-        >
-          <div className="editor-single">
-            <NoteEditor
-              markdown={activeNote ? noteContent : draftNoteContent}
-              onChange={handleEditorChange}
-            />
-          </div>
-        </div>
-      </div>
-    ) : (
-      <SettingsDetailPane
-        activeSection={activeSettingsSection}
-        theme={theme}
-        onThemeChange={setTheme}
-        notesListMode={notesListMode}
-        onNotesListModeChange={setNotesListMode}
-        sessions={sessions}
-        activeSessionId={activeSessionId}
-        sessionBusy={sessionsBusy}
-        sessionError={sessionsError}
-        onSessionChange={(sessionId) => {
-          void switchSession(sessionId);
-        }}
-        onCreateSession={() => {
-          void createSession();
-        }}
-        gitRemoteUrl={syncSettings.gitRemoteUrl}
-        onGitRemoteUrlChange={(v) => updateSyncSettings({ gitRemoteUrl: v })}
-        gitBranch={syncSettings.gitBranch}
-        onGitBranchChange={(v) => updateSyncSettings({ gitBranch: v })}
-        gitUsername={syncSettings.gitUsername}
-        onGitUsernameChange={(v) => updateSyncSettings({ gitUsername: v })}
-        gitPassword={syncSettings.gitPassword}
-        onGitPasswordChange={(v) => updateSyncSettings({ gitPassword: v })}
-        gitCommitMessage={syncSettings.gitCommitMessage}
-        onGitCommitMessageChange={(v) => updateSyncSettings({ gitCommitMessage: v })}
-        gitStatus={gitStatus}
-        gitSyncBusy={gitSyncBusy}
-        gitSyncAction={gitSyncAction}
-        gitSyncError={gitSyncError}
-        onGitRefresh={() => void refreshGitStatus()}
-        onGitConnect={() => void connectGitRepo()}
-        onGitPull={() => void gitPull({ onAfterPull: () => refreshTree() })}
-        onGitPush={() => void gitPush()}
-        assemblyAiApiKey={syncSettings.assemblyAiApiKey}
-        onAssemblyAiApiKeyChange={(v) => updateSyncSettings({ assemblyAiApiKey: v })}
-        mobileAutoTranscriptionEnabled={syncSettings.mobileAutoTranscriptionEnabled}
-        onMobileAutoTranscriptionChange={(v) =>
-          updateSyncSettings({ mobileAutoTranscriptionEnabled: v })
-        }
-        recordingSupported={recordingSupported}
-        isRecordingAudio={isRecordingAudio}
-        isRecordingBusy={isRecordingFinalizing || transcriptionQueueBusy}
-        recordingError={recorderError}
-        recordingStatus={recordingStatusMessage}
-        recordingLiveStatus={recordingLiveStatus}
-        recordingsQueue={recordingsQueue}
-        recordings={recordingsList}
-        recordingsBusy={recordingsBusy}
-        recordingsError={recordingsError}
-        activeAudioPath={activeAudioPath}
-        activeAudioSrc={activeAudioSrc}
-        onRefreshRecordings={() => {
-          void refreshRecordings();
-        }}
-        onPlayRecording={(audioPath) => {
-          void playRecording(audioPath);
-        }}
-        onStartAudioRecording={() => {
-          void startRecording();
-        }}
-        onStopAudioRecording={stopRecording}
-        onQueueRecordings={() => {
-          void queueRecordingTranscriptions("manual");
-        }}
-        rightPaneRef={rightPaneRef}
-        onPaneClick={() => focusNoScroll(rightPaneRef.current)}
-      />
-    );
-
   const renderLeftPane = () => (
     <div className="pane-with-drag">
       <div className="pane-drag-region" data-tauri-drag-region aria-hidden />
@@ -749,126 +544,31 @@ export function AppShell() {
             threePaneLayout={threePaneLayout}
             setThreePaneLayout={setThreePaneLayout}
             leftPane={renderLeftPane()}
-            middlePane={renderMiddlePane()}
-            rightPane={renderRightPane()}
+            middlePane={
+              <DesktopMiddlePane
+                appMode={appMode}
+                activeSettingsSection={activeSettingsSection}
+                onSettingsSectionChange={setActiveSettingsSection}
+                notesPanelRef={notesPanelRef}
+                middlePaneRef={middlePaneRef}
+                lastLeftPaneFocusRef={lastLeftPaneFocusRef}
+                onNotesKeyDown={handleNotesKeyDown}
+                onNoteClick={handleNoteClick}
+                onNoteContextMenu={handleNoteContextMenu}
+              />
+            }
+            rightPane={
+              <DesktopRightPane
+                appMode={appMode}
+                activeSettingsSection={activeSettingsSection}
+              />
+            }
           />
         ) : (
           <MobileShell
-            layoutMode={layoutMode}
-            theme={theme}
-            appStyle={appStyle}
-            visibleFolders={visibleItems}
-            expanded={expanded}
-            onToggleFolder={(path) =>
-              setExpanded((prev) => {
-                const next = new Set(prev);
-                if (next.has(path)) next.delete(path);
-                else next.add(path);
-                return next;
-              })
-            }
-            activeFolder={activeFolder}
-            activeFolderTitle={activeFolderTitle}
-            onSelectFolder={selectFolderForMobile}
-            onRenameFolder={renameFolderFromMobile}
-            onDeleteFolder={async (path) => {
-              await deleteFolders([path]);
-            }}
-            notes={notes}
-            notePreviews={notePreviews}
-            allNotes={allNotes}
-            allNotePreviews={allNotePreviews}
-            activeNote={activeNote}
-            activeNoteTitle={activeNoteTitle}
-            onSelectNote={selectNoteForMobile}
-            onCreateNote={createNewNote}
-            onEnterHome={enterMobileHome}
-            onDeleteNote={async (path) => {
-              return deleteNotes([path]);
-            }}
-            onArchiveNote={async (path) => {
-              await moveNotesToArchive([path]);
-            }}
-            onShowNoteInfo={showNoteInfo}
-            onNoteContextMenu={handleNoteContextMenu}
-            editorMarkdown={activeNote ? noteContent : draftNoteContent}
-            onEditorChange={handleEditorChange}
-            hasActiveNote={Boolean(activeNote)}
-            isSaving={isNoteSaving}
-            saveError={noteSaveError}
-            onRetrySave={retrySave}
-            flushSave={flushSave}
-            keyboardInset={keyboardInset}
-            settingsSections={MOBILE_SETTINGS_SECTIONS}
             activeSettingsSection={activeSettingsSection}
             onSettingsSectionChange={setActiveSettingsSection}
-            notesListMode={notesListMode}
-            onNotesListModeChange={setNotesListMode}
-            onThemeChange={setTheme}
-            sessions={sessions}
-            activeSessionId={activeSessionId}
-            sessionBusy={sessionsBusy}
-            sessionError={sessionsError}
-            onSessionChange={(sessionId) => {
-              void switchSession(sessionId);
-            }}
-            onCreateSession={() => {
-              void createSession();
-            }}
-            gitRemoteUrl={syncSettings.gitRemoteUrl}
-            onGitRemoteUrlChange={(v) => updateSyncSettings({ gitRemoteUrl: v })}
-            gitBranch={syncSettings.gitBranch}
-            onGitBranchChange={(v) => updateSyncSettings({ gitBranch: v })}
-            gitUsername={syncSettings.gitUsername}
-            onGitUsernameChange={(v) => updateSyncSettings({ gitUsername: v })}
-            gitPassword={syncSettings.gitPassword}
-            onGitPasswordChange={(v) => updateSyncSettings({ gitPassword: v })}
-            gitCommitMessage={syncSettings.gitCommitMessage}
-            onGitCommitMessageChange={(v) => updateSyncSettings({ gitCommitMessage: v })}
-            gitStatus={gitStatus}
-            gitSyncBusy={gitSyncBusy}
-            gitSyncAction={gitSyncAction}
-            gitSyncError={gitSyncError}
-            gitSyncHistory={gitSyncHistory}
-            onGitRefresh={() => void refreshGitStatus()}
-            onGitConnect={() => void connectGitRepo()}
-            onGitPull={() => void gitPull({ onAfterPull: () => refreshTree() })}
-            onGitPush={() => void gitPush()}
-            lastSuccessfulSyncAt={lastSuccessfulSyncLabel}
-            assemblyAiApiKey={syncSettings.assemblyAiApiKey}
-            onAssemblyAiApiKeyChange={(v) => updateSyncSettings({ assemblyAiApiKey: v })}
-            mobileAutoTranscriptionEnabled={syncSettings.mobileAutoTranscriptionEnabled}
-            onMobileAutoTranscriptionChange={(v) =>
-              updateSyncSettings({ mobileAutoTranscriptionEnabled: v })
-            }
-            recordingSupported={recordingSupported}
-            isRecordingAudio={isRecordingAudio}
-            isRecordingBusy={isRecordingFinalizing || transcriptionQueueBusy}
-            recordingError={recorderError}
-            recordingStatus={recordingStatusMessage}
-            recordingLiveStatus={recordingLiveStatus}
-            recordingsQueue={recordingsQueue}
-            recordings={recordingsList}
-            recordingsBusy={recordingsBusy}
-            recordingsError={recordingsError}
-            activeAudioPath={activeAudioPath}
-            activeAudioSrc={activeAudioSrc}
-            onRefreshTree={async () => {
-              await refreshTree();
-            }}
-            onRefreshRecordings={() => {
-              void refreshRecordings();
-            }}
-            onPlayRecording={(audioPath) => {
-              void playRecording(audioPath);
-            }}
-            onStartAudioRecording={(folderPath) => {
-              void startRecording(folderPath);
-            }}
-            onStopAudioRecording={stopRecording}
-            onQueueRecordings={() => {
-              void queueRecordingTranscriptions("manual");
-            }}
+            onNoteContextMenu={handleNoteContextMenu}
           />
         )}
       </div>
