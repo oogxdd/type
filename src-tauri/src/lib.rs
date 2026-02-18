@@ -2206,6 +2206,55 @@ fn fast_forward_to(
     Ok(())
 }
 
+fn merge_fetched_commit(
+    repo: &Repository,
+    branch: &str,
+    fetched_commit: &AnnotatedCommit<'_>,
+) -> Result<(), String> {
+    let mut checkout_options = CheckoutBuilder::new();
+    checkout_options.safe();
+    repo.merge(&[fetched_commit], None, Some(&mut checkout_options))
+        .map_err(map_git_error)?;
+
+    let merge_result = (|| -> Result<(), String> {
+        let head_commit = repo
+            .head()
+            .map_err(map_git_error)?
+            .peel_to_commit()
+            .map_err(map_git_error)?;
+        let remote_commit = repo.find_commit(fetched_commit.id()).map_err(map_git_error)?;
+        let mut index = repo.index().map_err(map_git_error)?;
+        if index.has_conflicts() {
+            return Err(
+                "Pull produced merge conflicts. Resolve conflicts on desktop, then pull again on mobile."
+                    .to_string(),
+            );
+        }
+        let tree_id = index.write_tree_to(repo).map_err(map_git_error)?;
+        let tree = repo.find_tree(tree_id).map_err(map_git_error)?;
+        let signature = default_signature(repo)?;
+        let message = format!("Merge origin/{branch} into {branch}");
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            &message,
+            &tree,
+            &[&head_commit, &remote_commit],
+        )
+        .map_err(map_git_error)?;
+        repo.checkout_head(Some(CheckoutBuilder::new().safe()))
+            .map_err(map_git_error)?;
+        Ok(())
+    })();
+
+    let cleanup_result = repo.cleanup_state().map_err(map_git_error);
+    if merge_result.is_ok() {
+        cleanup_result?;
+    }
+    merge_result
+}
+
 fn sort_by_order(mut names: Vec<String>, order: &[String]) -> Vec<String> {
     let mut index = HashMap::new();
     for (idx, name) in order.iter().enumerate() {
@@ -2508,10 +2557,11 @@ fn git_pull_blocking(app: tauri::AppHandle, args: GitSyncArgs) -> Result<GitSync
         fast_forward_to(&repo, &target_branch, &fetched)?;
         return Ok(build_git_status(&root));
     }
-    Err(
-        "Pull requires a merge commit. Resolve it on desktop, then pull again on mobile."
-            .to_string(),
-    )
+    if analysis.is_normal() {
+        merge_fetched_commit(&repo, &target_branch, &fetched)?;
+        return Ok(build_git_status(&root));
+    }
+    Err("Pull failed because local and remote history could not be merged.".to_string())
 }
 
 fn remote_push(

@@ -111,6 +111,12 @@ export const getSyncHint = (error: string | null): string | null => {
   if (lower.includes("merge commit")) {
     return "Diverged history. Resolve on desktop, then pull on mobile.";
   }
+  if (lower.includes("merge conflicts")) {
+    return "Merge conflict detected. Resolve on desktop, then sync again.";
+  }
+  if (lower.includes("non-fast-forward")) {
+    return "Remote is newer. Pull first, then push again.";
+  }
   if (lower.includes("credentials")) {
     return "Authentication failed. Verify username and token.";
   }
