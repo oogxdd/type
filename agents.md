@@ -75,6 +75,10 @@ These are the trickiest part of the architecture:
 
 **useAudioRecorder** (`src/hooks/useAudioRecorder.ts`): Dual-mode: Web MediaRecorder for desktop, native iOS recording via Tauri commands. Handles recovery when native recording survives app backgrounding.
 
+**useSettingsData** (`src/hooks/useSettingsData.ts`): Shared computed values for settings UI: `isRecordingBusy`, `syncActionLabel`, `canPull`/`canPush`/`canConnect`/`canQueue`, `recorderState`, `playButtonText()`. Consumed by both desktop and mobile settings sections to avoid duplication.
+
+**useEdgeSwipe** (`src/hooks/useEdgeSwipe.ts`): Swipe-back gesture handler for mobile. Returns pointer event handlers to spread on root div. Takes `enabled` flag and `onSwipeBack` callback.
+
 ### Data layer
 
 `src/data/notesApi.ts` wraps all Tauri IPC commands. Every function maps 1:1 to a Rust command. To swap backends, re-implement this module's exports.
@@ -128,8 +132,38 @@ Detection in `src/mobile/useLayoutMode.ts`.
 ### Mobile modules
 
 - `src/mobile/navigation.ts` — Route types + useReducer-based navigation state machine
-- `src/mobile/MobileShell.tsx` (~1293 lines) — Orchestrates mobile screens, tab bar, nav bar, action sheets, toasts. Consumes all contexts directly (only 3 props from AppShell).
-- `src/mobile/components/` — Individual screens: MobileFoldersScreen, MobileNotesScreen, MobileEditorScreen, MobileSettingsScreen (~590 lines, consumes contexts directly, 3 props), MobileRecordingScreen, MobileRecentScreen. Plus MobileActionSheet, MobilePromptSheet, MobileTabBar, MobileNavBar, MobileToast.
+- `src/mobile/types.ts` — Shared constants (`UNSORTED_FOLDER_PATH`, `ARCHIVE_FOLDER_PATH`, `SYSTEM_FOLDER_PATHS`) and helpers (`getDisplayFolderName`, `getDisplayRouteTitle`)
+- `src/mobile/MobileShell.tsx` (~463 lines) — Thin shell: wires up navigation/action sheet/edge swipe hooks, renders phone layout (nav bar + route renderer + drawer) or tablet layout, plus action sheet/prompt/toast overlays. Only 3 props from AppShell.
+- `src/mobile/TabletLayout.tsx` (~273 lines) — Tablet two-pane layout: left pane (folders or settings sections) + right pane (notes+editor or settings detail). Consumes contexts directly.
+
+**Mobile hooks** (`src/mobile/hooks/`):
+- `useMobileNavigation.ts` (~114 lines) — Navigation state (useReducer), route callbacks (popRoute, openNotesRoute, openEditorRoute, etc.), transition direction tracking
+- `useActionSheets.ts` (~186 lines) — Action sheet state, folder/note action sheet openers, sheet action handler, rename prompt, delete/archive/toggle helpers
+- `usePhoneNavHeader.ts` (~145 lines) — Computes phoneTitle, phoneLeftAction, phoneRightActions from current route
+- `useRecentBuckets.ts` (~114 lines) — Groups allNotes into date-bucketed recent entries
+
+**Phone screens** (`src/mobile/screens/`): Each route kind maps to a self-contained screen component:
+- `PhoneHomeScreen.tsx` — Draft editor
+- `PhoneFoldersScreen.tsx` — Folders/recent tab switcher
+- `PhoneNotesScreen.tsx` — Folder notes list
+- `PhoneRecentDateScreen.tsx` — Recent date bucket notes list
+- `PhoneRecordingScreen.tsx` — Recording screen (consumes RecordingsContext)
+- `PhoneEditorScreen.tsx` — Active note editor (consumes EditorContext + SelectionContext)
+- `PhoneSettingsScreen.tsx` — Thin wrapper for MobileSettingsScreen
+- `index.tsx` — `PhoneRouteRenderer` switch dispatching route.kind to screens
+
+**Mobile components** (`src/mobile/components/`):
+- `MobileFoldersScreen`, `MobileNotesScreen`, `MobileEditorScreen`, `MobileRecordingScreen`, `MobileRecentScreen` — Shared screen components used by both phone screens and tablet layout
+- `MobileSettingsScreen.tsx` (~42 lines) — Tabs + section switcher, delegates to section components
+- `MobileActionSheet`, `MobilePromptSheet`, `MobileTabBar`, `MobileNavBar`, `MobileToast` — UI primitives
+
+**Mobile settings sections** (`src/mobile/components/settings/`):
+- `SettingsHelpers.tsx` — Shared mobile settings primitives (Group, ChoiceRow, InputRow, StatRow)
+- `MobileGeneralSection.tsx`, `MobileAppearanceSection.tsx`, `MobileSyncSection.tsx`, `MobileRecordingsSection.tsx`
+
+**Desktop settings sections** (`src/components/settings/`):
+- `SettingsGeneralSection.tsx`, `SettingsAppearanceSection.tsx`, `SettingsSyncSection.tsx`, `SettingsRecordingsSection.tsx`
+- `SettingsPanel.tsx` (~122 lines) — SettingsDetail is now a ~25-line switch dispatching to section components. Retains SettingsRow, SettingsMiddlePane, SettingsDetailPane, and type exports.
 
 ## iOS Widget (Quick Record)
 
