@@ -131,6 +131,30 @@ Detection in `src/mobile/useLayoutMode.ts`.
 - `src/mobile/MobileShell.tsx` (~1293 lines) — Orchestrates mobile screens, tab bar, nav bar, action sheets, toasts. Consumes all contexts directly (only 3 props from AppShell).
 - `src/mobile/components/` — Individual screens: MobileFoldersScreen, MobileNotesScreen, MobileEditorScreen, MobileSettingsScreen (~590 lines, consumes contexts directly, 3 props), MobileRecordingScreen, MobileRecentScreen. Plus MobileActionSheet, MobilePromptSheet, MobileTabBar, MobileNavBar, MobileToast.
 
+## iOS Widget (Quick Record)
+
+A WidgetKit extension that lets users start a recording from the iOS home screen or lock screen.
+
+### How it works
+
+1. **Widget extension** (`src-tauri/gen/apple/type-widget/RecordWidget.swift`): A `systemSmall` StaticConfiguration widget showing a mic icon and "New Recording" label. The entire widget surface links to `type2://record`.
+
+2. **URL scheme**: The `type2://` custom URL scheme is registered in `project.yml` via `CFBundleURLTypes`. When the widget is tapped, iOS opens the app with `type2://record`.
+
+3. **Deep link handling** (`src/mobile/MobileShell.tsx`): A `useEffect` imports `@tauri-apps/plugin-deep-link` and listens for URL open events. When a URL containing "record" is received, it calls `openRecordingRoute` with `autoStart: true`.
+
+4. **Auto-start recording** (`src/mobile/components/MobileRecordingScreen.tsx`): When the `autoStart` prop is true and recording is supported/idle, recording begins automatically via a one-shot `useEffect` (guarded by a ref to prevent re-firing).
+
+### Files
+
+- `src-tauri/gen/apple/type-widget/RecordWidget.swift` — Widget SwiftUI code
+- `src-tauri/gen/apple/type-widget/Info.plist` — Widget extension plist
+- `src-tauri/gen/apple/project.yml` — `type_RecordWidget` target + `CFBundleURLTypes` on `type_iOS`
+- `src-tauri/Cargo.toml` + `src-tauri/src/lib.rs` — `tauri-plugin-deep-link` registration
+- `src/mobile/navigation.ts` — `autoStart` field on recording route
+- `src/mobile/MobileShell.tsx` — Deep link listener + passes autoStart through
+- `src/mobile/components/MobileRecordingScreen.tsx` — Auto-start behavior
+
 ## Gotchas
 
 - **"Archieve" typo**: The archive folder is spelled "Archieve" in the codebase and in persisted data. Do not "fix" this — it would break existing user data.

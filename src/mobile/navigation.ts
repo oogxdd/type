@@ -8,7 +8,7 @@ export type MobileRoute =
   | { kind: "notes"; folderPath: string }
   | { kind: "recent-date"; bucketId: string }
   | { kind: "editor"; folderPath: string; notePath: string }
-  | { kind: "recording"; folderPath: string }
+  | { kind: "recording"; folderPath: string; autoStart?: boolean }
   | { kind: "settings"; section?: SettingsSectionId };
 
 export type MobileNavigationState = {

@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 type MobileRecordingScreenProps = {
   recordingSupported: boolean;
   isRecording: boolean;
@@ -9,6 +11,7 @@ type MobileRecordingScreenProps = {
   onStart: () => void;
   onStop: () => void;
   onQueue: () => void;
+  autoStart?: boolean;
 };
 
 export function MobileRecordingScreen({
@@ -22,7 +25,17 @@ export function MobileRecordingScreen({
   onStart,
   onStop,
   onQueue,
+  autoStart,
 }: MobileRecordingScreenProps) {
+  const autoStartFired = useRef(false);
+
+  useEffect(() => {
+    if (autoStart && recordingSupported && !isRecording && !isBusy && !autoStartFired.current) {
+      autoStartFired.current = true;
+      onStart();
+    }
+  }, [autoStart, recordingSupported, isRecording, isBusy, onStart]);
+
   const mainLabel = isRecording ? "Stop and save" : "Start recording";
 
   return (

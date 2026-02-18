@@ -426,14 +426,37 @@ export function MobileShell({
   }, [selectNoteForMobile]);
 
   const openRecordingRoute = useCallback(
-    (folderPath: string = UNSORTED_FOLDER_PATH) => {
+    (folderPath: string = UNSORTED_FOLDER_PATH, autoStart?: boolean) => {
       selectFolderForMobile(folderPath);
       nextTransitionRef.current = "up";
-      dispatch({ type: "push", route: { kind: "recording", folderPath } });
+      dispatch({ type: "push", route: { kind: "recording", folderPath, autoStart } });
       setFoldersDrawerOpen(false);
     },
     [selectFolderForMobile]
   );
+
+  // Deep link listener — opens recording screen when type2://record is received
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    import("@tauri-apps/plugin-deep-link")
+      .then(({ onOpenUrl }) =>
+        onOpenUrl((urls: string[]) => {
+          for (const url of urls) {
+            if (url.includes("record")) {
+              openRecordingRoute(UNSORTED_FOLDER_PATH, true);
+              break;
+            }
+          }
+        })
+      )
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(() => {
+        // Deep link plugin not available (e.g. desktop/dev)
+      });
+    return () => unlisten?.();
+  }, [openRecordingRoute]);
 
   const handleEdgeSwipeStart = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -781,6 +804,7 @@ export function MobileShell({
           onStart={() => startRecording(currentRoute.folderPath)}
           onStop={stopRecording}
           onQueue={() => void queueRecordingTranscriptions("manual")}
+          autoStart={currentRoute.autoStart}
         />
       );
     }
