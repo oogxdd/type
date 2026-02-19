@@ -877,10 +877,51 @@ body {
   color: var(--ui-text);
 }
 
+.settings-section-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-card-block {
+  gap: 0;
+  border-radius: 12px;
+  border: 1px solid var(--ui-border);
+  background: color-mix(in srgb, #ffffff 84%, var(--ui-pane));
+  box-shadow: none;
+}
+
+.settings-card-block-header {
+  gap: 4px;
+  padding: 12px 14px 10px;
+}
+
+.settings-card-block-title {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ui-text);
+}
+
+.settings-card-block-description {
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.settings-card-block-content {
+  padding: 0 14px 14px;
+}
+
+.settings-card-separator {
+  margin: 12px 0;
+}
+
 .settings-inline-row {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.settings-inline-row > [data-slot="input"] {
+  flex: 1;
 }
 
 .settings-inline-row select {
@@ -1004,6 +1045,7 @@ body {
 .settings-action-row {
   margin-top: 14px;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -1577,6 +1619,19 @@ body {
 
 .app.theme-dark .settings-control {
   color: #d8e0ea;
+}
+
+.app.theme-dark .settings-card-block {
+  border-color: #313a47;
+  background: rgba(23, 29, 37, 0.72);
+}
+
+.app.theme-dark .settings-card-block-title {
+  color: #eef3f8;
+}
+
+.app.theme-dark .settings-card-block-description {
+  color: #a8b1be;
 }
 
 .app.theme-dark .settings-control select,

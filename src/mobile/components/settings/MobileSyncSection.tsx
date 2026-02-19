@@ -6,7 +6,11 @@ import { useGitSync } from "../../../contexts/GitSyncContext";
 import { useNotesTree } from "../../../contexts/NotesTreeContext";
 import { Group, InputRow, StatRow } from "./SettingsHelpers";
 
-export function MobileSyncSection() {
+type MobileSyncSectionProps = {
+  view: "credentials" | "actions";
+};
+
+export function MobileSyncSection({ view }: MobileSyncSectionProps) {
   const { syncSettings, updateSyncSettings } = useSessions();
   const {
     gitStatus,
@@ -27,7 +31,6 @@ export function MobileSyncSection() {
     : null;
 
   const syncHint = getSyncHint(gitSyncError);
-  const [syncView, setSyncView] = useState<"credentials" | "actions">("actions");
   const [selectedSyncHistoryId, setSelectedSyncHistoryId] = useState<string | null>(null);
 
   const visibleSyncHistory = useMemo(
@@ -61,26 +64,7 @@ export function MobileSyncSection() {
 
   return (
     <>
-      <Group title="Sync views">
-        <div className="mobile-segment">
-          <button
-            type="button"
-            className={`mobile-segment-btn${syncView === "credentials" ? " active" : ""}`}
-            onClick={() => setSyncView("credentials")}
-          >
-            Credentials
-          </button>
-          <button
-            type="button"
-            className={`mobile-segment-btn${syncView === "actions" ? " active" : ""}`}
-            onClick={() => setSyncView("actions")}
-          >
-            Actions
-          </button>
-        </div>
-      </Group>
-
-      {syncView === "credentials" ? (
+      {view === "credentials" ? (
         <>
           <Group title="Repository">
             <InputRow

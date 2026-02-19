@@ -647,24 +647,57 @@
   flex-direction: column;
 }
 
-.mobile-settings-sections {
+.mobile-settings-tabs-stack {
   position: sticky;
   top: 0;
   z-index: 5;
-  display: flex;
+  display: grid;
   gap: 8px;
   padding: 10px 12px 9px;
-  overflow-x: auto;
   border-bottom: 1px solid var(--mobile-separator-light);
   background: color-mix(in srgb, var(--mobile-surface-light) 94%, transparent);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+}
+
+.mobile-settings-sections {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+}
+
+.mobile-settings-subsections {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-settings-subsection-btn {
+  min-height: 34px;
+  border: 1px solid var(--mobile-separator-light);
+  background: var(--mobile-surface-light);
+  color: var(--mobile-text-muted-light);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 560;
+  white-space: nowrap;
+  padding: 0 12px;
+}
+
+.mobile-settings-subsection-btn.active {
+  border-color: color-mix(in srgb, var(--ui-accent) 65%, var(--mobile-separator-light));
+  color: var(--ui-accent);
+}
+
+.mobile-root.theme-dark .mobile-settings-tabs-stack {
+  border-color: var(--mobile-separator-dark);
+  background: color-mix(in srgb, var(--mobile-surface-dark) 94%, transparent);
 }
 
 .mobile-root.theme-dark .mobile-settings-sections {
   border-color: var(--mobile-separator-dark);
-  background: color-mix(in srgb, var(--mobile-surface-dark) 94%, transparent);
 }
 
 .mobile-settings-section-btn {
@@ -691,6 +724,16 @@
 }
 
 .mobile-root.theme-dark .mobile-settings-section-btn.active {
+  border-color: color-mix(in srgb, var(--ui-accent) 75%, var(--mobile-separator-dark));
+}
+
+.mobile-root.theme-dark .mobile-settings-subsection-btn {
+  border-color: var(--mobile-separator-dark);
+  background: var(--mobile-surface-muted-dark);
+  color: var(--mobile-text-muted-dark);
+}
+
+.mobile-root.theme-dark .mobile-settings-subsection-btn.active {
   border-color: color-mix(in srgb, var(--ui-accent) 75%, var(--mobile-separator-dark));
 }
 
@@ -1850,7 +1893,7 @@
 }
 
 .mobile-nav,
-.mobile-settings-sections,
+.mobile-settings-tabs-stack,
 .mobile-drawer-header,
 .mobile-drawer-tabs,
 .mobile-drawer-footer,
@@ -1961,8 +2004,7 @@
 
 .mobile-folder-row.active,
 .mobile-note-row.active,
-.mobile-settings-section-btn.active,
-.mobile-tablet-settings-btn.active {
+.mobile-tablet-archive-btn.active {
   background: color-mix(in srgb, var(--ui-accent) 12%, var(--ui-pane));
   box-shadow: inset 2px 0 0 var(--ui-accent);
 }
@@ -2033,12 +2075,17 @@
   font-size: max(16px, var(--editor-font-size, 14px));
 }
 
-.mobile-settings-sections {
+.mobile-settings-tabs-stack {
   gap: 6px;
   padding: 8px 10px;
 }
 
+.mobile-settings-sections {
+  gap: 6px;
+}
+
 .mobile-settings-section-btn,
+.mobile-settings-subsection-btn,
 .mobile-tablet-settings-btn {
   border-radius: 8px;
   border-color: var(--ui-border);
@@ -2049,9 +2096,12 @@
 }
 
 .mobile-settings-section-btn.active,
+.mobile-settings-subsection-btn.active,
 .mobile-tablet-settings-btn.active {
   border-color: color-mix(in srgb, var(--ui-border-strong) 85%, transparent);
   color: var(--ui-text);
+  background: color-mix(in srgb, var(--ui-accent) 10%, var(--ui-pane));
+  box-shadow: none;
 }
 
 .mobile-settings-scroll {
