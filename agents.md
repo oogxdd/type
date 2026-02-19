@@ -12,6 +12,19 @@ A local-first markdown notes app built with Tauri v2 (Rust backend) + React (Typ
 - **Backend**: Tauri v2 (Rust) — filesystem ops, Git via libgit2, native audio recording on iOS
 - **Build**: `npm run build` runs `tsc && vite build`. Rust: `cargo check --manifest-path src-tauri/Cargo.toml`
 
+## System folders and storage
+
+- Session notes root is configurable per session (`notes_root`). It can live in app data or any user-selected absolute path.
+- Required system folders inside each `notes_root`:
+  - `Feed` — default notes folder
+  - `Archieve` — archive folder (typo is intentional and persisted)
+  - `Recordings` — audio file storage folder
+- `Recordings` is hidden from folder tree/navigation and used as backend storage.
+- Legacy migrations are handled by backend:
+  - `Unsorted` -> `Feed`
+  - `_Recordings` -> `Recordings`
+- `Feed` does not keep `.notes-order.json`.
+
 ## How the frontend is structured
 
 ### Provider tree (App.tsx, ~72 lines)
@@ -39,15 +52,15 @@ All child components (MobileShell, SettingsPanel, MobileSettingsScreen) consume 
 
 **ThemeContext** (`src/contexts/ThemeContext.tsx`, ~75 lines): Persists theme and notesListMode to localStorage. Toggles `document.documentElement` dark class. Provides font size controls (increase/decrease/reset with min 12, max 28).
 
-**SessionsContext** (`src/contexts/SessionsContext.tsx`, ~174 lines): Manages multi-session support. Each session has its own notes folder and sync settings. `syncSettings` is a single object (gitRemoteUrl, gitBranch, gitUsername, gitPassword, gitCommitMessage, lastSuccessfulSyncAt, assemblyAiApiKey, mobileAutoTranscriptionEnabled) persisted to localStorage keyed by session ID. Takes a `flushSaveRef` prop to flush the editor before session switching.
+**SessionsContext** (`src/contexts/SessionsContext.tsx`, ~220 lines): Manages multi-session support. Each session has its own `notes_root` and sync settings. Exposes `activeSessionNotesRoot` and `setSessionNotesRoot(sessionId, notesRoot)` to migrate a session working directory. `syncSettings` is a single object (gitRemoteUrl, gitBranch, gitUsername, gitPassword, gitCommitMessage, lastSuccessfulSyncAt, assemblyAiApiKey, mobileAutoTranscriptionEnabled) persisted to localStorage keyed by session ID. Takes a `flushSaveRef` prop to flush the editor before session switching or path migration.
 
 **GitSyncContext** (`src/contexts/GitSyncContext.tsx`, ~304 lines): Reads sync settings from SessionsContext. Manages git status polling, connect/pull/push with history tracking. History entries include before/after status snapshots. `gitPull` accepts an optional `onAfterPull` callback (used to refresh the tree after pull).
 
-**SelectionContext** (`src/contexts/SelectionContext.tsx`, ~127 lines): Owns all folder/note selection state: `selectedFolders`, `selectedNotes`, `activeFolder`, `activeNote`, `lastSelectedFolder`, `lastSelectedNote`. Provides setters for all selection state. Contains mobile helpers: `selectFolderForMobile`, `selectNoteForMobile`, `enterMobileHome`. Resets all selection state when `activeSessionId` changes. Consumed by most UI components and by NotesTreeContext for CRUD operations that update selection.
+**SelectionContext** (`src/contexts/SelectionContext.tsx`, ~127 lines): Owns all folder/note selection state: `selectedFolders`, `selectedNotes`, `activeFolder`, `activeNote`, `lastSelectedFolder`, `lastSelectedNote`. Provides setters for all selection state. Contains mobile helpers: `selectFolderForMobile`, `selectNoteForMobile`, `enterMobileHome`. Resets selection when `activeSessionId` or `activeSessionNotesRoot` changes. Consumed by most UI components and by NotesTreeContext for CRUD operations that update selection.
 
-**EditorContext** (`src/contexts/EditorContext.tsx`, ~101 lines): Wraps the `useNoteEditor` hook, providing `noteContent`, `draftNoteContent`, `handleEditorChange`, `isSaving`, `lastSaveError`, `flushSave`, `clearNote`, `clearDraft`, `retrySave`. Owns `rightPaneRef`. Watches `activeNote` from SelectionContext to load/save notes. Handles flush-on-visibility/unload. Clears state when `activeSessionId` changes.
+**EditorContext** (`src/contexts/EditorContext.tsx`, ~101 lines): Wraps the `useNoteEditor` hook, providing `noteContent`, `draftNoteContent`, `handleEditorChange`, `isSaving`, `lastSaveError`, `flushSave`, `clearNote`, `clearDraft`, `retrySave`. Owns `rightPaneRef`. Watches `activeNote` from SelectionContext to load/save notes. Handles flush-on-visibility/unload. Clears state when `activeSessionId` or `activeSessionNotesRoot` changes.
 
-**NotesTreeContext** (`src/contexts/NotesTreeContext.tsx`, ~444 lines): Owns the folder tree, computed tree data (treeData, flatItems, visibleItems, orderedIds), and rename state. Provides all CRUD operations: createNewNote, deleteNotes, deleteFolders, moveNotesToArchive, rename. Consumes SelectionContext and EditorContext to update selection/editor state after CRUD operations. Resets tree state when activeSessionId changes.
+**NotesTreeContext** (`src/contexts/NotesTreeContext.tsx`, ~444 lines): Owns the folder tree, computed tree data (treeData, flatItems, visibleItems, orderedIds), and rename state. Provides all CRUD operations: createNewNote, deleteNotes, deleteFolders, moveNotesToArchive, rename. New notes are created through backend `create_note` with UUID v7 filenames. Consumes SelectionContext and EditorContext to update selection/editor state after CRUD operations. Resets tree state when `activeSessionId` or `activeSessionNotesRoot` changes.
 
 **RecordingsContext** (`src/contexts/RecordingsContext.tsx`, ~280 lines): Wraps `useAudioRecorder` hook. Manages recording target folder resolution, recording list/queue polling, audio playback (blob URL management), and auto-queue transcription timer. Takes `onRecordingComplete` callback prop wired in App.tsx to refresh tree and select the new note.
 
@@ -69,7 +82,7 @@ These are the trickiest part of the architecture:
 
 **useKeyboardNavigation** (`src/hooks/useKeyboardNavigation.ts`): Global keyboard shortcuts (Cmd+T toggle sidebar, Cmd+W switch panes, Cmd+J/K navigate panes, Cmd+N new note, Cmd+=/- font zoom, Cmd+0 reset font). Arrow key navigation for folders panel (with expand/collapse) and notes panel. Handles the "nested notes in navigation" mode where notes appear inline in the folder tree.
 
-**useNoteEditor** (`src/hooks/useNoteEditor.ts`): Loads note content when activeNote changes, flushes previous note if dirty. Debounced autosave at 400ms. Tracks dirty/saving/error state. `flushSave()` for immediate save on navigation away.
+**useNoteEditor** (`src/hooks/useNoteEditor.ts`): Loads note content when activeNote changes, flushes previous note if dirty. Debounced autosave at 400ms. Tracks dirty/saving/error state. `flushSave()` for immediate save on navigation away. On note switch: empty dirty notes are auto-deleted; UUID-v7 filename notes are auto-renamed to `<uuid-prefix>-<slug>.md` when content is sufficient.
 
 **useNotePreviews** (`src/hooks/useNotePreviews.ts`): Given an array of NoteEntry, fetches each note's metadata + content in parallel, returns preview objects (title, date, summary).
 
@@ -83,7 +96,7 @@ These are the trickiest part of the architecture:
 
 `src/data/notesApi.ts` wraps all Tauri IPC commands. Every function maps 1:1 to a Rust command. To swap backends, re-implement this module's exports.
 
-Key commands: `getTree`, `readNote`, `writeNote`, `getNoteMeta`, `deleteItems`, `moveItems`, `renameItem`, `setOrder`, `getGitStatus`, `connectGitRepo`, `gitPull`, `gitPush`, `getSessions`, `setActiveSession`, `createSession`, `listRecordings`, `saveAudioRecording`, `queueRecordingTranscriptions`, `readRecordingAudio`, `startNativeAudioRecording`, `stopNativeAudioRecording`, `nativeRecorderCapabilities`.
+Key commands: `getTree`, `readNote`, `createNote`, `writeNote`, `getNoteMeta`, `deleteItems`, `moveItems`, `renameItem`, `setOrder`, `getGitStatus`, `connectGitRepo`, `gitPull`, `gitPush`, `getSessions`, `setActiveSession`, `createSession`, `setSessionNotesRoot`, `listRecordings`, `saveAudioRecording`, `queueRecordingTranscriptions`, `readRecordingAudio`, `startNativeAudioRecording`, `stopNativeAudioRecording`, `nativeRecorderCapabilities`.
 
 ### Layout modes
 
@@ -125,14 +138,14 @@ Detection in `src/mobile/useLayoutMode.ts`.
 
 `src/utils/treeOps.ts`: Tree build/flatten/find/insert/remove/reorder. Used by DnD and tree rendering.
 
-`src/utils/format.ts`: Shared formatting utilities — `formatRecordingStatus`, `formatUpdatedAt`, `formatHistoryTime`, `getSyncHint`, `getNextNoteFileName`. Used by both desktop and mobile settings components.
+`src/utils/format.ts`: Shared formatting utilities — `formatRecordingStatus`, `formatUpdatedAt`, `formatHistoryTime`, `getSyncHint`. Used by both desktop and mobile settings components.
 
-`src/constants.ts`: `UNSORTED_FOLDER_PATH = "Unsorted"`, `ARCHIEVE_FOLDER_PATH = "Archieve"` (note: the typo "Archieve" is intentional — it's the actual folder name in existing data), system folder detection, localStorage keys, settings section definitions.
+`src/constants.ts`: `FEED_FOLDER_PATH = "Feed"`, `ARCHIEVE_FOLDER_PATH = "Archieve"` (note: the typo "Archieve" is intentional — it's the actual folder name in existing data), system folder detection, localStorage keys, settings section definitions.
 
 ### Mobile modules
 
 - `src/mobile/navigation.ts` — Route types + useReducer-based navigation state machine
-- `src/mobile/types.ts` — Shared constants (`UNSORTED_FOLDER_PATH`, `ARCHIVE_FOLDER_PATH`, `SYSTEM_FOLDER_PATHS`) and helpers (`getDisplayFolderName`, `getDisplayRouteTitle`)
+- `src/mobile/types.ts` — Shared constants (`FEED_FOLDER_PATH`, `ARCHIVE_FOLDER_PATH`, `SYSTEM_FOLDER_PATHS`) and helpers (`getDisplayFolderName`, `getDisplayRouteTitle`)
 - `src/mobile/MobileShell.tsx` (~463 lines) — Thin shell: wires up navigation/action sheet/edge swipe hooks, renders phone layout (nav bar + route renderer + drawer) or tablet layout, plus action sheet/prompt/toast overlays. Only 3 props from AppShell.
 - `src/mobile/TabletLayout.tsx` (~273 lines) — Tablet two-pane layout: left pane (folders or settings sections) + right pane (notes+editor or settings detail). Consumes contexts directly.
 
@@ -192,6 +205,10 @@ A WidgetKit extension that lets users start a recording from the iOS home screen
 ## Gotchas
 
 - **"Archieve" typo**: The archive folder is spelled "Archieve" in the codebase and in persisted data. Do not "fix" this — it would break existing user data.
+- **Feed folder semantics**: `Feed` is the default notes folder and does not keep `.notes-order.json`.
+- **Recordings storage**: audio files live under hidden `Recordings/`; notes created from recordings can be in `Feed` or the selected folder and reference audio via frontmatter.
+- **Filename lifecycle**: notes start as `<uuidv7>.md`; on note switch, sufficiently populated notes can auto-rename to `<uuid-prefix>-<slug>.md`.
+- **Empty note cleanup**: if a dirty note is emptied and then focus/selection moves away, it is auto-deleted.
 - **Git sync uses libgit2**, not shell git. The Rust backend handles all git operations.
 - **Editor saves are debounced** (400ms). `flushSave()` must be called before navigation away, session switching, or app backgrounding.
 - **`shouldNestNotesInNavigation`**: When `notesListMode === "nested"`, notes appear inline inside the folder tree instead of in a separate middle pane. This affects keyboard navigation, rendering, and the visible navigation items computation.

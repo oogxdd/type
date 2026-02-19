@@ -32,30 +32,16 @@ export type GitSyncStatus = {
   notes_root: string;
 };
 
-export type GitSyncHistoryStatusSnapshot = {
-  repo_initialized: boolean;
-  current_branch: string | null;
-  remote_url: string | null;
-  has_uncommitted_changes: boolean;
-  push_required: boolean;
-  ahead: number;
-  behind: number;
-};
+export type GitCommitHistorySyncState = "synced" | "local";
 
-export type GitSyncHistoryAction = "connect" | "pull" | "push";
-
-export type GitSyncHistoryEntry = {
+export type GitCommitHistoryEntry = {
   id: string;
-  action: GitSyncHistoryAction;
-  status: "success" | "error";
-  started_at: string;
-  finished_at: string;
-  branch: string;
-  remote_url: string;
-  commit_message?: string;
-  error_message?: string;
-  before: GitSyncHistoryStatusSnapshot | null;
-  after: GitSyncHistoryStatusSnapshot | null;
+  short_id: string;
+  summary: string;
+  author: string;
+  authored_ms: number | null;
+  sync_state: GitCommitHistorySyncState;
+  is_head: boolean;
 };
 
 export type NotesSession = {

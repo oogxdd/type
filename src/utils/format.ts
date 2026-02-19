@@ -100,6 +100,31 @@ export const formatHistoryTime = (value: string) => {
   return parsed.toLocaleString();
 };
 
+export const formatGitCommitTime = (value: number | null) => {
+  if (!value) {
+    return "Unknown time";
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "Unknown time";
+  }
+  return parsed.toLocaleString();
+};
+
+export const formatGitCommitStateLabel = (state: "synced" | "local") =>
+  state === "synced" ? "Synced" : "Local only";
+
+export const formatCommitSummaryForApp = (summary: string) => {
+  const normalized = summary.trim();
+  if (!normalized) {
+    return "No commit message";
+  }
+  if (normalized.toLowerCase() === "sync notes") {
+    return "Synced notes";
+  }
+  return normalized;
+};
+
 export const getSyncHint = (error: string | null): string | null => {
   if (!error) {
     return null;

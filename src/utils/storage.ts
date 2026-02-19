@@ -1,9 +1,7 @@
 import type { ThemeMode, NotesListMode } from "../components/SettingsPanel";
-import type { GitSyncHistoryEntry } from "../types";
 import type { SessionSyncSettings } from "../types";
 import {
   SESSION_SYNC_STORAGE_KEY,
-  GIT_SYNC_HISTORY_STORAGE_KEY,
   DEFAULT_EDITOR_FONT_SIZE,
 } from "../constants";
 
@@ -86,32 +84,6 @@ export const writeSessionSyncStore = (store: Record<string, Partial<SessionSyncS
     return;
   }
   window.localStorage.setItem(SESSION_SYNC_STORAGE_KEY, JSON.stringify(store));
-};
-
-export const readGitSyncHistoryStore = (): Record<string, GitSyncHistoryEntry[]> => {
-  if (typeof window === "undefined") {
-    return {};
-  }
-  try {
-    const raw = window.localStorage.getItem(GIT_SYNC_HISTORY_STORAGE_KEY);
-    if (!raw) {
-      return {};
-    }
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") {
-      return parsed as Record<string, GitSyncHistoryEntry[]>;
-    }
-  } catch {
-    return {};
-  }
-  return {};
-};
-
-export const writeGitSyncHistoryStore = (store: Record<string, GitSyncHistoryEntry[]>) => {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(GIT_SYNC_HISTORY_STORAGE_KEY, JSON.stringify(store));
 };
 
 export const getSessionSyncSettings = (sessionId: string): SessionSyncSettings => {

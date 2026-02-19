@@ -1,4 +1,11 @@
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "../ui/button";
+import {
+  formatCommitSummaryForApp,
+  formatGitCommitStateLabel,
+  formatGitCommitTime,
+  getSyncHint,
+} from "../../utils/format";
 import { useSettingsData } from "../../hooks/useSettingsData";
 import { useSessions } from "../../contexts/SessionsContext";
 import { useGitSync } from "../../contexts/GitSyncContext";
@@ -11,19 +18,50 @@ export function SettingsSyncSection() {
     gitSyncAction,
     gitSyncError,
     gitSyncBusy,
+    gitCommitHistory,
+    gitHistoryBusy,
+    gitHistoryError,
     refreshGitStatus,
+    refreshGitHistory,
     connectGitRepo,
     gitPull,
     gitPush,
   } = useGitSync();
   const { refreshTree } = useNotesTree();
   const { canPull, canPush, canConnect, syncActionLabel } = useSettingsData();
+  const [selectedCommitId, setSelectedCommitId] = useState<string | null>(null);
+
+  useEffect(() => {
+    void refreshGitHistory();
+  }, [refreshGitHistory]);
+
+  useEffect(() => {
+    if (gitCommitHistory.length === 0) {
+      if (selectedCommitId) {
+        setSelectedCommitId(null);
+      }
+      return;
+    }
+    if (!selectedCommitId || !gitCommitHistory.some((item) => item.id === selectedCommitId)) {
+      setSelectedCommitId(gitCommitHistory[0].id);
+    }
+  }, [gitCommitHistory, selectedCommitId]);
+
+  const selectedCommit = useMemo(() => {
+    if (gitCommitHistory.length === 0) {
+      return null;
+    }
+    if (!selectedCommitId) {
+      return gitCommitHistory[0];
+    }
+    return gitCommitHistory.find((item) => item.id === selectedCommitId) ?? gitCommitHistory[0];
+  }, [gitCommitHistory, selectedCommitId]);
 
   return (
     <>
       <h2 className="settings-detail-title">Sync</h2>
       <p className="settings-detail-text">
-        Git-based sync. Your notes stay local and can be pushed/pulled to a remote repo.
+        Git-based sync with a commit timeline adapted for notes workflow.
       </p>
       <label className="settings-control">
         <span>Remote repository URL</span>
@@ -113,6 +151,9 @@ export function SettingsSyncSection() {
       {gitSyncError ? (
         <p className="settings-warning-text settings-inline-warning">{gitSyncError}</p>
       ) : null}
+      {getSyncHint(gitSyncError) ? (
+        <p className="settings-inline-help">{getSyncHint(gitSyncError)}</p>
+      ) : null}
       <label className="settings-control">
         <span>Recommended flow</span>
         <span className="settings-inline-help">
@@ -120,8 +161,17 @@ export function SettingsSyncSection() {
         </span>
       </label>
       <div className="settings-action-row">
-        <Button variant="outline" size="sm" type="button" onClick={() => void refreshGitStatus()} disabled={gitSyncBusy}>
-          {gitSyncAction === "refresh" ? "Refreshing..." : "Refresh status"}
+        <Button
+          variant="outline"
+          size="sm"
+          type="button"
+          onClick={() => {
+            void refreshGitStatus();
+            void refreshGitHistory();
+          }}
+          disabled={gitSyncBusy || gitHistoryBusy}
+        >
+          {gitSyncAction === "refresh" || gitHistoryBusy ? "Refreshing..." : "Refresh status"}
         </Button>
         <Button size="sm" type="button" onClick={() => void connectGitRepo()} disabled={!canConnect}>
           {gitSyncAction === "connect" ? "Connecting..." : "Connect repo"}
@@ -133,6 +183,67 @@ export function SettingsSyncSection() {
           {gitSyncAction === "push" ? "Pushing..." : "Push"}
         </Button>
       </div>
+
+      <div className="settings-control">
+        <span>Commit history</span>
+        {gitHistoryError ? (
+          <p className="settings-warning-text settings-inline-warning">{gitHistoryError}</p>
+        ) : null}
+        <div className="settings-commit-list">
+          {gitCommitHistory.length === 0 ? (
+            <div className="settings-commit-row empty">
+              {gitHistoryBusy ? "Loading commit history..." : "No commits yet."}
+            </div>
+          ) : (
+            gitCommitHistory.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`settings-commit-row${selectedCommit?.id === item.id ? " active" : ""}`}
+                onClick={() => setSelectedCommitId(item.id)}
+              >
+                <span className="settings-commit-main">
+                  <span className="settings-commit-title">{formatCommitSummaryForApp(item.summary)}</span>
+                  <span className="settings-commit-meta">
+                    <code>{item.short_id}</code>
+                    <span>{formatGitCommitTime(item.authored_ms)}</span>
+                  </span>
+                </span>
+                <span className="settings-commit-state">{formatGitCommitStateLabel(item.sync_state)}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      {selectedCommit ? (
+        <div className="settings-info-grid">
+          <div className="settings-info-row">
+            <span>Selected commit</span>
+            <code>{selectedCommit.short_id}</code>
+          </div>
+          <div className="settings-info-row">
+            <span>Message</span>
+            <code>{formatCommitSummaryForApp(selectedCommit.summary)}</code>
+          </div>
+          <div className="settings-info-row">
+            <span>Author</span>
+            <code>{selectedCommit.author}</code>
+          </div>
+          <div className="settings-info-row">
+            <span>When</span>
+            <code>{formatGitCommitTime(selectedCommit.authored_ms)}</code>
+          </div>
+          <div className="settings-info-row">
+            <span>State</span>
+            <code>{formatGitCommitStateLabel(selectedCommit.sync_state)}</code>
+          </div>
+          <div className="settings-info-row">
+            <span>Position</span>
+            <code>{selectedCommit.is_head ? "Latest" : "History"}</code>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

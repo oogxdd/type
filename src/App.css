@@ -1103,6 +1103,66 @@ body {
   margin-top: 8px;
 }
 
+.settings-commit-list {
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.settings-commit-row {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid #edf2f7;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.settings-commit-row:last-child {
+  border-bottom: none;
+}
+
+.settings-commit-row.active {
+  background: #f4f8ff;
+}
+
+.settings-commit-row.empty {
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.settings-commit-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.settings-commit-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-text);
+  overflow-wrap: anywhere;
+}
+
+.settings-commit-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--ui-muted);
+}
+
+.settings-commit-state {
+  font-size: 11px;
+  color: var(--ui-muted);
+  white-space: nowrap;
+}
+
 .nav-action-group {
   display: grid;
   gap: 8px;
@@ -1719,6 +1779,27 @@ body {
 }
 
 .app.theme-dark .settings-recording-meta {
+  color: #a8b1be;
+}
+
+.app.theme-dark .settings-commit-list {
+  border-color: #2f3946;
+}
+
+.app.theme-dark .settings-commit-row {
+  border-bottom-color: #26303c;
+}
+
+.app.theme-dark .settings-commit-row.active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app.theme-dark .settings-commit-title {
+  color: #e8edf4;
+}
+
+.app.theme-dark .settings-commit-meta,
+.app.theme-dark .settings-commit-state {
   color: #a8b1be;
 }
 

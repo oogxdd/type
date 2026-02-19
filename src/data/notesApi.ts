@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   CreateNoteResult,
   FolderNode,
+  GitCommitHistoryEntry,
   GitSyncStatus,
   NativeRecorderCapabilities,
   NoteMeta,
@@ -158,6 +159,11 @@ export const setOrder = (args: SetOrderArgs): Promise<void> =>
 
 export const getGitStatus = (): Promise<GitSyncStatus> =>
   invokeLogged<GitSyncStatus>("get_git_status");
+
+export const getGitHistory = (limit = 40): Promise<GitCommitHistoryEntry[]> =>
+  invokeLogged<GitCommitHistoryEntry[]>("get_git_history", {
+    args: { limit },
+  });
 
 export const getSessions = (): Promise<NotesSessionSnapshot> =>
   invokeLogged<NotesSessionSnapshot>("get_sessions");

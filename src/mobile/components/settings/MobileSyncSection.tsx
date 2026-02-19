@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { formatHistoryTime, getSyncHint } from "../../../utils/format";
+import {
+  formatCommitSummaryForApp,
+  formatGitCommitStateLabel,
+  formatGitCommitTime,
+  getSyncHint,
+} from "../../../utils/format";
 import { useSettingsData } from "../../../hooks/useSettingsData";
 import { useSessions } from "../../../contexts/SessionsContext";
 import { useGitSync } from "../../../contexts/GitSyncContext";
@@ -17,8 +22,11 @@ export function MobileSyncSection({ view }: MobileSyncSectionProps) {
     gitSyncAction,
     gitSyncError,
     gitSyncBusy,
-    gitSyncHistory,
+    gitCommitHistory,
+    gitHistoryBusy,
+    gitHistoryError,
     refreshGitStatus,
+    refreshGitHistory,
     connectGitRepo,
     gitPull,
     gitPush,
@@ -31,36 +39,33 @@ export function MobileSyncSection({ view }: MobileSyncSectionProps) {
     : null;
 
   const syncHint = getSyncHint(gitSyncError);
-  const [selectedSyncHistoryId, setSelectedSyncHistoryId] = useState<string | null>(null);
-
-  const visibleSyncHistory = useMemo(
-    () =>
-      gitSyncHistory
-        .filter((item) => item.action === "pull" || item.action === "push")
-        .slice(0, 12),
-    [gitSyncHistory]
-  );
-  const selectedSyncHistory = useMemo(() => {
-    if (visibleSyncHistory.length === 0) {
-      return null;
-    }
-    if (!selectedSyncHistoryId) {
-      return visibleSyncHistory[0];
-    }
-    return visibleSyncHistory.find((item) => item.id === selectedSyncHistoryId) ?? visibleSyncHistory[0];
-  }, [selectedSyncHistoryId, visibleSyncHistory]);
+  const [selectedCommitId, setSelectedCommitId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (visibleSyncHistory.length === 0) {
-      if (selectedSyncHistoryId) {
-        setSelectedSyncHistoryId(null);
+    void refreshGitHistory();
+  }, [refreshGitHistory]);
+
+  useEffect(() => {
+    if (gitCommitHistory.length === 0) {
+      if (selectedCommitId) {
+        setSelectedCommitId(null);
       }
       return;
     }
-    if (!selectedSyncHistoryId || !visibleSyncHistory.some((item) => item.id === selectedSyncHistoryId)) {
-      setSelectedSyncHistoryId(visibleSyncHistory[0].id);
+    if (!selectedCommitId || !gitCommitHistory.some((item) => item.id === selectedCommitId)) {
+      setSelectedCommitId(gitCommitHistory[0].id);
     }
-  }, [selectedSyncHistoryId, visibleSyncHistory]);
+  }, [gitCommitHistory, selectedCommitId]);
+
+  const selectedCommit = useMemo(() => {
+    if (gitCommitHistory.length === 0) {
+      return null;
+    }
+    if (!selectedCommitId) {
+      return gitCommitHistory[0];
+    }
+    return gitCommitHistory.find((item) => item.id === selectedCommitId) ?? gitCommitHistory[0];
+  }, [gitCommitHistory, selectedCommitId]);
 
   return (
     <>
@@ -123,10 +128,13 @@ export function MobileSyncSection({ view }: MobileSyncSectionProps) {
               <button
                 type="button"
                 className="mobile-secondary-btn"
-                onClick={() => void refreshGitStatus()}
-                disabled={gitSyncBusy}
+                onClick={() => {
+                  void refreshGitStatus();
+                  void refreshGitHistory();
+                }}
+                disabled={gitSyncBusy || gitHistoryBusy}
               >
-                {gitSyncAction === "refresh" ? "Refreshing..." : "Refresh status"}
+                {gitSyncAction === "refresh" || gitHistoryBusy ? "Refreshing..." : "Refresh status"}
               </button>
             </div>
           </Group>
@@ -148,81 +156,39 @@ export function MobileSyncSection({ view }: MobileSyncSectionProps) {
             <StatRow label="Sync action" value={syncActionLabel} />
           </Group>
 
-          <Group title="Recent pull/push">
-            {visibleSyncHistory.length === 0 ? (
-              <p className="mobile-native-note">No pull/push history yet.</p>
-            ) : (
-              visibleSyncHistory.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`mobile-native-row choice mobile-sync-history-row${selectedSyncHistory?.id === item.id ? " active" : ""}`}
-                  onClick={() => setSelectedSyncHistoryId(item.id)}
-                >
-                  <span className="mobile-native-row-main">
-                    <span className="mobile-native-row-label">
-                      {item.action === "pull"
-                        ? "Pull"
-                        : item.action === "push"
-                          ? "Push"
-                          : "Connect repo"}
-                    </span>
-                    <span className="mobile-native-row-sub">
-                      {formatHistoryTime(item.finished_at)} · {item.branch || "-"}
-                    </span>
+          <Group title="Commit history">
+            {gitHistoryError ? (
+              <p className="mobile-native-note">{gitHistoryError}</p>
+            ) : null}
+            {!gitHistoryError && gitCommitHistory.length === 0 && !gitHistoryBusy ? (
+              <p className="mobile-native-note">No commits yet.</p>
+            ) : null}
+            {gitCommitHistory.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`mobile-native-row choice mobile-sync-history-row${selectedCommit?.id === item.id ? " active" : ""}`}
+                onClick={() => setSelectedCommitId(item.id)}
+              >
+                <span className="mobile-native-row-main">
+                  <span className="mobile-native-row-label">{formatCommitSummaryForApp(item.summary)}</span>
+                  <span className="mobile-native-row-sub">
+                    {item.short_id} · {formatGitCommitTime(item.authored_ms)}
                   </span>
-                  <span className="mobile-native-row-value">
-                    {item.status === "success" ? "Success" : "Failed"}
-                  </span>
-                </button>
-              ))
-            )}
+                </span>
+                <span className="mobile-native-row-value">{formatGitCommitStateLabel(item.sync_state)}</span>
+              </button>
+            ))}
           </Group>
 
-          {selectedSyncHistory ? (
-            <Group title="Action details">
-              <StatRow
-                label="Action"
-                value={
-                  selectedSyncHistory.action === "pull"
-                    ? "Pull"
-                    : selectedSyncHistory.action === "push"
-                      ? "Push"
-                      : "Connect repo"
-                }
-              />
-              <StatRow
-                label="Result"
-                value={selectedSyncHistory.status === "success" ? "Success" : "Failed"}
-              />
-              <StatRow
-                label="When"
-                value={`${formatHistoryTime(selectedSyncHistory.started_at)} → ${formatHistoryTime(selectedSyncHistory.finished_at)}`}
-              />
-              <StatRow label="Branch" value={selectedSyncHistory.branch || "-"} />
-              <StatRow label="Remote URL" value={selectedSyncHistory.remote_url || "-"} />
-              <StatRow
-                label="Ahead / behind (before)"
-                value={
-                  selectedSyncHistory.before
-                    ? `${selectedSyncHistory.before.ahead} ahead / ${selectedSyncHistory.before.behind} behind`
-                    : "-"
-                }
-              />
-              <StatRow
-                label="Ahead / behind (after)"
-                value={
-                  selectedSyncHistory.after
-                    ? `${selectedSyncHistory.after.ahead} ahead / ${selectedSyncHistory.after.behind} behind`
-                    : "-"
-                }
-              />
-              {selectedSyncHistory.commit_message ? (
-                <StatRow label="Commit message" value={selectedSyncHistory.commit_message} />
-              ) : null}
-              {selectedSyncHistory.error_message ? (
-                <p className="mobile-native-note">{selectedSyncHistory.error_message}</p>
-              ) : null}
+          {selectedCommit ? (
+            <Group title="Commit details">
+              <StatRow label="Message" value={formatCommitSummaryForApp(selectedCommit.summary)} />
+              <StatRow label="Commit" value={selectedCommit.short_id} />
+              <StatRow label="Author" value={selectedCommit.author} />
+              <StatRow label="When" value={formatGitCommitTime(selectedCommit.authored_ms)} />
+              <StatRow label="State" value={formatGitCommitStateLabel(selectedCommit.sync_state)} />
+              <StatRow label="Position" value={selectedCommit.is_head ? "Latest" : "History"} />
             </Group>
           ) : null}
 

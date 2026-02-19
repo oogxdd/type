@@ -1,7 +1,7 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use git2::{
     build::CheckoutBuilder, AnnotatedCommit, Cred, CredentialType, Direction, FetchOptions,
-    IndexAddOption, Oid, PushOptions, RemoteCallbacks, Repository, ResetType, Signature,
+    IndexAddOption, Oid, PushOptions, RemoteCallbacks, Repository, ResetType, Signature, Sort,
     StatusOptions,
 };
 #[cfg(target_os = "ios")]
@@ -170,6 +170,22 @@ struct GitSyncStatus {
     ahead: usize,
     behind: usize,
     notes_root: String,
+}
+
+#[derive(Serialize)]
+struct GitCommitHistoryEntry {
+    id: String,
+    short_id: String,
+    summary: String,
+    author: String,
+    authored_ms: Option<i64>,
+    sync_state: String,
+    is_head: bool,
+}
+
+#[derive(Deserialize)]
+struct GitHistoryArgs {
+    limit: Option<usize>,
 }
 
 #[derive(Clone, Deserialize, PartialEq, Serialize)]
@@ -2160,6 +2176,80 @@ fn build_git_status(root: &Path) -> GitSyncStatus {
     }
 }
 
+fn git_upstream_oid(repo: &Repository, branch: Option<&str>) -> Option<Oid> {
+    let branch_name = branch?;
+    repo.find_branch(branch_name, git2::BranchType::Local)
+        .ok()
+        .and_then(|local| local.upstream().ok())
+        .and_then(|upstream| upstream.get().target())
+}
+
+fn build_git_history(root: &Path, limit: usize) -> Result<Vec<GitCommitHistoryEntry>, String> {
+    if !git_repo_initialized(root) {
+        return Ok(Vec::new());
+    }
+    let repo = open_repo(root)?;
+    let head_oid = match repo.head().ok().and_then(|head| head.target()) {
+        Some(oid) => oid,
+        None => return Ok(Vec::new()),
+    };
+    let branch = git_current_branch(&repo);
+    let upstream_oid = git_upstream_oid(&repo, branch.as_deref());
+
+    let mut revwalk = repo.revwalk().map_err(map_git_error)?;
+    revwalk
+        .set_sorting(Sort::TOPOLOGICAL | Sort::TIME)
+        .map_err(map_git_error)?;
+    revwalk.push(head_oid).map_err(map_git_error)?;
+
+    let mut entries = Vec::new();
+    let max_items = limit.clamp(1, 200);
+    for oid_result in revwalk.take(max_items) {
+        let oid = oid_result.map_err(map_git_error)?;
+        let commit = repo.find_commit(oid).map_err(map_git_error)?;
+        let summary = commit
+            .summary()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("No commit message")
+            .to_string();
+        let author_signature = commit.author();
+        let author = author_signature
+            .name()
+            .or_else(|| author_signature.email())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("Unknown author")
+            .to_string();
+        let authored_ms = commit.time().seconds().checked_mul(1_000);
+        let sync_state = if let Some(upstream) = upstream_oid {
+            if oid == upstream
+                || repo
+                    .graph_descendant_of(upstream, oid)
+                    .unwrap_or(false)
+            {
+                "synced"
+            } else {
+                "local"
+            }
+        } else {
+            "local"
+        };
+        let id = oid.to_string();
+        let short_id = id.chars().take(8).collect::<String>();
+        entries.push(GitCommitHistoryEntry {
+            id,
+            short_id,
+            summary,
+            author,
+            authored_ms,
+            sync_state: sync_state.to_string(),
+            is_head: oid == head_oid,
+        });
+    }
+    Ok(entries)
+}
+
 fn ensure_git_repo(root: &Path) -> Result<Repository, String> {
     if let Ok(repo) = Repository::open(root) {
         return Ok(repo);
@@ -2709,6 +2799,21 @@ async fn get_git_status(app: tauri::AppHandle) -> Result<GitSyncStatus, String> 
     tauri::async_runtime::spawn_blocking(move || get_git_status_blocking(app))
         .await
         .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn get_git_history(
+    app: tauri::AppHandle,
+    args: Option<GitHistoryArgs>,
+) -> Result<Vec<GitCommitHistoryEntry>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = notes_root(&app)?;
+        ensure_system_folders(&root)?;
+        let limit = args.and_then(|value| value.limit).unwrap_or(40);
+        build_git_history(&root, limit)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 fn get_git_status_blocking(app: tauri::AppHandle) -> Result<GitSyncStatus, String> {
@@ -3622,6 +3727,7 @@ pub fn run() {
             set_active_session,
             set_session_notes_root,
             get_git_status,
+            get_git_history,
             connect_git_repo,
             git_pull,
             git_push
