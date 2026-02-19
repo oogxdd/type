@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNotesTree } from "../../contexts/NotesTreeContext";
 import { useGitSync } from "../../contexts/GitSyncContext";
-import { useSessions } from "../../contexts/SessionsContext";
+import { useProfiles } from "../../contexts/ProfilesContext";
 import { useSettingsData } from "../../hooks/useSettingsData";
 import {
   formatCommitSummaryForApp,
@@ -14,7 +14,7 @@ import { Input } from "../ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 
 export function SettingsSyncSection() {
-  const { syncSettings, updateSyncSettings } = useSessions();
+  const { syncSettings, updateSyncSettings } = useProfiles();
   const {
     gitStatus,
     gitSyncAction,
@@ -77,7 +77,7 @@ export function SettingsSyncSection() {
     <>
       <div className="settings-detail-hero">
         <h2 className="settings-detail-title">Sync</h2>
-        <p className="settings-detail-text">Git sync for this session.</p>
+        <p className="settings-detail-text">Git sync for this profile.</p>
       </div>
 
       <Tabs

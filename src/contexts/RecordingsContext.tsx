@@ -12,7 +12,7 @@ import type { RecordingListItem, RecordingQueueSnapshot } from "../types";
 import { FEED_FOLDER_PATH } from "../constants";
 import { toBase64, fromBase64 } from "../utils/notes";
 import { useAudioRecorder } from "../hooks/useAudioRecorder";
-import { useSessions } from "./SessionsContext";
+import { useProfiles } from "./ProfilesContext";
 
 type RecordingsContextValue = {
   recordingSupported: boolean;
@@ -55,7 +55,7 @@ export function RecordingsProvider({
     audio_path: string;
   }) => Promise<void>;
 }) {
-  const { syncSettings } = useSessions();
+  const { syncSettings } = useProfiles();
   const [recordingStatusMessage, setRecordingStatusMessage] = useState<string | null>(null);
   const [transcriptionQueueBusy, setTranscriptionQueueBusy] = useState(false);
   const [recordingsQueue, setRecordingsQueue] = useState<RecordingQueueSnapshot | null>(null);

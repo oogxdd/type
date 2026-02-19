@@ -1,6 +1,6 @@
 import { MobileRecordingScreen } from "../components/MobileRecordingScreen";
 import { useRecordings } from "../../contexts/RecordingsContext";
-import { useSessions } from "../../contexts/SessionsContext";
+import { useProfiles } from "../../contexts/ProfilesContext";
 
 type PhoneRecordingScreenProps = {
   folderPath: string;
@@ -23,7 +23,7 @@ export function PhoneRecordingScreen({
     stopRecording,
     queueRecordingTranscriptions,
   } = useRecordings();
-  const { syncSettings } = useSessions();
+  const { syncSettings } = useProfiles();
 
   const isRecordingBusy = isRecordingFinalizing || transcriptionQueueBusy;
 

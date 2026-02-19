@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useSessions } from "./SessionsContext";
+import { useProfiles } from "./ProfilesContext";
 import { getNoteParentPath } from "../utils/notes";
 
 type SelectionContextValue = {
@@ -34,7 +34,7 @@ export function SelectionProvider({
 }: {
   children: ReactNode;
 }) {
-  const { activeSessionId, activeSessionNotesRoot } = useSessions();
+  const { activeProfileId, activeProfileNotesRoot } = useProfiles();
 
   const [selectedFolders, setSelectedFolders] = useState<Set<string>>(new Set());
   const [lastSelectedFolder, setLastSelectedFolder] = useState("");
@@ -43,9 +43,9 @@ export function SelectionProvider({
   const [lastSelectedNote, setLastSelectedNote] = useState("");
   const [activeNote, setActiveNote] = useState<string | null>(null);
 
-  // Reset selection state when active session or notes root changes
+  // Reset selection state when active profile or notes root changes
   useEffect(() => {
-    if (activeSessionId) {
+    if (activeProfileId) {
       setSelectedFolders(new Set());
       setLastSelectedFolder("");
       setActiveFolder("");
@@ -53,7 +53,7 @@ export function SelectionProvider({
       setLastSelectedNote("");
       setActiveNote(null);
     }
-  }, [activeSessionId, activeSessionNotesRoot]);
+  }, [activeProfileId, activeProfileNotesRoot]);
 
   // -- Debug logging
   useEffect(() => {

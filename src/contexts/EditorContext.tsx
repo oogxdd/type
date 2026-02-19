@@ -7,7 +7,7 @@ import {
 } from "react";
 import { useNoteEditor } from "../hooks/useNoteEditor";
 import { useSelection } from "./SelectionContext";
-import { useSessions } from "./SessionsContext";
+import { useProfiles } from "./ProfilesContext";
 
 type EditorContextValue = {
   noteContent: string;
@@ -29,7 +29,7 @@ export function EditorProvider({
 }: {
   children: ReactNode;
 }) {
-  const { activeSessionId, activeSessionNotesRoot } = useSessions();
+  const { activeProfileId, activeProfileNotesRoot } = useProfiles();
   const { activeNote } = useSelection();
 
   const {
@@ -46,13 +46,13 @@ export function EditorProvider({
 
   const rightPaneRef = useRef<HTMLDivElement | null>(null);
 
-  // Clear editor state when session identity or notes root changes
+  // Clear editor state when profile identity or notes root changes
   useEffect(() => {
-    if (activeSessionId) {
+    if (activeProfileId) {
       clearNote();
       clearDraft();
     }
-  }, [activeSessionId, activeSessionNotesRoot, clearNote, clearDraft]);
+  }, [activeProfileId, activeProfileNotesRoot, clearNote, clearDraft]);
 
   // Flush save on visibility/unload
   useEffect(() => {

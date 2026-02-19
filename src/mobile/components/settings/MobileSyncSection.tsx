@@ -6,7 +6,7 @@ import {
   getSyncHint,
 } from "../../../utils/format";
 import { useSettingsData } from "../../../hooks/useSettingsData";
-import { useSessions } from "../../../contexts/SessionsContext";
+import { useProfiles } from "../../../contexts/ProfilesContext";
 import { useGitSync } from "../../../contexts/GitSyncContext";
 import { useNotesTree } from "../../../contexts/NotesTreeContext";
 import { Group, InputRow, StatRow } from "./SettingsHelpers";
@@ -16,7 +16,7 @@ type MobileSyncSectionProps = {
 };
 
 export function MobileSyncSection({ view }: MobileSyncSectionProps) {
-  const { syncSettings, updateSyncSettings } = useSessions();
+  const { syncSettings, updateSyncSettings } = useProfiles();
   const {
     gitStatus,
     gitSyncAction,

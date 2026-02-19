@@ -1,11 +1,11 @@
 import { formatRecordingStatus, formatUpdatedAt } from "../../utils/format";
-import { useSessions } from "../../contexts/SessionsContext";
+import { useProfiles } from "../../contexts/ProfilesContext";
 import { useRecordings } from "../../contexts/RecordingsContext";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 
 export function SettingsRecordingsSection() {
-  const { syncSettings, updateSyncSettings } = useSessions();
+  const { syncSettings, updateSyncSettings } = useProfiles();
   const {
     recordingStatusMessage,
     recordingsQueue,

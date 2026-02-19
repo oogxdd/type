@@ -1,10 +1,10 @@
 import { useMemo } from "react";
-import { useSessions } from "../contexts/SessionsContext";
+import { useProfiles } from "../contexts/ProfilesContext";
 import { useGitSync } from "../contexts/GitSyncContext";
 import { useRecordings } from "../contexts/RecordingsContext";
 
 export function useSettingsData() {
-  const { syncSettings } = useSessions();
+  const { syncSettings } = useProfiles();
   const { gitStatus, gitSyncAction, gitSyncBusy } = useGitSync();
   const {
     recordingSupported,

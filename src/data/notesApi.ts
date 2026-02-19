@@ -6,7 +6,8 @@ import type {
   GitSyncStatus,
   NativeRecorderCapabilities,
   NoteMeta,
-  NotesSessionSnapshot,
+  NotesProfile,
+  NotesProfileSnapshot,
   RecordingAudioPayload,
   RecordingsListResult,
   RecordingTranscriptionQueueResult,
@@ -15,6 +16,11 @@ import type {
 
 const LOG_PREFIX = "[notes]";
 const SENSITIVE_PATTERN = /(password|token|secret|api.?key|authorization)/i;
+
+type NotesProfilesSnapshotPayload = {
+  active_profile_id: string;
+  profiles: NotesProfile[];
+};
 
 const sanitizeForLog = (value: unknown): unknown => {
   if (Array.isArray(value)) {
@@ -165,31 +171,42 @@ export const getGitHistory = (limit = 40): Promise<GitCommitHistoryEntry[]> =>
     args: { limit },
   });
 
-export const getSessions = (): Promise<NotesSessionSnapshot> =>
-  invokeLogged<NotesSessionSnapshot>("get_sessions");
+const normalizeProfilesSnapshot = (
+  payload: NotesProfilesSnapshotPayload
+): NotesProfileSnapshot => ({
+  activeProfileId: payload.active_profile_id,
+  profiles: payload.profiles,
+});
 
-export const createSession = (name: string): Promise<NotesSessionSnapshot> =>
-  invokeLogged<NotesSessionSnapshot>("create_session", {
-    args: { name },
-  });
+export const getProfiles = async (): Promise<NotesProfileSnapshot> =>
+  normalizeProfilesSnapshot(
+    await invokeLogged<NotesProfilesSnapshotPayload>("get_profiles")
+  );
 
-export const setActiveSession = (
-  sessionId: string
-): Promise<NotesSessionSnapshot> =>
-  invokeLogged<NotesSessionSnapshot>("set_active_session", {
-    args: { session_id: sessionId },
-  });
+export const createProfile = async (name: string): Promise<NotesProfileSnapshot> =>
+  normalizeProfilesSnapshot(
+    await invokeLogged<NotesProfilesSnapshotPayload>("create_profile", {
+      args: { name },
+    })
+  );
 
-export const setSessionNotesRoot = (
-  sessionId: string,
+export const setActiveProfile = (
+  profileId: string
+): Promise<NotesProfileSnapshot> =>
+  invokeLogged<NotesProfilesSnapshotPayload>("set_active_profile", {
+    args: { profile_id: profileId },
+  }).then(normalizeProfilesSnapshot);
+
+export const setProfileNotesRoot = (
+  profileId: string,
   notesRoot: string
-): Promise<NotesSessionSnapshot> =>
-  invokeLogged<NotesSessionSnapshot>("set_session_notes_root", {
+): Promise<NotesProfileSnapshot> =>
+  invokeLogged<NotesProfilesSnapshotPayload>("set_profile_notes_root", {
     args: {
-      session_id: sessionId,
+      profile_id: profileId,
       notes_root: notesRoot,
     },
-  });
+  }).then(normalizeProfilesSnapshot);
 
 export const connectGitRepo = (
   remoteUrl: string,

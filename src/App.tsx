@@ -3,7 +3,7 @@ import "./App.css";
 import "./mobile/mobile.css";
 
 import { ThemeProvider } from "./contexts/ThemeContext";
-import { SessionsProvider } from "./contexts/SessionsContext";
+import { ProfilesProvider } from "./contexts/ProfilesContext";
 import { GitSyncProvider } from "./contexts/GitSyncContext";
 import { SelectionProvider, useSelection } from "./contexts/SelectionContext";
 import { EditorProvider, useEditor } from "./contexts/EditorContext";
@@ -53,7 +53,7 @@ function App() {
 
   return (
     <ThemeProvider>
-      <SessionsProvider flushSaveRef={flushSaveRef}>
+      <ProfilesProvider flushSaveRef={flushSaveRef}>
         <GitSyncProvider>
           <SelectionProvider>
             <EditorProvider>
@@ -64,7 +64,7 @@ function App() {
             </EditorProvider>
           </SelectionProvider>
         </GitSyncProvider>
-      </SessionsProvider>
+      </ProfilesProvider>
     </ThemeProvider>
   );
 }

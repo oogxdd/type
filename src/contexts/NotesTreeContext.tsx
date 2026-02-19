@@ -12,7 +12,7 @@ import type { FolderNode, NoteEntry, VisibleNavigationItem } from "../types";
 import { FEED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH, isSystemFolder } from "../constants";
 import { collectAllNotes } from "../utils/notes";
 import { useNotePreviews } from "../hooks/useNotePreviews";
-import { useSessions } from "./SessionsContext";
+import { useProfiles } from "./ProfilesContext";
 import { useSelection } from "./SelectionContext";
 import { useEditor } from "./EditorContext";
 import {
@@ -74,7 +74,7 @@ export function NotesTreeProvider({
 }: {
   children: ReactNode;
 }) {
-  const { activeSessionId, activeSessionNotesRoot } = useSessions();
+  const { activeProfileId, activeProfileNotesRoot } = useProfiles();
   const { notesListMode } = useTheme();
   const layoutMode = useLayoutMode();
   const {
@@ -183,13 +183,13 @@ export function NotesTreeProvider({
     return items;
   }, [expanded, shouldNestNotesInNavigation, treeData]);
 
-  // -- Session change: reset tree state and refresh
+  // -- Profile change: reset tree state and refresh
   useEffect(() => {
-    if (activeSessionId) {
+    if (activeProfileId) {
       setTree(null);
     }
     void refreshTree();
-  }, [activeSessionId, activeSessionNotesRoot, refreshTree]);
+  }, [activeProfileId, activeProfileNotesRoot, refreshTree]);
 
   useEffect(() => {
     const onTreeInvalidated = () => {

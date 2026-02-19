@@ -8,7 +8,7 @@ Local markdown notes app with filesystem storage and optional Git sync. Runs on 
 - **Markdown editor** (Tiptap) with debounced autosave
 - **Git sync** — push/pull notes across devices using any Git remote
 - **Audio recording + transcription** via AssemblyAI
-- **Multi-session** — separate notes folders with independent sync settings
+- **Multi-profile** — separate notes folders with independent sync settings
 - **Desktop** — three-pane layout with keyboard shortcuts
 - **Mobile** — native-feeling stack navigation, swipe actions, pull-to-refresh
 
@@ -52,7 +52,7 @@ The app uses `libgit2` (embedded Git) from Tauri commands. You do not need shell
 
 ### One-time setup per device
 
-Open **Settings → Sync**, then fill in:
+Open **Settings → Profiles**, then fill in:
 
 - **Remote URL** (e.g. `https://github.com/<user>/<repo>.git`)
 - **Branch** (usually `main`)
@@ -125,7 +125,7 @@ Then:
 
 ## Troubleshooting
 
-- **"Repository is not initialized. Connect a remote first."** — run Connect repo in Sync settings
+- **"Repository is not initialized. Connect a remote first."** — run Connect repo in Profiles settings
 - **"No matching Git credentials available..."** — check username/token for HTTPS remote
 - **Pull blocked by local changes** — push first, then pull
 - **Pull requires merge commit** — resolve divergence on desktop, push, then pull on mobile
@@ -147,4 +147,4 @@ cargo check --manifest-path src-tauri/Cargo.toml
 
 ## Contributing
 
-See [AGENTS.md](./AGENTS.md) for architecture, module map, and codebase patterns.
+See [agents.md](./agents.md) for architecture, module map, and codebase patterns.

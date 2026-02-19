@@ -44,15 +44,15 @@ export type GitCommitHistoryEntry = {
   is_head: boolean;
 };
 
-export type NotesSession = {
+export type NotesProfile = {
   id: string;
   name: string;
   notes_root: string;
 };
 
-export type NotesSessionSnapshot = {
-  active_session_id: string;
-  sessions: NotesSession[];
+export type NotesProfileSnapshot = {
+  activeProfileId: string;
+  profiles: NotesProfile[];
 };
 
 export type RecordingWriteResult = {
@@ -122,7 +122,7 @@ export type VisibleNavigationItem =
       parentId: string;
     };
 
-export type SessionSyncSettings = {
+export type ProfileSyncSettings = {
   gitRemoteUrl: string;
   gitBranch: string;
   gitUsername: string;

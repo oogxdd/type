@@ -1,5 +1,5 @@
 import { formatRecordingStatus, formatUpdatedAt } from "../../../utils/format";
-import { useSessions } from "../../../contexts/SessionsContext";
+import { useProfiles } from "../../../contexts/ProfilesContext";
 import { useRecordings } from "../../../contexts/RecordingsContext";
 import { Group, ChoiceRow, InputRow, StatRow } from "./SettingsHelpers";
 
@@ -13,7 +13,7 @@ const getJobTitle = (notePath: string): string => {
 };
 
 export function MobileRecordingsSection() {
-  const { syncSettings, updateSyncSettings } = useSessions();
+  const { syncSettings, updateSyncSettings } = useProfiles();
   const {
     recordingStatusMessage,
     recordingsQueue,

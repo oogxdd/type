@@ -13,7 +13,7 @@ import type {
   GitSyncStatus,
 } from "../types";
 import { yieldToUi } from "../utils/notes";
-import { useSessions } from "./SessionsContext";
+import { useProfiles } from "./ProfilesContext";
 
 type GitSyncContextValue = {
   gitStatus: GitSyncStatus | null;
@@ -35,7 +35,7 @@ type GitSyncContextValue = {
 const GitSyncContext = createContext<GitSyncContextValue | null>(null);
 
 export function GitSyncProvider({ children }: { children: ReactNode }) {
-  const { activeSessionId, syncSettings, updateSyncSettings } = useSessions();
+  const { activeProfileId, syncSettings, updateSyncSettings } = useProfiles();
   const [gitStatus, setGitStatus] = useState<GitSyncStatus | null>(null);
   const [gitSyncAction, setGitSyncAction] = useState<GitSyncAction>("idle");
   const [gitSyncError, setGitSyncError] = useState<string | null>(null);
@@ -77,13 +77,13 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!activeSessionId) {
+    if (!activeProfileId) {
       setGitCommitHistory([]);
       setGitHistoryError(null);
       return;
     }
     void refreshGitHistory();
-  }, [activeSessionId, refreshGitHistory]);
+  }, [activeProfileId, refreshGitHistory]);
 
   const connectGitRepo = useCallback(async () => {
     const remoteUrl = syncSettings.gitRemoteUrl.trim();

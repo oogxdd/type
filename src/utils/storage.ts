@@ -1,11 +1,11 @@
 import type { ThemeMode, NotesListMode } from "../components/SettingsPanel";
-import type { SessionSyncSettings } from "../types";
+import type { ProfileSyncSettings } from "../types";
 import {
-  SESSION_SYNC_STORAGE_KEY,
+  PROFILE_SYNC_STORAGE_KEY,
   DEFAULT_EDITOR_FONT_SIZE,
 } from "../constants";
 
-export const DEFAULT_SESSION_SYNC_SETTINGS: SessionSyncSettings = {
+export const DEFAULT_PROFILE_SYNC_SETTINGS: ProfileSyncSettings = {
   gitRemoteUrl: "",
   gitBranch: "main",
   gitUsername: "",
@@ -60,18 +60,18 @@ export const getStoredBooleanValue = (key: string, fallback: boolean) => {
   return fallback;
 };
 
-export const readSessionSyncStore = (): Record<string, Partial<SessionSyncSettings>> => {
+export const readProfileSyncStore = (): Record<string, Partial<ProfileSyncSettings>> => {
   if (typeof window === "undefined") {
     return {};
   }
   try {
-    const raw = window.localStorage.getItem(SESSION_SYNC_STORAGE_KEY);
+    const raw = window.localStorage.getItem(PROFILE_SYNC_STORAGE_KEY);
     if (!raw) {
       return {};
     }
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === "object") {
-      return parsed as Record<string, Partial<SessionSyncSettings>>;
+      return parsed as Record<string, Partial<ProfileSyncSettings>>;
     }
   } catch {
     return {};
@@ -79,18 +79,18 @@ export const readSessionSyncStore = (): Record<string, Partial<SessionSyncSettin
   return {};
 };
 
-export const writeSessionSyncStore = (store: Record<string, Partial<SessionSyncSettings>>) => {
+export const writeProfileSyncStore = (store: Record<string, Partial<ProfileSyncSettings>>) => {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.setItem(SESSION_SYNC_STORAGE_KEY, JSON.stringify(store));
+  window.localStorage.setItem(PROFILE_SYNC_STORAGE_KEY, JSON.stringify(store));
 };
 
-export const getSessionSyncSettings = (sessionId: string): SessionSyncSettings => {
-  const store = readSessionSyncStore();
-  const stored = store[sessionId] ?? {};
+export const getProfileSyncSettings = (profileId: string): ProfileSyncSettings => {
+  const store = readProfileSyncStore();
+  const stored = store[profileId] ?? {};
   const legacyFallback =
-    sessionId === "default"
+    profileId === "default"
       ? {
           gitRemoteUrl: getStoredSyncValue("notes-viewer-git-remote", ""),
           gitBranch: getStoredSyncValue("notes-viewer-git-branch", "main"),
@@ -101,32 +101,32 @@ export const getSessionSyncSettings = (sessionId: string): SessionSyncSettings =
           assemblyAiApiKey: getStoredSyncValue("notes-viewer-assemblyai-api-key", ""),
           mobileAutoTranscriptionEnabled: getStoredBooleanValue(
             "notes-viewer-mobile-auto-transcription-enabled",
-            DEFAULT_SESSION_SYNC_SETTINGS.mobileAutoTranscriptionEnabled
+            DEFAULT_PROFILE_SYNC_SETTINGS.mobileAutoTranscriptionEnabled
           ),
         }
       : {};
 
   return {
-    gitRemoteUrl: stored.gitRemoteUrl ?? legacyFallback.gitRemoteUrl ?? DEFAULT_SESSION_SYNC_SETTINGS.gitRemoteUrl,
-    gitBranch: stored.gitBranch ?? legacyFallback.gitBranch ?? DEFAULT_SESSION_SYNC_SETTINGS.gitBranch,
-    gitUsername: stored.gitUsername ?? legacyFallback.gitUsername ?? DEFAULT_SESSION_SYNC_SETTINGS.gitUsername,
-    gitPassword: stored.gitPassword ?? legacyFallback.gitPassword ?? DEFAULT_SESSION_SYNC_SETTINGS.gitPassword,
+    gitRemoteUrl: stored.gitRemoteUrl ?? legacyFallback.gitRemoteUrl ?? DEFAULT_PROFILE_SYNC_SETTINGS.gitRemoteUrl,
+    gitBranch: stored.gitBranch ?? legacyFallback.gitBranch ?? DEFAULT_PROFILE_SYNC_SETTINGS.gitBranch,
+    gitUsername: stored.gitUsername ?? legacyFallback.gitUsername ?? DEFAULT_PROFILE_SYNC_SETTINGS.gitUsername,
+    gitPassword: stored.gitPassword ?? legacyFallback.gitPassword ?? DEFAULT_PROFILE_SYNC_SETTINGS.gitPassword,
     gitCommitMessage:
       stored.gitCommitMessage ??
       legacyFallback.gitCommitMessage ??
-      DEFAULT_SESSION_SYNC_SETTINGS.gitCommitMessage,
+      DEFAULT_PROFILE_SYNC_SETTINGS.gitCommitMessage,
     lastSuccessfulSyncAt:
       stored.lastSuccessfulSyncAt ??
       legacyFallback.lastSuccessfulSyncAt ??
-      DEFAULT_SESSION_SYNC_SETTINGS.lastSuccessfulSyncAt,
+      DEFAULT_PROFILE_SYNC_SETTINGS.lastSuccessfulSyncAt,
     assemblyAiApiKey:
       stored.assemblyAiApiKey ??
       legacyFallback.assemblyAiApiKey ??
-      DEFAULT_SESSION_SYNC_SETTINGS.assemblyAiApiKey,
+      DEFAULT_PROFILE_SYNC_SETTINGS.assemblyAiApiKey,
     mobileAutoTranscriptionEnabled:
       stored.mobileAutoTranscriptionEnabled ??
       legacyFallback.mobileAutoTranscriptionEnabled ??
-      DEFAULT_SESSION_SYNC_SETTINGS.mobileAutoTranscriptionEnabled,
+      DEFAULT_PROFILE_SYNC_SETTINGS.mobileAutoTranscriptionEnabled,
   };
 };
 

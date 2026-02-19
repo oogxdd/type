@@ -30,7 +30,8 @@ use tauri::Manager;
 use uuid::Uuid;
 
 const ORDER_FILE: &str = ".notes-order.json";
-const SESSIONS_FILE: &str = ".notes-sessions.json";
+const PROFILES_FILE: &str = ".notes-profiles.json";
+const LEGACY_PROFILES_FILE: &str = ".notes-sessions.json";
 const FEED_FOLDER: &str = "Feed";
 const LEGACY_UNSORTED_FOLDER: &str = "Unsorted";
 const ARCHIEVE_FOLDER: &str = "Archieve";
@@ -189,37 +190,39 @@ struct GitHistoryArgs {
 }
 
 #[derive(Clone, Deserialize, PartialEq, Serialize)]
-struct NotesSessionEntry {
+struct NotesProfileEntry {
     id: String,
     name: String,
     notes_root: String,
 }
 
 #[derive(Clone, Default, Deserialize, PartialEq, Serialize)]
-struct NotesSessionsFile {
-    active_session_id: String,
-    sessions: Vec<NotesSessionEntry>,
+struct NotesProfilesFile {
+    #[serde(default, alias = "active_session_id")]
+    active_profile_id: String,
+    #[serde(default, alias = "sessions")]
+    profiles: Vec<NotesProfileEntry>,
 }
 
 #[derive(Serialize)]
-struct NotesSessionsSnapshot {
-    active_session_id: String,
-    sessions: Vec<NotesSessionEntry>,
+struct NotesProfilesSnapshot {
+    active_profile_id: String,
+    profiles: Vec<NotesProfileEntry>,
 }
 
 #[derive(Deserialize)]
-struct CreateSessionArgs {
+struct CreateProfileArgs {
     name: String,
 }
 
 #[derive(Deserialize)]
-struct SetActiveSessionArgs {
-    session_id: String,
+struct SetActiveProfileArgs {
+    profile_id: String,
 }
 
 #[derive(Deserialize)]
-struct SetSessionNotesRootArgs {
-    session_id: String,
+struct SetProfileNotesRootArgs {
+    profile_id: String,
     notes_root: String,
 }
 
@@ -372,12 +375,16 @@ fn app_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-fn sessions_file_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    Ok(app_data_dir(app)?.join(SESSIONS_FILE))
+fn profiles_file_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join(PROFILES_FILE))
 }
 
-fn session_root_for_id(app: &tauri::AppHandle, id: &str) -> Result<PathBuf, String> {
-    Ok(app_data_dir(app)?.join("sessions").join(id).join("notes"))
+fn legacy_profiles_file_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join(LEGACY_PROFILES_FILE))
+}
+
+fn profile_root_for_id(app: &tauri::AppHandle, id: &str) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join("profiles").join(id).join("notes"))
 }
 
 fn is_directory_empty(path: &Path) -> Result<bool, String> {
@@ -438,7 +445,7 @@ fn move_dir_contents(source: &Path, destination: &Path) -> Result<(), String> {
             )
         })?;
         println!(
-            "[sessions] fallback copy used while moving session root (rename failed: {})",
+            "[profiles] fallback copy used while moving profile root (rename failed: {})",
             rename_error
         );
     }
@@ -471,16 +478,16 @@ fn legacy_notes_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(root)
 }
 
-fn normalize_session_name(name: &str) -> String {
+fn normalize_profile_name(name: &str) -> String {
     let trimmed = name.trim();
     if trimmed.is_empty() {
-        "Session".to_string()
+        "Profile".to_string()
     } else {
         trimmed.to_string()
     }
 }
 
-fn slugify_session_id(name: &str) -> String {
+fn slugify_profile_id(name: &str) -> String {
     let mut slug = String::new();
     let mut last_dash = false;
     for ch in name.chars() {
@@ -497,20 +504,20 @@ fn slugify_session_id(name: &str) -> String {
     }
     let compact = slug.trim_matches('-').to_string();
     if compact.is_empty() {
-        "session".to_string()
+        "profile".to_string()
     } else {
         compact
     }
 }
 
-fn default_sessions_state(app: &tauri::AppHandle) -> Result<NotesSessionsFile, String> {
+fn default_profiles_state(app: &tauri::AppHandle) -> Result<NotesProfilesFile, String> {
     let legacy_root = legacy_notes_root(app)?;
     if !legacy_root.exists() {
         fs::create_dir_all(&legacy_root).map_err(|err| err.to_string())?;
     }
-    Ok(NotesSessionsFile {
-        active_session_id: "default".to_string(),
-        sessions: vec![NotesSessionEntry {
+    Ok(NotesProfilesFile {
+        active_profile_id: "default".to_string(),
+        profiles: vec![NotesProfileEntry {
             id: "default".to_string(),
             name: "Default".to_string(),
             notes_root: legacy_root.to_string_lossy().to_string(),
@@ -518,172 +525,182 @@ fn default_sessions_state(app: &tauri::AppHandle) -> Result<NotesSessionsFile, S
     })
 }
 
-fn write_sessions_state(app: &tauri::AppHandle, state: &NotesSessionsFile) -> Result<(), String> {
-    let path = sessions_file_path(app)?;
+fn write_profiles_state(app: &tauri::AppHandle, state: &NotesProfilesFile) -> Result<(), String> {
+    let path = profiles_file_path(app)?;
     let content = serde_json::to_string_pretty(state).map_err(|err| err.to_string())?;
     fs::write(path, content).map_err(|err| err.to_string())
 }
 
-fn normalize_sessions_state(
+fn normalize_profiles_state(
     app: &tauri::AppHandle,
-    mut state: NotesSessionsFile,
-) -> Result<NotesSessionsFile, String> {
+    mut state: NotesProfilesFile,
+) -> Result<NotesProfilesFile, String> {
     let mut seen = HashSet::new();
-    let mut sessions = Vec::new();
-    for mut session in state.sessions.drain(..) {
-        let id = session.id.trim().to_string();
+    let mut profiles = Vec::new();
+    for mut profile in state.profiles.drain(..) {
+        let id = profile.id.trim().to_string();
         if id.is_empty() || !seen.insert(id.clone()) {
             continue;
         }
-        session.id = id.clone();
-        session.name = normalize_session_name(&session.name);
-        if session.notes_root.trim().is_empty() {
-            session.notes_root = session_root_for_id(app, &id)?.to_string_lossy().to_string();
+        profile.id = id.clone();
+        profile.name = normalize_profile_name(&profile.name);
+        if profile.notes_root.trim().is_empty() {
+            profile.notes_root = profile_root_for_id(app, &id)?.to_string_lossy().to_string();
         }
-        let root = PathBuf::from(&session.notes_root);
+        let root = PathBuf::from(&profile.notes_root);
         if !root.exists() {
             fs::create_dir_all(&root).map_err(|err| err.to_string())?;
         }
-        sessions.push(session);
+        profiles.push(profile);
     }
 
-    if sessions.is_empty() {
-        return default_sessions_state(app);
+    if profiles.is_empty() {
+        return default_profiles_state(app);
     }
 
-    let active_session_id = if sessions
+    let active_profile_id = if profiles
         .iter()
-        .any(|session| session.id == state.active_session_id)
+        .any(|profile| profile.id == state.active_profile_id)
     {
-        state.active_session_id
+        state.active_profile_id
     } else {
-        sessions[0].id.clone()
+        profiles[0].id.clone()
     };
 
-    Ok(NotesSessionsFile {
-        active_session_id,
-        sessions,
+    Ok(NotesProfilesFile {
+        active_profile_id,
+        profiles,
     })
 }
 
-fn ensure_sessions_state(app: &tauri::AppHandle) -> Result<NotesSessionsFile, String> {
-    let path = sessions_file_path(app)?;
+fn ensure_profiles_state(app: &tauri::AppHandle) -> Result<NotesProfilesFile, String> {
+    let path = profiles_file_path(app)?;
     if path.exists() {
         let content = fs::read_to_string(&path).map_err(|err| err.to_string())?;
-        return match serde_json::from_str::<NotesSessionsFile>(&content) {
+        return match serde_json::from_str::<NotesProfilesFile>(&content) {
             Ok(parsed) => {
-                let normalized = normalize_sessions_state(app, parsed.clone())?;
+                let normalized = normalize_profiles_state(app, parsed.clone())?;
                 if normalized != parsed {
-                    write_sessions_state(app, &normalized)?;
+                    write_profiles_state(app, &normalized)?;
                 }
                 Ok(normalized)
             }
             Err(_) => {
-                let state = default_sessions_state(app)?;
-                write_sessions_state(app, &state)?;
+                let state = default_profiles_state(app)?;
+                write_profiles_state(app, &state)?;
                 Ok(state)
             }
         };
     }
 
-    let state = default_sessions_state(app)?;
-    write_sessions_state(app, &state)?;
+    let legacy_path = legacy_profiles_file_path(app)?;
+    if legacy_path.exists() {
+        let content = fs::read_to_string(&legacy_path).map_err(|err| err.to_string())?;
+        if let Ok(parsed) = serde_json::from_str::<NotesProfilesFile>(&content) {
+            let normalized = normalize_profiles_state(app, parsed)?;
+            write_profiles_state(app, &normalized)?;
+            return Ok(normalized);
+        }
+    }
+
+    let state = default_profiles_state(app)?;
+    write_profiles_state(app, &state)?;
     Ok(state)
 }
 
-fn sessions_snapshot(state: &NotesSessionsFile) -> NotesSessionsSnapshot {
-    NotesSessionsSnapshot {
-        active_session_id: state.active_session_id.clone(),
-        sessions: state.sessions.clone(),
+fn profiles_snapshot(state: &NotesProfilesFile) -> NotesProfilesSnapshot {
+    NotesProfilesSnapshot {
+        active_profile_id: state.active_profile_id.clone(),
+        profiles: state.profiles.clone(),
     }
 }
 
-fn find_session<'a>(
-    state: &'a NotesSessionsFile,
-    session_id: &str,
-) -> Option<&'a NotesSessionEntry> {
+fn find_profile<'a>(
+    state: &'a NotesProfilesFile,
+    profile_id: &str,
+) -> Option<&'a NotesProfileEntry> {
     state
-        .sessions
+        .profiles
         .iter()
-        .find(|session| session.id == session_id)
+        .find(|profile| profile.id == profile_id)
 }
 
-fn set_active_session_state(
+fn set_active_profile_state(
     app: &tauri::AppHandle,
-    session_id: &str,
-) -> Result<NotesSessionsFile, String> {
-    let mut state = ensure_sessions_state(app)?;
-    let id = session_id.trim();
+    profile_id: &str,
+) -> Result<NotesProfilesFile, String> {
+    let mut state = ensure_profiles_state(app)?;
+    let id = profile_id.trim();
     if id.is_empty() {
-        return Err("Session id is required.".to_string());
+        return Err("Profile id is required.".to_string());
     }
-    if find_session(&state, id).is_none() {
-        return Err(format!("Session not found: {}", id));
+    if find_profile(&state, id).is_none() {
+        return Err(format!("Profile not found: {}", id));
     }
-    state.active_session_id = id.to_string();
-    write_sessions_state(app, &state)?;
+    state.active_profile_id = id.to_string();
+    write_profiles_state(app, &state)?;
     Ok(state)
 }
 
-fn create_session_state(app: &tauri::AppHandle, name: &str) -> Result<NotesSessionsFile, String> {
-    let mut state = ensure_sessions_state(app)?;
-    let session_name = normalize_session_name(name);
-    let base_id = slugify_session_id(&session_name);
+fn create_profile_state(app: &tauri::AppHandle, name: &str) -> Result<NotesProfilesFile, String> {
+    let mut state = ensure_profiles_state(app)?;
+    let profile_name = normalize_profile_name(name);
+    let base_id = slugify_profile_id(&profile_name);
     let existing: HashSet<String> = state
-        .sessions
+        .profiles
         .iter()
-        .map(|session| session.id.clone())
+        .map(|profile| profile.id.clone())
         .collect();
-    let mut session_id = base_id.clone();
+    let mut profile_id = base_id.clone();
     let mut suffix = 2usize;
-    while existing.contains(&session_id) {
-        session_id = format!("{}-{}", base_id, suffix);
+    while existing.contains(&profile_id) {
+        profile_id = format!("{}-{}", base_id, suffix);
         suffix += 1;
     }
 
-    let session_root = session_root_for_id(app, &session_id)?;
-    if !session_root.exists() {
-        fs::create_dir_all(&session_root).map_err(|err| err.to_string())?;
+    let profile_root = profile_root_for_id(app, &profile_id)?;
+    if !profile_root.exists() {
+        fs::create_dir_all(&profile_root).map_err(|err| err.to_string())?;
     }
 
-    state.sessions.push(NotesSessionEntry {
-        id: session_id.clone(),
-        name: session_name,
-        notes_root: session_root.to_string_lossy().to_string(),
+    state.profiles.push(NotesProfileEntry {
+        id: profile_id.clone(),
+        name: profile_name,
+        notes_root: profile_root.to_string_lossy().to_string(),
     });
-    state.active_session_id = session_id;
-    write_sessions_state(app, &state)?;
+    state.active_profile_id = profile_id;
+    write_profiles_state(app, &state)?;
     Ok(state)
 }
 
 fn normalize_notes_root_path(notes_root: &str) -> Result<PathBuf, String> {
     let trimmed = notes_root.trim();
     if trimmed.is_empty() {
-        return Err("Session notes root is required.".to_string());
+        return Err("Profile notes root is required.".to_string());
     }
     let candidate = PathBuf::from(trimmed);
     if !candidate.is_absolute() {
-        return Err("Session notes root must be an absolute path.".to_string());
+        return Err("Profile notes root must be an absolute path.".to_string());
     }
     Ok(candidate)
 }
 
-fn set_session_notes_root_state(
+fn set_profile_notes_root_state(
     app: &tauri::AppHandle,
-    session_id: &str,
+    profile_id: &str,
     notes_root: &str,
-) -> Result<NotesSessionsFile, String> {
-    let mut state = ensure_sessions_state(app)?;
-    let id = session_id.trim();
+) -> Result<NotesProfilesFile, String> {
+    let mut state = ensure_profiles_state(app)?;
+    let id = profile_id.trim();
     if id.is_empty() {
-        return Err("Session id is required.".to_string());
+        return Err("Profile id is required.".to_string());
     }
     let next_root = normalize_notes_root_path(notes_root)?;
-    let Some(index) = state.sessions.iter().position(|session| session.id == id) else {
-        return Err(format!("Session not found: {}", id));
+    let Some(index) = state.profiles.iter().position(|profile| profile.id == id) else {
+        return Err(format!("Profile not found: {}", id));
     };
 
-    let current_root = PathBuf::from(state.sessions[index].notes_root.trim());
+    let current_root = PathBuf::from(state.profiles[index].notes_root.trim());
     if current_root != next_root {
         move_dir_contents(&current_root, &next_root)?;
     } else if !next_root.exists() {
@@ -691,17 +708,17 @@ fn set_session_notes_root_state(
     }
     ensure_system_folders(&next_root)?;
 
-    state.sessions[index].notes_root = next_root.to_string_lossy().to_string();
-    write_sessions_state(app, &state)?;
+    state.profiles[index].notes_root = next_root.to_string_lossy().to_string();
+    write_profiles_state(app, &state)?;
     Ok(state)
 }
 
 fn notes_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let root = match ensure_sessions_state(app) {
+    let root = match ensure_profiles_state(app) {
         Ok(state) => {
-            let active = find_session(&state, &state.active_session_id)
-                .or_else(|| state.sessions.first())
-                .ok_or_else(|| "No sessions configured.".to_string())?;
+            let active = find_profile(&state, &state.active_profile_id)
+                .or_else(|| state.profiles.first())
+                .ok_or_else(|| "No profiles configured.".to_string())?;
             PathBuf::from(&active.notes_root)
         }
         Err(_) => legacy_notes_root(app)?,
@@ -1085,23 +1102,23 @@ fn ns_error_message(error: *mut Object, fallback: &str) -> String {
 }
 
 #[cfg(target_os = "ios")]
-fn configure_ios_audio_session_for_recording() -> Result<(), String> {
+fn configure_ios_audio_for_recording() -> Result<(), String> {
     unsafe {
-        let session_class = ns_class("AVAudioSession")?;
-        let session: *mut Object = msg_send![session_class, sharedInstance];
-        if session.is_null() {
+        let av_audio_class = ns_class("AVAudioSession")?;
+        let av_audio: *mut Object = msg_send![av_audio_class, sharedInstance];
+        if av_audio.is_null() {
             return Err("Failed to access AVAudioSession.".to_string());
         }
         let category = ns_string("AVAudioSessionCategoryPlayAndRecord")?;
         let mut error: *mut Object = ptr::null_mut();
-        let category_ok: BOOL = msg_send![session, setCategory: category error: &mut error];
+        let category_ok: BOOL = msg_send![av_audio, setCategory: category error: &mut error];
         if category_ok == NO {
             return Err(ns_error_message(
                 error,
                 "Failed to set AVAudioSession category.",
             ));
         }
-        let active_ok: BOOL = msg_send![session, setActive: YES error: &mut error];
+        let active_ok: BOOL = msg_send![av_audio, setActive: YES error: &mut error];
         if active_ok == NO {
             return Err(ns_error_message(
                 error,
@@ -1113,15 +1130,15 @@ fn configure_ios_audio_session_for_recording() -> Result<(), String> {
 }
 
 #[cfg(target_os = "ios")]
-fn deactivate_ios_audio_session() {
+fn deactivate_ios_audio() {
     unsafe {
-        if let Some(session_class) = Class::get("AVAudioSession") {
-            let session: *mut Object = msg_send![session_class, sharedInstance];
-            if session.is_null() {
+        if let Some(av_audio_class) = Class::get("AVAudioSession") {
+            let av_audio: *mut Object = msg_send![av_audio_class, sharedInstance];
+            if av_audio.is_null() {
                 return;
             }
             let mut error: *mut Object = ptr::null_mut();
-            let _: BOOL = msg_send![session, setActive: NO error: &mut error];
+            let _: BOOL = msg_send![av_audio, setActive: NO error: &mut error];
         }
     }
 }
@@ -1207,7 +1224,7 @@ fn ios_ensure_recorder_active(recorder: *mut Object) -> bool {
     if ios_recorder_is_recording(recorder) {
         return true;
     }
-    if configure_ios_audio_session_for_recording().is_err() {
+    if configure_ios_audio_for_recording().is_err() {
         return false;
     }
     unsafe {
@@ -2762,36 +2779,36 @@ fn update_order_rename(
 }
 
 #[tauri::command]
-fn get_sessions(app: tauri::AppHandle) -> Result<NotesSessionsSnapshot, String> {
-    let state = ensure_sessions_state(&app).or_else(|_| default_sessions_state(&app))?;
-    Ok(sessions_snapshot(&state))
+fn get_profiles(app: tauri::AppHandle) -> Result<NotesProfilesSnapshot, String> {
+    let state = ensure_profiles_state(&app).or_else(|_| default_profiles_state(&app))?;
+    Ok(profiles_snapshot(&state))
 }
 
 #[tauri::command]
-fn create_session(
+fn create_profile(
     app: tauri::AppHandle,
-    args: CreateSessionArgs,
-) -> Result<NotesSessionsSnapshot, String> {
-    let state = create_session_state(&app, &args.name)?;
-    Ok(sessions_snapshot(&state))
+    args: CreateProfileArgs,
+) -> Result<NotesProfilesSnapshot, String> {
+    let state = create_profile_state(&app, &args.name)?;
+    Ok(profiles_snapshot(&state))
 }
 
 #[tauri::command]
-fn set_active_session(
+fn set_active_profile(
     app: tauri::AppHandle,
-    args: SetActiveSessionArgs,
-) -> Result<NotesSessionsSnapshot, String> {
-    let state = set_active_session_state(&app, &args.session_id)?;
-    Ok(sessions_snapshot(&state))
+    args: SetActiveProfileArgs,
+) -> Result<NotesProfilesSnapshot, String> {
+    let state = set_active_profile_state(&app, &args.profile_id)?;
+    Ok(profiles_snapshot(&state))
 }
 
 #[tauri::command]
-fn set_session_notes_root(
+fn set_profile_notes_root(
     app: tauri::AppHandle,
-    args: SetSessionNotesRootArgs,
-) -> Result<NotesSessionsSnapshot, String> {
-    let state = set_session_notes_root_state(&app, &args.session_id, &args.notes_root)?;
-    Ok(sessions_snapshot(&state))
+    args: SetProfileNotesRootArgs,
+) -> Result<NotesProfilesSnapshot, String> {
+    let state = set_profile_notes_root_state(&app, &args.profile_id, &args.notes_root)?;
+    Ok(profiles_snapshot(&state))
 }
 
 #[tauri::command]
@@ -3133,9 +3150,9 @@ fn start_native_audio_recording(app: tauri::AppHandle) -> Result<(), String> {
         }
         let output_path = next_native_recording_path(&app)?;
         ensure_avfoundation_loaded()?;
-        configure_ios_audio_session_for_recording()?;
+        configure_ios_audio_for_recording()?;
         let recorder = create_ios_audio_recorder(&output_path).inspect_err(|_| {
-            deactivate_ios_audio_session();
+            deactivate_ios_audio();
         })?;
 
         *guard = Some(IosNativeRecorderState {
@@ -3172,7 +3189,7 @@ fn stop_native_audio_recording() -> Result<RecordingAudioPayload, String> {
             let _: () = msg_send![recorder, stop];
             let _: () = msg_send![recorder, release];
         }
-        deactivate_ios_audio_session();
+        deactivate_ios_audio();
 
         let audio_bytes = fs::read(&state.output_path).map_err(|error| error.to_string())?;
         let _ = fs::remove_file(&state.output_path);
@@ -3722,10 +3739,10 @@ pub fn run() {
             delete_items,
             rename_item,
             set_order,
-            get_sessions,
-            create_session,
-            set_active_session,
-            set_session_notes_root,
+            get_profiles,
+            create_profile,
+            set_active_profile,
+            set_profile_notes_root,
             get_git_status,
             get_git_history,
             connect_git_repo,

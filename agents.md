@@ -14,7 +14,7 @@ A local-first markdown notes app built with Tauri v2 (Rust backend) + React (Typ
 
 ## System folders and storage
 
-- Session notes root is configurable per session (`notes_root`). It can live in app data or any user-selected absolute path.
+- Profile notes root is configurable per profile (`notes_root`). It can live in app data or any user-selected absolute path.
 - Required system folders inside each `notes_root`:
   - `Feed` — default notes folder
   - `Archieve` — archive folder (typo is intentional and persisted)
@@ -33,7 +33,7 @@ App.tsx is a thin composition layer. All state lives in React contexts:
 
 ```
 ThemeProvider              — theme mode, notes list mode, editor font size
-  SessionsProvider         — session list, active session, per-session sync settings
+  ProfilesProvider         — profile list, active profile, per-profile sync settings
     GitSyncProvider        — git status, connect/pull/push operations, commit history (git log)
       SelectionProvider    — folder/note selection state, mobile selection helpers
         EditorProvider     — note editor state (wraps useNoteEditor hook)
@@ -52,15 +52,15 @@ All child components (MobileShell, SettingsPanel, MobileSettingsScreen) consume 
 
 **ThemeContext** (`src/contexts/ThemeContext.tsx`, ~75 lines): Persists theme and notesListMode to localStorage. Toggles `document.documentElement` dark class. Provides font size controls (increase/decrease/reset with min 12, max 28).
 
-**SessionsContext** (`src/contexts/SessionsContext.tsx`, ~220 lines): Manages multi-session support. Each session has its own `notes_root` and sync settings. Exposes `activeSessionNotesRoot` and `setSessionNotesRoot(sessionId, notesRoot)` to migrate a session working directory. `syncSettings` is a single object (gitRemoteUrl, gitBranch, gitUsername, gitPassword, gitCommitMessage, lastSuccessfulSyncAt, assemblyAiApiKey, mobileAutoTranscriptionEnabled) persisted to localStorage keyed by session ID. Takes a `flushSaveRef` prop to flush the editor before session switching or path migration.
+**ProfilesContext** (`src/contexts/ProfilesContext.tsx`, ~220 lines): Manages multi-profile support. Each profile has its own `notes_root` and sync settings. Exposes `activeProfileNotesRoot` and `setProfileNotesRoot(profileId, notesRoot)` to migrate a profile working directory. `syncSettings` is a single object (gitRemoteUrl, gitBranch, gitUsername, gitPassword, gitCommitMessage, lastSuccessfulSyncAt, assemblyAiApiKey, mobileAutoTranscriptionEnabled) persisted to localStorage keyed by profile ID. Takes a `flushSaveRef` prop to flush the editor before profile switching or path migration.
 
-**GitSyncContext** (`src/contexts/GitSyncContext.tsx`, ~200 lines): Reads sync settings from SessionsContext. Manages git status polling and connect/pull/push operations. Exposes `gitCommitHistory` loaded from backend `get_git_history` (real git log for current branch) plus `refreshGitHistory()`. `gitPull` accepts an optional `onAfterPull` callback (used to refresh the tree after pull).
+**GitSyncContext** (`src/contexts/GitSyncContext.tsx`, ~200 lines): Reads sync settings from ProfilesContext. Manages git status polling and connect/pull/push operations. Exposes `gitCommitHistory` loaded from backend `get_git_history` (real git log for current branch) plus `refreshGitHistory()`. `gitPull` accepts an optional `onAfterPull` callback (used to refresh the tree after pull).
 
-**SelectionContext** (`src/contexts/SelectionContext.tsx`, ~127 lines): Owns all folder/note selection state: `selectedFolders`, `selectedNotes`, `activeFolder`, `activeNote`, `lastSelectedFolder`, `lastSelectedNote`. Provides setters for all selection state. Contains mobile helpers: `selectFolderForMobile`, `selectNoteForMobile`, `enterMobileHome`. Resets selection when `activeSessionId` or `activeSessionNotesRoot` changes. Consumed by most UI components and by NotesTreeContext for CRUD operations that update selection.
+**SelectionContext** (`src/contexts/SelectionContext.tsx`, ~127 lines): Owns all folder/note selection state: `selectedFolders`, `selectedNotes`, `activeFolder`, `activeNote`, `lastSelectedFolder`, `lastSelectedNote`. Provides setters for all selection state. Contains mobile helpers: `selectFolderForMobile`, `selectNoteForMobile`, `enterMobileHome`. Resets selection when `activeProfileId` or `activeProfileNotesRoot` changes. Consumed by most UI components and by NotesTreeContext for CRUD operations that update selection.
 
-**EditorContext** (`src/contexts/EditorContext.tsx`, ~101 lines): Wraps the `useNoteEditor` hook, providing `noteContent`, `draftNoteContent`, `handleEditorChange`, `isSaving`, `lastSaveError`, `flushSave`, `clearNote`, `clearDraft`, `retrySave`. Owns `rightPaneRef`. Watches `activeNote` from SelectionContext to load/save notes. Handles flush-on-visibility/unload. Clears state when `activeSessionId` or `activeSessionNotesRoot` changes.
+**EditorContext** (`src/contexts/EditorContext.tsx`, ~101 lines): Wraps the `useNoteEditor` hook, providing `noteContent`, `draftNoteContent`, `handleEditorChange`, `isSaving`, `lastSaveError`, `flushSave`, `clearNote`, `clearDraft`, `retrySave`. Owns `rightPaneRef`. Watches `activeNote` from SelectionContext to load/save notes. Handles flush-on-visibility/unload. Clears state when `activeProfileId` or `activeProfileNotesRoot` changes.
 
-**NotesTreeContext** (`src/contexts/NotesTreeContext.tsx`, ~444 lines): Owns the folder tree, computed tree data (treeData, flatItems, visibleItems, orderedIds), and rename state. Provides all CRUD operations: createNewNote, deleteNotes, deleteFolders, moveNotesToArchive, rename. New notes are created through backend `create_note` with UUID v7 filenames. Consumes SelectionContext and EditorContext to update selection/editor state after CRUD operations. Resets tree state when `activeSessionId` or `activeSessionNotesRoot` changes.
+**NotesTreeContext** (`src/contexts/NotesTreeContext.tsx`, ~444 lines): Owns the folder tree, computed tree data (treeData, flatItems, visibleItems, orderedIds), and rename state. Provides all CRUD operations: createNewNote, deleteNotes, deleteFolders, moveNotesToArchive, rename. New notes are created through backend `create_note` with UUID v7 filenames. Consumes SelectionContext and EditorContext to update selection/editor state after CRUD operations. Resets tree state when `activeProfileId` or `activeProfileNotesRoot` changes.
 
 **RecordingsContext** (`src/contexts/RecordingsContext.tsx`, ~280 lines): Wraps `useAudioRecorder` hook. Manages recording target folder resolution, recording list/queue polling, audio playback (blob URL management), and auto-queue transcription timer. Takes `onRecordingComplete` callback prop wired in App.tsx to refresh tree and select the new note.
 
@@ -68,7 +68,7 @@ All child components (MobileShell, SettingsPanel, MobileSettingsScreen) consume 
 
 These are the trickiest part of the architecture:
 
-1. **FlushSaveBridge** (in App.tsx): A tiny component that reads `flushSave` from EditorContext and writes it into SessionsProvider's `flushSaveRef`. This lets session switching flush unsaved editor content.
+1. **FlushSaveBridge** (in App.tsx): A tiny component that reads `flushSave` from EditorContext and writes it into ProfilesProvider's `flushSaveRef`. This lets profile switching flush unsaved editor content.
 
 2. **RecordingsProvider.onRecordingComplete**: Callback defined in App.tsx's `AppInner` component. When a recording finishes, it refreshes the tree (via NotesTreeContext) and selects the new recording's folder/note (via SelectionContext).
 
@@ -96,7 +96,7 @@ These are the trickiest part of the architecture:
 
 `src/data/notesApi.ts` wraps all Tauri IPC commands. Every function maps 1:1 to a Rust command. To swap backends, re-implement this module's exports.
 
-Key commands: `getTree`, `readNote`, `createNote`, `writeNote`, `getNoteMeta`, `deleteItems`, `moveItems`, `renameItem`, `setOrder`, `getGitStatus`, `getGitHistory`, `connectGitRepo`, `gitPull`, `gitPush`, `getSessions`, `setActiveSession`, `createSession`, `setSessionNotesRoot`, `listRecordings`, `saveAudioRecording`, `queueRecordingTranscriptions`, `readRecordingAudio`, `startNativeAudioRecording`, `stopNativeAudioRecording`, `nativeRecorderCapabilities`.
+Key commands: `getTree`, `readNote`, `createNote`, `writeNote`, `getNoteMeta`, `deleteItems`, `moveItems`, `renameItem`, `setOrder`, `getGitStatus`, `getGitHistory`, `connectGitRepo`, `gitPull`, `gitPush`, `getProfiles`, `setActiveProfile`, `createProfile`, `setProfileNotesRoot`, `listRecordings`, `saveAudioRecording`, `queueRecordingTranscriptions`, `readRecordingAudio`, `startNativeAudioRecording`, `stopNativeAudioRecording`, `nativeRecorderCapabilities`.
 
 ### Layout modes
 
@@ -110,7 +110,7 @@ Detection in `src/mobile/useLayoutMode.ts`.
 
 ### Types
 
-`src/types.ts`: FolderNode (recursive tree), NoteEntry, GitSyncStatus, GitCommitHistoryEntry, SessionSyncSettings, RecordingListItem, RecordingQueueSnapshot, AppMode, PaneId, GitSyncAction, VisibleNavigationItem.
+`src/types.ts`: FolderNode (recursive tree), NoteEntry, GitSyncStatus, GitCommitHistoryEntry, ProfileSyncSettings, RecordingListItem, RecordingQueueSnapshot, AppMode, PaneId, GitSyncAction, VisibleNavigationItem.
 
 `src/tree/types.ts`: TreeItem (DnD tree node), FlattenedItem (flattened for rendering).
 
@@ -211,6 +211,6 @@ A WidgetKit extension that lets users start a recording from the iOS home screen
 - **Empty note cleanup**: if a dirty note is emptied and then focus/selection moves away, it is auto-deleted.
 - **Git sync uses libgit2**, not shell git. The Rust backend handles all git operations.
 - **Sync history UX**: settings now show commit history from real git log. This cannot reliably encode which device performed push/pull for every commit.
-- **Editor saves are debounced** (400ms). `flushSave()` must be called before navigation away, session switching, or app backgrounding.
+- **Editor saves are debounced** (400ms). `flushSave()` must be called before navigation away, profile switching, or app backgrounding.
 - **`shouldNestNotesInNavigation`**: When `notesListMode === "nested"`, notes appear inline inside the folder tree instead of in a separate middle pane. This affects keyboard navigation, rendering, and the visible navigation items computation.
 - **Context split ordering matters**: SelectionContext and EditorContext are above NotesTreeContext in the provider tree. NotesTreeContext consumes both to update selection/editor after CRUD ops. Don't reorder providers without understanding these dependencies.
