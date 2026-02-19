@@ -868,6 +868,24 @@ body {
   font-size: 13px;
 }
 
+.settings-sync-tabs {
+  gap: 10px;
+}
+
+.settings-sync-tabs-list {
+  width: 100%;
+  max-width: 320px;
+}
+
+.settings-sync-tabs-list [data-slot="tabs-trigger"] {
+  min-height: 32px;
+}
+
+.settings-sync-tab-content {
+  display: grid;
+  gap: 10px;
+}
+
 .settings-control {
   display: grid;
   grid-template-columns: 1fr;
@@ -1109,10 +1127,17 @@ body {
   overflow: hidden;
 }
 
+.settings-commit-row-wrap {
+  border-bottom: 1px solid #edf2f7;
+}
+
+.settings-commit-row-wrap:last-child {
+  border-bottom: none;
+}
+
 .settings-commit-row {
   width: 100%;
   border: none;
-  border-bottom: 1px solid #edf2f7;
   background: transparent;
   color: inherit;
   text-align: left;
@@ -1121,10 +1146,6 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-}
-
-.settings-commit-row:last-child {
-  border-bottom: none;
 }
 
 .settings-commit-row.active {
@@ -1161,6 +1182,20 @@ body {
   font-size: 11px;
   color: var(--ui-muted);
   white-space: nowrap;
+}
+
+.settings-commit-details {
+  padding: 0 12px 10px;
+}
+
+.settings-commit-details-grid {
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.settings-commit-hint {
+  margin-top: 8px;
 }
 
 .nav-action-group {
@@ -1677,6 +1712,14 @@ body {
   color: #a8b1be;
 }
 
+.app.theme-dark .settings-sync-tabs-list [data-slot="tabs-trigger"] {
+  color: #b5becc;
+}
+
+.app.theme-dark .settings-sync-tabs-list [data-slot="tabs-trigger"][data-state="active"] {
+  color: #edf2f8;
+}
+
 .app.theme-dark .settings-control {
   color: #d8e0ea;
 }
@@ -1786,8 +1829,12 @@ body {
   border-color: #2f3946;
 }
 
-.app.theme-dark .settings-commit-row {
+.app.theme-dark .settings-commit-row-wrap {
   border-bottom-color: #26303c;
+}
+
+.app.theme-dark .settings-commit-row {
+  color: #e8edf4;
 }
 
 .app.theme-dark .settings-commit-row.active {
@@ -1801,6 +1848,10 @@ body {
 .app.theme-dark .settings-commit-meta,
 .app.theme-dark .settings-commit-state {
   color: #a8b1be;
+}
+
+.app.theme-dark .settings-commit-details-grid {
+  border-color: #2f3946;
 }
 
 .app.theme-dark .settings-action-row [data-slot="button"][data-variant="secondary"]:hover {

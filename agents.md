@@ -34,7 +34,7 @@ App.tsx is a thin composition layer. All state lives in React contexts:
 ```
 ThemeProvider              — theme mode, notes list mode, editor font size
   SessionsProvider         — session list, active session, per-session sync settings
-    GitSyncProvider        — git status, connect/pull/push operations, sync history
+    GitSyncProvider        — git status, connect/pull/push operations, commit history (git log)
       SelectionProvider    — folder/note selection state, mobile selection helpers
         EditorProvider     — note editor state (wraps useNoteEditor hook)
           NotesTreeProvider — folder tree, CRUD operations, rename
@@ -54,7 +54,7 @@ All child components (MobileShell, SettingsPanel, MobileSettingsScreen) consume 
 
 **SessionsContext** (`src/contexts/SessionsContext.tsx`, ~220 lines): Manages multi-session support. Each session has its own `notes_root` and sync settings. Exposes `activeSessionNotesRoot` and `setSessionNotesRoot(sessionId, notesRoot)` to migrate a session working directory. `syncSettings` is a single object (gitRemoteUrl, gitBranch, gitUsername, gitPassword, gitCommitMessage, lastSuccessfulSyncAt, assemblyAiApiKey, mobileAutoTranscriptionEnabled) persisted to localStorage keyed by session ID. Takes a `flushSaveRef` prop to flush the editor before session switching or path migration.
 
-**GitSyncContext** (`src/contexts/GitSyncContext.tsx`, ~304 lines): Reads sync settings from SessionsContext. Manages git status polling, connect/pull/push with history tracking. History entries include before/after status snapshots. `gitPull` accepts an optional `onAfterPull` callback (used to refresh the tree after pull).
+**GitSyncContext** (`src/contexts/GitSyncContext.tsx`, ~200 lines): Reads sync settings from SessionsContext. Manages git status polling and connect/pull/push operations. Exposes `gitCommitHistory` loaded from backend `get_git_history` (real git log for current branch) plus `refreshGitHistory()`. `gitPull` accepts an optional `onAfterPull` callback (used to refresh the tree after pull).
 
 **SelectionContext** (`src/contexts/SelectionContext.tsx`, ~127 lines): Owns all folder/note selection state: `selectedFolders`, `selectedNotes`, `activeFolder`, `activeNote`, `lastSelectedFolder`, `lastSelectedNote`. Provides setters for all selection state. Contains mobile helpers: `selectFolderForMobile`, `selectNoteForMobile`, `enterMobileHome`. Resets selection when `activeSessionId` or `activeSessionNotesRoot` changes. Consumed by most UI components and by NotesTreeContext for CRUD operations that update selection.
 
@@ -96,7 +96,7 @@ These are the trickiest part of the architecture:
 
 `src/data/notesApi.ts` wraps all Tauri IPC commands. Every function maps 1:1 to a Rust command. To swap backends, re-implement this module's exports.
 
-Key commands: `getTree`, `readNote`, `createNote`, `writeNote`, `getNoteMeta`, `deleteItems`, `moveItems`, `renameItem`, `setOrder`, `getGitStatus`, `connectGitRepo`, `gitPull`, `gitPush`, `getSessions`, `setActiveSession`, `createSession`, `setSessionNotesRoot`, `listRecordings`, `saveAudioRecording`, `queueRecordingTranscriptions`, `readRecordingAudio`, `startNativeAudioRecording`, `stopNativeAudioRecording`, `nativeRecorderCapabilities`.
+Key commands: `getTree`, `readNote`, `createNote`, `writeNote`, `getNoteMeta`, `deleteItems`, `moveItems`, `renameItem`, `setOrder`, `getGitStatus`, `getGitHistory`, `connectGitRepo`, `gitPull`, `gitPush`, `getSessions`, `setActiveSession`, `createSession`, `setSessionNotesRoot`, `listRecordings`, `saveAudioRecording`, `queueRecordingTranscriptions`, `readRecordingAudio`, `startNativeAudioRecording`, `stopNativeAudioRecording`, `nativeRecorderCapabilities`.
 
 ### Layout modes
 
@@ -110,7 +110,7 @@ Detection in `src/mobile/useLayoutMode.ts`.
 
 ### Types
 
-`src/types.ts`: FolderNode (recursive tree), NoteEntry, GitSyncStatus, GitSyncHistoryEntry, SessionSyncSettings, RecordingListItem, RecordingQueueSnapshot, AppMode, PaneId, GitSyncAction, VisibleNavigationItem.
+`src/types.ts`: FolderNode (recursive tree), NoteEntry, GitSyncStatus, GitCommitHistoryEntry, SessionSyncSettings, RecordingListItem, RecordingQueueSnapshot, AppMode, PaneId, GitSyncAction, VisibleNavigationItem.
 
 `src/tree/types.ts`: TreeItem (DnD tree node), FlattenedItem (flattened for rendering).
 
@@ -210,6 +210,7 @@ A WidgetKit extension that lets users start a recording from the iOS home screen
 - **Filename lifecycle**: notes start as `<uuidv7>.md`; on note switch, sufficiently populated notes can auto-rename to `<uuid-prefix>-<slug>.md`.
 - **Empty note cleanup**: if a dirty note is emptied and then focus/selection moves away, it is auto-deleted.
 - **Git sync uses libgit2**, not shell git. The Rust backend handles all git operations.
+- **Sync history UX**: settings now show commit history from real git log. This cannot reliably encode which device performed push/pull for every commit.
 - **Editor saves are debounced** (400ms). `flushSave()` must be called before navigation away, session switching, or app backgrounding.
 - **`shouldNestNotesInNavigation`**: When `notesListMode === "nested"`, notes appear inline inside the folder tree instead of in a separate middle pane. This affects keyboard navigation, rendering, and the visible navigation items computation.
 - **Context split ordering matters**: SelectionContext and EditorContext are above NotesTreeContext in the provider tree. NotesTreeContext consumes both to update selection/editor after CRUD ops. Don't reorder providers without understanding these dependencies.
