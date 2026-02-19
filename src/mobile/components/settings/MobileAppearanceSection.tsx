@@ -22,11 +22,13 @@ export function MobileAppearanceSection() {
       <Group title="Notes list">
         <ChoiceRow
           label="Separate panel"
+          subtitle="Notes in their own pane"
           selected={notesListMode === "separate"}
           onClick={() => setNotesListMode("separate")}
         />
         <ChoiceRow
           label="Nested in folders"
+          subtitle="Notes shown under folders"
           selected={notesListMode === "nested"}
           onClick={() => setNotesListMode("nested")}
         />

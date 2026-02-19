@@ -1,5 +1,5 @@
 import { useSessions } from "../../../contexts/SessionsContext";
-import { Group, ChoiceRow, InputRow } from "./SettingsHelpers";
+import { Group, ChoiceRow, InputRow, StatRow } from "./SettingsHelpers";
 import { useEffect, useMemo, useState } from "react";
 
 export function MobileGeneralSection() {
@@ -27,6 +27,7 @@ export function MobileGeneralSection() {
   return (
     <>
       <Group title="Session">
+        <StatRow label="Current" value={activeSession?.name ?? "No session"} />
         <div className="mobile-native-actions single">
           <button
             type="button"
@@ -37,6 +38,10 @@ export function MobileGeneralSection() {
             {sessionsBusy ? "Working..." : "New session"}
           </button>
         </div>
+        {sessionsError ? <p className="mobile-native-note">{sessionsError}</p> : null}
+      </Group>
+
+      <Group title="Switch session">
         {sessions.length === 0 ? (
           <p className="mobile-native-note">No sessions available.</p>
         ) : (
@@ -49,12 +54,12 @@ export function MobileGeneralSection() {
             />
           ))
         )}
-        {sessionsError ? <p className="mobile-native-note">{sessionsError}</p> : null}
       </Group>
 
-      <Group title="Folder path">
+      <Group title="Notes folder">
+        <StatRow label="Current path" value={activeSessionNotesRoot || "-"} />
         <InputRow
-          label="Path"
+          label="New path"
           value={notesRootInput}
           onChange={setNotesRootInput}
           placeholder="/Users/you/Documents/type"
@@ -75,9 +80,6 @@ export function MobileGeneralSection() {
             Apply path
           </button>
         </div>
-        {activeSessionNotesRoot ? (
-          <p className="mobile-native-note">{activeSessionNotesRoot}</p>
-        ) : null}
       </Group>
     </>
   );

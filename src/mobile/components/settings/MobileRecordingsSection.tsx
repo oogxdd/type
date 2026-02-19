@@ -3,6 +3,15 @@ import { useSessions } from "../../../contexts/SessionsContext";
 import { useRecordings } from "../../../contexts/RecordingsContext";
 import { Group, ChoiceRow, InputRow, StatRow } from "./SettingsHelpers";
 
+const getJobTitle = (notePath: string): string => {
+  const trimmed = notePath.trim();
+  if (!trimmed) {
+    return notePath;
+  }
+  const parts = trimmed.split(/[\\/]/);
+  return parts[parts.length - 1] || notePath;
+};
+
 export function MobileRecordingsSection() {
   const { syncSettings, updateSyncSettings } = useSessions();
   const {
@@ -13,6 +22,7 @@ export function MobileRecordingsSection() {
     recordingsError,
     refreshRecordings,
   } = useRecordings();
+  const visibleJobs = recordingsList.slice(0, 12);
 
   return (
     <>
@@ -52,14 +62,14 @@ export function MobileRecordingsSection() {
         </div>
       </Group>
 
-      <Group title="Queue items">
-        {recordingsList.length === 0 ? (
+      <Group title="Recent jobs">
+        {visibleJobs.length === 0 ? (
           <p className="mobile-native-note">No jobs yet.</p>
         ) : (
-          recordingsList.map((item) => (
+          visibleJobs.map((item) => (
             <div key={item.note_path} className="mobile-native-row stat mobile-recording-row">
               <span className="mobile-native-row-main">
-                <span className="mobile-native-row-label">{item.note_path}</span>
+                <span className="mobile-native-row-label">{getJobTitle(item.note_path)}</span>
                 <span className="mobile-native-row-sub">
                   {formatRecordingStatus(item)} · updated {formatUpdatedAt(item.updated_ms)}
                 </span>
