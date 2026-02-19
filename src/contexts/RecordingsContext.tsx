@@ -9,7 +9,7 @@ import {
 } from "react";
 import * as api from "../data/notesApi";
 import type { RecordingListItem, RecordingQueueSnapshot } from "../types";
-import { UNSORTED_FOLDER_PATH } from "../constants";
+import { FEED_FOLDER_PATH } from "../constants";
 import { toBase64, fromBase64 } from "../utils/notes";
 import { useAudioRecorder } from "../hooks/useAudioRecorder";
 import { useSessions } from "./SessionsContext";
@@ -66,7 +66,7 @@ export function RecordingsProvider({
   const [activeAudioSrc, setActiveAudioSrc] = useState<string | null>(null);
 
   const transcriptionQueueBusyRef = useRef(false);
-  const recordingTargetFolderRef = useRef<string>(UNSORTED_FOLDER_PATH);
+  const recordingTargetFolderRef = useRef<string>(FEED_FOLDER_PATH);
   const activeAudioObjectUrlRef = useRef<string | null>(null);
 
   const shouldAutoQueueTranscriptions =
@@ -172,7 +172,7 @@ export function RecordingsProvider({
         return preferred;
       }
       const active = activeFolder.trim();
-      return active || UNSORTED_FOLDER_PATH;
+      return active || FEED_FOLDER_PATH;
     },
     [activeFolder]
   );
@@ -181,7 +181,7 @@ export function RecordingsProvider({
     async (blob: Blob, mimeType: string) => {
       const buffer = await blob.arrayBuffer();
       const audioBase64 = toBase64(new Uint8Array(buffer));
-      const targetFolder = recordingTargetFolderRef.current || UNSORTED_FOLDER_PATH;
+      const targetFolder = recordingTargetFolderRef.current || FEED_FOLDER_PATH;
       const result = await api.saveAudioRecording(
         audioBase64,
         mimeType || undefined,

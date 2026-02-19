@@ -8,7 +8,7 @@ import {
 import type { LayoutMode } from "../navigation";
 import { useSelection } from "../../contexts/SelectionContext";
 import { useEditor } from "../../contexts/EditorContext";
-import { UNSORTED_FOLDER_PATH } from "../types";
+import { FEED_FOLDER_PATH } from "../types";
 
 export function useMobileNavigation(layoutMode: LayoutMode) {
   const { selectFolderForMobile, selectNoteForMobile } = useSelection();
@@ -90,7 +90,7 @@ export function useMobileNavigation(layoutMode: LayoutMode) {
   );
 
   const openRecordingRoute = useCallback(
-    (folderPath: string = UNSORTED_FOLDER_PATH, autoStart?: boolean) => {
+    (folderPath: string = FEED_FOLDER_PATH, autoStart?: boolean) => {
       selectFolderForMobile(folderPath);
       nextTransitionRef.current = "up";
       dispatch({ type: "push", route: { kind: "recording", folderPath, autoStart } });

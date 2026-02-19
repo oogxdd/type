@@ -1,5 +1,45 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { readNote, writeNote } from "../data/notesApi";
+import { deleteItems, readNote, renameItem, writeNote } from "../data/notesApi";
+
+const UUID_V7_FILE_NAME_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}\.md$/i;
+const MIN_SLUG_CONTENT_CHARS = 8;
+
+const emitTreeInvalidated = () => {
+  window.dispatchEvent(new CustomEvent("notes-tree-invalidated"));
+};
+
+const buildSlugFromContent = (markdown: string) => {
+  const normalized = markdown
+    .toLowerCase()
+    .replace(/[`*_#>\-\[\]()!~]/g, " ")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) {
+    return "";
+  }
+  const words = normalized.split(" ").filter(Boolean).slice(0, 8);
+  const slug = words.join("-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  return slug.slice(0, 56).replace(/-$/g, "");
+};
+
+const getAutoRenameTarget = (notePath: string, content: string) => {
+  const segments = notePath.split("/");
+  const fileName = segments[segments.length - 1] || "";
+  if (!UUID_V7_FILE_NAME_RE.test(fileName)) {
+    return null;
+  }
+  const rootId = fileName.replace(/\.md$/i, "");
+  const slug = buildSlugFromContent(content);
+  if (slug.replace(/-/g, "").length < MIN_SLUG_CONTENT_CHARS) {
+    return null;
+  }
+  const prefix = rootId.slice(0, 13);
+  const nextName = `${prefix}-${slug}.md`;
+  return nextName.toLowerCase() === fileName.toLowerCase() ? null : nextName;
+};
 
 export function useNoteEditor(activeNote: string | null) {
   const [noteContent, setNoteContent] = useState("");
@@ -55,7 +95,18 @@ export function useNoteEditor(activeNote: string | null) {
     const run = async () => {
       if (previousNote && previousDirty && previousNote !== activeNote) {
         try {
-          await saveNow(previousNote, previousContent);
+          const trimmed = previousContent.trim();
+          if (!trimmed) {
+            await deleteItems([previousNote]);
+            emitTreeInvalidated();
+          } else {
+            await saveNow(previousNote, previousContent);
+            const renameTarget = getAutoRenameTarget(previousNote, previousContent);
+            if (renameTarget) {
+              await renameItem(previousNote, renameTarget);
+              emitTreeInvalidated();
+            }
+          }
         } catch (error) {
           console.error("[notes] failed to flush previous note", error);
         }

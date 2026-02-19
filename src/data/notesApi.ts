@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  CreateNoteResult,
   FolderNode,
   GitSyncStatus,
   NativeRecorderCapabilities,
@@ -65,6 +66,19 @@ export const getTree = (): Promise<FolderNode> =>
 
 export const readNote = (path: string): Promise<string> =>
   invokeLogged<string>("read_note", { path });
+
+export const createNote = (
+  folderPath?: string,
+  content = "",
+  timestampMs?: number
+): Promise<CreateNoteResult> =>
+  invokeLogged<CreateNoteResult>("create_note", {
+    args: {
+      folder_path: folderPath,
+      content,
+      timestamp_ms: timestampMs,
+    },
+  });
 
 export const writeNote = (path: string, content: string): Promise<void> =>
   invokeLogged("write_note", { path, content });
@@ -158,6 +172,17 @@ export const setActiveSession = (
 ): Promise<NotesSessionSnapshot> =>
   invokeLogged<NotesSessionSnapshot>("set_active_session", {
     args: { session_id: sessionId },
+  });
+
+export const setSessionNotesRoot = (
+  sessionId: string,
+  notesRoot: string
+): Promise<NotesSessionSnapshot> =>
+  invokeLogged<NotesSessionSnapshot>("set_session_notes_root", {
+    args: {
+      session_id: sessionId,
+      notes_root: notesRoot,
+    },
   });
 
 export const connectGitRepo = (

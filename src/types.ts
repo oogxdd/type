@@ -75,6 +75,10 @@ export type RecordingWriteResult = {
   audio_path: string;
 };
 
+export type CreateNoteResult = {
+  path: string;
+};
+
 export type RecordingTranscriptionQueueResult = {
   scanned: number;
   queued: number;
@@ -142,4 +146,3 @@ export type SessionSyncSettings = {
   assemblyAiApiKey: string;
   mobileAutoTranscriptionEnabled: boolean;
 };
-

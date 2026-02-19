@@ -31,10 +31,11 @@ use uuid::Uuid;
 
 const ORDER_FILE: &str = ".notes-order.json";
 const SESSIONS_FILE: &str = ".notes-sessions.json";
-const UNSORTED_FOLDER: &str = "Unsorted";
+const FEED_FOLDER: &str = "Feed";
+const LEGACY_UNSORTED_FOLDER: &str = "Unsorted";
 const ARCHIEVE_FOLDER: &str = "Archieve";
-const RECORDINGS_STORAGE_FOLDER: &str = "_Recordings";
-const LEGACY_RECORDINGS_FOLDER: &str = "Recordings";
+const RECORDINGS_STORAGE_FOLDER: &str = "Recordings";
+const LEGACY_RECORDINGS_FOLDER: &str = "_Recordings";
 const AUDIO_FILE_NAME_PREFIX: &str = "audio";
 const RECORDING_FRONTMATTER_TYPE: &str = "audio_recording";
 const RECORDING_STATUS_PENDING: &str = "pending";
@@ -49,12 +50,13 @@ const ASSEMBLY_TRANSCRIPT_URL: &str = "https://api.assemblyai.com/v2/transcript"
 const ASSEMBLY_SPEECH_MODEL: &str = "universal-2";
 const ASSEMBLY_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const ASSEMBLY_MAX_POLL_ATTEMPTS: usize = 180;
-const VISIBLE_SYSTEM_FOLDERS: [&str; 2] = [UNSORTED_FOLDER, ARCHIEVE_FOLDER];
+const VISIBLE_SYSTEM_FOLDERS: [&str; 2] = [FEED_FOLDER, ARCHIEVE_FOLDER];
 const REQUIRED_SYSTEM_FOLDERS: [&str; 3] =
-    [UNSORTED_FOLDER, ARCHIEVE_FOLDER, RECORDINGS_STORAGE_FOLDER];
-const PROTECTED_SYSTEM_FOLDERS: [&str; 4] = [
-    UNSORTED_FOLDER,
+    [FEED_FOLDER, ARCHIEVE_FOLDER, RECORDINGS_STORAGE_FOLDER];
+const PROTECTED_SYSTEM_FOLDERS: [&str; 5] = [
+    FEED_FOLDER,
     ARCHIEVE_FOLDER,
+    LEGACY_UNSORTED_FOLDER,
     RECORDINGS_STORAGE_FOLDER,
     LEGACY_RECORDINGS_FOLDER,
 ];
@@ -200,6 +202,24 @@ struct SetActiveSessionArgs {
 }
 
 #[derive(Deserialize)]
+struct SetSessionNotesRootArgs {
+    session_id: String,
+    notes_root: String,
+}
+
+#[derive(Deserialize)]
+struct CreateNoteArgs {
+    folder_path: Option<String>,
+    content: Option<String>,
+    timestamp_ms: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct CreateNoteResult {
+    path: String,
+}
+
+#[derive(Deserialize)]
 struct SaveRecordingArgs {
     audio_base64: String,
     mime_type: Option<String>,
@@ -342,6 +362,71 @@ fn sessions_file_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 
 fn session_root_for_id(app: &tauri::AppHandle, id: &str) -> Result<PathBuf, String> {
     Ok(app_data_dir(app)?.join("sessions").join(id).join("notes"))
+}
+
+fn is_directory_empty(path: &Path) -> Result<bool, String> {
+    if !path.exists() {
+        return Ok(true);
+    }
+    let mut entries = fs::read_dir(path).map_err(|err| err.to_string())?;
+    Ok(entries.next().is_none())
+}
+
+fn copy_dir_recursive(from: &Path, to: &Path) -> Result<(), String> {
+    if !to.exists() {
+        fs::create_dir_all(to).map_err(|err| err.to_string())?;
+    }
+    for entry in fs::read_dir(from).map_err(|err| err.to_string())? {
+        let entry = entry.map_err(|err| err.to_string())?;
+        let source = entry.path();
+        let target = to.join(entry.file_name());
+        let metadata = entry.metadata().map_err(|err| err.to_string())?;
+        if metadata.is_dir() {
+            copy_dir_recursive(&source, &target)?;
+        } else if metadata.is_file() {
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+            }
+            fs::copy(&source, &target).map_err(|err| err.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn move_dir_contents(source: &Path, destination: &Path) -> Result<(), String> {
+    if source == destination {
+        return Ok(());
+    }
+    if !source.exists() {
+        fs::create_dir_all(destination).map_err(|err| err.to_string())?;
+        return Ok(());
+    }
+    if destination.exists() {
+        if !is_directory_empty(destination)? {
+            return Err(format!(
+                "Destination is not empty: {}",
+                destination.to_string_lossy()
+            ));
+        }
+    } else if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+
+    if let Err(rename_error) = fs::rename(source, destination) {
+        copy_dir_recursive(source, destination)?;
+        fs::remove_dir_all(source).map_err(|err| {
+            format!(
+                "Failed to remove source after copy ({}): {}",
+                source.to_string_lossy(),
+                err
+            )
+        })?;
+        println!(
+            "[sessions] fallback copy used while moving session root (rename failed: {})",
+            rename_error
+        );
+    }
+    Ok(())
 }
 
 fn legacy_notes_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -551,6 +636,46 @@ fn create_session_state(app: &tauri::AppHandle, name: &str) -> Result<NotesSessi
         notes_root: session_root.to_string_lossy().to_string(),
     });
     state.active_session_id = session_id;
+    write_sessions_state(app, &state)?;
+    Ok(state)
+}
+
+fn normalize_notes_root_path(notes_root: &str) -> Result<PathBuf, String> {
+    let trimmed = notes_root.trim();
+    if trimmed.is_empty() {
+        return Err("Session notes root is required.".to_string());
+    }
+    let candidate = PathBuf::from(trimmed);
+    if !candidate.is_absolute() {
+        return Err("Session notes root must be an absolute path.".to_string());
+    }
+    Ok(candidate)
+}
+
+fn set_session_notes_root_state(
+    app: &tauri::AppHandle,
+    session_id: &str,
+    notes_root: &str,
+) -> Result<NotesSessionsFile, String> {
+    let mut state = ensure_sessions_state(app)?;
+    let id = session_id.trim();
+    if id.is_empty() {
+        return Err("Session id is required.".to_string());
+    }
+    let next_root = normalize_notes_root_path(notes_root)?;
+    let Some(index) = state.sessions.iter().position(|session| session.id == id) else {
+        return Err(format!("Session not found: {}", id));
+    };
+
+    let current_root = PathBuf::from(state.sessions[index].notes_root.trim());
+    if current_root != next_root {
+        move_dir_contents(&current_root, &next_root)?;
+    } else if !next_root.exists() {
+        fs::create_dir_all(&next_root).map_err(|err| err.to_string())?;
+    }
+    ensure_system_folders(&next_root)?;
+
+    state.sessions[index].notes_root = next_root.to_string_lossy().to_string();
     write_sessions_state(app, &state)?;
     Ok(state)
 }
@@ -1713,14 +1838,13 @@ fn recording_initial_body() -> String {
 }
 
 fn recording_note_file_name(folder: &Path) -> Result<String, String> {
-    let timestamp = now_ms().unwrap_or(0);
+    let id = generate_note_id();
     for attempt in 0..=512usize {
-        let base = if attempt == 0 {
-            format!("recording-{}", timestamp)
+        let candidate = if attempt == 0 {
+            format!("{}.md", id)
         } else {
-            format!("recording-{}-{}", timestamp, attempt)
+            format!("{}-{}.md", id, attempt)
         };
-        let candidate = format!("{}.md", base);
         if !folder.join(&candidate).exists() {
             return Ok(candidate);
         }
@@ -1762,8 +1886,8 @@ fn resolve_recording_target_folder(
         }
     }
 
-    let fallback = root.join(UNSORTED_FOLDER);
-    Ok((UNSORTED_FOLDER.to_string(), fallback))
+    let fallback = root.join(FEED_FOLDER);
+    Ok((FEED_FOLDER.to_string(), fallback))
 }
 
 fn read_order_file(dir: &Path) -> OrderFile {
@@ -1777,6 +1901,13 @@ fn read_order_file(dir: &Path) -> OrderFile {
 }
 
 fn write_order_file(dir: &Path, order: &OrderFile) -> Result<(), String> {
+    if dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == FEED_FOLDER)
+    {
+        return Ok(());
+    }
     let file_path = dir.join(ORDER_FILE);
     let contents = serde_json::to_string_pretty(order).map_err(|err| err.to_string())?;
     fs::write(file_path, contents).map_err(|err| err.to_string())
@@ -2351,6 +2482,43 @@ fn is_hidden_root_folder_name(name: &str) -> bool {
     HIDDEN_ROOT_FOLDERS.iter().any(|folder| *folder == name)
 }
 
+fn is_feed_folder_path(root: &Path, path: &Path) -> bool {
+    path == root.join(FEED_FOLDER)
+}
+
+fn migrate_legacy_folder_name(root: &Path, from_name: &str, to_name: &str) -> Result<(), String> {
+    let from = root.join(from_name);
+    if !from.exists() {
+        return Ok(());
+    }
+    let to = root.join(to_name);
+    if !to.exists() {
+        fs::rename(&from, &to).map_err(|err| err.to_string())?;
+        return Ok(());
+    }
+    for entry in fs::read_dir(&from).map_err(|err| err.to_string())? {
+        let entry = entry.map_err(|err| err.to_string())?;
+        let source = entry.path();
+        let target = to.join(entry.file_name());
+        if target.exists() {
+            continue;
+        }
+        fs::rename(&source, &target).map_err(|err| err.to_string())?;
+    }
+    fs::remove_dir_all(&from).map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+fn migrate_legacy_system_folders(root: &Path) -> Result<(), String> {
+    migrate_legacy_folder_name(root, LEGACY_UNSORTED_FOLDER, FEED_FOLDER)?;
+    migrate_legacy_folder_name(root, LEGACY_RECORDINGS_FOLDER, RECORDINGS_STORAGE_FOLDER)?;
+    let feed_order = root.join(FEED_FOLDER).join(ORDER_FILE);
+    if feed_order.exists() {
+        let _ = fs::remove_file(feed_order);
+    }
+    Ok(())
+}
+
 fn is_system_folder_path(root: &Path, path: &Path) -> bool {
     if path.parent() != Some(root) {
         return false;
@@ -2361,6 +2529,8 @@ fn is_system_folder_path(root: &Path, path: &Path) -> bool {
 }
 
 fn ensure_system_folders(root: &Path) -> Result<(), String> {
+    migrate_legacy_system_folders(root)?;
+
     for folder in REQUIRED_SYSTEM_FOLDERS {
         let path = root.join(folder);
         if path.exists() {
@@ -2522,6 +2692,15 @@ fn set_active_session(
     args: SetActiveSessionArgs,
 ) -> Result<NotesSessionsSnapshot, String> {
     let state = set_active_session_state(&app, &args.session_id)?;
+    Ok(sessions_snapshot(&state))
+}
+
+#[tauri::command]
+fn set_session_notes_root(
+    app: tauri::AppHandle,
+    args: SetSessionNotesRootArgs,
+) -> Result<NotesSessionsSnapshot, String> {
+    let state = set_session_notes_root_state(&app, &args.session_id, &args.notes_root)?;
     Ok(sessions_snapshot(&state))
 }
 
@@ -2715,6 +2894,55 @@ fn read_note(app: tauri::AppHandle, path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn create_note(app: tauri::AppHandle, args: CreateNoteArgs) -> Result<CreateNoteResult, String> {
+    let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
+    let folder_rel = args
+        .folder_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(FEED_FOLDER);
+    let folder_full = resolve_path(&app, folder_rel)?;
+    if folder_full.starts_with(recording_storage_root(&root))
+        || folder_full.starts_with(root.join(LEGACY_RECORDINGS_FOLDER))
+    {
+        return Err("Notes cannot be created inside recordings storage.".to_string());
+    }
+    fs::create_dir_all(&folder_full).map_err(|err| err.to_string())?;
+
+    let id = generate_note_id();
+    let mut file_name: Option<String> = None;
+    for attempt in 0..=512usize {
+        let candidate = if attempt == 0 {
+            format!("{}.md", id)
+        } else {
+            format!("{}-{}.md", id, attempt)
+        };
+        if !folder_full.join(&candidate).exists() {
+            file_name = Some(candidate);
+            break;
+        }
+    }
+    let file_name = file_name.ok_or_else(|| "Failed to allocate note filename.".to_string())?;
+    let path = folder_full.join(&file_name);
+    let timestamp = args.timestamp_ms.or_else(now_ms);
+    let mut meta = NoteFrontMatter::default();
+    meta.id = Some(file_name.trim_end_matches(".md").to_string());
+    meta.created_ms = timestamp;
+    meta.updated_ms = timestamp;
+    let content = args.content.unwrap_or_default();
+    write_note_with_front_matter(&path, &meta, &content)?;
+    if !is_feed_folder_path(&root, &folder_full) {
+        update_order_append(&folder_full, &[file_name], false)?;
+    }
+
+    Ok(CreateNoteResult {
+        path: strip_root(&root, &path),
+    })
+}
+
+#[tauri::command]
 fn write_note(app: tauri::AppHandle, path: String, content: String) -> Result<(), String> {
     let full_path = resolve_path(&app, &path)?;
     if let Some(parent) = full_path.parent() {
@@ -2879,9 +3107,10 @@ fn save_audio_recording(
 
     let note_file_name = recording_note_file_name(&target_folder_path)?;
     let note_path = target_folder_path.join(&note_file_name);
+    let note_id = note_file_name.trim_end_matches(".md").to_string();
     let now = now_ms();
     let mut meta = NoteFrontMatter::default();
-    meta.id = Some(generate_note_id());
+    meta.id = Some(note_id);
     meta.created_ms = now;
     meta.updated_ms = now;
     meta.note_type = Some(RECORDING_FRONTMATTER_TYPE.to_string());
@@ -2892,7 +3121,9 @@ fn save_audio_recording(
     meta.transcription_id = None;
 
     write_note_with_front_matter(&note_path, &meta, &recording_initial_body())?;
-    update_order_append(&target_folder_path, &[note_file_name], false)?;
+    if !is_feed_folder_path(&root, &target_folder_path) {
+        update_order_append(&target_folder_path, &[note_file_name], false)?;
+    }
 
     Ok(RecordingWriteResult {
         folder_path: target_folder_rel,
@@ -3336,7 +3567,11 @@ fn rename_item(app: tauri::AppHandle, path: String, new_name: String) -> Result<
 
 #[tauri::command]
 fn set_order(app: tauri::AppHandle, args: SetOrderArgs) -> Result<(), String> {
+    let root = notes_root(&app)?;
     let parent_path = resolve_path(&app, &args.parent)?;
+    if is_feed_folder_path(&root, &parent_path) {
+        return Ok(());
+    }
     println!(
         "[set_order] parent={} folder_order={} note_order={} parent_path={}",
         args.parent,
@@ -3367,6 +3602,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_tree,
             read_note,
+            create_note,
             get_note_meta,
             write_note,
             set_note_timestamp,
@@ -3384,6 +3620,7 @@ pub fn run() {
             get_sessions,
             create_session,
             set_active_session,
+            set_session_notes_root,
             get_git_status,
             connect_git_repo,
             git_pull,

@@ -29,7 +29,7 @@ export function EditorProvider({
 }: {
   children: ReactNode;
 }) {
-  const { activeSessionId } = useSessions();
+  const { activeSessionId, activeSessionNotesRoot } = useSessions();
   const { activeNote } = useSelection();
 
   const {
@@ -46,13 +46,13 @@ export function EditorProvider({
 
   const rightPaneRef = useRef<HTMLDivElement | null>(null);
 
-  // Clear editor state when session changes
+  // Clear editor state when session identity or notes root changes
   useEffect(() => {
     if (activeSessionId) {
       clearNote();
       clearDraft();
     }
-  }, [activeSessionId, clearNote, clearDraft]);
+  }, [activeSessionId, activeSessionNotesRoot, clearNote, clearDraft]);
 
   // Flush save on visibility/unload
   useEffect(() => {

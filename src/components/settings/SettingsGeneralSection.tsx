@@ -3,18 +3,31 @@ import type { NotesListMode } from "../SettingsPanel";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useSessions } from "../../contexts/SessionsContext";
 import { useGitSync } from "../../contexts/GitSyncContext";
+import { useEffect, useMemo, useState } from "react";
 
 export function SettingsGeneralSection() {
   const { notesListMode, setNotesListMode } = useTheme();
   const {
     sessions,
     activeSessionId,
+    activeSessionNotesRoot,
     sessionsBusy,
     sessionsError,
     switchSession,
     createSession,
+    setSessionNotesRoot,
   } = useSessions();
   const { gitStatus } = useGitSync();
+  const [notesRootInput, setNotesRootInput] = useState("");
+
+  const activeSession = useMemo(
+    () => sessions.find((session) => session.id === activeSessionId) ?? null,
+    [activeSessionId, sessions]
+  );
+
+  useEffect(() => {
+    setNotesRootInput(activeSession?.notes_root ?? "");
+  }, [activeSession?.notes_root]);
 
   return (
     <>
@@ -68,6 +81,36 @@ export function SettingsGeneralSection() {
           <option value="separate">Separate notes panel</option>
           <option value="nested">Inside folders navigation</option>
         </select>
+      </label>
+      <label className="settings-control">
+        <span>Session working directory</span>
+        <div className="settings-inline-row">
+          <input
+            type="text"
+            value={notesRootInput}
+            onChange={(event) => setNotesRootInput(event.target.value)}
+            placeholder="/Users/you/Documents/type"
+            disabled={!activeSessionId || sessionsBusy}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!activeSessionId || sessionsBusy || !notesRootInput.trim()}
+            onClick={() => {
+              if (!activeSessionId) {
+                return;
+              }
+              void setSessionNotesRoot(activeSessionId, notesRootInput);
+            }}
+          >
+            Apply
+          </Button>
+        </div>
+        <span className="settings-inline-help">
+          Moves current session files and switches Git root to this absolute path.
+        </span>
+        {activeSessionNotesRoot ? <code>{activeSessionNotesRoot}</code> : null}
       </label>
     </>
   );

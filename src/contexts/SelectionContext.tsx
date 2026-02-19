@@ -34,7 +34,7 @@ export function SelectionProvider({
 }: {
   children: ReactNode;
 }) {
-  const { activeSessionId } = useSessions();
+  const { activeSessionId, activeSessionNotesRoot } = useSessions();
 
   const [selectedFolders, setSelectedFolders] = useState<Set<string>>(new Set());
   const [lastSelectedFolder, setLastSelectedFolder] = useState("");
@@ -43,7 +43,7 @@ export function SelectionProvider({
   const [lastSelectedNote, setLastSelectedNote] = useState("");
   const [activeNote, setActiveNote] = useState<string | null>(null);
 
-  // Reset selection state when activeSessionId changes
+  // Reset selection state when active session or notes root changes
   useEffect(() => {
     if (activeSessionId) {
       setSelectedFolders(new Set());
@@ -53,7 +53,7 @@ export function SelectionProvider({
       setLastSelectedNote("");
       setActiveNote(null);
     }
-  }, [activeSessionId]);
+  }, [activeSessionId, activeSessionNotesRoot]);
 
   // -- Debug logging
   useEffect(() => {

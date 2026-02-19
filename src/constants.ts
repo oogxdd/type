@@ -1,9 +1,9 @@
 import type { SettingsSectionId } from "./components/SettingsPanel";
 
 export const indentationWidth = 18;
-export const UNSORTED_FOLDER_PATH = "Unsorted";
+export const FEED_FOLDER_PATH = "Feed";
 export const ARCHIEVE_FOLDER_PATH = "Archieve";
-export const SYSTEM_FOLDER_PATHS = new Set([UNSORTED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH]);
+export const SYSTEM_FOLDER_PATHS = new Set([FEED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH]);
 
 export const SESSION_SYNC_STORAGE_KEY = "notes-viewer-session-sync-settings";
 export const GIT_SYNC_HISTORY_STORAGE_KEY = "notes-viewer-git-sync-history";

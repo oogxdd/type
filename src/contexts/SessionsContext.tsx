@@ -21,11 +21,13 @@ type SessionsContextValue = {
   sessionsError: string | null;
   sessions: NotesSessionSnapshot["sessions"];
   activeSessionId: string | null;
+  activeSessionNotesRoot: string | null;
   syncSettings: SessionSyncSettings;
   updateSyncSettings: (patch: Partial<SessionSyncSettings>) => void;
   refreshSessions: () => Promise<NotesSessionSnapshot>;
   switchSession: (sessionId: string) => Promise<void>;
   createSession: () => Promise<void>;
+  setSessionNotesRoot: (sessionId: string, notesRoot: string) => Promise<void>;
   flushSaveRef: React.RefObject<(() => Promise<void>) | null>;
 };
 
@@ -46,6 +48,8 @@ export function SessionsProvider({
 
   const sessions = sessionsSnapshot?.sessions ?? [];
   const activeSessionId = sessionsSnapshot?.active_session_id ?? null;
+  const activeSessionNotesRoot =
+    sessions.find((session) => session.id === activeSessionId)?.notes_root ?? null;
 
   const refreshSessions = useCallback(async () => {
     const snapshot = await api.getSessions();
@@ -144,6 +148,31 @@ export function SessionsProvider({
     }
   }, [flushSaveRef, sessions]);
 
+  const setSessionNotesRoot = useCallback(
+    async (sessionId: string, notesRoot: string) => {
+      const normalizedSessionId = sessionId.trim();
+      const normalizedRoot = notesRoot.trim();
+      if (!normalizedSessionId || !normalizedRoot) {
+        return;
+      }
+      setSessionsBusy(true);
+      try {
+        if (flushSaveRef.current) {
+          await flushSaveRef.current();
+        }
+        const snapshot = await api.setSessionNotesRoot(normalizedSessionId, normalizedRoot);
+        setSessionsSnapshot(snapshot);
+        setSessionsError(null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setSessionsError(message);
+      } finally {
+        setSessionsBusy(false);
+      }
+    },
+    [flushSaveRef]
+  );
+
   return (
     <SessionsContext.Provider
       value={{
@@ -152,11 +181,13 @@ export function SessionsProvider({
         sessionsError,
         sessions,
         activeSessionId,
+        activeSessionNotesRoot,
         syncSettings,
         updateSyncSettings,
         refreshSessions,
         switchSession,
         createSession,
+        setSessionNotesRoot,
         flushSaveRef,
       }}
     >

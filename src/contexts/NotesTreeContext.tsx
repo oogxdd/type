@@ -9,7 +9,7 @@ import {
 } from "react";
 import * as api from "../data/notesApi";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "../types";
-import { UNSORTED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH, isSystemFolder } from "../constants";
+import { FEED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH, isSystemFolder } from "../constants";
 import { collectAllNotes } from "../utils/notes";
 import { useNotePreviews } from "../hooks/useNotePreviews";
 import { useSessions } from "./SessionsContext";
@@ -21,7 +21,7 @@ import {
   flattenTree,
 } from "../utils/treeOps";
 import { removeChildrenOf } from "../tree/utilities";
-import { getNextNoteFileName, type NotePreview } from "../utils/format";
+import { type NotePreview } from "../utils/format";
 import { confirmAction, focusNoScroll } from "../utils/dom";
 import type { TreeItem } from "../tree/types";
 import type { FlattenedItem } from "../tree/types";
@@ -74,7 +74,7 @@ export function NotesTreeProvider({
 }: {
   children: ReactNode;
 }) {
-  const { activeSessionId } = useSessions();
+  const { activeSessionId, activeSessionNotesRoot } = useSessions();
   const { notesListMode } = useTheme();
   const layoutMode = useLayoutMode();
   const {
@@ -189,15 +189,23 @@ export function NotesTreeProvider({
       setTree(null);
     }
     void refreshTree();
-  }, [activeSessionId, refreshTree]);
+  }, [activeSessionId, activeSessionNotesRoot, refreshTree]);
+
+  useEffect(() => {
+    const onTreeInvalidated = () => {
+      void refreshTree();
+    };
+    window.addEventListener("notes-tree-invalidated", onTreeInvalidated);
+    return () => window.removeEventListener("notes-tree-invalidated", onTreeInvalidated);
+  }, [refreshTree]);
 
   // Mobile: auto-select first folder
   useEffect(() => {
     if (layoutMode === "desktop" || !tree || activeFolder) {
       return;
     }
-    const unsorted = findNode(tree, UNSORTED_FOLDER_PATH);
-    const firstFolderPath = unsorted?.path || tree.children[0]?.path || "";
+    const feed = findNode(tree, FEED_FOLDER_PATH);
+    const firstFolderPath = feed?.path || tree.children[0]?.path || "";
     if (!firstFolderPath) {
       return;
     }
@@ -219,24 +227,13 @@ export function NotesTreeProvider({
       targetTimestampMs?: number
     ) => {
       const treeSnapshot = tree ?? (await api.getTree());
-      const initialFolderPath = preferredFolderPath?.trim() || UNSORTED_FOLDER_PATH;
+      const initialFolderPath = preferredFolderPath?.trim() || FEED_FOLDER_PATH;
       const targetNode =
-        findNode(treeSnapshot, initialFolderPath) || findNode(treeSnapshot, UNSORTED_FOLDER_PATH);
+        findNode(treeSnapshot, initialFolderPath) || findNode(treeSnapshot, FEED_FOLDER_PATH);
       if (!targetNode) return null;
       const folderPath = targetNode.path;
-
-      const fileName = getNextNoteFileName(targetNode.notes.map((n) => n.name));
-      const path = `${folderPath}/${fileName}`;
-
-      await api.writeNote(path, initialContent);
-      if (typeof targetTimestampMs === "number") {
-        await api.setNoteTimestamp(path, targetTimestampMs);
-      }
-      await api.setOrder({
-        parent: folderPath,
-        folderOrder: targetNode.children.map((c) => c.name),
-        noteOrder: [fileName, ...targetNode.notes.map((n) => n.name)],
-      });
+      const created = await api.createNote(folderPath, initialContent, targetTimestampMs);
+      const path = created.path;
       await refreshTree();
 
       setSelectedFolders(new Set([folderPath]));
@@ -332,7 +329,7 @@ export function NotesTreeProvider({
       if (paths.length === 0) return;
       if (paths.some(isSystemFolder)) {
         window.alert(
-          '"Unsorted" and "Archieve" are fixed folders and cannot be deleted.'
+          '"Feed" and "Archieve" are fixed folders and cannot be deleted.'
         );
         return;
       }

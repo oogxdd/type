@@ -34,7 +34,7 @@ import { usePhoneNavHeader } from "./hooks/usePhoneNavHeader";
 import { useRecentBuckets } from "./hooks/useRecentBuckets";
 import { PhoneRouteRenderer } from "./screens";
 import { TabletLayout } from "./TabletLayout";
-import { UNSORTED_FOLDER_PATH, getDisplayFolderName, ARCHIVE_FOLDER_PATH } from "./types";
+import { FEED_FOLDER_PATH, getDisplayFolderName, ARCHIVE_FOLDER_PATH } from "./types";
 import { MobileFoldersScreen } from "./components/MobileFoldersScreen";
 import { MobileRecentScreen } from "./components/MobileRecentScreen";
 
@@ -239,7 +239,7 @@ export function MobileShell({
         onOpenUrl((urls: string[]) => {
           for (const url of urls) {
             if (url.includes("record")) {
-              openRecordingRoute(UNSORTED_FOLDER_PATH, true);
+              openRecordingRoute(FEED_FOLDER_PATH, true);
               break;
             }
           }
