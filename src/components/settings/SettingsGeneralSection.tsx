@@ -3,10 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useGitSync } from "../../contexts/GitSyncContext";
 import { useSessions } from "../../contexts/SessionsContext";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Separator } from "../ui/separator";
 
 export function SettingsGeneralSection() {
   const {
@@ -49,108 +47,90 @@ export function SettingsGeneralSection() {
 
   return (
     <>
-      <h2 className="settings-detail-title">General</h2>
-      <p className="settings-detail-text">Default behavior and session workspace.</p>
+      <div className="settings-detail-hero">
+        <h2 className="settings-detail-title">General</h2>
+        <p className="settings-detail-text">Session and notes folder.</p>
+      </div>
       <div className="settings-section-stack">
-        <Card className="settings-card-block">
-          <CardHeader className="settings-card-block-header">
-            <CardTitle className="settings-card-block-title">Session</CardTitle>
-            <CardDescription className="settings-card-block-description">
-              Each session has its own local notes folder and Git remote.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="settings-card-block-content">
-            <label className="settings-control">
-              <span>Active session</span>
-              <div className="settings-inline-row">
-                <select
-                  value={activeSessionId ?? ""}
-                  onChange={(event) => void switchSession(event.target.value)}
-                  disabled={sessionsBusy || sessions.length === 0}
-                >
-                  {sessions.map((session) => (
-                    <option key={session.id} value={session.id}>
-                      {session.name}
-                    </option>
-                  ))}
-                </select>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void createSession()}
-                  disabled={sessionsBusy}
-                >
-                  {sessionsBusy ? "Working..." : "New session"}
-                </Button>
-              </div>
-            </label>
-            {sessionsError ? (
-              <p className="settings-warning-text settings-inline-warning">{sessionsError}</p>
-            ) : null}
-            <div className="settings-info-grid">
-              <div className="settings-info-row">
-                <span>Notes source folder</span>
-                <code>{gitStatus?.notes_root || "-"}</code>
-              </div>
+        <section className="settings-group">
+          <h3 className="settings-group-title">Session</h3>
+          <label className="settings-control">
+            <span>Active session</span>
+            <div className="settings-inline-row">
+              <select
+                value={activeSessionId ?? ""}
+                onChange={(event) => void switchSession(event.target.value)}
+                disabled={sessionsBusy || sessions.length === 0}
+              >
+                {sessions.map((session) => (
+                  <option key={session.id} value={session.id}>
+                    {session.name}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void createSession()}
+                disabled={sessionsBusy}
+              >
+                {sessionsBusy ? "Working..." : "New session"}
+              </Button>
             </div>
-          </CardContent>
-        </Card>
+          </label>
+          {sessionsError ? (
+            <p className="settings-warning-text settings-inline-warning">{sessionsError}</p>
+          ) : null}
+          <div className="settings-info-grid">
+            <div className="settings-info-row">
+              <span>Notes root</span>
+              <code>{gitStatus?.notes_root || "-"}</code>
+            </div>
+          </div>
+        </section>
 
-        <Card className="settings-card-block">
-          <CardHeader className="settings-card-block-header">
-            <CardTitle className="settings-card-block-title">Session Working Directory</CardTitle>
-            <CardDescription className="settings-card-block-description">
-              Choose a local folder for notes in this session.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="settings-card-block-content">
-            <div className="settings-control">
-              <Label htmlFor="session-working-directory">Folder path</Label>
-              <div className="settings-inline-row">
-                <Input
-                  id="session-working-directory"
-                  type="text"
-                  value={notesRootInput}
-                  onChange={(event) => setNotesRootInput(event.target.value)}
-                  placeholder="/Users/you/Documents/type"
-                  disabled={!activeSessionId || sessionsBusy}
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={!activeSessionId || sessionsBusy}
-                  onClick={() => void chooseWorkingDirectory()}
-                >
-                  Choose folder
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!activeSessionId || sessionsBusy || !notesRootInput.trim()}
-                  onClick={() => {
-                    if (!activeSessionId) {
-                      return;
-                    }
-                    void setSessionNotesRoot(activeSessionId, notesRootInput);
-                  }}
-                >
-                  Apply
-                </Button>
-              </div>
-              <span className="settings-inline-help">
-                Moves current session files and switches Git root to this absolute path.
-              </span>
-              {activeSessionNotesRoot ? <code>{activeSessionNotesRoot}</code> : null}
+        <section className="settings-group">
+          <h3 className="settings-group-title">Folder path</h3>
+          <div className="settings-control">
+            <Label htmlFor="session-working-directory">Folder path</Label>
+            <div className="settings-inline-row">
+              <Input
+                id="session-working-directory"
+                type="text"
+                value={notesRootInput}
+                onChange={(event) => setNotesRootInput(event.target.value)}
+                placeholder="/Users/you/Documents/type"
+                disabled={!activeSessionId || sessionsBusy}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={!activeSessionId || sessionsBusy}
+                onClick={() => void chooseWorkingDirectory()}
+              >
+                Choose folder
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!activeSessionId || sessionsBusy || !notesRootInput.trim()}
+                onClick={() => {
+                  if (!activeSessionId) {
+                    return;
+                  }
+                  void setSessionNotesRoot(activeSessionId, notesRootInput);
+                }}
+              >
+                Apply
+              </Button>
             </div>
-            <Separator className="settings-card-separator" />
-            <p className="settings-inline-help">
-              Use the picker to avoid typos and ensure a valid absolute path.
-            </p>
-          </CardContent>
-        </Card>
+            <span className="settings-inline-help">Must be an absolute path.</span>
+            {activeSessionNotesRoot ? <code>{activeSessionNotesRoot}</code> : null}
+          </div>
+        </section>
       </div>
     </>
   );

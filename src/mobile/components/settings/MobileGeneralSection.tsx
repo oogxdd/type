@@ -1,10 +1,8 @@
-import { useTheme } from "../../../contexts/ThemeContext";
 import { useSessions } from "../../../contexts/SessionsContext";
 import { Group, ChoiceRow } from "./SettingsHelpers";
 import { useEffect, useMemo, useState } from "react";
 
 export function MobileGeneralSection() {
-  const { notesListMode, setNotesListMode } = useTheme();
   const {
     sessions,
     activeSessionId,
@@ -28,7 +26,7 @@ export function MobileGeneralSection() {
 
   return (
     <>
-      <Group title="Sessions">
+      <Group title="Session">
         <div className="mobile-native-actions single">
           <button
             type="button"
@@ -46,7 +44,6 @@ export function MobileGeneralSection() {
             <ChoiceRow
               key={session.id}
               label={session.name}
-              subtitle={session.id}
               selected={activeSessionId === session.id}
               onClick={() => void switchSession(session.id)}
             />
@@ -55,7 +52,7 @@ export function MobileGeneralSection() {
         {sessionsError ? <p className="mobile-native-note">{sessionsError}</p> : null}
       </Group>
 
-      <Group title="Working Directory">
+      <Group title="Folder path">
         <div className="mobile-native-row">
           <input
             type="text"
@@ -80,22 +77,9 @@ export function MobileGeneralSection() {
             Apply path
           </button>
         </div>
-        {activeSessionNotesRoot ? <p className="mobile-native-note">{activeSessionNotesRoot}</p> : null}
-      </Group>
-
-      <Group title="Notes List">
-        <ChoiceRow
-          label="Separate panel"
-          subtitle="Show notes in a dedicated list."
-          selected={notesListMode === "separate"}
-          onClick={() => setNotesListMode("separate")}
-        />
-        <ChoiceRow
-          label="Nested in folders"
-          subtitle="Show notes inside folder tree."
-          selected={notesListMode === "nested"}
-          onClick={() => setNotesListMode("nested")}
-        />
+        {activeSessionNotesRoot ? (
+          <p className="mobile-native-note">{activeSessionNotesRoot}</p>
+        ) : null}
       </Group>
     </>
   );

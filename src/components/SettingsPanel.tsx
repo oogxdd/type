@@ -16,17 +16,18 @@ export type SettingsSectionId =
 type SettingsSection = {
   id: SettingsSectionId;
   title: string;
-  description: string;
 };
 
 const SETTINGS_SECTIONS: SettingsSection[] = [
-  { id: "general", title: "General", description: "Basic app behavior and defaults." },
-  { id: "appearance", title: "Appearance", description: "Theme and visual style." },
-  { id: "sync", title: "Sync", description: "Cloud sync, refresh policy, and conflict rules." },
+  {
+    id: "general",
+    title: "General",
+  },
+  { id: "appearance", title: "Appearance" },
+  { id: "sync", title: "Sync" },
   {
     id: "recordings",
     title: "Recordings",
-    description: "Audio capture, transcription queue, and AssemblyAI settings.",
   },
 ];
 
@@ -42,14 +43,13 @@ function SettingsRow({
   return (
     <Button
       type="button"
-      className={`item-row settings-row transition-colors${isSelected ? " selected" : ""}`}
+      className={`item-row settings-row${isSelected ? " selected" : ""}`}
       variant="ghost"
       size="sm"
       onClick={onSelect}
     >
       <div className="settings-row-main">
         <div className="settings-row-title">{section.title}</div>
-        <div className="settings-row-subline">{section.description}</div>
       </div>
     </Button>
   );
@@ -83,14 +83,16 @@ export function SettingsMiddlePane({
         tabIndex={0}
         onClick={onPaneClick}
       >
-        {SETTINGS_SECTIONS.map((section) => (
-          <SettingsRow
-            key={section.id}
-            section={section}
-            isSelected={activeSection === section.id}
-            onSelect={() => onSectionChange(section.id)}
-          />
-        ))}
+        <nav className="settings-nav-list" aria-label="Settings sections">
+          {SETTINGS_SECTIONS.map((section) => (
+            <SettingsRow
+              key={section.id}
+              section={section}
+              isSelected={activeSection === section.id}
+              onSelect={() => onSectionChange(section.id)}
+            />
+          ))}
+        </nav>
       </div>
     </div>
   );
@@ -113,9 +115,11 @@ export function SettingsDetailPane({
         tabIndex={0}
         onClick={onPaneClick}
       >
-        <SettingsDetail
-          sectionId={activeSection as SettingsSectionId}
-        />
+        <div className="settings-detail-shell">
+          <SettingsDetail
+            sectionId={activeSection as SettingsSectionId}
+          />
+        </div>
       </div>
     </div>
   );

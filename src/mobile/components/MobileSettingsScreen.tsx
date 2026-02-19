@@ -23,8 +23,8 @@ export function MobileSettingsScreen({
   const activeSubSections =
     activeSection === "sync"
       ? [
-          { id: "actions" as const, label: "Actions" },
-          { id: "credentials" as const, label: "Credentials" },
+          { id: "actions" as const, label: "Status" },
+          { id: "credentials" as const, label: "Setup" },
         ]
       : [];
 
