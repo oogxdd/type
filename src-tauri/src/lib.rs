@@ -1,7 +1,8 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use git2::{
     build::CheckoutBuilder, AnnotatedCommit, Cred, CredentialType, Direction, FetchOptions,
-    IndexAddOption, Oid, PushOptions, RemoteCallbacks, Repository, Signature, StatusOptions,
+    IndexAddOption, Oid, PushOptions, RemoteCallbacks, Repository, ResetType, Signature,
+    StatusOptions,
 };
 #[cfg(target_os = "ios")]
 use objc::declare::ClassDecl;
@@ -763,8 +764,8 @@ extern "C" fn ios_webview_termination_proxy_process_did_terminate(
 
         let now = now_ms().unwrap_or(0);
         let last_reload_ms = *this.get_ivar::<i64>("lastReloadMs");
-        let should_reload = now <= 0
-            || now.saturating_sub(last_reload_ms) >= IOS_WEBVIEW_RELOAD_THROTTLE_MS;
+        let should_reload =
+            now <= 0 || now.saturating_sub(last_reload_ms) >= IOS_WEBVIEW_RELOAD_THROTTLE_MS;
         if should_reload {
             if now > 0 {
                 this.set_ivar("lastReloadMs", now);
@@ -2211,6 +2212,12 @@ fn merge_fetched_commit(
     branch: &str,
     fetched_commit: &AnnotatedCommit<'_>,
 ) -> Result<(), String> {
+    let pre_merge_head = repo
+        .head()
+        .map_err(map_git_error)?
+        .peel_to_commit()
+        .map_err(map_git_error)?;
+
     let mut checkout_options = CheckoutBuilder::new();
     checkout_options.safe();
     repo.merge(&[fetched_commit], None, Some(&mut checkout_options))
@@ -2222,12 +2229,47 @@ fn merge_fetched_commit(
             .map_err(map_git_error)?
             .peel_to_commit()
             .map_err(map_git_error)?;
-        let remote_commit = repo.find_commit(fetched_commit.id()).map_err(map_git_error)?;
+        let remote_commit = repo
+            .find_commit(fetched_commit.id())
+            .map_err(map_git_error)?;
         let mut index = repo.index().map_err(map_git_error)?;
         if index.has_conflicts() {
+            let mut paths = Vec::new();
+            if let Ok(conflicts) = index.conflicts() {
+                for entry in conflicts.flatten() {
+                    let path_bytes = entry
+                        .our
+                        .as_ref()
+                        .and_then(|value| std::str::from_utf8(&value.path).ok())
+                        .or_else(|| {
+                            entry
+                                .their
+                                .as_ref()
+                                .and_then(|value| std::str::from_utf8(&value.path).ok())
+                        })
+                        .or_else(|| {
+                            entry
+                                .ancestor
+                                .as_ref()
+                                .and_then(|value| std::str::from_utf8(&value.path).ok())
+                        });
+                    if let Some(path) = path_bytes {
+                        paths.push(path.to_string());
+                    }
+                }
+            }
+            paths.sort();
+            paths.dedup();
+            let details = if paths.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", paths.join(", "))
+            };
             return Err(
-                "Pull produced merge conflicts. Resolve conflicts on desktop, then pull again on mobile."
-                    .to_string(),
+                format!(
+                    "Pull produced merge conflicts{}. Resolve conflicts on desktop, then pull again on mobile.",
+                    details
+                ),
             );
         }
         let tree_id = index.write_tree_to(repo).map_err(map_git_error)?;
@@ -2248,11 +2290,33 @@ fn merge_fetched_commit(
         Ok(())
     })();
 
-    let cleanup_result = repo.cleanup_state().map_err(map_git_error);
-    if merge_result.is_ok() {
-        cleanup_result?;
+    match merge_result {
+        Ok(()) => {
+            repo.cleanup_state().map_err(map_git_error)?;
+            Ok(())
+        }
+        Err(error_message) => {
+            let cleanup_error = repo.cleanup_state().map_err(map_git_error).err();
+            let reset_error = repo
+                .reset(pre_merge_head.as_object(), ResetType::Hard, None)
+                .map_err(map_git_error)
+                .err();
+            if cleanup_error.is_none() && reset_error.is_none() {
+                return Err(error_message);
+            }
+            let mut extras = Vec::new();
+            if let Some(value) = cleanup_error {
+                extras.push(format!("cleanup_state failed: {value}"));
+            }
+            if let Some(value) = reset_error {
+                extras.push(format!("reset failed: {value}"));
+            }
+            Err(format!(
+                "{error_message} Automatic rollback failed: {}",
+                extras.join("; ")
+            ))
+        }
     }
-    merge_result
 }
 
 fn sort_by_order(mut names: Vec<String>, order: &[String]) -> Vec<String> {
