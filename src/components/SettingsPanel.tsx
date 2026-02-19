@@ -1,6 +1,7 @@
 import { Button } from "./ui/button";
 import { useEditor } from "../contexts/EditorContext";
-import { SettingsGeneralSection } from "./settings/SettingsGeneralSection";
+import { SettingsProfileSection } from "./settings/SettingsProfileSection";
+import { SettingsSyncSection } from "./settings/SettingsSyncSection";
 import { SettingsAppearanceSection } from "./settings/SettingsAppearanceSection";
 import { SettingsRecordingsSection } from "./settings/SettingsRecordingsSection";
 
@@ -8,7 +9,8 @@ export type ThemeMode = "light" | "dark";
 export type NotesListMode = "separate" | "nested";
 
 export type SettingsSectionId =
-  | "general"
+  | "profile"
+  | "sync"
   | "appearance"
   | "recordings";
 type SettingsSection = {
@@ -17,15 +19,10 @@ type SettingsSection = {
 };
 
 const SETTINGS_SECTIONS: SettingsSection[] = [
-  {
-    id: "general",
-    title: "Profiles",
-  },
+  { id: "profile", title: "Profile" },
+  { id: "sync", title: "Sync" },
   { id: "appearance", title: "Appearance" },
-  {
-    id: "recordings",
-    title: "Recordings",
-  },
+  { id: "recordings", title: "Recordings" },
 ];
 
 function SettingsRow({
@@ -53,7 +50,8 @@ function SettingsRow({
 }
 
 function SettingsDetail({ sectionId }: { sectionId: SettingsSectionId }) {
-  if (sectionId === "general") return <SettingsGeneralSection />;
+  if (sectionId === "profile") return <SettingsProfileSection />;
+  if (sectionId === "sync") return <SettingsSyncSection />;
   if (sectionId === "appearance") return <SettingsAppearanceSection />;
   if (sectionId === "recordings") return <SettingsRecordingsSection />;
   return null;

@@ -9,14 +9,10 @@ import { useSettingsData } from "../../../hooks/useSettingsData";
 import { useProfiles } from "../../../contexts/ProfilesContext";
 import { useGitSync } from "../../../contexts/GitSyncContext";
 import { useNotesTree } from "../../../contexts/NotesTreeContext";
-import { Group, InputRow, StatRow } from "./SettingsHelpers";
+import { Group, StatRow } from "./SettingsHelpers";
 
-type MobileSyncSectionProps = {
-  view: "credentials" | "actions";
-};
-
-export function MobileSyncSection({ view }: MobileSyncSectionProps) {
-  const { syncSettings, updateSyncSettings } = useProfiles();
+export function MobileSyncSection() {
+  const { syncSettings } = useProfiles();
   const {
     gitStatus,
     gitSyncAction,
@@ -45,52 +41,6 @@ export function MobileSyncSection({ view }: MobileSyncSectionProps) {
     void refreshGitHistory();
   }, [refreshGitHistory]);
 
-  if (view === "credentials") {
-    return (
-      <>
-        <Group title="Repository">
-          <InputRow
-            label="Remote URL"
-            value={syncSettings.gitRemoteUrl}
-            onChange={(value) => updateSyncSettings({ gitRemoteUrl: value })}
-            placeholder="https://github.com/you/notes.git"
-          />
-          <InputRow
-            label="Branch"
-            value={syncSettings.gitBranch}
-            onChange={(value) => updateSyncSettings({ gitBranch: value })}
-            placeholder="main"
-          />
-        </Group>
-
-        <Group title="Commit">
-          <InputRow
-            label="Commit message"
-            value={syncSettings.gitCommitMessage}
-            onChange={(value) => updateSyncSettings({ gitCommitMessage: value })}
-            placeholder="Sync notes"
-          />
-        </Group>
-
-        <Group title="Credentials">
-          <InputRow
-            label="Username"
-            value={syncSettings.gitUsername}
-            onChange={(value) => updateSyncSettings({ gitUsername: value })}
-            placeholder="Git username"
-          />
-          <InputRow
-            label="Token / password"
-            value={syncSettings.gitPassword}
-            onChange={(value) => updateSyncSettings({ gitPassword: value })}
-            placeholder="Personal access token"
-            password
-          />
-        </Group>
-      </>
-    );
-  }
-
   return (
     <>
       <Group title="Status">
@@ -98,22 +48,24 @@ export function MobileSyncSection({ view }: MobileSyncSectionProps) {
           label="Repository"
           value={gitStatus?.repo_initialized ? "Connected" : "Not connected"}
         />
-        <StatRow label="Last sync" value={lastSuccessfulSyncAt ?? "Never"} />
-        <StatRow label="Remote URL" value={gitStatus?.remote_url ?? "-"} />
         <StatRow label="Branch" value={gitStatus?.current_branch || syncSettings.gitBranch || "-"} />
         <StatRow
           label="Ahead / behind"
           value={gitStatus ? `${gitStatus.ahead} / ${gitStatus.behind}` : "-"}
         />
-        <StatRow
-          label="Working tree"
-          value={gitStatus?.has_uncommitted_changes ? "Changes pending" : "Clean"}
-        />
-        <StatRow label="Push status" value={gitStatus?.push_required ? "Required" : "Up to date"} />
+        <StatRow label="Last sync" value={lastSuccessfulSyncAt ?? "Never"} />
         <StatRow label="Next action" value={syncActionLabel} />
       </Group>
 
-      <Group title="Sync now">
+      {gitSyncError ? (
+        <section className="mobile-sync-error" role="alert">
+          <strong>Sync error</strong>
+          <p>{gitSyncError}</p>
+          {syncHint ? <p className="hint">{syncHint}</p> : null}
+        </section>
+      ) : null}
+
+      <Group title="Actions">
         <div className="mobile-native-actions single">
           <button
             type="button"
@@ -148,7 +100,7 @@ export function MobileSyncSection({ view }: MobileSyncSectionProps) {
             }}
             disabled={gitSyncBusy || gitHistoryBusy}
           >
-            {gitSyncAction === "refresh" || gitHistoryBusy ? "Refreshing..." : "Refresh status"}
+            {gitSyncAction === "refresh" || gitHistoryBusy ? "Refreshing..." : "Refresh"}
           </button>
         </div>
       </Group>
@@ -157,7 +109,7 @@ export function MobileSyncSection({ view }: MobileSyncSectionProps) {
         {gitHistoryError ? (
           <p className="mobile-native-note">{gitHistoryError}</p>
         ) : null}
-        {!gitHistoryError && gitCommitHistory.length === 0 && !gitHistoryBusy ? (
+        {!gitHistoryError && visibleCommits.length === 0 && !gitHistoryBusy ? (
           <p className="mobile-native-note">No commits yet.</p>
         ) : null}
         {visibleCommits.map((item) => (
@@ -172,14 +124,6 @@ export function MobileSyncSection({ view }: MobileSyncSectionProps) {
           </div>
         ))}
       </Group>
-
-      {gitSyncError ? (
-        <section className="mobile-sync-error" role="alert">
-          <strong>Sync error</strong>
-          <p>{gitSyncError}</p>
-          {syncHint ? <p className="hint">{syncHint}</p> : null}
-        </section>
-      ) : null}
     </>
   );
 }

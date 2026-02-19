@@ -111,7 +111,7 @@ export function AppShell() {
 
   // -- Local UI state
   const [appMode, setAppMode] = useState<AppMode>("notes");
-  const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("general");
+  const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSectionId>("profile");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [threePaneLayout, setThreePaneLayout] = useState<Record<string, number>>({
     nav: 22,
