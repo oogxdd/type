@@ -2179,6 +2179,267 @@
   border-top: 1px solid var(--ui-border);
 }
 
+/* iOS-like settings surfaces */
+.mobile-settings-screen {
+  background: #f2f2f7;
+}
+
+.mobile-root.theme-dark .mobile-settings-screen {
+  background: #000;
+}
+
+.mobile-settings-tabs-stack {
+  gap: 8px;
+  padding: 8px 12px 10px;
+  border-bottom: 0.5px solid #d1d1d6;
+  background: rgba(242, 242, 247, 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+.mobile-root.theme-dark .mobile-settings-tabs-stack {
+  border-color: #3a3a3c;
+  background: rgba(28, 28, 30, 0.82);
+}
+
+.mobile-settings-sections,
+.mobile-settings-subsections {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: #e9e9ef;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-root.theme-dark .mobile-settings-sections,
+.mobile-root.theme-dark .mobile-settings-subsections {
+  background: #2c2c2e;
+}
+
+.mobile-settings-section-btn,
+.mobile-settings-subsection-btn {
+  min-height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #3c3c43;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 0 12px;
+}
+
+.mobile-root.theme-dark .mobile-settings-section-btn,
+.mobile-root.theme-dark .mobile-settings-subsection-btn {
+  color: #a6a6b0;
+}
+
+.mobile-settings-section-btn.active,
+.mobile-settings-subsection-btn.active {
+  background: #fff;
+  color: #111;
+  border: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+}
+
+.mobile-root.theme-dark .mobile-settings-section-btn.active,
+.mobile-root.theme-dark .mobile-settings-subsection-btn.active {
+  background: #636366;
+  color: #fff;
+  box-shadow: none;
+}
+
+.mobile-settings-scroll {
+  padding: 12px 12px calc(16px + env(safe-area-inset-bottom));
+  gap: 14px;
+  background: transparent;
+}
+
+.mobile-settings-native {
+  background: transparent;
+}
+
+.mobile-settings-screen .mobile-native-group-wrap {
+  gap: 6px;
+  border-top: none;
+  padding-top: 0;
+}
+
+.mobile-settings-screen .mobile-native-group-wrap + .mobile-native-group-wrap {
+  margin-top: 2px;
+}
+
+.mobile-settings-screen .mobile-native-group-title {
+  margin: 0;
+  padding: 0 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6e6e73;
+}
+
+.mobile-root.theme-dark .mobile-settings-screen .mobile-native-group-title {
+  color: #8e8e93;
+}
+
+.mobile-settings-screen .mobile-native-group {
+  background: #fff;
+  border: 1px solid #d1d1d6;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.mobile-root.theme-dark .mobile-settings-screen .mobile-native-group {
+  background: #1c1c1e;
+  border-color: #3a3a3c;
+}
+
+.mobile-settings-screen .mobile-native-row,
+.mobile-settings-screen .mobile-native-input-row {
+  min-height: 44px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e5e5ea;
+}
+
+.mobile-root.theme-dark .mobile-settings-screen .mobile-native-row,
+.mobile-root.theme-dark .mobile-settings-screen .mobile-native-input-row {
+  border-bottom-color: #3a3a3c;
+}
+
+.mobile-settings-screen .mobile-native-row-label {
+  font-size: 15px;
+  font-weight: 500;
+  color: #1c1c1e;
+}
+
+.mobile-root.theme-dark .mobile-settings-screen .mobile-native-row-label {
+  color: #f2f2f7;
+}
+
+.mobile-settings-screen .mobile-native-row-sub {
+  font-size: 12px;
+  color: #6e6e73;
+}
+
+.mobile-root.theme-dark .mobile-settings-screen .mobile-native-row-sub {
+  color: #8e8e93;
+}
+
+.mobile-settings-screen .mobile-native-row-value {
+  max-width: 46%;
+  font-size: 13px;
+  color: #8e8e93;
+}
+
+.mobile-root.theme-dark .mobile-settings-screen .mobile-native-row-value {
+  color: #8e8e93;
+}
+
+.mobile-settings-screen .mobile-native-check.active {
+  color: #007aff;
+}
+
+.mobile-settings-screen .mobile-native-input-label {
+  font-size: 11px;
+  color: #8e8e93;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mobile-root.theme-dark .mobile-settings-screen .mobile-native-input-label {
+  color: #8e8e93;
+}
+
+.mobile-settings-screen .mobile-native-input-row input {
+  min-height: 36px;
+  border-radius: 8px;
+  border: 1px solid #d1d1d6;
+  background: #fff;
+  color: #1c1c1e;
+  padding: 0 10px;
+  font-size: 16px;
+}
+
+.mobile-root.theme-dark .mobile-settings-screen .mobile-native-input-row input {
+  border-color: #3a3a3c;
+  background: #2c2c2e;
+  color: #fff;
+}
+
+.mobile-settings-screen .mobile-native-input-row input:disabled {
+  opacity: 0.52;
+}
+
+.mobile-settings-screen .mobile-native-actions {
+  padding: 10px 14px;
+  gap: 8px;
+}
+
+.mobile-settings-screen .mobile-primary-btn,
+.mobile-settings-screen .mobile-secondary-btn {
+  min-height: 36px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mobile-settings-screen .mobile-primary-btn {
+  border-color: #007aff;
+  background: #007aff;
+  color: #fff;
+}
+
+.mobile-root.theme-dark .mobile-settings-screen .mobile-primary-btn {
+  border-color: #0a84ff;
+  background: #0a84ff;
+}
+
+.mobile-settings-screen .mobile-secondary-btn {
+  border: 1px solid #d1d1d6;
+  background: #fff;
+  color: #007aff;
+}
+
+.mobile-root.theme-dark .mobile-settings-screen .mobile-secondary-btn {
+  border-color: #3a3a3c;
+  background: #2c2c2e;
+  color: #0a84ff;
+}
+
+.mobile-settings-screen .mobile-primary-btn:disabled,
+.mobile-settings-screen .mobile-secondary-btn:disabled {
+  opacity: 0.5;
+}
+
+.mobile-settings-screen .mobile-native-note {
+  margin: 0;
+  padding: 0 14px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #6e6e73;
+}
+
+.mobile-root.theme-dark .mobile-settings-screen .mobile-native-note {
+  color: #8e8e93;
+}
+
+.mobile-settings-screen .mobile-sync-error {
+  margin: 0 2px;
+  border: 1px solid #f2c7c7;
+  border-radius: 12px;
+  background: #fff4f4;
+  padding: 10px 12px;
+  gap: 4px;
+}
+
+.mobile-root.theme-dark .mobile-settings-screen .mobile-sync-error {
+  border-color: #5a3436;
+  background: #2a1d1f;
+}
+
 .mobile-root[data-layout="tablet"] .mobile-tablet-shell {
   grid-template-columns: minmax(232px, 31%) minmax(0, 1fr);
   min-height: 0;

@@ -1,5 +1,5 @@
 import { useSessions } from "../../../contexts/SessionsContext";
-import { Group, ChoiceRow } from "./SettingsHelpers";
+import { Group, ChoiceRow, InputRow } from "./SettingsHelpers";
 import { useEffect, useMemo, useState } from "react";
 
 export function MobileGeneralSection() {
@@ -53,15 +53,13 @@ export function MobileGeneralSection() {
       </Group>
 
       <Group title="Folder path">
-        <div className="mobile-native-row">
-          <input
-            type="text"
-            value={notesRootInput}
-            onChange={(event) => setNotesRootInput(event.target.value)}
-            placeholder="/Users/you/Documents/type"
-            disabled={!activeSessionId || sessionsBusy}
-          />
-        </div>
+        <InputRow
+          label="Path"
+          value={notesRootInput}
+          onChange={setNotesRootInput}
+          placeholder="/Users/you/Documents/type"
+          disabled={!activeSessionId || sessionsBusy}
+        />
         <div className="mobile-native-actions single">
           <button
             type="button"

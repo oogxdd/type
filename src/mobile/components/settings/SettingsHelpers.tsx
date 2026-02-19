@@ -43,12 +43,14 @@ export function InputRow({
   onChange,
   placeholder,
   password,
+  disabled,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   password?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <label className="mobile-native-input-row">
@@ -60,6 +62,7 @@ export function InputRow({
         placeholder={placeholder}
         autoCapitalize="off"
         autoCorrect="off"
+        disabled={disabled}
       />
     </label>
   );
