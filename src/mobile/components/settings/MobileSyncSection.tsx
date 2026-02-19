@@ -28,7 +28,7 @@ export function MobileSyncSection() {
     gitPush,
   } = useGitSync();
   const { refreshTree } = useNotesTree();
-  const { canPull, canPush, canConnect, syncActionLabel } = useSettingsData();
+  const { canPull, canPush, canConnect } = useSettingsData();
 
   const lastSuccessfulSyncAt = syncSettings.lastSuccessfulSyncAt
     ? new Date(syncSettings.lastSuccessfulSyncAt).toLocaleString()
@@ -49,12 +49,13 @@ export function MobileSyncSection() {
           value={gitStatus?.repo_initialized ? "Connected" : "Not connected"}
         />
         <StatRow label="Branch" value={gitStatus?.current_branch || syncSettings.gitBranch || "-"} />
-        <StatRow
-          label="Ahead / behind"
-          value={gitStatus ? `${gitStatus.ahead} / ${gitStatus.behind}` : "-"}
-        />
+        {gitStatus && (gitStatus.ahead > 0 || gitStatus.behind > 0) ? (
+          <StatRow
+            label="Ahead / behind"
+            value={`${gitStatus.ahead} / ${gitStatus.behind}`}
+          />
+        ) : null}
         <StatRow label="Last sync" value={lastSuccessfulSyncAt ?? "Never"} />
-        <StatRow label="Next action" value={syncActionLabel} />
       </Group>
 
       {gitSyncError ? (
@@ -67,14 +68,16 @@ export function MobileSyncSection() {
 
       <Group title="Actions">
         <div className="mobile-native-actions single">
-          <button
-            type="button"
-            className="mobile-primary-btn"
-            onClick={() => void connectGitRepo()}
-            disabled={!canConnect}
-          >
-            {gitSyncAction === "connect" ? "Connecting..." : "Connect repo"}
-          </button>
+          {!gitStatus?.repo_initialized ? (
+            <button
+              type="button"
+              className="mobile-primary-btn"
+              onClick={() => void connectGitRepo()}
+              disabled={!canConnect}
+            >
+              {gitSyncAction === "connect" ? "Connecting..." : "Connect"}
+            </button>
+          ) : null}
           <button
             type="button"
             className="mobile-secondary-btn"
@@ -105,25 +108,28 @@ export function MobileSyncSection() {
         </div>
       </Group>
 
-      <Group title="Recent commits">
-        {gitHistoryError ? (
-          <p className="mobile-native-note">{gitHistoryError}</p>
-        ) : null}
-        {!gitHistoryError && visibleCommits.length === 0 && !gitHistoryBusy ? (
-          <p className="mobile-native-note">No commits yet.</p>
-        ) : null}
-        {visibleCommits.map((item) => (
-          <div key={item.id} className="mobile-native-row stat">
-            <span className="mobile-native-row-main">
-              <span className="mobile-native-row-label">{formatCommitSummaryForApp(item.summary)}</span>
-              <span className="mobile-native-row-sub">
-                {item.short_id} · {formatGitCommitTime(item.authored_ms)}
-              </span>
-            </span>
-            <span className="mobile-native-row-value">{formatGitCommitStateLabel(item.sync_state)}</span>
-          </div>
-        ))}
-      </Group>
+      {visibleCommits.length > 0 || gitHistoryBusy ? (
+        <Group title="Recent commits">
+          {gitHistoryError ? (
+            <p className="mobile-native-note">{gitHistoryError}</p>
+          ) : null}
+          {visibleCommits.length === 0 ? (
+            <p className="mobile-native-note">Loading...</p>
+          ) : (
+            visibleCommits.map((item) => (
+              <div key={item.id} className="mobile-native-row stat">
+                <span className="mobile-native-row-main">
+                  <span className="mobile-native-row-label">{formatCommitSummaryForApp(item.summary)}</span>
+                  <span className="mobile-native-row-sub">
+                    {item.short_id} · {formatGitCommitTime(item.authored_ms)}
+                  </span>
+                </span>
+                <span className="mobile-native-row-value">{formatGitCommitStateLabel(item.sync_state)}</span>
+              </div>
+            ))
+          )}
+        </Group>
+      ) : null}
     </>
   );
 }

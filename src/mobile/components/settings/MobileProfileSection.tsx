@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useProfiles } from "../../../contexts/ProfilesContext";
-import { Group, ChoiceRow, InputRow, StatRow } from "./SettingsHelpers";
+import { Group, ChoiceRow, InputRow } from "./SettingsHelpers";
 
 export function MobileProfileSection() {
   const {
@@ -29,23 +29,8 @@ export function MobileProfileSection() {
   return (
     <>
       <Group title="Profile">
-        <StatRow label="Current" value={activeProfile?.name ?? "No profile"} />
-        <div className="mobile-native-actions single">
-          <button
-            type="button"
-            className="mobile-primary-btn"
-            onClick={() => void createProfile()}
-            disabled={profilesBusy}
-          >
-            {profilesBusy ? "Working..." : "New profile"}
-          </button>
-        </div>
-        {profilesError ? <p className="mobile-native-note">{profilesError}</p> : null}
-      </Group>
-
-      <Group title="Switch profile">
         {profiles.length === 0 ? (
-          <p className="mobile-native-note">No profiles available.</p>
+          <p className="mobile-native-note">No profiles yet.</p>
         ) : (
           profiles.map((profile) => (
             <ChoiceRow
@@ -56,15 +41,25 @@ export function MobileProfileSection() {
             />
           ))
         )}
+        <div className="mobile-native-actions single">
+          <button
+            type="button"
+            className="mobile-secondary-btn"
+            onClick={() => void createProfile()}
+            disabled={profilesBusy}
+          >
+            {profilesBusy ? "Working..." : "New profile"}
+          </button>
+        </div>
+        {profilesError ? <p className="mobile-native-note">{profilesError}</p> : null}
       </Group>
 
       <Group title="Notes folder">
-        <StatRow label="Current path" value={activeProfileNotesRoot || "-"} />
         <InputRow
-          label="New path"
+          label="Path"
           value={notesRootInput}
           onChange={setNotesRootInput}
-          placeholder="/Users/you/Documents/type"
+          placeholder={activeProfileNotesRoot || "/Users/you/Documents/type"}
           disabled={!activeProfileId || profilesBusy}
         />
         <div className="mobile-native-actions single">
@@ -79,12 +74,12 @@ export function MobileProfileSection() {
               void setProfileNotesRoot(activeProfileId, notesRootInput);
             }}
           >
-            Apply path
+            Apply
           </button>
         </div>
       </Group>
 
-      <Group title="Git setup">
+      <Group title="Git">
         <InputRow
           label="Remote URL"
           value={syncSettings.gitRemoteUrl}
@@ -107,13 +102,13 @@ export function MobileProfileSection() {
           label="Username"
           value={syncSettings.gitUsername}
           onChange={(value) => updateSyncSettings({ gitUsername: value })}
-          placeholder="Git username"
+          placeholder="Optional"
         />
         <InputRow
-          label="Token / password"
+          label="Token"
           value={syncSettings.gitPassword}
           onChange={(value) => updateSyncSettings({ gitPassword: value })}
-          placeholder="Personal access token"
+          placeholder="Optional"
           password
         />
       </Group>

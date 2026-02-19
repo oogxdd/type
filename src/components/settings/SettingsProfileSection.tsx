@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useProfiles } from "../../contexts/ProfilesContext";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Label } from "../ui/label";
 
 export function SettingsProfileSection() {
   const {
@@ -52,7 +51,6 @@ export function SettingsProfileSection() {
       </div>
       <div className="settings-section-stack">
         <section className="settings-group">
-          <h3 className="settings-group-title">Profile</h3>
           <label className="settings-control">
             <span>Active profile</span>
             <div className="settings-inline-row">
@@ -75,28 +73,20 @@ export function SettingsProfileSection() {
                 onClick={() => void createProfile()}
                 disabled={profilesBusy}
               >
-                {profilesBusy ? "Working..." : "New profile"}
+                {profilesBusy ? "Working..." : "New"}
               </Button>
             </div>
           </label>
           {profilesError ? (
             <p className="settings-warning-text settings-inline-warning">{profilesError}</p>
           ) : null}
-          <div className="settings-info-grid">
-            <div className="settings-info-row">
-              <span>Current</span>
-              <code>{activeProfile?.name ?? "-"}</code>
-            </div>
-          </div>
         </section>
 
         <section className="settings-group">
           <h3 className="settings-group-title">Notes folder</h3>
           <div className="settings-control">
-            <Label htmlFor="profile-working-directory">Folder path</Label>
             <div className="settings-inline-row">
               <Input
-                id="profile-working-directory"
                 type="text"
                 value={notesRootInput}
                 onChange={(event) => setNotesRootInput(event.target.value)}
@@ -110,7 +100,7 @@ export function SettingsProfileSection() {
                 disabled={!activeProfileId || profilesBusy}
                 onClick={() => void chooseWorkingDirectory()}
               >
-                Choose folder
+                Browse
               </Button>
               <Button
                 type="button"
@@ -127,13 +117,11 @@ export function SettingsProfileSection() {
                 Apply
               </Button>
             </div>
-            <span className="settings-inline-help">Absolute path only.</span>
-            {activeProfileNotesRoot ? <code>{activeProfileNotesRoot}</code> : null}
           </div>
         </section>
 
         <section className="settings-group">
-          <h3 className="settings-group-title">Git setup</h3>
+          <h3 className="settings-group-title">Git</h3>
           <label className="settings-control">
             <span>Remote URL</span>
             <Input
@@ -162,23 +150,23 @@ export function SettingsProfileSection() {
             />
           </label>
           <label className="settings-control">
-            <span>Username (optional)</span>
+            <span>Username</span>
             <Input
               type="text"
               value={syncSettings.gitUsername}
               onChange={(event) => updateSyncSettings({ gitUsername: event.target.value })}
-              placeholder="Git username"
+              placeholder="Optional"
               autoCapitalize="off"
               autoCorrect="off"
             />
           </label>
           <label className="settings-control">
-            <span>Token / password (optional)</span>
+            <span>Token</span>
             <Input
               type="password"
               value={syncSettings.gitPassword}
               onChange={(event) => updateSyncSettings({ gitPassword: event.target.value })}
-              placeholder="Personal access token"
+              placeholder="Optional"
               autoCapitalize="off"
               autoCorrect="off"
             />
