@@ -27,6 +27,41 @@ npm run tauri ios dev    # simulator/device
 npm run tauri ios build  # release
 ```
 
+## OTA updates (iOS WebView assets)
+
+This app is configured to use `@inkibra/tauri-plugin-ota` for iOS OTA web asset updates.
+
+Set the OTA manifest URL in your environment:
+
+```bash
+cp .env.example .env
+# then set VITE_OTA_MANIFEST_URL
+```
+
+Build now emits both:
+
+- regular web assets for `index.html`
+- deterministic OTA fallback assets: `dist/app.js` and `dist/app.css`
+
+To prepare publishable OTA artifacts + manifest:
+
+```bash
+OTA_CDN_BASE_URL=https://your-cdn.example.com/type npm run ota:prepare
+```
+
+This writes:
+
+- `dist/ota/app-<version>.js`
+- `dist/ota/app-<version>.css`
+- `dist/ota/manifest.json` (with SHA-256 hash)
+
+OTA flow:
+
+1. Splash bootstrap (`src/ota-bootstrap.ts`) calls `prepare(manifestUrl)` then `start()`
+2. `start()` loads OTA update content when available
+3. Otherwise it loads bundled `app.js` fallback
+4. App startup is registered via `register()` in `src/main.tsx`
+
 ## Notes storage
 
 Notes are stored in a local folder tree. The app uses the first existing root:
