@@ -201,9 +201,17 @@ struct NotesProfileEntry {
 
 #[derive(Clone, Default, Deserialize, PartialEq, Serialize)]
 struct NotesProfilesFile {
-    #[serde(default, alias = "active_session_id")]
+    #[serde(default)]
     active_profile_id: String,
-    #[serde(default, alias = "sessions")]
+    #[serde(default)]
+    profiles: Vec<NotesProfileEntry>,
+}
+
+#[derive(Clone, Default, Deserialize)]
+struct LegacyProfilesMigrationFile {
+    #[serde(default, rename = "active_session_id")]
+    active_profile_id: String,
+    #[serde(default, rename = "sessions")]
     profiles: Vec<NotesProfileEntry>,
 }
 
@@ -595,6 +603,13 @@ fn normalize_profiles_state(
     })
 }
 
+fn migrate_legacy_profiles_state(state: LegacyProfilesMigrationFile) -> NotesProfilesFile {
+    NotesProfilesFile {
+        active_profile_id: state.active_profile_id,
+        profiles: state.profiles,
+    }
+}
+
 fn ensure_profiles_state(app: &tauri::AppHandle) -> Result<NotesProfilesFile, String> {
     let path = profiles_file_path(app)?;
     if path.exists() {
@@ -618,9 +633,20 @@ fn ensure_profiles_state(app: &tauri::AppHandle) -> Result<NotesProfilesFile, St
     let legacy_path = legacy_profiles_file_path(app)?;
     if legacy_path.exists() {
         let content = fs::read_to_string(&legacy_path).map_err(|err| err.to_string())?;
-        if let Ok(parsed) = serde_json::from_str::<NotesProfilesFile>(&content) {
-            let normalized = normalize_profiles_state(app, parsed)?;
+        let migrated =
+            if let Ok(parsed_profiles) = serde_json::from_str::<NotesProfilesFile>(&content) {
+                parsed_profiles
+            } else if let Ok(parsed_legacy) =
+                serde_json::from_str::<LegacyProfilesMigrationFile>(&content)
+            {
+                migrate_legacy_profiles_state(parsed_legacy)
+            } else {
+                NotesProfilesFile::default()
+            };
+        if !migrated.profiles.is_empty() {
+            let normalized = normalize_profiles_state(app, migrated)?;
             write_profiles_state(app, &normalized)?;
+            let _ = fs::remove_file(&legacy_path);
             return Ok(normalized);
         }
     }
