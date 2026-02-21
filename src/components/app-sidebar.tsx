@@ -57,10 +57,7 @@ export function AppSidebar({
         <SidebarHeader className="app-sidebar-header">
           <SidebarMenu>
             <SidebarMenuItem className="flex items-center gap-2">
-              <SidebarMenuButton
-                className="app-sidebar-menu-button min-w-8 duration-200 ease-linear"
-                onClick={onNewNoteClick}
-              >
+              <SidebarMenuButton onClick={onNewNoteClick}>
                 <CirclePlus />
                 <span>New note</span>
               </SidebarMenuButton>
@@ -80,26 +77,25 @@ export function AppSidebar({
                 </span>
               </Button>
             </SidebarMenuItem>
+          </SidebarMenu>
+
+          <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton className="app-sidebar-menu-button" onClick={() => {}}>
+              <SidebarMenuButton isActive={feedActive} onClick={onFeedClick}>
+                <Home />
+                <span>Feed</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={() => {}}>
                 <Search />
                 <span>Search</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton className="app-sidebar-menu-button" onClick={() => {}}>
+              <SidebarMenuButton onClick={() => {}}>
                 <MessageCircle />
                 <span>Chat</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={feedActive}
-                onClick={onFeedClick}
-                className="app-sidebar-menu-button"
-              >
-                <Home />
-                <span>Feed</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
@@ -115,21 +111,13 @@ export function AppSidebar({
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton
-                    isActive={trashActive}
-                    onClick={onTrashClick}
-                    className="app-sidebar-menu-button"
-                  >
+                  <SidebarMenuButton isActive={trashActive} onClick={onTrashClick}>
                     <Trash2 />
                     <span>Trash</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton
-                    isActive={settingsActive}
-                    onClick={onSettingsClick}
-                    className="app-sidebar-menu-button"
-                  >
+                  <SidebarMenuButton isActive={settingsActive} onClick={onSettingsClick}>
                     <Settings2 />
                     <span>Settings</span>
                   </SidebarMenuButton>

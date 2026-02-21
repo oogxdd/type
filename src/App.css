@@ -254,12 +254,6 @@ body {
   letter-spacing: 0.02em;
 }
 
-.app-sidebar-menu-button,
-.app-sidebar-primary-button {
-  min-height: 34px;
-  font-size: 14px;
-}
-
 .app-sidebar-recording-button {
   box-shadow: none;
 }
