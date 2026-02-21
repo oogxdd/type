@@ -49,18 +49,16 @@ export function AppSidebar({
 }: AppSidebarProps) {
   return (
     <SidebarProvider className="h-full min-h-0 w-full">
-      <Sidebar collapsible="none" className={cn("h-full w-full border-r-0", className)} {...props}>
-        <SidebarHeader>
+      <Sidebar
+        collapsible="none"
+        className={cn("app-sidebar-shell tree-pane nav-pane h-full w-full border-r-0", className)}
+        {...props}
+      >
+        <SidebarHeader className="app-sidebar-header">
           <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton isActive={feedActive} onClick={onFeedClick}>
-                <Home />
-                <span>Feed</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
             <SidebarMenuItem className="flex items-center gap-2">
               <SidebarMenuButton
-                className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground min-w-8 duration-200 ease-linear"
+                className="app-sidebar-primary-button bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground min-w-8 duration-200 ease-linear"
                 onClick={onNewNoteClick}
               >
                 <CirclePlus />
@@ -84,10 +82,20 @@ export function AppSidebar({
                 </span>
               </Button>
             </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={feedActive}
+                onClick={onFeedClick}
+                className="app-sidebar-menu-button"
+              >
+                <Home />
+                <span>Feed</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
 
-        <SidebarContent>
+        <SidebarContent className="app-sidebar-content">
           <SidebarGroup className="min-h-0 flex-1 px-0 pb-0">
             <SidebarGroupLabel>Folders</SidebarGroupLabel>
             <SidebarGroupContent className="min-h-0 flex-1">{children}</SidebarGroupContent>
@@ -97,15 +105,23 @@ export function AppSidebar({
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton isActive={settingsActive} onClick={onSettingsClick}>
-                    <Settings2 />
-                    <span>Settings</span>
+                  <SidebarMenuButton
+                    isActive={trashActive}
+                    onClick={onTrashClick}
+                    className="app-sidebar-menu-button"
+                  >
+                    <Trash2 />
+                    <span>Trash</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
-                  <SidebarMenuButton isActive={trashActive} onClick={onTrashClick}>
-                    <Trash2 />
-                    <span>Trash</span>
+                  <SidebarMenuButton
+                    isActive={settingsActive}
+                    onClick={onSettingsClick}
+                    className="app-sidebar-menu-button"
+                  >
+                    <Settings2 />
+                    <span>Settings</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
