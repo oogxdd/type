@@ -17,7 +17,7 @@ import {
 import { snapCenterToCursor } from "@dnd-kit/modifiers";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu } from "@tauri-apps/api/menu";
-import { Settings } from "lucide-react";
+import { CirclePlus, Mic, Settings, Square } from "lucide-react";
 
 import { useTheme } from "./contexts/ThemeContext";
 import { useNotesTree } from "./contexts/NotesTreeContext";
@@ -482,20 +482,20 @@ export function AppShell() {
           <div className="nav-action-group">
             <button
               type="button"
-              className="nav-action nav-action-new rounded-xl px-3 py-2 transition-colors"
+              className="nav-action nav-action-combined-primary rounded-md px-3 py-2 transition-all duration-200 ease-linear min-w-8"
               onClick={(event) => {
                 event.stopPropagation();
                 void createNewNote();
               }}
             >
               <span className="nav-action-icon" aria-hidden>
-                +
+                <CirclePlus className="h-4 w-4 shrink-0" strokeWidth={1.9} />
               </span>
-              <span>New note</span>
+              <span>Quick Create</span>
             </button>
             <button
               type="button"
-              className={`nav-action nav-action-record rounded-xl px-3 py-2 transition-colors${
+              className={`nav-action nav-action-combined-side rounded-md px-3 py-2 transition-all duration-200 ease-linear size-8${
                 isRecordingAudio ? " active" : ""
               }`}
               onClick={(event) => {
@@ -507,11 +507,19 @@ export function AppShell() {
                 }
               }}
               disabled={!recordingSupported || isRecordingFinalizing}
+              aria-label={isRecordingAudio ? "Stop recording" : "Record audio"}
+              title={isRecordingAudio ? "Stop recording" : "Record audio"}
             >
               <span className="nav-action-icon" aria-hidden>
-                {isRecordingAudio ? "■" : "●"}
+                {isRecordingAudio ? (
+                  <Square className="h-4 w-4 shrink-0" strokeWidth={2} />
+                ) : (
+                  <Mic className="h-4 w-4 shrink-0" strokeWidth={2} />
+                )}
               </span>
-              <span>{isRecordingAudio ? "Stop recording" : "Record audio"}</span>
+              <span className="sr-only">
+                {isRecordingAudio ? "Stop recording" : "Record audio"}
+              </span>
             </button>
           </div>
         }
