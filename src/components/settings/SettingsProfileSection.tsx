@@ -2,6 +2,14 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useState } from "react";
 import { useProfiles } from "../../contexts/ProfilesContext";
 import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
 import { Input } from "../ui/input";
 
 type GitDraftSettings = {
@@ -35,11 +43,19 @@ export function SettingsProfileSection() {
     profilesError,
     switchProfile,
     createProfile,
+    updateProfile,
+    deleteProfile,
     setProfileNotesRoot,
     syncSettings,
     updateSyncSettings,
   } = useProfiles();
   const [notesRootInput, setNotesRootInput] = useState("");
+  const [profileManagerOpen, setProfileManagerOpen] = useState(false);
+  const [newProfileName, setNewProfileName] = useState("");
+  const [newProfileDescription, setNewProfileDescription] = useState("");
+  const [profileDrafts, setProfileDrafts] = useState<
+    Record<string, { name: string; description: string }>
+  >({});
   const [gitDraft, setGitDraft] = useState<GitDraftSettings>(() =>
     getGitDraftFromSyncSettings(syncSettings)
   );
@@ -52,6 +68,19 @@ export function SettingsProfileSection() {
   useEffect(() => {
     setNotesRootInput(activeProfile?.notes_root ?? "");
   }, [activeProfile?.notes_root]);
+
+  useEffect(() => {
+    setProfileDrafts((prev) => {
+      const next: Record<string, { name: string; description: string }> = {};
+      profiles.forEach((profile) => {
+        next[profile.id] = prev[profile.id] ?? {
+          name: profile.name,
+          description: profile.description ?? "",
+        };
+      });
+      return next;
+    });
+  }, [profiles]);
 
   useEffect(() => {
     setGitDraft(getGitDraftFromSyncSettings(syncSettings));
@@ -87,6 +116,8 @@ export function SettingsProfileSection() {
     }
   };
 
+  const createProfileDisabled = profilesBusy || !newProfileName.trim();
+
   return (
     <>
       <div className="settings-detail-hero">
@@ -113,13 +144,16 @@ export function SettingsProfileSection() {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => void createProfile()}
+                onClick={() => setProfileManagerOpen(true)}
                 disabled={profilesBusy}
               >
-                {profilesBusy ? "Working..." : "New"}
+                Manage profiles
               </Button>
             </div>
           </label>
+          {activeProfile?.description ? (
+            <p className="settings-inline-help">{activeProfile.description}</p>
+          ) : null}
           {profilesError ? (
             <p className="settings-warning-text settings-inline-warning">{profilesError}</p>
           ) : null}
@@ -241,6 +275,149 @@ export function SettingsProfileSection() {
           </div>
         </section>
       </div>
+
+      <Dialog open={profileManagerOpen} onOpenChange={setProfileManagerOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage profiles</DialogTitle>
+            <DialogDescription>
+              Create, rename, and remove profiles. Deleting a profile keeps its notes folder on disk.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="settings-section-stack">
+            <section className="settings-group">
+              <h3 className="settings-group-title">Create profile</h3>
+              <label className="settings-control">
+                <span>Name</span>
+                <Input
+                  type="text"
+                  value={newProfileName}
+                  onChange={(event) => setNewProfileName(event.target.value)}
+                  placeholder="Work"
+                />
+              </label>
+              <label className="settings-control">
+                <span>Description</span>
+                <Input
+                  type="text"
+                  value={newProfileDescription}
+                  onChange={(event) => setNewProfileDescription(event.target.value)}
+                  placeholder="Short label for this profile"
+                />
+              </label>
+              <div className="settings-action-row">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={createProfileDisabled}
+                  onClick={() => {
+                    void createProfile({
+                      name: newProfileName.trim(),
+                      description: newProfileDescription.trim(),
+                    });
+                    setNewProfileName("");
+                    setNewProfileDescription("");
+                  }}
+                >
+                  {profilesBusy ? "Working..." : "Create profile"}
+                </Button>
+              </div>
+            </section>
+
+            <section className="settings-group">
+              <h3 className="settings-group-title">Existing profiles</h3>
+              {profiles.map((profile) => {
+                const draft = profileDrafts[profile.id] ?? {
+                  name: profile.name,
+                  description: profile.description ?? "",
+                };
+                const hasDraftChanges =
+                  draft.name !== profile.name ||
+                  draft.description !== (profile.description ?? "");
+                return (
+                  <div key={profile.id} className="settings-control">
+                    <div className="settings-inline-row">
+                      <Button
+                        type="button"
+                        variant={activeProfileId === profile.id ? "secondary" : "outline"}
+                        size="sm"
+                        onClick={() => void switchProfile(profile.id)}
+                        disabled={profilesBusy}
+                      >
+                        {activeProfileId === profile.id ? "Active" : "Switch"}
+                      </Button>
+                    </div>
+                    <label className="settings-control">
+                      <span>Name</span>
+                      <Input
+                        type="text"
+                        value={draft.name}
+                        onChange={(event) =>
+                          setProfileDrafts((prev) => ({
+                            ...prev,
+                            [profile.id]: {
+                              name: event.target.value,
+                              description: draft.description,
+                            },
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="settings-control">
+                      <span>Description</span>
+                      <Input
+                        type="text"
+                        value={draft.description}
+                        onChange={(event) =>
+                          setProfileDrafts((prev) => ({
+                            ...prev,
+                            [profile.id]: {
+                              name: draft.name,
+                              description: event.target.value,
+                            },
+                          }))
+                        }
+                        placeholder="Short label for this profile"
+                      />
+                    </label>
+                    <div className="settings-action-row">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={profilesBusy || !hasDraftChanges}
+                        onClick={() =>
+                          void updateProfile(profile.id, {
+                            name: draft.name,
+                            description: draft.description,
+                          })
+                        }
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        disabled={profilesBusy || profiles.length <= 1}
+                        onClick={() => {
+                          if (!window.confirm(`Delete profile "${profile.name}"?`)) {
+                            return;
+                          }
+                          void deleteProfile(profile.id);
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </section>
+          </div>
+          <DialogFooter showCloseButton />
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

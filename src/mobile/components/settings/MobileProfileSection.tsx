@@ -33,11 +33,18 @@ export function MobileProfileSection() {
     profilesError,
     switchProfile,
     createProfile,
+    updateProfile,
+    deleteProfile,
     setProfileNotesRoot,
     syncSettings,
     updateSyncSettings,
   } = useProfiles();
   const [notesRootInput, setNotesRootInput] = useState("");
+  const [newProfileName, setNewProfileName] = useState("");
+  const [newProfileDescription, setNewProfileDescription] = useState("");
+  const [profileDrafts, setProfileDrafts] = useState<
+    Record<string, { name: string; description: string }>
+  >({});
   const [gitDraft, setGitDraft] = useState<GitDraftSettings>(() =>
     getGitDraftFromSyncSettings(syncSettings)
   );
@@ -50,6 +57,19 @@ export function MobileProfileSection() {
   useEffect(() => {
     setNotesRootInput(activeProfile?.notes_root ?? "");
   }, [activeProfile?.notes_root]);
+
+  useEffect(() => {
+    setProfileDrafts((prev) => {
+      const next: Record<string, { name: string; description: string }> = {};
+      profiles.forEach((profile) => {
+        next[profile.id] = prev[profile.id] ?? {
+          name: profile.name,
+          description: profile.description ?? "",
+        };
+      });
+      return next;
+    });
+  }, [profiles]);
 
   useEffect(() => {
     setGitDraft(getGitDraftFromSyncSettings(syncSettings));
@@ -76,22 +96,106 @@ export function MobileProfileSection() {
           <p className="mobile-native-note">No profiles yet.</p>
         ) : (
           profiles.map((profile) => (
-            <ChoiceRow
-              key={profile.id}
-              label={profile.name}
-              selected={activeProfileId === profile.id}
-              onClick={() => void switchProfile(profile.id)}
-            />
+            <div key={profile.id}>
+              <ChoiceRow
+                label={profile.name}
+                subtitle={profile.description || undefined}
+                selected={activeProfileId === profile.id}
+                onClick={() => void switchProfile(profile.id)}
+              />
+              <InputRow
+                label="Name"
+                value={profileDrafts[profile.id]?.name ?? profile.name}
+                onChange={(value) =>
+                  setProfileDrafts((prev) => ({
+                    ...prev,
+                    [profile.id]: {
+                      name: value,
+                      description: prev[profile.id]?.description ?? profile.description ?? "",
+                    },
+                  }))
+                }
+              />
+              <InputRow
+                label="Description"
+                value={profileDrafts[profile.id]?.description ?? profile.description ?? ""}
+                onChange={(value) =>
+                  setProfileDrafts((prev) => ({
+                    ...prev,
+                    [profile.id]: {
+                      name: prev[profile.id]?.name ?? profile.name,
+                      description: value,
+                    },
+                  }))
+                }
+                placeholder="Short label for this profile"
+              />
+              <div className="mobile-native-actions single">
+                <button
+                  type="button"
+                  className="mobile-secondary-btn"
+                  disabled={
+                    profilesBusy ||
+                    ((profileDrafts[profile.id]?.name ?? profile.name) === profile.name &&
+                      (profileDrafts[profile.id]?.description ?? profile.description ?? "") ===
+                        (profile.description ?? ""))
+                  }
+                  onClick={() =>
+                    void updateProfile(profile.id, {
+                      name: profileDrafts[profile.id]?.name ?? profile.name,
+                      description:
+                        profileDrafts[profile.id]?.description ?? profile.description ?? "",
+                    })
+                  }
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="mobile-secondary-btn"
+                  disabled={profilesBusy || profiles.length <= 1}
+                  onClick={() => {
+                    if (!window.confirm(`Delete profile "${profile.name}"?`)) {
+                      return;
+                    }
+                    void deleteProfile(profile.id);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
           ))
         )}
+        <InputRow
+          label="New profile name"
+          value={newProfileName}
+          onChange={setNewProfileName}
+          placeholder="Work"
+          disabled={profilesBusy}
+        />
+        <InputRow
+          label="Description"
+          value={newProfileDescription}
+          onChange={setNewProfileDescription}
+          placeholder="Short label for this profile"
+          disabled={profilesBusy}
+        />
         <div className="mobile-native-actions single">
           <button
             type="button"
             className="mobile-secondary-btn"
-            onClick={() => void createProfile()}
-            disabled={profilesBusy}
+            onClick={() => {
+              void createProfile({
+                name: newProfileName.trim(),
+                description: newProfileDescription.trim(),
+              });
+              setNewProfileName("");
+              setNewProfileDescription("");
+            }}
+            disabled={profilesBusy || !newProfileName.trim()}
           >
-            {profilesBusy ? "Working..." : "New profile"}
+            {profilesBusy ? "Working..." : "Create profile"}
           </button>
         </div>
         {profilesError ? <p className="mobile-native-note">{profilesError}</p> : null}

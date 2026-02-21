@@ -193,6 +193,8 @@ struct GitHistoryArgs {
 struct NotesProfileEntry {
     id: String,
     name: String,
+    #[serde(default)]
+    description: String,
     notes_root: String,
 }
 
@@ -213,6 +215,7 @@ struct NotesProfilesSnapshot {
 #[derive(Deserialize)]
 struct CreateProfileArgs {
     name: String,
+    description: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -224,6 +227,18 @@ struct SetActiveProfileArgs {
 struct SetProfileNotesRootArgs {
     profile_id: String,
     notes_root: String,
+}
+
+#[derive(Deserialize)]
+struct UpdateProfileArgs {
+    profile_id: String,
+    name: Option<String>,
+    description: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct DeleteProfileArgs {
+    profile_id: String,
 }
 
 #[derive(Deserialize)]
@@ -487,6 +502,10 @@ fn normalize_profile_name(name: &str) -> String {
     }
 }
 
+fn normalize_profile_description(description: &str) -> String {
+    description.trim().to_string()
+}
+
 fn slugify_profile_id(name: &str) -> String {
     let mut slug = String::new();
     let mut last_dash = false;
@@ -520,6 +539,7 @@ fn default_profiles_state(app: &tauri::AppHandle) -> Result<NotesProfilesFile, S
         profiles: vec![NotesProfileEntry {
             id: "default".to_string(),
             name: "Default".to_string(),
+            description: String::new(),
             notes_root: legacy_root.to_string_lossy().to_string(),
         }],
     })
@@ -544,6 +564,7 @@ fn normalize_profiles_state(
         }
         profile.id = id.clone();
         profile.name = normalize_profile_name(&profile.name);
+        profile.description = normalize_profile_description(&profile.description);
         if profile.notes_root.trim().is_empty() {
             profile.notes_root = profile_root_for_id(app, &id)?.to_string_lossy().to_string();
         }
@@ -642,7 +663,11 @@ fn set_active_profile_state(
     Ok(state)
 }
 
-fn create_profile_state(app: &tauri::AppHandle, name: &str) -> Result<NotesProfilesFile, String> {
+fn create_profile_state(
+    app: &tauri::AppHandle,
+    name: &str,
+    description: Option<&str>,
+) -> Result<NotesProfilesFile, String> {
     let mut state = ensure_profiles_state(app)?;
     let profile_name = normalize_profile_name(name);
     let base_id = slugify_profile_id(&profile_name);
@@ -666,9 +691,61 @@ fn create_profile_state(app: &tauri::AppHandle, name: &str) -> Result<NotesProfi
     state.profiles.push(NotesProfileEntry {
         id: profile_id.clone(),
         name: profile_name,
+        description: normalize_profile_description(description.unwrap_or("")),
         notes_root: profile_root.to_string_lossy().to_string(),
     });
     state.active_profile_id = profile_id;
+    write_profiles_state(app, &state)?;
+    Ok(state)
+}
+
+fn update_profile_state(
+    app: &tauri::AppHandle,
+    profile_id: &str,
+    name: Option<&str>,
+    description: Option<&str>,
+) -> Result<NotesProfilesFile, String> {
+    let mut state = ensure_profiles_state(app)?;
+    let id = profile_id.trim();
+    if id.is_empty() {
+        return Err("Profile id is required.".to_string());
+    }
+    let Some(index) = state.profiles.iter().position(|profile| profile.id == id) else {
+        return Err(format!("Profile not found: {}", id));
+    };
+    if let Some(next_name) = name {
+        state.profiles[index].name = normalize_profile_name(next_name);
+    }
+    if let Some(next_description) = description {
+        state.profiles[index].description = normalize_profile_description(next_description);
+    }
+    write_profiles_state(app, &state)?;
+    Ok(state)
+}
+
+fn delete_profile_state(
+    app: &tauri::AppHandle,
+    profile_id: &str,
+) -> Result<NotesProfilesFile, String> {
+    let mut state = ensure_profiles_state(app)?;
+    let id = profile_id.trim();
+    if id.is_empty() {
+        return Err("Profile id is required.".to_string());
+    }
+    if state.profiles.len() <= 1 {
+        return Err("At least one profile must remain.".to_string());
+    }
+    let Some(index) = state.profiles.iter().position(|profile| profile.id == id) else {
+        return Err(format!("Profile not found: {}", id));
+    };
+    state.profiles.remove(index);
+    if state.active_profile_id == id {
+        let next_active = state
+            .profiles
+            .first()
+            .ok_or_else(|| "At least one profile must remain.".to_string())?;
+        state.active_profile_id = next_active.id.clone();
+    }
     write_profiles_state(app, &state)?;
     Ok(state)
 }
@@ -2789,7 +2866,7 @@ fn create_profile(
     app: tauri::AppHandle,
     args: CreateProfileArgs,
 ) -> Result<NotesProfilesSnapshot, String> {
-    let state = create_profile_state(&app, &args.name)?;
+    let state = create_profile_state(&app, &args.name, args.description.as_deref())?;
     Ok(profiles_snapshot(&state))
 }
 
@@ -2808,6 +2885,29 @@ fn set_profile_notes_root(
     args: SetProfileNotesRootArgs,
 ) -> Result<NotesProfilesSnapshot, String> {
     let state = set_profile_notes_root_state(&app, &args.profile_id, &args.notes_root)?;
+    Ok(profiles_snapshot(&state))
+}
+
+#[tauri::command]
+fn update_profile(
+    app: tauri::AppHandle,
+    args: UpdateProfileArgs,
+) -> Result<NotesProfilesSnapshot, String> {
+    let state = update_profile_state(
+        &app,
+        &args.profile_id,
+        args.name.as_deref(),
+        args.description.as_deref(),
+    )?;
+    Ok(profiles_snapshot(&state))
+}
+
+#[tauri::command]
+fn delete_profile(
+    app: tauri::AppHandle,
+    args: DeleteProfileArgs,
+) -> Result<NotesProfilesSnapshot, String> {
+    let state = delete_profile_state(&app, &args.profile_id)?;
     Ok(profiles_snapshot(&state))
 }
 
@@ -3744,6 +3844,8 @@ pub fn run() {
             create_profile,
             set_active_profile,
             set_profile_notes_root,
+            update_profile,
+            delete_profile,
             get_git_status,
             get_git_history,
             connect_git_repo,

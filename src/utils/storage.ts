@@ -87,6 +87,19 @@ export const writeProfileSyncStore = (store: Record<string, Partial<ProfileSyncS
   window.localStorage.setItem(PROFILE_SYNC_STORAGE_KEY, JSON.stringify(store));
 };
 
+export const removeProfileSyncSettings = (profileId: string) => {
+  const id = profileId.trim();
+  if (!id) {
+    return;
+  }
+  const store = readProfileSyncStore();
+  if (!(id in store)) {
+    return;
+  }
+  delete store[id];
+  writeProfileSyncStore(store);
+};
+
 export const getProfileSyncSettings = (profileId: string): ProfileSyncSettings => {
   const store = readProfileSyncStore();
   const stored = store[profileId] ?? {};

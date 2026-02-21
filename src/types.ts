@@ -47,6 +47,7 @@ export type GitCommitHistoryEntry = {
 export type NotesProfile = {
   id: string;
   name: string;
+  description: string;
   notes_root: string;
 };
 

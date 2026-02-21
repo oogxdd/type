@@ -11,6 +11,7 @@ import type { NotesProfileSnapshot, ProfileSyncSettings } from "../types";
 import {
   DEFAULT_PROFILE_SYNC_SETTINGS,
   getProfileSyncSettings,
+  removeProfileSyncSettings,
   readProfileSyncStore,
   writeProfileSyncStore,
 } from "../utils/storage";
@@ -26,7 +27,12 @@ type ProfilesContextValue = {
   updateSyncSettings: (patch: Partial<ProfileSyncSettings>) => void;
   refreshProfiles: () => Promise<NotesProfileSnapshot>;
   switchProfile: (profileId: string) => Promise<void>;
-  createProfile: () => Promise<void>;
+  createProfile: (input?: { name?: string; description?: string }) => Promise<void>;
+  updateProfile: (
+    profileId: string,
+    patch: { name?: string; description?: string }
+  ) => Promise<void>;
+  deleteProfile: (profileId: string) => Promise<void>;
   setProfileNotesRoot: (profileId: string, notesRoot: string) => Promise<void>;
   flushSaveRef: React.RefObject<(() => Promise<void>) | null>;
 };
@@ -121,32 +127,86 @@ export function ProfilesProvider({
     [activeProfileId, flushSaveRef]
   );
 
-  const createProfile = useCallback(async () => {
-    const existingNames = new Set(
-      profiles.map((profile) => profile.name.trim().toLowerCase())
-    );
-    let index = 1;
-    let name = "Profile";
-    while (existingNames.has(name.toLowerCase())) {
-      index += 1;
-      name = `Profile ${index}`;
-    }
-
-    setProfilesBusy(true);
-    try {
-      if (flushSaveRef.current) {
-        await flushSaveRef.current();
+  const createProfile = useCallback(
+    async (input?: { name?: string; description?: string }) => {
+      const existingNames = new Set(
+        profiles.map((profile) => profile.name.trim().toLowerCase())
+      );
+      let index = 1;
+      let fallbackName = "Profile";
+      while (existingNames.has(fallbackName.toLowerCase())) {
+        index += 1;
+        fallbackName = `Profile ${index}`;
       }
-      const snapshot = await api.createProfile(name);
-      setProfilesSnapshot(snapshot);
-      setProfilesError(null);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setProfilesError(message);
-    } finally {
-      setProfilesBusy(false);
-    }
-  }, [flushSaveRef, profiles]);
+      const name = input?.name?.trim() || fallbackName;
+      const description = input?.description?.trim() ?? "";
+
+      setProfilesBusy(true);
+      try {
+        if (flushSaveRef.current) {
+          await flushSaveRef.current();
+        }
+        const snapshot = await api.createProfile(name, description);
+        setProfilesSnapshot(snapshot);
+        setProfilesError(null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setProfilesError(message);
+      } finally {
+        setProfilesBusy(false);
+      }
+    },
+    [flushSaveRef, profiles]
+  );
+
+  const updateProfile = useCallback(
+    async (profileId: string, patch: { name?: string; description?: string }) => {
+      const normalizedProfileId = profileId.trim();
+      if (!normalizedProfileId) {
+        return;
+      }
+      setProfilesBusy(true);
+      try {
+        if (flushSaveRef.current) {
+          await flushSaveRef.current();
+        }
+        const snapshot = await api.updateProfile(normalizedProfileId, patch);
+        setProfilesSnapshot(snapshot);
+        setProfilesError(null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setProfilesError(message);
+      } finally {
+        setProfilesBusy(false);
+      }
+    },
+    [flushSaveRef]
+  );
+
+  const deleteProfile = useCallback(
+    async (profileId: string) => {
+      const normalizedProfileId = profileId.trim();
+      if (!normalizedProfileId) {
+        return;
+      }
+      setProfilesBusy(true);
+      try {
+        if (flushSaveRef.current) {
+          await flushSaveRef.current();
+        }
+        const snapshot = await api.deleteProfile(normalizedProfileId);
+        removeProfileSyncSettings(normalizedProfileId);
+        setProfilesSnapshot(snapshot);
+        setProfilesError(null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setProfilesError(message);
+      } finally {
+        setProfilesBusy(false);
+      }
+    },
+    [flushSaveRef]
+  );
 
   const setProfileNotesRoot = useCallback(
     async (profileId: string, notesRoot: string) => {
@@ -187,6 +247,8 @@ export function ProfilesProvider({
         refreshProfiles,
         switchProfile,
         createProfile,
+        updateProfile,
+        deleteProfile,
         setProfileNotesRoot,
         flushSaveRef,
       }}

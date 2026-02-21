@@ -183,10 +183,13 @@ export const getProfiles = async (): Promise<NotesProfileSnapshot> =>
     await invokeLogged<NotesProfilesSnapshotPayload>("get_profiles")
   );
 
-export const createProfile = async (name: string): Promise<NotesProfileSnapshot> =>
+export const createProfile = async (
+  name: string,
+  description?: string
+): Promise<NotesProfileSnapshot> =>
   normalizeProfilesSnapshot(
     await invokeLogged<NotesProfilesSnapshotPayload>("create_profile", {
-      args: { name },
+      args: { name, description },
     })
   );
 
@@ -206,6 +209,22 @@ export const setProfileNotesRoot = (
       profile_id: profileId,
       notes_root: notesRoot,
     },
+  }).then(normalizeProfilesSnapshot);
+
+export const updateProfile = (
+  profileId: string,
+  patch: { name?: string; description?: string }
+): Promise<NotesProfileSnapshot> =>
+  invokeLogged<NotesProfilesSnapshotPayload>("update_profile", {
+    args: {
+      profile_id: profileId,
+      ...patch,
+    },
+  }).then(normalizeProfilesSnapshot);
+
+export const deleteProfile = (profileId: string): Promise<NotesProfileSnapshot> =>
+  invokeLogged<NotesProfilesSnapshotPayload>("delete_profile", {
+    args: { profile_id: profileId },
   }).then(normalizeProfilesSnapshot);
 
 export const connectGitRepo = (
