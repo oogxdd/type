@@ -1,9 +1,18 @@
+import { OTA_AUTO_CHECK_STORAGE_KEY } from "./constants";
+
 const isLikelyIosWebView = () => {
   if (typeof window === "undefined") {
     return false;
   }
   const { userAgent, platform, maxTouchPoints } = window.navigator;
   return /iPad|iPhone|iPod/.test(userAgent) || (platform === "MacIntel" && maxTouchPoints > 1);
+};
+
+const getOtaAutoCheckEnabled = () => {
+  if (typeof window === "undefined") {
+    return true;
+  }
+  return window.localStorage.getItem(OTA_AUTO_CHECK_STORAGE_KEY) !== "false";
 };
 
 const statusEl = document.getElementById("ota-status");
@@ -39,6 +48,12 @@ const startWithOta = async () => {
 
 const bootstrap = async () => {
   if (!isLikelyIosWebView()) {
+    await mountBundledApp();
+    return;
+  }
+
+  if (!getOtaAutoCheckEnabled()) {
+    setStatus("Starting bundled app...");
     await mountBundledApp();
     return;
   }

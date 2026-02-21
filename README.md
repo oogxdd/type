@@ -62,6 +62,9 @@ OTA flow:
 3. Otherwise it loads bundled `app.js` fallback
 4. App startup is registered via `register()` in `src/main.tsx`
 
+Users can disable startup OTA checks in Settings -> Sync. When disabled, the app skips
+`manifest.json` fetch and starts bundled assets directly.
+
 ## Notes storage
 
 Notes are stored in a local folder tree. The app uses the first existing root:

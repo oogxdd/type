@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   formatCommitSummaryForApp,
   formatGitCommitStateLabel,
@@ -9,7 +9,8 @@ import { useSettingsData } from "../../../hooks/useSettingsData";
 import { useProfiles } from "../../../contexts/ProfilesContext";
 import { useGitSync } from "../../../contexts/GitSyncContext";
 import { useNotesTree } from "../../../contexts/NotesTreeContext";
-import { Group, StatRow } from "./SettingsHelpers";
+import { getOtaAutoCheckEnabled, setOtaAutoCheckEnabled } from "../../../utils/storage";
+import { ChoiceRow, Group, StatRow } from "./SettingsHelpers";
 
 export function MobileSyncSection() {
   const { syncSettings } = useProfiles();
@@ -29,6 +30,7 @@ export function MobileSyncSection() {
   } = useGitSync();
   const { refreshTree } = useNotesTree();
   const { canPull, canPush, canConnect } = useSettingsData();
+  const [otaAutoCheckEnabled, setLocalOtaAutoCheckEnabled] = useState(() => getOtaAutoCheckEnabled());
 
   const lastSuccessfulSyncAt = syncSettings.lastSuccessfulSyncAt
     ? new Date(syncSettings.lastSuccessfulSyncAt).toLocaleString()
@@ -56,6 +58,27 @@ export function MobileSyncSection() {
           />
         ) : null}
         <StatRow label="Last sync" value={lastSuccessfulSyncAt ?? "Never"} />
+      </Group>
+
+      <Group title="OTA updates (iOS)">
+        <ChoiceRow
+          label="Check for updates on launch"
+          subtitle="Fetches manifest.json before startup."
+          selected={otaAutoCheckEnabled}
+          onClick={() => {
+            setLocalOtaAutoCheckEnabled(true);
+            setOtaAutoCheckEnabled(true);
+          }}
+        />
+        <ChoiceRow
+          label="Always use bundled version"
+          subtitle="Skips OTA network check for faster startup."
+          selected={!otaAutoCheckEnabled}
+          onClick={() => {
+            setLocalOtaAutoCheckEnabled(false);
+            setOtaAutoCheckEnabled(false);
+          }}
+        />
       </Group>
 
       {gitSyncError ? (
