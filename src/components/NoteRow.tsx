@@ -40,9 +40,7 @@ export function NoteRow({
       {...listeners}
     >
       <div className="note-row-main">
-        <div className="note-row-title">
-          {preview?.title || note.name.replace(/\.md$/i, "")}
-        </div>
+        <div className="note-row-title">{preview?.title || ""}</div>
         <div className="note-row-subline">
           <span className="note-row-date">{preview?.dateLabel || ""}</span>
           {preview?.dateLabel && preview?.secondLine && (

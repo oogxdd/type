@@ -91,6 +91,7 @@ export function AppShell() {
     expanded,
     setExpanded,
     notes,
+    allNotePreviews,
     activeNode,
     visibleNavigationItems,
     parentById,
@@ -435,6 +436,7 @@ export function AppShell() {
         selectedNoteIds={selectedNotes}
         onNoteSelect={handleNoteClick}
         onNoteContextMenu={handleNoteContextMenu}
+        notePreviews={allNotePreviews}
         onPaneKeyDown={handleFoldersKeyDown}
         onPaneClick={() => {
           lastLeftPaneFocusRef.current = "folders";

@@ -130,7 +130,8 @@ export function NotesTreeProvider({
 
   const notes = useMemo(() => activeNode?.notes || [], [activeNode]);
   const allNotes = useMemo(() => collectAllNotes(tree), [tree]);
-  const previewSourceNotes = layoutMode === "desktop" ? notes : allNotes;
+  const previewSourceNotes =
+    layoutMode === "desktop" && !shouldNestNotesInNavigation ? notes : allNotes;
   const allNotePreviews = useNotePreviews(previewSourceNotes);
   const notePreviews = useMemo(() => {
     const previews: Record<string, NotePreview> = {};

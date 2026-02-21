@@ -3,9 +3,11 @@ import { useCallback } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { DragData, NoteEntry } from "../types";
+import type { NotePreview } from "../utils/format";
 
 export type NavNoteRowProps = {
   note: NoteEntry;
+  preview?: NotePreview;
   parentPath: string;
   depth: number;
   indentationWidth: number;
@@ -20,6 +22,7 @@ export type NavNoteRowProps = {
 
 export function NavNoteRow({
   note,
+  preview,
   parentPath,
   depth,
   indentationWidth,
@@ -46,6 +49,7 @@ export function NavNoteRow({
     transform: isDragging ? undefined : CSS.Translate.toString(transform),
     paddingLeft: 12 + depth * indentationWidth,
   } as React.CSSProperties;
+  const title = preview?.title || "";
 
   return (
     <div
@@ -80,7 +84,7 @@ export function NavNoteRow({
           />
         </svg>
       </span>
-      <span className="item-label">{note.name.replace(/\.md$/i, "")}</span>
+      <span className="item-label">{title}</span>
     </div>
   );
 }

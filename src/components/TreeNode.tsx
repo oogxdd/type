@@ -3,6 +3,7 @@ import type { TreeItem } from "../tree/types";
 import type { EdgeSnap } from "./FoldersPanel";
 import { TreeRow } from "./TreeRow";
 import { NavNoteRow } from "./NavNoteRow";
+import type { NotePreview } from "../utils/format";
 
 export type TreeNodeProps = {
   node: TreeItem;
@@ -20,6 +21,7 @@ export type TreeNodeProps = {
     notePath: string,
     parentPath: string
   ) => void;
+  notePreviews: Record<string, NotePreview>;
   renamingFolder: string | null;
   renameValue: string;
   setRenameValue: (value: string) => void;
@@ -41,6 +43,7 @@ export function TreeNode({
   onToggle,
   onNoteSelect,
   onNoteContextMenu,
+  notePreviews,
   renamingFolder,
   renameValue,
   setRenameValue,
@@ -81,6 +84,7 @@ export function TreeNode({
             <NavNoteRow
               key={note.path}
               note={note}
+              preview={notePreviews[note.path]}
               parentPath={node.id}
               depth={depth + 1}
               indentationWidth={indentationWidth}
@@ -102,6 +106,7 @@ export function TreeNode({
               onToggle={onToggle}
               onNoteSelect={onNoteSelect}
               onNoteContextMenu={onNoteContextMenu}
+              notePreviews={notePreviews}
               selectedIds={selectedIds}
               renamingFolder={renamingFolder}
               renameValue={renameValue}

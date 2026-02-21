@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { TreeNode } from "./TreeNode";
 import { RecentTreeNode } from "./RecentTreeNode";
 import type { RecentNode } from "./RecentTreeNode";
+import type { NotePreview } from "../utils/format";
 
 const DROP_PREFIX = "drop";
 const ROOT_ID = "root";
@@ -40,6 +41,7 @@ type FoldersPanelProps = {
     notePath: string,
     parentPath: string
   ) => void;
+  notePreviews?: Record<string, NotePreview>;
   indentationWidth: number;
   topAction?: React.ReactNode;
   sectionTitle?: string;
@@ -104,6 +106,7 @@ export function FoldersPanel({
   selectedNoteIds = EMPTY_STRING_SET,
   onNoteSelect,
   onNoteContextMenu,
+  notePreviews = {},
   indentationWidth,
   topAction,
   sectionTitle,
@@ -215,6 +218,7 @@ export function FoldersPanel({
                     onSelect={onSelect}
                     onNoteSelect={handleNoteSelect}
                     onNoteContextMenu={handleNoteContextMenu}
+                    notePreviews={notePreviews}
                     renamingFolder={renamingFolder}
                     renameValue={renameValue}
                     setRenameValue={setRenameValue}

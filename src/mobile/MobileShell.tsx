@@ -86,10 +86,7 @@ export function MobileShell({
     [editorFontSize]
   );
   const activeFolderTitle = activeNode?.name || activeFolder || "Notes";
-  const activeNoteTitle =
-    (activeNote ? notePreviews[activeNote]?.title : null) ||
-    (activeNote ? activeNote.split("/").pop()?.replace(/\.md$/i, "") : null) ||
-    "Note";
+  const activeNoteTitle = (activeNote ? notePreviews[activeNote]?.title : null) || "Note";
   const editorMarkdown = activeNote ? noteContent : draftNoteContent;
 
   // -- Navigation

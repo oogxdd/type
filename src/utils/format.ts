@@ -31,20 +31,28 @@ export const formatNoteDateLabel = (timestamp: number | null) => {
   if (diffDays < 7) {
     return value.toLocaleDateString([], { weekday: "long" }).toLowerCase();
   }
+  if (value.getFullYear() === now.getFullYear()) {
+    return value.toLocaleDateString([], {
+      day: "numeric",
+      month: "short",
+    });
+  }
   return value.toLocaleDateString([], {
-    month: "numeric",
-    day: "numeric",
-    year: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   });
 };
 
 export const parseNotePreview = (
-  noteName: string,
   content: string,
   updatedMs: number | null
 ): NotePreview => {
   const stripMarkdown = (line: string) =>
     line
+      .replace(/\\+_/g, "_")
+      .replace(/NV_EMPTY_LINE_TOKEN_[A-Za-z0-9]+/gi, " ")
+      .replace(/NV[\s_]+EMPTY[\s_]+LINE[\s_]+TOKEN(?:[\s_]+[A-Za-z0-9]+)?/gi, " ")
       .replace(/^#{1,6}\s+/, "")
       .replace(/^[>\-+*]\s+/, "")
       .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
@@ -52,10 +60,21 @@ export const parseNotePreview = (
       .replace(/[*_~`]/g, "")
       .replace(/\s+/g, " ")
       .trim();
-  const lines = content.split(/\r?\n/);
-  const fallbackTitle = noteName.replace(/\.md$/i, "");
-  const title = stripMarkdown(lines[0] || "") || fallbackTitle;
-  const secondLine = stripMarkdown(lines[1] || "");
+
+  const previewLines: string[] = [];
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = stripMarkdown(rawLine);
+    if (!line) {
+      continue;
+    }
+    previewLines.push(line);
+    if (previewLines.length >= 2) {
+      break;
+    }
+  }
+
+  const title = previewLines[0] || "";
+  const secondLine = previewLines[1] || "";
   return { title, dateLabel: formatNoteDateLabel(updatedMs), secondLine, updatedMs };
 };
 

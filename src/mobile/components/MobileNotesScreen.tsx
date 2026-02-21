@@ -189,7 +189,8 @@ function SwipeableNoteRow({
     }
   };
 
-  const noteTitle = preview?.title || note.name.replace(/\.md$/i, "");
+  const noteTitle = (preview?.title || "").trim();
+  const accessibleTitle = noteTitle || "untitled note";
   const noteSubline = `${preview?.dateLabel || ""}${preview?.secondLine ? ` ${preview?.secondLine}` : ""}`.trim();
 
   return (
@@ -199,7 +200,7 @@ function SwipeableNoteRow({
           type="button"
           className="mobile-note-action archive"
           onClick={() => onArchive(note.path)}
-          aria-label={`Archive ${noteTitle}`}
+          aria-label={`Archive ${accessibleTitle}`}
         >
           Archive
         </button>
@@ -207,7 +208,7 @@ function SwipeableNoteRow({
           type="button"
           className="mobile-note-action delete"
           onClick={() => onDelete(note.path)}
-          aria-label={`Delete ${noteTitle}`}
+          aria-label={`Delete ${accessibleTitle}`}
         >
           Delete
         </button>
@@ -217,7 +218,7 @@ function SwipeableNoteRow({
         type="button"
         className={`mobile-note-row${isActive ? " active" : ""}`}
         style={{ transform: `translateX(${offset}px)` }}
-        aria-label={`Open note ${noteTitle}${noteSubline ? `. ${noteSubline}` : ""}`}
+        aria-label={`Open note ${accessibleTitle}${noteSubline ? `. ${noteSubline}` : ""}`}
         onPointerDown={(event) => {
           if (event.pointerType === "mouse") {
             setDragging(false);

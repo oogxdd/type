@@ -2784,6 +2784,28 @@ fn is_feed_folder_path(root: &Path, path: &Path) -> bool {
     path == root.join(FEED_FOLDER)
 }
 
+fn note_created_ms_for_sort(path: &Path) -> i64 {
+    if let Ok(raw) = fs::read_to_string(path) {
+        let (meta, _) = parse_note_front_matter(&raw);
+        if let Some(created_ms) = meta.created_ms {
+            return created_ms;
+        }
+    }
+    if let Ok(metadata) = fs::metadata(path) {
+        if let Ok(created) = metadata.created() {
+            if let Some(created_ms) = time_to_ms(created) {
+                return created_ms;
+            }
+        }
+        if let Ok(modified) = metadata.modified() {
+            if let Some(modified_ms) = time_to_ms(modified) {
+                return modified_ms;
+            }
+        }
+    }
+    0
+}
+
 fn migrate_legacy_folder_name(root: &Path, from_name: &str, to_name: &str) -> Result<(), String> {
     let from = root.join(from_name);
     if !from.exists() {
@@ -2885,7 +2907,23 @@ fn build_folder_node(dir: &Path, rel_path: &str) -> Result<FolderNode, String> {
     }
 
     let folder_names = sort_by_order(folders, &order.folder_order);
-    let note_names = sort_by_order(notes, &order.note_order);
+    let note_names = if rel_path == FEED_FOLDER {
+        let mut feed_notes = notes
+            .into_iter()
+            .map(|name| {
+                let created_ms = note_created_ms_for_sort(&dir.join(&name));
+                (name, created_ms)
+            })
+            .collect::<Vec<_>>();
+        feed_notes.sort_by(|(a_name, a_created), (b_name, b_created)| {
+            b_created
+                .cmp(a_created)
+                .then_with(|| a_name.to_lowercase().cmp(&b_name.to_lowercase()))
+        });
+        feed_notes.into_iter().map(|(name, _)| name).collect()
+    } else {
+        sort_by_order(notes, &order.note_order)
+    };
 
     let mut children = Vec::new();
     for name in folder_names {
