@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CirclePlus, Home, Mic, Settings2, Square, Trash2 } from "lucide-react"
+import { CirclePlus, Home, Mic, Search, Settings2, Sparkles, Square, Trash2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -79,6 +79,18 @@ export function AppSidebar({
                   {recordingActive ? "Stop recording" : "Record audio"}
                 </span>
               </Button>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton className="app-sidebar-menu-button" onClick={() => {}}>
+                <Search />
+                <span>Search</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton className="app-sidebar-menu-button" onClick={() => {}}>
+                <Sparkles />
+                <span>Chat</span>
+              </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
