@@ -18,9 +18,9 @@
     "ios:build": "npm run tauri:ios:build -- --export-method app-store-connect",
     "ios:push": "xcrun altool --upload-app --type ios --file /Users/digital/Projects/type/app/src-tauri/gen/apple/build/arm64/Type.ipa --apiKey W2Y52J5N33 --apiIssuer bd0c62da-fcbf-4770-a10d-2ee30da0963e",
     "version:sync": "./scripts/sync-version.sh",
-    "release:patch": "npm version patch && yarn version:sync && yarn ios:build && yarn ios:push",
-    "release:minor": "npm version minor && yarn version:sync && yarn ios:build && yarn ios:push",
-    "release:major": "npm version major && yarn version:sync && yarn ios:build && yarn ios:push"
+    "release:patch": "npm version patch && yarn version:sync && yarn ios:build && yarn ota:prepare && yarn ios:push",
+    "release:minor": "npm version minor && yarn version:sync && yarn ios:build && yarn ota:prepare && yarn ios:push",
+    "release:major": "npm version major && yarn version:sync && yarn ios:build && yarn ota:prepare && yarn ios:push"
   },
   "dependencies": {
     "@inkibra/tauri-plugin-ota": "^0.1.3",

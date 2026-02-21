@@ -49,6 +49,9 @@ To prepare publishable OTA artifacts + manifest:
 OTA_CDN_BASE_URL=https://your-cdn.example.com/type npm run ota:prepare
 ```
 
+`npm run ota:prepare` also works without `OTA_CDN_BASE_URL` if `VITE_OTA_MANIFEST_URL` is set
+in env or `.env` (base URL is inferred from `.../manifest.json`).
+
 This writes:
 
 - `dist/ota/app-<version>.js`
