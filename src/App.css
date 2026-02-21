@@ -260,6 +260,44 @@ body {
   font-size: 14px;
 }
 
+.app-sidebar-recording-button {
+  box-shadow: none;
+}
+
+.app-sidebar-recording-button[data-active="false"] {
+  opacity: 0.86;
+}
+
+.app-sidebar-recording-button[data-active="true"] {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-accent-foreground);
+  border-color: color-mix(in srgb, var(--sidebar-accent) 65%, transparent);
+}
+
+.app.theme-light .app-sidebar-recording-button[data-active="false"] {
+  background: rgba(38, 57, 74, 0.04);
+  border-color: rgba(38, 57, 74, 0.1);
+  color: rgba(38, 57, 74, 0.7);
+}
+
+.app.theme-light .app-sidebar-recording-button[data-active="false"]:hover {
+  background: rgba(38, 57, 74, 0.09);
+  border-color: rgba(38, 57, 74, 0.16);
+  color: #1e2732;
+}
+
+.app.theme-dark .app-sidebar-recording-button[data-active="false"] {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.11);
+  color: rgba(232, 236, 242, 0.72);
+}
+
+.app.theme-dark .app-sidebar-recording-button[data-active="false"]:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #e8ecf2;
+}
+
 .sidebar-folders-section {
   min-height: 0;
 }

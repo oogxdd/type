@@ -67,10 +67,8 @@ export function AppSidebar({
               <Button
                 size="icon-sm"
                 variant="outline"
-                className={cn(
-                  "size-8 group-data-[collapsible=icon]:opacity-0",
-                  recordingActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : undefined
-                )}
+                className="app-sidebar-recording-button size-8 group-data-[collapsible=icon]:opacity-0"
+                data-active={recordingActive ? "true" : "false"}
                 onClick={onRecordingClick}
                 disabled={recordingDisabled}
                 aria-label={recordingActive ? "Stop recording" : "Record audio"}
