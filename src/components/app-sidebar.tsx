@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CirclePlus, Home, Mic, Search, Settings2, Sparkles, Square, Trash2 } from "lucide-react"
+import { CirclePlus, Home, MessageCircle, Mic, Search, Settings2, Square, Trash2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -88,7 +88,7 @@ export function AppSidebar({
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton className="app-sidebar-menu-button" onClick={() => {}}>
-                <Sparkles />
+                <MessageCircle />
                 <span>Chat</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
