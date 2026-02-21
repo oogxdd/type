@@ -1,6 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS as DndCSS } from "@dnd-kit/utilities";
 import type { MouseEvent as ReactMouseEvent } from "react";
+import { Mic } from "lucide-react";
 import type { DragData, NoteEntry } from "../types";
 import type { NotePreview } from "../utils/format";
 
@@ -40,7 +41,10 @@ export function NoteRow({
       {...listeners}
     >
       <div className="note-row-main">
-        <div className="note-row-title">{preview?.title || ""}</div>
+        <div className="note-row-title-wrap">
+          {preview?.isRecording ? <Mic size={12} className="note-row-recording-icon" /> : null}
+          <div className="note-row-title">{preview?.title || ""}</div>
+        </div>
         <div className="note-row-subline">
           <span className="note-row-date">{preview?.dateLabel || ""}</span>
           {preview?.dateLabel && preview?.secondLine && (

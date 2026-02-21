@@ -1,9 +1,14 @@
 import { NoteEditor } from "../../components/NoteEditor";
 import { useRef, useState } from "react";
+import { RecordingNoteHeader } from "../../components/RecordingNoteHeader";
+import type { NotePreview } from "../../utils/format";
+import { sanitizeRecordingEditorContent } from "../../utils/format";
 
 type MobileEditorScreenProps = {
   markdown: string;
   onChange: (markdown: string) => void;
+  notePath?: string | null;
+  notePreview?: NotePreview;
   hasActiveNote: boolean;
   isSaving: boolean;
   saveError: string | null;
@@ -16,6 +21,8 @@ type MobileEditorScreenProps = {
 export function MobileEditorScreen({
   markdown,
   onChange,
+  notePath = null,
+  notePreview,
   hasActiveNote,
   isSaving,
   saveError,
@@ -27,6 +34,10 @@ export function MobileEditorScreen({
   const [pullDistance, setPullDistance] = useState(0);
   const [creating, setCreating] = useState(false);
   const touchStartYRef = useRef<number | null>(null);
+  const editorMarkdown =
+    notePreview?.isRecording && hasActiveNote
+      ? sanitizeRecordingEditorContent(markdown, notePreview.transcriptionStatus)
+      : markdown;
 
   const focusEditorSurface = (container: HTMLDivElement) => {
     const editable = container.querySelector<HTMLElement>(".tiptap-content[contenteditable='true']");
@@ -127,8 +138,11 @@ export function MobileEditorScreen({
           )}
         </div>
       ) : null}
+      {!draftMode && hasActiveNote ? (
+        <RecordingNoteHeader notePath={notePath} preview={notePreview} />
+      ) : null}
       <div className="mobile-editor-surface">
-        <NoteEditor markdown={markdown} onChange={onChange} />
+        <NoteEditor markdown={editorMarkdown} onChange={onChange} />
       </div>
       {onPullUpCreate ? (
         <div className="mobile-pullup-indicator" style={{ height: pullDistance }}>

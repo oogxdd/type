@@ -1,4 +1,5 @@
 import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { Mic } from "lucide-react";
 import type { NoteEntry } from "../../types";
 import type { NotePreview } from "../../utils/format";
 
@@ -294,7 +295,10 @@ function SwipeableNoteRow({
           setOffset(0);
         }}
       >
-        <span className="mobile-note-title">{noteTitle}</span>
+        <span className="mobile-note-title-wrap">
+          {preview?.isRecording ? <Mic size={12} className="mobile-note-recording-icon" /> : null}
+          <span className="mobile-note-title">{noteTitle}</span>
+        </span>
         <span className="mobile-note-subline">
           <span>{preview?.dateLabel || ""}</span>
           {preview?.dateLabel && preview?.secondLine ? <span> · </span> : null}

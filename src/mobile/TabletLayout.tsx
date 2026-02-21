@@ -69,6 +69,7 @@ export function TabletLayout({
   const {
     notes,
     notePreviews,
+    allNotePreviews,
     activeNode,
     expanded,
     createNewNote,
@@ -78,6 +79,9 @@ export function TabletLayout({
   const activeFolderTitle = activeNode?.name || activeFolder || "Notes";
   const hasActiveNote = Boolean(activeNote);
   const editorMarkdown = activeNote ? noteContent : draftNoteContent;
+  const activeNotePreview = activeNote
+    ? notePreviews[activeNote] || allNotePreviews[activeNote]
+    : undefined;
 
   const settingsScreen = (
     <MobileSettingsScreen
@@ -214,6 +218,8 @@ export function TabletLayout({
         <MobileEditorScreen
           markdown={editorMarkdown}
           onChange={handleEditorChange}
+          notePath={activeNote}
+          notePreview={activeNotePreview}
           hasActiveNote={hasActiveNote}
           isSaving={isNoteSaving}
           saveError={noteSaveError}
@@ -230,6 +236,8 @@ export function TabletLayout({
           <MobileEditorScreen
             markdown={editorMarkdown}
             onChange={handleEditorChange}
+            notePath={activeNote}
+            notePreview={activeNotePreview}
             hasActiveNote={hasActiveNote}
             isSaving={isNoteSaving}
             saveError={noteSaveError}

@@ -13,6 +13,11 @@ export type FolderNode = {
 export type NoteMeta = {
   created_ms: number | null;
   updated_ms: number | null;
+  note_type?: string | null;
+  recording_audio_path?: string | null;
+  transcription_status?: string | null;
+  transcription_error?: string | null;
+  transcription_updated_ms?: number | null;
 };
 
 export type DragData = {

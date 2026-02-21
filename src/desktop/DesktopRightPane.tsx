@@ -1,11 +1,14 @@
 import { useSelection } from "../contexts/SelectionContext";
 import { useEditor } from "../contexts/EditorContext";
+import { useNotesTree } from "../contexts/NotesTreeContext";
 
 import { NoteEditor } from "../components/NoteEditor";
+import { RecordingNoteHeader } from "../components/RecordingNoteHeader";
 import {
   SettingsDetailPane,
   type SettingsSectionId,
 } from "../components/SettingsPanel";
+import { sanitizeRecordingEditorContent } from "../utils/format";
 
 import { focusNoScroll } from "../utils/dom";
 import type { AppMode } from "../types";
@@ -21,6 +24,16 @@ export function DesktopRightPane({
 }: DesktopRightPaneProps) {
   const { activeNote } = useSelection();
   const { noteContent, draftNoteContent, handleEditorChange, rightPaneRef } = useEditor();
+  const { notePreviews, allNotePreviews } = useNotesTree();
+  const activeNotePreview = activeNote
+    ? notePreviews[activeNote] || allNotePreviews[activeNote]
+    : undefined;
+  const editorMarkdown =
+    activeNote && activeNotePreview?.isRecording
+      ? sanitizeRecordingEditorContent(noteContent, activeNotePreview.transcriptionStatus)
+      : activeNote
+        ? noteContent
+        : draftNoteContent;
 
   if (appMode === "notes") {
     return (
@@ -38,8 +51,9 @@ export function DesktopRightPane({
           }}
         >
           <div className="editor-single">
+            <RecordingNoteHeader notePath={activeNote} preview={activeNotePreview} />
             <NoteEditor
-              markdown={activeNote ? noteContent : draftNoteContent}
+              markdown={editorMarkdown}
               onChange={handleEditorChange}
             />
           </div>

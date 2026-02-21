@@ -448,6 +448,22 @@
   white-space: nowrap;
 }
 
+.mobile-note-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mobile-note-recording-icon {
+  color: var(--mobile-text-muted-light);
+  flex: 0 0 auto;
+}
+
+.mobile-root.theme-dark .mobile-note-recording-icon {
+  color: var(--mobile-text-muted-dark);
+}
+
 .mobile-note-subline {
   font-size: 12px;
   line-height: 1.35;
@@ -531,6 +547,25 @@
 .mobile-root.theme-dark .mobile-editor-status {
   border-color: var(--mobile-separator-dark);
   color: var(--mobile-text-muted-dark);
+}
+
+.mobile-editor-screen .recording-note-header {
+  border-bottom-color: var(--mobile-separator-light);
+  background: var(--mobile-surface-light);
+  padding: 10px 12px;
+}
+
+.mobile-root.theme-dark .mobile-editor-screen .recording-note-header {
+  border-bottom-color: var(--mobile-separator-dark);
+  background: var(--mobile-surface-dark);
+}
+
+.mobile-editor-screen .recording-note-metrics {
+  grid-template-columns: 1fr 1fr;
+}
+
+.mobile-editor-screen .recording-note-player {
+  width: 100%;
 }
 
 .mobile-inline-action {

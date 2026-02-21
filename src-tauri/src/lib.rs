@@ -45,8 +45,6 @@ const RECORDING_STATUS_QUEUED: &str = "queued";
 const RECORDING_STATUS_PROCESSING: &str = "processing";
 const RECORDING_STATUS_COMPLETED: &str = "completed";
 const RECORDING_STATUS_FAILED: &str = "failed";
-const TRANSCRIPT_START_MARKER: &str = "<!-- recording-transcript:start -->";
-const TRANSCRIPT_END_MARKER: &str = "<!-- recording-transcript:end -->";
 const ASSEMBLY_UPLOAD_URL: &str = "https://api.assemblyai.com/v2/upload";
 const ASSEMBLY_TRANSCRIPT_URL: &str = "https://api.assemblyai.com/v2/transcript";
 const ASSEMBLY_SPEECH_MODEL: &str = "universal-2";
@@ -91,6 +89,11 @@ struct NoteEntry {
 struct NoteMeta {
     created_ms: Option<i64>,
     updated_ms: Option<i64>,
+    note_type: Option<String>,
+    recording_audio_path: Option<String>,
+    transcription_status: Option<String>,
+    transcription_error: Option<String>,
+    transcription_updated_ms: Option<i64>,
 }
 
 #[derive(Default)]
@@ -1676,76 +1679,16 @@ fn response_error(status: reqwest::StatusCode, body: String, context: &str) -> S
     }
 }
 
-fn recording_status_label(status: &str) -> &str {
-    match status {
-        RECORDING_STATUS_QUEUED => "Transcription is queued.",
-        RECORDING_STATUS_PROCESSING => "Transcription is processing.",
-        RECORDING_STATUS_COMPLETED => "Transcription completed.",
-        RECORDING_STATUS_FAILED => "Transcription failed.",
-        _ => "Transcription is pending.",
+fn recording_note_body(status: &str, transcript: Option<&str>) -> String {
+    if status != RECORDING_STATUS_COMPLETED {
+        return String::new();
     }
-}
-
-fn recording_transcript_section(
-    status: &str,
-    transcript: Option<&str>,
-    error: Option<&str>,
-) -> String {
-    if status == RECORDING_STATUS_COMPLETED {
-        let body = transcript.unwrap_or_default().trim();
-        if body.is_empty() {
-            return "## Transcript\n\n(AssemblyAI returned an empty transcript.)\n".to_string();
-        }
-        return format!("## Transcript\n\n{}\n", body);
+    let value = transcript.unwrap_or_default().trim();
+    if value.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", value)
     }
-    if status == RECORDING_STATUS_FAILED {
-        let details = error
-            .map(|value| value.trim())
-            .filter(|value| !value.is_empty())
-            .unwrap_or("Unknown transcription error.");
-        return format!(
-            "## Transcript\n\n(Transcription failed.)\n\nError: {}\n",
-            details
-        );
-    }
-    format!("## Transcript\n\n({})\n", recording_status_label(status))
-}
-
-fn upsert_recording_transcript_section(body: &str, section: &str) -> String {
-    let start_index = body.find(TRANSCRIPT_START_MARKER);
-    let end_index = start_index.and_then(|start| {
-        body[(start + TRANSCRIPT_START_MARKER.len())..]
-            .find(TRANSCRIPT_END_MARKER)
-            .map(|relative| start + TRANSCRIPT_START_MARKER.len() + relative)
-    });
-
-    if let (Some(start), Some(end)) = (start_index, end_index) {
-        let prefix = &body[..start + TRANSCRIPT_START_MARKER.len()];
-        let suffix = &body[end..];
-        return format!(
-            "{}\n\n{}\n\n{}",
-            prefix.trim_end(),
-            section.trim(),
-            suffix.trim_start()
-        );
-    }
-
-    if body.trim().is_empty() {
-        return format!(
-            "# Recording\n\n{}\n\n{}\n\n{}\n",
-            TRANSCRIPT_START_MARKER,
-            section.trim(),
-            TRANSCRIPT_END_MARKER
-        );
-    }
-
-    format!(
-        "{}\n\n{}\n\n{}\n\n{}\n",
-        body.trim_end(),
-        TRANSCRIPT_START_MARKER,
-        section.trim(),
-        TRANSCRIPT_END_MARKER
-    )
 }
 
 fn recording_storage_root(root: &Path) -> PathBuf {
@@ -1863,7 +1806,7 @@ fn update_recording_note_status(
     transcript_text: Option<&str>,
 ) -> Result<(), String> {
     let raw = fs::read_to_string(note_path).map_err(|issue| issue.to_string())?;
-    let (mut meta, body) = parse_note_front_matter(&raw);
+    let (mut meta, _) = parse_note_front_matter(&raw);
     if meta.id.is_none() {
         meta.id = Some(generate_note_id());
     }
@@ -1878,8 +1821,7 @@ fn update_recording_note_status(
     meta.transcription_updated_ms = now.or(meta.transcription_updated_ms);
     meta.transcription_id = transcript_id;
 
-    let section = recording_transcript_section(status, transcript_text, error.as_deref());
-    let next_body = upsert_recording_transcript_section(&body, &section);
+    let next_body = recording_note_body(status, transcript_text);
     write_note_with_front_matter(note_path, &meta, &next_body)
 }
 
@@ -2067,13 +2009,7 @@ fn spawn_transcription_worker_if_needed() {
 }
 
 fn recording_initial_body() -> String {
-    let section = recording_transcript_section(RECORDING_STATUS_PENDING, None, None);
-    format!(
-        "# Recording\n\n{}\n\n{}\n\n{}\n",
-        TRANSCRIPT_START_MARKER,
-        section.trim(),
-        TRANSCRIPT_END_MARKER
-    )
+    String::new()
 }
 
 fn recording_note_file_name(folder: &Path, timestamp_ms: i64) -> Result<String, String> {
@@ -3721,6 +3657,11 @@ fn get_note_meta(app: tauri::AppHandle, path: String) -> Result<NoteMeta, String
     Ok(NoteMeta {
         created_ms,
         updated_ms,
+        note_type: front_matter_meta.note_type.clone(),
+        recording_audio_path: front_matter_meta.recording_audio_path.clone(),
+        transcription_status: front_matter_meta.transcription_status.clone(),
+        transcription_error: front_matter_meta.transcription_error.clone(),
+        transcription_updated_ms: front_matter_meta.transcription_updated_ms,
     })
 }
 

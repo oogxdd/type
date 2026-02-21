@@ -559,6 +559,14 @@ body {
   font-weight: 450;
 }
 
+.tree-pane .nav-note-recording-icon {
+  width: 14px;
+  height: 14px;
+  color: #7f90a2;
+  margin-left: 6px;
+  flex: 0 0 auto;
+}
+
 .tree-pane .nav-note-row.is-dragging {
   opacity: 0.5;
 }
@@ -764,6 +772,18 @@ body {
 
 .note-row-main {
   width: 100%;
+}
+
+.note-row-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.note-row-recording-icon {
+  color: #708295;
+  flex: 0 0 auto;
 }
 
 .note-row-title {
@@ -1434,6 +1454,102 @@ body {
   flex: 1;
   height: 100%;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.recording-note-header {
+  border-bottom: 1px solid var(--ui-border);
+  padding: 10px 14px 10px 18px;
+  background: rgba(255, 255, 255, 0.82);
+  display: grid;
+  gap: 8px;
+}
+
+.recording-note-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.recording-note-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+
+.recording-note-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.recording-note-metric {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.recording-note-metric .label {
+  font-size: 11px;
+  color: var(--ui-muted);
+}
+
+.recording-note-metric .value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recording-note-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.recording-note-btn {
+  border: 1px solid var(--ui-border);
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--ui-text);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+}
+
+.recording-note-btn:hover {
+  background: var(--ui-select);
+}
+
+.recording-note-btn:disabled {
+  opacity: 0.6;
+}
+
+.recording-note-btn.ghost {
+  font-weight: 500;
+}
+
+.recording-note-player {
+  width: min(420px, 100%);
+  height: 30px;
+}
+
+.recording-note-message {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+
+.recording-note-message.error {
+  color: #a33f45;
 }
 
 .tiptap-editor {
@@ -1444,6 +1560,11 @@ body {
   border: none;
   border-radius: 0;
   overflow: hidden;
+}
+
+.editor-single .tiptap-editor {
+  flex: 1;
+  height: auto;
 }
 
 .tiptap-toolbar {
@@ -1843,6 +1964,10 @@ body {
   font-weight: 450;
 }
 
+.app.theme-dark .tree-pane .nav-note-recording-icon {
+  color: #9eabb9;
+}
+
 .app.theme-dark .tree-pane .note-count {
   color: #a2acb8;
   opacity: 0.72;
@@ -1901,6 +2026,10 @@ body {
 
 .app.theme-dark .note-row-title {
   color: #f1f4f8;
+}
+
+.app.theme-dark .note-row-recording-icon {
+  color: #b0bcc9;
 }
 
 .app.theme-dark .note-row-date,
@@ -2183,6 +2312,31 @@ body {
 .app.theme-dark .editor-body {
   background: rgba(24, 26, 30, 0.92);
   padding: 0;
+}
+
+.app.theme-dark .recording-note-header {
+  border-bottom-color: #2f3946;
+  background: rgba(29, 31, 36, 0.94);
+}
+
+.app.theme-dark .recording-note-chip,
+.app.theme-dark .recording-note-metric .value {
+  color: #e6ebf2;
+}
+
+.app.theme-dark .recording-note-metric .label,
+.app.theme-dark .recording-note-message {
+  color: #a8b2be;
+}
+
+.app.theme-dark .recording-note-btn {
+  border-color: #3a4554;
+  background: rgba(255, 255, 255, 0.05);
+  color: #dde4ee;
+}
+
+.app.theme-dark .recording-note-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .app.theme-dark .tiptap-editor {

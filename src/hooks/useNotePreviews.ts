@@ -19,7 +19,7 @@ export function useNotePreviews(notes: NoteEntry[]) {
           readNote(note.path),
         ]);
         const updatedMs = meta.updated_ms ?? meta.created_ms ?? null;
-        return [note.path, parseNotePreview(content, updatedMs)] as const;
+        return [note.path, parseNotePreview(content, updatedMs, meta)] as const;
       })
     )
       .then((entries) => {

@@ -1,10 +1,81 @@
-import type { RecordingListItem } from "../types";
+import type { NoteMeta, RecordingListItem } from "../types";
+
+const RECORDING_NOTE_TYPE = "audio_recording";
+
+const stripMarkdownLine = (line: string) =>
+  line
+    .replace(/\\+_/g, "_")
+    .replace(/NV_EMPTY_LINE_TOKEN_[A-Za-z0-9]+/gi, " ")
+    .replace(/NV[\s_]+EMPTY[\s_]+LINE[\s_]+TOKEN(?:[\s_]+[A-Za-z0-9]+)?/gi, " ")
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/^[>\-+*]\s+/, "")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[*_~`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const isRecordingNoiseLine = (line: string) =>
+  /^recording$/i.test(line) ||
+  /^transcript$/i.test(line) ||
+  /^<!--\s*recording-transcript:(start|end)\s*-->$/i.test(line) ||
+  /^\(transcription(?:\s+\w+)*\.\)$/i.test(line) ||
+  /^error:\s*/i.test(line);
+
+export const isRecordingNoteType = (
+  noteType: string | null | undefined,
+  recordingAudioPath: string | null | undefined
+) =>
+  noteType === RECORDING_NOTE_TYPE || Boolean(recordingAudioPath && recordingAudioPath.trim());
+
+export const isRecordingTranscriptionCompleted = (
+  status: string | null | undefined
+) => (status || "").trim().toLowerCase() === "completed";
+
+export const sanitizeRecordingEditorContent = (
+  content: string,
+  transcriptionStatus: string | null | undefined
+) => {
+  if (isRecordingTranscriptionCompleted(transcriptionStatus)) {
+    return content;
+  }
+  const filteredLines = content
+    .split(/\r?\n/)
+    .filter((line) => !isRecordingNoiseLine(stripMarkdownLine(line)));
+  return filteredLines.join("\n").replace(/\n{3,}/g, "\n\n");
+};
+
+export const formatRecordingStatusLabel = (status: string | null | undefined) => {
+  const normalized = (status || "").trim().toLowerCase();
+  if (!normalized) {
+    return "Unknown";
+  }
+  if (normalized === "pending") {
+    return "Pending";
+  }
+  if (normalized === "queued") {
+    return "Queued";
+  }
+  if (normalized === "processing") {
+    return "Processing";
+  }
+  if (normalized === "completed") {
+    return "Completed";
+  }
+  if (normalized === "failed") {
+    return "Failed";
+  }
+  return normalized[0].toUpperCase() + normalized.slice(1);
+};
 
 export type NotePreview = {
   title: string;
   dateLabel: string;
   secondLine: string;
   updatedMs: number | null;
+  isRecording: boolean;
+  recordingAudioPath: string | null;
+  transcriptionStatus: string | null;
 };
 
 export const formatNoteDateLabel = (timestamp: number | null) => {
@@ -46,25 +117,27 @@ export const formatNoteDateLabel = (timestamp: number | null) => {
 
 export const parseNotePreview = (
   content: string,
-  updatedMs: number | null
+  updatedMs: number | null,
+  noteMeta?: Pick<
+    NoteMeta,
+    "note_type" | "recording_audio_path" | "transcription_status"
+  >
 ): NotePreview => {
-  const stripMarkdown = (line: string) =>
-    line
-      .replace(/\\+_/g, "_")
-      .replace(/NV_EMPTY_LINE_TOKEN_[A-Za-z0-9]+/gi, " ")
-      .replace(/NV[\s_]+EMPTY[\s_]+LINE[\s_]+TOKEN(?:[\s_]+[A-Za-z0-9]+)?/gi, " ")
-      .replace(/^#{1,6}\s+/, "")
-      .replace(/^[>\-+*]\s+/, "")
-      .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-      .replace(/[*_~`]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
+  const isRecording = isRecordingNoteType(
+    noteMeta?.note_type,
+    noteMeta?.recording_audio_path
+  );
+  const transcriptionStatus = noteMeta?.transcription_status || null;
+  const isTranscribed = isRecordingTranscriptionCompleted(transcriptionStatus);
 
   const previewLines: string[] = [];
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = stripMarkdown(rawLine);
-    if (!line) {
+  const sourceContent =
+    isRecording && !isTranscribed
+      ? sanitizeRecordingEditorContent(content, transcriptionStatus)
+      : content;
+  for (const rawLine of sourceContent.split(/\r?\n/)) {
+    const line = stripMarkdownLine(rawLine);
+    if (!line || isRecordingNoiseLine(line)) {
       continue;
     }
     previewLines.push(line);
@@ -73,9 +146,18 @@ export const parseNotePreview = (
     }
   }
 
-  const title = previewLines[0] || "";
-  const secondLine = previewLines[1] || "";
-  return { title, dateLabel: formatNoteDateLabel(updatedMs), secondLine, updatedMs };
+  const title =
+    isRecording && !isTranscribed ? "Voice recording" : previewLines[0] || "";
+  const secondLine = isRecording && !isTranscribed ? "" : previewLines[1] || "";
+  return {
+    title,
+    dateLabel: formatNoteDateLabel(updatedMs),
+    secondLine,
+    updatedMs,
+    isRecording,
+    recordingAudioPath: noteMeta?.recording_audio_path || null,
+    transcriptionStatus,
+  };
 };
 
 export const getNextNoteFileName = (existingNames: string[]) => {

@@ -2,6 +2,7 @@ import type { MutableRefObject } from "react";
 import { MobileEditorScreen } from "../components/MobileEditorScreen";
 import { useEditor } from "../../contexts/EditorContext";
 import { useSelection } from "../../contexts/SelectionContext";
+import { useNotesTree } from "../../contexts/NotesTreeContext";
 import type { MobileAction } from "../navigation";
 
 type PhoneEditorScreenProps = {
@@ -25,14 +26,18 @@ export function PhoneEditorScreen({
   const { noteContent, isNoteSaving, noteSaveError, handleEditorChange, retrySave } =
     useEditor();
   const { activeNote } = useSelection();
+  const { allNotePreviews } = useNotesTree();
 
   const hasActiveNote = Boolean(activeNote);
   const editorMarkdown = noteContent;
+  const activeNotePreview = activeNote ? allNotePreviews[activeNote] : undefined;
 
   return (
     <MobileEditorScreen
       markdown={editorMarkdown}
       onChange={handleEditorChange}
+      notePath={activeNote}
+      notePreview={activeNotePreview}
       hasActiveNote={hasActiveNote}
       isSaving={isNoteSaving}
       saveError={noteSaveError}
