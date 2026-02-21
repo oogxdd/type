@@ -14,6 +14,21 @@ import { toBase64, fromBase64 } from "../utils/notes";
 import { useAudioRecorder } from "../hooks/useAudioRecorder";
 import { useProfiles } from "./ProfilesContext";
 
+const recordingsPreviewSignature = (items: RecordingListItem[]) =>
+  items
+    .map((item) =>
+      [
+        item.note_path,
+        item.status,
+        item.updated_ms ?? "",
+        item.error ?? "",
+        item.is_queued ? "1" : "0",
+        item.is_processing ? "1" : "0",
+      ].join("|")
+    )
+    .sort()
+    .join("||");
+
 type RecordingsContextValue = {
   recordingSupported: boolean;
   isRecordingAudio: boolean;
@@ -68,6 +83,7 @@ export function RecordingsProvider({
   const transcriptionQueueBusyRef = useRef(false);
   const recordingTargetFolderRef = useRef<string>(FEED_FOLDER_PATH);
   const activeAudioObjectUrlRef = useRef<string | null>(null);
+  const recordingsSignatureRef = useRef<string>("");
 
   const shouldAutoQueueTranscriptions =
     layoutMode === "desktop" || syncSettings.mobileAutoTranscriptionEnabled;
@@ -78,6 +94,11 @@ export function RecordingsProvider({
       const snapshot = await api.listRecordings();
       setRecordingsQueue(snapshot.queue);
       setRecordingsList(snapshot.recordings);
+      const nextSignature = recordingsPreviewSignature(snapshot.recordings);
+      if (recordingsSignatureRef.current !== nextSignature) {
+        recordingsSignatureRef.current = nextSignature;
+        window.dispatchEvent(new CustomEvent("note-previews-invalidated"));
+      }
       if (activeAudioPath) {
         const stillExists = snapshot.recordings.some(
           (item) => item.audio_path === activeAudioPath

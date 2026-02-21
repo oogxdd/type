@@ -1,5 +1,6 @@
 import {
   useMemo,
+  useCallback,
   useRef,
   useState,
   type CSSProperties,
@@ -170,6 +171,22 @@ export function AppShell() {
   });
 
   // -- Keyboard navigation
+  const deleteSelectedNotesByShortcut = useCallback(() => {
+    const selected = selectedNotesRef.current;
+    const paths =
+      selected.size > 0
+        ? activeNote && selected.has(activeNote)
+          ? Array.from(selected)
+          : activeNote
+            ? [activeNote]
+            : Array.from(selected)
+        : activeNote
+          ? [activeNote]
+          : [];
+    if (paths.length === 0) return;
+    void deleteNotes(paths);
+  }, [activeNote, deleteNotes]);
+
   const { handleNotesKeyDown, handleFoldersKeyDown, lastLeftPaneFocusRef } = useKeyboardNavigation({
     layoutMode,
     appMode,
@@ -180,6 +197,7 @@ export function AppShell() {
     decreaseEditorFontSize,
     resetEditorFontSize,
     createNewNote: () => createNewNote(),
+    deleteSelectedNotes: deleteSelectedNotesByShortcut,
     setSidebarCollapsed,
     visibleItems,
     orderedIds,

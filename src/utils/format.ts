@@ -146,9 +146,10 @@ export const parseNotePreview = (
     }
   }
 
-  const title =
-    isRecording && !isTranscribed ? "Voice recording" : previewLines[0] || "";
-  const secondLine = isRecording && !isTranscribed ? "" : previewLines[1] || "";
+  const useVoiceRecordingPlaceholder =
+    isRecording && !isTranscribed && previewLines.length === 0;
+  const title = useVoiceRecordingPlaceholder ? "Voice recording" : previewLines[0] || "";
+  const secondLine = useVoiceRecordingPlaceholder ? "" : previewLines[1] || "";
   return {
     title,
     dateLabel: formatNoteDateLabel(updatedMs),

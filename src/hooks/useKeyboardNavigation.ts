@@ -13,6 +13,7 @@ type UseKeyboardNavigationArgs = {
   decreaseEditorFontSize: () => void;
   resetEditorFontSize: () => void;
   createNewNote: () => Promise<string | null>;
+  deleteSelectedNotes: () => void;
   setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   // Tree data
   visibleItems: FlattenedItem[];
@@ -50,6 +51,7 @@ export function useKeyboardNavigation({
   decreaseEditorFontSize,
   resetEditorFontSize,
   createNewNote,
+  deleteSelectedNotes,
   setSidebarCollapsed,
   visibleItems,
   orderedIds,
@@ -138,6 +140,7 @@ export function useKeyboardNavigation({
         code !== "KeyK" &&
         code !== "KeyJ" &&
         code !== "KeyN" &&
+        code !== "Backspace" &&
         code !== "Equal" &&
         code !== "Minus" &&
         code !== "Digit0" &&
@@ -162,6 +165,10 @@ export function useKeyboardNavigation({
       }
       if (code === "KeyN") {
         void createNewNote();
+        return;
+      }
+      if (code === "Backspace") {
+        if (appMode === "notes") deleteSelectedNotes();
         return;
       }
       if (code === "KeyT") {
@@ -228,6 +235,7 @@ export function useKeyboardNavigation({
   }, [
     appMode,
     createNewNote,
+    deleteSelectedNotes,
     decreaseEditorFontSize,
     foldersPanelRef,
     increaseEditorFontSize,

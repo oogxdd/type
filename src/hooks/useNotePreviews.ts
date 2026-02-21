@@ -5,6 +5,15 @@ import type { NoteEntry } from "../types";
 
 export function useNotePreviews(notes: NoteEntry[]) {
   const [notePreviews, setNotePreviews] = useState<Record<string, NotePreview>>({});
+  const [refreshToken, setRefreshToken] = useState(0);
+
+  useEffect(() => {
+    const onInvalidated = () => {
+      setRefreshToken((value) => value + 1);
+    };
+    window.addEventListener("note-previews-invalidated", onInvalidated);
+    return () => window.removeEventListener("note-previews-invalidated", onInvalidated);
+  }, []);
 
   useEffect(() => {
     if (notes.length === 0) {
@@ -34,7 +43,7 @@ export function useNotePreviews(notes: NoteEntry[]) {
     return () => {
       cancelled = true;
     };
-  }, [notes]);
+  }, [notes, refreshToken]);
 
   return notePreviews;
 }
