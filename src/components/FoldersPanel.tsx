@@ -46,6 +46,8 @@ type FoldersPanelProps = {
   topAction?: React.ReactNode;
   sectionTitle?: string;
   footer?: React.ReactNode;
+  showRecentTab?: boolean;
+  embedded?: boolean;
 };
 
 const RECENT_PRIMARY_NODES: RecentNode[] = [
@@ -111,9 +113,11 @@ export function FoldersPanel({
   topAction,
   sectionTitle,
   footer,
+  showRecentTab = true,
+  embedded = false,
 }: FoldersPanelProps) {
   const [activeTab, setActiveTab] = useState<"recent" | "folders">(
-    showNotesAsChildren ? "folders" : "recent"
+    showNotesAsChildren || !showRecentTab ? "folders" : "recent"
   );
   const [showMoreRecent, setShowMoreRecent] = useState(false);
   const [expandedRecent, setExpandedRecent] = useState<Set<string>>(
@@ -140,10 +144,10 @@ export function FoldersPanel({
     });
 
   useEffect(() => {
-    if (showNotesAsChildren) {
+    if (showNotesAsChildren || !showRecentTab) {
       setActiveTab("folders");
     }
-  }, [showNotesAsChildren]);
+  }, [showNotesAsChildren, showRecentTab]);
 
   const toggleRecentNode = (id: string) => {
     setExpandedRecent((prev) => {
@@ -157,15 +161,9 @@ export function FoldersPanel({
     });
   };
 
-  return (
-    <div className="pane tree-pane nav-pane">
-      {topAction ? (
-        <div className="pane-top pane-top-draggable">
-          <div className="pane-top-drag-region" data-tauri-drag-region aria-hidden />
-          <div className="pane-top-content">{topAction}</div>
-        </div>
-      ) : null}
-      <div className="pane-section">
+  const sectionContent = (
+    <div className={embedded ? "pane-section sidebar-folders-section" : "pane-section"}>
+      {showRecentTab ? (
         <Tabs
           value={activeTab}
           onValueChange={(value) => setActiveTab(value as "recent" | "folders")}
@@ -177,7 +175,7 @@ export function FoldersPanel({
                 Recent
               </TabsTrigger>
               <TabsTrigger value="folders" className="folders-tab-trigger">
-                {sectionTitle}
+                {sectionTitle ?? "Folders"}
               </TabsTrigger>
             </TabsList>
           </div>
@@ -267,7 +265,76 @@ export function FoldersPanel({
             </div>
           </TabsContent>
         </Tabs>
-      </div>
+      ) : (
+        <>
+          {sectionTitle ? <div className="pane-section-title">{sectionTitle}</div> : null}
+          <div className="nav-scroll-area">
+            <div
+              ref={(node) => {
+                setRootDropRef(node);
+                if (typeof paneBodyRef === "function") {
+                  paneBodyRef(node);
+                } else if (paneBodyRef && "current" in paneBodyRef) {
+                  paneBodyRef.current = node;
+                }
+              }}
+              className={`pane-body tree-root${isOver ? " drop-inside" : ""}`}
+              tabIndex={0}
+              onKeyDownCapture={onPaneKeyDown}
+              onClick={(event) => {
+                if (onPaneClick) {
+                  onPaneClick();
+                }
+                if (event.target === event.currentTarget) {
+                  onClearSelection();
+                }
+              }}
+            >
+              {treeData.length === 0 ? <div className="empty">No folders yet.</div> : null}
+              {treeData.map((node) => (
+                <TreeNode
+                  key={node.id}
+                  node={node}
+                  depth={0}
+                  showNotesAsChildren={showNotesAsChildren}
+                  selectedNoteIds={selectedNoteIds}
+                  edgeSnap={edgeSnap}
+                  expanded={expanded}
+                  onToggle={onToggle}
+                  selectedIds={selectedIds}
+                  onSelect={onSelect}
+                  onNoteSelect={handleNoteSelect}
+                  onNoteContextMenu={handleNoteContextMenu}
+                  notePreviews={notePreviews}
+                  renamingFolder={renamingFolder}
+                  renameValue={renameValue}
+                  setRenameValue={setRenameValue}
+                  submitRenameFolder={submitRenameFolder}
+                  cancelRenameFolder={cancelRenameFolder}
+                  onContextMenu={onContextMenu}
+                  indentationWidth={indentationWidth}
+                />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  if (embedded) {
+    return sectionContent;
+  }
+
+  return (
+    <div className="pane tree-pane nav-pane">
+      {topAction ? (
+        <div className="pane-top pane-top-draggable">
+          <div className="pane-top-drag-region" data-tauri-drag-region aria-hidden />
+          <div className="pane-top-content">{topAction}</div>
+        </div>
+      ) : null}
+      {sectionContent}
       {footer ? <div className="pane-footer">{footer}</div> : null}
     </div>
   );

@@ -1432,10 +1432,20 @@ body {
   }
 }
 
+.nav-top-stack {
+  display: grid;
+  gap: 8px;
+}
+
 .nav-action-group {
   display: flex;
   gap: 8px;
   align-items: stretch;
+}
+
+.nav-footer-group {
+  display: grid;
+  gap: 8px;
 }
 
 .nav-action-combined-primary {

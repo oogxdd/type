@@ -17,7 +17,6 @@ import {
 import { snapCenterToCursor } from "@dnd-kit/modifiers";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu } from "@tauri-apps/api/menu";
-import { CirclePlus, Mic, Settings, Square } from "lucide-react";
 
 import { useTheme } from "./contexts/ThemeContext";
 import { useNotesTree } from "./contexts/NotesTreeContext";
@@ -30,6 +29,7 @@ import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
 
 import { FoldersPanel } from "./components/FoldersPanel";
 import { type SettingsSectionId } from "./components/SettingsPanel";
+import { AppSidebar } from "./components/app-sidebar";
 import { DesktopShell } from "./desktop/DesktopShell";
 import { DesktopMiddlePane } from "./desktop/DesktopMiddlePane";
 import { DesktopRightPane } from "./desktop/DesktopRightPane";
@@ -38,7 +38,12 @@ import { useLayoutMode } from "./mobile/useLayoutMode";
 
 import { focusNoScroll } from "./utils/dom";
 import { getNoteParentPath } from "./utils/notes";
-import { indentationWidth } from "./constants";
+import {
+  ARCHIEVE_FOLDER_PATH,
+  FEED_FOLDER_PATH,
+  indentationWidth,
+  isSystemFolder,
+} from "./constants";
 import type { AppMode } from "./types";
 
 export function AppShell() {
@@ -438,113 +443,91 @@ export function AppShell() {
   );
 
   const dndSensors = layoutMode === "desktop" ? sensors : [];
+  const customFoldersTreeData = useMemo(
+    () => treeData.filter((node) => !isSystemFolder(node.id)),
+    [treeData]
+  );
+
+  const openPinnedFolder = useCallback(
+    (folderPath: string) => {
+      setAppMode("notes");
+      setSelectedFolders(new Set([folderPath]));
+      setLastSelectedFolder(folderPath);
+      setActiveFolder(folderPath);
+      setSelectedNotes(new Set());
+      setLastSelectedNote("");
+      setActiveNote(null);
+    },
+    [
+      setActiveFolder,
+      setActiveNote,
+      setLastSelectedFolder,
+      setLastSelectedNote,
+      setSelectedFolders,
+      setSelectedNotes,
+    ]
+  );
 
   // -- Render helpers
   const renderLeftPane = () => (
     <div className="pane-with-drag">
       <div className="pane-drag-region" data-tauri-drag-region aria-hidden />
-      <FoldersPanel
-        treeData={treeData}
-        selectedIds={selectedFolders}
-        onSelect={handleFolderClick}
-        edgeSnap={edgeSnap}
-        expanded={expanded}
-        onToggle={handleToggle}
-        showNotesAsChildren={shouldNestNotesInNavigation}
-        selectedNoteIds={selectedNotes}
-        onNoteSelect={handleNoteClick}
-        onNoteContextMenu={handleNoteContextMenu}
-        notePreviews={allNotePreviews}
-        onPaneKeyDown={handleFoldersKeyDown}
-        onPaneClick={() => {
-          lastLeftPaneFocusRef.current = "folders";
-          focusNoScroll(foldersPanelRef.current);
-        }}
-        paneBodyRef={foldersPanelRef}
-        onClearSelection={() => {
-          setSelectedFolders(new Set());
-          setLastSelectedFolder("");
-          setSelectedNotes(new Set());
-          setLastSelectedNote("");
-          if (shouldNestNotesInNavigation) {
-            setActiveNote(null);
+      <AppSidebar
+        feedActive={appMode === "notes" && activeFolder === FEED_FOLDER_PATH}
+        settingsActive={appMode === "settings"}
+        trashActive={appMode === "notes" && activeFolder === ARCHIEVE_FOLDER_PATH}
+        recordingActive={isRecordingAudio}
+        recordingDisabled={!recordingSupported || isRecordingFinalizing}
+        onFeedClick={() => openPinnedFolder(FEED_FOLDER_PATH)}
+        onNewNoteClick={() => void createNewNote()}
+        onRecordingClick={() => {
+          if (isRecordingAudio) {
+            stopRecording();
+          } else {
+            void startRecording(activeFolder || undefined);
           }
         }}
-        renamingFolder={renamingFolder}
-        renameValue={renameValue}
-        setRenameValue={setRenameValue}
-        submitRenameFolder={submitRenameFolder}
-        cancelRenameFolder={cancelRenameFolder}
-        onContextMenu={handleFolderContextMenu}
-        indentationWidth={indentationWidth}
-        sectionTitle="Folders"
-        topAction={
-          <div className="nav-action-group">
-            <button
-              type="button"
-              className="nav-action nav-action-combined-primary rounded-md px-3 py-2 transition-all duration-200 ease-linear min-w-8"
-              onClick={(event) => {
-                event.stopPropagation();
-                void createNewNote();
-              }}
-            >
-              <span className="nav-action-icon" aria-hidden>
-                <CirclePlus className="h-4 w-4 shrink-0" strokeWidth={1.9} />
-              </span>
-              <span>Quick Create</span>
-            </button>
-            <button
-              type="button"
-              className={`nav-action nav-action-combined-side rounded-md px-3 py-2 transition-all duration-200 ease-linear size-8${
-                isRecordingAudio ? " active" : ""
-              }`}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (isRecordingAudio) {
-                  stopRecording();
-                } else {
-                  void startRecording(activeFolder || undefined);
-                }
-              }}
-              disabled={!recordingSupported || isRecordingFinalizing}
-              aria-label={isRecordingAudio ? "Stop recording" : "Record audio"}
-              title={isRecordingAudio ? "Stop recording" : "Record audio"}
-            >
-              <span className="nav-action-icon" aria-hidden>
-                {isRecordingAudio ? (
-                  <Square className="h-4 w-4 shrink-0" strokeWidth={2} />
-                ) : (
-                  <Mic className="h-4 w-4 shrink-0" strokeWidth={2} />
-                )}
-              </span>
-              <span className="sr-only">
-                {isRecordingAudio ? "Stop recording" : "Record audio"}
-              </span>
-            </button>
-          </div>
-        }
-        footer={
-          <button
-            type="button"
-            className={`nav-action nav-action-settings rounded-xl px-3 py-2 transition-colors${
-              appMode === "settings" ? " active" : ""
-            }`}
-            onClick={(event) => {
-              event.stopPropagation();
-              setAppMode((prev) => (prev === "notes" ? "settings" : "notes"));
-            }}
-          >
-            <span className="nav-action-icon text-base leading-none" aria-hidden>
-              {appMode === "settings" ? (
-                "←"
-              ) : (
-                <Settings className="h-4 w-4 shrink-0" strokeWidth={1.9} />
-              )}
-            </span>
-            <span>{appMode === "settings" ? "Back to notes" : "Settings"}</span>
-          </button>
-        }
-      />
+        onSettingsClick={() => setAppMode("settings")}
+        onTrashClick={() => openPinnedFolder(ARCHIEVE_FOLDER_PATH)}
+      >
+        <FoldersPanel
+          treeData={customFoldersTreeData}
+          selectedIds={selectedFolders}
+          onSelect={handleFolderClick}
+          edgeSnap={edgeSnap}
+          expanded={expanded}
+          onToggle={handleToggle}
+          showNotesAsChildren={shouldNestNotesInNavigation}
+          selectedNoteIds={selectedNotes}
+          onNoteSelect={handleNoteClick}
+          onNoteContextMenu={handleNoteContextMenu}
+          notePreviews={allNotePreviews}
+          onPaneKeyDown={handleFoldersKeyDown}
+          onPaneClick={() => {
+            lastLeftPaneFocusRef.current = "folders";
+            focusNoScroll(foldersPanelRef.current);
+          }}
+          paneBodyRef={foldersPanelRef}
+          onClearSelection={() => {
+            setSelectedFolders(new Set());
+            setLastSelectedFolder("");
+            setSelectedNotes(new Set());
+            setLastSelectedNote("");
+            if (shouldNestNotesInNavigation) {
+              setActiveNote(null);
+            }
+          }}
+          renamingFolder={renamingFolder}
+          renameValue={renameValue}
+          setRenameValue={setRenameValue}
+          submitRenameFolder={submitRenameFolder}
+          cancelRenameFolder={cancelRenameFolder}
+          onContextMenu={handleFolderContextMenu}
+          indentationWidth={indentationWidth}
+          showRecentTab={false}
+          embedded
+        />
+      </AppSidebar>
     </div>
   );
 
