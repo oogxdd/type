@@ -1869,11 +1869,6 @@ body {
   border-right: 1px solid #c8d2dc;
 }
 
-.app.theme-light .app-sidebar-shell[data-sidebar="sidebar"] {
-  background: linear-gradient(180deg, #e7ebf0 0%, #dde3ea 46%, #d6dde7 100%);
-  border-right: 1px solid #c8d2dc;
-}
-
 .app.theme-light .pane-top {
   padding: 10px 10px 8px;
 }
@@ -2064,18 +2059,6 @@ body {
 .app.theme-dark .nav-pane {
   display: flex;
   flex-direction: column;
-  background: linear-gradient(
-    180deg,
-    rgba(40, 44, 52, 0.95) 0%,
-    rgba(35, 39, 46, 0.94) 46%,
-    rgba(30, 34, 40, 0.93) 100%
-  );
-  border-right: 1px solid #474c56;
-  backdrop-filter: blur(2px) saturate(110%);
-  -webkit-backdrop-filter: blur(2px) saturate(110%);
-}
-
-.app.theme-dark .app-sidebar-shell[data-sidebar="sidebar"] {
   background: linear-gradient(
     180deg,
     rgba(40, 44, 52, 0.95) 0%,

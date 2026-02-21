@@ -51,7 +51,7 @@ export function AppSidebar({
     <SidebarProvider className="h-full min-h-0 w-full">
       <Sidebar
         collapsible="none"
-        className={cn("app-sidebar-shell tree-pane nav-pane h-full w-full border-r-0", className)}
+        className={cn("app-sidebar-shell pane tree-pane nav-pane h-full w-full border-r-0", className)}
         {...props}
       >
         <SidebarHeader className="app-sidebar-header">
