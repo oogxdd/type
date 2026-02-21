@@ -3,31 +3,84 @@ import { deleteItems, readNote, renameItem, writeNote } from "../data/notesApi";
 
 const UUID_V7_FILE_NAME_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}\.md$/i;
+const UTC_TIMESTAMP_FILE_NAME_RE =
+  /^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z)(?:-(.+))?\.md$/i;
 const MIN_SLUG_CONTENT_CHARS = 8;
+const MAX_SLUG_WORDS = 8;
+const MAX_SLUG_LENGTH = 56;
+const NOISE_HASH_RE = /^[a-z0-9]{1,32}$/;
 
 const emitTreeInvalidated = () => {
   window.dispatchEvent(new CustomEvent("notes-tree-invalidated"));
 };
 
+const stripNoiseTokenSequences = (tokens: string[]) => {
+  const cleaned: string[] = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    if (
+      i + 3 < tokens.length &&
+      tokens[i] === "nv" &&
+      tokens[i + 1] === "empty" &&
+      tokens[i + 2] === "line" &&
+      tokens[i + 3] === "token"
+    ) {
+      i += 3;
+      if (i + 1 < tokens.length && NOISE_HASH_RE.test(tokens[i + 1])) {
+        i += 1;
+      }
+      continue;
+    }
+    cleaned.push(tokens[i]);
+  }
+  return cleaned;
+};
+
 const buildSlugFromContent = (markdown: string) => {
   const normalized = markdown
+    .replace(/NV_EMPTY_LINE_TOKEN_[A-Za-z0-9]+/g, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`]*`/g, " ")
+    .replace(/!\[[^\]]*]\([^)]+\)/g, " ")
+    .replace(/\[[^\]]+]\([^)]+\)/g, " ")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^[>\-*+]\s+/gm, "")
+    .replace(/https?:\/\/\S+/gi, " ")
     .toLowerCase()
-    .replace(/[`*_#>\-\[\]()!~]/g, " ")
-    .replace(/https?:\/\/\S+/g, " ")
-    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/[^\p{L}\p{N}\s_-]/gu, " ")
+    .replace(/[_-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   if (!normalized) {
     return "";
   }
-  const words = normalized.split(" ").filter(Boolean).slice(0, 8);
+  const tokens = normalized
+    .split(" ")
+    .filter((word) => word && !word.startsWith("http") && !word.startsWith("www"));
+  const words = stripNoiseTokenSequences(tokens).slice(0, MAX_SLUG_WORDS);
   const slug = words.join("-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-  return slug.slice(0, 56).replace(/-$/g, "");
+  return slug.slice(0, MAX_SLUG_LENGTH).replace(/-$/g, "");
 };
 
 const getAutoRenameTarget = (notePath: string, content: string) => {
   const segments = notePath.split("/");
   const fileName = segments[segments.length - 1] || "";
+  const timestampMatch = fileName.match(UTC_TIMESTAMP_FILE_NAME_RE);
+  if (timestampMatch) {
+    const prefix = timestampMatch[1];
+    const suffix = (timestampMatch[2] || "").toLowerCase();
+    const shouldReplaceSuffix = !suffix || suffix === "note" || suffix === "untitled";
+    if (!shouldReplaceSuffix) {
+      return null;
+    }
+    const slug = buildSlugFromContent(content);
+    if (slug.replace(/-/g, "").length < MIN_SLUG_CONTENT_CHARS) {
+      return null;
+    }
+    const nextName = `${prefix}-${slug}.md`;
+    return nextName.toLowerCase() === fileName.toLowerCase() ? null : nextName;
+  }
+
   if (!UUID_V7_FILE_NAME_RE.test(fileName)) {
     return null;
   }

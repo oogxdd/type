@@ -182,6 +182,27 @@ function uuidV7(timestampMs = Date.now()) {
   ].join("-");
 }
 
+function stripNoiseTokenSequences(tokens) {
+  const cleaned = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    if (
+      i + 3 < tokens.length &&
+      tokens[i] === "nv" &&
+      tokens[i + 1] === "empty" &&
+      tokens[i + 2] === "line" &&
+      tokens[i + 3] === "token"
+    ) {
+      i += 3;
+      if (i + 1 < tokens.length && /^[a-z0-9]{1,32}$/i.test(tokens[i + 1])) {
+        i += 1;
+      }
+      continue;
+    }
+    cleaned.push(tokens[i]);
+  }
+  return cleaned;
+}
+
 function textSlug(body, fallback) {
   const stripped = body
     .replace(/NV_EMPTY_LINE_TOKEN_[A-Za-z0-9]+/g, " ")
@@ -193,21 +214,20 @@ function textSlug(body, fallback) {
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/^[>\-*+]\s+/gm, "")
     .replace(/[_*~]/g, " ")
-    .replace(/https?:\/\/\S+/g, " ")
-    .replace(/[^A-Za-z0-9\s-]/g, " ")
-    .replace(/\bnv\s+empty\s+line\s+token\s+[a-z0-9]+\b/g, " ")
+    .replace(/https?:\/\/\S+/gi, " ")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, " ")
+    .replace(/[_-]+/g, " ")
     .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
+    .trim();
   if (!stripped) {
     return fallback;
   }
-  const noise = new Set(["nv", "empty", "line", "token"]);
-  const words = stripped
+  const tokens = stripped
     .split(" ")
     .map((word) => word.trim())
-    .filter((word) => word && !noise.has(word))
-    .slice(0, 8);
+    .filter((word) => word && !word.startsWith("http") && !word.startsWith("www"));
+  const words = stripNoiseTokenSequences(tokens).slice(0, 8);
   const slug = words.join("-").replace(/-+/g, "-").replace(/^-|-$/g, "");
   return slug || fallback;
 }

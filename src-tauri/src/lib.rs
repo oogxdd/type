@@ -1496,31 +1496,64 @@ fn utc_note_filename_timestamp(timestamp_ms: i64) -> String {
         .unwrap_or_else(|_| "1970-01-01T00-00-00Z".to_string())
 }
 
+fn is_noise_hash_token(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 32 && value.chars().all(|ch| ch.is_ascii_alphanumeric())
+}
+
 fn slug_from_content(content: &str, fallback: &str) -> String {
-    let mut normalized = String::with_capacity(content.len());
+    const MAX_SLUG_WORDS: usize = 8;
+    const MAX_SLUG_CHARS: usize = 56;
+
+    let mut normalized = String::with_capacity(content.len().saturating_mul(2));
     for ch in content.chars() {
-        let lower = ch.to_ascii_lowercase();
-        if lower.is_ascii_alphanumeric() {
-            normalized.push(lower);
+        if ch.is_alphanumeric() || ch == '-' || ch == '_' || ch.is_whitespace() {
+            for lower in ch.to_lowercase() {
+                normalized.push(lower);
+            }
         } else {
             normalized.push(' ');
         }
     }
+
+    let tokens: Vec<&str> = normalized
+        .split(|ch: char| ch.is_whitespace() || ch == '-' || ch == '_')
+        .filter(|token| !token.is_empty())
+        .collect();
+
     let mut words = Vec::new();
-    for token in normalized.split_whitespace() {
-        words.push(token.to_string());
-        if words.len() >= 8 {
-            break;
+    let mut index = 0usize;
+    while index < tokens.len() && words.len() < MAX_SLUG_WORDS {
+        if index + 3 < tokens.len()
+            && tokens[index] == "nv"
+            && tokens[index + 1] == "empty"
+            && tokens[index + 2] == "line"
+            && tokens[index + 3] == "token"
+        {
+            index += 4;
+            if index < tokens.len() && is_noise_hash_token(tokens[index]) {
+                index += 1;
+            }
+            continue;
         }
+
+        let token = tokens[index];
+        index += 1;
+        if token.starts_with("http") || token.starts_with("www") {
+            continue;
+        }
+        words.push(token.to_string());
     }
+
     let mut slug = if words.is_empty() {
         fallback.to_string()
     } else {
         words.join("-")
     };
-    if slug.len() > 56 {
-        slug.truncate(56);
+
+    if slug.chars().count() > MAX_SLUG_CHARS {
+        slug = slug.chars().take(MAX_SLUG_CHARS).collect();
     }
+
     while slug.ends_with('-') {
         slug.pop();
     }
@@ -2017,19 +2050,8 @@ fn recording_initial_body() -> String {
     )
 }
 
-fn recording_note_file_name(folder: &Path) -> Result<String, String> {
-    let id = generate_note_id();
-    for attempt in 0..=512usize {
-        let candidate = if attempt == 0 {
-            format!("{}.md", id)
-        } else {
-            format!("{}-{}.md", id, attempt)
-        };
-        if !folder.join(&candidate).exists() {
-            return Ok(candidate);
-        }
-    }
-    Err("Failed to allocate recording note name.".to_string())
+fn recording_note_file_name(folder: &Path, timestamp_ms: i64) -> Result<String, String> {
+    allocate_timestamped_note_file_name(folder, timestamp_ms, "", "recording")
 }
 
 fn recording_audio_file_path(root: &Path, extension: &str) -> Result<PathBuf, String> {
@@ -2387,11 +2409,7 @@ fn build_git_history(root: &Path, limit: usize) -> Result<Vec<GitCommitHistoryEn
             .to_string();
         let authored_ms = commit.time().seconds().checked_mul(1_000);
         let sync_state = if let Some(upstream) = upstream_oid {
-            if oid == upstream
-                || repo
-                    .graph_descendant_of(upstream, oid)
-                    .unwrap_or(false)
-            {
+            if oid == upstream || repo.graph_descendant_of(upstream, oid).unwrap_or(false) {
                 "synced"
             } else {
                 "local"
@@ -3203,27 +3221,14 @@ fn create_note(app: tauri::AppHandle, args: CreateNoteArgs) -> Result<CreateNote
     }
     fs::create_dir_all(&folder_full).map_err(|err| err.to_string())?;
 
-    let id = generate_note_id();
-    let mut file_name: Option<String> = None;
-    for attempt in 0..=512usize {
-        let candidate = if attempt == 0 {
-            format!("{}.md", id)
-        } else {
-            format!("{}-{}.md", id, attempt)
-        };
-        if !folder_full.join(&candidate).exists() {
-            file_name = Some(candidate);
-            break;
-        }
-    }
-    let file_name = file_name.ok_or_else(|| "Failed to allocate note filename.".to_string())?;
-    let path = folder_full.join(&file_name);
-    let timestamp = args.timestamp_ms.or_else(now_ms);
-    let mut meta = NoteFrontMatter::default();
-    meta.id = Some(file_name.trim_end_matches(".md").to_string());
-    meta.created_ms = timestamp;
-    meta.updated_ms = timestamp;
+    let timestamp = args.timestamp_ms.or_else(now_ms).unwrap_or(0);
     let content = args.content.unwrap_or_default();
+    let file_name = allocate_timestamped_note_file_name(&folder_full, timestamp, &content, "note")?;
+    let path = folder_full.join(&file_name);
+    let mut meta = NoteFrontMatter::default();
+    meta.id = Some(generate_note_id());
+    meta.created_ms = Some(timestamp);
+    meta.updated_ms = Some(timestamp);
     write_note_with_front_matter(&path, &meta, &content)?;
     if !is_feed_folder_path(&root, &folder_full) {
         update_order_append(&folder_full, &[file_name], false)?;
@@ -3397,19 +3402,18 @@ fn save_audio_recording(
     let audio_path = recording_audio_file_path(&root, extension)?;
     fs::write(&audio_path, audio_bytes).map_err(|error| error.to_string())?;
 
-    let note_file_name = recording_note_file_name(&target_folder_path)?;
+    let now = now_ms().unwrap_or(0);
+    let note_file_name = recording_note_file_name(&target_folder_path, now)?;
     let note_path = target_folder_path.join(&note_file_name);
-    let note_id = note_file_name.trim_end_matches(".md").to_string();
-    let now = now_ms();
     let mut meta = NoteFrontMatter::default();
-    meta.id = Some(note_id);
-    meta.created_ms = now;
-    meta.updated_ms = now;
+    meta.id = Some(generate_note_id());
+    meta.created_ms = Some(now);
+    meta.updated_ms = Some(now);
     meta.note_type = Some(RECORDING_FRONTMATTER_TYPE.to_string());
     meta.recording_audio_path = Some(strip_root(&root, &audio_path));
     meta.transcription_status = Some(RECORDING_STATUS_PENDING.to_string());
     meta.transcription_error = None;
-    meta.transcription_updated_ms = now;
+    meta.transcription_updated_ms = Some(now);
     meta.transcription_id = None;
 
     write_note_with_front_matter(&note_path, &meta, &recording_initial_body())?;
