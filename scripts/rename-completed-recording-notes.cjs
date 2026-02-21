@@ -134,7 +134,8 @@ function isPlaceholderRecordingSuffix(value) {
   const normalized = String(value || "").toLowerCase();
   return (
     normalized === "recording" ||
-    normalized.startsWith("recording-transcript")
+    normalized.startsWith("recording-transcript") ||
+    /^recording-[0-9a-f-]{8,}$/i.test(normalized)
   );
 }
 
@@ -324,4 +325,3 @@ function main() {
 }
 
 main();
-

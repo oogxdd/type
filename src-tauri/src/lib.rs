@@ -1512,6 +1512,14 @@ fn generate_note_id() -> String {
     Uuid::now_v7().to_string()
 }
 
+fn uuid_tail_without_timestamp_prefix(note_id: &str) -> String {
+    let parts = note_id.split('-').collect::<Vec<_>>();
+    if parts.len() >= 5 {
+        return parts[2..].join("-").to_lowercase();
+    }
+    note_id.to_lowercase()
+}
+
 fn utc_note_filename_timestamp(timestamp_ms: i64) -> String {
     let seconds = timestamp_ms.div_euclid(1_000);
     let millis = timestamp_ms.rem_euclid(1_000);
@@ -2012,8 +2020,16 @@ fn recording_initial_body() -> String {
     String::new()
 }
 
-fn recording_note_file_name(folder: &Path, timestamp_ms: i64) -> Result<String, String> {
-    allocate_timestamped_note_file_name(folder, timestamp_ms, "", "recording")
+fn recording_note_file_name(
+    folder: &Path,
+    timestamp_ms: i64,
+    note_id: &str,
+) -> Result<String, String> {
+    let fallback = format!(
+        "recording-{}",
+        uuid_tail_without_timestamp_prefix(note_id)
+    );
+    allocate_timestamped_note_file_name(folder, timestamp_ms, "", &fallback)
 }
 
 fn recording_audio_file_path(root: &Path, extension: &str) -> Result<PathBuf, String> {
@@ -3223,10 +3239,13 @@ fn create_note(app: tauri::AppHandle, args: CreateNoteArgs) -> Result<CreateNote
 
     let timestamp = args.timestamp_ms.or_else(now_ms).unwrap_or(0);
     let content = args.content.unwrap_or_default();
-    let file_name = allocate_timestamped_note_file_name(&folder_full, timestamp, &content, "note")?;
+    let note_id = generate_note_id();
+    let fallback = format!("note-{}", uuid_tail_without_timestamp_prefix(&note_id));
+    let file_name =
+        allocate_timestamped_note_file_name(&folder_full, timestamp, &content, &fallback)?;
     let path = folder_full.join(&file_name);
     let mut meta = NoteFrontMatter::default();
-    meta.id = Some(generate_note_id());
+    meta.id = Some(note_id);
     meta.created_ms = Some(timestamp);
     meta.updated_ms = Some(timestamp);
     write_note_with_front_matter(&path, &meta, &content)?;
@@ -3403,10 +3422,11 @@ fn save_audio_recording(
     fs::write(&audio_path, audio_bytes).map_err(|error| error.to_string())?;
 
     let now = now_ms().unwrap_or(0);
-    let note_file_name = recording_note_file_name(&target_folder_path, now)?;
+    let note_id = generate_note_id();
+    let note_file_name = recording_note_file_name(&target_folder_path, now, &note_id)?;
     let note_path = target_folder_path.join(&note_file_name);
     let mut meta = NoteFrontMatter::default();
-    meta.id = Some(generate_note_id());
+    meta.id = Some(note_id);
     meta.created_ms = Some(now);
     meta.updated_ms = Some(now);
     meta.note_type = Some(RECORDING_FRONTMATTER_TYPE.to_string());

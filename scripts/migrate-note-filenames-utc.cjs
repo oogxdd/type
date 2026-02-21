@@ -126,7 +126,12 @@ function isPlaceholderFileName(fileName) {
     return false;
   }
   const suffix = (timestampMatch[2] || "").toLowerCase();
-  return !suffix || suffix === "note" || suffix === "untitled";
+  return (
+    !suffix ||
+    suffix === "note" ||
+    suffix === "untitled" ||
+    /^note-[0-9a-f-]{8,}$/i.test(suffix)
+  );
 }
 
 function buildSlug(body, fallback) {

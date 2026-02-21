@@ -9,6 +9,7 @@ const MIN_SLUG_CONTENT_CHARS = 8;
 const MAX_SLUG_WORDS = 8;
 const MAX_SLUG_LENGTH = 56;
 const NOISE_HASH_RE = /^[a-z0-9]{1,32}$/;
+const NOTE_PLACEHOLDER_WITH_ID_RE = /^note-[0-9a-f-]{8,}$/i;
 
 const emitTreeInvalidated = () => {
   window.dispatchEvent(new CustomEvent("notes-tree-invalidated"));
@@ -69,7 +70,11 @@ const getAutoRenameTarget = (notePath: string, content: string) => {
   if (timestampMatch) {
     const prefix = timestampMatch[1];
     const suffix = (timestampMatch[2] || "").toLowerCase();
-    const shouldReplaceSuffix = !suffix || suffix === "note" || suffix === "untitled";
+    const shouldReplaceSuffix =
+      !suffix ||
+      suffix === "note" ||
+      suffix === "untitled" ||
+      NOTE_PLACEHOLDER_WITH_ID_RE.test(suffix);
     if (!shouldReplaceSuffix) {
       return null;
     }
