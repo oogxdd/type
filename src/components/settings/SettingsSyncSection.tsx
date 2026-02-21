@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useNotesTree } from "../../contexts/NotesTreeContext";
 import { useGitSync } from "../../contexts/GitSyncContext";
 import { useProfiles } from "../../contexts/ProfilesContext";
@@ -10,7 +10,6 @@ import {
   getSyncHint,
 } from "../../utils/format";
 import { Button } from "../ui/button";
-import { getOtaAutoCheckEnabled, setOtaAutoCheckEnabled } from "../../utils/storage";
 
 export function SettingsSyncSection() {
   const { syncSettings } = useProfiles();
@@ -30,7 +29,6 @@ export function SettingsSyncSection() {
   } = useGitSync();
   const { refreshTree } = useNotesTree();
   const { canPull, canPush, canConnect } = useSettingsData();
-  const [otaAutoCheckEnabled, setLocalOtaAutoCheckEnabled] = useState(() => getOtaAutoCheckEnabled());
 
   useEffect(() => {
     void refreshGitHistory();
@@ -49,28 +47,6 @@ export function SettingsSyncSection() {
       </div>
 
       <div className="settings-section-stack">
-        <section className="settings-group">
-          <h3 className="settings-group-title">OTA updates (iOS)</h3>
-          <div className="settings-control">
-            <span>Update checks on launch</span>
-            <label className="settings-toggle">
-              <input
-                type="checkbox"
-                checked={otaAutoCheckEnabled}
-                onChange={(event) => {
-                  const enabled = event.target.checked;
-                  setLocalOtaAutoCheckEnabled(enabled);
-                  setOtaAutoCheckEnabled(enabled);
-                }}
-              />
-              <span>Check manifest.json at startup</span>
-            </label>
-            <span className="settings-inline-help">
-              Disable to always start bundled assets and skip OTA network checks.
-            </span>
-          </div>
-        </section>
-
         <section className="settings-group">
           <div className="settings-info-grid">
             <div className="settings-info-row">

@@ -78,12 +78,37 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!activeProfileId) {
+      setGitStatus(null);
+      setGitSyncError(null);
       setGitCommitHistory([]);
       setGitHistoryError(null);
       return;
     }
+    void refreshGitStatus();
     void refreshGitHistory();
-  }, [activeProfileId, refreshGitHistory]);
+  }, [activeProfileId, refreshGitHistory, refreshGitStatus]);
+
+  useEffect(() => {
+    if (!activeProfileId || !gitStatus?.repo_initialized) {
+      return;
+    }
+    const patch: Partial<typeof syncSettings> = {};
+    if (!syncSettings.gitRemoteUrl.trim() && gitStatus.remote_url) {
+      patch.gitRemoteUrl = gitStatus.remote_url;
+    }
+    if (!syncSettings.gitBranch.trim() && gitStatus.current_branch) {
+      patch.gitBranch = gitStatus.current_branch;
+    }
+    if (Object.keys(patch).length > 0) {
+      updateSyncSettings(patch);
+    }
+  }, [
+    activeProfileId,
+    gitStatus,
+    syncSettings.gitBranch,
+    syncSettings.gitRemoteUrl,
+    updateSyncSettings,
+  ]);
 
   const connectGitRepo = useCallback(async () => {
     const remoteUrl = syncSettings.gitRemoteUrl.trim();

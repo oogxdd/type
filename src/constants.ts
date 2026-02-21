@@ -15,6 +15,7 @@ export const MAX_EDITOR_FONT_SIZE = 28;
 export const MOBILE_SETTINGS_SECTIONS: Array<{ id: SettingsSectionId; label: string }> = [
   { id: "profile", label: "Profile" },
   { id: "sync", label: "Sync" },
+  { id: "updates", label: "Updates" },
   { id: "appearance", label: "Appearance" },
   { id: "recordings", label: "Recordings" },
 ];

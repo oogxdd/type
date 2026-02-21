@@ -4,6 +4,28 @@ import { useProfiles } from "../../contexts/ProfilesContext";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 
+type GitDraftSettings = {
+  gitRemoteUrl: string;
+  gitBranch: string;
+  gitCommitMessage: string;
+  gitUsername: string;
+  gitPassword: string;
+};
+
+const getGitDraftFromSyncSettings = (syncSettings: {
+  gitRemoteUrl: string;
+  gitBranch: string;
+  gitCommitMessage: string;
+  gitUsername: string;
+  gitPassword: string;
+}): GitDraftSettings => ({
+  gitRemoteUrl: syncSettings.gitRemoteUrl,
+  gitBranch: syncSettings.gitBranch,
+  gitCommitMessage: syncSettings.gitCommitMessage,
+  gitUsername: syncSettings.gitUsername,
+  gitPassword: syncSettings.gitPassword,
+});
+
 export function SettingsProfileSection() {
   const {
     profiles,
@@ -18,6 +40,9 @@ export function SettingsProfileSection() {
     updateSyncSettings,
   } = useProfiles();
   const [notesRootInput, setNotesRootInput] = useState("");
+  const [gitDraft, setGitDraft] = useState<GitDraftSettings>(() =>
+    getGitDraftFromSyncSettings(syncSettings)
+  );
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -27,6 +52,24 @@ export function SettingsProfileSection() {
   useEffect(() => {
     setNotesRootInput(activeProfile?.notes_root ?? "");
   }, [activeProfile?.notes_root]);
+
+  useEffect(() => {
+    setGitDraft(getGitDraftFromSyncSettings(syncSettings));
+  }, [activeProfileId]);
+
+  const hasUnsavedGitChanges =
+    gitDraft.gitRemoteUrl !== syncSettings.gitRemoteUrl ||
+    gitDraft.gitBranch !== syncSettings.gitBranch ||
+    gitDraft.gitCommitMessage !== syncSettings.gitCommitMessage ||
+    gitDraft.gitUsername !== syncSettings.gitUsername ||
+    gitDraft.gitPassword !== syncSettings.gitPassword;
+
+  useEffect(() => {
+    if (hasUnsavedGitChanges) {
+      return;
+    }
+    setGitDraft(getGitDraftFromSyncSettings(syncSettings));
+  }, [hasUnsavedGitChanges, syncSettings]);
 
   const chooseWorkingDirectory = async () => {
     try {
@@ -83,6 +126,84 @@ export function SettingsProfileSection() {
         </section>
 
         <section className="settings-group">
+          <h3 className="settings-group-title">Git</h3>
+          <label className="settings-control">
+            <span>Remote URL</span>
+            <Input
+              type="text"
+              value={gitDraft.gitRemoteUrl}
+              onChange={(event) => setGitDraft((prev) => ({ ...prev, gitRemoteUrl: event.target.value }))}
+              placeholder="https://github.com/you/notes.git"
+            />
+          </label>
+          <label className="settings-control">
+            <span>Branch</span>
+            <Input
+              type="text"
+              value={gitDraft.gitBranch}
+              onChange={(event) => setGitDraft((prev) => ({ ...prev, gitBranch: event.target.value }))}
+              placeholder="main"
+            />
+          </label>
+          <label className="settings-control">
+            <span>Commit message</span>
+            <Input
+              type="text"
+              value={gitDraft.gitCommitMessage}
+              onChange={(event) =>
+                setGitDraft((prev) => ({ ...prev, gitCommitMessage: event.target.value }))
+              }
+              placeholder="Sync notes"
+            />
+          </label>
+          <label className="settings-control">
+            <span>Username</span>
+            <Input
+              type="text"
+              value={gitDraft.gitUsername}
+              onChange={(event) => setGitDraft((prev) => ({ ...prev, gitUsername: event.target.value }))}
+              placeholder="Optional"
+              autoCapitalize="off"
+              autoCorrect="off"
+            />
+          </label>
+          <label className="settings-control">
+            <span>Token</span>
+            <Input
+              type="password"
+              value={gitDraft.gitPassword}
+              onChange={(event) => setGitDraft((prev) => ({ ...prev, gitPassword: event.target.value }))}
+              placeholder="Optional"
+              autoCapitalize="off"
+              autoCorrect="off"
+            />
+          </label>
+          <div className="settings-action-row">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!activeProfileId || profilesBusy || !hasUnsavedGitChanges}
+              onClick={() =>
+                updateSyncSettings({
+                  gitRemoteUrl: gitDraft.gitRemoteUrl,
+                  gitBranch: gitDraft.gitBranch,
+                  gitCommitMessage: gitDraft.gitCommitMessage,
+                  gitUsername: gitDraft.gitUsername,
+                  gitPassword: gitDraft.gitPassword,
+                })
+              }
+            >
+              Apply Git settings
+            </Button>
+          </div>
+          <p className="settings-inline-help">
+            Changes only take effect after clicking Apply Git settings.
+            {hasUnsavedGitChanges ? " You have unsaved changes." : ""}
+          </p>
+        </section>
+
+        <section className="settings-group">
           <h3 className="settings-group-title">Notes folder</h3>
           <div className="settings-control">
             <div className="settings-inline-row">
@@ -118,59 +239,6 @@ export function SettingsProfileSection() {
               </Button>
             </div>
           </div>
-        </section>
-
-        <section className="settings-group">
-          <h3 className="settings-group-title">Git</h3>
-          <label className="settings-control">
-            <span>Remote URL</span>
-            <Input
-              type="text"
-              value={syncSettings.gitRemoteUrl}
-              onChange={(event) => updateSyncSettings({ gitRemoteUrl: event.target.value })}
-              placeholder="https://github.com/you/notes.git"
-            />
-          </label>
-          <label className="settings-control">
-            <span>Branch</span>
-            <Input
-              type="text"
-              value={syncSettings.gitBranch}
-              onChange={(event) => updateSyncSettings({ gitBranch: event.target.value })}
-              placeholder="main"
-            />
-          </label>
-          <label className="settings-control">
-            <span>Commit message</span>
-            <Input
-              type="text"
-              value={syncSettings.gitCommitMessage}
-              onChange={(event) => updateSyncSettings({ gitCommitMessage: event.target.value })}
-              placeholder="Sync notes"
-            />
-          </label>
-          <label className="settings-control">
-            <span>Username</span>
-            <Input
-              type="text"
-              value={syncSettings.gitUsername}
-              onChange={(event) => updateSyncSettings({ gitUsername: event.target.value })}
-              placeholder="Optional"
-              autoCapitalize="off"
-              autoCorrect="off"
-            />
-          </label>
-          <label className="settings-control">
-            <span>Token</span>
-            <Input
-              type="password"
-              value={syncSettings.gitPassword}
-              onChange={(event) => updateSyncSettings({ gitPassword: event.target.value })}
-              placeholder="Optional"
-              autoCapitalize="off"
-              autoCorrect="off"
-            />
-          </label>
         </section>
       </div>
     </>

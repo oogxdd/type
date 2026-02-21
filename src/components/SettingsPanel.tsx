@@ -4,6 +4,7 @@ import { SettingsProfileSection } from "./settings/SettingsProfileSection";
 import { SettingsSyncSection } from "./settings/SettingsSyncSection";
 import { SettingsAppearanceSection } from "./settings/SettingsAppearanceSection";
 import { SettingsRecordingsSection } from "./settings/SettingsRecordingsSection";
+import { SettingsUpdatesSection } from "./settings/SettingsUpdatesSection";
 
 export type ThemeMode = "light" | "dark";
 export type NotesListMode = "separate" | "nested";
@@ -11,6 +12,7 @@ export type NotesListMode = "separate" | "nested";
 export type SettingsSectionId =
   | "profile"
   | "sync"
+  | "updates"
   | "appearance"
   | "recordings";
 type SettingsSection = {
@@ -21,9 +23,19 @@ type SettingsSection = {
 const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "profile", title: "Profile" },
   { id: "sync", title: "Sync" },
+  { id: "updates", title: "Updates" },
   { id: "appearance", title: "Appearance" },
   { id: "recordings", title: "Recordings" },
 ];
+
+const shouldIgnorePaneFocusClick = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  return Boolean(
+    target.closest("input, textarea, select, button, a, label, [contenteditable='true']")
+  );
+};
 
 function SettingsRow({
   section,
@@ -52,6 +64,7 @@ function SettingsRow({
 function SettingsDetail({ sectionId }: { sectionId: SettingsSectionId }) {
   if (sectionId === "profile") return <SettingsProfileSection />;
   if (sectionId === "sync") return <SettingsSyncSection />;
+  if (sectionId === "updates") return <SettingsUpdatesSection />;
   if (sectionId === "appearance") return <SettingsAppearanceSection />;
   if (sectionId === "recordings") return <SettingsRecordingsSection />;
   return null;
@@ -75,7 +88,12 @@ export function SettingsMiddlePane({
         className="pane-body settings-sections-body"
         ref={middlePaneRef}
         tabIndex={0}
-        onClick={onPaneClick}
+        onClick={(event) => {
+          if (shouldIgnorePaneFocusClick(event.target)) {
+            return;
+          }
+          onPaneClick();
+        }}
       >
         <nav className="settings-nav-list" aria-label="Settings sections">
           {SETTINGS_SECTIONS.map((section) => (
@@ -107,7 +125,12 @@ export function SettingsDetailPane({
         className="pane-body settings-detail-body"
         ref={rightPaneRef}
         tabIndex={0}
-        onClick={onPaneClick}
+        onClick={(event) => {
+          if (shouldIgnorePaneFocusClick(event.target)) {
+            return;
+          }
+          onPaneClick();
+        }}
       >
         <div className="settings-detail-shell">
           <SettingsDetail
