@@ -27,6 +27,7 @@ use std::{
     ptr,
 };
 use tauri::Manager;
+use time::{macros::format_description, Duration as TimeDuration, OffsetDateTime};
 use uuid::Uuid;
 
 const ORDER_FILE: &str = ".notes-order.json";
@@ -1480,6 +1481,75 @@ fn render_note_with_front_matter(meta: &NoteFrontMatter, body: &str) -> String {
 
 fn generate_note_id() -> String {
     Uuid::now_v7().to_string()
+}
+
+fn utc_note_filename_timestamp(timestamp_ms: i64) -> String {
+    let seconds = timestamp_ms.div_euclid(1_000);
+    let millis = timestamp_ms.rem_euclid(1_000);
+    let nanos = millis.saturating_mul(1_000_000);
+    let base = OffsetDateTime::from_unix_timestamp(seconds).unwrap_or(OffsetDateTime::UNIX_EPOCH);
+    let value = base + TimeDuration::nanoseconds(nanos);
+    value
+        .format(&format_description!(
+            "[year]-[month]-[day]T[hour]-[minute]-[second]Z"
+        ))
+        .unwrap_or_else(|_| "1970-01-01T00-00-00Z".to_string())
+}
+
+fn slug_from_content(content: &str, fallback: &str) -> String {
+    let mut normalized = String::with_capacity(content.len());
+    for ch in content.chars() {
+        let lower = ch.to_ascii_lowercase();
+        if lower.is_ascii_alphanumeric() {
+            normalized.push(lower);
+        } else {
+            normalized.push(' ');
+        }
+    }
+    let mut words = Vec::new();
+    for token in normalized.split_whitespace() {
+        words.push(token.to_string());
+        if words.len() >= 8 {
+            break;
+        }
+    }
+    let mut slug = if words.is_empty() {
+        fallback.to_string()
+    } else {
+        words.join("-")
+    };
+    if slug.len() > 56 {
+        slug.truncate(56);
+    }
+    while slug.ends_with('-') {
+        slug.pop();
+    }
+    if slug.is_empty() {
+        fallback.to_string()
+    } else {
+        slug
+    }
+}
+
+fn allocate_timestamped_note_file_name(
+    folder: &Path,
+    timestamp_ms: i64,
+    content: &str,
+    fallback_slug: &str,
+) -> Result<String, String> {
+    let prefix = utc_note_filename_timestamp(timestamp_ms);
+    let slug = slug_from_content(content, fallback_slug);
+    for attempt in 0..=512usize {
+        let candidate = if attempt == 0 {
+            format!("{}-{}.md", prefix, slug)
+        } else {
+            format!("{}-{}-{}.md", prefix, slug, attempt)
+        };
+        if !folder.join(&candidate).exists() {
+            return Ok(candidate);
+        }
+    }
+    Err("Failed to allocate note filename.".to_string())
 }
 
 fn audio_extension_from_mime(mime_type: Option<&str>) -> &'static str {
