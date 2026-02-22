@@ -103,3 +103,25 @@ export const upsertFrontmatterScalar = (
   const nextFrontmatterBlock = buildFrontmatterBlock(lines.join("\n"));
   return joinFrontmatter(nextFrontmatterBlock, body);
 };
+
+export const removeFrontmatterScalar = (markdown: string, key: string) => {
+  const { frontmatterBlock, body } = splitFrontmatter(markdown);
+  if (!frontmatterBlock) {
+    return normalizeNewlines(markdown);
+  }
+
+  const frontmatterBody = splitFrontmatterBlock(frontmatterBlock);
+  const lines = frontmatterBody ? frontmatterBody.split("\n") : [];
+  const keyRe = new RegExp(`^\\s*${escapeRegExp(key)}\\s*:`);
+  const filtered = lines.filter((entry) => !keyRe.test(entry));
+
+  if (filtered.length === lines.length) {
+    return joinFrontmatter(frontmatterBlock, body);
+  }
+  if (filtered.length === 0) {
+    return normalizeNewlines(body);
+  }
+
+  const nextFrontmatterBlock = buildFrontmatterBlock(filtered.join("\n"));
+  return joinFrontmatter(nextFrontmatterBlock, body);
+};

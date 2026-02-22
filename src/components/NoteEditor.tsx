@@ -3,6 +3,10 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import { joinFrontmatter, splitFrontmatter } from "../utils/frontmatter";
+import {
+  appendRawLensBackmatterBlock,
+  splitLensBackmatterBlock,
+} from "../utils/lensBackmatter";
 import { htmlToMarkdown, markdownToHtml } from "../utils/markdownEditor";
 import { stripInlineAnnotationMetadata } from "../utils/noteAnnotations";
 
@@ -16,9 +20,11 @@ const toolbarButton =
 
 const splitEditorMarkdown = (markdown: string) => {
   const split = splitFrontmatter(markdown);
+  const lensSplit = splitLensBackmatterBlock(split.body);
   return {
     frontmatterBlock: split.frontmatterBlock,
-    body: stripInlineAnnotationMetadata(split.body),
+    backmatterBlock: lensSplit.rawBlock,
+    body: stripInlineAnnotationMetadata(lensSplit.content),
   };
 };
 
@@ -28,6 +34,7 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const initialContentRef = useRef(splitEditorMarkdown(markdown));
   const frontmatterRef = useRef<string | null>(initialContentRef.current.frontmatterBlock);
+  const backmatterRef = useRef<string | null>(initialContentRef.current.backmatterBlock);
 
   const keepCaretBreathingRoom = (currentEditor: NonNullable<ReturnType<typeof useEditor>>) => {
     const scrollEl = scrollRef.current;
@@ -77,7 +84,11 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
         return;
       }
       const nextBodyMarkdown = htmlToMarkdown(currentEditor.getHTML());
-      const nextMarkdown = joinFrontmatter(frontmatterRef.current, nextBodyMarkdown);
+      const frontmatterJoined = joinFrontmatter(frontmatterRef.current, nextBodyMarkdown);
+      const nextMarkdown = appendRawLensBackmatterBlock(
+        frontmatterJoined,
+        backmatterRef.current
+      );
       latestMarkdown.current = nextMarkdown;
       onChange(nextMarkdown);
       requestAnimationFrame(() => keepCaretBreathingRoom(currentEditor));
@@ -93,6 +104,7 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
     }
     const incoming = splitEditorMarkdown(markdown);
     frontmatterRef.current = incoming.frontmatterBlock;
+    backmatterRef.current = incoming.backmatterBlock;
     const currentBodyMarkdown = htmlToMarkdown(editor.getHTML());
     if (currentBodyMarkdown === incoming.body) {
       latestMarkdown.current = markdown;

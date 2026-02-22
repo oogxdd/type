@@ -15,6 +15,7 @@ import {
   parseNoteAnnotations,
   stripInlineAnnotationMetadata,
   withNoteAnnotations,
+  type NoteAnnotationAnchor,
   type NoteAnnotationPoint,
   type NoteAnnotationsPayload,
 } from "../utils/noteAnnotations";
@@ -50,7 +51,15 @@ type ActiveDrawing = {
 type PendingTextDraft = {
   notePath: string;
   point: NoteAnnotationPoint;
+  anchor: NoteAnnotationAnchor | null;
   text: string;
+};
+
+type AnchorCandidate = {
+  hash: string;
+  snippet: string;
+  index: number;
+  centerY: number;
 };
 
 const DRAW_TOOL = "draw" as const;
@@ -84,6 +93,26 @@ const getOverlayPoint = (event: ReactPointerEvent<HTMLDivElement>): NoteAnnotati
 const isWithinInlineTextEditor = (target: EventTarget | null) =>
   target instanceof Element && Boolean(target.closest(".multi-lens-inline-text-editor"));
 
+const textBlockSelector =
+  ".tiptap-content p, .tiptap-content li, .tiptap-content blockquote, .tiptap-content h1, .tiptap-content h2, .tiptap-content h3";
+
+const normalizeAnchorText = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+const shortAnchorSnippet = (value: string) => normalizeAnchorText(value).slice(0, 80);
+
+const hashAnchorText = (value: string) => {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+};
+
 export function MultiNoteLens({
   notes,
   activeNote,
@@ -101,8 +130,12 @@ export function MultiNoteLens({
   const [tool, setTool] = useState<LensTool>(DRAW_TOOL);
   const [drawing, setDrawing] = useState<ActiveDrawing | null>(null);
   const [pendingTextDraft, setPendingTextDraft] = useState<PendingTextDraft | null>(null);
+  const [anchorCandidatesByNote, setAnchorCandidatesByNote] = useState<
+    Record<string, AnchorCandidate[]>
+  >({});
 
   const loadedNotesRef = useRef<LoadedLensNote[]>([]);
+  const noteReadonlyRefMap = useRef<Record<string, HTMLDivElement | null>>({});
   const saveChainsRef = useRef<Record<string, Promise<void>>>({});
   const saveMessageTimerRef = useRef<number | null>(null);
   const textDraftRef = useRef<HTMLTextAreaElement | null>(null);
@@ -181,6 +214,113 @@ export function MultiNoteLens({
     }
     textDraftRef.current?.focus();
   }, [pendingTextDraft]);
+
+  const collectAnchorCandidates = useCallback(() => {
+    const next: Record<string, AnchorCandidate[]> = {};
+
+    loadedNotes.forEach((note) => {
+      const readonlyRoot = noteReadonlyRefMap.current[note.path];
+      if (!readonlyRoot) {
+        return;
+      }
+      const stage = readonlyRoot.closest(".multi-lens-note-stage");
+      if (!(stage instanceof HTMLElement)) {
+        return;
+      }
+
+      const stageRect = stage.getBoundingClientRect();
+      if (!stageRect.height) {
+        return;
+      }
+
+      const blocks = Array.from(
+        readonlyRoot.querySelectorAll<HTMLElement>(textBlockSelector)
+      );
+      const anchors: AnchorCandidate[] = [];
+      blocks.forEach((block) => {
+        const normalized = normalizeAnchorText(block.textContent || "");
+        if (!normalized) {
+          return;
+        }
+        const blockRect = block.getBoundingClientRect();
+        const centerY = clamp01(
+          (blockRect.top + blockRect.height / 2 - stageRect.top) / stageRect.height
+        );
+        anchors.push({
+          hash: hashAnchorText(normalized),
+          snippet: shortAnchorSnippet(normalized),
+          index: anchors.length,
+          centerY,
+        });
+      });
+
+      next[note.path] = anchors;
+    });
+
+    return next;
+  }, [loadedNotes]);
+
+  useEffect(() => {
+    const refresh = () => setAnchorCandidatesByNote(collectAnchorCandidates());
+    const frame = window.requestAnimationFrame(refresh);
+    window.addEventListener("resize", refresh);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", refresh);
+    };
+  }, [collectAnchorCandidates]);
+
+  const buildAnchorForPoint = useCallback(
+    (notePath: string, y: number): NoteAnnotationAnchor | null => {
+      const candidates = anchorCandidatesByNote[notePath] || [];
+      if (candidates.length === 0) {
+        return null;
+      }
+      let best = candidates[0];
+      let bestDistance = Math.abs(best.centerY - y);
+      for (let index = 1; index < candidates.length; index += 1) {
+        const candidate = candidates[index];
+        const distance = Math.abs(candidate.centerY - y);
+        if (distance < bestDistance) {
+          best = candidate;
+          bestDistance = distance;
+        }
+      }
+      return {
+        hash: best.hash,
+        snippet: best.snippet,
+        index: best.index,
+        y: best.centerY,
+      };
+    },
+    [anchorCandidatesByNote]
+  );
+
+  const resolveAnchorDelta = useCallback(
+    (notePath: string, anchor?: NoteAnnotationAnchor | null) => {
+      if (!anchor) {
+        return 0;
+      }
+      const candidates = anchorCandidatesByNote[notePath] || [];
+      if (candidates.length === 0) {
+        return 0;
+      }
+
+      let match = candidates.find((candidate) => candidate.hash === anchor.hash);
+      if (!match && anchor.snippet) {
+        const normalizedSnippet = shortAnchorSnippet(anchor.snippet);
+        match = candidates.find((candidate) => candidate.snippet === normalizedSnippet);
+      }
+      if (!match) {
+        match = candidates.find((candidate) => candidate.index === anchor.index);
+      }
+      if (!match) {
+        return 0;
+      }
+      return match.centerY - anchor.y;
+    },
+    [anchorCandidatesByNote]
+  );
 
   const queuePersist = useCallback(
     (notePath: string, annotations: NoteAnnotationsPayload) => {
@@ -268,6 +408,8 @@ export function MultiNoteLens({
       if (points.length < 2) {
         return;
       }
+      const meanY = points.reduce((total, point) => total + point.y, 0) / points.length;
+      const anchor = buildAnchorForPoint(notePath, meanY);
       patchAnnotations(notePath, (current) => ({
         ...current,
         strokes: [
@@ -277,12 +419,13 @@ export function MultiNoteLens({
             points,
             color: "#2b6ff0",
             width: 0.42,
+            anchor,
             createdAt: Date.now(),
           },
         ],
       }));
     },
-    [patchAnnotations]
+    [buildAnchorForPoint, patchAnnotations]
   );
 
   const commitDraft = useCallback(
@@ -300,6 +443,7 @@ export function MultiNoteLens({
             x: draft.point.x,
             y: draft.point.y,
             text: trimmed,
+            anchor: draft.anchor,
             createdAt: Date.now(),
           },
         ],
@@ -340,10 +484,11 @@ export function MultiNoteLens({
       setPendingTextDraft({
         notePath,
         point,
+        anchor: buildAnchorForPoint(notePath, point.y),
         text: "",
       });
     },
-    [commitDraft, pendingTextDraft]
+    [buildAnchorForPoint, commitDraft, pendingTextDraft]
   );
 
   const commitPendingTextDraftFromSubmit = useCallback(
@@ -552,6 +697,29 @@ export function MultiNoteLens({
                 drawing && drawing.notePath === note.path
                   ? pointsToSvgPath(drawing.points)
                   : null;
+              const renderedStrokes = note.annotations.strokes.map((stroke) => {
+                const deltaY = resolveAnchorDelta(note.path, stroke.anchor);
+                if (!deltaY) {
+                  return stroke;
+                }
+                return {
+                  ...stroke,
+                  points: stroke.points.map((point) => ({
+                    x: point.x,
+                    y: clamp01(point.y + deltaY),
+                  })),
+                };
+              });
+              const renderedTextNotes = note.annotations.textNotes.map((item) => {
+                const deltaY = resolveAnchorDelta(note.path, item.anchor);
+                if (!deltaY) {
+                  return item;
+                }
+                return {
+                  ...item,
+                  y: clamp01(item.y + deltaY),
+                };
+              });
 
               return (
                 <section className="multi-lens-note" key={note.path}>
@@ -577,7 +745,12 @@ export function MultiNoteLens({
                   </header>
 
                   <div className="multi-lens-note-stage">
-                    <div className="multi-lens-note-readonly">
+                    <div
+                      className="multi-lens-note-readonly"
+                      ref={(node) => {
+                        noteReadonlyRefMap.current[note.path] = node;
+                      }}
+                    >
                       <NoteReadonlyContent markdown={note.displayMarkdown} />
                     </div>
 
@@ -594,7 +767,7 @@ export function MultiNoteLens({
                           viewBox="0 0 100 100"
                           preserveAspectRatio="none"
                         >
-                          {note.annotations.strokes.map((stroke) => (
+                          {renderedStrokes.map((stroke) => (
                             <path
                               key={stroke.id}
                               d={pointsToSvgPath(stroke.points)}
@@ -616,7 +789,7 @@ export function MultiNoteLens({
                             />
                           ) : null}
                         </svg>
-                        {note.annotations.textNotes.map((item) => (
+                        {renderedTextNotes.map((item) => (
                           <aside
                             className="multi-lens-text-note"
                             key={item.id}
