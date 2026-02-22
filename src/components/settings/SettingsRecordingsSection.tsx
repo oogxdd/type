@@ -16,17 +16,17 @@ export function SettingsRecordingsSection() {
   } = useRecordings();
 
   return (
-    <>
-      <div className="settings-detail-hero">
-        <h2 className="settings-detail-title">Recordings</h2>
-        <p className="settings-detail-text">Transcription settings and job status.</p>
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground">Recordings</h2>
+        <p className="text-sm text-muted-foreground">Transcription settings and job status.</p>
       </div>
 
-      <div className="settings-section-stack">
-        <section className="settings-group">
-          <h3 className="settings-group-title">Transcription</h3>
-          <label className="settings-control">
-            <span>AssemblyAI API key</span>
+      <div className="space-y-4">
+        <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
+          <h3 className="text-sm font-semibold text-foreground">Transcription</h3>
+          <label className="grid gap-2 text-sm">
+            <span className="text-sm font-medium text-foreground">AssemblyAI API key</span>
             <Input
               type="password"
               value={syncSettings.assemblyAiApiKey}
@@ -36,11 +36,12 @@ export function SettingsRecordingsSection() {
               autoCorrect="off"
             />
           </label>
-          <div className="settings-control">
-            <span>Mobile transcription</span>
-            <label className="settings-toggle">
+          <div className="grid gap-2 text-sm">
+            <span className="text-sm font-medium text-foreground">Mobile transcription</span>
+            <label className="inline-flex items-center gap-2 text-sm text-foreground">
               <input
                 type="checkbox"
+                className="h-4 w-4 rounded border-border"
                 checked={syncSettings.mobileAutoTranscriptionEnabled}
                 onChange={(event) =>
                   updateSyncSettings({ mobileAutoTranscriptionEnabled: event.target.checked })
@@ -48,31 +49,31 @@ export function SettingsRecordingsSection() {
               />
               <span>Auto-queue on mobile</span>
             </label>
-            <span className="settings-inline-help">
+            <span className="text-xs text-muted-foreground">
               Re-queues unfinished recordings on launch and while the mobile app stays open.
             </span>
           </div>
         </section>
 
-        <section className="settings-group">
-          <h3 className="settings-group-title">Jobs</h3>
-          <div className="settings-info-grid">
-            <div className="settings-info-row">
+        <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
+          <h3 className="text-sm font-semibold text-foreground">Jobs</h3>
+          <div className="overflow-hidden rounded-md border border-border/70">
+            <div className="flex items-center justify-between gap-4 border-b border-border/70 px-3 py-2 text-sm">
               <span>Queue in-flight</span>
-              <code>{recordingsQueue?.in_flight ?? 0}</code>
+              <code className="text-xs">{recordingsQueue?.in_flight ?? 0}</code>
             </div>
-            <div className="settings-info-row">
+            <div className="flex items-center justify-between gap-4 px-3 py-2 text-sm">
               <span>Queue active job</span>
-              <code>{recordingsQueue?.current_recording ?? "-"}</code>
+              <code className="text-xs">{recordingsQueue?.current_recording ?? "-"}</code>
             </div>
           </div>
           {recordingStatusMessage ? (
-            <div className="settings-control">
-              <span>Last queue result</span>
-              <span className="settings-inline-help">{recordingStatusMessage}</span>
+            <div className="grid gap-1 text-sm">
+              <span className="text-sm font-medium text-foreground">Last queue result</span>
+              <span className="text-xs text-muted-foreground">{recordingStatusMessage}</span>
             </div>
           ) : null}
-          <div className="settings-action-row">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="secondary"
               size="sm"
@@ -84,30 +85,29 @@ export function SettingsRecordingsSection() {
             </Button>
           </div>
           {recordingsError ? (
-            <p className="settings-warning-text settings-inline-warning">{recordingsError}</p>
+            <p className="text-xs text-destructive">{recordingsError}</p>
           ) : null}
         </section>
 
-        <section className="settings-group">
-          <h3 className="settings-group-title">Queue items</h3>
-          <div className="settings-recordings-list">
+        <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
+          <h3 className="text-sm font-semibold text-foreground">Queue items</h3>
+          <div className="overflow-hidden rounded-md border border-border/70">
             {recordingsList.length === 0 ? (
-              <div className="settings-recording-row empty">No recordings yet.</div>
+              <div className="px-3 py-2 text-xs text-muted-foreground">No recordings yet.</div>
             ) : (
               recordingsList.map((item) => {
                 const currentStatus = formatRecordingStatus(item);
                 return (
-                  <div key={item.note_path} className="settings-recording-row">
-                    <div className="settings-recording-main">
-                      <div className="settings-recording-title">{item.note_path}</div>
-                      <div className="settings-recording-meta">
+                  <div
+                    key={item.note_path}
+                    className="grid gap-1 border-b border-border/70 px-3 py-2.5 last:border-b-0"
+                  >
+                    <div className="text-sm font-medium text-foreground break-all">{item.note_path}</div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <code>{currentStatus}</code>
                         <span>updated {formatUpdatedAt(item.updated_ms)}</span>
-                      </div>
-                      {item.error ? (
-                        <p className="settings-warning-text settings-inline-warning">{item.error}</p>
-                      ) : null}
                     </div>
+                    {item.error ? <p className="text-xs text-destructive">{item.error}</p> : null}
                   </div>
                 );
               })
@@ -115,6 +115,6 @@ export function SettingsRecordingsSection() {
           </div>
         </section>
       </div>
-    </>
+    </div>
   );
 }

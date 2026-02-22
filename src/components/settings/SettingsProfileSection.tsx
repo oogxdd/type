@@ -117,18 +117,25 @@ export function SettingsProfileSection() {
   };
 
   const createProfileDisabled = profilesBusy || !newProfileName.trim();
+  const cardClass = "space-y-3 rounded-lg border border-border/70 bg-card/30 p-4";
+  const controlClass = "grid gap-2 text-sm";
+  const labelClass = "text-sm font-medium text-foreground";
+  const hintClass = "text-xs text-muted-foreground";
+  const warningClass = "text-xs text-destructive";
+  const actionRowClass = "flex flex-wrap gap-2";
 
   return (
-    <>
-      <div className="settings-detail-hero">
-        <h2 className="settings-detail-title">Profile</h2>
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground">Profile</h2>
       </div>
-      <div className="settings-section-stack">
-        <section className="settings-group">
-          <label className="settings-control">
-            <span>Active profile</span>
-            <div className="settings-inline-row">
+      <div className="space-y-4">
+        <section className={cardClass}>
+          <label className={controlClass}>
+            <span className={labelClass}>Active profile</span>
+            <div className="flex flex-wrap items-center gap-2">
               <select
+                className="h-9 min-w-[220px] flex-1 rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring/60"
                 value={activeProfileId ?? ""}
                 onChange={(event) => void switchProfile(event.target.value)}
                 disabled={profilesBusy || profiles.length === 0}
@@ -152,17 +159,15 @@ export function SettingsProfileSection() {
             </div>
           </label>
           {activeProfile?.description ? (
-            <p className="settings-inline-help">{activeProfile.description}</p>
+            <p className={hintClass}>{activeProfile.description}</p>
           ) : null}
-          {profilesError ? (
-            <p className="settings-warning-text settings-inline-warning">{profilesError}</p>
-          ) : null}
+          {profilesError ? <p className={warningClass}>{profilesError}</p> : null}
         </section>
 
-        <section className="settings-group">
-          <h3 className="settings-group-title">Git</h3>
-          <label className="settings-control">
-            <span>Remote URL</span>
+        <section className={cardClass}>
+          <h3 className="text-sm font-semibold text-foreground">Git</h3>
+          <label className={controlClass}>
+            <span className={labelClass}>Remote URL</span>
             <Input
               type="text"
               value={gitDraft.gitRemoteUrl}
@@ -170,8 +175,8 @@ export function SettingsProfileSection() {
               placeholder="https://github.com/you/notes.git"
             />
           </label>
-          <label className="settings-control">
-            <span>Branch</span>
+          <label className={controlClass}>
+            <span className={labelClass}>Branch</span>
             <Input
               type="text"
               value={gitDraft.gitBranch}
@@ -179,8 +184,8 @@ export function SettingsProfileSection() {
               placeholder="main"
             />
           </label>
-          <label className="settings-control">
-            <span>Commit message</span>
+          <label className={controlClass}>
+            <span className={labelClass}>Commit message</span>
             <Input
               type="text"
               value={gitDraft.gitCommitMessage}
@@ -190,8 +195,8 @@ export function SettingsProfileSection() {
               placeholder="Sync notes"
             />
           </label>
-          <label className="settings-control">
-            <span>Username</span>
+          <label className={controlClass}>
+            <span className={labelClass}>Username</span>
             <Input
               type="text"
               value={gitDraft.gitUsername}
@@ -201,8 +206,8 @@ export function SettingsProfileSection() {
               autoCorrect="off"
             />
           </label>
-          <label className="settings-control">
-            <span>Token</span>
+          <label className={controlClass}>
+            <span className={labelClass}>Token</span>
             <Input
               type="password"
               value={gitDraft.gitPassword}
@@ -212,7 +217,7 @@ export function SettingsProfileSection() {
               autoCorrect="off"
             />
           </label>
-          <div className="settings-action-row">
+          <div className={actionRowClass}>
             <Button
               type="button"
               variant="outline"
@@ -231,16 +236,16 @@ export function SettingsProfileSection() {
               Apply Git settings
             </Button>
           </div>
-          <p className="settings-inline-help">
+          <p className={hintClass}>
             Changes only take effect after clicking Apply Git settings.
             {hasUnsavedGitChanges ? " You have unsaved changes." : ""}
           </p>
         </section>
 
-        <section className="settings-group">
-          <h3 className="settings-group-title">Notes folder</h3>
-          <div className="settings-control">
-            <div className="settings-inline-row">
+        <section className={cardClass}>
+          <h3 className="text-sm font-semibold text-foreground">Notes folder</h3>
+          <div className={controlClass}>
+            <div className="flex flex-wrap items-center gap-2">
               <Input
                 type="text"
                 value={notesRootInput}
@@ -284,11 +289,11 @@ export function SettingsProfileSection() {
               Create, rename, and remove profiles. Deleting a profile keeps its notes folder on disk.
             </DialogDescription>
           </DialogHeader>
-          <div className="settings-section-stack">
-            <section className="settings-group">
-              <h3 className="settings-group-title">Create profile</h3>
-              <label className="settings-control">
-                <span>Name</span>
+          <div className="space-y-4">
+            <section className={cardClass}>
+              <h3 className="text-sm font-semibold text-foreground">Create profile</h3>
+              <label className={controlClass}>
+                <span className={labelClass}>Name</span>
                 <Input
                   type="text"
                   value={newProfileName}
@@ -296,8 +301,8 @@ export function SettingsProfileSection() {
                   placeholder="Work"
                 />
               </label>
-              <label className="settings-control">
-                <span>Description</span>
+              <label className={controlClass}>
+                <span className={labelClass}>Description</span>
                 <Input
                   type="text"
                   value={newProfileDescription}
@@ -305,7 +310,7 @@ export function SettingsProfileSection() {
                   placeholder="Short label for this profile"
                 />
               </label>
-              <div className="settings-action-row">
+              <div className={actionRowClass}>
                 <Button
                   type="button"
                   size="sm"
@@ -324,8 +329,8 @@ export function SettingsProfileSection() {
               </div>
             </section>
 
-            <section className="settings-group">
-              <h3 className="settings-group-title">Existing profiles</h3>
+            <section className={cardClass}>
+              <h3 className="text-sm font-semibold text-foreground">Existing profiles</h3>
               {profiles.map((profile) => {
                 const draft = profileDrafts[profile.id] ?? {
                   name: profile.name,
@@ -335,8 +340,11 @@ export function SettingsProfileSection() {
                   draft.name !== profile.name ||
                   draft.description !== (profile.description ?? "");
                 return (
-                  <div key={profile.id} className="settings-control">
-                    <div className="settings-inline-row">
+                  <div
+                    key={profile.id}
+                    className="space-y-3 rounded-md border border-border/60 bg-background/50 p-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button
                         type="button"
                         variant={activeProfileId === profile.id ? "secondary" : "outline"}
@@ -347,8 +355,8 @@ export function SettingsProfileSection() {
                         {activeProfileId === profile.id ? "Active" : "Switch"}
                       </Button>
                     </div>
-                    <label className="settings-control">
-                      <span>Name</span>
+                    <label className={controlClass}>
+                      <span className={labelClass}>Name</span>
                       <Input
                         type="text"
                         value={draft.name}
@@ -363,8 +371,8 @@ export function SettingsProfileSection() {
                         }
                       />
                     </label>
-                    <label className="settings-control">
-                      <span>Description</span>
+                    <label className={controlClass}>
+                      <span className={labelClass}>Description</span>
                       <Input
                         type="text"
                         value={draft.description}
@@ -380,7 +388,7 @@ export function SettingsProfileSection() {
                         placeholder="Short label for this profile"
                       />
                     </label>
-                    <div className="settings-action-row">
+                    <div className={actionRowClass}>
                       <Button
                         type="button"
                         variant="outline"
@@ -418,6 +426,6 @@ export function SettingsProfileSection() {
           <DialogFooter showCloseButton />
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }
