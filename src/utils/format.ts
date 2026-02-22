@@ -1,5 +1,6 @@
 import type { NoteMeta, RecordingListItem } from "../types";
 import { stripFrontmatter } from "./frontmatter";
+import { stripInlineAnnotationMetadata } from "./noteAnnotations";
 
 const RECORDING_NOTE_TYPE = "audio_recording";
 
@@ -130,7 +131,9 @@ export const parseNotePreview = (
   );
   const transcriptionStatus = noteMeta?.transcription_status || null;
   const isTranscribed = isRecordingTranscriptionCompleted(transcriptionStatus);
-  const contentWithoutFrontmatter = stripFrontmatter(content);
+  const contentWithoutFrontmatter = stripInlineAnnotationMetadata(
+    stripFrontmatter(content)
+  );
 
   const previewLines: string[] = [];
   const sourceContent =

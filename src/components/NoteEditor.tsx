@@ -2,62 +2,31 @@ import { useEffect, useMemo, useRef } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import { marked } from "marked";
-import TurndownService from "turndown";
 import { joinFrontmatter, splitFrontmatter } from "../utils/frontmatter";
+import { htmlToMarkdown, markdownToHtml } from "../utils/markdownEditor";
+import { stripInlineAnnotationMetadata } from "../utils/noteAnnotations";
 
 type NoteEditorProps = {
   markdown: string;
   onChange: (markdown: string) => void;
 };
 
-const turndown = new TurndownService({
-  headingStyle: "atx",
-  codeBlockStyle: "fenced",
-  bulletListMarker: "-",
-});
-
-const EMPTY_LINE_TOKEN = "NV_EMPTY_LINE_TOKEN_9f3a1";
-
-const expandExtraBlankLines = (markdown: string) =>
-  markdown.replace(/\n{3,}/g, (match) => {
-    const extraBlankLines = Math.max(0, match.length - 2);
-    if (extraBlankLines === 0) {
-      return match;
-    }
-    return `\n\n${`${EMPTY_LINE_TOKEN}\n\n`.repeat(extraBlankLines)}`;
-  });
-
-const restoreEmptyLineTokens = (html: string) =>
-  html.replace(
-    new RegExp(`<p>\\s*${EMPTY_LINE_TOKEN}\\s*<\\/p>`, "g"),
-    "<p><br></p>"
-  );
-
-const markdownToHtml = (markdown: string) => {
-  const parsed = marked.parse(expandExtraBlankLines(markdown || ""), {
-    breaks: true,
-    gfm: true,
-  });
-  return typeof parsed === "string" ? restoreEmptyLineTokens(parsed) : "";
-};
-
-const htmlToMarkdown = (html: string) => {
-  const normalized = html.replace(
-    /<p>\s*(?:<br\s*\/?>|&nbsp;)?\s*<\/p>/gi,
-    `<p>${EMPTY_LINE_TOKEN}</p>`
-  );
-  return turndown.turndown(normalized).replace(new RegExp(EMPTY_LINE_TOKEN, "g"), "");
-};
-
 const toolbarButton =
   "rounded-md border border-transparent px-2 py-1 text-xs font-medium text-[var(--ui-muted)] transition-colors hover:border-[var(--ui-border)] hover:bg-[var(--ui-select)] hover:text-[var(--ui-text)]";
+
+const splitEditorMarkdown = (markdown: string) => {
+  const split = splitFrontmatter(markdown);
+  return {
+    frontmatterBlock: split.frontmatterBlock,
+    body: stripInlineAnnotationMetadata(split.body),
+  };
+};
 
 export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
   const isSyncing = useRef(false);
   const latestMarkdown = useRef(markdown);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const initialContentRef = useRef(splitFrontmatter(markdown));
+  const initialContentRef = useRef(splitEditorMarkdown(markdown));
   const frontmatterRef = useRef<string | null>(initialContentRef.current.frontmatterBlock);
 
   const keepCaretBreathingRoom = (currentEditor: NonNullable<ReturnType<typeof useEditor>>) => {
@@ -122,7 +91,7 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
     if (markdown === latestMarkdown.current) {
       return;
     }
-    const incoming = splitFrontmatter(markdown);
+    const incoming = splitEditorMarkdown(markdown);
     frontmatterRef.current = incoming.frontmatterBlock;
     const currentBodyMarkdown = htmlToMarkdown(editor.getHTML());
     if (currentBodyMarkdown === incoming.body) {

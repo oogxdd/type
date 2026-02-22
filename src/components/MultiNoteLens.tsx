@@ -4,14 +4,16 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type FormEvent as ReactFormEvent,
 } from "react";
 import { Brush, Eye, EyeOff, MessageSquarePlus, X } from "lucide-react";
-import { marked } from "marked";
 import { readNote, writeNote } from "../data/notesApi";
+import { NoteReadonlyContent } from "./NoteReadonlyContent";
 import { sanitizeRecordingEditorContent } from "../utils/format";
 import { stripFrontmatter } from "../utils/frontmatter";
 import {
   parseNoteAnnotations,
+  stripInlineAnnotationMetadata,
   withNoteAnnotations,
   type NoteAnnotationPoint,
   type NoteAnnotationsPayload,
@@ -36,7 +38,6 @@ type MultiNoteLensProps = {
 type LoadedLensNote = LensNote & {
   rawMarkdown: string;
   displayMarkdown: string;
-  html: string;
   annotations: NoteAnnotationsPayload;
 };
 
@@ -46,29 +47,28 @@ type ActiveDrawing = {
   points: NoteAnnotationPoint[];
 };
 
+type PendingTextDraft = {
+  notePath: string;
+  point: NoteAnnotationPoint;
+  text: string;
+};
+
 const DRAW_TOOL = "draw" as const;
 const TEXT_TOOL = "text" as const;
 type LensTool = typeof DRAW_TOOL | typeof TEXT_TOOL;
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
-const toHtml = (markdown: string) => {
-  const parsed = marked.parse(markdown || "", {
-    breaks: true,
-    gfm: true,
-  });
-  return typeof parsed === "string" ? parsed : "";
-};
-
 const pointsToSvgPath = (points: NoteAnnotationPoint[]) =>
   points
     .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x * 100} ${point.y * 100}`)
     .join(" ");
 
-const buildId = () =>
-  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `lens-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+let markCounter = 0;
+const buildId = () => {
+  markCounter = (markCounter + 1) % 1_679_616;
+  return `${Date.now().toString(36)}-${markCounter.toString(36)}`;
+};
 
 const getOverlayPoint = (event: ReactPointerEvent<HTMLDivElement>): NoteAnnotationPoint | null => {
   const rect = event.currentTarget.getBoundingClientRect();
@@ -80,6 +80,9 @@ const getOverlayPoint = (event: ReactPointerEvent<HTMLDivElement>): NoteAnnotati
     y: clamp01((event.clientY - rect.top) / rect.height),
   };
 };
+
+const isWithinInlineTextEditor = (target: EventTarget | null) =>
+  target instanceof Element && Boolean(target.closest(".multi-lens-inline-text-editor"));
 
 export function MultiNoteLens({
   notes,
@@ -97,13 +100,17 @@ export function MultiNoteLens({
   const [isAnnotating, setIsAnnotating] = useState(false);
   const [tool, setTool] = useState<LensTool>(DRAW_TOOL);
   const [drawing, setDrawing] = useState<ActiveDrawing | null>(null);
+  const [pendingTextDraft, setPendingTextDraft] = useState<PendingTextDraft | null>(null);
 
+  const loadedNotesRef = useRef<LoadedLensNote[]>([]);
   const saveChainsRef = useRef<Record<string, Promise<void>>>({});
   const saveMessageTimerRef = useRef<number | null>(null);
+  const textDraftRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     if (notes.length === 0) {
+      loadedNotesRef.current = [];
       setLoadedNotes([]);
       setIsLoading(false);
       setLoadError(null);
@@ -118,14 +125,14 @@ export function MultiNoteLens({
       notes.map(async (note) => {
         const rawMarkdown = await readNote(note.path);
         const bodyMarkdown = stripFrontmatter(rawMarkdown);
+        const cleanBodyMarkdown = stripInlineAnnotationMetadata(bodyMarkdown);
         const displayMarkdown = note.isRecording
-          ? sanitizeRecordingEditorContent(bodyMarkdown, note.transcriptionStatus)
-          : bodyMarkdown;
+          ? sanitizeRecordingEditorContent(cleanBodyMarkdown, note.transcriptionStatus)
+          : cleanBodyMarkdown;
         return {
           ...note,
           rawMarkdown,
           displayMarkdown,
-          html: toHtml(displayMarkdown),
           annotations: parseNoteAnnotations(rawMarkdown),
         } satisfies LoadedLensNote;
       })
@@ -134,6 +141,7 @@ export function MultiNoteLens({
         if (cancelled) {
           return;
         }
+        loadedNotesRef.current = next;
         setLoadedNotes(next);
       })
       .catch((error) => {
@@ -156,6 +164,10 @@ export function MultiNoteLens({
   }, [notes]);
 
   useEffect(() => {
+    loadedNotesRef.current = loadedNotes;
+  }, [loadedNotes]);
+
+  useEffect(() => {
     return () => {
       if (saveMessageTimerRef.current) {
         window.clearTimeout(saveMessageTimerRef.current);
@@ -164,10 +176,11 @@ export function MultiNoteLens({
   }, []);
 
   useEffect(() => {
-    if (!isAnnotating) {
-      setDrawing(null);
+    if (!pendingTextDraft) {
+      return;
     }
-  }, [isAnnotating]);
+    textDraftRef.current?.focus();
+  }, [pendingTextDraft]);
 
   const queuePersist = useCallback(
     (notePath: string, annotations: NoteAnnotationsPayload) => {
@@ -181,16 +194,16 @@ export function MultiNoteLens({
           const latestMarkdown = await readNote(notePath);
           const nextMarkdown = withNoteAnnotations(latestMarkdown, annotations);
           await writeNote(notePath, nextMarkdown);
-          setLoadedNotes((previous) =>
-            previous.map((entry) =>
-              entry.path === notePath
-                ? {
-                    ...entry,
-                    rawMarkdown: nextMarkdown,
-                  }
-                : entry
-            )
+          const nextSnapshot = loadedNotesRef.current.map((entry) =>
+            entry.path === notePath
+              ? {
+                  ...entry,
+                  rawMarkdown: nextMarkdown,
+                }
+              : entry
           );
+          loadedNotesRef.current = nextSnapshot;
+          setLoadedNotes(nextSnapshot);
           if (activeNote === notePath && onActiveNoteContentSync) {
             onActiveNoteContentSync(nextMarkdown);
           }
@@ -219,27 +232,33 @@ export function MultiNoteLens({
       notePath: string,
       patcher: (current: NoteAnnotationsPayload) => NoteAnnotationsPayload
     ) => {
+      const currentSnapshot = loadedNotesRef.current;
       let nextPayload: NoteAnnotationsPayload | null = null;
-      setLoadedNotes((previous) =>
-        previous.map((entry) => {
-          if (entry.path !== notePath) {
-            return entry;
-          }
-          const patched = patcher(entry.annotations);
-          const nextEntryPayload: NoteAnnotationsPayload = {
-            ...patched,
-            updatedAt: Date.now(),
-          };
-          nextPayload = nextEntryPayload;
-          return {
-            ...entry,
-            annotations: nextEntryPayload,
-          };
-        })
-      );
-      if (nextPayload) {
-        queuePersist(notePath, nextPayload);
+      let found = false;
+      const nextSnapshot = currentSnapshot.map((entry) => {
+        if (entry.path !== notePath) {
+          return entry;
+        }
+        found = true;
+        const patched = patcher(entry.annotations);
+        const nextEntryPayload: NoteAnnotationsPayload = {
+          ...patched,
+          updatedAt: Date.now(),
+        };
+        nextPayload = nextEntryPayload;
+        return {
+          ...entry,
+          annotations: nextEntryPayload,
+        };
+      });
+
+      if (!found || !nextPayload) {
+        return;
       }
+
+      loadedNotesRef.current = nextSnapshot;
+      setLoadedNotes(nextSnapshot);
+      queuePersist(notePath, nextPayload);
     },
     [queuePersist]
   );
@@ -266,21 +285,20 @@ export function MultiNoteLens({
     [patchAnnotations]
   );
 
-  const addTextNote = useCallback(
-    (notePath: string, point: NoteAnnotationPoint) => {
-      const text = window.prompt("New margin note");
-      const trimmed = text?.trim();
+  const commitDraft = useCallback(
+    (draft: PendingTextDraft) => {
+      const trimmed = draft.text.trim();
       if (!trimmed) {
         return;
       }
-      patchAnnotations(notePath, (current) => ({
+      patchAnnotations(draft.notePath, (current) => ({
         ...current,
         textNotes: [
           ...current.textNotes,
           {
             id: buildId(),
-            x: point.x,
-            y: point.y,
+            x: draft.point.x,
+            y: draft.point.y,
             text: trimmed,
             createdAt: Date.now(),
           },
@@ -288,6 +306,53 @@ export function MultiNoteLens({
       }));
     },
     [patchAnnotations]
+  );
+
+  const commitPendingTextDraft = useCallback(() => {
+    if (!pendingTextDraft) {
+      return;
+    }
+    const trimmed = pendingTextDraft.text.trim();
+    if (!trimmed) {
+      setPendingTextDraft(null);
+      return;
+    }
+    commitDraft(pendingTextDraft);
+    setPendingTextDraft(null);
+  }, [commitDraft, pendingTextDraft]);
+
+  useEffect(() => {
+    if (isAnnotating) {
+      return;
+    }
+    setDrawing(null);
+    if (pendingTextDraft && pendingTextDraft.text.trim()) {
+      commitDraft(pendingTextDraft);
+    }
+    setPendingTextDraft(null);
+  }, [commitDraft, isAnnotating, pendingTextDraft]);
+
+  const addTextNote = useCallback(
+    (notePath: string, point: NoteAnnotationPoint) => {
+      if (pendingTextDraft && pendingTextDraft.text.trim()) {
+        commitDraft(pendingTextDraft);
+      }
+      setPendingTextDraft({
+        notePath,
+        point,
+        text: "",
+      });
+    },
+    [commitDraft, pendingTextDraft]
+  );
+
+  const commitPendingTextDraftFromSubmit = useCallback(
+    (event: ReactFormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      commitPendingTextDraft();
+    },
+    [commitPendingTextDraft]
   );
 
   const clearAnnotations = useCallback(
@@ -310,6 +375,9 @@ export function MultiNoteLens({
   const handleOverlayPointerDown = useCallback(
     (notePath: string, event: ReactPointerEvent<HTMLDivElement>) => {
       if (!isAnnotating || event.button !== 0) {
+        return;
+      }
+      if (isWithinInlineTextEditor(event.target)) {
         return;
       }
       const point = getOverlayPoint(event);
@@ -411,7 +479,13 @@ export function MultiNoteLens({
           <button
             type="button"
             className={`multi-lens-btn ${isAnnotating ? "active" : ""}`}
-            onClick={() => setIsAnnotating((previous) => !previous)}
+            onClick={() => {
+              if (pendingTextDraft && pendingTextDraft.text.trim()) {
+                commitDraft(pendingTextDraft);
+                setPendingTextDraft(null);
+              }
+              setIsAnnotating((previous) => !previous);
+            }}
           >
             <Brush size={14} />
             <span>{isAnnotating ? "Stop marking" : "Mark up"}</span>
@@ -442,7 +516,13 @@ export function MultiNoteLens({
             <button
               type="button"
               className="multi-lens-btn icon"
-              onClick={onExitLens}
+              onClick={() => {
+                if (pendingTextDraft && pendingTextDraft.text.trim()) {
+                  commitDraft(pendingTextDraft);
+                  setPendingTextDraft(null);
+                }
+                onExitLens();
+              }}
               aria-label="Close lens"
               title="Close lens"
             >
@@ -497,10 +577,9 @@ export function MultiNoteLens({
                   </header>
 
                   <div className="multi-lens-note-stage">
-                    <article
-                      className="tiptap-content multi-lens-markdown"
-                      dangerouslySetInnerHTML={{ __html: note.html || "<p></p>" }}
-                    />
+                    <div className="multi-lens-note-readonly">
+                      <NoteReadonlyContent markdown={note.displayMarkdown} />
+                    </div>
 
                     {isAnnotationsVisible ? (
                       <div
@@ -549,6 +628,62 @@ export function MultiNoteLens({
                             {item.text}
                           </aside>
                         ))}
+                        {pendingTextDraft && pendingTextDraft.notePath === note.path ? (
+                          <form
+                            className="multi-lens-inline-text-editor"
+                            style={{
+                              left: `${pendingTextDraft.point.x * 100}%`,
+                              top: `${pendingTextDraft.point.y * 100}%`,
+                            }}
+                            onSubmit={commitPendingTextDraftFromSubmit}
+                            onPointerDown={(event) => event.stopPropagation()}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <textarea
+                              ref={textDraftRef}
+                              className="multi-lens-inline-text-editor-input"
+                              rows={1}
+                              value={pendingTextDraft.text}
+                              placeholder="Margin note..."
+                              onChange={(event) =>
+                                setPendingTextDraft((previous) =>
+                                  previous
+                                    ? {
+                                        ...previous,
+                                        text: event.target.value,
+                                      }
+                                    : previous
+                                )
+                              }
+                              onKeyDown={(event) => {
+                                if (event.key === "Escape") {
+                                  event.preventDefault();
+                                  setPendingTextDraft(null);
+                                }
+                                if (event.key === "Enter" && !event.shiftKey) {
+                                  event.preventDefault();
+                                  commitPendingTextDraft();
+                                }
+                              }}
+                            />
+                            <div className="multi-lens-inline-text-editor-actions">
+                              <button
+                                type="button"
+                                className="multi-lens-inline-text-editor-action"
+                                onClick={() => setPendingTextDraft(null)}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="submit"
+                                className="multi-lens-inline-text-editor-action primary"
+                                disabled={!pendingTextDraft.text.trim()}
+                              >
+                                Save
+                              </button>
+                            </div>
+                          </form>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>

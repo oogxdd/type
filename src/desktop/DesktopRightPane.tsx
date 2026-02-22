@@ -90,6 +90,9 @@ export function DesktopRightPane({
           ref={rightPaneRef}
           tabIndex={0}
           onClick={() => {
+            if (shouldShowLens) {
+              return;
+            }
             const editorElement =
               rightPaneRef.current?.querySelector<HTMLElement>(
                 ".tiptap-content[contenteditable='true']"

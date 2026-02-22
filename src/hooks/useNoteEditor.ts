@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteItems, readNote, renameItem, writeNote } from "../data/notesApi";
 import { stripFrontmatter } from "../utils/frontmatter";
+import { stripInlineAnnotationMetadata } from "../utils/noteAnnotations";
 
 const UUID_V7_FILE_NAME_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}\.md$/i;
@@ -38,7 +39,7 @@ const stripNoiseTokenSequences = (tokens: string[]) => {
 };
 
 const buildSlugFromContent = (markdown: string) => {
-  const normalized = stripFrontmatter(markdown)
+  const normalized = stripInlineAnnotationMetadata(stripFrontmatter(markdown))
     .replace(/NV_EMPTY_LINE_TOKEN_[A-Za-z0-9]+/g, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/```[\s\S]*?```/g, " ")
