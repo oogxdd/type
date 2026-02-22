@@ -1,4 +1,5 @@
 import type { NoteMeta, RecordingListItem } from "../types";
+import { stripFrontmatter } from "./frontmatter";
 
 const RECORDING_NOTE_TYPE = "audio_recording";
 
@@ -129,12 +130,13 @@ export const parseNotePreview = (
   );
   const transcriptionStatus = noteMeta?.transcription_status || null;
   const isTranscribed = isRecordingTranscriptionCompleted(transcriptionStatus);
+  const contentWithoutFrontmatter = stripFrontmatter(content);
 
   const previewLines: string[] = [];
   const sourceContent =
     isRecording && !isTranscribed
-      ? sanitizeRecordingEditorContent(content, transcriptionStatus)
-      : content;
+      ? sanitizeRecordingEditorContent(contentWithoutFrontmatter, transcriptionStatus)
+      : contentWithoutFrontmatter;
   for (const rawLine of sourceContent.split(/\r?\n/)) {
     const line = stripMarkdownLine(rawLine);
     if (!line || isRecordingNoiseLine(line)) {

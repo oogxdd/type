@@ -4,6 +4,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import { marked } from "marked";
 import TurndownService from "turndown";
+import { joinFrontmatter, splitFrontmatter } from "../utils/frontmatter";
 
 type NoteEditorProps = {
   markdown: string;
@@ -56,6 +57,8 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
   const isSyncing = useRef(false);
   const latestMarkdown = useRef(markdown);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const initialContentRef = useRef(splitFrontmatter(markdown));
+  const frontmatterRef = useRef<string | null>(initialContentRef.current.frontmatterBlock);
 
   const keepCaretBreathingRoom = (currentEditor: NonNullable<ReturnType<typeof useEditor>>) => {
     const scrollEl = scrollRef.current;
@@ -94,7 +97,7 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
   const editor = useEditor({
     extensions,
     autofocus: false,
-    content: markdownToHtml(markdown),
+    content: markdownToHtml(initialContentRef.current.body),
     editorProps: {
       attributes: {
         class: "tiptap-content",
@@ -104,7 +107,8 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
       if (isSyncing.current) {
         return;
       }
-      const nextMarkdown = htmlToMarkdown(currentEditor.getHTML());
+      const nextBodyMarkdown = htmlToMarkdown(currentEditor.getHTML());
+      const nextMarkdown = joinFrontmatter(frontmatterRef.current, nextBodyMarkdown);
       latestMarkdown.current = nextMarkdown;
       onChange(nextMarkdown);
       requestAnimationFrame(() => keepCaretBreathingRoom(currentEditor));
@@ -118,13 +122,15 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
     if (markdown === latestMarkdown.current) {
       return;
     }
-    const currentMarkdown = htmlToMarkdown(editor.getHTML());
-    if (currentMarkdown === markdown) {
+    const incoming = splitFrontmatter(markdown);
+    frontmatterRef.current = incoming.frontmatterBlock;
+    const currentBodyMarkdown = htmlToMarkdown(editor.getHTML());
+    if (currentBodyMarkdown === incoming.body) {
       latestMarkdown.current = markdown;
       return;
     }
     isSyncing.current = true;
-    editor.commands.setContent(markdownToHtml(markdown), { emitUpdate: false });
+    editor.commands.setContent(markdownToHtml(incoming.body), { emitUpdate: false });
     isSyncing.current = false;
     latestMarkdown.current = markdown;
   }, [editor, markdown]);
