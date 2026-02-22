@@ -81,12 +81,6 @@ export function AppSidebar({
 
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton isActive={feedActive} onClick={onFeedClick}>
-                <Home />
-                <span>Feed</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
               <SidebarMenuButton onClick={() => {}}>
                 <Search />
                 <span>Search</span>
@@ -96,6 +90,12 @@ export function AppSidebar({
               <SidebarMenuButton onClick={() => {}}>
                 <MessageCircle />
                 <span>Chat</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton isActive={feedActive} onClick={onFeedClick}>
+                <Home />
+                <span>Feed</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
