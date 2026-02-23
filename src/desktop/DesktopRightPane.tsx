@@ -6,6 +6,7 @@ import { useNotesTree } from "../contexts/NotesTreeContext";
 import { NoteEditor } from "../components/NoteEditor";
 import { MultiNoteLens } from "../components/MultiNoteLens";
 import { RecordingNoteHeader } from "../components/RecordingNoteHeader";
+import { HandwritingNoteHeader } from "../components/HandwritingNoteHeader";
 import {
   SettingsDetailPane,
   type SettingsSectionId,
@@ -126,6 +127,7 @@ export function DesktopRightPane({
                 ) : null}
               </div>
               <RecordingNoteHeader notePath={activeNote} preview={activeNotePreview} />
+              <HandwritingNoteHeader notePath={activeNote} preview={activeNotePreview} />
               <NoteEditor
                 markdown={editorMarkdown}
                 onChange={handleEditorChange}

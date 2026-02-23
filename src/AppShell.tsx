@@ -3,6 +3,7 @@ import {
   useCallback,
   useRef,
   useState,
+  type ChangeEvent,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -23,6 +24,7 @@ import { useNotesTree } from "./contexts/NotesTreeContext";
 import { useSelection } from "./contexts/SelectionContext";
 import { useEditor } from "./contexts/EditorContext";
 import { useRecordings } from "./contexts/RecordingsContext";
+import { useHandwriting } from "./contexts/HandwritingContext";
 
 import { useDragDrop } from "./hooks/useDragDrop";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
@@ -65,6 +67,7 @@ export function AppShell() {
     startRecording,
     stopRecording,
   } = useRecordings();
+  const { importHandwritingFile, handwritingImportBusy } = useHandwriting();
 
   const {
     selectedFolders,
@@ -136,6 +139,7 @@ export function AppShell() {
   const middlePaneRef = useRef<HTMLDivElement | null>(null);
   const folderContextPathRef = useRef<string | null>(null);
   const noteContextPathRef = useRef<string | null>(null);
+  const handwritingInputRef = useRef<HTMLInputElement | null>(null);
   const selectedFoldersRef = useRef<Set<string>>(new Set());
   const selectedNotesRef = useRef<Set<string>>(new Set());
   const folderMenuPromiseRef = useRef<Promise<Menu> | null>(null);
@@ -468,6 +472,17 @@ export function AppShell() {
     ]
   );
 
+  const onHandwritingImportChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) {
+      return;
+    }
+    void importHandwritingFile(file, activeFolder || undefined).catch((error) => {
+      console.error("[handwriting] import failed", error);
+    });
+  };
+
   // -- Render helpers
   const renderLeftPane = () => (
     <div className="pane-with-drag">
@@ -478,6 +493,7 @@ export function AppShell() {
         trashActive={appMode === "notes" && activeFolder === ARCHIEVE_FOLDER_PATH}
         recordingActive={isRecordingAudio}
         recordingDisabled={!recordingSupported || isRecordingFinalizing}
+        handwritingImportDisabled={handwritingImportBusy}
         onFeedClick={() => openPinnedFolder(FEED_FOLDER_PATH)}
         onNewNoteClick={() => void createNewNote()}
         onRecordingClick={() => {
@@ -487,6 +503,7 @@ export function AppShell() {
             void startRecording(activeFolder || undefined);
           }
         }}
+        onHandwritingImportClick={() => handwritingInputRef.current?.click()}
         onSettingsClick={() => setAppMode("settings")}
         onTrashClick={() => openPinnedFolder(ARCHIEVE_FOLDER_PATH)}
       >
@@ -542,6 +559,13 @@ export function AppShell() {
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
+      <input
+        ref={handwritingInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        style={{ display: "none" }}
+        onChange={onHandwritingImportChange}
+      />
       <div className={`window-shell theme-${theme}`}>
         {layoutMode === "desktop" ? (
           <DesktopShell

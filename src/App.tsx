@@ -9,6 +9,7 @@ import { SelectionProvider, useSelection } from "./contexts/SelectionContext";
 import { EditorProvider, useEditor } from "./contexts/EditorContext";
 import { NotesTreeProvider, useNotesTree } from "./contexts/NotesTreeContext";
 import { RecordingsProvider } from "./contexts/RecordingsContext";
+import { HandwritingProvider } from "./contexts/HandwritingContext";
 import { AppShell } from "./AppShell";
 import { useLayoutMode } from "./mobile/useLayoutMode";
 
@@ -17,23 +18,33 @@ function AppInner() {
   const selection = useSelection();
   const editor = useEditor();
   const layoutMode = useLayoutMode();
+  const handleCapturedNoteComplete = async (result: {
+    folder_path: string;
+    note_path: string;
+  }) => {
+    await notesTree.refreshTree();
+    selection.setSelectedFolders(new Set([result.folder_path]));
+    selection.setLastSelectedFolder(result.folder_path);
+    selection.setActiveFolder(result.folder_path);
+    selection.setSelectedNotes(new Set([result.note_path]));
+    selection.setLastSelectedNote(result.note_path);
+    selection.setActiveNote(result.note_path);
+    editor.clearDraft();
+  };
 
   return (
     <RecordingsProvider
       activeFolder={selection.activeFolder}
       layoutMode={layoutMode}
-      onRecordingComplete={async (result) => {
-        await notesTree.refreshTree();
-        selection.setSelectedFolders(new Set([result.folder_path]));
-        selection.setLastSelectedFolder(result.folder_path);
-        selection.setActiveFolder(result.folder_path);
-        selection.setSelectedNotes(new Set([result.note_path]));
-        selection.setLastSelectedNote(result.note_path);
-        selection.setActiveNote(result.note_path);
-        editor.clearDraft();
-      }}
+      onRecordingComplete={handleCapturedNoteComplete}
     >
-      <AppShell />
+      <HandwritingProvider
+        activeFolder={selection.activeFolder}
+        layoutMode={layoutMode}
+        onHandwritingComplete={handleCapturedNoteComplete}
+      >
+        <AppShell />
+      </HandwritingProvider>
     </RecordingsProvider>
   );
 }

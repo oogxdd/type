@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CirclePlus, Home, MessageCircle, Mic, Search, Settings2, Square, Trash2 } from "lucide-react"
+import { CirclePlus, FilePenLine, Home, MessageCircle, Mic, Search, Settings2, Square, Trash2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -24,9 +24,11 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   trashActive: boolean
   recordingActive: boolean
   recordingDisabled: boolean
+  handwritingImportDisabled: boolean
   onFeedClick: () => void
   onNewNoteClick: () => void
   onRecordingClick: () => void
+  onHandwritingImportClick: () => void
   onSettingsClick: () => void
   onTrashClick: () => void
   children: React.ReactNode
@@ -38,9 +40,11 @@ export function AppSidebar({
   trashActive,
   recordingActive,
   recordingDisabled,
+  handwritingImportDisabled,
   onFeedClick,
   onNewNoteClick,
   onRecordingClick,
+  onHandwritingImportClick,
   onSettingsClick,
   onTrashClick,
   className,
@@ -75,6 +79,18 @@ export function AppSidebar({
                 <span className="sr-only">
                   {recordingActive ? "Stop recording" : "Record audio"}
                 </span>
+              </Button>
+              <Button
+                size="icon-sm"
+                variant="outline"
+                className="size-8 group-data-[collapsible=icon]:opacity-0"
+                onClick={onHandwritingImportClick}
+                disabled={handwritingImportDisabled}
+                aria-label="Import handwriting"
+                title="Import handwriting"
+              >
+                <FilePenLine />
+                <span className="sr-only">Import handwriting</span>
               </Button>
             </SidebarMenuItem>
           </SidebarMenu>

@@ -2,7 +2,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Mic } from "lucide-react";
+import { Mic, PenLine } from "lucide-react";
 import type { DragData, NoteEntry } from "../types";
 import type { NotePreview } from "../utils/format";
 
@@ -86,7 +86,11 @@ export function NavNoteRow({
         </svg>
       </span>
       <span className="item-label">{title}</span>
-      {preview?.isRecording ? <Mic size={11} className="nav-note-recording-icon" /> : null}
+      {preview?.isRecording ? (
+        <Mic size={11} className="nav-note-recording-icon" />
+      ) : preview?.isHandwriting ? (
+        <PenLine size={11} className="nav-note-recording-icon" />
+      ) : null}
     </div>
   );
 }

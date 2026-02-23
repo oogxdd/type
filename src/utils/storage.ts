@@ -15,6 +15,12 @@ export const DEFAULT_PROFILE_SYNC_SETTINGS: ProfileSyncSettings = {
   lastSuccessfulSyncAt: "",
   assemblyAiApiKey: "",
   mobileAutoTranscriptionEnabled: true,
+  handwritingOcrProvider: "openai",
+  openAiApiKey: "",
+  openAiModel: "gpt-4.1-mini",
+  huggingFaceApiKey: "",
+  huggingFaceModel: "microsoft/trocr-base-handwritten",
+  mobileAutoHandwritingOcrEnabled: true,
 };
 
 export const getInitialTheme = (): ThemeMode => {
@@ -60,6 +66,11 @@ export const getStoredBooleanValue = (key: string, fallback: boolean) => {
   }
   return fallback;
 };
+
+const normalizeHandwritingProvider = (
+  value: string
+): ProfileSyncSettings["handwritingOcrProvider"] =>
+  value === "huggingface" ? "huggingface" : "openai";
 
 export const readProfileSyncStore = (): Record<string, Partial<ProfileSyncSettings>> => {
   if (typeof window === "undefined") {
@@ -117,6 +128,26 @@ export const getProfileSyncSettings = (profileId: string): ProfileSyncSettings =
             "notes-viewer-mobile-auto-transcription-enabled",
             DEFAULT_PROFILE_SYNC_SETTINGS.mobileAutoTranscriptionEnabled
           ),
+          handwritingOcrProvider: normalizeHandwritingProvider(
+            getStoredSyncValue(
+              "notes-viewer-handwriting-ocr-provider",
+              DEFAULT_PROFILE_SYNC_SETTINGS.handwritingOcrProvider
+            )
+          ),
+          openAiApiKey: getStoredSyncValue("notes-viewer-openai-api-key", ""),
+          openAiModel: getStoredSyncValue(
+            "notes-viewer-openai-model",
+            DEFAULT_PROFILE_SYNC_SETTINGS.openAiModel
+          ),
+          huggingFaceApiKey: getStoredSyncValue("notes-viewer-huggingface-api-key", ""),
+          huggingFaceModel: getStoredSyncValue(
+            "notes-viewer-huggingface-model",
+            DEFAULT_PROFILE_SYNC_SETTINGS.huggingFaceModel
+          ),
+          mobileAutoHandwritingOcrEnabled: getStoredBooleanValue(
+            "notes-viewer-mobile-auto-handwriting-ocr-enabled",
+            DEFAULT_PROFILE_SYNC_SETTINGS.mobileAutoHandwritingOcrEnabled
+          ),
         }
       : {};
 
@@ -141,6 +172,31 @@ export const getProfileSyncSettings = (profileId: string): ProfileSyncSettings =
       stored.mobileAutoTranscriptionEnabled ??
       legacyFallback.mobileAutoTranscriptionEnabled ??
       DEFAULT_PROFILE_SYNC_SETTINGS.mobileAutoTranscriptionEnabled,
+    handwritingOcrProvider: normalizeHandwritingProvider(
+      stored.handwritingOcrProvider ??
+        legacyFallback.handwritingOcrProvider ??
+        DEFAULT_PROFILE_SYNC_SETTINGS.handwritingOcrProvider
+    ),
+    openAiApiKey:
+      stored.openAiApiKey ??
+      legacyFallback.openAiApiKey ??
+      DEFAULT_PROFILE_SYNC_SETTINGS.openAiApiKey,
+    openAiModel:
+      stored.openAiModel ??
+      legacyFallback.openAiModel ??
+      DEFAULT_PROFILE_SYNC_SETTINGS.openAiModel,
+    huggingFaceApiKey:
+      stored.huggingFaceApiKey ??
+      legacyFallback.huggingFaceApiKey ??
+      DEFAULT_PROFILE_SYNC_SETTINGS.huggingFaceApiKey,
+    huggingFaceModel:
+      stored.huggingFaceModel ??
+      legacyFallback.huggingFaceModel ??
+      DEFAULT_PROFILE_SYNC_SETTINGS.huggingFaceModel,
+    mobileAutoHandwritingOcrEnabled:
+      stored.mobileAutoHandwritingOcrEnabled ??
+      legacyFallback.mobileAutoHandwritingOcrEnabled ??
+      DEFAULT_PROFILE_SYNC_SETTINGS.mobileAutoHandwritingOcrEnabled,
   };
 };
 

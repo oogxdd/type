@@ -8,9 +8,16 @@ type MobileRecordingScreenProps = {
   recordingStatus: string | null;
   recordingLiveStatus: string | null;
   hasAssemblyApiKey: boolean;
+  handwritingImportBusy: boolean;
+  handwritingQueueBusy: boolean;
+  handwritingStatus: string | null;
+  handwritingError: string | null;
+  hasHandwritingProviderConfig: boolean;
   onStart: () => void;
   onStop: () => void;
   onQueue: () => void;
+  onPickHandwriting: () => void;
+  onQueueHandwriting: () => void;
   autoStart?: boolean;
 };
 
@@ -22,9 +29,16 @@ export function MobileRecordingScreen({
   recordingStatus,
   recordingLiveStatus,
   hasAssemblyApiKey,
+  handwritingImportBusy,
+  handwritingQueueBusy,
+  handwritingStatus,
+  handwritingError,
+  hasHandwritingProviderConfig,
   onStart,
   onStop,
   onQueue,
+  onPickHandwriting,
+  onQueueHandwriting,
   autoStart,
 }: MobileRecordingScreenProps) {
   const autoStartFired = useRef(false);
@@ -79,6 +93,34 @@ export function MobileRecordingScreen({
         </button>
       </section>
 
+      <section className="mobile-recording-card" aria-label="Handwriting OCR">
+        <h2>Handwriting</h2>
+        <p>Pick an image to create a handwriting note and queue OCR.</p>
+        <div className="mobile-native-actions">
+          <button
+            type="button"
+            className="mobile-secondary-btn"
+            onClick={onPickHandwriting}
+            disabled={handwritingImportBusy}
+          >
+            {handwritingImportBusy ? "Importing..." : "Pick handwriting image"}
+          </button>
+          <button
+            type="button"
+            className="mobile-secondary-btn"
+            onClick={onQueueHandwriting}
+            disabled={
+              !hasHandwritingProviderConfig ||
+              isBusy ||
+              handwritingImportBusy ||
+              handwritingQueueBusy
+            }
+          >
+            {handwritingQueueBusy ? "Queueing..." : "Queue handwriting OCR"}
+          </button>
+        </div>
+      </section>
+
       {recordingStatus ? (
         <section className="mobile-recording-card" aria-label="Last status">
           <h2>Last status</h2>
@@ -86,10 +128,24 @@ export function MobileRecordingScreen({
         </section>
       ) : null}
 
+      {handwritingStatus ? (
+        <section className="mobile-recording-card" aria-label="Handwriting status">
+          <h2>Handwriting status</h2>
+          <p>{handwritingStatus}</p>
+        </section>
+      ) : null}
+
       {recordingError ? (
         <section className="mobile-sync-error" role="alert">
           <strong>Recording error</strong>
           <p>{recordingError}</p>
+        </section>
+      ) : null}
+
+      {handwritingError ? (
+        <section className="mobile-sync-error" role="alert">
+          <strong>Handwriting error</strong>
+          <p>{handwritingError}</p>
         </section>
       ) : null}
     </div>

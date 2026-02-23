@@ -37,30 +37,48 @@ const FEED_FOLDER: &str = "Feed";
 const LEGACY_UNSORTED_FOLDER: &str = "Unsorted";
 const ARCHIEVE_FOLDER: &str = "Archieve";
 const RECORDINGS_STORAGE_FOLDER: &str = "Recordings";
+const ATTACHMENTS_STORAGE_FOLDER: &str = "Attachments";
 const LEGACY_RECORDINGS_FOLDER: &str = "_Recordings";
 const AUDIO_FILE_NAME_PREFIX: &str = "audio";
+const ATTACHMENT_FILE_NAME_PREFIX: &str = "attachment";
 const RECORDING_FRONTMATTER_TYPE: &str = "audio_recording";
+const HANDWRITING_FRONTMATTER_TYPE: &str = "handwriting_attachment";
 const RECORDING_STATUS_PENDING: &str = "pending";
 const RECORDING_STATUS_QUEUED: &str = "queued";
 const RECORDING_STATUS_PROCESSING: &str = "processing";
 const RECORDING_STATUS_COMPLETED: &str = "completed";
 const RECORDING_STATUS_FAILED: &str = "failed";
+const HANDWRITING_OCR_PROMPT: &str = "Extract all handwritten text from this image. Return plain text only, preserving line breaks and paragraphs. Do not add commentary.";
+const OPENAI_RESPONSES_URL: &str = "https://api.openai.com/v1/responses";
+const HUGGINGFACE_INFERENCE_BASE_URL: &str = "https://api-inference.huggingface.co/models";
+const HUGGINGFACE_RETRYABLE_STATUS: reqwest::StatusCode = reqwest::StatusCode::SERVICE_UNAVAILABLE;
+const HUGGINGFACE_MAX_RETRIES: usize = 5;
+const HUGGINGFACE_RETRY_DELAY: Duration = Duration::from_secs(2);
 const ASSEMBLY_UPLOAD_URL: &str = "https://api.assemblyai.com/v2/upload";
 const ASSEMBLY_TRANSCRIPT_URL: &str = "https://api.assemblyai.com/v2/transcript";
 const ASSEMBLY_SPEECH_MODEL: &str = "universal-2";
 const ASSEMBLY_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const ASSEMBLY_MAX_POLL_ATTEMPTS: usize = 180;
 const VISIBLE_SYSTEM_FOLDERS: [&str; 2] = [FEED_FOLDER, ARCHIEVE_FOLDER];
-const REQUIRED_SYSTEM_FOLDERS: [&str; 3] =
-    [FEED_FOLDER, ARCHIEVE_FOLDER, RECORDINGS_STORAGE_FOLDER];
-const PROTECTED_SYSTEM_FOLDERS: [&str; 5] = [
+const REQUIRED_SYSTEM_FOLDERS: [&str; 4] = [
+    FEED_FOLDER,
+    ARCHIEVE_FOLDER,
+    ATTACHMENTS_STORAGE_FOLDER,
+    RECORDINGS_STORAGE_FOLDER,
+];
+const PROTECTED_SYSTEM_FOLDERS: [&str; 6] = [
     FEED_FOLDER,
     ARCHIEVE_FOLDER,
     LEGACY_UNSORTED_FOLDER,
+    ATTACHMENTS_STORAGE_FOLDER,
     RECORDINGS_STORAGE_FOLDER,
     LEGACY_RECORDINGS_FOLDER,
 ];
-const HIDDEN_ROOT_FOLDERS: [&str; 2] = [RECORDINGS_STORAGE_FOLDER, LEGACY_RECORDINGS_FOLDER];
+const HIDDEN_ROOT_FOLDERS: [&str; 3] = [
+    ATTACHMENTS_STORAGE_FOLDER,
+    RECORDINGS_STORAGE_FOLDER,
+    LEGACY_RECORDINGS_FOLDER,
+];
 #[cfg(target_os = "macos")]
 const MACOS_WINDOW_ALPHA: f64 = 1.0;
 
@@ -91,9 +109,13 @@ struct NoteMeta {
     updated_ms: Option<i64>,
     note_type: Option<String>,
     recording_audio_path: Option<String>,
+    handwriting_attachment_path: Option<String>,
     transcription_status: Option<String>,
     transcription_error: Option<String>,
     transcription_updated_ms: Option<i64>,
+    ocr_status: Option<String>,
+    ocr_error: Option<String>,
+    ocr_updated_ms: Option<i64>,
 }
 
 #[derive(Default)]
@@ -103,10 +125,14 @@ struct NoteFrontMatter {
     updated_ms: Option<i64>,
     note_type: Option<String>,
     recording_audio_path: Option<String>,
+    handwriting_attachment_path: Option<String>,
     transcription_status: Option<String>,
     transcription_error: Option<String>,
     transcription_updated_ms: Option<i64>,
     transcription_id: Option<String>,
+    ocr_status: Option<String>,
+    ocr_error: Option<String>,
+    ocr_updated_ms: Option<i64>,
     passthrough_lines: Vec<String>,
 }
 
@@ -272,6 +298,14 @@ struct SaveRecordingArgs {
     folder_path: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct SaveHandwritingAttachmentArgs {
+    image_base64: String,
+    mime_type: Option<String>,
+    file_name: Option<String>,
+    folder_path: Option<String>,
+}
+
 #[derive(Serialize)]
 struct RecordingWriteResult {
     folder_path: String,
@@ -279,9 +313,23 @@ struct RecordingWriteResult {
     audio_path: String,
 }
 
+#[derive(Serialize)]
+struct HandwritingAttachmentWriteResult {
+    folder_path: String,
+    note_path: String,
+    attachment_path: String,
+}
+
 #[derive(Deserialize)]
 struct QueueRecordingsArgs {
     assembly_api_key: String,
+}
+
+#[derive(Deserialize)]
+struct QueueHandwritingOcrArgs {
+    provider: String,
+    api_key: String,
+    model: String,
 }
 
 #[derive(Serialize)]
@@ -293,9 +341,25 @@ struct RecordingTranscriptionQueueResult {
 }
 
 #[derive(Serialize)]
+struct HandwritingOcrQueueResult {
+    scanned: usize,
+    queued: usize,
+    skipped: usize,
+    in_flight: usize,
+}
+
+#[derive(Serialize)]
 struct RecordingQueueSnapshot {
     running: bool,
     current_recording: Option<String>,
+    pending: Vec<String>,
+    in_flight: usize,
+}
+
+#[derive(Serialize)]
+struct HandwritingOcrQueueSnapshot {
+    running: bool,
+    current_note: Option<String>,
     pending: Vec<String>,
     in_flight: usize,
 }
@@ -313,9 +377,27 @@ struct RecordingListItem {
 }
 
 #[derive(Serialize)]
+struct HandwritingOcrListItem {
+    note_path: String,
+    folder_path: String,
+    attachment_path: Option<String>,
+    status: String,
+    error: Option<String>,
+    updated_ms: Option<i64>,
+    is_queued: bool,
+    is_processing: bool,
+}
+
+#[derive(Serialize)]
 struct RecordingsListResult {
     queue: RecordingQueueSnapshot,
     recordings: Vec<RecordingListItem>,
+}
+
+#[derive(Serialize)]
+struct HandwritingOcrListResult {
+    queue: HandwritingOcrQueueSnapshot,
+    jobs: Vec<HandwritingOcrListItem>,
 }
 
 #[derive(Deserialize)]
@@ -353,11 +435,32 @@ struct QueuedTranscriptionJob {
 }
 
 #[derive(Clone)]
+struct QueuedHandwritingOcrJob {
+    note_rel: String,
+    note_path: PathBuf,
+    attachment_path: PathBuf,
+    provider: HandwritingOcrProvider,
+    api_key: String,
+    model: String,
+}
+
+#[derive(Clone)]
 struct RecordingNoteInfo {
     note_rel: String,
     note_path: PathBuf,
     audio_rel: String,
     audio_path: PathBuf,
+    status: String,
+    error: Option<String>,
+    updated_ms: Option<i64>,
+}
+
+#[derive(Clone)]
+struct HandwritingNoteInfo {
+    note_rel: String,
+    note_path: PathBuf,
+    attachment_rel: String,
+    attachment_path: PathBuf,
     status: String,
     error: Option<String>,
     updated_ms: Option<i64>,
@@ -369,6 +472,20 @@ struct TranscriptionQueueState {
     current_recording: Option<String>,
     pending: VecDeque<QueuedTranscriptionJob>,
     known_recordings: HashSet<String>,
+}
+
+#[derive(Copy, Clone)]
+enum HandwritingOcrProvider {
+    OpenAi,
+    HuggingFace,
+}
+
+#[derive(Default)]
+struct HandwritingOcrQueueState {
+    running: bool,
+    current_note: Option<String>,
+    pending: VecDeque<QueuedHandwritingOcrJob>,
+    known_notes: HashSet<String>,
 }
 
 #[derive(Deserialize)]
@@ -385,6 +502,7 @@ struct AssemblyTranscriptResponse {
 }
 
 static TRANSCRIPTION_QUEUE: OnceLock<Mutex<TranscriptionQueueState>> = OnceLock::new();
+static HANDWRITING_OCR_QUEUE: OnceLock<Mutex<HandwritingOcrQueueState>> = OnceLock::new();
 static GIT_NOTE_TIMESTAMPS_CACHE: OnceLock<Mutex<HashMap<String, (Option<i64>, Option<i64>)>>> =
     OnceLock::new();
 #[cfg(target_os = "ios")]
@@ -863,6 +981,22 @@ fn resolve_path(app: &tauri::AppHandle, rel: &str) -> Result<PathBuf, String> {
 
 fn transcription_queue_state() -> &'static Mutex<TranscriptionQueueState> {
     TRANSCRIPTION_QUEUE.get_or_init(|| Mutex::new(TranscriptionQueueState::default()))
+}
+
+fn handwriting_ocr_queue_state() -> &'static Mutex<HandwritingOcrQueueState> {
+    HANDWRITING_OCR_QUEUE.get_or_init(|| Mutex::new(HandwritingOcrQueueState::default()))
+}
+
+fn parse_handwriting_ocr_provider(value: &str) -> Result<HandwritingOcrProvider, String> {
+    let normalized = value.trim().to_lowercase();
+    match normalized.as_str() {
+        "openai" => Ok(HandwritingOcrProvider::OpenAi),
+        "huggingface" => Ok(HandwritingOcrProvider::HuggingFace),
+        _ => Err(format!(
+            "Unsupported OCR provider: {}. Expected \"openai\" or \"huggingface\".",
+            value
+        )),
+    }
 }
 
 fn now_ms() -> Option<i64> {
@@ -1417,6 +1551,11 @@ fn parse_note_front_matter(raw: &str) -> (NoteFrontMatter, String) {
                     meta.recording_audio_path = Some(value);
                 }
             }
+            "handwriting_attachment_path" => {
+                if !value.is_empty() {
+                    meta.handwriting_attachment_path = Some(value);
+                }
+            }
             "transcription_status" => {
                 if !value.is_empty() {
                     meta.transcription_status = Some(value);
@@ -1437,6 +1576,23 @@ fn parse_note_front_matter(raw: &str) -> (NoteFrontMatter, String) {
             "transcription_id" => {
                 if !value.is_empty() {
                     meta.transcription_id = Some(value);
+                }
+            }
+            "ocr_status" => {
+                if !value.is_empty() {
+                    meta.ocr_status = Some(value);
+                }
+            }
+            "ocr_error" => {
+                if !value.is_empty() {
+                    meta.ocr_error = Some(value);
+                }
+            }
+            "ocr_updated_ms" => {
+                if let Ok(parsed) = value.parse::<i64>() {
+                    meta.ocr_updated_ms = Some(parsed);
+                } else {
+                    meta.passthrough_lines.push(trimmed.to_string());
                 }
             }
             _ => meta.passthrough_lines.push(trimmed.to_string()),
@@ -1478,6 +1634,12 @@ fn render_note_with_front_matter(meta: &NoteFrontMatter, body: &str) -> String {
             front_matter_safe_value(audio_path)
         ));
     }
+    if let Some(attachment_path) = &meta.handwriting_attachment_path {
+        output.push_str(&format!(
+            "handwriting_attachment_path: {}\n",
+            front_matter_safe_value(attachment_path)
+        ));
+    }
     if let Some(status) = &meta.transcription_status {
         output.push_str(&format!(
             "transcription_status: {}\n",
@@ -1498,6 +1660,15 @@ fn render_note_with_front_matter(meta: &NoteFrontMatter, body: &str) -> String {
             "transcription_id: {}\n",
             front_matter_safe_value(transcription_id)
         ));
+    }
+    if let Some(status) = &meta.ocr_status {
+        output.push_str(&format!("ocr_status: {}\n", front_matter_safe_value(status)));
+    }
+    if let Some(error) = &meta.ocr_error {
+        output.push_str(&format!("ocr_error: {}\n", front_matter_safe_value(error)));
+    }
+    if let Some(updated_ms) = meta.ocr_updated_ms {
+        output.push_str(&format!("ocr_updated_ms: {}\n", updated_ms));
     }
     for line in &meta.passthrough_lines {
         output.push_str(line);
@@ -1664,10 +1835,70 @@ fn audio_mime_from_path(path: &Path) -> &'static str {
     }
 }
 
-fn decode_audio_base64(payload: &str) -> Result<Vec<u8>, String> {
+fn normalize_image_extension(value: &str) -> Option<&'static str> {
+    match value.trim().to_lowercase().as_str() {
+        "png" => Some("png"),
+        "jpg" | "jpeg" => Some("jpg"),
+        "webp" => Some("webp"),
+        "gif" => Some("gif"),
+        _ => None,
+    }
+}
+
+fn image_extension_from_mime(mime_type: Option<&str>) -> Option<&'static str> {
+    let raw = mime_type?;
+    let normalized = raw.trim().to_lowercase();
+    if normalized.contains("png") {
+        return Some("png");
+    }
+    if normalized.contains("jpeg") || normalized.contains("jpg") {
+        return Some("jpg");
+    }
+    if normalized.contains("webp") {
+        return Some("webp");
+    }
+    if normalized.contains("gif") {
+        return Some("gif");
+    }
+    None
+}
+
+fn image_extension_from_file_name(file_name: Option<&str>) -> Option<&'static str> {
+    let raw = file_name?;
+    let ext = Path::new(raw)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    normalize_image_extension(ext)
+}
+
+fn image_mime_from_extension(extension: &str) -> &'static str {
+    match extension {
+        "png" => "image/png",
+        "jpg" => "image/jpeg",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        _ => "application/octet-stream",
+    }
+}
+
+fn supported_image_extension(
+    mime_type: Option<&str>,
+    file_name: Option<&str>,
+) -> Result<&'static str, String> {
+    if let Some(ext) = image_extension_from_mime(mime_type) {
+        return Ok(ext);
+    }
+    if let Some(ext) = image_extension_from_file_name(file_name) {
+        return Ok(ext);
+    }
+    Err("Unsupported image type. Supported formats: png, jpg/jpeg, webp, gif.".to_string())
+}
+
+fn decode_base64_payload(payload: &str, kind: &str) -> Result<Vec<u8>, String> {
     let trimmed = payload.trim();
     if trimmed.is_empty() {
-        return Err("Audio payload is empty.".to_string());
+        return Err(format!("{} payload is empty.", kind));
     }
     let body = trimmed
         .split_once(',')
@@ -1675,7 +1906,15 @@ fn decode_audio_base64(payload: &str) -> Result<Vec<u8>, String> {
         .unwrap_or(trimmed);
     BASE64
         .decode(body)
-        .map_err(|error| format!("Invalid base64 audio payload: {}", error))
+        .map_err(|error| format!("Invalid base64 {} payload: {}", kind.to_lowercase(), error))
+}
+
+fn decode_audio_base64(payload: &str) -> Result<Vec<u8>, String> {
+    decode_base64_payload(payload, "Audio")
+}
+
+fn decode_image_base64(payload: &str) -> Result<Vec<u8>, String> {
+    decode_base64_payload(payload, "Image")
 }
 
 fn response_error(status: reqwest::StatusCode, body: String, context: &str) -> String {
@@ -1703,9 +1942,23 @@ fn recording_storage_root(root: &Path) -> PathBuf {
     root.join(RECORDINGS_STORAGE_FOLDER)
 }
 
+fn handwriting_storage_root(root: &Path) -> PathBuf {
+    root.join(ATTACHMENTS_STORAGE_FOLDER)
+}
+
+fn is_storage_folder_path(root: &Path, path: &Path) -> bool {
+    path.starts_with(recording_storage_root(root))
+        || path.starts_with(root.join(LEGACY_RECORDINGS_FOLDER))
+        || path.starts_with(handwriting_storage_root(root))
+}
+
 fn is_recording_audio_path_allowed(root: &Path, audio_path: &Path) -> bool {
     audio_path.starts_with(recording_storage_root(root))
         || audio_path.starts_with(root.join(LEGACY_RECORDINGS_FOLDER))
+}
+
+fn is_handwriting_attachment_path_allowed(root: &Path, attachment_path: &Path) -> bool {
+    attachment_path.starts_with(handwriting_storage_root(root))
 }
 
 fn recording_info_from_note_meta(
@@ -1743,6 +1996,44 @@ fn recording_info_from_note_meta(
         status,
         error: meta.transcription_error.clone(),
         updated_ms: meta.transcription_updated_ms.or(meta.updated_ms),
+    })
+}
+
+fn handwriting_info_from_note_meta(
+    root: &Path,
+    note_path: &Path,
+    note_rel: &str,
+    meta: &NoteFrontMatter,
+) -> Option<HandwritingNoteInfo> {
+    if meta.note_type.as_deref() != Some(HANDWRITING_FRONTMATTER_TYPE) {
+        return None;
+    }
+
+    let attachment_rel = meta.handwriting_attachment_path.as_ref()?.trim();
+    if attachment_rel.is_empty() {
+        return None;
+    }
+
+    let attachment_rel_path = sanitize_relative(attachment_rel).ok()?;
+    let attachment_path = root.join(&attachment_rel_path);
+    if !is_handwriting_attachment_path_allowed(root, &attachment_path) {
+        return None;
+    }
+
+    let status = meta
+        .ocr_status
+        .as_deref()
+        .unwrap_or(RECORDING_STATUS_PENDING)
+        .to_string();
+
+    Some(HandwritingNoteInfo {
+        note_rel: note_rel.to_string(),
+        note_path: note_path.to_path_buf(),
+        attachment_rel: attachment_rel_path.to_string_lossy().replace('\\', "/"),
+        attachment_path,
+        status,
+        error: meta.ocr_error.clone(),
+        updated_ms: meta.ocr_updated_ms.or(meta.updated_ms),
     })
 }
 
@@ -1797,6 +2088,25 @@ fn collect_recording_notes(root: &Path) -> Result<Vec<RecordingNoteInfo>, String
     Ok(recordings)
 }
 
+fn collect_handwriting_notes(root: &Path) -> Result<Vec<HandwritingNoteInfo>, String> {
+    let mut note_files = Vec::new();
+    collect_markdown_note_files(root, root, &mut note_files)?;
+
+    let mut notes = Vec::new();
+    for note_path in note_files {
+        let raw = match fs::read_to_string(&note_path) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let (meta, _) = parse_note_front_matter(&raw);
+        let note_rel = strip_root(root, &note_path);
+        if let Some(info) = handwriting_info_from_note_meta(root, &note_path, &note_rel, &meta) {
+            notes.push(info);
+        }
+    }
+    Ok(notes)
+}
+
 fn write_note_with_front_matter(
     path: &Path,
     meta: &NoteFrontMatter,
@@ -1831,6 +2141,221 @@ fn update_recording_note_status(
 
     let next_body = recording_note_body(status, transcript_text);
     write_note_with_front_matter(note_path, &meta, &next_body)
+}
+
+fn handwriting_note_body(status: &str, text: Option<&str>) -> String {
+    if status != RECORDING_STATUS_COMPLETED {
+        return String::new();
+    }
+    let value = text.unwrap_or_default().trim();
+    if value.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", value)
+    }
+}
+
+fn update_handwriting_note_status(
+    note_path: &Path,
+    status: &str,
+    error: Option<String>,
+    extracted_text: Option<&str>,
+) -> Result<(), String> {
+    let raw = fs::read_to_string(note_path).map_err(|issue| issue.to_string())?;
+    let (mut meta, _) = parse_note_front_matter(&raw);
+    if meta.id.is_none() {
+        meta.id = Some(generate_note_id());
+    }
+    let now = now_ms();
+    if meta.created_ms.is_none() {
+        meta.created_ms = now;
+    }
+    meta.updated_ms = now.or(meta.updated_ms);
+    meta.note_type = Some(HANDWRITING_FRONTMATTER_TYPE.to_string());
+    meta.ocr_status = Some(status.to_string());
+    meta.ocr_error = error;
+    meta.ocr_updated_ms = now.or(meta.ocr_updated_ms);
+
+    let next_body = handwriting_note_body(status, extracted_text);
+    write_note_with_front_matter(note_path, &meta, &next_body)
+}
+
+fn extract_openai_output_text(payload: &serde_json::Value) -> Option<String> {
+    if let Some(value) = payload.get("output_text") {
+        if let Some(text) = value.as_str() {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+        if let Some(items) = value.as_array() {
+            let joined = items
+                .iter()
+                .filter_map(|item| item.as_str())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n");
+            if !joined.trim().is_empty() {
+                return Some(joined);
+            }
+        }
+    }
+
+    let mut chunks = Vec::new();
+    if let Some(output) = payload.get("output").and_then(|value| value.as_array()) {
+        for block in output {
+            if let Some(contents) = block.get("content").and_then(|value| value.as_array()) {
+                for item in contents {
+                    if let Some(text) = item.get("text").and_then(|value| value.as_str()) {
+                        let trimmed = text.trim();
+                        if !trimmed.is_empty() {
+                            chunks.push(trimmed.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if chunks.is_empty() {
+        None
+    } else {
+        Some(chunks.join("\n"))
+    }
+}
+
+fn transcribe_handwriting_with_openai(
+    image_bytes: &[u8],
+    mime_type: &str,
+    api_key: &str,
+    model: &str,
+) -> Result<String, String> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(120))
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let image_data_url = format!("data:{};base64,{}", mime_type, BASE64.encode(image_bytes));
+    let response = client
+        .post(OPENAI_RESPONSES_URL)
+        .header("authorization", format!("Bearer {}", api_key))
+        .json(&serde_json::json!({
+            "model": model,
+            "input": [{
+                "role": "user",
+                "content": [
+                    { "type": "input_text", "text": HANDWRITING_OCR_PROMPT },
+                    { "type": "input_image", "image_url": image_data_url }
+                ]
+            }]
+        }))
+        .send()
+        .map_err(|error| format!("OpenAI OCR request failed: {}", error))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().unwrap_or_default();
+        return Err(response_error(status, body, "OpenAI OCR request"));
+    }
+
+    let payload = response
+        .json::<serde_json::Value>()
+        .map_err(|error| format!("OpenAI OCR response parse failed: {}", error))?;
+    extract_openai_output_text(&payload)
+        .filter(|text| !text.trim().is_empty())
+        .ok_or_else(|| "OpenAI OCR did not return text.".to_string())
+}
+
+fn parse_huggingface_text(payload: &serde_json::Value) -> Option<String> {
+    if let Some(text) = payload.get("generated_text").and_then(|value| value.as_str()) {
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Some(text) = payload.get("text").and_then(|value| value.as_str()) {
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Some(items) = payload.as_array() {
+        for item in items {
+            if let Some(found) = parse_huggingface_text(item) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn transcribe_handwriting_with_huggingface(
+    image_bytes: &[u8],
+    mime_type: &str,
+    api_key: &str,
+    model: &str,
+) -> Result<String, String> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(120))
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let endpoint = format!("{}/{}", HUGGINGFACE_INFERENCE_BASE_URL, model);
+    for attempt in 0..HUGGINGFACE_MAX_RETRIES {
+        let response = client
+            .post(&endpoint)
+            .header("authorization", format!("Bearer {}", api_key))
+            .header("content-type", mime_type)
+            .body(image_bytes.to_vec())
+            .send()
+            .map_err(|error| format!("Hugging Face OCR request failed: {}", error))?;
+
+        if response.status().is_success() {
+            let payload = response
+                .json::<serde_json::Value>()
+                .map_err(|error| format!("Hugging Face OCR response parse failed: {}", error))?;
+            if let Some(message) = payload.get("error").and_then(|value| value.as_str()) {
+                let retryable = message.to_lowercase().contains("loading");
+                if retryable && attempt + 1 < HUGGINGFACE_MAX_RETRIES {
+                    thread::sleep(HUGGINGFACE_RETRY_DELAY);
+                    continue;
+                }
+                return Err(format!("Hugging Face OCR failed: {}", message));
+            }
+            return parse_huggingface_text(&payload)
+                .filter(|text| !text.trim().is_empty())
+                .ok_or_else(|| "Hugging Face OCR did not return text.".to_string());
+        }
+
+        if response.status() == HUGGINGFACE_RETRYABLE_STATUS && attempt + 1 < HUGGINGFACE_MAX_RETRIES
+        {
+            thread::sleep(HUGGINGFACE_RETRY_DELAY);
+            continue;
+        }
+
+        let status = response.status();
+        let body = response.text().unwrap_or_default();
+        return Err(response_error(status, body, "Hugging Face OCR request"));
+    }
+
+    Err("Hugging Face OCR timed out while waiting for the model to load.".to_string())
+}
+
+fn run_handwriting_ocr_job(
+    provider: HandwritingOcrProvider,
+    image_bytes: &[u8],
+    mime_type: &str,
+    api_key: &str,
+    model: &str,
+) -> Result<String, String> {
+    match provider {
+        HandwritingOcrProvider::OpenAi => {
+            transcribe_handwriting_with_openai(image_bytes, mime_type, api_key, model)
+        }
+        HandwritingOcrProvider::HuggingFace => {
+            transcribe_handwriting_with_huggingface(image_bytes, mime_type, api_key, model)
+        }
+    }
 }
 
 fn transcribe_audio_bytes_with_assembly(
@@ -2016,7 +2541,109 @@ fn spawn_transcription_worker_if_needed() {
     });
 }
 
+fn process_handwriting_ocr_job(job: QueuedHandwritingOcrJob) {
+    if let Err(error) = update_handwriting_note_status(
+        &job.note_path,
+        RECORDING_STATUS_PROCESSING,
+        None,
+        None,
+    ) {
+        eprintln!(
+            "[handwriting] failed to mark processing for {}: {}",
+            job.note_rel, error
+        );
+    }
+
+    let run = || -> Result<String, String> {
+        let image_bytes = fs::read(&job.attachment_path).map_err(|error| error.to_string())?;
+        let extension = job
+            .attachment_path
+            .extension()
+            .and_then(|value| value.to_str())
+            .and_then(normalize_image_extension)
+            .ok_or_else(|| "Unsupported attachment format.".to_string())?;
+        let mime_type = image_mime_from_extension(extension);
+        run_handwriting_ocr_job(job.provider, &image_bytes, mime_type, &job.api_key, &job.model)
+    };
+
+    match run() {
+        Ok(extracted_text) => {
+            if let Err(error) = update_handwriting_note_status(
+                &job.note_path,
+                RECORDING_STATUS_COMPLETED,
+                None,
+                Some(&extracted_text),
+            ) {
+                eprintln!(
+                    "[handwriting] failed to write OCR text for {}: {}",
+                    job.note_rel, error
+                );
+            }
+        }
+        Err(error) => {
+            let _ = update_handwriting_note_status(
+                &job.note_path,
+                RECORDING_STATUS_FAILED,
+                Some(error.clone()),
+                None,
+            );
+            eprintln!("[handwriting] OCR failed for {}: {}", job.note_rel, error);
+        }
+    }
+}
+
+fn spawn_handwriting_ocr_worker_if_needed() {
+    let should_spawn = {
+        let queue = handwriting_ocr_queue_state();
+        let mut state = queue.lock().expect("handwriting ocr queue poisoned");
+        if state.running || state.pending.is_empty() {
+            false
+        } else {
+            state.running = true;
+            true
+        }
+    };
+
+    if !should_spawn {
+        return;
+    }
+
+    thread::spawn(move || loop {
+        let maybe_job = {
+            let queue = handwriting_ocr_queue_state();
+            let mut state = queue.lock().expect("handwriting ocr queue poisoned");
+            match state.pending.pop_front() {
+                Some(job) => {
+                    state.current_note = Some(job.note_rel.clone());
+                    Some(job)
+                }
+                None => {
+                    state.running = false;
+                    state.current_note = None;
+                    None
+                }
+            }
+        };
+
+        let Some(job) = maybe_job else {
+            break;
+        };
+
+        process_handwriting_ocr_job(job.clone());
+        let queue = handwriting_ocr_queue_state();
+        let mut state = queue.lock().expect("handwriting ocr queue poisoned");
+        state.known_notes.remove(&job.note_rel);
+        if state.current_note.as_deref() == Some(job.note_rel.as_str()) {
+            state.current_note = None;
+        }
+    });
+}
+
 fn recording_initial_body() -> String {
+    String::new()
+}
+
+fn handwriting_initial_body() -> String {
     String::new()
 }
 
@@ -2027,6 +2654,18 @@ fn recording_note_file_name(
 ) -> Result<String, String> {
     let fallback = format!(
         "recording-{}",
+        uuid_tail_without_timestamp_prefix(note_id)
+    );
+    allocate_timestamped_note_file_name(folder, timestamp_ms, "", &fallback)
+}
+
+fn handwriting_note_file_name(
+    folder: &Path,
+    timestamp_ms: i64,
+    note_id: &str,
+) -> Result<String, String> {
+    let fallback = format!(
+        "handwriting-{}",
         uuid_tail_without_timestamp_prefix(note_id)
     );
     allocate_timestamped_note_file_name(folder, timestamp_ms, "", &fallback)
@@ -2049,6 +2688,23 @@ fn recording_audio_file_path(root: &Path, extension: &str) -> Result<PathBuf, St
     Err("Failed to allocate recording audio filename.".to_string())
 }
 
+fn handwriting_attachment_file_path(root: &Path, extension: &str) -> Result<PathBuf, String> {
+    let storage = handwriting_storage_root(root);
+    fs::create_dir_all(&storage).map_err(|error| error.to_string())?;
+    for _ in 0..=512usize {
+        let candidate = storage.join(format!(
+            "{}-{}.{}",
+            ATTACHMENT_FILE_NAME_PREFIX,
+            Uuid::now_v7(),
+            extension
+        ));
+        if !candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+    Err("Failed to allocate attachment filename.".to_string())
+}
+
 fn resolve_recording_target_folder(
     app: &tauri::AppHandle,
     requested: Option<&str>,
@@ -2057,11 +2713,24 @@ fn resolve_recording_target_folder(
     let candidate = requested.unwrap_or("").trim();
     if !candidate.is_empty() {
         let path = resolve_path(app, candidate)?;
-        if path.exists()
-            && path.is_dir()
-            && !path.starts_with(recording_storage_root(&root))
-            && !path.starts_with(root.join(LEGACY_RECORDINGS_FOLDER))
-        {
+        if path.exists() && path.is_dir() && !is_storage_folder_path(&root, &path) {
+            return Ok((strip_root(&root, &path), path));
+        }
+    }
+
+    let fallback = root.join(FEED_FOLDER);
+    Ok((FEED_FOLDER.to_string(), fallback))
+}
+
+fn resolve_handwriting_target_folder(
+    app: &tauri::AppHandle,
+    requested: Option<&str>,
+) -> Result<(String, PathBuf), String> {
+    let root = notes_root(app)?;
+    let candidate = requested.unwrap_or("").trim();
+    if !candidate.is_empty() {
+        let path = resolve_path(app, candidate)?;
+        if path.exists() && path.is_dir() && !is_storage_folder_path(&root, &path) {
             return Ok((strip_root(&root, &path), path));
         }
     }
@@ -3230,10 +3899,8 @@ fn create_note(app: tauri::AppHandle, args: CreateNoteArgs) -> Result<CreateNote
         .filter(|value| !value.is_empty())
         .unwrap_or(FEED_FOLDER);
     let folder_full = resolve_path(&app, folder_rel)?;
-    if folder_full.starts_with(recording_storage_root(&root))
-        || folder_full.starts_with(root.join(LEGACY_RECORDINGS_FOLDER))
-    {
-        return Err("Notes cannot be created inside recordings storage.".to_string());
+    if is_storage_folder_path(&root, &folder_full) {
+        return Err("Notes cannot be created inside recordings or attachments storage.".to_string());
     }
     fs::create_dir_all(&folder_full).map_err(|err| err.to_string())?;
 
@@ -3449,6 +4116,50 @@ fn save_audio_recording(
 }
 
 #[tauri::command]
+fn save_handwriting_attachment(
+    app: tauri::AppHandle,
+    args: SaveHandwritingAttachmentArgs,
+) -> Result<HandwritingAttachmentWriteResult, String> {
+    let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
+    let image_bytes = decode_image_base64(&args.image_base64)?;
+    if image_bytes.is_empty() {
+        return Err("Image payload is empty.".to_string());
+    }
+
+    let extension = supported_image_extension(args.mime_type.as_deref(), args.file_name.as_deref())?;
+    let (target_folder_rel, target_folder_path) =
+        resolve_handwriting_target_folder(&app, args.folder_path.as_deref())?;
+    let attachment_path = handwriting_attachment_file_path(&root, extension)?;
+    fs::write(&attachment_path, image_bytes).map_err(|error| error.to_string())?;
+
+    let now = now_ms().unwrap_or(0);
+    let note_id = generate_note_id();
+    let note_file_name = handwriting_note_file_name(&target_folder_path, now, &note_id)?;
+    let note_path = target_folder_path.join(&note_file_name);
+    let mut meta = NoteFrontMatter::default();
+    meta.id = Some(note_id);
+    meta.created_ms = Some(now);
+    meta.updated_ms = Some(now);
+    meta.note_type = Some(HANDWRITING_FRONTMATTER_TYPE.to_string());
+    meta.handwriting_attachment_path = Some(strip_root(&root, &attachment_path));
+    meta.ocr_status = Some(RECORDING_STATUS_PENDING.to_string());
+    meta.ocr_error = None;
+    meta.ocr_updated_ms = Some(now);
+
+    write_note_with_front_matter(&note_path, &meta, &handwriting_initial_body())?;
+    if !is_feed_folder_path(&root, &target_folder_path) {
+        update_order_append(&target_folder_path, &[note_file_name], false)?;
+    }
+
+    Ok(HandwritingAttachmentWriteResult {
+        folder_path: target_folder_rel,
+        note_path: strip_root(&root, &note_path),
+        attachment_path: strip_root(&root, &attachment_path),
+    })
+}
+
+#[tauri::command]
 fn queue_recording_transcriptions(
     app: tauri::AppHandle,
     args: QueueRecordingsArgs,
@@ -3555,6 +4266,110 @@ fn queue_recording_transcriptions(
 }
 
 #[tauri::command]
+fn queue_handwriting_ocr(
+    app: tauri::AppHandle,
+    args: QueueHandwritingOcrArgs,
+) -> Result<HandwritingOcrQueueResult, String> {
+    let provider = parse_handwriting_ocr_provider(&args.provider)?;
+    let api_key = args.api_key.trim();
+    if api_key.is_empty() {
+        return Err("OCR API key is required.".to_string());
+    }
+    let model = args.model.trim();
+    if model.is_empty() {
+        return Err("OCR model is required.".to_string());
+    }
+
+    let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
+    let notes = collect_handwriting_notes(&root)?;
+    let active_notes = {
+        let queue = handwriting_ocr_queue_state();
+        let state = queue.lock().expect("handwriting ocr queue poisoned");
+        let mut active = HashSet::new();
+        if let Some(current) = &state.current_note {
+            active.insert(current.clone());
+        }
+        for job in state.pending.iter() {
+            active.insert(job.note_rel.clone());
+        }
+        active
+    };
+    let mut scanned = 0usize;
+    let mut skipped = 0usize;
+    let mut candidates = Vec::new();
+
+    for note in notes {
+        scanned += 1;
+        if !note.attachment_path.exists() {
+            let _ = update_handwriting_note_status(
+                &note.note_path,
+                RECORDING_STATUS_FAILED,
+                Some("Attachment file is missing.".to_string()),
+                None,
+            );
+            skipped += 1;
+            continue;
+        }
+
+        let status = note.status.as_str();
+        let is_active = active_notes.contains(&note.note_rel);
+        if status == RECORDING_STATUS_COMPLETED {
+            skipped += 1;
+            continue;
+        }
+        if matches!(
+            status,
+            RECORDING_STATUS_QUEUED | RECORDING_STATUS_PROCESSING
+        ) && is_active
+        {
+            skipped += 1;
+            continue;
+        }
+
+        update_handwriting_note_status(&note.note_path, RECORDING_STATUS_QUEUED, None, None)?;
+        candidates.push(QueuedHandwritingOcrJob {
+            note_rel: note.note_rel,
+            note_path: note.note_path,
+            attachment_path: note.attachment_path,
+            provider,
+            api_key: api_key.to_string(),
+            model: model.to_string(),
+        });
+    }
+
+    let queued = {
+        let queue = handwriting_ocr_queue_state();
+        let mut state = queue.lock().expect("handwriting ocr queue poisoned");
+        let mut added = 0usize;
+        for job in candidates {
+            if state.known_notes.contains(&job.note_rel) {
+                continue;
+            }
+            state.known_notes.insert(job.note_rel.clone());
+            state.pending.push_back(job);
+            added += 1;
+        }
+        added
+    };
+
+    spawn_handwriting_ocr_worker_if_needed();
+
+    let in_flight = {
+        let queue = handwriting_ocr_queue_state();
+        let state = queue.lock().expect("handwriting ocr queue poisoned");
+        state.pending.len() + usize::from(state.running)
+    };
+
+    Ok(HandwritingOcrQueueResult {
+        scanned,
+        queued,
+        skipped,
+        in_flight,
+    })
+}
+
+#[tauri::command]
 fn list_recordings(app: tauri::AppHandle) -> Result<RecordingsListResult, String> {
     let root = notes_root(&app)?;
     ensure_system_folders(&root)?;
@@ -3619,6 +4434,70 @@ fn list_recordings(app: tauri::AppHandle) -> Result<RecordingsListResult, String
 }
 
 #[tauri::command]
+fn list_handwriting_ocr_jobs(app: tauri::AppHandle) -> Result<HandwritingOcrListResult, String> {
+    let root = notes_root(&app)?;
+    ensure_system_folders(&root)?;
+
+    let (queue_running, current_note, pending, in_flight) = {
+        let queue = handwriting_ocr_queue_state();
+        let state = queue.lock().expect("handwriting ocr queue poisoned");
+        let pending = state
+            .pending
+            .iter()
+            .map(|job| job.note_rel.clone())
+            .collect::<Vec<_>>();
+        (
+            state.running,
+            state.current_note.clone(),
+            pending,
+            state.pending.len() + usize::from(state.running),
+        )
+    };
+
+    let mut jobs = collect_handwriting_notes(&root)?
+        .into_iter()
+        .map(|note| {
+            let folder_path = note
+                .note_rel
+                .rsplit_once('/')
+                .map(|(parent, _)| parent.to_string())
+                .unwrap_or_default();
+            let attachment_exists = note.attachment_path.exists();
+            let mut error = note.error.clone();
+            if !attachment_exists {
+                error = Some("Attachment file is missing.".to_string());
+            }
+            HandwritingOcrListItem {
+                note_path: note.note_rel.clone(),
+                folder_path,
+                attachment_path: if attachment_exists {
+                    Some(note.attachment_rel.clone())
+                } else {
+                    None
+                },
+                status: note.status.clone(),
+                error,
+                updated_ms: note.updated_ms,
+                is_queued: pending.iter().any(|value| value == &note.note_rel),
+                is_processing: current_note.as_deref() == Some(note.note_rel.as_str()),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    jobs.sort_by(|a, b| b.updated_ms.unwrap_or(0).cmp(&a.updated_ms.unwrap_or(0)));
+
+    Ok(HandwritingOcrListResult {
+        queue: HandwritingOcrQueueSnapshot {
+            running: queue_running,
+            current_note,
+            pending,
+            in_flight,
+        },
+        jobs,
+    })
+}
+
+#[tauri::command]
 fn read_recording_audio(
     app: tauri::AppHandle,
     args: ReadRecordingAudioArgs,
@@ -3628,7 +4507,7 @@ fn read_recording_audio(
     let path_rel = sanitize_relative(&args.path)?;
     let audio_path = root.join(path_rel);
     if !is_recording_audio_path_allowed(&root, &audio_path) {
-        return Err("Only files inside _Recordings are allowed.".to_string());
+        return Err("Only files inside recordings storage are allowed.".to_string());
     }
     if !audio_path.exists() || !audio_path.is_file() {
         return Err("Audio file not found.".to_string());
@@ -3679,9 +4558,13 @@ fn get_note_meta(app: tauri::AppHandle, path: String) -> Result<NoteMeta, String
         updated_ms,
         note_type: front_matter_meta.note_type.clone(),
         recording_audio_path: front_matter_meta.recording_audio_path.clone(),
+        handwriting_attachment_path: front_matter_meta.handwriting_attachment_path.clone(),
         transcription_status: front_matter_meta.transcription_status.clone(),
         transcription_error: front_matter_meta.transcription_error.clone(),
         transcription_updated_ms: front_matter_meta.transcription_updated_ms,
+        ocr_status: front_matter_meta.ocr_status.clone(),
+        ocr_error: front_matter_meta.ocr_error.clone(),
+        ocr_updated_ms: front_matter_meta.ocr_updated_ms,
     })
 }
 
@@ -3932,8 +4815,11 @@ pub fn run() {
             start_native_audio_recording,
             stop_native_audio_recording,
             save_audio_recording,
+            save_handwriting_attachment,
             queue_recording_transcriptions,
+            queue_handwriting_ocr,
             list_recordings,
+            list_handwriting_ocr_jobs,
             read_recording_audio,
             move_items,
             delete_items,

@@ -15,9 +15,13 @@ export type NoteMeta = {
   updated_ms: number | null;
   note_type?: string | null;
   recording_audio_path?: string | null;
+  handwriting_attachment_path?: string | null;
   transcription_status?: string | null;
   transcription_error?: string | null;
   transcription_updated_ms?: number | null;
+  ocr_status?: string | null;
+  ocr_error?: string | null;
+  ocr_updated_ms?: number | null;
 };
 
 export type DragData = {
@@ -67,6 +71,12 @@ export type RecordingWriteResult = {
   audio_path: string;
 };
 
+export type HandwritingAttachmentWriteResult = {
+  folder_path: string;
+  note_path: string;
+  attachment_path: string;
+};
+
 export type CreateNoteResult = {
   path: string;
 };
@@ -78,9 +88,23 @@ export type RecordingTranscriptionQueueResult = {
   in_flight: number;
 };
 
+export type HandwritingOcrQueueResult = {
+  scanned: number;
+  queued: number;
+  skipped: number;
+  in_flight: number;
+};
+
 export type RecordingQueueSnapshot = {
   running: boolean;
   current_recording: string | null;
+  pending: string[];
+  in_flight: number;
+};
+
+export type HandwritingOcrQueueSnapshot = {
+  running: boolean;
+  current_note: string | null;
   pending: string[];
   in_flight: number;
 };
@@ -96,9 +120,25 @@ export type RecordingListItem = {
   is_processing: boolean;
 };
 
+export type HandwritingOcrListItem = {
+  note_path: string;
+  folder_path: string;
+  attachment_path: string | null;
+  status: string;
+  error: string | null;
+  updated_ms: number | null;
+  is_queued: boolean;
+  is_processing: boolean;
+};
+
 export type RecordingsListResult = {
   queue: RecordingQueueSnapshot;
   recordings: RecordingListItem[];
+};
+
+export type HandwritingOcrListResult = {
+  queue: HandwritingOcrQueueSnapshot;
+  jobs: HandwritingOcrListItem[];
 };
 
 export type RecordingAudioPayload = {
@@ -137,4 +177,10 @@ export type ProfileSyncSettings = {
   lastSuccessfulSyncAt: string;
   assemblyAiApiKey: string;
   mobileAutoTranscriptionEnabled: boolean;
+  handwritingOcrProvider: "openai" | "huggingface";
+  openAiApiKey: string;
+  openAiModel: string;
+  huggingFaceApiKey: string;
+  huggingFaceModel: string;
+  mobileAutoHandwritingOcrEnabled: boolean;
 };

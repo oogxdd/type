@@ -1,6 +1,8 @@
 import { MobileRecordingScreen } from "../components/MobileRecordingScreen";
 import { useRecordings } from "../../contexts/RecordingsContext";
 import { useProfiles } from "../../contexts/ProfilesContext";
+import { useHandwriting } from "../../contexts/HandwritingContext";
+import { useRef, type ChangeEvent } from "react";
 
 type PhoneRecordingScreenProps = {
   folderPath: string;
@@ -23,23 +25,71 @@ export function PhoneRecordingScreen({
     stopRecording,
     queueRecordingTranscriptions,
   } = useRecordings();
+  const {
+    handwritingImportBusy,
+    handwritingQueueBusy,
+    handwritingStatusMessage,
+    handwritingError,
+    importHandwritingFile,
+    queueHandwritingOcr,
+  } = useHandwriting();
   const { syncSettings } = useProfiles();
+  const handwritingInputRef = useRef<HTMLInputElement | null>(null);
 
   const isRecordingBusy = isRecordingFinalizing || transcriptionQueueBusy;
+  const handwritingConfig =
+    syncSettings.handwritingOcrProvider === "huggingface"
+      ? {
+          apiKey: syncSettings.huggingFaceApiKey.trim(),
+          model: syncSettings.huggingFaceModel.trim(),
+        }
+      : {
+          apiKey: syncSettings.openAiApiKey.trim(),
+          model: syncSettings.openAiModel.trim(),
+        };
+  const hasHandwritingProviderConfig =
+    handwritingConfig.apiKey.length > 0 && handwritingConfig.model.length > 0;
+
+  const onHandwritingInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) {
+      return;
+    }
+    void importHandwritingFile(file, folderPath).catch((error) => {
+      console.error("[handwriting] mobile import failed", error);
+    });
+  };
 
   return (
-    <MobileRecordingScreen
-      recordingSupported={recordingSupported}
-      isRecording={isRecordingAudio}
-      isBusy={isRecordingBusy}
-      recordingError={recorderError}
-      recordingStatus={recordingStatusMessage}
-      recordingLiveStatus={recordingLiveStatus}
-      hasAssemblyApiKey={syncSettings.assemblyAiApiKey.trim().length > 0}
-      onStart={() => startRecording(folderPath)}
-      onStop={stopRecording}
-      onQueue={() => void queueRecordingTranscriptions("manual")}
-      autoStart={autoStart}
-    />
+    <>
+      <input
+        ref={handwritingInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        style={{ display: "none" }}
+        onChange={onHandwritingInputChange}
+      />
+      <MobileRecordingScreen
+        recordingSupported={recordingSupported}
+        isRecording={isRecordingAudio}
+        isBusy={isRecordingBusy}
+        recordingError={recorderError}
+        recordingStatus={recordingStatusMessage}
+        recordingLiveStatus={recordingLiveStatus}
+        hasAssemblyApiKey={syncSettings.assemblyAiApiKey.trim().length > 0}
+        handwritingImportBusy={handwritingImportBusy}
+        handwritingQueueBusy={handwritingQueueBusy}
+        handwritingStatus={handwritingStatusMessage}
+        handwritingError={handwritingError}
+        hasHandwritingProviderConfig={hasHandwritingProviderConfig}
+        onStart={() => startRecording(folderPath)}
+        onStop={stopRecording}
+        onQueue={() => void queueRecordingTranscriptions("manual")}
+        onPickHandwriting={() => handwritingInputRef.current?.click()}
+        onQueueHandwriting={() => void queueHandwritingOcr("manual")}
+        autoStart={autoStart}
+      />
+    </>
   );
 }

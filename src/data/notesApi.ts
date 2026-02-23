@@ -4,6 +4,9 @@ import type {
   FolderNode,
   GitCommitHistoryEntry,
   GitSyncStatus,
+  HandwritingAttachmentWriteResult,
+  HandwritingOcrListResult,
+  HandwritingOcrQueueResult,
   NativeRecorderCapabilities,
   NoteMeta,
   NotesProfile,
@@ -111,6 +114,21 @@ export const saveAudioRecording = (
     },
   });
 
+export const saveHandwritingAttachment = (
+  imageBase64: string,
+  mimeType?: string,
+  fileName?: string,
+  folderPath?: string
+): Promise<HandwritingAttachmentWriteResult> =>
+  invokeLogged<HandwritingAttachmentWriteResult>("save_handwriting_attachment", {
+    args: {
+      image_base64: imageBase64,
+      mime_type: mimeType,
+      file_name: fileName,
+      folder_path: folderPath,
+    },
+  });
+
 export const queueRecordingTranscriptions = (
   assemblyApiKey: string
 ): Promise<RecordingTranscriptionQueueResult> =>
@@ -120,8 +138,24 @@ export const queueRecordingTranscriptions = (
     },
   });
 
+export const queueHandwritingOcr = (
+  provider: "openai" | "huggingface",
+  apiKey: string,
+  model: string
+): Promise<HandwritingOcrQueueResult> =>
+  invokeLogged<HandwritingOcrQueueResult>("queue_handwriting_ocr", {
+    args: {
+      provider,
+      api_key: apiKey,
+      model,
+    },
+  });
+
 export const listRecordings = (): Promise<RecordingsListResult> =>
   invokeLogged<RecordingsListResult>("list_recordings");
+
+export const listHandwritingOcrJobs = (): Promise<HandwritingOcrListResult> =>
+  invokeLogged<HandwritingOcrListResult>("list_handwriting_ocr_jobs");
 
 export const readRecordingAudio = (
   path: string

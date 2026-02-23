@@ -1,8 +1,13 @@
-import type { NoteMeta, RecordingListItem } from "../types";
+import type {
+  HandwritingOcrListItem,
+  NoteMeta,
+  RecordingListItem,
+} from "../types";
 import { stripFrontmatter } from "./frontmatter";
 import { stripInlineAnnotationMetadata } from "./noteAnnotations";
 
 const RECORDING_NOTE_TYPE = "audio_recording";
+const HANDWRITING_NOTE_TYPE = "handwriting_attachment";
 
 const stripMarkdownLine = (line: string) =>
   line
@@ -30,9 +35,19 @@ export const isRecordingNoteType = (
 ) =>
   noteType === RECORDING_NOTE_TYPE || Boolean(recordingAudioPath && recordingAudioPath.trim());
 
+export const isHandwritingNoteType = (
+  noteType: string | null | undefined,
+  handwritingAttachmentPath: string | null | undefined
+) =>
+  noteType === HANDWRITING_NOTE_TYPE ||
+  Boolean(handwritingAttachmentPath && handwritingAttachmentPath.trim());
+
 export const isRecordingTranscriptionCompleted = (
   status: string | null | undefined
 ) => (status || "").trim().toLowerCase() === "completed";
+
+export const isHandwritingOcrCompleted = (status: string | null | undefined) =>
+  (status || "").trim().toLowerCase() === "completed";
 
 export const sanitizeRecordingEditorContent = (
   content: string,
@@ -76,8 +91,11 @@ export type NotePreview = {
   secondLine: string;
   updatedMs: number | null;
   isRecording: boolean;
+  isHandwriting: boolean;
   recordingAudioPath: string | null;
+  handwritingAttachmentPath: string | null;
   transcriptionStatus: string | null;
+  ocrStatus: string | null;
 };
 
 export const formatNoteDateLabel = (timestamp: number | null) => {
@@ -122,15 +140,25 @@ export const parseNotePreview = (
   updatedMs: number | null,
   noteMeta?: Pick<
     NoteMeta,
-    "note_type" | "recording_audio_path" | "transcription_status"
+    | "note_type"
+    | "recording_audio_path"
+    | "handwriting_attachment_path"
+    | "transcription_status"
+    | "ocr_status"
   >
 ): NotePreview => {
   const isRecording = isRecordingNoteType(
     noteMeta?.note_type,
     noteMeta?.recording_audio_path
   );
+  const isHandwriting = isHandwritingNoteType(
+    noteMeta?.note_type,
+    noteMeta?.handwriting_attachment_path
+  );
   const transcriptionStatus = noteMeta?.transcription_status || null;
+  const ocrStatus = noteMeta?.ocr_status || null;
   const isTranscribed = isRecordingTranscriptionCompleted(transcriptionStatus);
+  const isOcrComplete = isHandwritingOcrCompleted(ocrStatus);
   const contentWithoutFrontmatter = stripInlineAnnotationMetadata(
     stripFrontmatter(content)
   );
@@ -153,7 +181,14 @@ export const parseNotePreview = (
 
   const useVoiceRecordingPlaceholder =
     isRecording && !isTranscribed && previewLines.length === 0;
-  const title = useVoiceRecordingPlaceholder ? "Voice recording" : previewLines[0] || "";
+  const useHandwritingPlaceholder =
+    isHandwriting && !isOcrComplete && previewLines.length === 0;
+  const title =
+    useVoiceRecordingPlaceholder
+      ? "Voice recording"
+      : useHandwritingPlaceholder
+        ? "Handwriting note"
+        : previewLines[0] || "";
   const secondLine = useVoiceRecordingPlaceholder ? "" : previewLines[1] || "";
   return {
     title,
@@ -161,8 +196,11 @@ export const parseNotePreview = (
     secondLine,
     updatedMs,
     isRecording,
+    isHandwriting,
     recordingAudioPath: noteMeta?.recording_audio_path || null,
+    handwritingAttachmentPath: noteMeta?.handwriting_attachment_path || null,
     transcriptionStatus,
+    ocrStatus,
   };
 };
 
@@ -179,6 +217,16 @@ export const getNextNoteFileName = (existingNames: string[]) => {
 };
 
 export const formatRecordingStatus = (item: RecordingListItem) => {
+  if (item.is_processing) {
+    return "processing";
+  }
+  if (item.is_queued) {
+    return "queued";
+  }
+  return item.status;
+};
+
+export const formatHandwritingStatus = (item: HandwritingOcrListItem) => {
   if (item.is_processing) {
     return "processing";
   }

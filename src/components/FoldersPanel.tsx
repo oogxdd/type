@@ -1,7 +1,7 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useEffect, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { ChevronRight, File, Folder, Mic } from "lucide-react";
+import { ChevronRight, File, Folder, Mic, PenLine } from "lucide-react";
 import type { TreeItem } from "../tree/types";
 import { Collapsible, CollapsibleContent } from "./ui/collapsible";
 import {
@@ -223,7 +223,11 @@ function SidebarFileTreeNode({
                     >
                       <File />
                       <span>{preview?.title || note.name}</span>
-                      {preview?.isRecording ? <Mic size={12} className="sidebar-filetree-note-mic" /> : null}
+                      {preview?.isRecording ? (
+                        <Mic size={12} className="sidebar-filetree-note-mic" />
+                      ) : preview?.isHandwriting ? (
+                        <PenLine size={12} className="sidebar-filetree-note-mic" />
+                      ) : null}
                     </button>
                   </SidebarMenuSubButton>
                 );

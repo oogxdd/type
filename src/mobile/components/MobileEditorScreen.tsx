@@ -1,6 +1,7 @@
 import { NoteEditor } from "../../components/NoteEditor";
 import { useRef, useState } from "react";
 import { RecordingNoteHeader } from "../../components/RecordingNoteHeader";
+import { HandwritingNoteHeader } from "../../components/HandwritingNoteHeader";
 import type { NotePreview } from "../../utils/format";
 import { sanitizeRecordingEditorContent } from "../../utils/format";
 
@@ -140,6 +141,9 @@ export function MobileEditorScreen({
       ) : null}
       {!draftMode && hasActiveNote ? (
         <RecordingNoteHeader notePath={notePath} preview={notePreview} />
+      ) : null}
+      {!draftMode && hasActiveNote ? (
+        <HandwritingNoteHeader notePath={notePath} preview={notePreview} />
       ) : null}
       <div className="mobile-editor-surface">
         <NoteEditor markdown={editorMarkdown} onChange={onChange} />
