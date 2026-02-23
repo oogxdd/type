@@ -187,7 +187,8 @@ export function HandwritingProvider({
           toBase64(bytes),
           file.type || undefined,
           file.name || undefined,
-          resolveTargetFolder(preferredFolderPath)
+          resolveTargetFolder(preferredFolderPath),
+          syncSettings.noteFileNameFormat
         );
         await onHandwritingComplete(result);
         setHandwritingStatusMessage(`Saved ${result.note_path}.`);
@@ -208,6 +209,7 @@ export function HandwritingProvider({
       queueHandwritingOcr,
       refreshHandwritingJobs,
       resolveTargetFolder,
+      syncSettings.noteFileNameFormat,
       shouldAutoQueueHandwriting,
     ]
   );

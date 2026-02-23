@@ -155,6 +155,10 @@ export type NativeRecorderCapabilities = {
 export type AppMode = "notes" | "settings";
 export type PaneId = "folders" | "middle" | "right";
 export type GitSyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
+export type NoteFileNameFormat =
+  | "utc_timestamp_slug"
+  | "uuid_v7"
+  | "uuid_v7_prefix_slug";
 
 export type VisibleNavigationItem =
   | {
@@ -175,6 +179,7 @@ export type ProfileSyncSettings = {
   gitPassword: string;
   gitCommitMessage: string;
   lastSuccessfulSyncAt: string;
+  noteFileNameFormat: NoteFileNameFormat;
   assemblyAiApiKey: string;
   mobileAutoTranscriptionEnabled: boolean;
   handwritingOcrProvider: "openai" | "huggingface";

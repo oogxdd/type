@@ -46,7 +46,7 @@ Build now emits both:
 To prepare publishable OTA artifacts + manifest:
 
 ```bash
-OTA_CDN_BASE_URL=https://your-cdn.example.com/type npm run ota:prepare
+OTA_CDN_BASE_URL=https://your-cdn.example.com/type/ota npm run ota:prepare
 ```
 
 `npm run ota:prepare` also works without `OTA_CDN_BASE_URL` if `VITE_OTA_MANIFEST_URL` is set
@@ -57,6 +57,9 @@ This writes:
 - `dist/ota/app-<version>.js`
 - `dist/ota/app-<version>.css`
 - `dist/ota/manifest.json` (with SHA-256 hash)
+
+Set `VITE_OTA_MANIFEST_URL` to this manifest path (for example:
+`https://your-cdn.example.com/type/ota/manifest.json`).
 
 OTA flow:
 

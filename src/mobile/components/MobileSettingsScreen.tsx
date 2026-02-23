@@ -1,4 +1,5 @@
 import type { SettingsSectionId } from "../../components/SettingsPanel";
+import { MobileGeneralSection } from "./settings/MobileGeneralSection";
 import { MobileProfileSection } from "./settings/MobileProfileSection";
 import { MobileSyncSection } from "./settings/MobileSyncSection";
 import { MobileUpdatesSection } from "./settings/MobileUpdatesSection";
@@ -36,6 +37,7 @@ export function MobileSettingsScreen({
       </div>
 
       <div className="mobile-settings-scroll mobile-settings-native">
+        {activeSection === "general" ? <MobileGeneralSection /> : null}
         {activeSection === "profile" ? <MobileProfileSection /> : null}
         {activeSection === "sync" ? <MobileSyncSection /> : null}
         {activeSection === "updates" ? <MobileUpdatesSection /> : null}

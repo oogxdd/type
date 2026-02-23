@@ -74,7 +74,7 @@ export function NotesTreeProvider({
 }: {
   children: ReactNode;
 }) {
-  const { activeProfileId, activeProfileNotesRoot } = useProfiles();
+  const { activeProfileId, activeProfileNotesRoot, syncSettings } = useProfiles();
   const { notesListMode } = useTheme();
   const layoutMode = useLayoutMode();
   const {
@@ -233,7 +233,12 @@ export function NotesTreeProvider({
         findNode(treeSnapshot, initialFolderPath) || findNode(treeSnapshot, FEED_FOLDER_PATH);
       if (!targetNode) return null;
       const folderPath = targetNode.path;
-      const created = await api.createNote(folderPath, initialContent, targetTimestampMs);
+      const created = await api.createNote(
+        folderPath,
+        initialContent,
+        targetTimestampMs,
+        syncSettings.noteFileNameFormat
+      );
       const path = created.path;
       await refreshTree();
 
@@ -255,7 +260,19 @@ export function NotesTreeProvider({
 
       return path;
     },
-    [clearDraft, refreshTree, rightPaneRef, setActiveFolder, setActiveNote, setLastSelectedFolder, setLastSelectedNote, setSelectedFolders, setSelectedNotes, tree]
+    [
+      clearDraft,
+      refreshTree,
+      rightPaneRef,
+      setActiveFolder,
+      setActiveNote,
+      setLastSelectedFolder,
+      setLastSelectedNote,
+      setSelectedFolders,
+      setSelectedNotes,
+      syncSettings.noteFileNameFormat,
+      tree,
+    ]
   );
 
   // -- Rename

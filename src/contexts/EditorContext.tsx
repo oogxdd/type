@@ -29,7 +29,7 @@ export function EditorProvider({
 }: {
   children: ReactNode;
 }) {
-  const { activeProfileId, activeProfileNotesRoot } = useProfiles();
+  const { activeProfileId, activeProfileNotesRoot, syncSettings } = useProfiles();
   const { activeNote } = useSelection();
 
   const {
@@ -42,7 +42,7 @@ export function EditorProvider({
     clearDraft,
     flushSave,
     retrySave,
-  } = useNoteEditor(activeNote);
+  } = useNoteEditor(activeNote, syncSettings.noteFileNameFormat);
 
   const rightPaneRef = useRef<HTMLDivElement | null>(null);
 

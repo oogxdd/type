@@ -206,7 +206,8 @@ export function RecordingsProvider({
       const result = await api.saveAudioRecording(
         audioBase64,
         mimeType || undefined,
-        targetFolder
+        targetFolder,
+        syncSettings.noteFileNameFormat
       );
       await onRecordingComplete(result);
       setRecordingStatusMessage(`Saved ${result.note_path}.`);
@@ -215,7 +216,13 @@ export function RecordingsProvider({
         await queueRecordingTranscriptions("auto");
       }
     },
-    [onRecordingComplete, queueRecordingTranscriptions, refreshRecordings, shouldAutoQueueTranscriptions]
+    [
+      onRecordingComplete,
+      queueRecordingTranscriptions,
+      refreshRecordings,
+      shouldAutoQueueTranscriptions,
+      syncSettings.noteFileNameFormat,
+    ]
   );
 
   const {

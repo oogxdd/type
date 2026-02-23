@@ -60,7 +60,7 @@ All child components (MobileShell, SettingsPanel, MobileSettingsScreen) consume 
 
 **EditorContext** (`src/contexts/EditorContext.tsx`, ~101 lines): Wraps the `useNoteEditor` hook, providing `noteContent`, `draftNoteContent`, `handleEditorChange`, `isSaving`, `lastSaveError`, `flushSave`, `clearNote`, `clearDraft`, `retrySave`. Owns `rightPaneRef`. Watches `activeNote` from SelectionContext to load/save notes. Handles flush-on-visibility/unload. Clears state when `activeProfileId` or `activeProfileNotesRoot` changes.
 
-**NotesTreeContext** (`src/contexts/NotesTreeContext.tsx`, ~444 lines): Owns the folder tree, computed tree data (treeData, flatItems, visibleItems, orderedIds), and rename state. Provides all CRUD operations: createNewNote, deleteNotes, deleteFolders, moveNotesToArchive, rename. New notes are created through backend `create_note` with UTC timestamp-based filenames (`YYYY-MM-DDTHH-mm-ssZ-<slug>.md`). Consumes SelectionContext and EditorContext to update selection/editor state after CRUD operations. Resets tree state when `activeProfileId` or `activeProfileNotesRoot` changes.
+**NotesTreeContext** (`src/contexts/NotesTreeContext.tsx`, ~444 lines): Owns the folder tree, computed tree data (treeData, flatItems, visibleItems, orderedIds), and rename state. Provides all CRUD operations: createNewNote, deleteNotes, deleteFolders, moveNotesToArchive, rename. New notes are created through backend `create_note` and use the per-profile filename mode from sync settings (`utc_timestamp_slug`, `uuid_v7`, or `uuid_v7_prefix_slug`). Consumes SelectionContext and EditorContext to update selection/editor state after CRUD operations. Resets tree state when `activeProfileId` or `activeProfileNotesRoot` changes.
 
 **RecordingsContext** (`src/contexts/RecordingsContext.tsx`, ~280 lines): Wraps `useAudioRecorder` hook. Manages recording target folder resolution, recording list/queue polling, audio playback (blob URL management), and auto-queue transcription timer. Takes `onRecordingComplete` callback prop wired in App.tsx to refresh tree and select the new note.
 
@@ -82,7 +82,7 @@ These are the trickiest part of the architecture:
 
 **useKeyboardNavigation** (`src/hooks/useKeyboardNavigation.ts`): Global keyboard shortcuts (Cmd+T toggle sidebar, Cmd+W switch panes, Cmd+J/K navigate panes, Cmd+N new note, Cmd+=/- font zoom, Cmd+0 reset font). Arrow key navigation for folders panel (with expand/collapse) and notes panel. Handles the "nested notes in navigation" mode where notes appear inline in the folder tree.
 
-**useNoteEditor** (`src/hooks/useNoteEditor.ts`): Loads note content when activeNote changes, flushes previous note if dirty. Debounced autosave at 400ms. Tracks dirty/saving/error state. `flushSave()` for immediate save on navigation away. On note switch: empty dirty notes are auto-deleted; timestamp filename notes with placeholder suffix (`...-note.md`) are auto-renamed to `...-<slug>.md` when content is sufficient.
+**useNoteEditor** (`src/hooks/useNoteEditor.ts`): Loads note content when activeNote changes, flushes previous note if dirty. Debounced autosave at 400ms. Tracks dirty/saving/error state. `flushSave()` for immediate save on navigation away. On note switch: empty dirty notes are auto-deleted; placeholder filename notes are auto-renamed to `...-<slug>.md` when content is sufficient for slugging (mode-dependent: UTC timestamp and UUID-prefix modes rename, pure UUID mode does not).
 
 **useNotePreviews** (`src/hooks/useNotePreviews.ts`): Given an array of NoteEntry, fetches each note's metadata + content in parallel, returns preview objects (title, date, summary).
 
@@ -207,7 +207,11 @@ A WidgetKit extension that lets users start a recording from the iOS home screen
 - **"Archieve" typo**: The archive folder is spelled "Archieve" in the codebase and in persisted data. Do not "fix" this — it would break existing user data.
 - **Feed folder semantics**: `Feed` is the default notes folder and does not keep `.notes-order.json`.
 - **Recordings storage**: audio files live under hidden `Recordings/`; notes created from recordings can be in `Feed` or the selected folder and reference audio via frontmatter.
-- **Filename lifecycle**: notes are named with UTC timestamp prefix: `YYYY-MM-DDTHH-mm-ssZ-<slug>.md`. New notes may start with placeholder suffix (`-note`) and then auto-rename to content slug when enough text is available. Slug extraction is Unicode-aware (keeps Cyrillic/Latin letters and digits) and ignores `NV_EMPTY_LINE_TOKEN_*` noise.
+- **Filename lifecycle**: per-profile setting controls new note file names:
+  - `utc_timestamp_slug` (default): `YYYY-MM-DDTHH-mm-ssZ-<slug>.md`
+  - `uuid_v7`: `<uuidv7>.md` (no auto-rename to slug)
+  - `uuid_v7_prefix_slug`: `<uuidv7-prefix>-<slug>.md`
+  New notes may start with placeholder suffixes (`-note-...`, `-recording-...`, etc.) and then auto-rename to content slug when enough text is available in slug-capable modes. Slug extraction is Unicode-aware (keeps Cyrillic/Latin letters and digits) and ignores `NV_EMPTY_LINE_TOKEN_*` noise.
 - **Empty note cleanup**: if a dirty note is emptied and then focus/selection moves away, it is auto-deleted.
 - **Git sync uses libgit2**, not shell git. The Rust backend handles all git operations.
 - **Sync history UX**: settings now show commit history from real git log. This cannot reliably encode which device performed push/pull for every commit.

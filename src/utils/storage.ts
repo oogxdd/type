@@ -13,6 +13,7 @@ export const DEFAULT_PROFILE_SYNC_SETTINGS: ProfileSyncSettings = {
   gitPassword: "",
   gitCommitMessage: "Sync notes",
   lastSuccessfulSyncAt: "",
+  noteFileNameFormat: "utc_timestamp_slug",
   assemblyAiApiKey: "",
   mobileAutoTranscriptionEnabled: true,
   handwritingOcrProvider: "openai",
@@ -72,6 +73,15 @@ const normalizeHandwritingProvider = (
 ): ProfileSyncSettings["handwritingOcrProvider"] =>
   value === "huggingface" ? "huggingface" : "openai";
 
+const normalizeNoteFileNameFormat = (
+  value: unknown
+): ProfileSyncSettings["noteFileNameFormat"] => {
+  if (value === "uuid_v7" || value === "uuid_v7_prefix_slug") {
+    return value;
+  }
+  return "utc_timestamp_slug";
+};
+
 export const readProfileSyncStore = (): Record<string, Partial<ProfileSyncSettings>> => {
   if (typeof window === "undefined") {
     return {};
@@ -123,6 +133,12 @@ export const getProfileSyncSettings = (profileId: string): ProfileSyncSettings =
           gitPassword: getStoredSyncValue("notes-viewer-git-password", ""),
           gitCommitMessage: getStoredSyncValue("notes-viewer-git-commit-message", "Sync notes"),
           lastSuccessfulSyncAt: getStoredSyncValue("notes-viewer-git-last-sync-at", ""),
+          noteFileNameFormat: normalizeNoteFileNameFormat(
+            getStoredSyncValue(
+              "notes-viewer-note-file-name-format",
+              DEFAULT_PROFILE_SYNC_SETTINGS.noteFileNameFormat
+            )
+          ),
           assemblyAiApiKey: getStoredSyncValue("notes-viewer-assemblyai-api-key", ""),
           mobileAutoTranscriptionEnabled: getStoredBooleanValue(
             "notes-viewer-mobile-auto-transcription-enabled",
@@ -164,6 +180,11 @@ export const getProfileSyncSettings = (profileId: string): ProfileSyncSettings =
       stored.lastSuccessfulSyncAt ??
       legacyFallback.lastSuccessfulSyncAt ??
       DEFAULT_PROFILE_SYNC_SETTINGS.lastSuccessfulSyncAt,
+    noteFileNameFormat: normalizeNoteFileNameFormat(
+      stored.noteFileNameFormat ??
+        legacyFallback.noteFileNameFormat ??
+        DEFAULT_PROFILE_SYNC_SETTINGS.noteFileNameFormat
+    ),
     assemblyAiApiKey:
       stored.assemblyAiApiKey ??
       legacyFallback.assemblyAiApiKey ??

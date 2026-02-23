@@ -279,6 +279,7 @@ export function SettingsProfileSection() {
             </div>
           </div>
         </section>
+
       </div>
 
       <Dialog open={profileManagerOpen} onOpenChange={setProfileManagerOpen}>

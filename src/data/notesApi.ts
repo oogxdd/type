@@ -8,6 +8,7 @@ import type {
   HandwritingOcrListResult,
   HandwritingOcrQueueResult,
   NativeRecorderCapabilities,
+  NoteFileNameFormat,
   NoteMeta,
   NotesProfile,
   NotesProfileSnapshot,
@@ -80,13 +81,15 @@ export const readNote = (path: string): Promise<string> =>
 export const createNote = (
   folderPath?: string,
   content = "",
-  timestampMs?: number
+  timestampMs?: number,
+  fileNameFormat?: NoteFileNameFormat
 ): Promise<CreateNoteResult> =>
   invokeLogged<CreateNoteResult>("create_note", {
     args: {
       folder_path: folderPath,
       content,
       timestamp_ms: timestampMs,
+      file_name_format: fileNameFormat,
     },
   });
 
@@ -104,13 +107,15 @@ export const setNoteTimestamp = (path: string, timestampMs: number): Promise<voi
 export const saveAudioRecording = (
   audioBase64: string,
   mimeType?: string,
-  folderPath?: string
+  folderPath?: string,
+  fileNameFormat?: NoteFileNameFormat
 ): Promise<RecordingWriteResult> =>
   invokeLogged<RecordingWriteResult>("save_audio_recording", {
     args: {
       audio_base64: audioBase64,
       mime_type: mimeType,
       folder_path: folderPath,
+      file_name_format: fileNameFormat,
     },
   });
 
@@ -118,7 +123,8 @@ export const saveHandwritingAttachment = (
   imageBase64: string,
   mimeType?: string,
   fileName?: string,
-  folderPath?: string
+  folderPath?: string,
+  noteFileNameFormat?: NoteFileNameFormat
 ): Promise<HandwritingAttachmentWriteResult> =>
   invokeLogged<HandwritingAttachmentWriteResult>("save_handwriting_attachment", {
     args: {
@@ -126,6 +132,7 @@ export const saveHandwritingAttachment = (
       mime_type: mimeType,
       file_name: fileName,
       folder_path: folderPath,
+      file_name_format: noteFileNameFormat,
     },
   });
 

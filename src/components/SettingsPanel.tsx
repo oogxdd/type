@@ -1,5 +1,6 @@
 import { Button } from "./ui/button";
 import { useEditor } from "../contexts/EditorContext";
+import { SettingsGeneralSection } from "./settings/SettingsGeneralSection";
 import { SettingsProfileSection } from "./settings/SettingsProfileSection";
 import { SettingsSyncSection } from "./settings/SettingsSyncSection";
 import { SettingsAppearanceSection } from "./settings/SettingsAppearanceSection";
@@ -10,6 +11,7 @@ export type ThemeMode = "light" | "dark";
 export type NotesListMode = "separate" | "nested";
 
 export type SettingsSectionId =
+  | "general"
   | "profile"
   | "sync"
   | "updates"
@@ -21,6 +23,7 @@ type SettingsSection = {
 };
 
 const SETTINGS_SECTIONS: SettingsSection[] = [
+  { id: "general", title: "General" },
   { id: "profile", title: "Profile" },
   { id: "sync", title: "Sync" },
   { id: "updates", title: "Updates" },
@@ -62,6 +65,7 @@ function SettingsRow({
 }
 
 function SettingsDetail({ sectionId }: { sectionId: SettingsSectionId }) {
+  if (sectionId === "general") return <SettingsGeneralSection />;
   if (sectionId === "profile") return <SettingsProfileSection />;
   if (sectionId === "sync") return <SettingsSyncSection />;
   if (sectionId === "updates") return <SettingsUpdatesSection />;

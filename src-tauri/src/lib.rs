@@ -279,11 +279,22 @@ struct DeleteProfileArgs {
     profile_id: String,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum NoteFileNameFormat {
+    #[default]
+    UtcTimestampSlug,
+    UuidV7,
+    UuidV7PrefixSlug,
+}
+
 #[derive(Deserialize)]
 struct CreateNoteArgs {
     folder_path: Option<String>,
     content: Option<String>,
     timestamp_ms: Option<i64>,
+    #[serde(default)]
+    file_name_format: NoteFileNameFormat,
 }
 
 #[derive(Serialize)]
@@ -296,6 +307,8 @@ struct SaveRecordingArgs {
     audio_base64: String,
     mime_type: Option<String>,
     folder_path: Option<String>,
+    #[serde(default)]
+    file_name_format: NoteFileNameFormat,
 }
 
 #[derive(Deserialize)]
@@ -304,6 +317,8 @@ struct SaveHandwritingAttachmentArgs {
     mime_type: Option<String>,
     file_name: Option<String>,
     folder_path: Option<String>,
+    #[serde(default)]
+    file_name_format: NoteFileNameFormat,
 }
 
 #[derive(Serialize)]
@@ -1691,6 +1706,11 @@ fn uuid_tail_without_timestamp_prefix(note_id: &str) -> String {
     note_id.to_lowercase()
 }
 
+fn uuid_prefix_with_timestamp(note_id: &str) -> String {
+    let lower = note_id.to_lowercase();
+    lower.chars().take(13).collect()
+}
+
 fn utc_note_filename_timestamp(timestamp_ms: i64) -> String {
     let seconds = timestamp_ms.div_euclid(1_000);
     let millis = timestamp_ms.rem_euclid(1_000);
@@ -1772,14 +1792,11 @@ fn slug_from_content(content: &str, fallback: &str) -> String {
     }
 }
 
-fn allocate_timestamped_note_file_name(
+fn allocate_prefixed_note_file_name(
     folder: &Path,
-    timestamp_ms: i64,
-    content: &str,
-    fallback_slug: &str,
+    prefix: &str,
+    slug: &str,
 ) -> Result<String, String> {
-    let prefix = utc_note_filename_timestamp(timestamp_ms);
-    let slug = slug_from_content(content, fallback_slug);
     for attempt in 0..=512usize {
         let candidate = if attempt == 0 {
             format!("{}-{}.md", prefix, slug)
@@ -1791,6 +1808,44 @@ fn allocate_timestamped_note_file_name(
         }
     }
     Err("Failed to allocate note filename.".to_string())
+}
+
+fn allocate_uuid_v7_note_file_name(folder: &Path, note_id: &str) -> Result<String, String> {
+    let base = note_id.to_lowercase();
+    for attempt in 0..=512usize {
+        let candidate = if attempt == 0 {
+            format!("{}.md", base)
+        } else {
+            format!("{}-{}.md", base, attempt)
+        };
+        if !folder.join(&candidate).exists() {
+            return Ok(candidate);
+        }
+    }
+    Err("Failed to allocate note filename.".to_string())
+}
+
+fn allocate_note_file_name(
+    folder: &Path,
+    timestamp_ms: i64,
+    note_id: &str,
+    content: &str,
+    fallback_slug: &str,
+    file_name_format: NoteFileNameFormat,
+) -> Result<String, String> {
+    match file_name_format {
+        NoteFileNameFormat::UtcTimestampSlug => {
+            let prefix = utc_note_filename_timestamp(timestamp_ms);
+            let slug = slug_from_content(content, fallback_slug);
+            allocate_prefixed_note_file_name(folder, &prefix, &slug)
+        }
+        NoteFileNameFormat::UuidV7 => allocate_uuid_v7_note_file_name(folder, note_id),
+        NoteFileNameFormat::UuidV7PrefixSlug => {
+            let prefix = uuid_prefix_with_timestamp(note_id);
+            let slug = slug_from_content(content, fallback_slug);
+            allocate_prefixed_note_file_name(folder, &prefix, &slug)
+        }
+    }
 }
 
 fn audio_extension_from_mime(mime_type: Option<&str>) -> &'static str {
@@ -2651,24 +2706,40 @@ fn recording_note_file_name(
     folder: &Path,
     timestamp_ms: i64,
     note_id: &str,
+    file_name_format: NoteFileNameFormat,
 ) -> Result<String, String> {
     let fallback = format!(
         "recording-{}",
         uuid_tail_without_timestamp_prefix(note_id)
     );
-    allocate_timestamped_note_file_name(folder, timestamp_ms, "", &fallback)
+    allocate_note_file_name(
+        folder,
+        timestamp_ms,
+        note_id,
+        "",
+        &fallback,
+        file_name_format,
+    )
 }
 
 fn handwriting_note_file_name(
     folder: &Path,
     timestamp_ms: i64,
     note_id: &str,
+    file_name_format: NoteFileNameFormat,
 ) -> Result<String, String> {
     let fallback = format!(
         "handwriting-{}",
         uuid_tail_without_timestamp_prefix(note_id)
     );
-    allocate_timestamped_note_file_name(folder, timestamp_ms, "", &fallback)
+    allocate_note_file_name(
+        folder,
+        timestamp_ms,
+        note_id,
+        "",
+        &fallback,
+        file_name_format,
+    )
 }
 
 fn recording_audio_file_path(root: &Path, extension: &str) -> Result<PathBuf, String> {
@@ -3908,8 +3979,14 @@ fn create_note(app: tauri::AppHandle, args: CreateNoteArgs) -> Result<CreateNote
     let content = args.content.unwrap_or_default();
     let note_id = generate_note_id();
     let fallback = format!("note-{}", uuid_tail_without_timestamp_prefix(&note_id));
-    let file_name =
-        allocate_timestamped_note_file_name(&folder_full, timestamp, &content, &fallback)?;
+    let file_name = allocate_note_file_name(
+        &folder_full,
+        timestamp,
+        &note_id,
+        &content,
+        &fallback,
+        args.file_name_format,
+    )?;
     let path = folder_full.join(&file_name);
     let mut meta = NoteFrontMatter::default();
     meta.id = Some(note_id);
@@ -4090,7 +4167,8 @@ fn save_audio_recording(
 
     let now = now_ms().unwrap_or(0);
     let note_id = generate_note_id();
-    let note_file_name = recording_note_file_name(&target_folder_path, now, &note_id)?;
+    let note_file_name =
+        recording_note_file_name(&target_folder_path, now, &note_id, args.file_name_format)?;
     let note_path = target_folder_path.join(&note_file_name);
     let mut meta = NoteFrontMatter::default();
     meta.id = Some(note_id);
@@ -4135,7 +4213,12 @@ fn save_handwriting_attachment(
 
     let now = now_ms().unwrap_or(0);
     let note_id = generate_note_id();
-    let note_file_name = handwriting_note_file_name(&target_folder_path, now, &note_id)?;
+    let note_file_name = handwriting_note_file_name(
+        &target_folder_path,
+        now,
+        &note_id,
+        args.file_name_format,
+    )?;
     let note_path = target_folder_path.join(&note_file_name);
     let mut meta = NoteFrontMatter::default();
     meta.id = Some(note_id);
