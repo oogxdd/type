@@ -969,6 +969,12 @@ fn notes_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(root)
 }
 
+fn ensured_notes_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let root = notes_root(app)?;
+    ensure_system_folders(&root)?;
+    Ok(root)
+}
+
 fn sanitize_relative(path: &str) -> Result<PathBuf, String> {
     if path.is_empty() {
         return Ok(PathBuf::new());
@@ -1000,6 +1006,67 @@ fn transcription_queue_state() -> &'static Mutex<TranscriptionQueueState> {
 
 fn handwriting_ocr_queue_state() -> &'static Mutex<HandwritingOcrQueueState> {
     HANDWRITING_OCR_QUEUE.get_or_init(|| Mutex::new(HandwritingOcrQueueState::default()))
+}
+
+fn active_transcription_note_paths() -> HashSet<String> {
+    let queue = transcription_queue_state();
+    let state = queue.lock().expect("transcription queue poisoned");
+    let mut active = HashSet::with_capacity(state.pending.len() + 1);
+    if let Some(current) = &state.current_recording {
+        active.insert(current.clone());
+    }
+    active.extend(state.pending.iter().map(|job| job.note_rel.clone()));
+    active
+}
+
+fn active_handwriting_note_paths() -> HashSet<String> {
+    let queue = handwriting_ocr_queue_state();
+    let state = queue.lock().expect("handwriting ocr queue poisoned");
+    let mut active = HashSet::with_capacity(state.pending.len() + 1);
+    if let Some(current) = &state.current_note {
+        active.insert(current.clone());
+    }
+    active.extend(state.pending.iter().map(|job| job.note_rel.clone()));
+    active
+}
+
+fn recording_queue_snapshot() -> RecordingQueueSnapshot {
+    let queue = transcription_queue_state();
+    let state = queue.lock().expect("transcription queue poisoned");
+    let pending = state
+        .pending
+        .iter()
+        .map(|job| job.note_rel.clone())
+        .collect::<Vec<_>>();
+    RecordingQueueSnapshot {
+        running: state.running,
+        current_recording: state.current_recording.clone(),
+        in_flight: pending.len() + usize::from(state.running),
+        pending,
+    }
+}
+
+fn handwriting_queue_snapshot() -> HandwritingOcrQueueSnapshot {
+    let queue = handwriting_ocr_queue_state();
+    let state = queue.lock().expect("handwriting ocr queue poisoned");
+    let pending = state
+        .pending
+        .iter()
+        .map(|job| job.note_rel.clone())
+        .collect::<Vec<_>>();
+    HandwritingOcrQueueSnapshot {
+        running: state.running,
+        current_note: state.current_note.clone(),
+        in_flight: pending.len() + usize::from(state.running),
+        pending,
+    }
+}
+
+fn note_parent_folder_path(note_rel: &str) -> String {
+    note_rel
+        .rsplit_once('/')
+        .map(|(parent, _)| parent.to_string())
+        .unwrap_or_default()
 }
 
 fn parse_handwriting_ocr_provider(value: &str) -> Result<HandwritingOcrProvider, String> {
@@ -1677,7 +1744,10 @@ fn render_note_with_front_matter(meta: &NoteFrontMatter, body: &str) -> String {
         ));
     }
     if let Some(status) = &meta.ocr_status {
-        output.push_str(&format!("ocr_status: {}\n", front_matter_safe_value(status)));
+        output.push_str(&format!(
+            "ocr_status: {}\n",
+            front_matter_safe_value(status)
+        ));
     }
     if let Some(error) = &meta.ocr_error {
         output.push_str(&format!("ocr_error: {}\n", front_matter_safe_value(error)));
@@ -2322,7 +2392,10 @@ fn transcribe_handwriting_with_openai(
 }
 
 fn parse_huggingface_text(payload: &serde_json::Value) -> Option<String> {
-    if let Some(text) = payload.get("generated_text").and_then(|value| value.as_str()) {
+    if let Some(text) = payload
+        .get("generated_text")
+        .and_then(|value| value.as_str())
+    {
         let trimmed = text.trim();
         if !trimmed.is_empty() {
             return Some(trimmed.to_string());
@@ -2382,7 +2455,8 @@ fn transcribe_handwriting_with_huggingface(
                 .ok_or_else(|| "Hugging Face OCR did not return text.".to_string());
         }
 
-        if response.status() == HUGGINGFACE_RETRYABLE_STATUS && attempt + 1 < HUGGINGFACE_MAX_RETRIES
+        if response.status() == HUGGINGFACE_RETRYABLE_STATUS
+            && attempt + 1 < HUGGINGFACE_MAX_RETRIES
         {
             thread::sleep(HUGGINGFACE_RETRY_DELAY);
             continue;
@@ -2597,12 +2671,9 @@ fn spawn_transcription_worker_if_needed() {
 }
 
 fn process_handwriting_ocr_job(job: QueuedHandwritingOcrJob) {
-    if let Err(error) = update_handwriting_note_status(
-        &job.note_path,
-        RECORDING_STATUS_PROCESSING,
-        None,
-        None,
-    ) {
+    if let Err(error) =
+        update_handwriting_note_status(&job.note_path, RECORDING_STATUS_PROCESSING, None, None)
+    {
         eprintln!(
             "[handwriting] failed to mark processing for {}: {}",
             job.note_rel, error
@@ -2618,7 +2689,13 @@ fn process_handwriting_ocr_job(job: QueuedHandwritingOcrJob) {
             .and_then(normalize_image_extension)
             .ok_or_else(|| "Unsupported attachment format.".to_string())?;
         let mime_type = image_mime_from_extension(extension);
-        run_handwriting_ocr_job(job.provider, &image_bytes, mime_type, &job.api_key, &job.model)
+        run_handwriting_ocr_job(
+            job.provider,
+            &image_bytes,
+            mime_type,
+            &job.api_key,
+            &job.model,
+        )
     };
 
     match run() {
@@ -2708,10 +2785,7 @@ fn recording_note_file_name(
     note_id: &str,
     file_name_format: NoteFileNameFormat,
 ) -> Result<String, String> {
-    let fallback = format!(
-        "recording-{}",
-        uuid_tail_without_timestamp_prefix(note_id)
-    );
+    let fallback = format!("recording-{}", uuid_tail_without_timestamp_prefix(note_id));
     allocate_note_file_name(
         folder,
         timestamp_ms,
@@ -3755,11 +3829,19 @@ fn delete_profile(
     Ok(profiles_snapshot(&state))
 }
 
-#[tauri::command]
-async fn get_git_status(app: tauri::AppHandle) -> Result<GitSyncStatus, String> {
-    tauri::async_runtime::spawn_blocking(move || get_git_status_blocking(app))
+async fn run_blocking_command<T, F>(operation: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(operation)
         .await
         .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn get_git_status(app: tauri::AppHandle) -> Result<GitSyncStatus, String> {
+    run_blocking_command(move || get_git_status_blocking(app)).await
 }
 
 #[tauri::command]
@@ -3767,19 +3849,16 @@ async fn get_git_history(
     app: tauri::AppHandle,
     args: Option<GitHistoryArgs>,
 ) -> Result<Vec<GitCommitHistoryEntry>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let root = notes_root(&app)?;
-        ensure_system_folders(&root)?;
+    run_blocking_command(move || {
+        let root = ensured_notes_root(&app)?;
         let limit = args.and_then(|value| value.limit).unwrap_or(40);
         build_git_history(&root, limit)
     })
     .await
-    .map_err(|error| error.to_string())?
 }
 
 fn get_git_status_blocking(app: tauri::AppHandle) -> Result<GitSyncStatus, String> {
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
+    let root = ensured_notes_root(&app)?;
     Ok(build_git_status(&root))
 }
 
@@ -3788,17 +3867,14 @@ async fn connect_git_repo(
     app: tauri::AppHandle,
     args: ConnectGitArgs,
 ) -> Result<GitSyncStatus, String> {
-    tauri::async_runtime::spawn_blocking(move || connect_git_repo_blocking(app, args))
-        .await
-        .map_err(|error| error.to_string())?
+    run_blocking_command(move || connect_git_repo_blocking(app, args)).await
 }
 
 fn connect_git_repo_blocking(
     app: tauri::AppHandle,
     args: ConnectGitArgs,
 ) -> Result<GitSyncStatus, String> {
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
+    let root = ensured_notes_root(&app)?;
     let repo = ensure_git_repo(&root)?;
     prepare_bootstrap_worktree_for_sync(&root, &repo)?;
     ensure_origin_remote(&repo, &args.remote_url)?;
@@ -3834,14 +3910,11 @@ fn connect_git_repo_blocking(
 
 #[tauri::command]
 async fn git_pull(app: tauri::AppHandle, args: GitSyncArgs) -> Result<GitSyncStatus, String> {
-    tauri::async_runtime::spawn_blocking(move || git_pull_blocking(app, args))
-        .await
-        .map_err(|error| error.to_string())?
+    run_blocking_command(move || git_pull_blocking(app, args)).await
 }
 
 fn git_pull_blocking(app: tauri::AppHandle, args: GitSyncArgs) -> Result<GitSyncStatus, String> {
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
+    let root = ensured_notes_root(&app)?;
     if !git_repo_initialized(&root) {
         return Err("Repository is not initialized. Connect a remote first.".to_string());
     }
@@ -3907,14 +3980,11 @@ fn remote_push(
 
 #[tauri::command]
 async fn git_push(app: tauri::AppHandle, args: GitPushArgs) -> Result<GitSyncStatus, String> {
-    tauri::async_runtime::spawn_blocking(move || git_push_blocking(app, args))
-        .await
-        .map_err(|error| error.to_string())?
+    run_blocking_command(move || git_push_blocking(app, args)).await
 }
 
 fn git_push_blocking(app: tauri::AppHandle, args: GitPushArgs) -> Result<GitSyncStatus, String> {
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
+    let root = ensured_notes_root(&app)?;
     if !git_repo_initialized(&root) {
         return Err("Repository is not initialized. Connect a remote first.".to_string());
     }
@@ -3943,8 +4013,7 @@ fn git_push_blocking(app: tauri::AppHandle, args: GitPushArgs) -> Result<GitSync
 
 #[tauri::command]
 fn get_tree(app: tauri::AppHandle) -> Result<FolderNode, String> {
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
+    let root = ensured_notes_root(&app)?;
     build_folder_node(&root, "")
 }
 
@@ -3961,8 +4030,7 @@ fn read_note(app: tauri::AppHandle, path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn create_note(app: tauri::AppHandle, args: CreateNoteArgs) -> Result<CreateNoteResult, String> {
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
+    let root = ensured_notes_root(&app)?;
     let folder_rel = args
         .folder_path
         .as_deref()
@@ -3971,7 +4039,9 @@ fn create_note(app: tauri::AppHandle, args: CreateNoteArgs) -> Result<CreateNote
         .unwrap_or(FEED_FOLDER);
     let folder_full = resolve_path(&app, folder_rel)?;
     if is_storage_folder_path(&root, &folder_full) {
-        return Err("Notes cannot be created inside recordings or attachments storage.".to_string());
+        return Err(
+            "Notes cannot be created inside recordings or attachments storage.".to_string(),
+        );
     }
     fs::create_dir_all(&folder_full).map_err(|err| err.to_string())?;
 
@@ -4152,8 +4222,7 @@ fn save_audio_recording(
     app: tauri::AppHandle,
     args: SaveRecordingArgs,
 ) -> Result<RecordingWriteResult, String> {
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
+    let root = ensured_notes_root(&app)?;
     let audio_bytes = decode_audio_base64(&args.audio_base64)?;
     if audio_bytes.is_empty() {
         return Err("Audio payload is empty.".to_string());
@@ -4198,14 +4267,14 @@ fn save_handwriting_attachment(
     app: tauri::AppHandle,
     args: SaveHandwritingAttachmentArgs,
 ) -> Result<HandwritingAttachmentWriteResult, String> {
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
+    let root = ensured_notes_root(&app)?;
     let image_bytes = decode_image_base64(&args.image_base64)?;
     if image_bytes.is_empty() {
         return Err("Image payload is empty.".to_string());
     }
 
-    let extension = supported_image_extension(args.mime_type.as_deref(), args.file_name.as_deref())?;
+    let extension =
+        supported_image_extension(args.mime_type.as_deref(), args.file_name.as_deref())?;
     let (target_folder_rel, target_folder_path) =
         resolve_handwriting_target_folder(&app, args.folder_path.as_deref())?;
     let attachment_path = handwriting_attachment_file_path(&root, extension)?;
@@ -4213,12 +4282,8 @@ fn save_handwriting_attachment(
 
     let now = now_ms().unwrap_or(0);
     let note_id = generate_note_id();
-    let note_file_name = handwriting_note_file_name(
-        &target_folder_path,
-        now,
-        &note_id,
-        args.file_name_format,
-    )?;
+    let note_file_name =
+        handwriting_note_file_name(&target_folder_path, now, &note_id, args.file_name_format)?;
     let note_path = target_folder_path.join(&note_file_name);
     let mut meta = NoteFrontMatter::default();
     meta.id = Some(note_id);
@@ -4252,21 +4317,9 @@ fn queue_recording_transcriptions(
         return Err("AssemblyAI API key is required.".to_string());
     }
 
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
+    let root = ensured_notes_root(&app)?;
     let recordings = collect_recording_notes(&root)?;
-    let active_recordings = {
-        let queue = transcription_queue_state();
-        let state = queue.lock().expect("transcription queue poisoned");
-        let mut active = HashSet::new();
-        if let Some(current) = &state.current_recording {
-            active.insert(current.clone());
-        }
-        for job in state.pending.iter() {
-            active.insert(job.note_rel.clone());
-        }
-        active
-    };
+    let active_recordings = active_transcription_note_paths();
     let mut scanned = 0usize;
     let mut skipped = 0usize;
     let mut candidates = Vec::new();
@@ -4334,11 +4387,7 @@ fn queue_recording_transcriptions(
 
     spawn_transcription_worker_if_needed();
 
-    let in_flight = {
-        let queue = transcription_queue_state();
-        let state = queue.lock().expect("transcription queue poisoned");
-        state.pending.len() + usize::from(state.running)
-    };
+    let in_flight = recording_queue_snapshot().in_flight;
 
     Ok(RecordingTranscriptionQueueResult {
         scanned,
@@ -4363,21 +4412,9 @@ fn queue_handwriting_ocr(
         return Err("OCR model is required.".to_string());
     }
 
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
+    let root = ensured_notes_root(&app)?;
     let notes = collect_handwriting_notes(&root)?;
-    let active_notes = {
-        let queue = handwriting_ocr_queue_state();
-        let state = queue.lock().expect("handwriting ocr queue poisoned");
-        let mut active = HashSet::new();
-        if let Some(current) = &state.current_note {
-            active.insert(current.clone());
-        }
-        for job in state.pending.iter() {
-            active.insert(job.note_rel.clone());
-        }
-        active
-    };
+    let active_notes = active_handwriting_note_paths();
     let mut scanned = 0usize;
     let mut skipped = 0usize;
     let mut candidates = Vec::new();
@@ -4438,11 +4475,7 @@ fn queue_handwriting_ocr(
 
     spawn_handwriting_ocr_worker_if_needed();
 
-    let in_flight = {
-        let queue = handwriting_ocr_queue_state();
-        let state = queue.lock().expect("handwriting ocr queue poisoned");
-        state.pending.len() + usize::from(state.running)
-    };
+    let in_flight = handwriting_queue_snapshot().in_flight;
 
     Ok(HandwritingOcrQueueResult {
         scanned,
@@ -4454,33 +4487,18 @@ fn queue_handwriting_ocr(
 
 #[tauri::command]
 fn list_recordings(app: tauri::AppHandle) -> Result<RecordingsListResult, String> {
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
-
-    let (queue_running, current_recording, pending, in_flight) = {
-        let queue = transcription_queue_state();
-        let state = queue.lock().expect("transcription queue poisoned");
-        let pending = state
-            .pending
-            .iter()
-            .map(|job| job.note_rel.clone())
-            .collect::<Vec<_>>();
-        (
-            state.running,
-            state.current_recording.clone(),
-            pending,
-            state.pending.len() + usize::from(state.running),
-        )
-    };
+    let root = ensured_notes_root(&app)?;
+    let queue = recording_queue_snapshot();
+    let pending_set = queue
+        .pending
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
 
     let mut recordings = collect_recording_notes(&root)?
         .into_iter()
         .map(|recording| {
-            let folder_path = recording
-                .note_rel
-                .rsplit_once('/')
-                .map(|(parent, _)| parent.to_string())
-                .unwrap_or_default();
+            let folder_path = note_parent_folder_path(&recording.note_rel);
             let audio_exists = recording.audio_path.exists();
             let mut error = recording.error.clone();
             if !audio_exists {
@@ -4497,54 +4515,32 @@ fn list_recordings(app: tauri::AppHandle) -> Result<RecordingsListResult, String
                 status: recording.status.clone(),
                 error,
                 updated_ms: recording.updated_ms,
-                is_queued: pending.iter().any(|value| value == &recording.note_rel),
-                is_processing: current_recording.as_deref() == Some(recording.note_rel.as_str()),
+                is_queued: pending_set.contains(recording.note_rel.as_str()),
+                is_processing: queue.current_recording.as_deref()
+                    == Some(recording.note_rel.as_str()),
             }
         })
         .collect::<Vec<_>>();
 
     recordings.sort_by(|a, b| b.updated_ms.unwrap_or(0).cmp(&a.updated_ms.unwrap_or(0)));
 
-    Ok(RecordingsListResult {
-        queue: RecordingQueueSnapshot {
-            running: queue_running,
-            current_recording,
-            pending,
-            in_flight,
-        },
-        recordings,
-    })
+    Ok(RecordingsListResult { queue, recordings })
 }
 
 #[tauri::command]
 fn list_handwriting_ocr_jobs(app: tauri::AppHandle) -> Result<HandwritingOcrListResult, String> {
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
-
-    let (queue_running, current_note, pending, in_flight) = {
-        let queue = handwriting_ocr_queue_state();
-        let state = queue.lock().expect("handwriting ocr queue poisoned");
-        let pending = state
-            .pending
-            .iter()
-            .map(|job| job.note_rel.clone())
-            .collect::<Vec<_>>();
-        (
-            state.running,
-            state.current_note.clone(),
-            pending,
-            state.pending.len() + usize::from(state.running),
-        )
-    };
+    let root = ensured_notes_root(&app)?;
+    let queue = handwriting_queue_snapshot();
+    let pending_set = queue
+        .pending
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
 
     let mut jobs = collect_handwriting_notes(&root)?
         .into_iter()
         .map(|note| {
-            let folder_path = note
-                .note_rel
-                .rsplit_once('/')
-                .map(|(parent, _)| parent.to_string())
-                .unwrap_or_default();
+            let folder_path = note_parent_folder_path(&note.note_rel);
             let attachment_exists = note.attachment_path.exists();
             let mut error = note.error.clone();
             if !attachment_exists {
@@ -4561,23 +4557,15 @@ fn list_handwriting_ocr_jobs(app: tauri::AppHandle) -> Result<HandwritingOcrList
                 status: note.status.clone(),
                 error,
                 updated_ms: note.updated_ms,
-                is_queued: pending.iter().any(|value| value == &note.note_rel),
-                is_processing: current_note.as_deref() == Some(note.note_rel.as_str()),
+                is_queued: pending_set.contains(note.note_rel.as_str()),
+                is_processing: queue.current_note.as_deref() == Some(note.note_rel.as_str()),
             }
         })
         .collect::<Vec<_>>();
 
     jobs.sort_by(|a, b| b.updated_ms.unwrap_or(0).cmp(&a.updated_ms.unwrap_or(0)));
 
-    Ok(HandwritingOcrListResult {
-        queue: HandwritingOcrQueueSnapshot {
-            running: queue_running,
-            current_note,
-            pending,
-            in_flight,
-        },
-        jobs,
-    })
+    Ok(HandwritingOcrListResult { queue, jobs })
 }
 
 #[tauri::command]
@@ -4585,8 +4573,7 @@ fn read_recording_audio(
     app: tauri::AppHandle,
     args: ReadRecordingAudioArgs,
 ) -> Result<RecordingAudioPayload, String> {
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
+    let root = ensured_notes_root(&app)?;
     let path_rel = sanitize_relative(&args.path)?;
     let audio_path = root.join(path_rel);
     if !is_recording_audio_path_allowed(&root, &audio_path) {
@@ -4657,8 +4644,7 @@ fn move_items(
     items: Vec<String>,
     destination: String,
 ) -> Result<(), String> {
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
+    let root = ensured_notes_root(&app)?;
     println!(
         "[move_items] root={} destination={}",
         root.to_string_lossy(),
@@ -4773,8 +4759,7 @@ fn move_items(
 
 #[tauri::command]
 fn delete_items(app: tauri::AppHandle, items: Vec<String>) -> Result<(), String> {
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
+    let root = ensured_notes_root(&app)?;
     let mut parent_folder_groups: HashMap<PathBuf, Vec<String>> = HashMap::new();
     let mut parent_note_groups: HashMap<PathBuf, Vec<String>> = HashMap::new();
 
@@ -4822,8 +4807,7 @@ fn delete_items(app: tauri::AppHandle, items: Vec<String>) -> Result<(), String>
 
 #[tauri::command]
 fn rename_item(app: tauri::AppHandle, path: String, new_name: String) -> Result<String, String> {
-    let root = notes_root(&app)?;
-    ensure_system_folders(&root)?;
+    let root = ensured_notes_root(&app)?;
     let full_path = resolve_path(&app, &path)?;
     if is_system_folder_path(&root, &full_path) {
         return Err(format!(
@@ -4854,7 +4838,7 @@ fn rename_item(app: tauri::AppHandle, path: String, new_name: String) -> Result<
 
 #[tauri::command]
 fn set_order(app: tauri::AppHandle, args: SetOrderArgs) -> Result<(), String> {
-    let root = notes_root(&app)?;
+    let root = ensured_notes_root(&app)?;
     let parent_path = resolve_path(&app, &args.parent)?;
     if is_feed_folder_path(&root, &parent_path) {
         return Ok(());
