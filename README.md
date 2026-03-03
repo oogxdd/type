@@ -82,6 +82,26 @@ Notes are stored in a local folder tree. The app uses the first existing root:
 
 Each folder has its own `.notes-order.json` to persist ordering of child folders and notes.
 
+## Security mode (encryption + lock + panic)
+
+When enabled in **Settings -> Security**:
+
+- Note **body** content is encrypted at rest.
+- File names and frontmatter remain plaintext.
+- App launches in locked state by default.
+- You can lock manually at any time (`Cmd/Ctrl+Shift+L` on desktop, or **Lock now** in settings).
+- Optional auto-lock on background is configurable.
+
+Unlock behavior:
+
+- Normal unlock password unlocks notes.
+- Panic password wipes local notes/profiles/settings/security state, then creates 3 dummy notes and reloads the app.
+
+Notes:
+
+- Panic reset is local-only and does not remove history from remote Git servers.
+- Recording audio/attachments are not encrypted in this iteration.
+
 ## Git sync setup
 
 The app uses `libgit2` (embedded Git) from Tauri commands. You do not need shell `git`.
@@ -98,7 +118,7 @@ The app uses `libgit2` (embedded Git) from Tauri commands. You do not need shell
 
 Open **Settings → Profiles**, then fill in:
 
-- **Remote URL** (e.g. `https://github.com/<user>/<repo>.git`)
+- **Remote URL** (e.g. `git://192.168.1.15/notes.git`, `ssh://...`, or `https://...`)
 - **Branch** (usually `main`)
 - **Commit message** (default auto-commit message for push)
 - **Username** and **Token/Password** (for HTTPS auth)
@@ -108,6 +128,8 @@ Then:
 1. Tap **Connect repo**
 2. If this is the first device with local notes: tap **Push**
 3. If this device should download existing notes: tap **Pull** first
+
+For LAN/hotspot self-hosted Git, see [LOCAL_GIT_SERVER_LAN_HOTSPOT.md](./LOCAL_GIT_SERVER_LAN_HOTSPOT.md).
 
 ### Daily flow
 

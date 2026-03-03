@@ -1,7 +1,42 @@
 use super::*;
 
 #[tauri::command]
+fn get_security_state(app: tauri::AppHandle) -> Result<SecurityState, String> {
+    get_security_state_impl(&app)
+}
+
+#[tauri::command]
+fn enable_security(
+    app: tauri::AppHandle,
+    args: EnableSecurityArgs,
+) -> Result<SecurityState, String> {
+    enable_security_impl(&app, args)
+}
+
+#[tauri::command]
+fn lock_security(app: tauri::AppHandle) -> Result<SecurityState, String> {
+    lock_security_impl(&app)
+}
+
+#[tauri::command]
+fn unlock_security(
+    app: tauri::AppHandle,
+    args: UnlockSecurityArgs,
+) -> Result<SecurityUnlockResult, String> {
+    unlock_security_impl(&app, args)
+}
+
+#[tauri::command]
+fn set_security_preferences(
+    app: tauri::AppHandle,
+    args: SetSecurityPreferencesArgs,
+) -> Result<SecurityState, String> {
+    set_security_preferences_impl(&app, args)
+}
+
+#[tauri::command]
 fn get_profiles(app: tauri::AppHandle) -> Result<NotesProfilesSnapshot, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let state = ensure_profiles_state(&app).or_else(|_| default_profiles_state(&app))?;
     Ok(profiles_snapshot(&state))
 }
@@ -11,6 +46,7 @@ fn create_profile(
     app: tauri::AppHandle,
     args: CreateProfileArgs,
 ) -> Result<NotesProfilesSnapshot, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let state = create_profile_state(&app, &args.name, args.description.as_deref())?;
     Ok(profiles_snapshot(&state))
 }
@@ -20,6 +56,7 @@ fn set_active_profile(
     app: tauri::AppHandle,
     args: SetActiveProfileArgs,
 ) -> Result<NotesProfilesSnapshot, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let state = set_active_profile_state(&app, &args.profile_id)?;
     Ok(profiles_snapshot(&state))
 }
@@ -29,6 +66,7 @@ fn set_profile_notes_root(
     app: tauri::AppHandle,
     args: SetProfileNotesRootArgs,
 ) -> Result<NotesProfilesSnapshot, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let state = set_profile_notes_root_state(&app, &args.profile_id, &args.notes_root)?;
     Ok(profiles_snapshot(&state))
 }
@@ -38,6 +76,7 @@ fn update_profile(
     app: tauri::AppHandle,
     args: UpdateProfileArgs,
 ) -> Result<NotesProfilesSnapshot, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let state = update_profile_state(
         &app,
         &args.profile_id,
@@ -52,6 +91,7 @@ fn delete_profile(
     app: tauri::AppHandle,
     args: DeleteProfileArgs,
 ) -> Result<NotesProfilesSnapshot, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let state = delete_profile_state(&app, &args.profile_id)?;
     Ok(profiles_snapshot(&state))
 }
@@ -68,6 +108,7 @@ where
 
 #[tauri::command]
 async fn get_git_status(app: tauri::AppHandle) -> Result<GitSyncStatus, String> {
+    ensure_security_unlocked_for_app(&app)?;
     run_blocking_command(move || get_git_status_blocking(app)).await
 }
 
@@ -76,7 +117,9 @@ async fn get_git_history(
     app: tauri::AppHandle,
     args: Option<GitHistoryArgs>,
 ) -> Result<Vec<GitCommitHistoryEntry>, String> {
+    ensure_security_unlocked_for_app(&app)?;
     run_blocking_command(move || {
+        ensure_security_unlocked_for_app(&app)?;
         let root = ensured_notes_root(&app)?;
         let limit = args.and_then(|value| value.limit).unwrap_or(40);
         build_git_history(&root, limit)
@@ -85,6 +128,7 @@ async fn get_git_history(
 }
 
 fn get_git_status_blocking(app: tauri::AppHandle) -> Result<GitSyncStatus, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = ensured_notes_root(&app)?;
     Ok(build_git_status(&root))
 }
@@ -94,6 +138,7 @@ async fn connect_git_repo(
     app: tauri::AppHandle,
     args: ConnectGitArgs,
 ) -> Result<GitSyncStatus, String> {
+    ensure_security_unlocked_for_app(&app)?;
     run_blocking_command(move || connect_git_repo_blocking(app, args)).await
 }
 
@@ -101,6 +146,7 @@ fn connect_git_repo_blocking(
     app: tauri::AppHandle,
     args: ConnectGitArgs,
 ) -> Result<GitSyncStatus, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = ensured_notes_root(&app)?;
     let repo = ensure_git_repo(&root)?;
     prepare_bootstrap_worktree_for_sync(&root, &repo)?;
@@ -137,10 +183,12 @@ fn connect_git_repo_blocking(
 
 #[tauri::command]
 async fn git_pull(app: tauri::AppHandle, args: GitSyncArgs) -> Result<GitSyncStatus, String> {
+    ensure_security_unlocked_for_app(&app)?;
     run_blocking_command(move || git_pull_blocking(app, args)).await
 }
 
 fn git_pull_blocking(app: tauri::AppHandle, args: GitSyncArgs) -> Result<GitSyncStatus, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = ensured_notes_root(&app)?;
     if !git_repo_initialized(&root) {
         return Err("Repository is not initialized. Connect a remote first.".to_string());
@@ -207,10 +255,12 @@ fn remote_push(
 
 #[tauri::command]
 async fn git_push(app: tauri::AppHandle, args: GitPushArgs) -> Result<GitSyncStatus, String> {
+    ensure_security_unlocked_for_app(&app)?;
     run_blocking_command(move || git_push_blocking(app, args)).await
 }
 
 fn git_push_blocking(app: tauri::AppHandle, args: GitPushArgs) -> Result<GitSyncStatus, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = ensured_notes_root(&app)?;
     if !git_repo_initialized(&root) {
         return Err("Repository is not initialized. Connect a remote first.".to_string());
@@ -240,23 +290,26 @@ fn git_push_blocking(app: tauri::AppHandle, args: GitPushArgs) -> Result<GitSync
 
 #[tauri::command]
 fn get_tree(app: tauri::AppHandle) -> Result<FolderNode, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = ensured_notes_root(&app)?;
     build_folder_node(&root, "")
 }
 
 #[tauri::command]
 fn read_note(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let full_path = resolve_path(&app, &path)?;
     if !full_path.exists() || !full_path.is_file() {
         return Err("Note file does not exist.".to_string());
     }
     let raw = fs::read_to_string(full_path).map_err(|err| err.to_string())?;
     let (_, body) = parse_note_front_matter(&raw);
-    Ok(body)
+    decrypt_note_body_for_read(&body)
 }
 
 #[tauri::command]
 fn create_note(app: tauri::AppHandle, args: CreateNoteArgs) -> Result<CreateNoteResult, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = ensured_notes_root(&app)?;
     let folder_rel = args
         .folder_path
@@ -301,6 +354,7 @@ fn create_note(app: tauri::AppHandle, args: CreateNoteArgs) -> Result<CreateNote
 
 #[tauri::command]
 fn write_note(app: tauri::AppHandle, path: String, content: String) -> Result<(), String> {
+    ensure_security_unlocked_for_app(&app)?;
     let full_path = resolve_path(&app, &path)?;
     if let Some(parent) = full_path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
@@ -325,12 +379,14 @@ fn write_note(app: tauri::AppHandle, path: String, content: String) -> Result<()
 
 #[tauri::command]
 fn set_note_timestamp(app: tauri::AppHandle, args: SetNoteTimestampArgs) -> Result<(), String> {
+    ensure_security_unlocked_for_app(&app)?;
     let full_path = resolve_path(&app, &args.path)?;
     if !full_path.exists() || !full_path.is_file() {
         return Err("Note file does not exist.".to_string());
     }
     let raw = fs::read_to_string(&full_path).map_err(|err| err.to_string())?;
     let (mut meta, body) = parse_note_front_matter(&raw);
+    let body = decrypt_note_body_for_read(&body)?;
     if meta.id.is_none() {
         meta.id = Some(generate_note_id());
     }
@@ -342,7 +398,8 @@ fn set_note_timestamp(app: tauri::AppHandle, args: SetNoteTimestampArgs) -> Resu
 }
 
 #[tauri::command]
-fn native_audio_recorder_capabilities() -> NativeRecorderCapabilities {
+fn native_audio_recorder_capabilities(app: tauri::AppHandle) -> Result<NativeRecorderCapabilities, String> {
+    ensure_security_unlocked_for_app(&app)?;
     #[cfg(target_os = "ios")]
     {
         let (recording, started_ms) = ios_native_recorder_state()
@@ -356,25 +413,26 @@ fn native_audio_recorder_capabilities() -> NativeRecorderCapabilities {
                 (resumed, state.started_ms)
             })
             .unwrap_or((false, None));
-        return NativeRecorderCapabilities {
+        return Ok(NativeRecorderCapabilities {
             supported: true,
             recording,
             started_ms,
-        };
+        });
     }
 
     #[cfg(not(target_os = "ios"))]
     {
-        NativeRecorderCapabilities {
+        Ok(NativeRecorderCapabilities {
             supported: false,
             recording: false,
             started_ms: None,
-        }
+        })
     }
 }
 
 #[tauri::command]
 fn start_native_audio_recording(app: tauri::AppHandle) -> Result<(), String> {
+    ensure_security_unlocked_for_app(&app)?;
     #[cfg(target_os = "ios")]
     {
         let mut guard = ios_native_recorder_state()
@@ -407,7 +465,8 @@ fn start_native_audio_recording(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn stop_native_audio_recording() -> Result<RecordingAudioPayload, String> {
+fn stop_native_audio_recording(app: tauri::AppHandle) -> Result<RecordingAudioPayload, String> {
+    ensure_security_unlocked_for_app(&app)?;
     #[cfg(target_os = "ios")]
     {
         let state = {
@@ -449,6 +508,7 @@ fn save_audio_recording(
     app: tauri::AppHandle,
     args: SaveRecordingArgs,
 ) -> Result<RecordingWriteResult, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = ensured_notes_root(&app)?;
     let audio_bytes = decode_audio_base64(&args.audio_base64)?;
     if audio_bytes.is_empty() {
@@ -494,6 +554,7 @@ fn save_handwriting_attachment(
     app: tauri::AppHandle,
     args: SaveHandwritingAttachmentArgs,
 ) -> Result<HandwritingAttachmentWriteResult, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = ensured_notes_root(&app)?;
     let image_bytes = decode_image_base64(&args.image_base64)?;
     if image_bytes.is_empty() {
@@ -539,6 +600,7 @@ fn queue_recording_transcriptions(
     app: tauri::AppHandle,
     args: QueueRecordingsArgs,
 ) -> Result<RecordingTranscriptionQueueResult, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let api_key = args.assembly_api_key.trim();
     if api_key.is_empty() {
         return Err("AssemblyAI API key is required.".to_string());
@@ -629,6 +691,7 @@ fn queue_handwriting_ocr(
     app: tauri::AppHandle,
     args: QueueHandwritingOcrArgs,
 ) -> Result<HandwritingOcrQueueResult, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let provider = parse_handwriting_ocr_provider(&args.provider)?;
     let api_key = args.api_key.trim();
     if api_key.is_empty() {
@@ -714,6 +777,7 @@ fn queue_handwriting_ocr(
 
 #[tauri::command]
 fn list_recordings(app: tauri::AppHandle) -> Result<RecordingsListResult, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = ensured_notes_root(&app)?;
     let queue = recording_queue_snapshot();
     let pending_set = queue
@@ -756,6 +820,7 @@ fn list_recordings(app: tauri::AppHandle) -> Result<RecordingsListResult, String
 
 #[tauri::command]
 fn list_handwriting_ocr_jobs(app: tauri::AppHandle) -> Result<HandwritingOcrListResult, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = ensured_notes_root(&app)?;
     let queue = handwriting_queue_snapshot();
     let pending_set = queue
@@ -800,6 +865,7 @@ fn read_recording_audio(
     app: tauri::AppHandle,
     args: ReadRecordingAudioArgs,
 ) -> Result<RecordingAudioPayload, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = ensured_notes_root(&app)?;
     let path_rel = sanitize_relative(&args.path)?;
     let audio_path = root.join(path_rel);
@@ -818,6 +884,7 @@ fn read_recording_audio(
 
 #[tauri::command]
 fn get_note_meta(app: tauri::AppHandle, path: String) -> Result<NoteMeta, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = notes_root(&app)?;
     let full_path = resolve_path(&app, &path)?;
     let (front_matter_meta, metadata) = if full_path.exists() {
@@ -866,6 +933,7 @@ fn move_items(
     items: Vec<String>,
     destination: String,
 ) -> Result<(), String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = ensured_notes_root(&app)?;
     println!(
         "[move_items] root={} destination={}",
@@ -981,6 +1049,7 @@ fn move_items(
 
 #[tauri::command]
 fn delete_items(app: tauri::AppHandle, items: Vec<String>) -> Result<(), String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = ensured_notes_root(&app)?;
     let mut parent_folder_groups: HashMap<PathBuf, Vec<String>> = HashMap::new();
     let mut parent_note_groups: HashMap<PathBuf, Vec<String>> = HashMap::new();
@@ -1029,6 +1098,7 @@ fn delete_items(app: tauri::AppHandle, items: Vec<String>) -> Result<(), String>
 
 #[tauri::command]
 fn rename_item(app: tauri::AppHandle, path: String, new_name: String) -> Result<String, String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = ensured_notes_root(&app)?;
     let full_path = resolve_path(&app, &path)?;
     if is_system_folder_path(&root, &full_path) {
@@ -1060,6 +1130,7 @@ fn rename_item(app: tauri::AppHandle, path: String, new_name: String) -> Result<
 
 #[tauri::command]
 fn set_order(app: tauri::AppHandle, args: SetOrderArgs) -> Result<(), String> {
+    ensure_security_unlocked_for_app(&app)?;
     let root = ensured_notes_root(&app)?;
     let parent_path = resolve_path(&app, &args.parent)?;
     if is_feed_folder_path(&root, &parent_path) {
@@ -1086,6 +1157,8 @@ pub(super) fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_ota::init())
         .setup(|_app| {
+            let app_handle = _app.handle();
+            ensure_security_runtime_initialized_for_setup(&app_handle)?;
             #[cfg(target_os = "macos")]
             if let Some(window) = _app.get_webview_window("main") {
                 let _ = apply_macos_window_alpha(&window, MACOS_WINDOW_ALPHA);
@@ -1093,6 +1166,11 @@ pub(super) fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            get_security_state,
+            enable_security,
+            lock_security,
+            unlock_security,
+            set_security_preferences,
             get_tree,
             read_note,
             create_note,

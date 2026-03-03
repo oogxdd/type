@@ -172,7 +172,7 @@ export function SettingsProfileSection() {
               type="text"
               value={gitDraft.gitRemoteUrl}
               onChange={(event) => setGitDraft((prev) => ({ ...prev, gitRemoteUrl: event.target.value }))}
-              placeholder="https://github.com/you/notes.git"
+              placeholder="git://192.168.1.15/notes.git"
             />
           </label>
           <label className={controlClass}>
@@ -207,7 +207,7 @@ export function SettingsProfileSection() {
             />
           </label>
           <label className={controlClass}>
-            <span className={labelClass}>Token</span>
+            <span className={labelClass}>Password / Token</span>
             <Input
               type="password"
               value={gitDraft.gitPassword}
@@ -239,6 +239,9 @@ export function SettingsProfileSection() {
           <p className={hintClass}>
             Changes only take effect after clicking Apply Git settings.
             {hasUnsavedGitChanges ? " You have unsaved changes." : ""}
+          </p>
+          <p className={hintClass}>
+            Supported remote schemes: <code>git://</code>, <code>ssh://</code>, and <code>https://</code>.
           </p>
         </section>
 

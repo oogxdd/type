@@ -19,6 +19,7 @@ export const MOBILE_SETTINGS_SECTIONS: Array<{ id: SettingsSectionId; label: str
   { id: "updates", label: "Updates" },
   { id: "appearance", label: "Appearance" },
   { id: "recordings", label: "Recordings" },
+  { id: "security", label: "Security" },
 ];
 
 export const isSystemFolder = (path: string) => SYSTEM_FOLDER_PATHS.has(path);

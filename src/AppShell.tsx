@@ -25,6 +25,7 @@ import { useSelection } from "./contexts/SelectionContext";
 import { useEditor } from "./contexts/EditorContext";
 import { useRecordings } from "./contexts/RecordingsContext";
 import { useHandwriting } from "./contexts/HandwritingContext";
+import { useSecurity } from "./contexts/SecurityContext";
 
 import { useDragDrop } from "./hooks/useDragDrop";
 import { useKeyboardNavigation } from "./hooks/useKeyboardNavigation";
@@ -68,6 +69,7 @@ export function AppShell() {
     stopRecording,
   } = useRecordings();
   const { importHandwritingFile, handwritingImportBusy } = useHandwriting();
+  const { lockSecurity } = useSecurity();
 
   const {
     selectedFolders,
@@ -207,6 +209,7 @@ export function AppShell() {
     resetEditorFontSize,
     createNewNote: () => createNewNote(),
     deleteSelectedNotes: deleteSelectedNotesByShortcut,
+    lockAppNow: () => lockSecurity(),
     setSidebarCollapsed,
     visibleItems,
     orderedIds,

@@ -10,8 +10,10 @@ import { EditorProvider, useEditor } from "./contexts/EditorContext";
 import { NotesTreeProvider, useNotesTree } from "./contexts/NotesTreeContext";
 import { RecordingsProvider } from "./contexts/RecordingsContext";
 import { HandwritingProvider } from "./contexts/HandwritingContext";
+import { SecurityProvider, useSecurity } from "./contexts/SecurityContext";
 import { AppShell } from "./AppShell";
 import { useLayoutMode } from "./mobile/useLayoutMode";
+import { SecurityLockScreen } from "./components/SecurityLockScreen";
 
 function AppInner() {
   const notesTree = useNotesTree();
@@ -59,23 +61,70 @@ function FlushSaveBridge({
   return null;
 }
 
+function UnlockedApp({
+  flushSaveRef,
+}: {
+  flushSaveRef: React.RefObject<(() => Promise<void>) | null>;
+}) {
+  return (
+    <ProfilesProvider flushSaveRef={flushSaveRef}>
+      <GitSyncProvider>
+        <SelectionProvider>
+          <EditorProvider>
+            <NotesTreeProvider>
+              <FlushSaveBridge flushSaveRef={flushSaveRef} />
+              <AppInner />
+            </NotesTreeProvider>
+          </EditorProvider>
+        </SelectionProvider>
+      </GitSyncProvider>
+    </ProfilesProvider>
+  );
+}
+
+function SecurityGate({
+  flushSaveRef,
+}: {
+  flushSaveRef: React.RefObject<(() => Promise<void>) | null>;
+}) {
+  const {
+    securityState,
+    securityBusy,
+    securityError,
+    isLocked,
+    unlockSecurity,
+  } = useSecurity();
+
+  if (!securityState) {
+    return <div className="security-lock-screen">Loading security...</div>;
+  }
+
+  if (securityState.encryption_enabled && isLocked) {
+    return (
+      <SecurityLockScreen
+        busy={securityBusy}
+        error={securityError}
+        onUnlock={async (password) => {
+          const result = await unlockSecurity(password);
+          if (!result.unlocked) {
+            return;
+          }
+        }}
+      />
+    );
+  }
+
+  return <UnlockedApp flushSaveRef={flushSaveRef} />;
+}
+
 function App() {
   const flushSaveRef = useRef<(() => Promise<void>) | null>(null);
 
   return (
     <ThemeProvider>
-      <ProfilesProvider flushSaveRef={flushSaveRef}>
-        <GitSyncProvider>
-          <SelectionProvider>
-            <EditorProvider>
-              <NotesTreeProvider>
-                <FlushSaveBridge flushSaveRef={flushSaveRef} />
-                <AppInner />
-              </NotesTreeProvider>
-            </EditorProvider>
-          </SelectionProvider>
-        </GitSyncProvider>
-      </ProfilesProvider>
+      <SecurityProvider>
+        <SecurityGate flushSaveRef={flushSaveRef} />
+      </SecurityProvider>
     </ThemeProvider>
   );
 }

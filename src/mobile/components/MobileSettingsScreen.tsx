@@ -5,6 +5,7 @@ import { MobileSyncSection } from "./settings/MobileSyncSection";
 import { MobileUpdatesSection } from "./settings/MobileUpdatesSection";
 import { MobileAppearanceSection } from "./settings/MobileAppearanceSection";
 import { MobileRecordingsSection } from "./settings/MobileRecordingsSection";
+import { MobileSecuritySection } from "./settings/MobileSecuritySection";
 
 type MobileSettingsScreenProps = {
   activeSection: SettingsSectionId;
@@ -43,6 +44,7 @@ export function MobileSettingsScreen({
         {activeSection === "updates" ? <MobileUpdatesSection /> : null}
         {activeSection === "appearance" ? <MobileAppearanceSection /> : null}
         {activeSection === "recordings" ? <MobileRecordingsSection /> : null}
+        {activeSection === "security" ? <MobileSecuritySection /> : null}
       </div>
     </div>
   );

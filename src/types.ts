@@ -189,3 +189,16 @@ export type ProfileSyncSettings = {
   huggingFaceModel: string;
   mobileAutoHandwritingOcrEnabled: boolean;
 };
+
+export type SecurityState = {
+  encryption_enabled: boolean;
+  locked: boolean;
+  auto_lock_on_background: boolean;
+};
+
+export type SecurityUnlockResult = {
+  unlocked: boolean;
+  panic_triggered: boolean;
+  reset_required: boolean;
+  message?: string | null;
+};

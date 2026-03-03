@@ -206,7 +206,7 @@ export function MobileProfileSection() {
           label="Remote URL"
           value={gitDraft.gitRemoteUrl}
           onChange={(value) => setGitDraft((prev) => ({ ...prev, gitRemoteUrl: value }))}
-          placeholder="https://github.com/you/notes.git"
+          placeholder="git://192.168.1.15/notes.git"
         />
         <InputRow
           label="Branch"
@@ -227,7 +227,7 @@ export function MobileProfileSection() {
           placeholder="Optional"
         />
         <InputRow
-          label="Token"
+          label="Password / Token"
           value={gitDraft.gitPassword}
           onChange={(value) => setGitDraft((prev) => ({ ...prev, gitPassword: value }))}
           placeholder="Optional"
@@ -254,6 +254,9 @@ export function MobileProfileSection() {
         <p className="mobile-native-note">
           Changes only take effect after tapping Apply Git settings.
           {hasUnsavedGitChanges ? " You have unsaved changes." : ""}
+        </p>
+        <p className="mobile-native-note">
+          Supported remote schemes: <code>git://</code>, <code>ssh://</code>, and <code>https://</code>.
         </p>
       </Group>
 

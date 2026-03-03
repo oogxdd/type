@@ -3153,3 +3153,75 @@ body {
     background: transparent;
   }
 }
+
+.security-lock-screen {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: radial-gradient(circle at top, rgba(80, 112, 162, 0.22), transparent 45%),
+    var(--ui-bg, #f5f6fb);
+}
+
+.security-lock-card {
+  width: min(460px, 100%);
+  border: 1px solid var(--ui-border, #d7dbe8);
+  border-radius: 14px;
+  background: var(--ui-panel, #ffffff);
+  padding: 22px;
+  display: grid;
+  gap: 12px;
+}
+
+.security-lock-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--ui-text, #1f2734);
+}
+
+.security-lock-subtitle {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ui-muted, #5f6b82);
+}
+
+.security-lock-input-wrap {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ui-muted, #5f6b82);
+}
+
+.security-lock-input-wrap input {
+  border: 1px solid var(--ui-border, #d7dbe8);
+  border-radius: 10px;
+  height: 40px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--ui-text, #1f2734);
+}
+
+.security-lock-btn {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  height: 40px;
+  background: #1f2734;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.security-lock-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.security-lock-error {
+  margin: 0;
+  font-size: 12px;
+  color: #b23838;
+}

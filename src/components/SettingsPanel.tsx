@@ -6,6 +6,7 @@ import { SettingsSyncSection } from "./settings/SettingsSyncSection";
 import { SettingsAppearanceSection } from "./settings/SettingsAppearanceSection";
 import { SettingsRecordingsSection } from "./settings/SettingsRecordingsSection";
 import { SettingsUpdatesSection } from "./settings/SettingsUpdatesSection";
+import { SettingsSecuritySection } from "./settings/SettingsSecuritySection";
 
 export type ThemeMode = "light" | "dark";
 export type NotesListMode = "separate" | "nested";
@@ -16,7 +17,8 @@ export type SettingsSectionId =
   | "sync"
   | "updates"
   | "appearance"
-  | "recordings";
+  | "recordings"
+  | "security";
 type SettingsSection = {
   id: SettingsSectionId;
   title: string;
@@ -29,6 +31,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "updates", title: "Updates" },
   { id: "appearance", title: "Appearance" },
   { id: "recordings", title: "Recordings" },
+  { id: "security", title: "Security" },
 ];
 
 const shouldIgnorePaneFocusClick = (target: EventTarget | null) => {
@@ -71,6 +74,7 @@ function SettingsDetail({ sectionId }: { sectionId: SettingsSectionId }) {
   if (sectionId === "updates") return <SettingsUpdatesSection />;
   if (sectionId === "appearance") return <SettingsAppearanceSection />;
   if (sectionId === "recordings") return <SettingsRecordingsSection />;
+  if (sectionId === "security") return <SettingsSecuritySection />;
   return null;
 }
 

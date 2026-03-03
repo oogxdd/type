@@ -14,6 +14,7 @@ type UseKeyboardNavigationArgs = {
   resetEditorFontSize: () => void;
   createNewNote: () => Promise<string | null>;
   deleteSelectedNotes: () => void;
+  lockAppNow: () => Promise<void>;
   setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   // Tree data
   visibleItems: FlattenedItem[];
@@ -52,6 +53,7 @@ export function useKeyboardNavigation({
   resetEditorFontSize,
   createNewNote,
   deleteSelectedNotes,
+  lockAppNow,
   setSidebarCollapsed,
   visibleItems,
   orderedIds,
@@ -134,6 +136,7 @@ export function useKeyboardNavigation({
     const handleGlobalKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.repeat) return;
       const code = event.code;
+      const isLockShortcut = code === "KeyL" && event.shiftKey;
       if (
         code !== "KeyT" &&
         code !== "KeyW" &&
@@ -146,7 +149,8 @@ export function useKeyboardNavigation({
         code !== "Digit0" &&
         code !== "NumpadAdd" &&
         code !== "NumpadSubtract" &&
-        code !== "Numpad0"
+        code !== "Numpad0" &&
+        !isLockShortcut
       )
         return;
       event.preventDefault();
@@ -165,6 +169,10 @@ export function useKeyboardNavigation({
       }
       if (code === "KeyN") {
         void createNewNote();
+        return;
+      }
+      if (isLockShortcut) {
+        void lockAppNow();
         return;
       }
       if (code === "Backspace") {
@@ -243,6 +251,7 @@ export function useKeyboardNavigation({
     middlePaneRef,
     resetEditorFontSize,
     rightPaneRef,
+    lockAppNow,
     setSidebarCollapsed,
     shouldNestNotesInNavigation,
     sidebarCollapsed,
