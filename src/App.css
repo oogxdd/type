@@ -1640,20 +1640,48 @@ body {
   gap: 8px;
 }
 
-.editor-lens-toggle {
-  border: 1px solid var(--ui-border);
-  background: transparent;
-  color: var(--ui-text);
-  border-radius: 8px;
-  padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  cursor: pointer;
+.editor-lens-menu-area {
+  width: 44px;
+  min-width: 44px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
-.editor-lens-toggle:hover {
+.editor-lens-menu-trigger {
+  width: 28px;
+  height: 28px;
+  border: 1px solid color-mix(in srgb, var(--ui-border) 82%, transparent);
+  background: color-mix(in srgb, var(--ui-pane) 72%, transparent);
+  color: color-mix(in srgb, var(--ui-text) 58%, transparent);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-1px);
+  transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease,
+    border-color 120ms ease;
+  pointer-events: none;
+}
+
+.editor-lens-menu-area:hover .editor-lens-menu-trigger,
+.editor-lens-menu-trigger[data-state="open"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.editor-lens-menu-trigger:hover {
+  color: var(--ui-text);
   background: var(--ui-select);
+  border-color: var(--ui-border);
+}
+
+.editor-lens-menu-trigger svg {
+  width: 14px;
+  height: 14px;
 }
 
 .multi-lens-shell {
@@ -2940,12 +2968,15 @@ body {
   background: rgba(255, 255, 255, 0.12);
 }
 
-.app.theme-dark .editor-lens-toggle {
-  border-color: #485261;
-  color: #dbe3ee;
+.app.theme-dark .editor-lens-menu-trigger {
+  border-color: rgba(90, 103, 122, 0.85);
+  color: rgba(219, 227, 238, 0.62);
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.app.theme-dark .editor-lens-toggle:hover {
+.app.theme-dark .editor-lens-menu-trigger:hover {
+  border-color: #63748b;
+  color: #e3eaf3;
   background: rgba(116, 143, 191, 0.2);
 }
 

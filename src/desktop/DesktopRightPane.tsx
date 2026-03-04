@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Menu } from "lucide-react";
 import { useSelection } from "../contexts/SelectionContext";
 import { useEditor } from "../contexts/EditorContext";
 import { useNotesTree } from "../contexts/NotesTreeContext";
@@ -15,6 +16,12 @@ import { sanitizeRecordingEditorContent } from "../utils/format";
 
 import { focusNoScroll } from "../utils/dom";
 import type { AppMode } from "../types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
 
 type DesktopRightPaneProps = {
   appMode: AppMode;
@@ -27,6 +34,7 @@ export function DesktopRightPane({
 }: DesktopRightPaneProps) {
   const { activeNote, selectedNotes } = useSelection();
   const [isLensPinned, setIsLensPinned] = useState(false);
+  const [isLensMenuOpen, setIsLensMenuOpen] = useState(false);
   const {
     noteContent,
     draftNoteContent,
@@ -117,13 +125,24 @@ export function DesktopRightPane({
             <div className="editor-single">
               <div className="editor-top-row">
                 {selectedNotePaths.length > 0 ? (
-                  <button
-                    type="button"
-                    className="editor-lens-toggle"
-                    onClick={() => setIsLensPinned(true)}
-                  >
-                    Open Lens
-                  </button>
+                  <div className="editor-lens-menu-area">
+                    <DropdownMenu open={isLensMenuOpen} onOpenChange={setIsLensMenuOpen}>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="editor-lens-menu-trigger"
+                          aria-label="Open editor menu"
+                        >
+                          <Menu aria-hidden="true" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setIsLensPinned(true)}>
+                          Open Lens
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 ) : null}
               </div>
               <RecordingNoteHeader notePath={activeNote} preview={activeNotePreview} />
