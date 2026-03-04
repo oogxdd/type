@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import * as api from "../data/notesApi";
+import * as api from "../data/profilesApi";
 import type { NotesProfileSnapshot, ProfileSyncSettings } from "../types";
 import {
   DEFAULT_PROFILE_SYNC_SETTINGS,

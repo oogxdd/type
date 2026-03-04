@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import * as api from "../data/notesApi";
+import * as api from "../data/recordingsApi";
 import type { RecordingListItem, RecordingQueueSnapshot } from "../types";
 import { FEED_FOLDER_PATH } from "../constants";
 import { toBase64, fromBase64 } from "../utils/notes";

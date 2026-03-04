@@ -5,7 +5,8 @@ import type {
   DragOverEvent,
   DragStartEvent,
 } from "@dnd-kit/core";
-import * as api from "../data/notesApi";
+import { moveItems, setOrder } from "../data/notesApi";
+import { logGroup } from "../data/invoke";
 import type { DragData, FolderNode } from "../types";
 import { isSystemFolder } from "../constants";
 import { getNoteParentPath } from "../utils/notes";
@@ -86,7 +87,7 @@ export function useDragDrop({
       const data = active.data.current as DragData | undefined;
       if (!data) return;
       activeDrag.current = data;
-      api.logGroup("drag start", {
+      logGroup("drag start", {
         type: data.type,
         path: "path" in data ? data.path : undefined,
         id: active.id.toString(),
@@ -234,19 +235,19 @@ export function useDragDrop({
           edgeSnap ? `${DROP_PREFIX}:${edgeSnap.id}:${edgeSnap.position}` : over.id;
         const dropTarget = parseDropTargetId(resolvedId);
         if (!dropTarget) {
-          api.logGroup("drop ignored", { reason: "invalid target", overId: over.id });
+          logGroup("drop ignored", { reason: "invalid target", overId: over.id });
           return;
         }
 
         const selectedIdsList = Array.from(selectedFolders);
         const draggingIds = getTopLevelSelected(selectedIdsList, parentById);
         if (draggingIds.length === 0) {
-          api.logGroup("drop ignored", { reason: "no dragging ids" });
+          logGroup("drop ignored", { reason: "no dragging ids" });
           return;
         }
 
         if (dropTarget.type === "item" && draggingIds.includes(dropTarget.itemId)) {
-          api.logGroup("drop ignored", { reason: "target is dragged item", target: dropTarget });
+          logGroup("drop ignored", { reason: "target is dragged item", target: dropTarget });
           return;
         }
 
@@ -254,7 +255,7 @@ export function useDragDrop({
           dropTarget.type === "item" &&
           isInDraggedSubtree(treeData, draggingIds, dropTarget.itemId)
         ) {
-          api.logGroup("drop ignored", {
+          logGroup("drop ignored", {
             reason: "target inside dragged subtree",
             target: dropTarget,
           });
@@ -263,7 +264,7 @@ export function useDragDrop({
 
         const orderedDraggingIds = sortIdsByTreeOrder(draggingIds, orderedIds);
         if (orderedDraggingIds.some(isSystemFolder)) {
-          api.logGroup("drop ignored", { reason: "system folder drag blocked" });
+          logGroup("drop ignored", { reason: "system folder drag blocked" });
           return;
         }
         const { tree: prunedTree, removed } = removeNodes(treeData, orderedDraggingIds);
@@ -292,7 +293,7 @@ export function useDragDrop({
         }
 
         const nextTree = insertNodes(prunedTree, targetParentId, targetIndex, nodesToInsert);
-        api.logGroup("folder drag drop", {
+        logGroup("folder drag drop", {
           dropTarget,
           draggingIds: orderedDraggingIds,
           targetParentId: targetParentId ?? "",
@@ -313,7 +314,7 @@ export function useDragDrop({
           const oldParent = oldParentById[id] ?? null;
           const newParent = newParentById[id] ?? null;
           if (oldParent !== newParent) {
-            await api.moveItems([id], newParent ?? "");
+            await moveItems([id], newParent ?? "");
           }
         }
 
@@ -329,13 +330,13 @@ export function useDragDrop({
           (parent) => !arraysEqual(nextOrderMap[parent], currentOrderMap[parent])
         );
 
-        api.logGroup("folder order delta", {
+        logGroup("folder order delta", {
           changedParents,
           totalParents: Object.keys(nextOrderMap).length,
         });
 
         for (const parentPath of changedParents) {
-          await api.setOrder({
+          await setOrder({
             parent: parentPath,
             folderOrder: nextOrderMap[parentPath],
             noteOrder: noteOrderMap[parentPath] || [],
@@ -355,7 +356,7 @@ export function useDragDrop({
       if (data.type === "note") {
         activeDrag.current = null;
         if (!over || !overData) {
-          api.logGroup("note drop ignored", { reason: "missing target" });
+          logGroup("note drop ignored", { reason: "missing target" });
           return;
         }
         const selectedList = selectedNotes.has(data.path)
@@ -363,11 +364,11 @@ export function useDragDrop({
           : [data.path];
         const sourceParentPath = getNoteParentPath(data.path);
         if (overData.type === "folder") {
-          api.logGroup("note move to folder", {
+          logGroup("note move to folder", {
             notes: selectedList,
             destination: overData.path,
           });
-          await api.moveItems(selectedList, overData.path);
+          await moveItems(selectedList, overData.path);
           if (selectedList.includes(activeNote || "")) {
             setActiveNote(null);
             clearNote();
@@ -380,12 +381,12 @@ export function useDragDrop({
         if (overData.type === "note") {
           const destinationParentPath = getNoteParentPath(overData.path);
           if (destinationParentPath !== sourceParentPath) {
-            api.logGroup("note move to note parent", {
+            logGroup("note move to note parent", {
               notes: selectedList,
               destination: destinationParentPath,
               over: overData.path,
             });
-            await api.moveItems(selectedList, destinationParentPath);
+            await moveItems(selectedList, destinationParentPath);
             if (selectedList.includes(activeNote || "")) {
               setActiveNote(null);
               clearNote();
@@ -398,7 +399,7 @@ export function useDragDrop({
 
           const parentNode = findNode(tree, destinationParentPath);
           if (!parentNode) {
-            api.logGroup("note drop ignored", {
+            logGroup("note drop ignored", {
               reason: "missing destination parent",
               destinationParentPath,
             });
@@ -416,14 +417,14 @@ export function useDragDrop({
           const newOrder = reorderList(notePaths, movingNotes, overData.path);
           const folderOrder = parentNode.children.map((c) => c.name);
           const noteOrder = newOrder.map((p) => p.split("/").pop() || p);
-          api.logGroup("note reorder", {
+          logGroup("note reorder", {
             parent: parentNode.path,
             dragging: movingNotes,
             over: overData.path,
             noteOrder,
             folderOrder,
           });
-          await api.setOrder({
+          await setOrder({
             parent: parentNode.path,
             folderOrder,
             noteOrder,

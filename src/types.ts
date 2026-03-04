@@ -152,6 +152,12 @@ export type NativeRecorderCapabilities = {
   started_ms: number | null;
 };
 
+export type SetOrderArgs = {
+  parent: string;
+  folderOrder: string[];
+  noteOrder: string[];
+};
+
 export type AppMode = "notes" | "settings";
 export type PaneId = "folders" | "middle" | "right";
 export type GitSyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
