@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "notes-reviewer",
-  "version": "0.1.0",
-  "identifier": "com.digital.notes-reviewer",
+  "productName": "Type",
+  "version": "0.3.0",
+  "identifier": "com.digital.type2",
   "build": {
     "beforeDevCommand": "yarn dev",
     "devUrl": "http://localhost:1430",
@@ -10,9 +10,10 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "notes-reviewer",
+        "title": "Type",
         "width": 800,
         "height": 600,
         "decorations": true,

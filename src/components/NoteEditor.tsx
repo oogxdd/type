@@ -2,33 +2,61 @@ import { useEffect, useMemo, useRef } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import { marked } from "marked";
-import TurndownService from "turndown";
+import { joinFrontmatter, splitFrontmatter } from "../utils/frontmatter";
+import {
+  appendRawLensBackmatterBlock,
+  splitLensBackmatterBlock,
+} from "../utils/lensBackmatter";
+import { htmlToMarkdown, markdownToHtml } from "../utils/markdownEditor";
+import { stripInlineAnnotationMetadata } from "../utils/noteAnnotations";
 
 type NoteEditorProps = {
   markdown: string;
   onChange: (markdown: string) => void;
 };
 
-const turndown = new TurndownService({
-  headingStyle: "atx",
-  codeBlockStyle: "fenced",
-  bulletListMarker: "-",
-});
-
-const markdownToHtml = (markdown: string) => {
-  const parsed = marked.parse(markdown || "", { breaks: true, gfm: true });
-  return typeof parsed === "string" ? parsed : "";
-};
-
-const htmlToMarkdown = (html: string) => turndown.turndown(html).trimEnd();
-
 const toolbarButton =
   "rounded-md border border-transparent px-2 py-1 text-xs font-medium text-[var(--ui-muted)] transition-colors hover:border-[var(--ui-border)] hover:bg-[var(--ui-select)] hover:text-[var(--ui-text)]";
+
+const splitEditorMarkdown = (markdown: string) => {
+  const split = splitFrontmatter(markdown);
+  const lensSplit = splitLensBackmatterBlock(split.body);
+  return {
+    frontmatterBlock: split.frontmatterBlock,
+    backmatterBlock: lensSplit.rawBlock,
+    body: stripInlineAnnotationMetadata(lensSplit.content),
+  };
+};
 
 export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
   const isSyncing = useRef(false);
   const latestMarkdown = useRef(markdown);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const initialContentRef = useRef(splitEditorMarkdown(markdown));
+  const frontmatterRef = useRef<string | null>(initialContentRef.current.frontmatterBlock);
+  const backmatterRef = useRef<string | null>(initialContentRef.current.backmatterBlock);
+
+  const keepCaretBreathingRoom = (currentEditor: NonNullable<ReturnType<typeof useEditor>>) => {
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) {
+      return;
+    }
+    const position = currentEditor.state.selection.$anchor.pos;
+    let coords: { top: number; bottom: number };
+    try {
+      coords = currentEditor.view.coordsAtPos(position);
+    } catch {
+      return;
+    }
+    const rect = scrollEl.getBoundingClientRect();
+    const bottomLimit = rect.bottom - rect.height * 0.2;
+    if (coords.bottom <= bottomLimit) {
+      return;
+    }
+    const delta = coords.bottom - bottomLimit;
+    const maxScrollTop = scrollEl.scrollHeight - scrollEl.clientHeight;
+    scrollEl.scrollTop = Math.min(maxScrollTop, scrollEl.scrollTop + delta);
+  };
 
   const extensions = useMemo(
     () => [
@@ -36,7 +64,7 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
         heading: { levels: [1, 2, 3] },
       }),
       Placeholder.configure({
-        placeholder: "Start writing your note...",
+        placeholder: "What's on your mind?",
       }),
     ],
     []
@@ -45,7 +73,7 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
   const editor = useEditor({
     extensions,
     autofocus: false,
-    content: markdownToHtml(markdown),
+    content: markdownToHtml(initialContentRef.current.body),
     editorProps: {
       attributes: {
         class: "tiptap-content",
@@ -55,9 +83,15 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
       if (isSyncing.current) {
         return;
       }
-      const nextMarkdown = htmlToMarkdown(currentEditor.getHTML());
+      const nextBodyMarkdown = htmlToMarkdown(currentEditor.getHTML());
+      const frontmatterJoined = joinFrontmatter(frontmatterRef.current, nextBodyMarkdown);
+      const nextMarkdown = appendRawLensBackmatterBlock(
+        frontmatterJoined,
+        backmatterRef.current
+      );
       latestMarkdown.current = nextMarkdown;
       onChange(nextMarkdown);
+      requestAnimationFrame(() => keepCaretBreathingRoom(currentEditor));
     },
   });
 
@@ -68,13 +102,16 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
     if (markdown === latestMarkdown.current) {
       return;
     }
-    const currentMarkdown = htmlToMarkdown(editor.getHTML());
-    if (currentMarkdown === markdown) {
+    const incoming = splitEditorMarkdown(markdown);
+    frontmatterRef.current = incoming.frontmatterBlock;
+    backmatterRef.current = incoming.backmatterBlock;
+    const currentBodyMarkdown = htmlToMarkdown(editor.getHTML());
+    if (currentBodyMarkdown === incoming.body) {
       latestMarkdown.current = markdown;
       return;
     }
     isSyncing.current = true;
-    editor.commands.setContent(markdownToHtml(markdown), { emitUpdate: false });
+    editor.commands.setContent(markdownToHtml(incoming.body), { emitUpdate: false });
     isSyncing.current = false;
     latestMarkdown.current = markdown;
   }, [editor, markdown]);
@@ -147,7 +184,14 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
           Redo
         </button>
       </div>
-      <EditorContent editor={editor} className="tiptap-scroll" />
+      <div
+        className="tiptap-scroll"
+        ref={(node) => {
+          scrollRef.current = node;
+        }}
+      >
+        <EditorContent editor={editor} />
+      </div>
     </div>
   );
 }

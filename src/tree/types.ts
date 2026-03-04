@@ -1,8 +1,11 @@
+import type { NoteEntry } from "../types";
+
 export type TreeItem = {
   id: string;
   name: string;
   children: TreeItem[];
   noteCount?: number;
+  notes?: NoteEntry[];
   collapsed?: boolean;
 };
 
@@ -13,6 +16,7 @@ export type FlattenedItem = {
   depth: number;
   children: TreeItem[];
   noteCount?: number;
+  notes?: NoteEntry[];
   collapsed?: boolean;
 };
 
