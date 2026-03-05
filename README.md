@@ -211,6 +211,22 @@ cargo check --manifest-path src-tauri/Cargo.toml
 - Phone: folders → notes → editor flow, back navigation, swipe actions, action sheets, sync
 - Tablet: split view in portrait/landscape, rotation stability
 
+## Backend structure
+
+The Rust backend (`src-tauri/src/`) is organized into domain modules:
+
+| File | Domain |
+|------|--------|
+| `lib.rs` | Module hub — shared utilities, constants, re-exports |
+| `commands.rs` | All `#[tauri::command]` handlers (IPC layer) |
+| `security.rs` | Encryption, password hashing, lock mode |
+| `profiles.rs` | Multi-profile management, legacy migration |
+| `notes.rs` | Note filesystem ops, front-matter, folder tree, ordering |
+| `git.rs` | Git sync via libgit2 — fetch, push, merge, status, history |
+| `recordings.rs` | Audio recording, AssemblyAI transcription queue |
+| `handwriting.rs` | Handwriting attachment OCR (OpenAI / HuggingFace) |
+| `ios.rs` | iOS-specific: native AVAudioRecorder, WKWebView recovery |
+
 ## Contributing
 
 See [agents.md](./agents.md) for architecture, module map, and codebase patterns.

@@ -9,8 +9,117 @@ A local-first markdown notes app built with Tauri v2 (Rust backend) + React (Typ
 ## Tech stack
 
 - **Frontend**: React 19, TypeScript, Vite, Tiptap (editor), DnD Kit (drag-and-drop), Tailwind + Shadcn/ui
-- **Backend**: Tauri v2 (Rust) — filesystem ops, Git via libgit2, native audio recording on iOS
+- **Backend**: Tauri v2 (Rust) — domain modules for security, profiles, notes, git, recordings, handwriting, iOS
 - **Build**: `npm run build` runs `tsc && vite build`. Rust: `cargo check --manifest-path src-tauri/Cargo.toml`
+
+## Backend module structure (src-tauri/src/)
+
+The Rust backend is split into domain modules. `lib.rs` is a thin hub that declares modules, re-exports all `pub(crate)` symbols, and holds shared utilities. `commands.rs` contains all `#[tauri::command]` handlers and uses `use super::*;` to access everything via lib.rs re-exports.
+
+### lib.rs — shared hub (~140 lines)
+
+- **Module declarations** and `pub(crate) use module::*;` re-exports for all 7 domain modules
+- **Shared crate re-exports**: `BASE64`, `fs`, `HashMap`, `HashSet`, `PathBuf`, `Manager`, git2 types, objc types (iOS)
+- **Shared constants**: `RECORDING_STATUS_PENDING/QUEUED/PROCESSING/COMPLETED/FAILED`
+- **Shared utilities**: `app_data_dir`, `now_ms`, `time_to_ms`, `note_parent_folder_path`, `decode_base64_payload`, `decode_audio_base64`, `decode_image_base64`, `response_error`
+- **macOS**: `MACOS_WINDOW_ALPHA`, `apply_macos_window_alpha`
+- **Entry point**: `pub fn run()` delegates to `commands::run()`
+
+### commands.rs (~1,224 lines, unchanged)
+
+All `#[tauri::command]` functions. Each is a thin wrapper calling `_impl` functions from domain modules. Also contains `pub fn run()` which builds the Tauri app, registers commands, and sets up plugins. Uses `use super::*;` — never needs direct module imports.
+
+### security.rs (~450 lines)
+
+Encryption at rest using XChaCha20-Poly1305 with Argon2-derived keys.
+
+- **Runtime state**: `SECURITY_RUNTIME` (OnceLock<Mutex>) holds the derived key in memory after unlock
+- **Config persistence**: `.notes-security.json` in app data (password hashes, salt, encrypted key, preferences)
+- **Key functions**: `encrypt_note_body_for_write`, `decrypt_note_body_for_read`, `ensure_security_unlocked_for_app`
+- **Command impls**: `get_security_state_impl`, `enable_security_impl`, `lock_security_impl`, `unlock_security_impl`, `set_security_preferences_impl`
+- **Panic flow**: `panic_reset_local_data` — wipes notes/profiles/security, seeds dummy notes
+- **Cross-module deps**: profiles (reset/migrate), notes (collect/parse/write notes for migration)
+
+### profiles.rs (~400 lines)
+
+Multi-profile management with per-profile notes root directories.
+
+- **Config persistence**: `.notes-profiles.json` in app data
+- **Legacy migration**: from `.notes-sessions.json` format (renames fields, copies data)
+- **Key functions**: `ensure_profiles_state` (load + migrate + normalize), `find_profile`, `write_profiles_state`
+- **CRUD**: `create_profile_state`, `update_profile_state`, `delete_profile_state`, `set_active_profile_state`, `set_profile_notes_root_state`
+- **Path handling**: `profile_root_for_id`, `normalize_notes_root_path`, `copy_dir_recursive`, `move_dir_contents`
+
+### notes.rs (~700 lines)
+
+Note filesystem operations, front-matter parsing, folder tree building, ordering.
+
+- **Constants**: `ORDER_FILE`, `FEED_FOLDER`, `ARCHIEVE_FOLDER`, `RECORDINGS_STORAGE_FOLDER`, `ATTACHMENTS_STORAGE_FOLDER`, `PROTECTED_SYSTEM_FOLDERS`
+- **Front-matter**: `parse_note_front_matter` (YAML-like key-value), `render_note_with_front_matter`, `write_note_with_front_matter`
+- **File naming**: `allocate_note_file_name` dispatches to UTC-timestamp-slug, UUID-v7, or UUID-v7-prefix-slug mode. `slug_from_content` extracts Unicode-aware slugs.
+- **Folder tree**: `build_folder_node` (recursive), `ensure_system_folders`, `migrate_legacy_system_folders`
+- **Ordering**: `read_order_file`, `write_order_file`, `sort_by_order`, `update_order_remove/append/rename`
+- **Collection**: `collect_markdown_note_files` enumerates `.md` files in a folder
+
+### git.rs (~550 lines)
+
+Git operations via libgit2 — repo init, fetch, push, merge, status, commit history.
+
+- **Repo management**: `ensure_git_repo`, `open_repo`, `git_repo_initialized`
+- **Sync operations**: `perform_fetch`, `fast_forward_to`, `merge_fetched_commit`, `commit_all_changes`
+- **Status**: `build_git_status` (ahead/behind counts, remote URL, branch, dirty state)
+- **History**: `build_git_history` with `GIT_NOTE_TIMESTAMPS_CACHE` for per-note commit timestamps
+- **Auth**: `build_callbacks` sets up credential callbacks for SSH/HTTPS
+- **Bootstrap detection**: `worktree_has_only_bootstrap_artifacts`, `clear_bootstrap_artifacts`
+
+### recordings.rs (~600 lines)
+
+Audio recording save and AssemblyAI transcription queue.
+
+- **Save flow**: `recording_audio_file_path` → save bytes → `write_note_with_front_matter` with recording metadata
+- **Transcription queue**: `TRANSCRIPTION_QUEUE` (OnceLock<Mutex>) with `spawn_transcription_worker_if_needed` background thread
+- **AssemblyAI**: `transcribe_audio_bytes_with_assembly` — upload → poll transcript endpoint until complete
+- **Listing**: `collect_recording_notes` — enumerate recording-type notes with audio paths and status
+- **Queue snapshot**: `recording_queue_snapshot` for frontend status display
+
+### handwriting.rs (~500 lines)
+
+Handwriting attachment save and OCR queue (OpenAI or HuggingFace).
+
+- **Save flow**: `handwriting_attachment_file_path` → save image → `write_note_with_front_matter` with attachment metadata
+- **OCR queue**: `HANDWRITING_OCR_QUEUE` with `spawn_handwriting_ocr_worker_if_needed` background thread
+- **Providers**: `HandwritingOcrProvider::OpenAi` (GPT-4o via responses API) and `HandwritingOcrProvider::HuggingFace` (with retry logic for 503s)
+- **Listing**: `collect_handwriting_notes` — enumerate handwriting-type notes with attachment paths and status
+
+### ios.rs (~470 lines, `#[cfg(target_os = "ios")]`)
+
+iOS-specific native functionality via Objective-C runtime interop.
+
+- **Native recording**: `create_ios_audio_recorder` (AVAudioRecorder), `configure_ios_audio_for_recording` (AVAudioSession), `ios_recorder_is_recording`, `ios_ensure_recorder_active`
+- **WKWebView recovery**: `install_ios_webview_termination_recovery` — registers an ObjC class that observes `WKWebView` and reloads on termination
+- **State**: `IOS_NATIVE_RECORDER` (active recording path + recorder pointer), `IOS_WEBVIEW_TERMINATION_PROXIES`
+- **ObjC helpers**: `ns_class`, `ns_string`, `ns_error_message`, `ensure_avfoundation_loaded`
+
+### Cross-module dependency graph
+
+```
+lib.rs (shared utils) ← all modules
+profiles ← security (panic reset, enable migration)
+profiles ← notes (notes_root resolution)
+notes ← security (encrypt_note_body_for_write)
+notes ← recordings (front matter, file naming, collection)
+notes ← handwriting (front matter, file naming, collection)
+notes ← git (constants for bootstrap detection)
+```
+
+Circular references (security↔notes, profiles↔notes) are fine — same crate, all resolved via `crate::` paths.
+
+### Visibility rules
+
+1. Types/functions used outside their module → `pub(crate)`
+2. Struct fields accessed from commands.rs or other modules → `pub(crate)`
+3. Module-internal helpers → private (no `pub` modifier)
+4. `pub(crate) use module::*;` in lib.rs re-exports everything, so commands.rs sees all symbols via `use super::*;`
 
 ## System folders and storage
 
