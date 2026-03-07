@@ -259,6 +259,14 @@ export function useNoteEditor(
     setDraftNoteContent("");
   }, []);
 
+  const primeNoteContent = useCallback((markdown: string) => {
+    setNoteContent(markdown);
+    noteContentRef.current = markdown;
+    setNoteDirty(false);
+    noteDirtyRef.current = false;
+    setSaveError(null);
+  }, []);
+
   const flushSave = useCallback(async () => {
     if (saveTimer.current) {
       window.clearTimeout(saveTimer.current);
@@ -297,6 +305,7 @@ export function useNoteEditor(
     handleEditorChange,
     clearNote,
     clearDraft,
+    primeNoteContent,
     flushSave,
     retrySave,
   };

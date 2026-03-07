@@ -17,8 +17,6 @@ import { PhoneSettingsScreen } from "./PhoneSettingsScreen";
 type PhoneRouteRendererProps = {
   currentRoute: MobileRoute;
   // Home screen
-  editorMarkdown: string;
-  handleEditorChange: (markdown: string) => void;
   keyboardInset: number;
   createNewNote: (
     preferredFolderPath?: string,
@@ -66,16 +64,7 @@ export function PhoneRouteRenderer(props: PhoneRouteRendererProps) {
   const { currentRoute } = props;
 
   if (currentRoute.kind === "home") {
-    return (
-      <PhoneHomeScreen
-        editorMarkdown={props.editorMarkdown}
-        handleEditorChange={props.handleEditorChange}
-        keyboardInset={props.keyboardInset}
-        createNewNote={props.createNewNote}
-        openEditorRoute={props.openEditorRoute}
-        nextTransitionRef={props.nextTransitionRef}
-      />
-    );
+    return <PhoneHomeScreen keyboardInset={props.keyboardInset} />;
   }
 
   if (currentRoute.kind === "folders") {

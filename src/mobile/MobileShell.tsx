@@ -63,13 +63,7 @@ export function MobileShell({
     selectNoteForMobile,
     enterMobileHome,
   } = useSelection();
-  const {
-    noteContent,
-    draftNoteContent,
-    handleEditorChange,
-    clearNote,
-    clearDraft,
-  } = useEditor();
+  const { clearNote, clearDraft } = useEditor();
   const {
     visibleItems,
     expanded,
@@ -89,7 +83,6 @@ export function MobileShell({
   const activeNoteTitle =
     (activeNote ? notePreviews[activeNote]?.title || allNotePreviews[activeNote]?.title : null) ||
     "Note";
-  const editorMarkdown = activeNote ? noteContent : draftNoteContent;
 
   // -- Navigation
   const {
@@ -288,8 +281,6 @@ export function MobileShell({
             >
               <PhoneRouteRenderer
                 currentRoute={currentRoute}
-                editorMarkdown={editorMarkdown}
-                handleEditorChange={handleEditorChange}
                 keyboardInset={keyboardInset}
                 createNewNote={createNewNote}
                 openEditorRoute={openEditorRoute}

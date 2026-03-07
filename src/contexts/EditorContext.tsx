@@ -17,6 +17,7 @@ type EditorContextValue = {
   handleEditorChange: (markdown: string) => void;
   clearNote: () => void;
   clearDraft: () => void;
+  primeNoteContent: (markdown: string) => void;
   flushSave: () => Promise<void>;
   retrySave: () => Promise<void>;
   rightPaneRef: React.RefObject<HTMLDivElement | null>;
@@ -40,6 +41,7 @@ export function EditorProvider({
     handleEditorChange,
     clearNote,
     clearDraft,
+    primeNoteContent,
     flushSave,
     retrySave,
   } = useNoteEditor(activeNote, syncSettings.noteFileNameFormat);
@@ -82,6 +84,7 @@ export function EditorProvider({
         handleEditorChange,
         clearNote,
         clearDraft,
+        primeNoteContent,
         flushSave,
         retrySave,
         rightPaneRef,
