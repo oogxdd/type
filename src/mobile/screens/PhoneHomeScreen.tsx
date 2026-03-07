@@ -15,7 +15,6 @@ export function PhoneHomeScreen({ keyboardInset }: PhoneHomeScreenProps) {
   const {
     noteContent,
     draftNoteContent,
-    isNoteSaving,
     noteSaveError,
     handleEditorChange,
     clearNote,
@@ -166,7 +165,6 @@ export function PhoneHomeScreen({ keyboardInset }: PhoneHomeScreenProps) {
       onChange={handleHomeEditorChange}
       notePath={activeNote}
       hasActiveNote={Boolean(activeNote)}
-      isSaving={isNoteSaving}
       saveError={noteSaveError}
       keyboardInset={keyboardInset}
       onRetrySave={() => {

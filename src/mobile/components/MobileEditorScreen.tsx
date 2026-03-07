@@ -11,7 +11,6 @@ type MobileEditorScreenProps = {
   notePath?: string | null;
   notePreview?: NotePreview;
   hasActiveNote: boolean;
-  isSaving: boolean;
   saveError: string | null;
   keyboardInset: number;
   onRetrySave: () => void;
@@ -25,7 +24,6 @@ export function MobileEditorScreen({
   notePath = null,
   notePreview,
   hasActiveNote,
-  isSaving,
   saveError,
   keyboardInset,
   onRetrySave,
@@ -125,18 +123,14 @@ export function MobileEditorScreen({
         setPullDistance(0);
       }}
     >
-      {!draftMode && hasActiveNote && (saveError || isSaving) ? (
+      {!draftMode && hasActiveNote && saveError ? (
         <div className="mobile-editor-status" role="status" aria-live="polite">
-          {saveError ? (
-            <>
-              <span className="error">Save failed: {saveError}</span>
-              <button type="button" className="mobile-inline-action" onClick={onRetrySave}>
-                Retry
-              </button>
-            </>
-          ) : (
-            <span>Saving...</span>
-          )}
+          <>
+            <span className="error">Save failed: {saveError}</span>
+            <button type="button" className="mobile-inline-action" onClick={onRetrySave}>
+              Retry
+            </button>
+          </>
         </div>
       ) : null}
       {!draftMode && hasActiveNote ? (

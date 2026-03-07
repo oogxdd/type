@@ -61,7 +61,6 @@ export function TabletLayout({
   const {
     noteContent,
     draftNoteContent,
-    isNoteSaving,
     noteSaveError,
     handleEditorChange,
     retrySave,
@@ -221,7 +220,6 @@ export function TabletLayout({
           notePath={activeNote}
           notePreview={activeNotePreview}
           hasActiveNote={hasActiveNote}
-          isSaving={isNoteSaving}
           saveError={noteSaveError}
           keyboardInset={keyboardInset}
           onRetrySave={() => {
@@ -239,7 +237,6 @@ export function TabletLayout({
             notePath={activeNote}
             notePreview={activeNotePreview}
             hasActiveNote={hasActiveNote}
-            isSaving={isNoteSaving}
             saveError={noteSaveError}
             keyboardInset={keyboardInset}
             onRetrySave={() => {

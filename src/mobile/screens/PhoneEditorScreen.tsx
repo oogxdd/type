@@ -23,8 +23,7 @@ export function PhoneEditorScreen({
   nextTransitionRef,
   dispatch,
 }: PhoneEditorScreenProps) {
-  const { noteContent, isNoteSaving, noteSaveError, handleEditorChange, retrySave } =
-    useEditor();
+  const { noteContent, noteSaveError, handleEditorChange, retrySave } = useEditor();
   const { activeNote } = useSelection();
   const { allNotePreviews } = useNotesTree();
 
@@ -39,7 +38,6 @@ export function PhoneEditorScreen({
       notePath={activeNote}
       notePreview={activeNotePreview}
       hasActiveNote={hasActiveNote}
-      isSaving={isNoteSaving}
       saveError={noteSaveError}
       keyboardInset={keyboardInset}
       onRetrySave={() => {
