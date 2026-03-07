@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "b5fc45bcdcf2",
+  "strategy": "manual-commit",
+  "branch": "manual-ota-updates",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/components/settings/SettingsUpdatesSection.tsx",
+    "src/constants.ts",
+    "src/mobile/components/settings/MobileUpdatesSection.tsx",
+    "src/ota-bootstrap.ts",
+    "src/utils/storage.ts",
+    "src/vite-env.d.ts",
+    "vite.config.ts",
+    "vite.ota.config.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/b5/fc45bcdcf2/0/metadata.json",
+      "transcript": "/b5/fc45bcdcf2/0/full.jsonl",
+      "context": "/b5/fc45bcdcf2/0/context.md",
+      "content_hash": "/b5/fc45bcdcf2/0/content_hash.txt",
+      "prompt": "/b5/fc45bcdcf2/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1618,
+    "cache_creation_tokens": 72504,
+    "cache_read_tokens": 1246448,
+    "output_tokens": 12779,
+    "api_call_count": 27
+  }
+}
