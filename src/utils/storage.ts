@@ -2,7 +2,6 @@ import type { ThemeMode, NotesListMode } from "../components/SettingsPanel";
 import type { ProfileSyncSettings } from "../types";
 import {
   PROFILE_SYNC_STORAGE_KEY,
-  OTA_AUTO_CHECK_STORAGE_KEY,
   DEFAULT_EDITOR_FONT_SIZE,
 } from "../constants";
 
@@ -235,20 +234,3 @@ export const getInitialEditorFontSize = (): number => {
   return DEFAULT_EDITOR_FONT_SIZE;
 };
 
-export const getOtaAutoCheckEnabled = (): boolean => {
-  if (typeof window === "undefined") {
-    return true;
-  }
-  const stored = window.localStorage.getItem(OTA_AUTO_CHECK_STORAGE_KEY);
-  if (stored === "false") {
-    return false;
-  }
-  return true;
-};
-
-export const setOtaAutoCheckEnabled = (enabled: boolean) => {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(OTA_AUTO_CHECK_STORAGE_KEY, String(enabled));
-};

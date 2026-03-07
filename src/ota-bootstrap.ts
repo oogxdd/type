@@ -1,4 +1,4 @@
-import { OTA_AUTO_CHECK_STORAGE_KEY } from "./constants";
+import { OTA_APPLY_PENDING_KEY } from "./constants";
 
 const isLikelyIosWebView = () => {
   if (typeof window === "undefined") {
@@ -6,13 +6,6 @@ const isLikelyIosWebView = () => {
   }
   const { userAgent, platform, maxTouchPoints } = window.navigator;
   return /iPad|iPhone|iPod/.test(userAgent) || (platform === "MacIntel" && maxTouchPoints > 1);
-};
-
-const getOtaAutoCheckEnabled = () => {
-  if (typeof window === "undefined") {
-    return true;
-  }
-  return window.localStorage.getItem(OTA_AUTO_CHECK_STORAGE_KEY) !== "false";
 };
 
 const statusEl = document.getElementById("ota-status");
@@ -27,19 +20,23 @@ const mountBundledApp = async () => {
   mountApp();
 };
 
-const startWithOta = async () => {
-  setStatus("Checking for updates...");
+const applyOtaUpdate = async () => {
+  window.localStorage.removeItem(OTA_APPLY_PENDING_KEY);
+
+  setStatus("Downloading update...");
   const { prepare, start } = await import("@inkibra/tauri-plugin-ota");
   const manifestUrl = import.meta.env.VITE_OTA_MANIFEST_URL?.trim();
 
-  if (manifestUrl) {
-    try {
-      await prepare(manifestUrl);
-    } catch (error) {
-      console.warn("[OTA] prepare failed; falling back to bundled app", error);
-    }
-  } else {
-    console.info("[OTA] VITE_OTA_MANIFEST_URL not set; using bundled app");
+  if (!manifestUrl) {
+    console.warn("[OTA] VITE_OTA_MANIFEST_URL not set; falling back to bundled app");
+    await mountBundledApp();
+    return;
+  }
+
+  try {
+    await prepare(manifestUrl);
+  } catch (error) {
+    console.warn("[OTA] prepare failed; falling back to bundled app", error);
   }
 
   setStatus("Starting app...");
@@ -47,24 +44,22 @@ const startWithOta = async () => {
 };
 
 const bootstrap = async () => {
-  if (!isLikelyIosWebView()) {
-    await mountBundledApp();
+  const applyPending =
+    isLikelyIosWebView() &&
+    window.localStorage.getItem(OTA_APPLY_PENDING_KEY) === "true";
+
+  if (applyPending) {
+    try {
+      await applyOtaUpdate();
+    } catch (error) {
+      console.error("[OTA] apply failed; mounting bundled app directly", error);
+      setStatus("Update failed. Starting bundled app...");
+      await mountBundledApp();
+    }
     return;
   }
 
-  if (!getOtaAutoCheckEnabled()) {
-    setStatus("Starting bundled app...");
-    await mountBundledApp();
-    return;
-  }
-
-  try {
-    await startWithOta();
-  } catch (error) {
-    console.error("[OTA] startup failed; mounting bundled app directly", error);
-    setStatus("Unable to load update. Starting bundled app...");
-    await mountBundledApp();
-  }
+  await mountBundledApp();
 };
 
 void bootstrap();
