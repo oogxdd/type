@@ -38,8 +38,9 @@ export function MobileSyncSection() {
   const visibleCommits = gitCommitHistory.slice(0, 8);
 
   useEffect(() => {
+    void refreshGitStatus();
     void refreshGitHistory();
-  }, [refreshGitHistory]);
+  }, [refreshGitHistory, refreshGitStatus]);
 
   return (
     <>

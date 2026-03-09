@@ -33,6 +33,7 @@ tauri-plugin-ota = { git = "https://github.com/inkibra/tauri-plugins", tag = "@i
 argon2 = "0.5"
 chacha20poly1305 = { version = "0.10", features = ["std"] }
 zeroize = "1.8"
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"

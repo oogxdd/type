@@ -55,15 +55,6 @@ export function SelectionProvider({
     }
   }, [activeProfileId, activeProfileNotesRoot]);
 
-  // -- Debug logging
-  useEffect(() => {
-    console.log("[folders] selectedFolders", Array.from(selectedFolders));
-  }, [selectedFolders]);
-
-  useEffect(() => {
-    console.log("[folders] activeFolder", activeFolder);
-  }, [activeFolder]);
-
   const selectFolderForMobile = useCallback((path: string) => {
     if (!path) return;
     setSelectedFolders(new Set([path]));

@@ -5077,6 +5077,7 @@ dependencies = [
  "time",
  "uuid",
  "zeroize",
+ "zip",
 ]
 
 [[package]]

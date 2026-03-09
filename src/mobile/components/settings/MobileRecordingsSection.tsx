@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   formatHandwritingStatus,
   formatRecordingStatus,
@@ -39,6 +40,11 @@ export function MobileRecordingsSection() {
   const visibleVoiceJobs = recordingsList.slice(0, 12);
   const visibleHandwritingJobs = handwritingJobs.slice(0, 12);
   const isHuggingFace = syncSettings.handwritingOcrProvider === "huggingface";
+
+  useEffect(() => {
+    void refreshRecordings();
+    void refreshHandwritingJobs();
+  }, [refreshHandwritingJobs, refreshRecordings]);
 
   return (
     <>

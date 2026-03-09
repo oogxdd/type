@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { openPath } from "@tauri-apps/plugin-opener";
 import { useProfiles } from "../../../contexts/ProfilesContext";
+import { createProfilesBackupZip } from "../../../data/profilesApi";
 import { Group, ChoiceRow, InputRow } from "./SettingsHelpers";
 
 type GitDraftSettings = {
@@ -23,6 +25,21 @@ const getGitDraftFromSyncSettings = (syncSettings: {
   gitUsername: syncSettings.gitUsername,
   gitPassword: syncSettings.gitPassword,
 });
+
+const formatByteSize = (bytes: number) => {
+  if (!Number.isFinite(bytes) || bytes < 1024) {
+    return `${Math.max(0, Math.round(bytes))} B`;
+  }
+  const kb = bytes / 1024;
+  if (kb < 1024) {
+    return `${kb.toFixed(1)} KB`;
+  }
+  const mb = kb / 1024;
+  if (mb < 1024) {
+    return `${mb.toFixed(1)} MB`;
+  }
+  return `${(mb / 1024).toFixed(1)} GB`;
+};
 
 export function MobileProfileSection() {
   const {
@@ -48,6 +65,8 @@ export function MobileProfileSection() {
   const [gitDraft, setGitDraft] = useState<GitDraftSettings>(() =>
     getGitDraftFromSyncSettings(syncSettings)
   );
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupStatus, setBackupStatus] = useState("");
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -283,6 +302,49 @@ export function MobileProfileSection() {
             Apply
           </button>
         </div>
+      </Group>
+
+      <Group title="Backup">
+        <p className="mobile-native-note">
+          Bundle all profiles and every file from each profile notes root into a single zip.
+        </p>
+        <div className="mobile-native-actions single">
+          <button
+            type="button"
+            className="mobile-secondary-btn"
+            disabled={backupBusy}
+            onClick={() => {
+              void (async () => {
+                setBackupBusy(true);
+                setBackupStatus("");
+                try {
+                  const archive = await createProfilesBackupZip();
+                  const sizeLabel = formatByteSize(archive.total_bytes);
+                  try {
+                    await openPath(archive.archive_path);
+                    setBackupStatus(
+                      `Created ${archive.archive_name} (${sizeLabel}, ${archive.file_count} files). Save it to Files from the sheet that opens.`
+                    );
+                  } catch (openError) {
+                    const openMessage =
+                      openError instanceof Error ? openError.message : String(openError);
+                    setBackupStatus(
+                      `Created ${archive.archive_name}. Couldn't open automatically: ${openMessage}. File path: ${archive.archive_path}`
+                    );
+                  }
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : String(error);
+                  setBackupStatus(message);
+                } finally {
+                  setBackupBusy(false);
+                }
+              })();
+            }}
+          >
+            {backupBusy ? "Preparing backup..." : "Export all profiles (.zip)"}
+          </button>
+        </div>
+        {backupStatus ? <p className="mobile-native-note">{backupStatus}</p> : null}
       </Group>
     </>
   );

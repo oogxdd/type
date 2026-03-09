@@ -14,12 +14,12 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    allocate_note_file_name, collect_markdown_note_files, generate_note_id,
-    is_storage_folder_path, notes_root, now_ms, parse_note_front_matter, resolve_path,
-    response_error, sanitize_relative, strip_root, write_note_with_front_matter,
-    uuid_tail_without_timestamp_prefix, NoteFrontMatter, NoteFileNameFormat,
-    ATTACHMENTS_STORAGE_FOLDER, FEED_FOLDER, RECORDING_STATUS_COMPLETED, RECORDING_STATUS_FAILED,
-    RECORDING_STATUS_PENDING, RECORDING_STATUS_PROCESSING,
+    allocate_note_file_name, collect_markdown_note_files, generate_note_id, is_storage_folder_path,
+    notes_root, now_ms, parse_note_front_matter, resolve_path, response_error, sanitize_relative,
+    strip_root, uuid_tail_without_timestamp_prefix, write_note_with_front_matter,
+    NoteFileNameFormat, NoteFrontMatter, ATTACHMENTS_STORAGE_FOLDER, FEED_FOLDER,
+    RECORDING_STATUS_COMPLETED, RECORDING_STATUS_FAILED, RECORDING_STATUS_PENDING,
+    RECORDING_STATUS_PROCESSING,
 };
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -165,7 +165,9 @@ pub(crate) fn handwriting_queue_snapshot() -> HandwritingOcrQueueSnapshot {
     }
 }
 
-pub(crate) fn parse_handwriting_ocr_provider(value: &str) -> Result<HandwritingOcrProvider, String> {
+pub(crate) fn parse_handwriting_ocr_provider(
+    value: &str,
+) -> Result<HandwritingOcrProvider, String> {
     let normalized = value.trim().to_lowercase();
     match normalized.as_str() {
         "openai" => Ok(HandwritingOcrProvider::OpenAi),
@@ -630,7 +632,14 @@ pub(crate) fn handwriting_note_file_name(
         "handwriting-{}",
         uuid_tail_without_timestamp_prefix(note_id)
     );
-    allocate_note_file_name(folder, timestamp_ms, note_id, "", &fallback, file_name_format)
+    allocate_note_file_name(
+        folder,
+        timestamp_ms,
+        note_id,
+        "",
+        &fallback,
+        file_name_format,
+    )
 }
 
 pub(crate) fn handwriting_attachment_file_path(

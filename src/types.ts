@@ -65,6 +65,14 @@ export type NotesProfileSnapshot = {
   profiles: NotesProfile[];
 };
 
+export type ProfilesBackupArchive = {
+  archive_path: string;
+  archive_name: string;
+  profile_count: number;
+  file_count: number;
+  total_bytes: number;
+};
+
 export type RecordingWriteResult = {
   folder_path: string;
   note_path: string;

@@ -215,20 +215,33 @@ export function HandwritingProvider({
   );
 
   useEffect(() => {
+    if (layoutMode === "phone") {
+      return;
+    }
     void refreshHandwritingJobs();
-  }, [refreshHandwritingJobs]);
+  }, [layoutMode, refreshHandwritingJobs]);
 
   useEffect(() => {
     const config = getProviderConfig();
     if (!shouldAutoQueueHandwriting || !config.apiKey || !config.model) {
       return;
     }
-    void queueHandwritingOcr("auto");
-    const timer = window.setInterval(() => {
+    let intervalId: number | null = null;
+    const startAutoQueue = () => {
       void queueHandwritingOcr("auto");
-    }, 15000);
-    return () => window.clearInterval(timer);
-  }, [getProviderConfig, queueHandwritingOcr, shouldAutoQueueHandwriting]);
+      intervalId = window.setInterval(() => {
+        void queueHandwritingOcr("auto");
+      }, 15000);
+    };
+    const delayMs = layoutMode === "phone" ? 3000 : 0;
+    const startTimer = window.setTimeout(startAutoQueue, delayMs);
+    return () => {
+      window.clearTimeout(startTimer);
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, [getProviderConfig, layoutMode, queueHandwritingOcr, shouldAutoQueueHandwriting]);
 
   return (
     <HandwritingContext.Provider

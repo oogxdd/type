@@ -96,6 +96,14 @@ fn delete_profile(
     Ok(profiles_snapshot(&state))
 }
 
+#[tauri::command]
+async fn create_profiles_backup_zip(
+    app: tauri::AppHandle,
+) -> Result<ProfilesBackupArchive, String> {
+    ensure_security_unlocked_for_app(&app)?;
+    run_blocking_command(move || create_profiles_backup_zip_impl(&app)).await
+}
+
 async fn run_blocking_command<T, F>(operation: F) -> Result<T, String>
 where
     T: Send + 'static,
@@ -398,7 +406,9 @@ fn set_note_timestamp(app: tauri::AppHandle, args: SetNoteTimestampArgs) -> Resu
 }
 
 #[tauri::command]
-fn native_audio_recorder_capabilities(app: tauri::AppHandle) -> Result<NativeRecorderCapabilities, String> {
+fn native_audio_recorder_capabilities(
+    app: tauri::AppHandle,
+) -> Result<NativeRecorderCapabilities, String> {
     ensure_security_unlocked_for_app(&app)?;
     #[cfg(target_os = "ios")]
     {
@@ -1197,6 +1207,7 @@ pub(super) fn run() {
             set_profile_notes_root,
             update_profile,
             delete_profile,
+            create_profiles_backup_zip,
             get_git_status,
             get_git_history,
             connect_git_repo,

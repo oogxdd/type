@@ -7,31 +7,69 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, minimum-scale=1, user-scalable=no"
     />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f6fb" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#14171b" />
     <title>Type</title>
+    <script>
+      (() => {
+        const storedTheme = window.localStorage.getItem("notes-viewer-theme");
+        const launchTheme =
+          storedTheme === "light" || storedTheme === "dark" ? storedTheme : "dark";
+        document.documentElement.setAttribute("data-launch-theme", launchTheme);
+      })();
+    </script>
     <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+
+      body {
+        background: #14171b;
+      }
+
+      html[data-launch-theme="light"] body {
+        background: #f5f6fb;
+      }
+
       #ota-splash {
         position: fixed;
         inset: 0;
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 8px;
-        background: #f5f5f7;
-        color: #1d1d1f;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #14171b;
         z-index: 9999;
       }
+
+      html[data-launch-theme="light"] #ota-splash {
+        background: #f5f6fb;
+      }
+
+      #ota-logo {
+        width: 88px;
+        height: 88px;
+        object-fit: contain;
+      }
+
       #ota-status {
-        font-size: 13px;
-        opacity: 0.75;
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
     </style>
   </head>
 
   <body>
     <div id="ota-splash">
-      <strong>Type</strong>
+      <img id="ota-logo" src="/type-splash-logo.png" alt="Type logo" />
       <div id="ota-status">Loading...</div>
     </div>
     <div id="root"></div>

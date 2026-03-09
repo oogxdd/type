@@ -130,8 +130,13 @@ export function NotesTreeProvider({
 
   const notes = useMemo(() => activeNode?.notes || [], [activeNode]);
   const allNotes = useMemo(() => collectAllNotes(tree), [tree]);
-  const previewSourceNotes =
-    layoutMode === "desktop" && !shouldNestNotesInNavigation ? notes : allNotes;
+  const shouldWarmNotePreviews =
+    layoutMode !== "phone" || Boolean(activeFolder) || Boolean(activeNote);
+  const previewSourceNotes = shouldWarmNotePreviews
+    ? layoutMode === "desktop" && !shouldNestNotesInNavigation
+      ? notes
+      : allNotes
+    : [];
   const allNotePreviews = useNotePreviews(previewSourceNotes);
   const notePreviews = useMemo(() => {
     const previews: Record<string, NotePreview> = {};
@@ -186,9 +191,10 @@ export function NotesTreeProvider({
 
   // -- Profile change: reset tree state and refresh
   useEffect(() => {
-    if (activeProfileId) {
-      setTree(null);
+    if (!activeProfileId) {
+      return;
     }
+    setTree(null);
     void refreshTree();
   }, [activeProfileId, activeProfileNotesRoot, refreshTree]);
 
@@ -202,7 +208,7 @@ export function NotesTreeProvider({
 
   // Mobile: auto-select first folder
   useEffect(() => {
-    if (layoutMode === "desktop" || !tree || activeFolder) {
+    if (layoutMode !== "tablet" || !tree || activeFolder) {
       return;
     }
     const feed = findNode(tree, FEED_FOLDER_PATH);
@@ -214,11 +220,6 @@ export function NotesTreeProvider({
     setLastSelectedFolder(firstFolderPath);
     setActiveFolder(firstFolderPath);
   }, [activeFolder, layoutMode, setActiveFolder, setLastSelectedFolder, setSelectedFolders, tree]);
-
-  // -- Debug logging
-  useEffect(() => {
-    console.log("[folders] activeNode", activeNode?.path || null);
-  }, [activeNode]);
 
   // -- Create new note
   const createNewNote = useCallback(

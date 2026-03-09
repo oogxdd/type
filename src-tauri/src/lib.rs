@@ -148,7 +148,10 @@ pub(crate) fn response_error(status: reqwest::StatusCode, body: String, context:
 // Entry point
 // ---------------------------------------------------------------------------
 
-#[cfg_attr(any(target_os = "ios", target_os = "android"), tauri::mobile_entry_point)]
+#[cfg_attr(
+    any(target_os = "ios", target_os = "android"),
+    tauri::mobile_entry_point
+)]
 pub fn run() {
     commands::run();
 }

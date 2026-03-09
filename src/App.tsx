@@ -2,7 +2,7 @@ import { useRef } from "react";
 import "./App.css";
 import "./mobile/mobile.css";
 
-import { ThemeProvider } from "./contexts/ThemeContext";
+import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import { ProfilesProvider } from "./contexts/ProfilesContext";
 import { GitSyncProvider } from "./contexts/GitSyncContext";
 import { SelectionProvider, useSelection } from "./contexts/SelectionContext";
@@ -14,6 +14,14 @@ import { SecurityProvider, useSecurity } from "./contexts/SecurityContext";
 import { AppShell } from "./AppShell";
 import { useLayoutMode } from "./mobile/useLayoutMode";
 import { SecurityLockScreen } from "./components/SecurityLockScreen";
+
+function StartupScreen({ theme }: { theme: "light" | "dark" }) {
+  return (
+    <div className={`startup-screen startup-screen-${theme}`} aria-label="Starting Type">
+      <img className="startup-logo" src="/type-splash-logo.png" alt="Type logo" />
+    </div>
+  );
+}
 
 function AppInner() {
   const notesTree = useNotesTree();
@@ -87,6 +95,7 @@ function SecurityGate({
 }: {
   flushSaveRef: React.RefObject<(() => Promise<void>) | null>;
 }) {
+  const { theme } = useTheme();
   const {
     securityState,
     securityBusy,
@@ -96,7 +105,7 @@ function SecurityGate({
   } = useSecurity();
 
   if (!securityState) {
-    return <div className="security-lock-screen">Loading security...</div>;
+    return <StartupScreen theme={theme} />;
   }
 
   if (securityState.encryption_enabled && isLocked) {

@@ -1,5 +1,5 @@
 import { invokeLogged } from "./invoke";
-import type { NotesProfile, NotesProfileSnapshot } from "../types";
+import type { NotesProfile, NotesProfileSnapshot, ProfilesBackupArchive } from "../types";
 
 type NotesProfilesSnapshotPayload = {
   active_profile_id: string;
@@ -61,3 +61,6 @@ export const deleteProfile = (profileId: string): Promise<NotesProfileSnapshot> 
   invokeLogged<NotesProfilesSnapshotPayload>("delete_profile", {
     args: { profile_id: profileId },
   }).then(normalizeProfilesSnapshot);
+
+export const createProfilesBackupZip = (): Promise<ProfilesBackupArchive> =>
+  invokeLogged<ProfilesBackupArchive>("create_profiles_backup_zip");

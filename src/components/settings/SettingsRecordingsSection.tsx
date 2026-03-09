@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   formatHandwritingStatus,
   formatRecordingStatus,
@@ -35,6 +36,11 @@ export function SettingsRecordingsSection() {
   const providerModel = isHuggingFace
     ? syncSettings.huggingFaceModel
     : syncSettings.openAiModel;
+
+  useEffect(() => {
+    void refreshRecordings();
+    void refreshHandwritingJobs();
+  }, [refreshHandwritingJobs, refreshRecordings]);
 
   return (
     <div className="space-y-4">

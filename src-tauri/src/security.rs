@@ -24,8 +24,8 @@ use zeroize::Zeroize;
 use crate::{
     app_data_dir, collect_markdown_note_files, default_profiles_state, ensure_profiles_state,
     ensure_system_folders, find_profile, generate_note_id, legacy_profiles_file_path, now_ms,
-    parse_note_front_matter, profiles_file_path, render_note_with_front_matter, write_profiles_state,
-    NoteFrontMatter, NotesProfilesFile, FEED_FOLDER,
+    parse_note_front_matter, profiles_file_path, render_note_with_front_matter,
+    write_profiles_state, NoteFrontMatter, NotesProfilesFile, FEED_FOLDER,
 };
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -135,12 +135,15 @@ fn read_security_config(app: &tauri::AppHandle) -> Result<SecurityConfigFile, St
         return Ok(SecurityConfigFile::default());
     }
     let raw = fs::read_to_string(&path).map_err(|err| err.to_string())?;
-    let parsed =
-        serde_json::from_str::<SecurityConfigFile>(&raw).unwrap_or_else(|_| SecurityConfigFile::default());
+    let parsed = serde_json::from_str::<SecurityConfigFile>(&raw)
+        .unwrap_or_else(|_| SecurityConfigFile::default());
     Ok(parsed)
 }
 
-fn write_security_config(app: &tauri::AppHandle, config: &SecurityConfigFile) -> Result<(), String> {
+fn write_security_config(
+    app: &tauri::AppHandle,
+    config: &SecurityConfigFile,
+) -> Result<(), String> {
     let path = security_file_path(app)?;
     let raw = serde_json::to_string_pretty(config).map_err(|err| err.to_string())?;
     fs::write(path, raw).map_err(|err| err.to_string())
@@ -230,7 +233,11 @@ fn encrypt_note_body_with_key(body: &str, key: &[u8; SECURITY_KEY_SIZE]) -> Resu
     let mut payload = Vec::with_capacity(SECURITY_NONCE_SIZE + ciphertext.len());
     payload.extend_from_slice(&nonce_bytes);
     payload.extend_from_slice(&ciphertext);
-    Ok(format!("{}{}", SECURITY_NOTE_BODY_PREFIX, BASE64.encode(payload)))
+    Ok(format!(
+        "{}{}",
+        SECURITY_NOTE_BODY_PREFIX,
+        BASE64.encode(payload)
+    ))
 }
 
 fn decrypt_note_body_with_key(body: &str, key: &[u8; SECURITY_KEY_SIZE]) -> Result<String, String> {

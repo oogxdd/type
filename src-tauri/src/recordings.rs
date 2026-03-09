@@ -13,12 +13,12 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    allocate_note_file_name, collect_markdown_note_files, generate_note_id,
-    is_storage_folder_path, notes_root, now_ms, parse_note_front_matter, resolve_path,
-    response_error, sanitize_relative, strip_root, write_note_with_front_matter,
-    uuid_tail_without_timestamp_prefix, NoteFrontMatter, NoteFileNameFormat, FEED_FOLDER,
-    LEGACY_RECORDINGS_FOLDER, RECORDINGS_STORAGE_FOLDER, RECORDING_STATUS_COMPLETED,
-    RECORDING_STATUS_FAILED, RECORDING_STATUS_PENDING, RECORDING_STATUS_PROCESSING,
+    allocate_note_file_name, collect_markdown_note_files, generate_note_id, is_storage_folder_path,
+    notes_root, now_ms, parse_note_front_matter, resolve_path, response_error, sanitize_relative,
+    strip_root, uuid_tail_without_timestamp_prefix, write_note_with_front_matter,
+    NoteFileNameFormat, NoteFrontMatter, FEED_FOLDER, LEGACY_RECORDINGS_FOLDER,
+    RECORDINGS_STORAGE_FOLDER, RECORDING_STATUS_COMPLETED, RECORDING_STATUS_FAILED,
+    RECORDING_STATUS_PENDING, RECORDING_STATUS_PROCESSING,
 };
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -370,7 +370,11 @@ fn transcribe_audio_bytes_with_assembly(
     if !transcript_create_response.status().is_success() {
         let status = transcript_create_response.status();
         let body = transcript_create_response.text().unwrap_or_default();
-        return Err(response_error(status, body, "AssemblyAI transcript request"));
+        return Err(response_error(
+            status,
+            body,
+            "AssemblyAI transcript request",
+        ));
     }
     let transcript_create_payload = transcript_create_response
         .json::<AssemblyTranscriptResponse>()
@@ -517,7 +521,14 @@ pub(crate) fn recording_note_file_name(
     file_name_format: NoteFileNameFormat,
 ) -> Result<String, String> {
     let fallback = format!("recording-{}", uuid_tail_without_timestamp_prefix(note_id));
-    allocate_note_file_name(folder, timestamp_ms, note_id, "", &fallback, file_name_format)
+    allocate_note_file_name(
+        folder,
+        timestamp_ms,
+        note_id,
+        "",
+        &fallback,
+        file_name_format,
+    )
 }
 
 /// Allocate a unique audio file path inside the Recordings storage folder.

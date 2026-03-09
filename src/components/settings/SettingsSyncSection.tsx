@@ -31,8 +31,9 @@ export function SettingsSyncSection() {
   const { canPull, canPush, canConnect } = useSettingsData();
 
   useEffect(() => {
+    void refreshGitStatus();
     void refreshGitHistory();
-  }, [refreshGitHistory]);
+  }, [refreshGitHistory, refreshGitStatus]);
 
   const syncHint = useMemo(() => getSyncHint(gitSyncError), [gitSyncError]);
   const lastSuccessfulSyncAt = syncSettings.lastSuccessfulSyncAt

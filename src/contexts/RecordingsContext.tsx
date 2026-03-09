@@ -261,12 +261,27 @@ export function RecordingsProvider({
     if (!shouldAutoQueueTranscriptions || !syncSettings.assemblyAiApiKey.trim()) {
       return;
     }
-    void queueRecordingTranscriptions("auto");
-    const timer = window.setInterval(() => {
+    let intervalId: number | null = null;
+    const startAutoQueue = () => {
       void queueRecordingTranscriptions("auto");
-    }, 15000);
-    return () => window.clearInterval(timer);
-  }, [syncSettings.assemblyAiApiKey, queueRecordingTranscriptions, shouldAutoQueueTranscriptions]);
+      intervalId = window.setInterval(() => {
+        void queueRecordingTranscriptions("auto");
+      }, 15000);
+    };
+    const delayMs = layoutMode === "phone" ? 3000 : 0;
+    const startTimer = window.setTimeout(startAutoQueue, delayMs);
+    return () => {
+      window.clearTimeout(startTimer);
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, [
+    layoutMode,
+    syncSettings.assemblyAiApiKey,
+    queueRecordingTranscriptions,
+    shouldAutoQueueTranscriptions,
+  ]);
 
   return (
     <RecordingsContext.Provider
