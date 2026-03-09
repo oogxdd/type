@@ -73,6 +73,7 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
   const editor = useEditor({
     extensions,
     autofocus: false,
+    enableInputRules: false,
     content: markdownToHtml(initialContentRef.current.body),
     editorProps: {
       attributes: {

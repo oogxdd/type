@@ -20,6 +20,14 @@ const emitTreeInvalidated = () => {
   window.dispatchEvent(new CustomEvent("notes-tree-invalidated"));
 };
 
+const slugContentCharCount = (value: string) => value.replace(/-/g, "").length;
+
+const hasEnoughSlugContent = (value: string) =>
+  slugContentCharCount(value) >= MIN_SLUG_CONTENT_CHARS;
+
+const isProvisionalSuffix = (suffix: string) =>
+  !suffix || PLACEHOLDER_SUFFIX_RE.test(suffix) || !hasEnoughSlugContent(suffix);
+
 const stripNoiseTokenSequences = (tokens: string[]) => {
   const cleaned: string[] = [];
   for (let i = 0; i < tokens.length; i += 1) {
@@ -76,7 +84,7 @@ const getAutoRenameTarget = (
   const segments = notePath.split("/");
   const fileName = segments[segments.length - 1] || "";
   const slug = buildSlugFromContent(content);
-  if (slug.replace(/-/g, "").length < MIN_SLUG_CONTENT_CHARS) {
+  if (!hasEnoughSlugContent(slug)) {
     return null;
   }
 
@@ -91,7 +99,7 @@ const getAutoRenameTarget = (
     }
     const prefix = timestampMatch[1];
     const suffix = (timestampMatch[2] || "").toLowerCase();
-    if (suffix && !PLACEHOLDER_SUFFIX_RE.test(suffix)) {
+    if (!isProvisionalSuffix(suffix)) {
       return null;
     }
     const nextName = `${prefix}-${slug}.md`;
@@ -102,7 +110,7 @@ const getAutoRenameTarget = (
   if (prefixMatch) {
     const prefix = (prefixMatch[1] || "").toLowerCase();
     const suffix = (prefixMatch[2] || "").toLowerCase();
-    if (suffix && !PLACEHOLDER_SUFFIX_RE.test(suffix)) {
+    if (!isProvisionalSuffix(suffix)) {
       return null;
     }
     const nextName = `${prefix}-${slug}.md`;
@@ -173,22 +181,26 @@ export function useNoteEditor(
     activeNoteRef.current = activeNote;
 
     const run = async () => {
-      if (previousNote && previousDirty && previousNote !== activeNote) {
+      if (previousNote && previousNote !== activeNote) {
         try {
           const trimmed = previousContent.trim();
-          if (!trimmed) {
+          if (previousDirty && !trimmed) {
             await deleteItems([previousNote]);
             emitTreeInvalidated();
           } else {
-            await saveNow(previousNote, previousContent);
-            const renameTarget = getAutoRenameTarget(
-              previousNote,
-              previousContent,
-              noteFileNameFormat
-            );
-            if (renameTarget) {
-              await renameItem(previousNote, renameTarget);
-              emitTreeInvalidated();
+            if (previousDirty) {
+              await saveNow(previousNote, previousContent);
+            }
+            if (trimmed) {
+              const renameTarget = getAutoRenameTarget(
+                previousNote,
+                previousContent,
+                noteFileNameFormat
+              );
+              if (renameTarget) {
+                await renameItem(previousNote, renameTarget);
+                emitTreeInvalidated();
+              }
             }
           }
         } catch (error) {

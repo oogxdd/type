@@ -107,6 +107,16 @@ export function MobileProfileSection() {
     setGitDraft(getGitDraftFromSyncSettings(syncSettings));
   }, [hasUnsavedGitChanges, syncSettings]);
 
+  const profileDebugLines = useMemo(
+    () =>
+      profiles.map((profile, index) => {
+        const flags = activeProfileId === profile.id ? " [active]" : "";
+        const description = profile.description ? ` | description=${profile.description}` : "";
+        return `${index + 1}. ${profile.name}${flags} | id=${profile.id}${description} | notes_root=${profile.notes_root}`;
+      }),
+    [activeProfileId, profiles]
+  );
+
   return (
     <>
       <Group title="Profile">
@@ -217,6 +227,24 @@ export function MobileProfileSection() {
           </button>
         </div>
         {profilesError ? <p className="mobile-native-note">{profilesError}</p> : null}
+      </Group>
+
+      <Group title="Debug profiles">
+        <p className="mobile-native-note">Count: {profiles.length}</p>
+        <p className="mobile-native-note">Active profile id: {activeProfileId ?? "none"}</p>
+        {profileDebugLines.length === 0 ? (
+          <p className="mobile-native-note">No profiles returned by the app.</p>
+        ) : (
+          profileDebugLines.map((line) => (
+            <p
+              key={line}
+              className="mobile-native-note"
+              style={{ wordBreak: "break-word" }}
+            >
+              {line}
+            </p>
+          ))
+        )}
       </Group>
 
       <Group title="Git">

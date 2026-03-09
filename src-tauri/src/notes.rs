@@ -445,10 +445,15 @@ fn is_noise_hash_token(value: &str) -> bool {
     !value.is_empty() && value.len() <= 32 && value.chars().all(|ch| ch.is_ascii_alphanumeric())
 }
 
+fn slug_content_char_count(value: &str) -> usize {
+    value.chars().filter(|ch| *ch != '-').count()
+}
+
 /// Derive a short kebab-case slug from the note body for the filename.
 pub(crate) fn slug_from_content(content: &str, fallback: &str) -> String {
     const MAX_SLUG_WORDS: usize = 8;
     const MAX_SLUG_CHARS: usize = 56;
+    const MIN_SLUG_CONTENT_CHARS: usize = 8;
 
     let mut normalized = String::with_capacity(content.len().saturating_mul(2));
     for ch in content.chars() {
@@ -503,7 +508,7 @@ pub(crate) fn slug_from_content(content: &str, fallback: &str) -> String {
     while slug.ends_with('-') {
         slug.pop();
     }
-    if slug.is_empty() {
+    if slug.is_empty() || slug_content_char_count(&slug) < MIN_SLUG_CONTENT_CHARS {
         fallback.to_string()
     } else {
         slug
