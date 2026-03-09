@@ -319,6 +319,113 @@ fn normalize_profile_description(description: &str) -> String {
     description.trim().to_string()
 }
 
+fn profile_name_from_id(id: &str) -> String {
+    let words = id
+        .split(|ch: char| ch == '-' || ch == '_' || ch.is_whitespace())
+        .filter_map(|segment| {
+            let trimmed = segment.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            let mut chars = trimmed.chars();
+            let first = chars.next()?;
+            let mut title = String::new();
+            title.push(first.to_ascii_uppercase());
+            title.extend(chars);
+            Some(title)
+        })
+        .collect::<Vec<_>>();
+    if words.is_empty() {
+        "Profile".to_string()
+    } else {
+        words.join(" ")
+    }
+}
+
+fn push_normalized_profile(
+    app: &tauri::AppHandle,
+    mut profile: NotesProfileEntry,
+    seen_ids: &mut HashSet<String>,
+    seen_roots: &mut HashSet<String>,
+    profiles: &mut Vec<NotesProfileEntry>,
+) -> Result<(), String> {
+    let id = profile.id.trim().to_string();
+    if id.is_empty() || !seen_ids.insert(id.clone()) {
+        return Ok(());
+    }
+
+    profile.id = id.clone();
+    profile.name = normalize_profile_name(&profile.name);
+    profile.description = normalize_profile_description(&profile.description);
+    if profile.notes_root.trim().is_empty() {
+        profile.notes_root = profile_root_for_id(app, &id)?.to_string_lossy().to_string();
+    }
+
+    let root = PathBuf::from(profile.notes_root.trim());
+    if !root.exists() {
+        fs::create_dir_all(&root).map_err(|err| err.to_string())?;
+    }
+    ensure_system_folders(&root)?;
+
+    let normalized_root = root.to_string_lossy().to_string();
+    if !seen_roots.insert(normalized_root.clone()) {
+        return Ok(());
+    }
+
+    profile.notes_root = normalized_root;
+    profiles.push(profile);
+    Ok(())
+}
+
+fn discover_filesystem_profiles(
+    app: &tauri::AppHandle,
+    seen_ids: &HashSet<String>,
+    seen_roots: &HashSet<String>,
+) -> Result<Vec<NotesProfileEntry>, String> {
+    let profiles_root = app_data_dir(app)?.join("profiles");
+    if !profiles_root.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut entries = fs::read_dir(&profiles_root)
+        .map_err(|err| err.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| err.to_string())?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    let mut discovered = Vec::new();
+    for entry in entries {
+        let metadata = entry.metadata().map_err(|err| err.to_string())?;
+        if !metadata.is_dir() {
+            continue;
+        }
+
+        let id = entry.file_name().to_string_lossy().trim().to_string();
+        if id.is_empty() || seen_ids.contains(&id) {
+            continue;
+        }
+
+        let notes_root = entry.path().join("notes");
+        if !notes_root.is_dir() {
+            continue;
+        }
+
+        let notes_root_string = notes_root.to_string_lossy().to_string();
+        if seen_roots.contains(&notes_root_string) {
+            continue;
+        }
+
+        discovered.push(NotesProfileEntry {
+            id: id.clone(),
+            name: profile_name_from_id(&id),
+            description: String::new(),
+            notes_root: notes_root_string,
+        });
+    }
+
+    Ok(discovered)
+}
+
 /// Generate a URL-safe id from a profile name.
 fn slugify_profile_id(name: &str) -> String {
     let mut slug = String::new();
@@ -376,28 +483,22 @@ pub(crate) fn normalize_profiles_state(
     app: &tauri::AppHandle,
     mut state: NotesProfilesFile,
 ) -> Result<NotesProfilesFile, String> {
-    let mut seen = HashSet::new();
+    let mut seen_ids = HashSet::new();
+    let mut seen_roots = HashSet::new();
     let mut profiles = Vec::new();
-    for mut profile in state.profiles.drain(..) {
-        let id = profile.id.trim().to_string();
-        if id.is_empty() || !seen.insert(id.clone()) {
-            continue;
-        }
-        profile.id = id.clone();
-        profile.name = normalize_profile_name(&profile.name);
-        profile.description = normalize_profile_description(&profile.description);
-        if profile.notes_root.trim().is_empty() {
-            profile.notes_root = profile_root_for_id(app, &id)?.to_string_lossy().to_string();
-        }
-        let root = PathBuf::from(&profile.notes_root);
-        if !root.exists() {
-            fs::create_dir_all(&root).map_err(|err| err.to_string())?;
-        }
-        profiles.push(profile);
+    for profile in state.profiles.drain(..) {
+        push_normalized_profile(app, profile, &mut seen_ids, &mut seen_roots, &mut profiles)?;
     }
 
     if profiles.is_empty() {
-        return default_profiles_state(app);
+        for profile in default_profiles_state(app)?.profiles {
+            push_normalized_profile(app, profile, &mut seen_ids, &mut seen_roots, &mut profiles)?;
+        }
+    }
+
+    let discovered = discover_filesystem_profiles(app, &seen_ids, &seen_roots)?;
+    for profile in discovered {
+        push_normalized_profile(app, profile, &mut seen_ids, &mut seen_roots, &mut profiles)?;
     }
 
     let active_profile_id = if profiles
@@ -436,7 +537,7 @@ pub(crate) fn ensure_profiles_state(app: &tauri::AppHandle) -> Result<NotesProfi
                 Ok(normalized)
             }
             Err(_) => {
-                let state = default_profiles_state(app)?;
+                let state = normalize_profiles_state(app, default_profiles_state(app)?)?;
                 write_profiles_state(app, &state)?;
                 Ok(state)
             }
@@ -464,7 +565,7 @@ pub(crate) fn ensure_profiles_state(app: &tauri::AppHandle) -> Result<NotesProfi
         }
     }
 
-    let state = default_profiles_state(app)?;
+    let state = normalize_profiles_state(app, default_profiles_state(app)?)?;
     write_profiles_state(app, &state)?;
     Ok(state)
 }
