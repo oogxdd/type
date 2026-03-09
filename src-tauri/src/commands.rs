@@ -35,6 +35,20 @@ fn set_security_preferences(
 }
 
 #[tauri::command]
+fn set_native_theme(app: tauri::AppHandle, theme: String) -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        return set_ios_native_theme(&app, &theme);
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = (app, theme);
+        Ok(())
+    }
+}
+
+#[tauri::command]
 fn get_profiles(app: tauri::AppHandle) -> Result<NotesProfilesSnapshot, String> {
     ensure_security_unlocked_for_app(&app)?;
     let state = ensure_profiles_state(&app).or_else(|_| default_profiles_state(&app))?;
@@ -123,6 +137,14 @@ fn present_file_export_sheet(app: tauri::AppHandle, path: String) -> Result<(), 
         let _ = app;
         Err("Native iOS file export is unavailable on this platform.".to_string())
     }
+}
+
+#[tauri::command]
+async fn export_profiles_to_documents(
+    app: tauri::AppHandle,
+) -> Result<ProfilesDocumentsExport, String> {
+    ensure_security_unlocked_for_app(&app)?;
+    run_blocking_command(move || export_profiles_to_documents_impl(&app)).await
 }
 
 async fn run_blocking_command<T, F>(operation: F) -> Result<T, String>
@@ -1202,6 +1224,7 @@ pub(super) fn run() {
             lock_security,
             unlock_security,
             set_security_preferences,
+            set_native_theme,
             get_tree,
             read_note,
             create_note,
@@ -1230,6 +1253,7 @@ pub(super) fn run() {
             delete_profile,
             create_profiles_backup_zip,
             present_file_export_sheet,
+            export_profiles_to_documents,
             get_git_status,
             get_git_history,
             connect_git_repo,

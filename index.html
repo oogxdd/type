@@ -7,8 +7,8 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, minimum-scale=1, user-scalable=no"
     />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f6fb" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#14171b" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#14171b" data-app-theme-color="true" />
     <title>Type</title>
     <script>
       (() => {
@@ -16,11 +16,21 @@
         const launchTheme =
           storedTheme === "light" || storedTheme === "dark" ? storedTheme : "dark";
         document.documentElement.setAttribute("data-launch-theme", launchTheme);
+        document.documentElement.classList.toggle("dark", launchTheme === "dark");
+        document.documentElement.style.colorScheme = launchTheme;
+        const themeColor = launchTheme === "dark" ? "#14171b" : "#f5f6fb";
+        const themeColorMeta = document.querySelector(
+          'meta[name="theme-color"][data-app-theme-color="true"]'
+        );
+        if (themeColorMeta) {
+          themeColorMeta.setAttribute("content", themeColor);
+        }
       })();
     </script>
     <style>
       html,
-      body {
+      body,
+      #root {
         margin: 0;
         height: 100%;
       }
@@ -40,6 +50,8 @@
         align-items: center;
         justify-content: center;
         background: #14171b;
+        opacity: 1;
+        transition: opacity 140ms ease-out, visibility 140ms ease-out;
         z-index: 9999;
       }
 
@@ -47,9 +59,15 @@
         background: #f5f6fb;
       }
 
+      #ota-splash.launch-splash-hidden {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
       #ota-logo {
-        width: 88px;
-        height: 88px;
+        width: 120px;
+        height: 120px;
         object-fit: contain;
       }
 

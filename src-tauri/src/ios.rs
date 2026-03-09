@@ -24,6 +24,8 @@ pub(crate) const IOS_AUDIO_MIME_TYPE: &str = "audio/mp4";
 const IOS_AUDIO_FILE_EXT: &str = "m4a";
 const K_AUDIO_FORMAT_MPEG4AAC: u32 = 0x6161_6320;
 const RTLD_NOW: c_int = 2;
+const UI_USER_INTERFACE_STYLE_LIGHT: isize = 1;
+const UI_USER_INTERFACE_STYLE_DARK: isize = 2;
 
 // ── FFI ────────────────────────────────────────────────────────────────────────
 
@@ -506,6 +508,66 @@ pub(crate) fn next_native_recording_path(app: &tauri::AppHandle) -> Result<PathB
         }
     }
     Err("Failed to allocate native recording filename.".to_string())
+}
+
+unsafe fn apply_ios_interface_style_to_webview(
+    webview: *mut Object,
+    style: isize,
+) -> Result<(), String> {
+    if webview.is_null() {
+        return Err("WKWebView handle is null.".to_string());
+    }
+
+    let _: () = msg_send![webview, setOverrideUserInterfaceStyle: style];
+
+    let scroll_view: *mut Object = msg_send![webview, scrollView];
+    if !scroll_view.is_null() {
+        let _: () = msg_send![scroll_view, setOverrideUserInterfaceStyle: style];
+    }
+
+    let window: *mut Object = msg_send![webview, window];
+    if !window.is_null() {
+        let _: () = msg_send![window, setOverrideUserInterfaceStyle: style];
+
+        let mut controller: *mut Object = msg_send![window, rootViewController];
+        while !controller.is_null() {
+            let _: () = msg_send![controller, setOverrideUserInterfaceStyle: style];
+            let next_controller: *mut Object = msg_send![controller, presentedViewController];
+            if next_controller.is_null() {
+                break;
+            }
+            controller = next_controller;
+        }
+    }
+
+    Ok(())
+}
+
+pub(crate) fn set_ios_native_theme(app: &tauri::AppHandle, theme: &str) -> Result<(), String> {
+    let normalized = theme.trim().to_ascii_lowercase();
+    let style = match normalized.as_str() {
+        "dark" => UI_USER_INTERFACE_STYLE_DARK,
+        "light" => UI_USER_INTERFACE_STYLE_LIGHT,
+        _ => return Err(format!("Unsupported iOS theme: {}", theme)),
+    };
+
+    let Some(window) = app.get_webview_window("main") else {
+        return Ok(());
+    };
+
+    let (tx, rx) = mpsc::sync_channel(1);
+    window
+        .with_webview(move |platform_webview| {
+            let result = unsafe {
+                let webview = platform_webview.inner() as *mut Object;
+                apply_ios_interface_style_to_webview(webview, style)
+            };
+            let _ = tx.send(result);
+        })
+        .map_err(|error| error.to_string())?;
+
+    rx.recv()
+        .map_err(|_| "Failed to receive the iOS theme update result.".to_string())?
 }
 
 unsafe fn ios_top_presenting_view_controller(webview: *mut Object) -> Result<*mut Object, String> {

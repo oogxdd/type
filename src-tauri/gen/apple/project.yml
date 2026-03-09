@@ -40,7 +40,9 @@ targets:
       path: type_iOS/Info.plist
       properties:
         LSRequiresIPhoneOS: true
+        LSSupportsOpeningDocumentsInPlace: true
         UILaunchStoryboardName: LaunchScreen
+        UIFileSharingEnabled: true
         UIRequiredDeviceCapabilities: [arm64, metal]
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

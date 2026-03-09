@@ -3198,6 +3198,7 @@ body {
 
 .startup-screen {
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
   display: flex;
   align-items: center;
@@ -3213,8 +3214,8 @@ body {
 }
 
 .startup-logo {
-  width: 88px;
-  height: 88px;
+  width: 120px;
+  height: 120px;
   object-fit: contain;
 }
 

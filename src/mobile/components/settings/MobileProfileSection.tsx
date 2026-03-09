@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { openPath } from "@tauri-apps/plugin-opener";
 import { useProfiles } from "../../../contexts/ProfilesContext";
-import { createProfilesBackupZip, presentFileExportSheet } from "../../../data/profilesApi";
+import { exportProfilesToDocuments } from "../../../data/profilesApi";
 import { Group, ChoiceRow, InputRow } from "./SettingsHelpers";
 
 type GitDraftSettings = {
@@ -65,8 +64,8 @@ export function MobileProfileSection() {
   const [gitDraft, setGitDraft] = useState<GitDraftSettings>(() =>
     getGitDraftFromSyncSettings(syncSettings)
   );
-  const [backupBusy, setBackupBusy] = useState(false);
-  const [backupStatus, setBackupStatus] = useState("");
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportStatus, setExportStatus] = useState("");
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -304,54 +303,41 @@ export function MobileProfileSection() {
         </div>
       </Group>
 
-      <Group title="Backup">
+      <Group title="Export">
         <p className="mobile-native-note">
-          Bundle all profiles and every file from each profile notes root into a single zip.
+          Copy all profiles and their files into the app Documents folder so they show up in Files.
         </p>
         <div className="mobile-native-actions single">
           <button
             type="button"
             className="mobile-secondary-btn"
-            disabled={backupBusy}
+            disabled={exportBusy}
             onClick={() => {
               void (async () => {
-                setBackupBusy(true);
-                setBackupStatus("");
+                setExportBusy(true);
+                setExportStatus("");
                 try {
-                  const archive = await createProfilesBackupZip();
-                  const sizeLabel = formatByteSize(archive.total_bytes);
-                  try {
-                    await presentFileExportSheet(archive.archive_path);
-                    setBackupStatus(
-                      `Created ${archive.archive_name} (${sizeLabel}, ${archive.file_count} files). Choose Save to Files in the sheet that opened.`
-                    );
-                  } catch {
-                    try {
-                      await openPath(archive.archive_path);
-                      setBackupStatus(
-                        `Created ${archive.archive_name} (${sizeLabel}, ${archive.file_count} files).`
-                      );
-                    } catch (openError) {
-                      const openMessage =
-                        openError instanceof Error ? openError.message : String(openError);
-                      setBackupStatus(
-                        `Created ${archive.archive_name}. Couldn't open automatically: ${openMessage}. File path: ${archive.archive_path}`
-                      );
-                    }
-                  }
+                  const exported = await exportProfilesToDocuments();
+                  const sizeLabel = formatByteSize(exported.total_bytes);
+                  setExportStatus(
+                    `Export ready: ${exported.export_name} (${sizeLabel}, ${exported.file_count} files). Open Files > On My iPhone > Type > Type Export.`
+                  );
                 } catch (error) {
                   const message = error instanceof Error ? error.message : String(error);
-                  setBackupStatus(message);
+                  setExportStatus(message);
                 } finally {
-                  setBackupBusy(false);
+                  setExportBusy(false);
                 }
               })();
             }}
           >
-            {backupBusy ? "Preparing backup..." : "Export all profiles (.zip)"}
+            {exportBusy ? "Preparing export..." : "Prepare export in Files"}
           </button>
         </div>
-        {backupStatus ? <p className="mobile-native-note">{backupStatus}</p> : null}
+        <p className="mobile-native-note">
+          After it finishes, use the Files app or Finder file sharing to copy the folder out.
+        </p>
+        {exportStatus ? <p className="mobile-native-note">{exportStatus}</p> : null}
       </Group>
     </>
   );

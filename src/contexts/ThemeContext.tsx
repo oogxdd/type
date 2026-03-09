@@ -5,6 +5,8 @@ import {
   MIN_EDITOR_FONT_SIZE,
   MAX_EDITOR_FONT_SIZE,
 } from "../constants";
+import { setNativeTheme } from "../data/appearanceApi";
+import { applyThemeToDocument } from "../utils/launchScreen";
 import { getInitialTheme, getInitialNotesListMode, getInitialEditorFontSize } from "../utils/storage";
 
 type ThemeContextValue = {
@@ -28,7 +30,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     window.localStorage.setItem("notes-viewer-theme", theme);
-    document.documentElement.classList.toggle("dark", theme === "dark");
+    applyThemeToDocument(theme);
+    void setNativeTheme(theme).catch(() => {});
   }, [theme]);
 
   useEffect(() => {

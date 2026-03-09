@@ -7,6 +7,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
 };
+use tauri::Manager;
 use zip::write::FileOptions;
 
 use crate::{app_data_dir, ensure_system_folders, now_ms};
@@ -86,6 +87,15 @@ pub(crate) struct DeleteProfileArgs {
 pub(crate) struct ProfilesBackupArchive {
     pub(crate) archive_path: String,
     pub(crate) archive_name: String,
+    pub(crate) profile_count: usize,
+    pub(crate) file_count: usize,
+    pub(crate) total_bytes: u64,
+}
+
+#[derive(Serialize)]
+pub(crate) struct ProfilesDocumentsExport {
+    pub(crate) export_path: String,
+    pub(crate) export_name: String,
     pub(crate) profile_count: usize,
     pub(crate) file_count: usize,
     pub(crate) total_bytes: u64,
@@ -276,6 +286,60 @@ fn add_path_to_zip(
     })?;
     *file_count += 1;
     *total_bytes += copied;
+    Ok(())
+}
+
+fn documents_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    if let Ok(path) = app.path().document_dir() {
+        return Ok(path);
+    }
+
+    let app_data = app_data_dir(app)?;
+    let Some(container_root) = app_data
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+    else {
+        return Err("Failed to resolve the app Documents directory.".to_string());
+    };
+    Ok(container_root.join("Documents"))
+}
+
+fn copy_path_with_stats(
+    from: &Path,
+    to: &Path,
+    file_count: &mut usize,
+    total_bytes: &mut u64,
+) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(from).map_err(|err| err.to_string())?;
+    if metadata.file_type().is_symlink() {
+        return Ok(());
+    }
+
+    if metadata.is_dir() {
+        fs::create_dir_all(to).map_err(|err| err.to_string())?;
+        let mut entries = fs::read_dir(from)
+            .map_err(|err| err.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|err| err.to_string())?;
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let target = to.join(entry.file_name());
+            copy_path_with_stats(&entry.path(), &target, file_count, total_bytes)?;
+        }
+        return Ok(());
+    }
+
+    if !metadata.is_file() {
+        return Ok(());
+    }
+
+    if let Some(parent) = to.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    fs::copy(from, to).map_err(|err| err.to_string())?;
+    *file_count += 1;
+    *total_bytes += metadata.len();
     Ok(())
 }
 
@@ -789,6 +853,65 @@ pub(crate) fn create_profiles_backup_zip_impl(
     Ok(ProfilesBackupArchive {
         archive_path: archive_path.to_string_lossy().to_string(),
         archive_name,
+        profile_count: state.profiles.len(),
+        file_count,
+        total_bytes,
+    })
+}
+
+pub(crate) fn export_profiles_to_documents_impl(
+    app: &tauri::AppHandle,
+) -> Result<ProfilesDocumentsExport, String> {
+    let state = ensure_profiles_state(app)?;
+    let documents_root = documents_dir(app)?.join("Type Export");
+    fs::create_dir_all(&documents_root).map_err(|err| err.to_string())?;
+
+    let export_name = format!("type-export-{}", now_ms().unwrap_or(0));
+    let export_path = documents_root.join(&export_name);
+    fs::create_dir_all(&export_path).map_err(|err| err.to_string())?;
+
+    let mut file_count = 0usize;
+    let mut total_bytes = 0u64;
+
+    let profiles_state_path = profiles_file_path(app)?;
+    if profiles_state_path.exists() {
+        let target = export_path.join(".notes-profiles.json");
+        copy_path_with_stats(&profiles_state_path, &target, &mut file_count, &mut total_bytes)?;
+    }
+
+    let security_path = app_data_dir(app)?.join(".notes-security.json");
+    if security_path.exists() {
+        let target = export_path.join(".notes-security.json");
+        copy_path_with_stats(&security_path, &target, &mut file_count, &mut total_bytes)?;
+    }
+
+    let snapshot_json = serde_json::to_vec_pretty(&state).map_err(|err| err.to_string())?;
+    let snapshot_target = export_path.join("profiles-state.json");
+    fs::write(&snapshot_target, &snapshot_json).map_err(|err| err.to_string())?;
+    file_count += 1;
+    total_bytes += snapshot_json.len() as u64;
+
+    for (index, profile) in state.profiles.iter().enumerate() {
+        let notes_root = PathBuf::from(profile.notes_root.trim());
+        if !notes_root.exists() {
+            return Err(format!(
+                "Profile \"{}\" notes root does not exist: {}",
+                profile.name,
+                notes_root.to_string_lossy()
+            ));
+        }
+        let folder_name = format!(
+            "{:02}-{}",
+            index + 1,
+            sanitize_archive_segment(&profile.id, "profile")
+        );
+        let target_root = export_path.join("profiles").join(folder_name).join("notes");
+        copy_path_with_stats(&notes_root, &target_root, &mut file_count, &mut total_bytes)?;
+    }
+
+    Ok(ProfilesDocumentsExport {
+        export_path: export_path.to_string_lossy().to_string(),
+        export_name,
         profile_count: state.profiles.len(),
         file_count,
         total_bytes,

@@ -1,5 +1,10 @@
 import { invokeLogged } from "./invoke";
-import type { NotesProfile, NotesProfileSnapshot, ProfilesBackupArchive } from "../types";
+import type {
+  NotesProfile,
+  NotesProfileSnapshot,
+  ProfilesBackupArchive,
+  ProfilesDocumentsExport,
+} from "../types";
 
 type NotesProfilesSnapshotPayload = {
   active_profile_id: string;
@@ -67,3 +72,6 @@ export const createProfilesBackupZip = (): Promise<ProfilesBackupArchive> =>
 
 export const presentFileExportSheet = (path: string): Promise<void> =>
   invokeLogged("present_file_export_sheet", { path });
+
+export const exportProfilesToDocuments = (): Promise<ProfilesDocumentsExport> =>
+  invokeLogged<ProfilesDocumentsExport>("export_profiles_to_documents");

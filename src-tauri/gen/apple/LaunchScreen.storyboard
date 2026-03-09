@@ -15,7 +15,7 @@
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
                             <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" image="SplashLogo" translatesAutoresizingMaskIntoConstraints="NO" id="XkM-fY-awu">
-                                <rect key="frame" x="127" y="368" width="160" height="160"/>
+                                <rect key="frame" x="147" y="388" width="120" height="120"/>
                             </imageView>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="vDu-zF-Fre"/>
@@ -23,8 +23,8 @@
                         <constraints>
                             <constraint firstItem="XkM-fY-awu" firstAttribute="centerX" secondItem="vDu-zF-Fre" secondAttribute="centerX" id="M8q-jA-uY0"/>
                             <constraint firstItem="XkM-fY-awu" firstAttribute="centerY" secondItem="vDu-zF-Fre" secondAttribute="centerY" id="RrA-L3-BV5"/>
-                            <constraint firstItem="XkM-fY-awu" firstAttribute="width" constant="160" id="jzK-2H-kY6"/>
-                            <constraint firstItem="XkM-fY-awu" firstAttribute="height" constant="160" id="wmd-2F-24F"/>
+                            <constraint firstItem="XkM-fY-awu" firstAttribute="width" constant="120" id="jzK-2H-kY6"/>
+                            <constraint firstItem="XkM-fY-awu" firstAttribute="height" constant="120" id="wmd-2F-24F"/>
                         </constraints>
                     </view>
                 </viewController>

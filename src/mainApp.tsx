@@ -57,10 +57,6 @@ const lockIosZoom = () => {
 
 export const mountApp = () => {
   lockIosZoom();
-  const splash = document.getElementById("ota-splash");
-  if (splash) {
-    splash.remove();
-  }
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
       <App />

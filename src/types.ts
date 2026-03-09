@@ -73,6 +73,14 @@ export type ProfilesBackupArchive = {
   total_bytes: number;
 };
 
+export type ProfilesDocumentsExport = {
+  export_path: string;
+  export_name: string;
+  profile_count: number;
+  file_count: number;
+  total_bytes: number;
+};
+
 export type RecordingWriteResult = {
   folder_path: string;
   note_path: string;

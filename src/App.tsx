@@ -1,9 +1,9 @@
-import { useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import "./App.css";
 import "./mobile/mobile.css";
 
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
-import { ProfilesProvider } from "./contexts/ProfilesContext";
+import { ProfilesProvider, useProfiles } from "./contexts/ProfilesContext";
 import { GitSyncProvider } from "./contexts/GitSyncContext";
 import { SelectionProvider, useSelection } from "./contexts/SelectionContext";
 import { EditorProvider, useEditor } from "./contexts/EditorContext";
@@ -14,6 +14,7 @@ import { SecurityProvider, useSecurity } from "./contexts/SecurityContext";
 import { AppShell } from "./AppShell";
 import { useLayoutMode } from "./mobile/useLayoutMode";
 import { SecurityLockScreen } from "./components/SecurityLockScreen";
+import { hideLaunchSplash } from "./utils/launchScreen";
 
 function StartupScreen({ theme }: { theme: "light" | "dark" }) {
   return (
@@ -21,6 +22,27 @@ function StartupScreen({ theme }: { theme: "light" | "dark" }) {
       <img className="startup-logo" src="/type-splash-logo.png" alt="Type logo" />
     </div>
   );
+}
+
+function LaunchReveal({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    hideLaunchSplash();
+  }, []);
+
+  return <>{children}</>;
+}
+
+function AppReadyGate({ children }: { children: ReactNode }) {
+  const { theme } = useTheme();
+  const { profilesSnapshot, activeProfileId } = useProfiles();
+  const { tree } = useNotesTree();
+
+  const appReady = Boolean(profilesSnapshot) && (!activeProfileId || Boolean(tree));
+  if (!appReady) {
+    return <StartupScreen theme={theme} />;
+  }
+
+  return <LaunchReveal>{children}</LaunchReveal>;
 }
 
 function AppInner() {
@@ -81,7 +103,9 @@ function UnlockedApp({
           <EditorProvider>
             <NotesTreeProvider>
               <FlushSaveBridge flushSaveRef={flushSaveRef} />
-              <AppInner />
+              <AppReadyGate>
+                <AppInner />
+              </AppReadyGate>
             </NotesTreeProvider>
           </EditorProvider>
         </SelectionProvider>
@@ -110,16 +134,18 @@ function SecurityGate({
 
   if (securityState.encryption_enabled && isLocked) {
     return (
-      <SecurityLockScreen
-        busy={securityBusy}
-        error={securityError}
-        onUnlock={async (password) => {
-          const result = await unlockSecurity(password);
-          if (!result.unlocked) {
-            return;
-          }
-        }}
-      />
+      <LaunchReveal>
+        <SecurityLockScreen
+          busy={securityBusy}
+          error={securityError}
+          onUnlock={async (password) => {
+            const result = await unlockSecurity(password);
+            if (!result.unlocked) {
+              return;
+            }
+          }}
+        />
+      </LaunchReveal>
     );
   }
 
