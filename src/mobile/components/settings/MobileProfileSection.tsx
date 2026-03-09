@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { useProfiles } from "../../../contexts/ProfilesContext";
-import { createProfilesBackupZip } from "../../../data/profilesApi";
+import { createProfilesBackupZip, presentFileExportSheet } from "../../../data/profilesApi";
 import { Group, ChoiceRow, InputRow } from "./SettingsHelpers";
 
 type GitDraftSettings = {
@@ -321,16 +321,23 @@ export function MobileProfileSection() {
                   const archive = await createProfilesBackupZip();
                   const sizeLabel = formatByteSize(archive.total_bytes);
                   try {
-                    await openPath(archive.archive_path);
+                    await presentFileExportSheet(archive.archive_path);
                     setBackupStatus(
-                      `Created ${archive.archive_name} (${sizeLabel}, ${archive.file_count} files). Save it to Files from the sheet that opens.`
+                      `Created ${archive.archive_name} (${sizeLabel}, ${archive.file_count} files). Choose Save to Files in the sheet that opened.`
                     );
-                  } catch (openError) {
-                    const openMessage =
-                      openError instanceof Error ? openError.message : String(openError);
-                    setBackupStatus(
-                      `Created ${archive.archive_name}. Couldn't open automatically: ${openMessage}. File path: ${archive.archive_path}`
-                    );
+                  } catch {
+                    try {
+                      await openPath(archive.archive_path);
+                      setBackupStatus(
+                        `Created ${archive.archive_name} (${sizeLabel}, ${archive.file_count} files).`
+                      );
+                    } catch (openError) {
+                      const openMessage =
+                        openError instanceof Error ? openError.message : String(openError);
+                      setBackupStatus(
+                        `Created ${archive.archive_name}. Couldn't open automatically: ${openMessage}. File path: ${archive.archive_path}`
+                      );
+                    }
                   }
                 } catch (error) {
                   const message = error instanceof Error ? error.message : String(error);

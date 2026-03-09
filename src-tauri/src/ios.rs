@@ -10,7 +10,7 @@ use std::{
     os::raw::{c_char, c_int},
     path::{Path, PathBuf},
     ptr,
-    sync::{Mutex, OnceLock},
+    sync::{mpsc, Mutex, OnceLock},
 };
 use tauri::Manager;
 
@@ -506,4 +506,92 @@ pub(crate) fn next_native_recording_path(app: &tauri::AppHandle) -> Result<PathB
         }
     }
     Err("Failed to allocate native recording filename.".to_string())
+}
+
+unsafe fn ios_top_presenting_view_controller(webview: *mut Object) -> Result<*mut Object, String> {
+    if webview.is_null() {
+        return Err("WKWebView handle is null.".to_string());
+    }
+
+    let window: *mut Object = msg_send![webview, window];
+    if window.is_null() {
+        return Err("Failed to resolve the iOS window for file export.".to_string());
+    }
+
+    let mut controller: *mut Object = msg_send![window, rootViewController];
+    if controller.is_null() {
+        return Err("Failed to resolve the iOS root view controller.".to_string());
+    }
+
+    loop {
+        let presented: *mut Object = msg_send![controller, presentedViewController];
+        if presented.is_null() {
+            break;
+        }
+        controller = presented;
+    }
+
+    Ok(controller)
+}
+
+unsafe fn present_ios_file_export_sheet_for_webview(
+    webview: *mut Object,
+    file_path: &Path,
+) -> Result<(), String> {
+    let controller = ios_top_presenting_view_controller(webview)?;
+    let path_ns = ns_string(&file_path.to_string_lossy())?;
+    let url_class = ns_class("NSURL")?;
+    let url: *mut Object = msg_send![url_class, fileURLWithPath: path_ns];
+    if url.is_null() {
+        return Err("Failed to create the iOS export URL.".to_string());
+    }
+
+    let picker_class = ns_class("UIDocumentPickerViewController")?;
+    let alloc: *mut Object = msg_send![picker_class, alloc];
+    if alloc.is_null() {
+        return Err("Failed to allocate the iOS export picker.".to_string());
+    }
+
+    // UIDocumentPickerModeExportToService
+    let picker: *mut Object = msg_send![alloc, initWithURL: url inMode: 2usize];
+    if picker.is_null() {
+        return Err("Failed to initialize the iOS export picker.".to_string());
+    }
+
+    let _: () = msg_send![controller, presentViewController: picker animated: YES completion: ptr::null_mut::<Object>()];
+    Ok(())
+}
+
+pub(crate) fn present_ios_file_export_sheet(
+    app: &tauri::AppHandle,
+    file_path: &Path,
+) -> Result<(), String> {
+    if !file_path.is_absolute() {
+        return Err("Export file path must be absolute.".to_string());
+    }
+    if !file_path.exists() || !file_path.is_file() {
+        return Err(format!(
+            "Export file not found: {}",
+            file_path.to_string_lossy()
+        ));
+    }
+
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window is unavailable for iOS file export.".to_string())?;
+    let export_path = file_path.to_path_buf();
+    let (tx, rx) = mpsc::sync_channel(1);
+
+    window
+        .with_webview(move |platform_webview| {
+            let result = unsafe {
+                let webview = platform_webview.inner() as *mut Object;
+                present_ios_file_export_sheet_for_webview(webview, &export_path)
+            };
+            let _ = tx.send(result);
+        })
+        .map_err(|error| error.to_string())?;
+
+    rx.recv()
+        .map_err(|_| "Failed to receive the iOS export sheet result.".to_string())?
 }

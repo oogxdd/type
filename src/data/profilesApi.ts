@@ -64,3 +64,6 @@ export const deleteProfile = (profileId: string): Promise<NotesProfileSnapshot> 
 
 export const createProfilesBackupZip = (): Promise<ProfilesBackupArchive> =>
   invokeLogged<ProfilesBackupArchive>("create_profiles_backup_zip");
+
+export const presentFileExportSheet = (path: string): Promise<void> =>
+  invokeLogged("present_file_export_sheet", { path });

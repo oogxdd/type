@@ -104,6 +104,27 @@ async fn create_profiles_backup_zip(
     run_blocking_command(move || create_profiles_backup_zip_impl(&app)).await
 }
 
+#[tauri::command]
+fn present_file_export_sheet(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    ensure_security_unlocked_for_app(&app)?;
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Export file path is required.".to_string());
+    }
+
+    #[cfg(target_os = "ios")]
+    {
+        let export_path = PathBuf::from(trimmed);
+        return present_ios_file_export_sheet(&app, &export_path);
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = app;
+        Err("Native iOS file export is unavailable on this platform.".to_string())
+    }
+}
+
 async fn run_blocking_command<T, F>(operation: F) -> Result<T, String>
 where
     T: Send + 'static,
@@ -1208,6 +1229,7 @@ pub(super) fn run() {
             update_profile,
             delete_profile,
             create_profiles_backup_zip,
+            present_file_export_sheet,
             get_git_status,
             get_git_history,
             connect_git_repo,
