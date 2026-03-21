@@ -706,7 +706,18 @@ pub(crate) fn fast_forward_to(
     Ok(())
 }
 
-/// Merge a fetched commit, rolling back on conflict.
+/// Build a `.conflict` sibling path: `dir/note.md` → `dir/note.conflict.md`.
+fn make_conflict_path(rel_path: &str) -> String {
+    let p = Path::new(rel_path);
+    let stem = p.file_stem().map(|s| s.to_string_lossy()).unwrap_or_default();
+    let new_name = match p.extension().map(|s| s.to_string_lossy()) {
+        Some(ext) => format!("{stem}.conflict.{ext}"),
+        None => format!("{stem}.conflict"),
+    };
+    p.with_file_name(new_name).to_string_lossy().to_string()
+}
+
+/// Merge a fetched commit, saving `.conflict` files when there are conflicts.
 pub(crate) fn merge_fetched_commit(
     repo: &Repository,
     branch: &str,
@@ -733,45 +744,100 @@ pub(crate) fn merge_fetched_commit(
             .find_commit(fetched_commit.id())
             .map_err(map_git_error)?;
         let mut index = repo.index().map_err(map_git_error)?;
+
         if index.has_conflicts() {
-            let mut paths = Vec::new();
-            if let Ok(conflicts) = index.conflicts() {
-                for entry in conflicts.flatten() {
-                    let path_bytes = entry
-                        .our
-                        .as_ref()
-                        .and_then(|value| std::str::from_utf8(&value.path).ok())
-                        .or_else(|| {
-                            entry
-                                .their
-                                .as_ref()
-                                .and_then(|value| std::str::from_utf8(&value.path).ok())
-                        })
-                        .or_else(|| {
-                            entry
-                                .ancestor
-                                .as_ref()
-                                .and_then(|value| std::str::from_utf8(&value.path).ok())
-                        });
-                    if let Some(path) = path_bytes {
-                        paths.push(path.to_string());
+            let workdir = repo
+                .workdir()
+                .ok_or_else(|| "Repository has no working directory.".to_string())?;
+
+            // Collect conflict entries first (can't mutate index while iterating).
+            let conflict_entries: Vec<_> = index
+                .conflicts()
+                .map_err(map_git_error)?
+                .filter_map(|r| r.ok())
+                .collect();
+
+            let mut resolved_paths = Vec::new();
+
+            for entry in &conflict_entries {
+                let rel_path = entry
+                    .our
+                    .as_ref()
+                    .or(entry.their.as_ref())
+                    .or(entry.ancestor.as_ref())
+                    .and_then(|e| std::str::from_utf8(&e.path).ok())
+                    .map(|s| s.to_string());
+                let Some(rel_path) = rel_path else {
+                    continue;
+                };
+
+                match (&entry.our, &entry.their) {
+                    (Some(ours), Some(theirs)) => {
+                        // Both sides modified — keep ours, save theirs as .conflict.
+                        let their_blob = repo.find_blob(theirs.id).map_err(map_git_error)?;
+                        let conflict_rel = make_conflict_path(&rel_path);
+                        let conflict_abs = workdir.join(&conflict_rel);
+                        if let Some(parent) = conflict_abs.parent() {
+                            let _ = fs::create_dir_all(parent);
+                        }
+                        fs::write(&conflict_abs, their_blob.content())
+                            .map_err(|e| e.to_string())?;
+
+                        let our_blob = repo.find_blob(ours.id).map_err(map_git_error)?;
+                        fs::write(workdir.join(&rel_path), our_blob.content())
+                            .map_err(|e| e.to_string())?;
                     }
+                    (Some(ours), None) => {
+                        // They deleted, we modified — keep ours.
+                        let our_blob = repo.find_blob(ours.id).map_err(map_git_error)?;
+                        fs::write(workdir.join(&rel_path), our_blob.content())
+                            .map_err(|e| e.to_string())?;
+                    }
+                    (None, Some(theirs)) => {
+                        // We deleted, they modified — take theirs.
+                        let their_blob = repo.find_blob(theirs.id).map_err(map_git_error)?;
+                        let full_path = workdir.join(&rel_path);
+                        if let Some(parent) = full_path.parent() {
+                            let _ = fs::create_dir_all(parent);
+                        }
+                        fs::write(&full_path, their_blob.content())
+                            .map_err(|e| e.to_string())?;
+                    }
+                    (None, None) => continue,
+                }
+
+                resolved_paths.push(rel_path);
+            }
+
+            // Resolve each conflict in the index and stage files.
+            for rel_path in &resolved_paths {
+                index
+                    .conflict_remove(Path::new(rel_path))
+                    .map_err(map_git_error)?;
+                if workdir.join(rel_path).exists() {
+                    index
+                        .add_path(Path::new(rel_path))
+                        .map_err(map_git_error)?;
+                }
+                let conflict_rel = make_conflict_path(rel_path);
+                if workdir.join(&conflict_rel).exists() {
+                    index
+                        .add_path(Path::new(&conflict_rel))
+                        .map_err(map_git_error)?;
                 }
             }
-            paths.sort();
-            paths.dedup();
-            let details = if paths.is_empty() {
-                String::new()
-            } else {
-                format!(" ({})", paths.join(", "))
-            };
-            return Err(
-                format!(
-                    "Pull produced merge conflicts{}. Resolve conflicts on desktop, then pull again on mobile.",
-                    details
-                ),
-            );
+
+            index.write().map_err(map_git_error)?;
+
+            if !resolved_paths.is_empty() {
+                println!(
+                    "[git] Resolved {} conflict(s) with .conflict files: {}",
+                    resolved_paths.len(),
+                    resolved_paths.join(", ")
+                );
+            }
         }
+
         let tree_id = index.write_tree_to(repo).map_err(map_git_error)?;
         let tree = repo.find_tree(tree_id).map_err(map_git_error)?;
         let signature = default_signature(repo)?;
