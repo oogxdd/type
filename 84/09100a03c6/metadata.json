@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "8409100a03c6",
+  "strategy": "manual-commit",
+  "branch": "mobile-debug",
+  "checkpoints_count": 19,
+  "files_touched": [
+    "src-tauri/src/commands.rs",
+    "src-tauri/src/git.rs",
+    "src/components/settings/SettingsProfileSection.tsx",
+    "src/data/gitApi.ts",
+    "src/mobile/components/settings/MobileProfileSection.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/84/09100a03c6/0/metadata.json",
+      "transcript": "/84/09100a03c6/0/full.jsonl",
+      "context": "/84/09100a03c6/0/context.md",
+      "content_hash": "/84/09100a03c6/0/content_hash.txt",
+      "prompt": "/84/09100a03c6/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 687,
+    "cache_creation_tokens": 86670,
+    "cache_read_tokens": 4169592,
+    "output_tokens": 21996,
+    "api_call_count": 70
+  }
+}
