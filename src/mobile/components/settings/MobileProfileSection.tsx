@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useProfiles } from "../../../contexts/ProfilesContext";
+import * as gitApi from "../../../data/gitApi";
 import { exportProfilesToDocuments } from "../../../data/profilesApi";
 import { Group, ChoiceRow, InputRow } from "./SettingsHelpers";
 
@@ -66,6 +67,51 @@ export function MobileProfileSection() {
   );
   const [exportBusy, setExportBusy] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
+  const [sshPublicKey, setSshPublicKey] = useState<string | null>(null);
+  const [sshBusy, setSshBusy] = useState(false);
+  const [sshError, setSshError] = useState<string | null>(null);
+
+  const refreshSshKey = useCallback(async () => {
+    try {
+      const key = await gitApi.getSshPublicKey();
+      setSshPublicKey(key);
+    } catch {
+      setSshPublicKey(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshSshKey();
+  }, [refreshSshKey]);
+
+  const handleGenerateSshKey = async () => {
+    setSshBusy(true);
+    setSshError(null);
+    try {
+      const pubKey = await gitApi.generateSshKey();
+      setSshPublicKey(pubKey);
+    } catch (error) {
+      setSshError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSshBusy(false);
+    }
+  };
+
+  const handleDeleteSshKey = async () => {
+    if (!window.confirm("Delete the SSH keypair? You will need to re-add the public key to your server.")) {
+      return;
+    }
+    setSshBusy(true);
+    setSshError(null);
+    try {
+      await gitApi.deleteSshKey();
+      setSshPublicKey(null);
+    } catch (error) {
+      setSshError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSshBusy(false);
+    }
+  };
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -304,6 +350,53 @@ export function MobileProfileSection() {
         <p className="mobile-native-note">
           Supported remote schemes: <code>git://</code>, <code>ssh://</code>, and <code>https://</code>.
         </p>
+      </Group>
+
+      <Group title="SSH key">
+        {sshPublicKey ? (
+          <>
+            <p className="mobile-native-note" style={{ wordBreak: "break-all", userSelect: "all" }}>
+              {sshPublicKey}
+            </p>
+            <p className="mobile-native-note">
+              Add this key to <code>~/.ssh/authorized_keys</code> on your server.
+            </p>
+            <div className="mobile-native-actions single">
+              <button
+                type="button"
+                className="mobile-secondary-btn"
+                onClick={() => void navigator.clipboard.writeText(sshPublicKey)}
+              >
+                Copy
+              </button>
+              <button
+                type="button"
+                className="mobile-secondary-btn"
+                disabled={sshBusy}
+                onClick={() => void handleDeleteSshKey()}
+              >
+                Delete key
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="mobile-native-note">
+              Generate an Ed25519 keypair for SSH-based git sync.
+            </p>
+            <div className="mobile-native-actions single">
+              <button
+                type="button"
+                className="mobile-secondary-btn"
+                disabled={sshBusy}
+                onClick={() => void handleGenerateSshKey()}
+              >
+                {sshBusy ? "Generating..." : "Generate SSH key"}
+              </button>
+            </div>
+          </>
+        )}
+        {sshError ? <p className="mobile-native-note">{sshError}</p> : null}
       </Group>
 
       <Group title="Notes folder">

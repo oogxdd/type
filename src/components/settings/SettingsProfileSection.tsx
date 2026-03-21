@@ -1,6 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useProfiles } from "../../contexts/ProfilesContext";
+import * as gitApi from "../../data/gitApi";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -99,6 +100,52 @@ export function SettingsProfileSection() {
     }
     setGitDraft(getGitDraftFromSyncSettings(syncSettings));
   }, [hasUnsavedGitChanges, syncSettings]);
+
+  const [sshPublicKey, setSshPublicKey] = useState<string | null>(null);
+  const [sshBusy, setSshBusy] = useState(false);
+  const [sshError, setSshError] = useState<string | null>(null);
+
+  const refreshSshKey = useCallback(async () => {
+    try {
+      const key = await gitApi.getSshPublicKey();
+      setSshPublicKey(key);
+    } catch {
+      setSshPublicKey(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshSshKey();
+  }, [refreshSshKey]);
+
+  const handleGenerateSshKey = async () => {
+    setSshBusy(true);
+    setSshError(null);
+    try {
+      const pubKey = await gitApi.generateSshKey();
+      setSshPublicKey(pubKey);
+    } catch (error) {
+      setSshError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSshBusy(false);
+    }
+  };
+
+  const handleDeleteSshKey = async () => {
+    if (!window.confirm("Delete the SSH keypair? You will need to re-add the public key to your server.")) {
+      return;
+    }
+    setSshBusy(true);
+    setSshError(null);
+    try {
+      await gitApi.deleteSshKey();
+      setSshPublicKey(null);
+    } catch (error) {
+      setSshError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSshBusy(false);
+    }
+  };
 
   const chooseWorkingDirectory = async () => {
     try {
@@ -243,6 +290,62 @@ export function SettingsProfileSection() {
           <p className={hintClass}>
             Supported remote schemes: <code>git://</code>, <code>ssh://</code>, and <code>https://</code>.
           </p>
+        </section>
+
+        <section className={cardClass}>
+          <h3 className="text-sm font-semibold text-foreground">SSH key</h3>
+          {sshPublicKey ? (
+            <>
+              <div className={controlClass}>
+                <span className={labelClass}>Public key</span>
+                <code
+                  className="block break-all rounded bg-muted/50 p-2 text-xs text-foreground select-all"
+                >
+                  {sshPublicKey}
+                </code>
+              </div>
+              <p className={hintClass}>
+                Add this key to <code>~/.ssh/authorized_keys</code> on your server.
+              </p>
+              <div className={actionRowClass}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void navigator.clipboard.writeText(sshPublicKey)}
+                >
+                  Copy
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  disabled={sshBusy}
+                  onClick={() => void handleDeleteSshKey()}
+                >
+                  Delete key
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className={hintClass}>
+                Generate an Ed25519 keypair for SSH-based git sync.
+              </p>
+              <div className={actionRowClass}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={sshBusy}
+                  onClick={() => void handleGenerateSshKey()}
+                >
+                  {sshBusy ? "Generating..." : "Generate SSH key"}
+                </Button>
+              </div>
+            </>
+          )}
+          {sshError ? <p className={warningClass}>{sshError}</p> : null}
         </section>
 
         <section className={cardClass}>

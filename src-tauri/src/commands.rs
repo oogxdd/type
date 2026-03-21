@@ -158,6 +158,21 @@ where
 }
 
 #[tauri::command]
+fn generate_ssh_key(app: tauri::AppHandle) -> Result<String, String> {
+    generate_ssh_keypair(&app)
+}
+
+#[tauri::command]
+fn get_ssh_public_key(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    read_ssh_public_key(&app)
+}
+
+#[tauri::command]
+fn delete_ssh_key(app: tauri::AppHandle) -> Result<(), String> {
+    delete_ssh_keypair(&app)
+}
+
+#[tauri::command]
 async fn get_git_status(app: tauri::AppHandle) -> Result<GitSyncStatus, String> {
     ensure_security_unlocked_for_app(&app)?;
     run_blocking_command(move || get_git_status_blocking(app)).await
@@ -204,11 +219,15 @@ fn connect_git_repo_blocking(
     ensure_origin_remote(&repo, &args.remote_url)?;
     let target_branch = resolve_target_branch(&repo, args.branch.clone());
     switch_or_prepare_branch(&repo, &target_branch)?;
+    let ssh_priv = ssh_private_key_if_exists(&app);
+    let ssh_pub = ssh_public_key_if_exists(&app);
     let fetched = match perform_fetch(
         &repo,
         &target_branch,
         args.username.as_deref(),
         args.password.as_deref(),
+        ssh_priv,
+        ssh_pub,
     ) {
         Ok(commit) => Some(commit),
         Err(error) => {
@@ -251,11 +270,15 @@ fn git_pull_blocking(app: tauri::AppHandle, args: GitSyncArgs) -> Result<GitSync
     }
     let target_branch = resolve_target_branch(&repo, args.branch.clone());
     switch_or_prepare_branch(&repo, &target_branch)?;
+    let ssh_priv = ssh_private_key_if_exists(&app);
+    let ssh_pub = ssh_public_key_if_exists(&app);
     let fetched = perform_fetch(
         &repo,
         &target_branch,
         args.username.as_deref(),
         args.password.as_deref(),
+        ssh_priv,
+        ssh_pub,
     )?;
     let (analysis, _) = repo.merge_analysis(&[&fetched]).map_err(map_git_error)?;
     if analysis.is_up_to_date() {
@@ -277,15 +300,17 @@ fn remote_push(
     branch: &str,
     username: Option<&str>,
     password: Option<&str>,
+    ssh_private_key: Option<std::path::PathBuf>,
+    ssh_public_key: Option<std::path::PathBuf>,
 ) -> Result<(), String> {
-    let callbacks = build_callbacks(username, password);
+    let callbacks = build_callbacks(username, password, ssh_private_key.clone(), ssh_public_key.clone());
     let mut push_options = PushOptions::new();
     push_options.remote_callbacks(callbacks);
     let mut remote = repo.find_remote("origin").map_err(map_git_error)?;
     remote
         .connect_auth(
             Direction::Push,
-            Some(build_callbacks(username, password)),
+            Some(build_callbacks(username, password, ssh_private_key, ssh_public_key)),
             None,
         )
         .map_err(map_git_error)?;
@@ -330,11 +355,15 @@ fn git_push_blocking(app: tauri::AppHandle, args: GitPushArgs) -> Result<GitSync
         return Ok(status_before_push);
     }
     let _ = commit_all_changes(&repo, message, &target_branch)?;
+    let ssh_priv = ssh_private_key_if_exists(&app);
+    let ssh_pub = ssh_public_key_if_exists(&app);
     remote_push(
         &repo,
         &target_branch,
         args.username.as_deref(),
         args.password.as_deref(),
+        ssh_priv,
+        ssh_pub,
     )?;
     Ok(build_git_status(&root))
 }
@@ -1254,6 +1283,9 @@ pub(super) fn run() {
             create_profiles_backup_zip,
             present_file_export_sheet,
             export_profiles_to_documents,
+            generate_ssh_key,
+            get_ssh_public_key,
+            delete_ssh_key,
             get_git_status,
             get_git_history,
             connect_git_repo,

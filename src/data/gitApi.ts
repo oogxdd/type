@@ -1,6 +1,15 @@
 import { invokeLogged } from "./invoke";
 import type { GitCommitHistoryEntry, GitSyncStatus } from "../types";
 
+export const generateSshKey = (): Promise<string> =>
+  invokeLogged<string>("generate_ssh_key");
+
+export const getSshPublicKey = (): Promise<string | null> =>
+  invokeLogged<string | null>("get_ssh_public_key");
+
+export const deleteSshKey = (): Promise<void> =>
+  invokeLogged<void>("delete_ssh_key");
+
 export const getGitStatus = (): Promise<GitSyncStatus> =>
   invokeLogged<GitSyncStatus>("get_git_status");
 
