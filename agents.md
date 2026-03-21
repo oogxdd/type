@@ -25,9 +25,9 @@ The Rust backend is split into domain modules. `lib.rs` is a thin hub that decla
 - **macOS**: `MACOS_WINDOW_ALPHA`, `apply_macos_window_alpha`
 - **Entry point**: `pub fn run()` delegates to `commands::run()`
 
-### commands.rs (~1,224 lines, unchanged)
+### commands.rs (~1,280 lines)
 
-All `#[tauri::command]` functions. Each is a thin wrapper calling `_impl` functions from domain modules. Also contains `pub fn run()` which builds the Tauri app, registers commands, and sets up plugins. Uses `use super::*;` — never needs direct module imports.
+All `#[tauri::command]` functions. Each is a thin wrapper calling `_impl` functions from domain modules. Also contains `pub fn run()` which builds the Tauri app, registers commands, and sets up plugins. Uses `use super::*;` — never needs direct module imports. Includes `generate_ssh_key`, `get_ssh_public_key`, `delete_ssh_key` commands for SSH key management. Git push/pull/connect commands automatically use the app-generated SSH key if it exists.
 
 ### security.rs (~450 lines)
 
@@ -61,15 +61,17 @@ Note filesystem operations, front-matter parsing, folder tree building, ordering
 - **Ordering**: `read_order_file`, `write_order_file`, `sort_by_order`, `update_order_remove/append/rename`
 - **Collection**: `collect_markdown_note_files` enumerates `.md` files in a folder
 
-### git.rs (~550 lines)
+### git.rs (~750 lines)
 
-Git operations via libgit2 — repo init, fetch, push, merge, status, commit history.
+Git operations via libgit2 — repo init, fetch, push, merge, status, commit history, SSH key management.
 
 - **Repo management**: `ensure_git_repo`, `open_repo`, `git_repo_initialized`
 - **Sync operations**: `perform_fetch`, `fast_forward_to`, `merge_fetched_commit`, `commit_all_changes`
+- **Conflict resolution**: `merge_fetched_commit` saves remote version as `.conflict.md` sibling file instead of rolling back. Both-modified → keep ours + save theirs as `.conflict.md`. Delete/modify → keep whichever version exists. Merge always completes, sync is never blocked.
 - **Status**: `build_git_status` (ahead/behind counts, remote URL, branch, dirty state)
 - **History**: `build_git_history` with `GIT_NOTE_TIMESTAMPS_CACHE` for per-note commit timestamps
-- **Auth**: `build_callbacks` sets up credential callbacks for SSH/HTTPS
+- **Auth**: `build_callbacks` sets up credential callbacks — tries SSH key file first (from app data dir), then SSH agent, then username/password
+- **SSH key management**: `generate_ssh_keypair` (Ed25519 via ssh-keygen), `read_ssh_public_key`, `delete_ssh_keypair`, `ssh_private_key_if_exists`, `ssh_public_key_if_exists`. Keys stored in `<app_data_dir>/ssh/`
 - **Bootstrap detection**: `worktree_has_only_bootstrap_artifacts`, `clear_bootstrap_artifacts`
 
 ### recordings.rs (~600 lines)
@@ -227,7 +229,9 @@ These are the trickiest part of the architecture:
 
 `src/data/notesApi.ts` wraps all Tauri IPC commands. Every function maps 1:1 to a Rust command. To swap backends, re-implement this module's exports.
 
-Key commands: `getTree`, `readNote`, `createNote`, `writeNote`, `getNoteMeta`, `deleteItems`, `moveItems`, `renameItem`, `setOrder`, `getGitStatus`, `getGitHistory`, `connectGitRepo`, `gitPull`, `gitPush`, `getProfiles`, `setActiveProfile`, `createProfile`, `setProfileNotesRoot`, `listRecordings`, `saveAudioRecording`, `queueRecordingTranscriptions`, `readRecordingAudio`, `startNativeAudioRecording`, `stopNativeAudioRecording`, `nativeRecorderCapabilities`, `getSecurityState`, `enableSecurity`, `lockSecurity`, `unlockSecurity`, `setSecurityPreferences`.
+Key commands: `getTree`, `readNote`, `createNote`, `writeNote`, `getNoteMeta`, `deleteItems`, `moveItems`, `renameItem`, `setOrder`, `getGitStatus`, `getGitHistory`, `connectGitRepo`, `gitPull`, `gitPush`, `generateSshKey`, `getSshPublicKey`, `deleteSshKey`, `getProfiles`, `setActiveProfile`, `createProfile`, `setProfileNotesRoot`, `listRecordings`, `saveAudioRecording`, `queueRecordingTranscriptions`, `readRecordingAudio`, `startNativeAudioRecording`, `stopNativeAudioRecording`, `nativeRecorderCapabilities`, `getSecurityState`, `enableSecurity`, `lockSecurity`, `unlockSecurity`, `setSecurityPreferences`.
+
+Git API (`src/data/gitApi.ts`): Also exposes `generateSshKey`, `getSshPublicKey`, `deleteSshKey` for SSH key lifecycle management.
 
 ### Layout modes
 
@@ -303,10 +307,12 @@ Detection in `src/mobile/useLayoutMode.ts`.
 
 **Mobile settings sections** (`src/mobile/components/settings/`):
 - `SettingsHelpers.tsx` — Shared mobile settings primitives (Group, ChoiceRow, InputRow, StatRow)
+- `MobileProfileSection.tsx` — Profile management, git settings, **SSH key section** (generate/copy/delete), notes folder, export
 - `MobileGeneralSection.tsx`, `MobileAppearanceSection.tsx`, `MobileSyncSection.tsx`, `MobileRecordingsSection.tsx`, `MobileSecuritySection.tsx`
 
 **Desktop settings sections** (`src/components/settings/`):
 - `SettingsGeneralSection.tsx`, `SettingsAppearanceSection.tsx`, `SettingsSyncSection.tsx`, `SettingsRecordingsSection.tsx`, `SettingsSecuritySection.tsx`
+- `SettingsProfileSection.tsx` — Profile management, git remote settings, **SSH key section** (generate/copy/delete Ed25519 keypair), notes folder picker
 - `SettingsPanel.tsx` (~122 lines) — SettingsDetail is now a ~25-line switch dispatching to section components. Retains SettingsRow, SettingsMiddlePane, SettingsDetailPane, and type exports.
 
 ## iOS Widget (Quick Record)
@@ -345,7 +351,9 @@ A WidgetKit extension that lets users start a recording from the iOS home screen
   New notes may start with placeholder suffixes (`-note-...`, `-recording-...`, etc.) and then auto-rename to content slug when enough text is available in slug-capable modes. Slug extraction is Unicode-aware (keeps Cyrillic/Latin letters and digits) and ignores `NV_EMPTY_LINE_TOKEN_*` noise.
 - **Empty note cleanup**: if a dirty note is emptied and then focus/selection moves away, it is auto-deleted.
 - **Git sync uses libgit2**, not shell git. The Rust backend handles all git operations.
-- **Git server support is generic**: `git://`, `ssh://`, and `https://` remotes are all supported. See `LOCAL_GIT_SERVER_LAN_HOTSPOT.md` for LAN/hotspot setup.
+- **Git server support is generic**: `git://`, `ssh://`, and `https://` remotes are all supported. See `docs/ssh-sync-setup.md` for SSH sync setup with key-based auth.
+- **SSH key auth**: The app can generate and store an Ed25519 keypair in `<app_data_dir>/ssh/`. When an SSH key exists, all git operations (connect/push/pull) use it automatically before falling back to SSH agent or username/password.
+- **Merge conflict resolution**: Conflicts during pull are resolved by keeping the local version and saving the remote version as a `.conflict.md` sibling file (e.g., `note.md` + `note.conflict.md`). The merge always completes — sync is never blocked by conflicts. Users resolve manually and delete the `.conflict.md` file when done.
 - **Lock guard is backend-enforced**: most app commands return a locked error while encrypted mode is locked; only security commands remain callable.
 - **Encryption scope is note body only**: recordings/attachments are currently stored unencrypted.
 - **Sync history UX**: settings now show commit history from real git log. This cannot reliably encode which device performed push/pull for every commit.

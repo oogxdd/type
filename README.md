@@ -7,6 +7,8 @@ Local markdown notes app with filesystem storage and optional Git sync. Runs on 
 - **Folder tree** with drag-and-drop reordering
 - **Markdown editor** (Tiptap) with debounced autosave
 - **Git sync** — push/pull notes across devices using any Git remote
+- **SSH key auth** — generate Ed25519 keypair in-app for passwordless SSH sync
+- **Conflict resolution** — merge conflicts save both versions as sibling files, sync is never blocked
 - **Audio recording + transcription** via AssemblyAI
 - **Multi-profile** — separate notes folders with independent sync settings
 - **Desktop** — three-pane layout with keyboard shortcuts
@@ -118,7 +120,7 @@ The app uses `libgit2` (embedded Git) from Tauri commands. You do not need shell
 
 Open **Settings → Profiles**, then fill in:
 
-- **Remote URL** (e.g. `git://192.168.1.15/notes.git`, `ssh://...`, or `https://...`)
+- **Remote URL** (e.g. `ssh://user@mac.local/path/to/repo.git`, `git://...`, or `https://...`)
 - **Branch** (usually `main`)
 - **Commit message** (default auto-commit message for push)
 - **Username** and **Token/Password** (for HTTPS auth)
@@ -129,7 +131,16 @@ Then:
 2. If this is the first device with local notes: tap **Push**
 3. If this device should download existing notes: tap **Pull** first
 
-For LAN/hotspot self-hosted Git, see [LOCAL_GIT_SERVER_LAN_HOTSPOT.md](./LOCAL_GIT_SERVER_LAN_HOTSPOT.md).
+### SSH key auth (recommended)
+
+For passwordless sync over SSH:
+
+1. Go to **Settings → SSH key → Generate SSH key**
+2. Copy the public key and add it to `~/.ssh/authorized_keys` on your server
+3. Set the remote URL to `ssh://user@host/path/to/repo.git`
+4. No username/password needed — the SSH key handles authentication
+
+See [docs/ssh-sync-setup.md](docs/ssh-sync-setup.md) for full setup guide including security hardening.
 
 ### Daily flow
 
@@ -147,14 +158,25 @@ For LAN/hotspot self-hosted Git, see [LOCAL_GIT_SERVER_LAN_HOTSPOT.md](./LOCAL_G
 
 - **Pull** allows up-to-date and fast-forward updates
 - If local changes exist, pull is blocked until you push/commit
-- If remote requires merge commit (diverged history), pull is blocked with a clear error — resolve on desktop, push, then pull on mobile
+- **Diverged history** is auto-merged when possible. If the same file was edited on both sides, the local version is kept and the remote version is saved as a `.conflict.md` sibling file. The merge always completes — sync is never blocked.
 - **Push** auto-commits local changes with your message, then pushes to remote
+
+### Conflict resolution
+
+When a pull encounters conflicting changes to the same file:
+
+- `note.md` — keeps the **local** version
+- `note.conflict.md` — appears alongside with the **remote** version
+
+Both files are plain readable markdown. Compare them, edit the original, delete the `.conflict.md` when done.
 
 ### Security note
 
 - Git username/token are stored in local storage on the device
+- SSH private key is stored in the app's sandboxed data directory
 - Sensitive fields are redacted from frontend invoke logs
 - Prefer least-privilege tokens and rotate/revoke when needed
+- For SSH, restrict the key to git-only access — see [docs/ssh-sync-setup.md](docs/ssh-sync-setup.md)
 
 ## Audio recording + transcription
 
@@ -192,9 +214,10 @@ For LAN/hotspot self-hosted Git, see [LOCAL_GIT_SERVER_LAN_HOTSPOT.md](./LOCAL_G
 ## Troubleshooting
 
 - **"Repository is not initialized. Connect a remote first."** — run Connect repo in Profiles settings
-- **"No matching Git credentials available..."** — check username/token for HTTPS remote
+- **"No matching Git credentials available..."** — check username/token for HTTPS, or generate an SSH key in Settings for SSH remotes
 - **Pull blocked by local changes** — push first, then pull
-- **Pull requires merge commit** — resolve divergence on desktop, push, then pull on mobile
+- **SSH "Permission denied"** — ensure public key is in `~/.ssh/authorized_keys` on the server, file has `chmod 600`
+- **SSH "Connection refused"** — enable Remote Login on the Mac (System Settings → General → Sharing)
 
 ## Validation
 
@@ -222,7 +245,7 @@ The Rust backend (`src-tauri/src/`) is organized into domain modules:
 | `security.rs` | Encryption, password hashing, lock mode |
 | `profiles.rs` | Multi-profile management, legacy migration |
 | `notes.rs` | Note filesystem ops, front-matter, folder tree, ordering |
-| `git.rs` | Git sync via libgit2 — fetch, push, merge, status, history |
+| `git.rs` | Git sync via libgit2 — fetch, push, merge, status, history, SSH key management |
 | `recordings.rs` | Audio recording, AssemblyAI transcription queue |
 | `handwriting.rs` | Handwriting attachment OCR (OpenAI / HuggingFace) |
 | `ios.rs` | iOS-specific: native AVAudioRecorder, WKWebView recovery |
