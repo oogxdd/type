@@ -1,4 +1,7 @@
-// Domain modules
+// Port interfaces (platform-agnostic contracts)
+pub mod ports;
+
+// Domain modules (Rust/Tauri implementations)
 mod commands;
 mod git;
 mod handwriting;
