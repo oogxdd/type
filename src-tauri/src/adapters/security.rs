@@ -435,6 +435,7 @@ pub(crate) fn ensure_security_runtime_initialized_for_setup(
     ensure_security_runtime_loaded(app)
 }
 
+/// Return the current security state snapshot for the frontend.
 pub(crate) fn get_security_state_impl(app: &tauri::AppHandle) -> Result<SecurityState, String> {
     security_state_snapshot(app)
 }
@@ -493,6 +494,7 @@ pub(crate) fn enable_security_impl(
     })
 }
 
+/// Lock the app: zeroize the derived key from memory.
 pub(crate) fn lock_security_impl(app: &tauri::AppHandle) -> Result<SecurityState, String> {
     ensure_security_runtime_loaded(app)?;
     let runtime = security_runtime_state();
@@ -578,6 +580,7 @@ pub(crate) fn unlock_security_impl(
     })
 }
 
+/// Update security preferences (e.g. auto-lock on background).
 pub(crate) fn set_security_preferences_impl(
     app: &tauri::AppHandle,
     args: SetSecurityPreferencesArgs,

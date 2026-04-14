@@ -1,4 +1,4 @@
-// Git operations: repo init, fetch, push, merge, status, history.
+//! Git operations: repo init, fetch, push, merge, status, history.
 
 use git2::{
     build::CheckoutBuilder, AnnotatedCommit, Cred, CredentialType, FetchOptions, IndexAddOption,
@@ -119,6 +119,7 @@ pub(crate) struct GitSyncStatus {
     pub(crate) notes_root: String,
 }
 
+/// Single commit entry in the git history list.
 #[derive(Serialize)]
 pub(crate) struct GitCommitHistoryEntry {
     pub(crate) id: String,
@@ -130,6 +131,7 @@ pub(crate) struct GitCommitHistoryEntry {
     pub(crate) is_head: bool,
 }
 
+/// Arguments for connecting to a remote git repository.
 #[derive(Deserialize)]
 pub(crate) struct ConnectGitArgs {
     pub(crate) remote_url: String,
@@ -138,6 +140,7 @@ pub(crate) struct ConnectGitArgs {
     pub(crate) password: Option<String>,
 }
 
+/// Arguments for a fetch-merge-push sync cycle.
 #[derive(Deserialize)]
 pub(crate) struct GitSyncArgs {
     pub(crate) branch: Option<String>,
@@ -145,6 +148,7 @@ pub(crate) struct GitSyncArgs {
     pub(crate) password: Option<String>,
 }
 
+/// Arguments for committing and pushing local changes.
 #[derive(Deserialize)]
 pub(crate) struct GitPushArgs {
     pub(crate) message: Option<String>,
@@ -153,6 +157,7 @@ pub(crate) struct GitPushArgs {
     pub(crate) password: Option<String>,
 }
 
+/// Arguments for fetching commit history.
 #[derive(Deserialize)]
 pub(crate) struct GitHistoryArgs {
     pub(crate) limit: Option<usize>,
@@ -165,18 +170,22 @@ static GIT_NOTE_TIMESTAMPS_CACHE: OnceLock<Mutex<HashMap<String, (Option<i64>, O
 
 // ── Core helpers ───────────────────────────────────────────────────────────────
 
+/// Convert a git2 error into a user-facing string.
 pub(crate) fn map_git_error(error: git2::Error) -> String {
     error.message().to_string()
 }
 
+/// Open an existing git repository at the given path.
 pub(crate) fn open_repo(root: &Path) -> Result<Repository, String> {
     Repository::open(root).map_err(map_git_error)
 }
 
+/// Check whether a `.git` directory exists at the given path.
 pub(crate) fn git_repo_initialized(root: &Path) -> bool {
     Repository::open(root).is_ok()
 }
 
+/// Get the name of the current HEAD branch, if any.
 pub(crate) fn git_current_branch(repo: &Repository) -> Option<String> {
     let head = repo.head().ok()?;
     if !head.is_branch() {
@@ -185,11 +194,13 @@ pub(crate) fn git_current_branch(repo: &Repository) -> Option<String> {
     head.shorthand().map(|value| value.to_string())
 }
 
+/// Get the URL of the "origin" remote, if configured.
 pub(crate) fn git_remote_url(repo: &Repository) -> Option<String> {
     let remote = repo.find_remote("origin").ok()?;
     remote.url().map(|value| value.to_string())
 }
 
+/// True if the working tree has uncommitted changes.
 pub(crate) fn git_has_changes(repo: &Repository) -> bool {
     let mut status_opts = StatusOptions::new();
     status_opts
@@ -503,6 +514,7 @@ pub(crate) fn build_git_history(
 
 // ── Repo setup ─────────────────────────────────────────────────────────────────
 
+/// Open an existing repo or initialize a new one.
 pub(crate) fn ensure_git_repo(root: &Path) -> Result<Repository, String> {
     if let Ok(repo) = Repository::open(root) {
         return Ok(repo);
@@ -510,6 +522,7 @@ pub(crate) fn ensure_git_repo(root: &Path) -> Result<Repository, String> {
     Repository::init(root).map_err(map_git_error)
 }
 
+/// Resolve the target branch name: use provided value, current HEAD, or "main".
 pub(crate) fn resolve_target_branch(repo: &Repository, branch: Option<String>) -> String {
     let requested = branch
         .as_ref()
@@ -574,6 +587,7 @@ pub(crate) fn build_callbacks(
     callbacks
 }
 
+/// Create or update the "origin" remote to point at the given URL.
 pub(crate) fn ensure_origin_remote(repo: &Repository, remote_url: &str) -> Result<(), String> {
     let url = remote_url.trim();
     if url.is_empty() {
@@ -588,6 +602,7 @@ pub(crate) fn ensure_origin_remote(repo: &Repository, remote_url: &str) -> Resul
     Ok(())
 }
 
+/// Switch to the target branch, creating it if it doesn't exist.
 pub(crate) fn switch_or_prepare_branch(repo: &Repository, branch: &str) -> Result<(), String> {
     let name = branch.trim();
     if name.is_empty() {
@@ -659,6 +674,7 @@ pub(crate) fn commit_all_changes(
 
 // ── Fetch / merge ──────────────────────────────────────────────────────────────
 
+/// Fetch from "origin" and return the annotated commit for the target branch.
 pub(crate) fn perform_fetch<'a>(
     repo: &'a Repository,
     branch: &str,
@@ -679,6 +695,7 @@ pub(crate) fn perform_fetch<'a>(
         .map_err(map_git_error)
 }
 
+/// Fast-forward the local branch to match the fetched commit.
 pub(crate) fn fast_forward_to(
     repo: &Repository,
     branch: &str,

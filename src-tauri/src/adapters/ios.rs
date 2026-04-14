@@ -1,4 +1,4 @@
-// iOS-specific: native AVAudioRecorder, WKWebView termination recovery.
+//! iOS-specific: native AVAudioRecorder, WKWebView termination recovery.
 
 use objc::declare::ClassDecl;
 use objc::runtime::{Class, Object, Protocol, Sel, BOOL, NO, YES};
@@ -52,6 +52,7 @@ static IOS_WEBVIEW_TERMINATION_PROXY_CLASS_PTR: OnceLock<usize> = OnceLock::new(
 
 // ── Recorder state ─────────────────────────────────────────────────────────────
 
+/// Access the global native recorder state mutex.
 pub(crate) fn ios_native_recorder_state() -> &'static Mutex<Option<IosNativeRecorderState>> {
     IOS_NATIVE_RECORDER.get_or_init(|| Mutex::new(None))
 }
@@ -306,6 +307,7 @@ pub(crate) fn release_ios_webview_termination_proxies() {
 
 // ── AVFoundation ───────────────────────────────────────────────────────────────
 
+/// Dynamically load the AVFoundation framework via dlopen.
 pub(crate) fn ensure_avfoundation_loaded() -> Result<(), String> {
     let framework_path =
         CString::new("/System/Library/Frameworks/AVFoundation.framework/AVFoundation")
@@ -389,6 +391,7 @@ pub(crate) fn configure_ios_audio_for_recording() -> Result<(), String> {
     Ok(())
 }
 
+/// Deactivate the iOS audio session.
 pub(crate) fn deactivate_ios_audio() {
     unsafe {
         if let Some(av_audio_class) = Class::get("AVAudioSession") {
@@ -467,6 +470,7 @@ pub(crate) fn create_ios_audio_recorder(output_path: &Path) -> Result<*mut Objec
     }
 }
 
+/// Check if the AVAudioRecorder is currently recording.
 pub(crate) fn ios_recorder_is_recording(recorder: *mut Object) -> bool {
     if recorder.is_null() {
         return false;
@@ -543,6 +547,7 @@ unsafe fn apply_ios_interface_style_to_webview(
     Ok(())
 }
 
+/// Override the iOS interface style (dark/light) on the main webview.
 pub(crate) fn set_ios_native_theme(app: &tauri::AppHandle, theme: &str) -> Result<(), String> {
     let normalized = theme.trim().to_ascii_lowercase();
     let style = match normalized.as_str() {
@@ -624,6 +629,7 @@ unsafe fn present_ios_file_export_sheet_for_webview(
     Ok(())
 }
 
+/// Present the native iOS share sheet for exporting a file.
 pub(crate) fn present_ios_file_export_sheet(
     app: &tauri::AppHandle,
     file_path: &Path,

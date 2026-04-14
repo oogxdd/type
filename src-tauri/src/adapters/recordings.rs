@@ -73,16 +73,30 @@ main()
 "#;
 
 /// Lightweight check script — just verifies faster_whisper can be imported.
+/// If a model is provided as an argument, it also tries to load it (which may trigger download).
 const WHISPER_CHECK_SCRIPT: &str = r#"
 import json, sys
 try:
     from faster_whisper import WhisperModel
+    model_size = sys.argv[1] if len(sys.argv) > 1 else None
     available = True
     error = None
+
+    if model_size:
+        try:
+            # Try to load the model to verify it's available.
+            # This will trigger a download if model_size is a name and not yet cached.
+            # We use CPU and int8 for a lightweight check.
+            WhisperModel(model_size, device="cpu", compute_type="int8", local_files_only=False)
+        except Exception as e:
+            available = False
+            error = str(e)
+
+    json.dump({"available": available, "error": error}, sys.stdout)
 except Exception as e:
     available = False
     error = str(e)
-json.dump({"available": available, "error": error}, sys.stdout)
+    json.dump({"available": available, "error": error}, sys.stdout)
 "#;
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -105,11 +119,13 @@ pub(crate) struct RecordingWriteResult {
     pub(crate) audio_path: String,
 }
 
+/// Arguments for queuing transcription via AssemblyAI.
 #[derive(Deserialize)]
 pub(crate) struct QueueRecordingsArgs {
     pub(crate) assembly_api_key: String,
 }
 
+/// Arguments for queuing transcription via local Whisper.
 #[derive(Deserialize)]
 pub(crate) struct QueueLocalTranscriptionsArgs {
     #[serde(default = "default_whisper_model")]
@@ -120,11 +136,19 @@ fn default_whisper_model() -> String {
     DEFAULT_WHISPER_MODEL.to_string()
 }
 
+/// Arguments for re-triggering a single note's transcription.
 #[derive(Deserialize)]
 pub(crate) struct RetriggerTranscriptionArgs {
     pub(crate) note_path: String,
+    pub(crate) model: Option<String>,
 }
 
+#[derive(Deserialize)]
+pub(crate) struct CheckWhisperStatusArgs {
+    pub(crate) model: Option<String>,
+}
+
+/// Summary returned after scanning and queuing recording notes for transcription.
 #[derive(Serialize)]
 pub(crate) struct RecordingTranscriptionQueueResult {
     pub(crate) scanned: usize,
@@ -133,6 +157,7 @@ pub(crate) struct RecordingTranscriptionQueueResult {
     pub(crate) in_flight: usize,
 }
 
+/// Current state of the transcription worker queue.
 #[derive(Serialize)]
 pub(crate) struct RecordingQueueSnapshot {
     pub(crate) running: bool,
@@ -141,6 +166,7 @@ pub(crate) struct RecordingQueueSnapshot {
     pub(crate) in_flight: usize,
 }
 
+/// Single recording entry for the frontend recordings list.
 #[derive(Serialize)]
 pub(crate) struct RecordingListItem {
     pub(crate) note_path: String,
@@ -153,23 +179,27 @@ pub(crate) struct RecordingListItem {
     pub(crate) is_processing: bool,
 }
 
+/// Combined queue snapshot and recordings list for the frontend.
 #[derive(Serialize)]
 pub(crate) struct RecordingsListResult {
     pub(crate) queue: RecordingQueueSnapshot,
     pub(crate) recordings: Vec<RecordingListItem>,
 }
 
+/// Arguments for reading a recording's raw audio bytes.
 #[derive(Deserialize)]
 pub(crate) struct ReadRecordingAudioArgs {
     pub(crate) path: String,
 }
 
+/// Base64-encoded audio data with MIME type, returned to the frontend.
 #[derive(Serialize)]
 pub(crate) struct RecordingAudioPayload {
     pub(crate) mime_type: String,
     pub(crate) audio_base64: String,
 }
 
+/// Platform native recorder availability and state.
 #[derive(Serialize)]
 pub(crate) struct NativeRecorderCapabilities {
     pub(crate) supported: bool,
@@ -177,6 +207,7 @@ pub(crate) struct NativeRecorderCapabilities {
     pub(crate) started_ms: Option<i64>,
 }
 
+/// Local Whisper availability check result.
 #[derive(Serialize)]
 pub(crate) struct WhisperStatusResult {
     pub(crate) available: bool,
@@ -191,6 +222,7 @@ pub(crate) enum TranscriptionMethod {
     LocalWhisper { model: String },
 }
 
+/// A single pending transcription job in the queue.
 #[derive(Clone)]
 pub(crate) struct QueuedTranscriptionJob {
     pub(crate) note_rel: String,
@@ -199,6 +231,7 @@ pub(crate) struct QueuedTranscriptionJob {
     pub(crate) method: TranscriptionMethod,
 }
 
+/// Parsed info for a recording note found during scanning.
 #[derive(Clone)]
 pub(crate) struct RecordingNoteInfo {
     pub(crate) note_rel: String,
@@ -210,6 +243,7 @@ pub(crate) struct RecordingNoteInfo {
     pub(crate) updated_ms: Option<i64>,
 }
 
+/// In-memory state for the background transcription worker.
 #[derive(Default)]
 pub(crate) struct TranscriptionQueueState {
     pub(crate) running: bool,
@@ -257,10 +291,12 @@ static TRANSCRIPTION_QUEUE: OnceLock<Mutex<TranscriptionQueueState>> = OnceLock:
 
 // ── Queue state ────────────────────────────────────────────────────────────────
 
+/// Access the global transcription queue mutex.
 pub(crate) fn transcription_queue_state() -> &'static Mutex<TranscriptionQueueState> {
     TRANSCRIPTION_QUEUE.get_or_init(|| Mutex::new(TranscriptionQueueState::default()))
 }
 
+/// Collect note paths that are currently queued or being transcribed.
 pub(crate) fn active_transcription_note_paths() -> HashSet<String> {
     let queue = transcription_queue_state();
     let state = queue.lock().expect("transcription queue poisoned");
@@ -272,6 +308,7 @@ pub(crate) fn active_transcription_note_paths() -> HashSet<String> {
     active
 }
 
+/// Snapshot the current queue state for the frontend.
 pub(crate) fn recording_queue_snapshot() -> RecordingQueueSnapshot {
     let queue = transcription_queue_state();
     let state = queue.lock().expect("transcription queue poisoned");
@@ -290,6 +327,7 @@ pub(crate) fn recording_queue_snapshot() -> RecordingQueueSnapshot {
 
 // ── Audio helpers ──────────────────────────────────────────────────────────────
 
+/// Map a MIME type to a file extension (defaults to "webm").
 pub(crate) fn audio_extension_from_mime(mime_type: Option<&str>) -> &'static str {
     let Some(raw) = mime_type else {
         return "webm";
@@ -313,6 +351,7 @@ pub(crate) fn audio_extension_from_mime(mime_type: Option<&str>) -> &'static str
     "webm"
 }
 
+/// Infer MIME type from an audio file's extension.
 pub(crate) fn audio_mime_from_path(path: &Path) -> &'static str {
     let ext = path
         .extension()
@@ -349,6 +388,7 @@ fn recording_storage_root(root: &Path) -> PathBuf {
     root.join(RECORDINGS_STORAGE_FOLDER)
 }
 
+/// Verify that an audio path resolves inside the allowed storage folders.
 pub(crate) fn is_recording_audio_path_allowed(root: &Path, audio_path: &Path) -> bool {
     audio_path.starts_with(recording_storage_root(root))
         || audio_path.starts_with(root.join(LEGACY_RECORDINGS_FOLDER))
@@ -454,7 +494,7 @@ fn find_python() -> Option<String> {
 }
 
 /// Check whether faster-whisper is available in the system Python.
-pub(crate) fn check_whisper_availability() -> WhisperStatusResult {
+pub(crate) fn check_whisper_availability(model: Option<&str>) -> WhisperStatusResult {
     let python = match find_python() {
         Some(p) => p,
         None => {
@@ -465,7 +505,14 @@ pub(crate) fn check_whisper_availability() -> WhisperStatusResult {
             }
         }
     };
-    let output = match Command::new(&python).arg("-c").arg(WHISPER_CHECK_SCRIPT).output() {
+    
+    let mut cmd = Command::new(&python);
+    cmd.arg("-c").arg(WHISPER_CHECK_SCRIPT);
+    if let Some(m) = model {
+        cmd.arg(m);
+    }
+    
+    let output = match cmd.output() {
         Ok(o) => o,
         Err(e) => {
             return WhisperStatusResult {
@@ -493,7 +540,7 @@ pub(crate) fn check_whisper_availability() -> WhisperStatusResult {
         Err(e) => WhisperStatusResult {
             available: false,
             python_found: true,
-            error: Some(format!("Failed to parse check output: {}", e)),
+            error: Some(format!("Failed to parse check output: {}. Raw: {}", e, stdout.trim())),
         },
     }
 }
@@ -917,10 +964,12 @@ pub(crate) fn retrigger_single_transcription(
 
 // ── File allocation ────────────────────────────────────────────────────────────
 
+/// Default body for a newly created recording note (empty).
 pub(crate) fn recording_initial_body() -> String {
     String::new()
 }
 
+/// Generate a unique filename for a recording note.
 pub(crate) fn recording_note_file_name(
     folder: &Path,
     timestamp_ms: i64,

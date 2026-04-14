@@ -417,6 +417,7 @@ pub(crate) fn write_note_with_front_matter(
 
 // ── Note ID & filename generation ──────────────────────────────────────────────
 
+/// Generate a new UUIDv7-based note identifier.
 pub(crate) fn generate_note_id() -> String {
     Uuid::now_v7().to_string()
 }
@@ -522,6 +523,7 @@ pub(crate) fn slug_from_content(content: &str, fallback: &str) -> String {
     }
 }
 
+/// Find an available filename with the given prefix and slug, appending a counter on collision.
 pub(crate) fn allocate_prefixed_note_file_name(
     folder: &Path,
     prefix: &str,
@@ -540,6 +542,7 @@ pub(crate) fn allocate_prefixed_note_file_name(
     Err("Failed to allocate note filename.".to_string())
 }
 
+/// Find an available filename using the full UUIDv7 as base name.
 pub(crate) fn allocate_uuid_v7_note_file_name(
     folder: &Path,
     note_id: &str,
@@ -637,16 +640,19 @@ pub(crate) fn sort_by_order(mut names: Vec<String>, order: &[String]) -> Vec<Str
 
 // ── Folder classification ──────────────────────────────────────────────────────
 
+/// True if the folder name matches a protected system folder.
 pub(crate) fn is_system_folder_name(name: &str) -> bool {
     PROTECTED_SYSTEM_FOLDERS
         .iter()
         .any(|folder| *folder == name)
 }
 
+/// True if the folder should be hidden from the tree at root level.
 pub(crate) fn is_hidden_root_folder_name(name: &str) -> bool {
     HIDDEN_ROOT_FOLDERS.iter().any(|folder| *folder == name)
 }
 
+/// True if the path is the Feed folder.
 pub(crate) fn is_feed_folder_path(root: &Path, path: &Path) -> bool {
     path == root.join(FEED_FOLDER)
 }
@@ -711,6 +717,7 @@ fn migrate_legacy_system_folders(root: &Path) -> Result<(), String> {
 
 // ── System folders ─────────────────────────────────────────────────────────────
 
+/// True if the path is a direct child of root and a system folder.
 pub(crate) fn is_system_folder_path(root: &Path, path: &Path) -> bool {
     if path.parent() != Some(root) {
         return false;
@@ -850,6 +857,7 @@ pub(crate) fn build_folder_node(dir: &Path, rel_path: &str) -> Result<FolderNode
 
 // ── Order file I/O ─────────────────────────────────────────────────────────────
 
+/// Read the `.notes-order.json` from a directory, returning defaults if missing.
 pub(crate) fn read_order_file(dir: &Path) -> OrderFile {
     let file_path = dir.join(ORDER_FILE);
     if let Ok(contents) = fs::read_to_string(file_path) {
@@ -860,6 +868,7 @@ pub(crate) fn read_order_file(dir: &Path) -> OrderFile {
     OrderFile::default()
 }
 
+/// Persist the order file to disk (no-op for Feed folder, which sorts by date).
 pub(crate) fn write_order_file(dir: &Path, order: &OrderFile) -> Result<(), String> {
     if dir
         .file_name()
@@ -873,6 +882,7 @@ pub(crate) fn write_order_file(dir: &Path, order: &OrderFile) -> Result<(), Stri
     fs::write(file_path, contents).map_err(|err| err.to_string())
 }
 
+/// Remove entries from the folder or note order list.
 pub(crate) fn update_order_remove(
     dir: &Path,
     names: &[String],
@@ -887,6 +897,7 @@ pub(crate) fn update_order_remove(
     write_order_file(dir, &order)
 }
 
+/// Append entries to the folder or note order list if not already present.
 pub(crate) fn update_order_append(
     dir: &Path,
     names: &[String],
@@ -906,6 +917,7 @@ pub(crate) fn update_order_append(
     write_order_file(dir, &order)
 }
 
+/// Rename an entry in the order list (preserving its position).
 pub(crate) fn update_order_rename(
     dir: &Path,
     old_name: &str,

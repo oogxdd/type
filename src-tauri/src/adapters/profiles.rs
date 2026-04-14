@@ -98,6 +98,7 @@ pub(crate) struct ProfilesBackupArchive {
     pub(crate) total_bytes: u64,
 }
 
+/// Result of exporting all profiles to the Documents directory.
 #[derive(Serialize)]
 pub(crate) struct ProfilesDocumentsExport {
     pub(crate) export_path: String,
@@ -109,10 +110,12 @@ pub(crate) struct ProfilesDocumentsExport {
 
 // ── Paths ──────────────────────────────────────────────────────────────────────
 
+/// Path to the profiles JSON file in app data.
 pub(crate) fn profiles_file_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(app_data_dir(app)?.join(PROFILES_FILE))
 }
 
+/// Path to the legacy sessions file (pre-rename migration source).
 pub(crate) fn legacy_profiles_file_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(app_data_dir(app)?.join(LEGACY_PROFILES_FILE))
 }
@@ -539,6 +542,7 @@ pub(crate) fn default_profiles_state(app: &tauri::AppHandle) -> Result<NotesProf
     })
 }
 
+/// Persist profiles state to disk as pretty-printed JSON.
 pub(crate) fn write_profiles_state(
     app: &tauri::AppHandle,
     state: &NotesProfilesFile,
@@ -640,6 +644,7 @@ pub(crate) fn ensure_profiles_state(app: &tauri::AppHandle) -> Result<NotesProfi
     Ok(state)
 }
 
+/// Convert internal profiles state to the frontend-facing snapshot.
 pub(crate) fn profiles_snapshot(state: &NotesProfilesFile) -> NotesProfilesSnapshot {
     NotesProfilesSnapshot {
         active_profile_id: state.active_profile_id.clone(),
@@ -647,6 +652,7 @@ pub(crate) fn profiles_snapshot(state: &NotesProfilesFile) -> NotesProfilesSnaps
     }
 }
 
+/// Look up a profile by its id.
 pub(crate) fn find_profile<'a>(
     state: &'a NotesProfilesFile,
     profile_id: &str,
@@ -659,6 +665,7 @@ pub(crate) fn find_profile<'a>(
 
 // ── Profile CRUD ───────────────────────────────────────────────────────────────
 
+/// Switch the active profile and persist the change.
 pub(crate) fn set_active_profile_state(
     app: &tauri::AppHandle,
     profile_id: &str,
@@ -676,6 +683,7 @@ pub(crate) fn set_active_profile_state(
     Ok(state)
 }
 
+/// Create a new profile with an auto-generated id and notes root directory.
 pub(crate) fn create_profile_state(
     app: &tauri::AppHandle,
     name: &str,
@@ -712,6 +720,7 @@ pub(crate) fn create_profile_state(
     Ok(state)
 }
 
+/// Update a profile's name and/or description.
 pub(crate) fn update_profile_state(
     app: &tauri::AppHandle,
     profile_id: &str,
@@ -736,6 +745,7 @@ pub(crate) fn update_profile_state(
     Ok(state)
 }
 
+/// Delete a profile (at least one must remain). Switches active if needed.
 pub(crate) fn delete_profile_state(
     app: &tauri::AppHandle,
     profile_id: &str,
@@ -805,6 +815,7 @@ pub(crate) fn set_profile_notes_root_state(
     Ok(state)
 }
 
+/// Create a zip archive containing all profiles' notes and state.
 pub(crate) fn create_profiles_backup_zip_impl(
     app: &tauri::AppHandle,
 ) -> Result<ProfilesBackupArchive, String> {
@@ -865,6 +876,7 @@ pub(crate) fn create_profiles_backup_zip_impl(
     })
 }
 
+/// Export all profiles to the system Documents directory as plain files.
 pub(crate) fn export_profiles_to_documents_impl(
     app: &tauri::AppHandle,
 ) -> Result<ProfilesDocumentsExport, String> {

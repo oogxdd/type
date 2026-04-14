@@ -47,6 +47,7 @@ pub(crate) struct SaveHandwritingAttachmentArgs {
 }
 
 #[derive(Serialize)]
+/// Paths returned after successfully writing a handwriting note and attachment.
 pub(crate) struct HandwritingAttachmentWriteResult {
     pub(crate) folder_path: String,
     pub(crate) note_path: String,
@@ -54,6 +55,7 @@ pub(crate) struct HandwritingAttachmentWriteResult {
 }
 
 #[derive(Deserialize)]
+/// Arguments for queuing OCR (provider name, API key, model).
 pub(crate) struct QueueHandwritingOcrArgs {
     pub(crate) provider: String,
     pub(crate) api_key: String,
@@ -61,6 +63,7 @@ pub(crate) struct QueueHandwritingOcrArgs {
 }
 
 #[derive(Serialize)]
+/// Summary returned after scanning and queuing handwriting notes for OCR.
 pub(crate) struct HandwritingOcrQueueResult {
     pub(crate) scanned: usize,
     pub(crate) queued: usize,
@@ -69,6 +72,7 @@ pub(crate) struct HandwritingOcrQueueResult {
 }
 
 #[derive(Serialize)]
+/// Current state of the OCR worker queue.
 pub(crate) struct HandwritingOcrQueueSnapshot {
     pub(crate) running: bool,
     pub(crate) current_note: Option<String>,
@@ -77,6 +81,7 @@ pub(crate) struct HandwritingOcrQueueSnapshot {
 }
 
 #[derive(Serialize)]
+/// Single handwriting entry for the frontend list.
 pub(crate) struct HandwritingOcrListItem {
     pub(crate) note_path: String,
     pub(crate) folder_path: String,
@@ -89,18 +94,21 @@ pub(crate) struct HandwritingOcrListItem {
 }
 
 #[derive(Serialize)]
+/// Combined queue snapshot and handwriting list for the frontend.
 pub(crate) struct HandwritingOcrListResult {
     pub(crate) queue: HandwritingOcrQueueSnapshot,
     pub(crate) jobs: Vec<HandwritingOcrListItem>,
 }
 
 #[derive(Copy, Clone)]
+/// Supported OCR backend providers.
 pub(crate) enum HandwritingOcrProvider {
     OpenAi,
     HuggingFace,
 }
 
 #[derive(Clone)]
+/// A single pending OCR job in the queue.
 pub(crate) struct QueuedHandwritingOcrJob {
     pub(crate) note_rel: String,
     pub(crate) note_path: PathBuf,
@@ -111,6 +119,7 @@ pub(crate) struct QueuedHandwritingOcrJob {
 }
 
 #[derive(Clone)]
+/// Parsed info for a handwriting note found during scanning.
 pub(crate) struct HandwritingNoteInfo {
     pub(crate) note_rel: String,
     pub(crate) note_path: PathBuf,
@@ -122,6 +131,7 @@ pub(crate) struct HandwritingNoteInfo {
 }
 
 #[derive(Default)]
+/// In-memory state for the background OCR worker.
 pub(crate) struct HandwritingOcrQueueState {
     pub(crate) running: bool,
     pub(crate) current_note: Option<String>,
@@ -135,10 +145,12 @@ static HANDWRITING_OCR_QUEUE: OnceLock<Mutex<HandwritingOcrQueueState>> = OnceLo
 
 // ── Queue state ────────────────────────────────────────────────────────────────
 
+/// Access the global OCR queue mutex.
 pub(crate) fn handwriting_ocr_queue_state() -> &'static Mutex<HandwritingOcrQueueState> {
     HANDWRITING_OCR_QUEUE.get_or_init(|| Mutex::new(HandwritingOcrQueueState::default()))
 }
 
+/// Collect note paths that are currently queued or being OCR-processed.
 pub(crate) fn active_handwriting_note_paths() -> HashSet<String> {
     let queue = handwriting_ocr_queue_state();
     let state = queue.lock().expect("handwriting ocr queue poisoned");
@@ -150,6 +162,7 @@ pub(crate) fn active_handwriting_note_paths() -> HashSet<String> {
     active
 }
 
+/// Snapshot the current OCR queue state for the frontend.
 pub(crate) fn handwriting_queue_snapshot() -> HandwritingOcrQueueSnapshot {
     let queue = handwriting_ocr_queue_state();
     let state = queue.lock().expect("handwriting ocr queue poisoned");
@@ -166,6 +179,7 @@ pub(crate) fn handwriting_queue_snapshot() -> HandwritingOcrQueueSnapshot {
     }
 }
 
+/// Parse a provider string into the corresponding enum variant.
 pub(crate) fn parse_handwriting_ocr_provider(
     value: &str,
 ) -> Result<HandwritingOcrProvider, String> {
@@ -182,6 +196,7 @@ pub(crate) fn parse_handwriting_ocr_provider(
 
 // ── Image helpers ──────────────────────────────────────────────────────────────
 
+/// Normalize a raw extension or MIME fragment to a canonical image extension.
 pub(crate) fn normalize_image_extension(value: &str) -> Option<&'static str> {
     match value.trim().to_lowercase().as_str() {
         "png" => Some("png"),
@@ -229,6 +244,7 @@ fn image_mime_from_extension(extension: &str) -> &'static str {
     }
 }
 
+/// Determine a supported image extension from filename, MIME type, or defaults.
 pub(crate) fn supported_image_extension(
     mime_type: Option<&str>,
     file_name: Option<&str>,
@@ -319,6 +335,7 @@ pub(crate) fn collect_handwriting_notes(root: &Path) -> Result<Vec<HandwritingNo
     Ok(notes)
 }
 
+/// Update a handwriting note's OCR status and body on disk.
 pub(crate) fn update_handwriting_note_status(
     note_path: &Path,
     status: &str,
@@ -574,6 +591,7 @@ fn process_handwriting_ocr_job(job: QueuedHandwritingOcrJob) {
     }
 }
 
+/// Start a background worker thread if OCR jobs are queued and none is running.
 pub(crate) fn spawn_handwriting_ocr_worker_if_needed() {
     let should_spawn = {
         let queue = handwriting_ocr_queue_state();
@@ -619,10 +637,12 @@ pub(crate) fn spawn_handwriting_ocr_worker_if_needed() {
 
 // ── File allocation ────────────────────────────────────────────────────────────
 
+/// Default body for a newly created handwriting note (empty).
 pub(crate) fn handwriting_initial_body() -> String {
     String::new()
 }
 
+/// Generate a unique filename for a handwriting note.
 pub(crate) fn handwriting_note_file_name(
     folder: &Path,
     timestamp_ms: i64,
@@ -643,6 +663,7 @@ pub(crate) fn handwriting_note_file_name(
     )
 }
 
+/// Allocate a unique attachment file path inside the Attachments storage folder.
 pub(crate) fn handwriting_attachment_file_path(
     root: &Path,
     extension: &str,
@@ -663,6 +684,7 @@ pub(crate) fn handwriting_attachment_file_path(
     Err("Failed to allocate attachment filename.".to_string())
 }
 
+/// Resolve the target folder for a new handwriting note, falling back to Feed.
 pub(crate) fn resolve_handwriting_target_folder(
     app: &tauri::AppHandle,
     requested: Option<&str>,
