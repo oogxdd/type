@@ -43,14 +43,22 @@ export const queueLocalTranscriptions = (
   });
 
 export const retriggerTranscription = (
-  notePath: string
+  notePath: string,
+  model?: string
 ): Promise<void> =>
   invokeLogged<void>("retrigger_transcription", {
-    args: { note_path: notePath },
+    args: {
+      note_path: notePath,
+      model,
+    },
   });
 
-export const checkWhisperStatus = (): Promise<WhisperStatusResult> =>
-  invokeLogged<WhisperStatusResult>("check_whisper_status");
+export const checkWhisperStatus = (
+  model?: string
+): Promise<WhisperStatusResult> =>
+  invokeLogged<WhisperStatusResult>("check_whisper_status", {
+    args: { model },
+  });
 
 export const listRecordings = (): Promise<RecordingsListResult> =>
   invokeLogged<RecordingsListResult>("list_recordings");

@@ -210,6 +210,7 @@ export type ProfileSyncSettings = {
   noteFileNameFormat: NoteFileNameFormat;
   assemblyAiApiKey: string;
   mobileAutoTranscriptionEnabled: boolean;
+  whisperModel: string;
   handwritingOcrProvider: "openai" | "huggingface";
   openAiApiKey: string;
   openAiModel: string;

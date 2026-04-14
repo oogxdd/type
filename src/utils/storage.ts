@@ -15,6 +15,7 @@ export const DEFAULT_PROFILE_SYNC_SETTINGS: ProfileSyncSettings = {
   noteFileNameFormat: "utc_timestamp_slug",
   assemblyAiApiKey: "",
   mobileAutoTranscriptionEnabled: true,
+  whisperModel: "large-v3",
   handwritingOcrProvider: "openai",
   openAiApiKey: "",
   openAiModel: "gpt-4.1-mini",
@@ -192,6 +193,8 @@ export const getProfileSyncSettings = (profileId: string): ProfileSyncSettings =
       stored.mobileAutoTranscriptionEnabled ??
       legacyFallback.mobileAutoTranscriptionEnabled ??
       DEFAULT_PROFILE_SYNC_SETTINGS.mobileAutoTranscriptionEnabled,
+    whisperModel:
+      stored.whisperModel ?? DEFAULT_PROFILE_SYNC_SETTINGS.whisperModel,
     handwritingOcrProvider: normalizeHandwritingProvider(
       stored.handwritingOcrProvider ??
         legacyFallback.handwritingOcrProvider ??

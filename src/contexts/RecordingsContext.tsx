@@ -167,7 +167,9 @@ export function RecordingsProvider({
         let result;
         if (isDesktop) {
           // Desktop: use local whisper transcription (no API key needed)
-          result = await api.queueLocalTranscriptions();
+          result = await api.queueLocalTranscriptions(
+            syncSettings.whisperModel.trim() || undefined
+          );
         } else {
           // Mobile: use AssemblyAI (requires API key)
           const apiKey = syncSettings.assemblyAiApiKey.trim();
@@ -199,7 +201,10 @@ export function RecordingsProvider({
   const retriggerTranscription = useCallback(
     async (notePath: string) => {
       try {
-        await api.retriggerTranscription(notePath);
+        await api.retriggerTranscription(
+          notePath,
+          syncSettings.whisperModel.trim() || undefined
+        );
         setRecordingStatusMessage(`Re-queued ${notePath} for transcription.`);
         void refreshRecordings();
       } catch (error) {
@@ -207,7 +212,7 @@ export function RecordingsProvider({
         setRecordingStatusMessage(`Retrigger failed: ${message}`);
       }
     },
-    [refreshRecordings]
+    [refreshRecordings, syncSettings.whisperModel]
   );
 
   const resolveRecordingTargetFolder = useCallback(

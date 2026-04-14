@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   formatHandwritingStatus,
   formatRecordingStatus,
@@ -45,21 +46,24 @@ export function SettingsRecordingsSection() {
     ? syncSettings.huggingFaceModel
     : syncSettings.openAiModel;
 
-  const checkWhisper = useCallback(async () => {
-    setWhisperChecking(true);
-    try {
-      const status = await api.checkWhisperStatus();
-      setWhisperStatus(status);
-    } catch (error) {
-      setWhisperStatus({
-        available: false,
-        python_found: false,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      setWhisperChecking(false);
-    }
-  }, []);
+  const checkWhisper = useCallback(
+    async (model?: string) => {
+      setWhisperChecking(true);
+      try {
+        const status = await api.checkWhisperStatus(model);
+        setWhisperStatus(status);
+      } catch (error) {
+        setWhisperStatus({
+          available: false,
+          python_found: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        setWhisperChecking(false);
+      }
+    },
+    []
+  );
 
   const handleRetrigger = useCallback(
     async (notePath: string) => {
@@ -116,9 +120,49 @@ export function SettingsRecordingsSection() {
                     : "Not available"}
               </code>
             </div>
-            <div className="flex items-center justify-between gap-4 px-3 py-2 text-sm">
-              <span>Model</span>
-              <code className="text-xs">large-v3</code>
+            <div className="flex flex-col gap-2 px-3 py-2 text-sm">
+              <div className="flex items-center justify-between gap-4">
+                <span>Model / Path</span>
+                <div className="flex flex-1 items-center gap-2 max-w-[300px]">
+                  <Input
+                    type="text"
+                    className="h-8 text-xs font-mono"
+                    value={syncSettings.whisperModel}
+                    onChange={(e) =>
+                      updateSyncSettings({ whisperModel: e.target.value })
+                    }
+                    placeholder="large-v3"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck="false"
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-8 px-2 text-xs"
+                    onClick={async () => {
+                      try {
+                        const selected = await open({
+                          directory: true,
+                          multiple: false,
+                          title: "Select Whisper model directory",
+                        });
+                        if (selected && typeof selected === "string") {
+                          updateSyncSettings({ whisperModel: selected });
+                        }
+                      } catch (err) {
+                        console.error("Failed to open dialog", err);
+                      }
+                    }}
+                  >
+                    Browse
+                  </Button>
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                Model name (e.g. <code>large-v3</code>) or absolute path to a local
+                directory containing the model files (<code>model.bin</code>, etc).
+              </p>
             </div>
           </div>
           {whisperStatus?.error ? (
@@ -134,10 +178,10 @@ export function SettingsRecordingsSection() {
               variant="secondary"
               size="sm"
               type="button"
-              onClick={() => void checkWhisper()}
+              onClick={() => void checkWhisper(syncSettings.whisperModel)}
               disabled={whisperChecking}
             >
-              {whisperChecking ? "Checking..." : "Check whisper status"}
+              {whisperChecking ? "Verifying..." : "Verify / Download model"}
             </Button>
           </div>
         </section>

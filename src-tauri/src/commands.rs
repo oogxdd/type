@@ -796,12 +796,13 @@ fn retrigger_transcription(
     if note_rel.is_empty() {
         return Err("Note path is required.".to_string());
     }
-    retrigger_single_transcription(&root, note_rel, DEFAULT_WHISPER_MODEL)
+    let model = args.model.as_deref().unwrap_or(DEFAULT_WHISPER_MODEL);
+    retrigger_single_transcription(&root, note_rel, model)
 }
 
 #[tauri::command]
-fn check_whisper_status() -> WhisperStatusResult {
-    check_whisper_availability()
+fn check_whisper_status(args: CheckWhisperStatusArgs) -> WhisperStatusResult {
+    check_whisper_availability(args.model.as_deref())
 }
 
 #[tauri::command]
