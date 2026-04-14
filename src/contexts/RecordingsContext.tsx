@@ -50,6 +50,7 @@ type RecordingsContextValue = {
   refreshRecordings: () => Promise<void>;
   playRecording: (audioPath: string) => Promise<void>;
   queueRecordingTranscriptions: (trigger?: "manual" | "auto") => Promise<void>;
+  retriggerTranscription: (notePath: string) => Promise<void>;
   shouldAutoQueueTranscriptions: boolean;
 };
 
@@ -85,8 +86,10 @@ export function RecordingsProvider({
   const activeAudioObjectUrlRef = useRef<string | null>(null);
   const recordingsSignatureRef = useRef<string>("");
 
+  const isDesktop = layoutMode === "desktop";
+
   const shouldAutoQueueTranscriptions =
-    layoutMode === "desktop" || syncSettings.mobileAutoTranscriptionEnabled;
+    isDesktop || syncSettings.mobileAutoTranscriptionEnabled;
 
   const refreshRecordings = useCallback(async () => {
     setRecordingsBusy(true);
@@ -157,18 +160,25 @@ export function RecordingsProvider({
       if (transcriptionQueueBusyRef.current) {
         return;
       }
-      const apiKey = syncSettings.assemblyAiApiKey.trim();
-      if (!apiKey) {
-        if (trigger === "manual") {
-          setRecordingStatusMessage("AssemblyAI API key is required.");
-        }
-        return;
-      }
 
       transcriptionQueueBusyRef.current = true;
       setTranscriptionQueueBusy(true);
       try {
-        const result = await api.queueRecordingTranscriptions(apiKey);
+        let result;
+        if (isDesktop) {
+          // Desktop: use local whisper transcription (no API key needed)
+          result = await api.queueLocalTranscriptions();
+        } else {
+          // Mobile: use AssemblyAI (requires API key)
+          const apiKey = syncSettings.assemblyAiApiKey.trim();
+          if (!apiKey) {
+            if (trigger === "manual") {
+              setRecordingStatusMessage("AssemblyAI API key is required.");
+            }
+            return;
+          }
+          result = await api.queueRecordingTranscriptions(apiKey);
+        }
         const label =
           trigger === "manual"
             ? `Scanned ${result.scanned}, queued ${result.queued}, in-flight ${result.in_flight}.`
@@ -183,7 +193,21 @@ export function RecordingsProvider({
         void refreshRecordings();
       }
     },
-    [syncSettings.assemblyAiApiKey, refreshRecordings]
+    [isDesktop, syncSettings.assemblyAiApiKey, refreshRecordings]
+  );
+
+  const retriggerTranscription = useCallback(
+    async (notePath: string) => {
+      try {
+        await api.retriggerTranscription(notePath);
+        setRecordingStatusMessage(`Re-queued ${notePath} for transcription.`);
+        void refreshRecordings();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setRecordingStatusMessage(`Retrigger failed: ${message}`);
+      }
+    },
+    [refreshRecordings]
   );
 
   const resolveRecordingTargetFolder = useCallback(
@@ -258,7 +282,12 @@ export function RecordingsProvider({
 
   // Auto queue transcriptions timer
   useEffect(() => {
-    if (!shouldAutoQueueTranscriptions || !syncSettings.assemblyAiApiKey.trim()) {
+    if (!shouldAutoQueueTranscriptions) {
+      return;
+    }
+    // On desktop, local whisper needs no API key.
+    // On mobile, require AssemblyAI key.
+    if (!isDesktop && !syncSettings.assemblyAiApiKey.trim()) {
       return;
     }
     let intervalId: number | null = null;
@@ -278,6 +307,7 @@ export function RecordingsProvider({
     };
   }, [
     layoutMode,
+    isDesktop,
     syncSettings.assemblyAiApiKey,
     queueRecordingTranscriptions,
     shouldAutoQueueTranscriptions,
@@ -306,6 +336,7 @@ export function RecordingsProvider({
         refreshRecordings,
         playRecording,
         queueRecordingTranscriptions,
+        retriggerTranscription,
         shouldAutoQueueTranscriptions,
       }}
     >

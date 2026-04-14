@@ -1,28 +1,16 @@
-// Port interfaces (platform-agnostic contracts)
+// Port interfaces — platform-agnostic service contracts.
+// Read these to understand what each domain does. When migrating to another
+// language (JS, Dart, Swift …), reimplement the traits defined here.
 pub mod ports;
 
-// Domain modules (Rust/Tauri implementations)
+// Adapters — Rust/Tauri implementations of the port contracts.
+// Each adapter module lives in adapters/ and is re-exported at the crate root
+// so the rest of the code can import symbols without path gymnastics.
+mod adapters;
+pub(crate) use adapters::*;
+
+// Commands — thin Tauri command layer that bridges the frontend to adapters.
 mod commands;
-mod git;
-mod handwriting;
-mod notes;
-mod profiles;
-mod recordings;
-mod security;
-
-#[cfg(target_os = "ios")]
-mod ios;
-
-// Re-export all domain symbols so commands.rs can use `use super::*;`
-pub(crate) use git::*;
-pub(crate) use handwriting::*;
-pub(crate) use notes::*;
-pub(crate) use profiles::*;
-pub(crate) use recordings::*;
-pub(crate) use security::*;
-
-#[cfg(target_os = "ios")]
-pub(crate) use ios::*;
 
 // Shared external crate re-exports (used by commands.rs via `use super::*;`)
 pub(crate) use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};

@@ -1,4 +1,4 @@
-// Profile management: multi-profile support, migration from legacy sessions format.
+//! Profile management: multi-profile support, migration from legacy sessions format.
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -54,23 +54,27 @@ pub(crate) struct NotesProfilesSnapshot {
     pub(crate) profiles: Vec<NotesProfileEntry>,
 }
 
+/// Arguments for creating a new profile.
 #[derive(Deserialize)]
 pub(crate) struct CreateProfileArgs {
     pub(crate) name: String,
     pub(crate) description: Option<String>,
 }
 
+/// Arguments for switching the active profile.
 #[derive(Deserialize)]
 pub(crate) struct SetActiveProfileArgs {
     pub(crate) profile_id: String,
 }
 
+/// Arguments for changing a profile's notes root directory.
 #[derive(Deserialize)]
 pub(crate) struct SetProfileNotesRootArgs {
     pub(crate) profile_id: String,
     pub(crate) notes_root: String,
 }
 
+/// Arguments for updating a profile's name or description.
 #[derive(Deserialize)]
 pub(crate) struct UpdateProfileArgs {
     pub(crate) profile_id: String,
@@ -78,11 +82,13 @@ pub(crate) struct UpdateProfileArgs {
     pub(crate) description: Option<String>,
 }
 
+/// Arguments for deleting a profile.
 #[derive(Deserialize)]
 pub(crate) struct DeleteProfileArgs {
     pub(crate) profile_id: String,
 }
 
+/// Result of creating a zip backup of all profiles.
 #[derive(Serialize)]
 pub(crate) struct ProfilesBackupArchive {
     pub(crate) archive_path: String,

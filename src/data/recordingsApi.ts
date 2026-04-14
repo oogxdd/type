@@ -6,6 +6,7 @@ import type {
   RecordingsListResult,
   RecordingTranscriptionQueueResult,
   RecordingWriteResult,
+  WhisperStatusResult,
 } from "../types";
 
 export const saveAudioRecording = (
@@ -31,6 +32,25 @@ export const queueRecordingTranscriptions = (
       assembly_api_key: assemblyApiKey,
     },
   });
+
+export const queueLocalTranscriptions = (
+  model?: string
+): Promise<RecordingTranscriptionQueueResult> =>
+  invokeLogged<RecordingTranscriptionQueueResult>("queue_local_transcriptions", {
+    args: {
+      model: model || "large-v3",
+    },
+  });
+
+export const retriggerTranscription = (
+  notePath: string
+): Promise<void> =>
+  invokeLogged<void>("retrigger_transcription", {
+    args: { note_path: notePath },
+  });
+
+export const checkWhisperStatus = (): Promise<WhisperStatusResult> =>
+  invokeLogged<WhisperStatusResult>("check_whisper_status");
 
 export const listRecordings = (): Promise<RecordingsListResult> =>
   invokeLogged<RecordingsListResult>("list_recordings");

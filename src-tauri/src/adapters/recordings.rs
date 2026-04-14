@@ -1,4 +1,4 @@
-// Audio recording: save, transcription queue (AssemblyAI), listing.
+//! Audio recording: save, transcription queue (local Whisper + AssemblyAI fallback), listing.
 
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -6,6 +6,7 @@ use std::{
     collections::{HashSet, VecDeque},
     fs,
     path::{Path, PathBuf},
+    process::Command,
     sync::{Mutex, OnceLock},
     thread,
     time::Duration,
@@ -31,8 +32,62 @@ const ASSEMBLY_SPEECH_MODEL: &str = "universal-2";
 const ASSEMBLY_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const ASSEMBLY_MAX_POLL_ATTEMPTS: usize = 180;
 
+pub(crate) const DEFAULT_WHISPER_MODEL: &str = "large-v3";
+
+/// Python script executed as a subprocess for local whisper transcription.
+const WHISPER_TRANSCRIBE_SCRIPT: &str = r#"
+import sys, json
+
+def main():
+    audio_path = sys.argv[1]
+    model_size = sys.argv[2] if len(sys.argv) > 2 else "large-v3"
+
+    from faster_whisper import WhisperModel
+
+    model = WhisperModel(model_size, device="auto", compute_type="auto")
+    segments, info = model.transcribe(audio_path, word_timestamps=True)
+
+    text_parts = []
+    words = []
+    for segment in segments:
+        text_parts.append(segment.text)
+        if segment.words:
+            for w in segment.words:
+                words.append({
+                    "word": w.word.strip(),
+                    "start": round(w.start, 3),
+                    "end": round(w.end, 3),
+                    "probability": round(w.probability, 3),
+                })
+
+    result = {
+        "text": " ".join(text_parts).strip(),
+        "language": info.language,
+        "language_probability": round(info.language_probability, 3),
+        "duration": round(info.duration, 3),
+        "words": words,
+    }
+    json.dump(result, sys.stdout, ensure_ascii=False)
+
+main()
+"#;
+
+/// Lightweight check script — just verifies faster_whisper can be imported.
+const WHISPER_CHECK_SCRIPT: &str = r#"
+import json, sys
+try:
+    from faster_whisper import WhisperModel
+    available = True
+    error = None
+except Exception as e:
+    available = False
+    error = str(e)
+json.dump({"available": available, "error": error}, sys.stdout)
+"#;
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+/// Arguments for saving a new audio recording to disk.
 #[derive(Deserialize)]
 pub(crate) struct SaveRecordingArgs {
     pub(crate) audio_base64: String,
@@ -42,6 +97,7 @@ pub(crate) struct SaveRecordingArgs {
     pub(crate) file_name_format: NoteFileNameFormat,
 }
 
+/// Paths returned after successfully writing a recording note and audio file.
 #[derive(Serialize)]
 pub(crate) struct RecordingWriteResult {
     pub(crate) folder_path: String,
@@ -52,6 +108,21 @@ pub(crate) struct RecordingWriteResult {
 #[derive(Deserialize)]
 pub(crate) struct QueueRecordingsArgs {
     pub(crate) assembly_api_key: String,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct QueueLocalTranscriptionsArgs {
+    #[serde(default = "default_whisper_model")]
+    pub(crate) model: String,
+}
+
+fn default_whisper_model() -> String {
+    DEFAULT_WHISPER_MODEL.to_string()
+}
+
+#[derive(Deserialize)]
+pub(crate) struct RetriggerTranscriptionArgs {
+    pub(crate) note_path: String,
 }
 
 #[derive(Serialize)]
@@ -106,12 +177,26 @@ pub(crate) struct NativeRecorderCapabilities {
     pub(crate) started_ms: Option<i64>,
 }
 
+#[derive(Serialize)]
+pub(crate) struct WhisperStatusResult {
+    pub(crate) available: bool,
+    pub(crate) python_found: bool,
+    pub(crate) error: Option<String>,
+}
+
+/// Determines which transcription backend to use for a queued job.
+#[derive(Clone)]
+pub(crate) enum TranscriptionMethod {
+    AssemblyAi { api_key: String },
+    LocalWhisper { model: String },
+}
+
 #[derive(Clone)]
 pub(crate) struct QueuedTranscriptionJob {
     pub(crate) note_rel: String,
     pub(crate) note_path: PathBuf,
     pub(crate) audio_path: PathBuf,
-    pub(crate) api_key: String,
+    pub(crate) method: TranscriptionMethod,
 }
 
 #[derive(Clone)]
@@ -143,6 +228,26 @@ struct AssemblyTranscriptResponse {
     id: String,
     status: String,
     text: Option<String>,
+    error: Option<String>,
+}
+
+/// JSON output from the local whisper Python script.
+#[derive(Deserialize)]
+struct WhisperScriptOutput {
+    text: String,
+    #[allow(dead_code)]
+    language: Option<String>,
+    #[allow(dead_code)]
+    language_probability: Option<f64>,
+    #[allow(dead_code)]
+    duration: Option<f64>,
+    #[allow(dead_code)]
+    words: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+struct WhisperCheckOutput {
+    available: bool,
     error: Option<String>,
 }
 
@@ -331,6 +436,136 @@ pub(crate) fn update_recording_note_status(
     write_note_with_front_matter(note_path, &meta, &next_body)
 }
 
+// ── Local Whisper transcription ────────────────────────────────────────────────
+
+/// Find python3 binary. Tries `python3` first, then `python`.
+fn find_python() -> Option<String> {
+    for candidate in &["python3", "python"] {
+        if Command::new(candidate)
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+        {
+            return Some(candidate.to_string());
+        }
+    }
+    None
+}
+
+/// Check whether faster-whisper is available in the system Python.
+pub(crate) fn check_whisper_availability() -> WhisperStatusResult {
+    let python = match find_python() {
+        Some(p) => p,
+        None => {
+            return WhisperStatusResult {
+                available: false,
+                python_found: false,
+                error: Some("python3 not found in PATH".to_string()),
+            }
+        }
+    };
+    let output = match Command::new(&python).arg("-c").arg(WHISPER_CHECK_SCRIPT).output() {
+        Ok(o) => o,
+        Err(e) => {
+            return WhisperStatusResult {
+                available: false,
+                python_found: true,
+                error: Some(format!("Failed to run check script: {}", e)),
+            }
+        }
+    };
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return WhisperStatusResult {
+            available: false,
+            python_found: true,
+            error: Some(format!("Check script failed: {}", stderr.trim())),
+        };
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    match serde_json::from_str::<WhisperCheckOutput>(&stdout) {
+        Ok(result) => WhisperStatusResult {
+            available: result.available,
+            python_found: true,
+            error: result.error,
+        },
+        Err(e) => WhisperStatusResult {
+            available: false,
+            python_found: true,
+            error: Some(format!("Failed to parse check output: {}", e)),
+        },
+    }
+}
+
+/// Transcribe audio using local faster-whisper via Python subprocess.
+/// Returns (plain_text, full_json_string_with_words).
+fn transcribe_audio_local_whisper(
+    audio_path: &Path,
+    model: &str,
+) -> Result<(String, String), String> {
+    let python = find_python()
+        .ok_or_else(|| "python3 not found in PATH. Install Python 3 to use local transcription.".to_string())?;
+
+    // Write embedded script to a temp file for reliable execution
+    let script_path = std::env::temp_dir().join("type_whisper_transcribe.py");
+    fs::write(&script_path, WHISPER_TRANSCRIBE_SCRIPT)
+        .map_err(|e| format!("Failed to write whisper script: {}", e))?;
+
+    let audio_path_str = audio_path
+        .to_str()
+        .ok_or_else(|| "Audio path contains invalid UTF-8".to_string())?;
+
+    eprintln!(
+        "[recordings] starting local whisper transcription: model={}, audio={}",
+        model, audio_path_str
+    );
+
+    let output = Command::new(&python)
+        .arg(&script_path)
+        .arg(audio_path_str)
+        .arg(model)
+        .output()
+        .map_err(|e| format!("Failed to spawn whisper process: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Whisper transcription failed: {}", stderr.trim()));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: WhisperScriptOutput = serde_json::from_str(&stdout)
+        .map_err(|e| format!("Failed to parse whisper output: {}. Raw: {}", e, &stdout[..stdout.len().min(500)]))?;
+
+    let text = parsed.text.clone();
+    // Keep the full JSON (including words) as-is for saving
+    let full_json = stdout.trim().to_string();
+
+    eprintln!(
+        "[recordings] whisper transcription complete: {} chars, language={:?}",
+        text.len(),
+        parsed.language
+    );
+
+    Ok((text, full_json))
+}
+
+/// Save word-level transcription JSON alongside the audio file.
+/// e.g. audio-xxxx.webm → audio-xxxx.transcription.json
+fn save_word_level_json(audio_path: &Path, json_content: &str) -> Result<PathBuf, String> {
+    let stem = audio_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("audio");
+    let json_path = audio_path
+        .parent()
+        .unwrap_or(audio_path)
+        .join(format!("{}.transcription.json", stem));
+    fs::write(&json_path, json_content)
+        .map_err(|e| format!("Failed to write transcription JSON: {}", e))?;
+    Ok(json_path)
+}
+
 // ── AssemblyAI transcription ───────────────────────────────────────────────────
 
 fn transcribe_audio_bytes_with_assembly(
@@ -428,18 +663,55 @@ fn process_transcription_job(job: QueuedTranscriptionJob) {
         );
     }
 
-    let run = || -> Result<(String, String), String> {
-        let audio_bytes = fs::read(&job.audio_path).map_err(|error| error.to_string())?;
-        transcribe_audio_bytes_with_assembly(audio_bytes, &job.api_key)
+    let result = match &job.method {
+        TranscriptionMethod::LocalWhisper { model } => {
+            transcribe_audio_local_whisper(&job.audio_path, model)
+        }
+        TranscriptionMethod::AssemblyAi { api_key } => {
+            let audio_bytes = match fs::read(&job.audio_path) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    let _ = update_recording_note_status(
+                        &job.note_path,
+                        RECORDING_STATUS_FAILED,
+                        Some(e.to_string()),
+                        None,
+                        None,
+                    );
+                    eprintln!(
+                        "[recordings] failed to read audio for {}: {}",
+                        job.note_rel, e
+                    );
+                    return;
+                }
+            };
+            transcribe_audio_bytes_with_assembly(audio_bytes, api_key)
+        }
     };
 
-    match run() {
-        Ok((transcript, transcript_id)) => {
+    match result {
+        Ok((transcript, id_or_json)) => {
+            // For local whisper, id_or_json is the full JSON with word timestamps.
+            // Save word-level JSON alongside the audio file.
+            if matches!(job.method, TranscriptionMethod::LocalWhisper { .. }) {
+                if let Err(e) = save_word_level_json(&job.audio_path, &id_or_json) {
+                    eprintln!(
+                        "[recordings] failed to save word-level JSON for {}: {}",
+                        job.note_rel, e
+                    );
+                }
+            }
+
+            let transcript_id = match &job.method {
+                TranscriptionMethod::AssemblyAi { .. } => Some(id_or_json),
+                TranscriptionMethod::LocalWhisper { .. } => None,
+            };
+
             if let Err(error) = update_recording_note_status(
                 &job.note_path,
                 RECORDING_STATUS_COMPLETED,
                 None,
-                Some(transcript_id),
+                transcript_id,
                 Some(&transcript),
             ) {
                 eprintln!(
@@ -506,6 +778,141 @@ pub(crate) fn spawn_transcription_worker_if_needed() {
             state.current_recording = None;
         }
     });
+}
+
+// ── Queue helpers for local transcription ──────────────────────────────────────
+
+/// Queue all pending recordings for local whisper transcription (desktop only).
+pub(crate) fn queue_recordings_for_local_transcription(
+    root: &Path,
+    model: &str,
+) -> Result<RecordingTranscriptionQueueResult, String> {
+    let recordings = collect_recording_notes(root)?;
+    let active_recordings = active_transcription_note_paths();
+    let mut scanned = 0usize;
+    let mut skipped = 0usize;
+    let mut candidates = Vec::new();
+
+    for recording in recordings {
+        scanned += 1;
+        if !recording.audio_path.exists() {
+            let _ = update_recording_note_status(
+                &recording.note_path,
+                RECORDING_STATUS_FAILED,
+                Some("Audio file is missing.".to_string()),
+                None,
+                None,
+            );
+            skipped += 1;
+            continue;
+        }
+
+        let status = recording.status.as_str();
+        let is_active = active_recordings.contains(&recording.note_rel);
+
+        if status == RECORDING_STATUS_COMPLETED {
+            skipped += 1;
+            continue;
+        }
+
+        if matches!(
+            status,
+            crate::RECORDING_STATUS_QUEUED | RECORDING_STATUS_PROCESSING
+        ) && is_active
+        {
+            skipped += 1;
+            continue;
+        }
+
+        update_recording_note_status(
+            &recording.note_path,
+            crate::RECORDING_STATUS_QUEUED,
+            None,
+            None,
+            None,
+        )?;
+        candidates.push(QueuedTranscriptionJob {
+            note_rel: recording.note_rel,
+            note_path: recording.note_path,
+            audio_path: recording.audio_path,
+            method: TranscriptionMethod::LocalWhisper {
+                model: model.to_string(),
+            },
+        });
+    }
+
+    let queued = {
+        let queue = transcription_queue_state();
+        let mut state = queue.lock().expect("transcription queue poisoned");
+        let mut added = 0usize;
+        for job in candidates {
+            if state.known_recordings.contains(&job.note_rel) {
+                continue;
+            }
+            state.known_recordings.insert(job.note_rel.clone());
+            state.pending.push_back(job);
+            added += 1;
+        }
+        added
+    };
+
+    spawn_transcription_worker_if_needed();
+
+    let in_flight = {
+        let queue = transcription_queue_state();
+        let state = queue.lock().expect("transcription queue poisoned");
+        state.pending.len() + usize::from(state.running)
+    };
+
+    Ok(RecordingTranscriptionQueueResult {
+        scanned,
+        queued,
+        skipped,
+        in_flight,
+    })
+}
+
+/// Reset a single recording's status and re-queue it for local transcription.
+pub(crate) fn retrigger_single_transcription(
+    root: &Path,
+    note_rel: &str,
+    model: &str,
+) -> Result<(), String> {
+    let note_path = root.join(note_rel);
+    if !note_path.exists() {
+        return Err(format!("Note not found: {}", note_rel));
+    }
+    let raw = fs::read_to_string(&note_path).map_err(|e| e.to_string())?;
+    let (meta, _) = parse_note_front_matter(&raw);
+    let info = recording_info_from_note_meta(root, &note_path, note_rel, &meta)
+        .ok_or_else(|| format!("Not a recording note: {}", note_rel))?;
+
+    if !info.audio_path.exists() {
+        return Err("Audio file is missing.".to_string());
+    }
+
+    // Reset status to queued
+    update_recording_note_status(&note_path, crate::RECORDING_STATUS_QUEUED, None, None, None)?;
+
+    // Add to queue
+    {
+        let queue = transcription_queue_state();
+        let mut state = queue.lock().expect("transcription queue poisoned");
+        // Remove from known so it can be re-queued
+        state.known_recordings.remove(note_rel);
+        state.known_recordings.insert(note_rel.to_string());
+        state.pending.push_back(QueuedTranscriptionJob {
+            note_rel: note_rel.to_string(),
+            note_path,
+            audio_path: info.audio_path,
+            method: TranscriptionMethod::LocalWhisper {
+                model: model.to_string(),
+            },
+        });
+    }
+
+    spawn_transcription_worker_if_needed();
+    Ok(())
 }
 
 // ── File allocation ────────────────────────────────────────────────────────────

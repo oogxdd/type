@@ -1,4 +1,4 @@
-// Notes filesystem: folder tree, front-matter parsing, ordering, system folders.
+//! Notes filesystem: folder tree, front-matter parsing, ordering, system folders.
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -44,6 +44,7 @@ const HIDDEN_ROOT_FOLDERS: [&str; 3] = [
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+/// A note's display name and relative path.
 #[derive(Serialize)]
 pub(crate) struct NoteEntry {
     pub(crate) name: String,
@@ -85,6 +86,7 @@ pub(crate) struct NoteFrontMatter {
     pub(crate) passthrough_lines: Vec<String>,
 }
 
+/// Arguments for setting folder and note ordering within a parent.
 #[derive(Deserialize)]
 pub(crate) struct SetOrderArgs {
     pub(crate) parent: String,
@@ -94,12 +96,14 @@ pub(crate) struct SetOrderArgs {
     pub(crate) note_order: Vec<String>,
 }
 
+/// Arguments for updating a note's created timestamp.
 #[derive(Deserialize)]
 pub(crate) struct SetNoteTimestampArgs {
     pub(crate) path: String,
     pub(crate) timestamp_ms: i64,
 }
 
+/// Recursive tree node representing a folder with child folders and notes.
 #[derive(Serialize)]
 pub(crate) struct FolderNode {
     pub(crate) name: String,
@@ -108,6 +112,7 @@ pub(crate) struct FolderNode {
     pub(crate) notes: Vec<NoteEntry>,
 }
 
+/// Persisted sort order for folders and notes within a directory.
 #[derive(Default, Deserialize, Serialize)]
 pub(crate) struct OrderFile {
     #[serde(default)]
@@ -126,6 +131,7 @@ pub(crate) enum NoteFileNameFormat {
     UuidV7PrefixSlug,
 }
 
+/// Arguments for creating a new note.
 #[derive(Deserialize)]
 pub(crate) struct CreateNoteArgs {
     pub(crate) folder_path: Option<String>,
@@ -135,6 +141,7 @@ pub(crate) struct CreateNoteArgs {
     pub(crate) file_name_format: NoteFileNameFormat,
 }
 
+/// Result returned after creating a note, containing its relative path.
 #[derive(Serialize)]
 pub(crate) struct CreateNoteResult {
     pub(crate) path: String,

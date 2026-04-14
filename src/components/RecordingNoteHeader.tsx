@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Mic } from "lucide-react";
-import { useProfiles } from "../contexts/ProfilesContext";
 import { useRecordings } from "../contexts/RecordingsContext";
 import {
   formatRecordingStatus,
@@ -15,20 +14,19 @@ type RecordingNoteHeaderProps = {
 
 export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderProps) {
   const {
-    syncSettings: { assemblyAiApiKey },
-  } = useProfiles();
-  const {
     recordingsList,
     recordingsQueue,
     recordingsError,
     transcriptionQueueBusy,
     refreshRecordings,
     queueRecordingTranscriptions,
+    retriggerTranscription,
     playRecording,
     activeAudioPath,
     activeAudioSrc,
   } = useRecordings();
   const [playerBusy, setPlayerBusy] = useState(false);
+  const [retriggerBusy, setRetriggerBusy] = useState(false);
 
   const recordingItem = useMemo(
     () => recordingsList.find((item) => item.note_path === notePath),
@@ -47,9 +45,11 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
   const queuePositionLabel = isProcessing ? "in progress" : isQueued ? queuePosition || "queued" : "-";
 
   const audioPath = recordingItem?.audio_path || preview?.recordingAudioPath || null;
-  const hasApiKey = assemblyAiApiKey.trim().length > 0;
   const showTranscribeNow =
     Boolean(audioPath) && !isQueued && !isProcessing && effectiveStatus !== "completed";
+  const showRetrigger =
+    Boolean(audioPath) && !isQueued && !isProcessing &&
+    (effectiveStatus === "completed" || effectiveStatus === "failed");
 
   const loadAudioPlayer = useCallback(async () => {
     if (!audioPath) {
@@ -62,6 +62,17 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
       setPlayerBusy(false);
     }
   }, [audioPath, playRecording]);
+
+  const handleRetrigger = useCallback(async () => {
+    if (!notePath) return;
+    setRetriggerBusy(true);
+    try {
+      await retriggerTranscription(notePath);
+      await refreshRecordings();
+    } finally {
+      setRetriggerBusy(false);
+    }
+  }, [notePath, retriggerTranscription, refreshRecordings]);
 
   useEffect(() => {
     if (!isRecording) {
@@ -128,6 +139,16 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
             {transcriptionQueueBusy ? "Queueing..." : "Transcribe now"}
           </button>
         ) : null}
+        {showRetrigger ? (
+          <button
+            type="button"
+            className="recording-note-btn"
+            onClick={() => void handleRetrigger()}
+            disabled={retriggerBusy}
+          >
+            {retriggerBusy ? "Re-queueing..." : "Retranscribe"}
+          </button>
+        ) : null}
         {audioPath && !(activeAudioPath === audioPath && activeAudioSrc) ? (
           <button
             type="button"
@@ -150,10 +171,8 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
         <p className="recording-note-message">Audio file is missing for this note.</p>
       )}
 
-      {!hasApiKey && showTranscribeNow ? (
-        <p className="recording-note-message">
-          Add an AssemblyAI API key in settings to run transcription.
-        </p>
+      {recordingItem?.error ? (
+        <p className="recording-note-message error">{recordingItem.error}</p>
       ) : null}
       {recordingsError ? <p className="recording-note-message error">{recordingsError}</p> : null}
     </div>

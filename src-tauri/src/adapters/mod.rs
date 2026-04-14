@@ -1,0 +1,26 @@
+// Rust/Tauri implementations of the port interfaces.
+//
+// Each module here implements the contracts defined in `crate::ports`.
+// These are the concrete adapters — when migrating to another platform,
+// replace these files with equivalent implementations in the target language.
+
+pub(crate) mod git;
+pub(crate) mod handwriting;
+pub(crate) mod notes;
+pub(crate) mod profiles;
+pub(crate) mod recordings;
+pub(crate) mod security;
+
+#[cfg(target_os = "ios")]
+pub(crate) mod ios;
+
+// Re-export all adapter symbols so the rest of the crate can use them directly.
+pub(crate) use git::*;
+pub(crate) use handwriting::*;
+pub(crate) use notes::*;
+pub(crate) use profiles::*;
+pub(crate) use recordings::*;
+pub(crate) use security::*;
+
+#[cfg(target_os = "ios")]
+pub(crate) use ios::*;

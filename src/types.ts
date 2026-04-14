@@ -162,6 +162,12 @@ export type RecordingAudioPayload = {
   audio_base64: string;
 };
 
+export type WhisperStatusResult = {
+  available: boolean;
+  python_found: boolean;
+  error: string | null;
+};
+
 export type NativeRecorderCapabilities = {
   supported: boolean;
   recording: boolean;

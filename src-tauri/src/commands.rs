@@ -737,7 +737,9 @@ fn queue_recording_transcriptions(
             note_rel: recording.note_rel,
             note_path: recording.note_path,
             audio_path: recording.audio_path,
-            api_key: api_key.to_string(),
+            method: TranscriptionMethod::AssemblyAi {
+                api_key: api_key.to_string(),
+            },
         });
     }
 
@@ -766,6 +768,40 @@ fn queue_recording_transcriptions(
         skipped,
         in_flight,
     })
+}
+
+#[tauri::command]
+fn queue_local_transcriptions(
+    app: tauri::AppHandle,
+    args: QueueLocalTranscriptionsArgs,
+) -> Result<RecordingTranscriptionQueueResult, String> {
+    ensure_security_unlocked_for_app(&app)?;
+    let root = ensured_notes_root(&app)?;
+    let model = if args.model.trim().is_empty() {
+        DEFAULT_WHISPER_MODEL.to_string()
+    } else {
+        args.model.trim().to_string()
+    };
+    queue_recordings_for_local_transcription(&root, &model)
+}
+
+#[tauri::command]
+fn retrigger_transcription(
+    app: tauri::AppHandle,
+    args: RetriggerTranscriptionArgs,
+) -> Result<(), String> {
+    ensure_security_unlocked_for_app(&app)?;
+    let root = ensured_notes_root(&app)?;
+    let note_rel = args.note_path.trim();
+    if note_rel.is_empty() {
+        return Err("Note path is required.".to_string());
+    }
+    retrigger_single_transcription(&root, note_rel, DEFAULT_WHISPER_MODEL)
+}
+
+#[tauri::command]
+fn check_whisper_status() -> WhisperStatusResult {
+    check_whisper_availability()
 }
 
 #[tauri::command]
@@ -1266,6 +1302,9 @@ pub(super) fn run() {
             save_audio_recording,
             save_handwriting_attachment,
             queue_recording_transcriptions,
+            queue_local_transcriptions,
+            retrigger_transcription,
+            check_whisper_status,
             queue_handwriting_ocr,
             list_recordings,
             list_handwriting_ocr_jobs,

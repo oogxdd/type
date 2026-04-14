@@ -1,4 +1,4 @@
-// Encryption, password hashing, and lock-mode management.
+//! Encryption, password hashing, and lock-mode management.
 
 use argon2::{
     password_hash::{
@@ -83,22 +83,26 @@ pub(crate) struct SecurityState {
     pub(crate) auto_lock_on_background: bool,
 }
 
+/// Arguments for enabling encryption (unlock and panic passwords).
 #[derive(Deserialize)]
 pub(crate) struct EnableSecurityArgs {
     pub(crate) unlock_password: String,
     pub(crate) panic_password: String,
 }
 
+/// Arguments for unlocking the app with a password.
 #[derive(Deserialize)]
 pub(crate) struct UnlockSecurityArgs {
     pub(crate) password: String,
 }
 
+/// Arguments for updating security preferences (e.g. auto-lock behavior).
 #[derive(Deserialize)]
 pub(crate) struct SetSecurityPreferencesArgs {
     pub(crate) auto_lock_on_background: bool,
 }
 
+/// Result of an unlock attempt, including panic-trigger and reset flags.
 #[derive(Serialize)]
 pub(crate) struct SecurityUnlockResult {
     pub(crate) unlocked: bool,

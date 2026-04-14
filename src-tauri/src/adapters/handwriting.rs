@@ -1,4 +1,4 @@
-// Handwriting OCR: save attachments, OCR queue (OpenAI / HuggingFace), listing.
+//! Handwriting OCR: save attachments, OCR queue (OpenAI / HuggingFace), listing.
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use reqwest::blocking::Client;
@@ -35,6 +35,7 @@ const HUGGINGFACE_RETRY_DELAY: Duration = Duration::from_secs(2);
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+/// Arguments for saving a handwriting image attachment.
 #[derive(Deserialize)]
 pub(crate) struct SaveHandwritingAttachmentArgs {
     pub(crate) image_base64: String,

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   formatHandwritingStatus,
   formatRecordingStatus,
@@ -9,6 +9,8 @@ import { useRecordings } from "../../contexts/RecordingsContext";
 import { useHandwriting } from "../../contexts/HandwritingContext";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import * as api from "../../data/recordingsApi";
+import type { WhisperStatusResult } from "../../types";
 
 export function SettingsRecordingsSection() {
   const { syncSettings, updateSyncSettings } = useProfiles();
@@ -19,6 +21,8 @@ export function SettingsRecordingsSection() {
     recordingsBusy,
     recordingsError,
     refreshRecordings,
+    queueRecordingTranscriptions,
+    retriggerTranscription,
   } = useRecordings();
   const {
     handwritingStatusMessage,
@@ -29,6 +33,10 @@ export function SettingsRecordingsSection() {
     refreshHandwritingJobs,
   } = useHandwriting();
 
+  const [whisperStatus, setWhisperStatus] = useState<WhisperStatusResult | null>(null);
+  const [whisperChecking, setWhisperChecking] = useState(false);
+  const [retriggerBusyPath, setRetriggerBusyPath] = useState<string | null>(null);
+
   const isHuggingFace = syncSettings.handwritingOcrProvider === "huggingface";
   const providerKey = isHuggingFace
     ? syncSettings.huggingFaceApiKey
@@ -37,10 +45,40 @@ export function SettingsRecordingsSection() {
     ? syncSettings.huggingFaceModel
     : syncSettings.openAiModel;
 
+  const checkWhisper = useCallback(async () => {
+    setWhisperChecking(true);
+    try {
+      const status = await api.checkWhisperStatus();
+      setWhisperStatus(status);
+    } catch (error) {
+      setWhisperStatus({
+        available: false,
+        python_found: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setWhisperChecking(false);
+    }
+  }, []);
+
+  const handleRetrigger = useCallback(
+    async (notePath: string) => {
+      setRetriggerBusyPath(notePath);
+      try {
+        await retriggerTranscription(notePath);
+        await refreshRecordings();
+      } finally {
+        setRetriggerBusyPath(null);
+      }
+    },
+    [retriggerTranscription, refreshRecordings]
+  );
+
   useEffect(() => {
     void refreshRecordings();
     void refreshHandwritingJobs();
-  }, [refreshHandwritingJobs, refreshRecordings]);
+    void checkWhisper();
+  }, [refreshHandwritingJobs, refreshRecordings, checkWhisper]);
 
   return (
     <div className="space-y-4">
@@ -53,14 +91,69 @@ export function SettingsRecordingsSection() {
 
       <div className="space-y-4">
         <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
-          <h3 className="text-sm font-semibold text-foreground">Voice transcription</h3>
+          <h3 className="text-sm font-semibold text-foreground">Local transcription (Whisper)</h3>
+          <p className="text-xs text-muted-foreground">
+            Desktop transcription uses faster-whisper locally. No API key needed.
+          </p>
+          <div className="overflow-hidden rounded-md border border-border/70">
+            <div className="flex items-center justify-between gap-4 border-b border-border/70 px-3 py-2 text-sm">
+              <span>Python</span>
+              <code className="text-xs">
+                {whisperStatus === null
+                  ? "..."
+                  : whisperStatus.python_found
+                    ? "Found"
+                    : "Not found"}
+              </code>
+            </div>
+            <div className="flex items-center justify-between gap-4 border-b border-border/70 px-3 py-2 text-sm">
+              <span>faster-whisper</span>
+              <code className="text-xs">
+                {whisperStatus === null
+                  ? "..."
+                  : whisperStatus.available
+                    ? "Available"
+                    : "Not available"}
+              </code>
+            </div>
+            <div className="flex items-center justify-between gap-4 px-3 py-2 text-sm">
+              <span>Model</span>
+              <code className="text-xs">large-v3</code>
+            </div>
+          </div>
+          {whisperStatus?.error ? (
+            <p className="text-xs text-destructive">{whisperStatus.error}</p>
+          ) : null}
+          {!whisperStatus?.available && !whisperChecking ? (
+            <p className="text-xs text-muted-foreground">
+              Install faster-whisper: <code>pip install faster-whisper</code>
+            </p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              type="button"
+              onClick={() => void checkWhisper()}
+              disabled={whisperChecking}
+            >
+              {whisperChecking ? "Checking..." : "Check whisper status"}
+            </Button>
+          </div>
+        </section>
+
+        <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
+          <h3 className="text-sm font-semibold text-foreground">Voice transcription (mobile)</h3>
+          <p className="text-xs text-muted-foreground">
+            Mobile uses AssemblyAI cloud transcription.
+          </p>
           <label className="grid gap-2 text-sm">
             <span className="text-sm font-medium text-foreground">AssemblyAI API key</span>
             <Input
               type="password"
               value={syncSettings.assemblyAiApiKey}
               onChange={(event) => updateSyncSettings({ assemblyAiApiKey: event.target.value })}
-              placeholder="Paste AssemblyAI key"
+              placeholder="Paste AssemblyAI key (mobile only)"
               autoCapitalize="off"
               autoCorrect="off"
             />
@@ -181,6 +274,14 @@ export function SettingsRecordingsSection() {
             >
               {recordingsBusy ? "Refreshing..." : "Refresh voice queue"}
             </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              type="button"
+              onClick={() => void queueRecordingTranscriptions("manual")}
+            >
+              Transcribe all pending
+            </Button>
           </div>
           {recordingsError ? <p className="text-xs text-destructive">{recordingsError}</p> : null}
         </section>
@@ -231,6 +332,20 @@ export function SettingsRecordingsSection() {
                     <span>updated {formatUpdatedAt(item.updated_ms)}</span>
                   </div>
                   {item.error ? <p className="text-xs text-destructive">{item.error}</p> : null}
+                  {!item.is_queued && !item.is_processing && item.audio_path ? (
+                    <div className="mt-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        type="button"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => void handleRetrigger(item.note_path)}
+                        disabled={retriggerBusyPath === item.note_path}
+                      >
+                        {retriggerBusyPath === item.note_path ? "Re-queueing..." : "Retranscribe"}
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
               ))
             )}

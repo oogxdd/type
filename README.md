@@ -9,7 +9,7 @@ Local markdown notes app with filesystem storage and optional Git sync. Runs on 
 - **Git sync** — push/pull notes across devices using any Git remote
 - **SSH key auth** — generate Ed25519 keypair in-app for passwordless SSH sync
 - **Conflict resolution** — merge conflicts save both versions as sibling files, sync is never blocked
-- **Audio recording + transcription** via AssemblyAI
+- **Audio recording + transcription** — local Whisper on desktop, AssemblyAI on mobile
 - **Multi-profile** — separate notes folders with independent sync settings
 - **Desktop** — three-pane layout with keyboard shortcuts
 - **Mobile** — native-feeling stack navigation, swipe actions, pull-to-refresh
@@ -180,14 +180,51 @@ Both files are plain readable markdown. Compare them, edit the original, delete 
 
 ## Audio recording + transcription
 
-- Recordings are saved in `Recordings/recording-<timestamp>/`
-- Each recording folder contains:
-  - `audio.*` (captured file)
-  - `transcript.md` (written after successful transcription)
-  - `.transcription-status.json` (queue/progress/error state)
+- Recordings are saved in `Recordings/` with a unique audio file per recording
 - Start/stop recording from the left panel (desktop) or recording screen (mobile)
+- Desktop auto-queues pending recordings for local transcription
+
+### Desktop: local transcription (faster-whisper)
+
+Desktop uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper) to transcribe audio locally on your machine. No API key needed.
+
+**Prerequisites (macOS with Apple Silicon):**
+
+1. Install Python 3 (if not already present):
+   ```bash
+   brew install python
+   ```
+
+2. Install faster-whisper:
+   ```bash
+   pip3 install faster-whisper
+   ```
+
+3. The model (`large-v3`) downloads automatically on first transcription (~3 GB). This is cached in `~/.cache/huggingface/hub/` and reused for subsequent runs.
+
+**How it works:**
+
+- After a recording is saved, the app auto-queues it for transcription
+- A background worker runs faster-whisper via Python subprocess
+- Plain transcript text is written into the recording note body
+- Word-level timestamps JSON is saved alongside the audio file as `<audio-name>.transcription.json`
+- Check whisper status in **Settings → Recordings → Local transcription**
+- Use the **Retranscribe** button on any recording to re-run transcription
+
+**Verify setup:**
+
+```bash
+python3 -c "from faster_whisper import WhisperModel; print('OK')"
+```
+
+You can also check status in **Settings → Recordings** — it shows whether Python and faster-whisper are detected.
+
+### Mobile: cloud transcription (AssemblyAI)
+
+Mobile uses AssemblyAI for cloud-based transcription.
+
 - Add your AssemblyAI key in **Settings → Recordings**
-- Desktop auto-queues pending recordings for transcription when a key is present
+- Enable auto-queue in settings for automatic transcription on mobile
 
 ## Mobile UX
 
