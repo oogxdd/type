@@ -1,0 +1,39 @@
+# Session Context
+
+## User Prompts
+
+### Prompt 1
+
+Hi. Currently. I have the "production" version (the build from long time ago, before i implemented the releases workflow) of this app installed as well as development. I want to understand where my data is stored currently. (I want to just "backup" all of the notes and start fresh with the production one)
+
+
+Another question. When I will build the production .dmg and install. Will it save the data to the same location as when I will develop it? Or will it be different?
+
+### Prompt 2
+
+➜  ~ open  ~/Library/Application Support/com.digital.type/
+The files /Users/digital/Library/Application and /Users/digital/Support/com.digital.type do not exist.
+➜  ~ cd Projects/type/app
+➜  ~ ls  ~/Library/Application Support/
+ls: /Users/digital/Library/Application: No such file or directory
+ls: Support/: No such file or directory
+➜  ~ sudo
+➜  ~ sudo ls  ~/Library/Application Support/
+Password:
+ls: /Users/digital/Library/Application: No such file or directory
+ls: Support/: No such file or di...
+
+### Prompt 3
+
+ok now. please explore all inside com.digital.type2. merge all profiles into single one. normalize all the data (i remember when developing i was making changes on the file structure and notes naming and other things). i already backed this up
+
+### Prompt 4
+
+actually explore within the DATA folder inside this repo. merge all profiles and all data into single one. normalize all the data (i remember when developing i was making changes on the file structure and notes naming and other things). i already backed this up
+
+### Prompt 5
+
+я полагаю что из unsorted они должны перейти в feed.
+
+и посмотри где у меня сейчас папки в приложении сохраняются? они сохраняются внутри "Folders/" или прямо в root?
+

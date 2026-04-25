@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "97497489e080",
+  "session_id": "bb860dd5-4948-47f3-8f14-2f676485ab1e",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-25T16:23:14.600963Z",
+  "branch": "clean-architecture",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "package.json",
+    "src-tauri/Cargo.lock",
+    "src-tauri/Cargo.toml",
+    "src-tauri/capabilities/default.json",
+    "src-tauri/src/commands.rs",
+    "src-tauri/tauri.conf.json",
+    "src/App.tsx",
+    "yarn.lock"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f2c162071915",
+  "token_usage": {
+    "input_tokens": 147,
+    "cache_creation_tokens": 96128,
+    "cache_read_tokens": 2901602,
+    "output_tokens": 30143,
+    "api_call_count": 57
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-25T16:23:14.479489Z",
+    "agent_lines": 713,
+    "human_added": 86,
+    "human_modified": 1,
+    "human_removed": 0,
+    "total_committed": 800,
+    "agent_percentage": 89.125
+  }
+}
