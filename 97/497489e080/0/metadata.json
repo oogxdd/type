@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "97497489e080",
+  "session_id": "93bdeee7-a0e0-41d9-85e6-296aec571913",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-25T16:23:14.446583Z",
+  "branch": "clean-architecture",
+  "checkpoints_count": 3,
+  "files_touched": [
+    ".github/workflows/release-desktop.yml",
+    "package.json",
+    "src-tauri/Cargo.lock",
+    "src-tauri/Cargo.toml",
+    "src-tauri/capabilities/default.json",
+    "src-tauri/src/commands.rs",
+    "src-tauri/tauri.conf.json",
+    "src/App.tsx",
+    "src/hooks/useDesktopUpdater.ts",
+    "yarn.lock"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "c9660479379c",
+  "token_usage": {
+    "input_tokens": 43,
+    "cache_creation_tokens": 135989,
+    "cache_read_tokens": 986280,
+    "output_tokens": 9259,
+    "api_call_count": 36
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-25T16:23:14.351405Z",
+    "agent_lines": 799,
+    "human_added": 0,
+    "human_modified": 1,
+    "human_removed": 0,
+    "total_committed": 800,
+    "agent_percentage": 99.875
+  }
+}
