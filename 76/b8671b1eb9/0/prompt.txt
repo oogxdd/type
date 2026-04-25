@@ -1,0 +1,157 @@
+Hi. See this:
+
+hi. look. im iterating on the tauri app. i develop it but i also use the production version of it. it's simple with mobile app. i develop in simulator or device, and then i build and rollout build to testflight and then can update my actual production version which i use day-to-day already
+ 
+the question is with the desktop. i have installed the dmg. but how i can sorta make an updater there? so i can build, publish the update, and then from the app i can install the update without reinstalling. how i can make this done?Yes, Tauri has a built-in updater (via the tauri-plugin-updater) that does exactly what you want for desktop. It works great with your existing DMG workflow: you build → publish an update (e.g. to GitHub Releases) → the installed app (from the DMG) automatically detects, downloads, and installs the update without you having to reinstall a new DMG every time.
+This mirrors your mobile/TestFlight flow perfectly. The updater uses the .app.tar.gz bundle (not the DMG) on macOS, so once the user has the app installed from DMG, future updates just replace the app bundle in place.
+Quick Setup (Tauri v2 – this is the current version)
+
+Install the updater plugin
+In your project root:Bashnpm install @tauri-apps/plugin-updater(Also recommended: npm install @tauri-apps/plugin-dialog so you can show nice update prompts.)In src-tauri/Cargo.toml (or via cargo add):tomltauri-plugin-updater = "2"
+tauri-plugin-dialog = "2"Register it in src-tauri/src/lib.rs (or main.rs):Rusttauri::Builder::default()
+    .plugin(tauri_plugin_updater::init())
+    .plugin(tauri_plugin_dialog::init())
+    // ...
+    .run(tauri::generate_context!())
+Generate updater signing keys (required for security)
+Run once:Bashnpx tauri signer generate -- -w ~/.tauri/your-app.keyThis creates:
+~/.tauri/your-app.key (private key – keep it secret, never commit it)
+~/.tauri/your-app.key.pub (public key)
+Add the public key content (not the file path) to src-tauri/tauri.conf.json later.
+Configure the updater in tauri.conf.jsonJSON{
+  "tauri": {
+    "updater": {
+      "active": true,
+      "pubkey": "YOUR_PUBLIC_KEY_HERE",   // paste the whole key string from .pub file
+      "endpoints": [
+        "https://github.com/YOUR_USERNAME/YOUR_REPO/releases/latest/download/latest.json"
+      ],
+      "createUpdaterArtifacts": true
+    }
+  }
+}
+Add permissions (in src-tauri/capabilities/default.json or your capability file):JSON{
+  "permissions": [
+    "updater:allow-check",
+    "updater:allow-download-and-install"
+  ]
+}
+Check for updates from your frontend (JS/TS)
+Create a simple updater function (e.g. call it on app start):TypeScriptimport { check } from '@tauri-apps/plugin-updater';
+import { ask } from '@tauri-apps/plugin-dialog';
+import { relaunch } from '@tauri-apps/plugin-process';
+
+async function checkForUpdates() {
+  const update = await check();
+  if (!update?.available) return;
+
+  const yes = await ask(
+    `Update to ${update.version} is available!\n\nRelease notes:\n${update.body || 'No notes'}`,
+    { title: 'Update Available', kind: 'info', okLabel: 'Update Now' }
+  );
+
+  if (yes) {
+    await update.downloadAndInstall();
+    await relaunch();        // restarts the app with the new version
+  }
+}
+
+// Call this early, e.g. in your main component
+// onMount(() => { checkForUpdates(); });
+
+Publishing Updates (your new "TestFlight" flow)
+Recommended & simplest way: GitHub Releases + tauri-action
+Use the official tauri-action in GitHub Actions. It:
+
+Builds your app (including .app.tar.gz + .sig)
+Creates a latest.json automatically
+Uploads everything to a new GitHub release
+
+Then just bump the version in tauri.conf.json (or package.json), push a tag or merge to a release branch, and you're done. The endpoint you added earlier (.../releases/latest/download/latest.json) will point to it automatically.
+You can also do it manually (create release + upload the macOS artifacts + latest.json), but the action is way cleaner and identical to your mobile build process.
+Important macOS Notes
+
+The DMG is only for the initial install. Updates use the .app.tar.gz (Tauri generates it automatically when createUpdaterArtifacts: true).
+Your app must be code-signed and notarized for the updater to work smoothly (you probably already do this for DMG builds).
+The updater will replace the .app bundle in /Applications (or wherever the user installed it).
+
+Once set up, you just:
+
+Build (tauri build)
+Publish release (GitHub)
+Your production app (the one you use daily) will see the update on next launch or when you call check().
+
+This is the standard way most Tauri apps do it (very similar to Electron/Sparkle on macOS).
+If you hit any snags (e.g. signing, GitHub private repo, custom server, etc.), just paste the error or your current tauri.conf.json and I’ll help debug it step-by-step. You’ve already got the mobile side sorted — desktop updater is the missing piece and it’s actually pretty smooth once the keys + config are in place. 🚀
+
+and please implement the updater for desktop version of the app and tell me how do i use it (how do i publish releases and how do i receive releases in my installed .dmg)
+
+---
+
+REDACTED
+
+---
+
+hey. how i can regenerate (i want to choose different password)
+
+➜  app git:(clean-architecture) ✗ mkdir -p ~/.tauri && npx tauri signer generate -w ~/.tauri/type.key
+Please enter a password to protect the secret key.
+Password:
+Password (one more time):
+Deriving a key from the password in order to encrypt the secret key...
+Your keypair was generated successfully:
+Private: /Users/digital/.tauri/type.key (Keep it secret!)
+Public: /Users/digital/.tauri/type.key.pub
+---------------------------
+
+Environment variables used to sign:
+- `TAURI_SIGNING_PRIVATE_KEY`: String of your private key
+- `TAURI_SIGNING_PRIVATE_KEY_PATH`: Path to your private key file
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`:  Your private key password (optional if key has no password)
+
+ATTENTION: If you lose your private key OR password, you'll not be able to sign your update package and updates will not work
+
+---
+
+➜  app git:(clean-architecture) ✗ npx tauri signer generate -w ~/.tauri/type.key
+Please enter a password to protect the secret key.
+Password:
+Password (one more time):
+Deriving a key from the password in order to encrypt the secret key...
+thread '<unnamed>' (185916) panicked at crates/tauri-cli/src/signer/generate.rs:40:10:
+Unable to write keypair: GenericError("Key generation aborted:\n/Users/digital/.tauri/type.key already exists\nIf you really want to overwrite the existing key pair, add the --force switch to force this operation.")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+[1]    8001 abort      npx tauri signer generate -w ~/.tauri/type.key
+➜  app git:(clean-architecture) ✗
+
+---
+
+ok. i added signing key to config. now
+
+1) please explain me how it works. why do i need the signin key
+2) how did you configure workflow on desktop release. how does it work under the hood?
+3) what if i want to release both mobile and desktop version
+
+4) maybe you teach me the proper workflow? eg what i should do next (merge everything to main and tag the release)? how do i approach development further (i merge out from main to a feature branch. then when i want to make a release i merge everything from feature branch back to main and tag the release and push and it triggers the workflows?) (for now dev environment is not really needed)
+
+---
+
+ok. i added signing key to config. now
+
+1) please explain me how it works. why do i need the signin key
+2) how did you configure workflow on desktop release. how does it work under the hood?
+3) what if i want to release both mobile and desktop version
+
+4) maybe you teach me the proper workflow? eg what i should do next (merge everything to main and tag the release)? how do i approach development further (i merge out from main to a feature branch. then when i want to make a release i merge everything from feature branch back to main and tag the release and push and it triggers the workflows?) (for now dev environment is not really needed)
+
+---
+
+hi
+
+---
+
+hi
+
+---
+
+can you commit the current progress
