@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "f4a396241cd9",
+  "session_id": "af96ae75-1d7b-4e08-97ab-3df1de535caa",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-30T00:50:33.644699Z",
+  "branch": "clean-architecture",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "src-tauri/src/adapters/git.rs"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "7a1cc7b6de32",
+  "token_usage": {
+    "input_tokens": 38,
+    "cache_creation_tokens": 47784,
+    "cache_read_tokens": 808973,
+    "output_tokens": 8518,
+    "api_call_count": 28
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-30T00:50:33.582677Z",
+    "agent_lines": 1,
+    "human_added": 721,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 722,
+    "agent_percentage": 0.13850415512465375
+  }
+}
