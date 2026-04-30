@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "f4a396241cd9",
+  "session_id": "93bdeee7-a0e0-41d9-85e6-296aec571913",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-30T00:50:33.552912Z",
+  "branch": "clean-architecture",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".entire/logs/entire.log",
+    ".gitignore",
+    "scripts/import_apple_notes.py",
+    "scripts/merge_notes.py",
+    "src-tauri/src/adapters/git.rs"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "edad6e691007",
+  "checkpoint_transcript_start": 172,
+  "transcript_lines_at_start": 172,
+  "token_usage": {
+    "input_tokens": 2197,
+    "cache_creation_tokens": 59253,
+    "cache_read_tokens": 94523,
+    "output_tokens": 1132,
+    "api_call_count": 4
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-30T00:50:33.394373Z",
+    "agent_lines": 545,
+    "human_added": 177,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 722,
+    "agent_percentage": 75.48476454293629
+  }
+}

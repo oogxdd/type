@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "f4a396241cd9",
+  "strategy": "manual-commit",
+  "branch": "clean-architecture",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".entire/logs/entire.log",
+    ".gitignore",
+    "scripts/import_apple_notes.py",
+    "scripts/merge_notes.py",
+    "src-tauri/src/adapters/git.rs"
+  ],
+  "sessions": [
+    {
+      "metadata": "/f4/a396241cd9/0/metadata.json",
+      "transcript": "/f4/a396241cd9/0/full.jsonl",
+      "context": "/f4/a396241cd9/0/context.md",
+      "content_hash": "/f4/a396241cd9/0/content_hash.txt",
+      "prompt": "/f4/a396241cd9/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 2197,
+    "cache_creation_tokens": 59253,
+    "cache_read_tokens": 94523,
+    "output_tokens": 1132,
+    "api_call_count": 4
+  }
+}
