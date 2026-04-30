@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "f4a396241cd9",
+  "session_id": "bb860dd5-4948-47f3-8f14-2f676485ab1e",
+  "strategy": "manual-commit",
+  "created_at": "2026-04-30T00:50:33.964588Z",
+  "branch": "clean-architecture",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "scripts/import_apple_notes.py",
+    "scripts/merge_notes.py"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f10a6ce18e15",
+  "token_usage": {
+    "input_tokens": 240,
+    "cache_creation_tokens": 604787,
+    "cache_read_tokens": 12972743,
+    "output_tokens": 65188,
+    "api_call_count": 134
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-04-30T00:50:33.715524Z",
+    "agent_lines": 0,
+    "human_added": 838,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 838,
+    "agent_percentage": 0
+  }
+}
