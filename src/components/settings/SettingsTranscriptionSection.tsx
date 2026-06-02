@@ -108,6 +108,13 @@ export function SettingsTranscriptionSection() {
   const [whisperSettingUp, setWhisperSettingUp] = useState(false);
   const [busyPaths, setBusyPaths] = useState<Set<string>>(new Set());
 
+  // Navigate to the note itself. AppShell listens for this and leaves Settings.
+  const openNote = useCallback((notePath: string) => {
+    window.dispatchEvent(
+      new CustomEvent("open-note", { detail: { notePath } })
+    );
+  }, []);
+
   const setPathBusy = useCallback((path: string, busy: boolean) => {
     setBusyPaths((prev) => {
       const next = new Set(prev);
@@ -404,14 +411,19 @@ export function SettingsTranscriptionSection() {
                   className="flex flex-col gap-2 border-b border-border/70 px-3 py-3 last:border-b-0"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-foreground">
+                    <button
+                      type="button"
+                      onClick={() => openNote(item.note_path)}
+                      title="Open note"
+                      className="group min-w-0 flex-1 text-left"
+                    >
+                      <div className="truncate text-sm font-medium text-foreground group-hover:underline">
                         {recordingTitle(item.note_path)}
                       </div>
                       <div className="truncate text-[11px] text-muted-foreground">
                         {item.folder_path || item.note_path}
                       </div>
-                    </div>
+                    </button>
                     <StatusBadge status={status} />
                   </div>
 

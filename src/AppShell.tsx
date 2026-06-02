@@ -1,6 +1,7 @@
 import {
   useMemo,
   useCallback,
+  useEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -474,6 +475,42 @@ export function AppShell() {
       setSelectedNotes,
     ]
   );
+
+  // Open a note by path, leaving settings/other modes if needed. Mirrors a
+  // plain note click. Used by the Transcription settings page (via the
+  // "open-note" window event) so a row can jump straight to its note.
+  const openNoteByPath = useCallback(
+    (notePath: string) => {
+      const noteParentPath = getNoteParentPath(notePath);
+      setAppMode("notes");
+      setSelectedFolders(new Set(noteParentPath ? [noteParentPath] : []));
+      setLastSelectedFolder(noteParentPath);
+      setActiveFolder(noteParentPath);
+      setSelectedNotes(new Set([notePath]));
+      setLastSelectedNote(notePath);
+      setActiveNote(notePath);
+    },
+    [
+      setActiveFolder,
+      setActiveNote,
+      setLastSelectedFolder,
+      setLastSelectedNote,
+      setSelectedFolders,
+      setSelectedNotes,
+    ]
+  );
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const notePath = (event as CustomEvent<{ notePath?: string }>).detail
+        ?.notePath;
+      if (notePath) {
+        openNoteByPath(notePath);
+      }
+    };
+    window.addEventListener("open-note", handler);
+    return () => window.removeEventListener("open-note", handler);
+  }, [openNoteByPath]);
 
   const onHandwritingImportChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
