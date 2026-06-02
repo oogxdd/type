@@ -17,11 +17,23 @@ where
 }
 
 pub(super) fn run() {
-    let app = tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_ota::init())
+        .plugin(tauri_plugin_ota::init());
+
+    // Native desktop auto-updater (replaces the whole app binary). Not available
+    // on mobile, so it is only registered for desktop targets. iOS keeps using
+    // the OTA JS-bundle plugin above.
+    #[cfg(desktop)]
+    {
+        builder = builder
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_process::init());
+    }
+
+    let app = builder
         .setup(|_app| {
             let app_handle = _app.handle();
             crate::ensure_security_runtime_initialized_for_setup(&app_handle)?;
