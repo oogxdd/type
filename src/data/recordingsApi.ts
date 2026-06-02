@@ -54,10 +54,11 @@ export const retriggerTranscription = (
   });
 
 export const checkWhisperStatus = (
-  model?: string
+  model?: string,
+  setup?: boolean
 ): Promise<WhisperStatusResult> =>
   invokeLogged<WhisperStatusResult>("check_whisper_status", {
-    args: { model },
+    args: { model, setup: setup ?? false },
   });
 
 export const listRecordings = (): Promise<RecordingsListResult> =>

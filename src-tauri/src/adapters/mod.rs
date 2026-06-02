@@ -10,6 +10,7 @@ pub(crate) mod notes;
 pub(crate) mod profiles;
 pub(crate) mod recordings;
 pub(crate) mod security;
+pub(crate) mod whisper_env;
 
 #[cfg(target_os = "ios")]
 pub(crate) mod ios;
@@ -21,6 +22,7 @@ pub(crate) use notes::*;
 pub(crate) use profiles::*;
 pub(crate) use recordings::*;
 pub(crate) use security::*;
+pub(crate) use whisper_env::*;
 
 #[cfg(target_os = "ios")]
 pub(crate) use ios::*;

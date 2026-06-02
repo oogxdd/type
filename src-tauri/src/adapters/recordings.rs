@@ -146,6 +146,10 @@ pub(crate) struct RetriggerTranscriptionArgs {
 #[derive(Deserialize)]
 pub(crate) struct CheckWhisperStatusArgs {
     pub(crate) model: Option<String>,
+    /// When true, provision the managed env (and download the model) instead of
+    /// only probing readiness. Driven by the explicit "Set up" button.
+    #[serde(default)]
+    pub(crate) setup: bool,
 }
 
 /// Summary returned after scanning and queuing recording notes for transcription.
@@ -218,8 +222,15 @@ pub(crate) struct WhisperStatusResult {
 /// Determines which transcription backend to use for a queued job.
 #[derive(Clone)]
 pub(crate) enum TranscriptionMethod {
-    AssemblyAi { api_key: String },
-    LocalWhisper { model: String },
+    AssemblyAi {
+        api_key: String,
+    },
+    /// Local faster-whisper running in the app-managed Python environment.
+    /// Carries an `AppHandle` so the worker can provision the env lazily.
+    LocalWhisper {
+        model: String,
+        app: tauri::AppHandle,
+    },
 }
 
 /// A single pending transcription job in the queue.
@@ -478,34 +489,37 @@ pub(crate) fn update_recording_note_status(
 
 // ── Local Whisper transcription ────────────────────────────────────────────────
 
-/// Find python3 binary. Tries `python3` first, then `python`.
-fn find_python() -> Option<String> {
-    for candidate in &["python3", "python"] {
-        if Command::new(candidate)
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-        {
-            return Some(candidate.to_string());
-        }
+/// Report whether local transcription is ready, optionally provisioning it.
+///
+/// With `setup == false` this is a cheap, side-effect-free probe (safe to call
+/// on UI mount / while polling). With `setup == true` it provisions the managed
+/// env and, when a model name is supplied, loads it — triggering a download of
+/// the model weights when not already cached.
+pub(crate) fn check_whisper_availability(
+    app: &tauri::AppHandle,
+    model: Option<&str>,
+    setup: bool,
+) -> WhisperStatusResult {
+    if !setup {
+        let ready = crate::whisper_env_ready(app);
+        return WhisperStatusResult {
+            available: ready,
+            python_found: ready,
+            error: None,
+        };
     }
-    None
-}
 
-/// Check whether faster-whisper is available in the system Python.
-pub(crate) fn check_whisper_availability(model: Option<&str>) -> WhisperStatusResult {
-    let python = match find_python() {
-        Some(p) => p,
-        None => {
+    let python = match crate::ensure_whisper_env(app) {
+        Ok(path) => path,
+        Err(error) => {
             return WhisperStatusResult {
                 available: false,
                 python_found: false,
-                error: Some("python3 not found in PATH".to_string()),
+                error: Some(error),
             }
         }
     };
-    
+
     let mut cmd = Command::new(&python);
     cmd.arg("-c").arg(WHISPER_CHECK_SCRIPT);
     if let Some(m) = model {
@@ -545,15 +559,13 @@ pub(crate) fn check_whisper_availability(model: Option<&str>) -> WhisperStatusRe
     }
 }
 
-/// Transcribe audio using local faster-whisper via Python subprocess.
+/// Transcribe audio using local faster-whisper via the managed Python subprocess.
 /// Returns (plain_text, full_json_string_with_words).
 fn transcribe_audio_local_whisper(
     audio_path: &Path,
     model: &str,
+    python: &Path,
 ) -> Result<(String, String), String> {
-    let python = find_python()
-        .ok_or_else(|| "python3 not found in PATH. Install Python 3 to use local transcription.".to_string())?;
-
     // Write embedded script to a temp file for reliable execution
     let script_path = std::env::temp_dir().join("type_whisper_transcribe.py");
     fs::write(&script_path, WHISPER_TRANSCRIBE_SCRIPT)
@@ -568,7 +580,7 @@ fn transcribe_audio_local_whisper(
         model, audio_path_str
     );
 
-    let output = Command::new(&python)
+    let output = Command::new(python)
         .arg(&script_path)
         .arg(audio_path_str)
         .arg(model)
@@ -711,8 +723,13 @@ fn process_transcription_job(job: QueuedTranscriptionJob) {
     }
 
     let result = match &job.method {
-        TranscriptionMethod::LocalWhisper { model } => {
-            transcribe_audio_local_whisper(&job.audio_path, model)
+        TranscriptionMethod::LocalWhisper { model, app } => {
+            // Provision the managed Python env on first use; subsequent jobs are
+            // instant. Any setup failure surfaces as the note's transcription error.
+            match crate::ensure_whisper_env(app) {
+                Ok(python) => transcribe_audio_local_whisper(&job.audio_path, model, &python),
+                Err(error) => Err(format!("Failed to set up local transcription: {error}")),
+            }
         }
         TranscriptionMethod::AssemblyAi { api_key } => {
             let audio_bytes = match fs::read(&job.audio_path) {
@@ -831,6 +848,7 @@ pub(crate) fn spawn_transcription_worker_if_needed() {
 
 /// Queue all pending recordings for local whisper transcription (desktop only).
 pub(crate) fn queue_recordings_for_local_transcription(
+    app: &tauri::AppHandle,
     root: &Path,
     model: &str,
 ) -> Result<RecordingTranscriptionQueueResult, String> {
@@ -884,6 +902,7 @@ pub(crate) fn queue_recordings_for_local_transcription(
             audio_path: recording.audio_path,
             method: TranscriptionMethod::LocalWhisper {
                 model: model.to_string(),
+                app: app.clone(),
             },
         });
     }
@@ -921,6 +940,7 @@ pub(crate) fn queue_recordings_for_local_transcription(
 
 /// Reset a single recording's status and re-queue it for local transcription.
 pub(crate) fn retrigger_single_transcription(
+    app: &tauri::AppHandle,
     root: &Path,
     note_rel: &str,
     model: &str,
@@ -954,6 +974,7 @@ pub(crate) fn retrigger_single_transcription(
             audio_path: info.audio_path,
             method: TranscriptionMethod::LocalWhisper {
                 model: model.to_string(),
+                app: app.clone(),
             },
         });
     }

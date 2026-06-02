@@ -5,6 +5,7 @@ import { SettingsProfileSection } from "./settings/SettingsProfileSection";
 import { SettingsSyncSection } from "./settings/SettingsSyncSection";
 import { SettingsAppearanceSection } from "./settings/SettingsAppearanceSection";
 import { SettingsRecordingsSection } from "./settings/SettingsRecordingsSection";
+import { SettingsTranscriptionSection } from "./settings/SettingsTranscriptionSection";
 import { SettingsUpdatesSection } from "./settings/SettingsUpdatesSection";
 import { SettingsSecuritySection } from "./settings/SettingsSecuritySection";
 
@@ -17,6 +18,7 @@ export type SettingsSectionId =
   | "sync"
   | "updates"
   | "appearance"
+  | "transcription"
   | "recordings"
   | "security";
 type SettingsSection = {
@@ -30,6 +32,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "sync", title: "Sync" },
   { id: "updates", title: "Updates" },
   { id: "appearance", title: "Appearance" },
+  { id: "transcription", title: "Transcription" },
   { id: "recordings", title: "Recordings" },
   { id: "security", title: "Security" },
 ];
@@ -73,6 +76,7 @@ function SettingsDetail({ sectionId }: { sectionId: SettingsSectionId }) {
   if (sectionId === "sync") return <SettingsSyncSection />;
   if (sectionId === "updates") return <SettingsUpdatesSection />;
   if (sectionId === "appearance") return <SettingsAppearanceSection />;
+  if (sectionId === "transcription") return <SettingsTranscriptionSection />;
   if (sectionId === "recordings") return <SettingsRecordingsSection />;
   if (sectionId === "security") return <SettingsSecuritySection />;
   return null;

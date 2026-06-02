@@ -261,7 +261,7 @@ pub(super) fn queue_local_transcriptions(
     } else {
         args.model.trim().to_string()
     };
-    queue_recordings_for_local_transcription(&root, &model)
+    queue_recordings_for_local_transcription(&app, &root, &model)
 }
 
 #[tauri::command]
@@ -276,12 +276,15 @@ pub(super) fn retrigger_transcription(
         return Err("Note path is required.".to_string());
     }
     let model = args.model.as_deref().unwrap_or(DEFAULT_WHISPER_MODEL);
-    retrigger_single_transcription(&root, note_rel, model)
+    retrigger_single_transcription(&app, &root, note_rel, model)
 }
 
 #[tauri::command]
-pub(super) fn check_whisper_status(args: CheckWhisperStatusArgs) -> WhisperStatusResult {
-    check_whisper_availability(args.model.as_deref())
+pub(super) fn check_whisper_status(
+    app: tauri::AppHandle,
+    args: CheckWhisperStatusArgs,
+) -> WhisperStatusResult {
+    check_whisper_availability(&app, args.model.as_deref(), args.setup)
 }
 
 #[tauri::command]
