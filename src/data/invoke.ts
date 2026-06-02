@@ -3,7 +3,12 @@ import { invoke } from "@tauri-apps/api/core";
 const LOG_PREFIX = "[notes]";
 const SENSITIVE_PATTERN = /(password|token|secret|api.?key|authorization)/i;
 
+const MAX_LOGGED_STRING = 200;
+
 const sanitizeForLog = (value: unknown): unknown => {
+  if (typeof value === "string" && value.length > MAX_LOGGED_STRING) {
+    return `${value.slice(0, MAX_LOGGED_STRING)}… <${value.length} chars>`;
+  }
   if (Array.isArray(value)) {
     return value.map(sanitizeForLog);
   }
@@ -31,7 +36,7 @@ export const invokeLogged = async <T,>(
   }
   try {
     const result = await invoke<T>(command, args);
-    console.log("result", result);
+    console.log("result", sanitizeForLog(result));
     console.groupEnd();
     return result;
   } catch (error) {

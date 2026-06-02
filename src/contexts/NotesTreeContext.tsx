@@ -132,11 +132,36 @@ export function NotesTreeProvider({
   const allNotes = useMemo(() => collectAllNotes(tree), [tree]);
   const shouldWarmNotePreviews =
     layoutMode !== "phone" || Boolean(activeFolder) || Boolean(activeNote);
-  const previewSourceNotes = shouldWarmNotePreviews
-    ? layoutMode === "desktop" && !shouldNestNotesInNavigation
-      ? notes
-      : allNotes
-    : [];
+  const previewSourceNotes = useMemo<NoteEntry[]>(() => {
+    if (!shouldWarmNotePreviews) {
+      return [];
+    }
+    if (layoutMode === "desktop" && !shouldNestNotesInNavigation) {
+      return notes;
+    }
+    // On phone, the home composer and editor don't render the notes list — only
+    // the active note's own preview is used (recording/handwriting header). When
+    // no folder list is on screen, warming every note in the vault here is pure
+    // waste, and it's what froze the UI on the first keystroke of a new note:
+    // creating the note flips `activeNote` truthy, which would otherwise kick off
+    // a full-vault read (getNoteMeta + readNote per note) on the main thread.
+    if (layoutMode === "phone" && !activeFolder) {
+      if (!activeNote) {
+        return [];
+      }
+      const active = allNotes.find((note) => note.path === activeNote);
+      return active ? [active] : [];
+    }
+    return allNotes;
+  }, [
+    shouldWarmNotePreviews,
+    layoutMode,
+    shouldNestNotesInNavigation,
+    notes,
+    activeFolder,
+    activeNote,
+    allNotes,
+  ]);
   const allNotePreviews = useNotePreviews(previewSourceNotes);
   const notePreviews = useMemo(() => {
     const previews: Record<string, NotePreview> = {};
