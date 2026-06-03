@@ -30,6 +30,11 @@ export const invokeLogged = async <T,>(
   command: string,
   args?: Record<string, unknown>
 ): Promise<T> => {
+  // Verbose IPC tracing is a development aid only; production builds invoke
+  // straight through so the console stays quiet and there's no logging overhead.
+  if (!import.meta.env.DEV) {
+    return invoke<T>(command, args);
+  }
   console.groupCollapsed(`${LOG_PREFIX} invoke ${command}`);
   if (args) {
     console.log("args", sanitizeForLog(args));
@@ -47,6 +52,9 @@ export const invokeLogged = async <T,>(
 };
 
 export const logGroup = (label: string, data?: Record<string, unknown>) => {
+  if (!import.meta.env.DEV) {
+    return;
+  }
   console.groupCollapsed(`${LOG_PREFIX} ${label}`);
   if (data) {
     console.log(data);

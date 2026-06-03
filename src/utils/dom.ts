@@ -33,15 +33,12 @@ export const escapeSelectorValue = (value: string) => {
 
 export const confirmAction = async (message: string) => {
   try {
-    const result = window.confirm(message);
-    console.log("[confirm] window", message, result);
-    return result;
+    return window.confirm(message);
   } catch (error) {
     console.warn("[confirm] window failed, falling back", error);
   }
   try {
     const result = await confirmDialog(message);
-    console.log("[confirm] dialog", message, result);
     return Boolean(result);
   } catch (error) {
     console.error("[confirm] dialog failed", error);

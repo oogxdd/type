@@ -79,7 +79,6 @@ export function TreeRow({
         if (target && target.closest(".tree-toggle, .rename-input")) {
           return;
         }
-        console.log("[folders] select click", node.id);
         onSelect(event, node.id);
       }}
       onContextMenu={(event) => {
