@@ -31,7 +31,7 @@ type TabletLayoutProps = {
     notePath: string,
     parentPath?: string
   ) => Promise<void>;
-  navigationFolders: import("../tree/types").FlattenedItem[];
+  navigationFolders: import("@/features/tree/types").FlattenedItem[];
   onToggleFolder: (path: string) => void;
   openFolderActionSheet: (path: string) => void;
   onDeleteNote: (path: string) => Promise<boolean>;

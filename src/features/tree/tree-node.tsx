@@ -1,9 +1,9 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
-import type { TreeItem } from "../tree/types";
-import type { EdgeSnap } from "./FoldersPanel";
-import { TreeRow } from "./TreeRow";
-import { NavNoteRow } from "./NavNoteRow";
-import type { NotePreview } from "../utils/format";
+import type { TreeItem } from "./types";
+import type { EdgeSnap } from "./folders-panel";
+import { TreeRow } from "./tree-row";
+import { NavNoteRow } from "./nav-note-row";
+import type { NotePreview } from "@/utils/format";
 
 export type TreeNodeProps = {
   node: TreeItem;

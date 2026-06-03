@@ -1,6 +1,6 @@
 import { MobileFoldersScreen } from "../components/MobileFoldersScreen";
 import { MobileRecentScreen } from "../components/MobileRecentScreen";
-import type { FlattenedItem } from "../../tree/types";
+import type { FlattenedItem } from "@/features/tree/types";
 import type { RecentBucket } from "../hooks/useRecentBuckets";
 
 type PhoneFoldersScreenProps = {

@@ -19,12 +19,12 @@ import {
   buildTreeItems,
   findNode,
   flattenTree,
-} from "../utils/treeOps";
-import { removeChildrenOf } from "../tree/utilities";
+} from "@/features/tree/tree-ops";
+import { removeChildrenOf } from "@/features/tree/dnd-tree";
 import { type NotePreview } from "../utils/format";
 import { confirmAction, focusNoScroll } from "../utils/dom";
-import type { TreeItem } from "../tree/types";
-import type { FlattenedItem } from "../tree/types";
+import type { TreeItem } from "@/features/tree/types";
+import type { FlattenedItem } from "@/features/tree/types";
 import { useLayoutMode } from "../mobile/useLayoutMode";
 import { useTheme } from "./ThemeContext";
 

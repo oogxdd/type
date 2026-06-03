@@ -2,8 +2,8 @@ import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { ChevronRight, File, Folder, Mic, PenLine } from "lucide-react";
-import type { TreeItem } from "../tree/types";
-import { Collapsible, CollapsibleContent } from "./ui/collapsible";
+import type { TreeItem } from "./types";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import {
   SidebarMenu,
   SidebarMenuBadge,
@@ -11,12 +11,12 @@ import {
   SidebarMenuItem,
   SidebarMenuSub,
   SidebarMenuSubButton,
-} from "./ui/sidebar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { TreeNode } from "./TreeNode";
-import { RecentTreeNode } from "./RecentTreeNode";
-import type { RecentNode } from "./RecentTreeNode";
-import type { NotePreview } from "../utils/format";
+} from "@/components/ui/sidebar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TreeNode } from "./tree-node";
+import { RecentTreeNode } from "./recent-tree-node";
+import type { RecentNode } from "./recent-tree-node";
+import type { NotePreview } from "@/utils/format";
 
 const DROP_PREFIX = "drop";
 const ROOT_ID = "root";

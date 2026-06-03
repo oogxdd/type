@@ -82,7 +82,7 @@ src/
 
 - [x] **0. Setup** — branch `refactor-frontend-structure`, this doc. (README change stashed.)
 - [x] **1. features/editor/** — editor components + headers + lens + useNoteEditor + editor utils ✅ tsc clean
-- [ ] **2. features/tree/** — tree components + useDragDrop + useKeyboardNavigation + src/tree/* + treeOps
+- [x] **2. features/tree/** — tree components + useDragDrop + useKeyboardNavigation + src/tree/* + treeOps ✅ tsc clean (src/tree/ root removed)
 - [ ] **3. features/notes/** — note-row + use-note-previews
 - [ ] **4. features/security/** — lock-screen
 - [ ] **5. features/recording/** — use-audio-recorder
@@ -102,3 +102,6 @@ src/
 - `noUnusedLocals` is on — moves must also drop now-unused imports.
 - Settings desktop (8 sections, incl. Transcription) and mobile (7 sections) are
   genuinely different UIs, not pure dupes — kept as two variants under one feature.
+- `features/tree/keyboard-coordinates.ts` (was `tree/keyboardCoordinates.ts`) has
+  **no importers** — appears to be dead (DnD context uses only PointerSensor).
+  Moved as-is; candidate for deletion (flag to user, out of refactor scope).

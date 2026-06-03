@@ -5,12 +5,12 @@ import type {
   DragOverEvent,
   DragStartEvent,
 } from "@dnd-kit/core";
-import { moveItems, setOrder } from "../data/notesApi";
-import { logGroup } from "../data/invoke";
-import type { DragData, FolderNode } from "../types";
-import { isSystemFolder } from "../constants";
-import { getNoteParentPath } from "../utils/notes";
-import { DROP_PREFIX } from "../components/FoldersPanel";
+import { moveItems, setOrder } from "@/data/notesApi";
+import { logGroup } from "@/data/invoke";
+import type { DragData, FolderNode } from "@/types";
+import { isSystemFolder } from "@/constants";
+import { getNoteParentPath } from "@/utils/notes";
+import { DROP_PREFIX } from "./folders-panel";
 import {
   findNode,
   findParentAndIndex,
@@ -27,9 +27,9 @@ import {
   buildNoteOrderMap,
   reorderList,
   flattenTree,
-} from "../utils/treeOps";
-import type { TreeItem } from "../tree/types";
-import type { FlattenedItem } from "../tree/types";
+} from "./tree-ops";
+import type { TreeItem } from "./types";
+import type { FlattenedItem } from "./types";
 
 type UseDragDropArgs = {
   tree: FolderNode | null;

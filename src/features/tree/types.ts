@@ -1,4 +1,4 @@
-import type { NoteEntry } from "../types";
+import type { NoteEntry } from "@/types";
 
 export type TreeItem = {
   id: string;
