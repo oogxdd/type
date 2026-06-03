@@ -312,26 +312,35 @@ export function NotesTreeProvider({
     setRenameValue(name);
   }, []);
 
+  // Carry an active/selected folder over to its new path after a rename.
+  const applyFolderRename = useCallback(
+    (oldPath: string, newPath: string) => {
+      if (activeFolder === oldPath) {
+        setActiveFolder(newPath);
+      }
+      if (selectedFolders.has(oldPath)) {
+        const nextSelected = new Set(selectedFolders);
+        nextSelected.delete(oldPath);
+        nextSelected.add(newPath);
+        setSelectedFolders(nextSelected);
+        setLastSelectedFolder(newPath);
+      }
+    },
+    [activeFolder, selectedFolders, setActiveFolder, setLastSelectedFolder, setSelectedFolders]
+  );
+
   const submitRenameFolder = useCallback(async () => {
     if (!renamingFolder || !renameValue.trim()) {
       setRenamingFolder(null);
       return;
     }
-    const wasSelected = selectedFolders.has(renamingFolder);
-    const wasActive = activeFolder === renamingFolder;
-    const newPath = await api.renameItem(renamingFolder, renameValue.trim());
+    const oldPath = renamingFolder;
+    const newPath = await api.renameItem(oldPath, renameValue.trim());
     setRenamingFolder(null);
     setRenameValue("");
     await refreshTree();
-    if (wasActive) setActiveFolder(newPath);
-    if (wasSelected) {
-      const nextSelected = new Set(selectedFolders);
-      nextSelected.delete(renamingFolder);
-      nextSelected.add(newPath);
-      setSelectedFolders(nextSelected);
-      setLastSelectedFolder(newPath);
-    }
-  }, [activeFolder, refreshTree, renamingFolder, renameValue, selectedFolders, setActiveFolder, setLastSelectedFolder, setSelectedFolders]);
+    applyFolderRename(oldPath, newPath);
+  }, [applyFolderRename, refreshTree, renamingFolder, renameValue]);
 
   const cancelRenameFolder = useCallback(() => {
     setRenamingFolder(null);
@@ -349,22 +358,11 @@ export function NotesTreeProvider({
       if (!normalizedNextName || normalizedNextName === currentName) {
         return;
       }
-      const wasSelected = selectedFolders.has(path);
-      const wasActive = activeFolder === path;
       const newPath = await api.renameItem(path, normalizedNextName);
       await refreshTree();
-      if (wasActive) {
-        setActiveFolder(newPath);
-      }
-      if (wasSelected) {
-        const nextSelected = new Set(selectedFolders);
-        nextSelected.delete(path);
-        nextSelected.add(newPath);
-        setSelectedFolders(nextSelected);
-        setLastSelectedFolder(newPath);
-      }
+      applyFolderRename(path, newPath);
     },
-    [activeFolder, refreshTree, selectedFolders, setActiveFolder, setLastSelectedFolder, setSelectedFolders]
+    [applyFolderRename, refreshTree]
   );
 
   // -- Delete
