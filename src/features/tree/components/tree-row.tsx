@@ -2,9 +2,9 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import type { TreeItem } from "./types";
+import type { TreeItem } from "../lib/types";
 import type { DragData } from "@/types";
-import { dropId } from "./folders-panel";
+import { dropId } from "../lib/tree-dnd";
 
 export type TreeRowProps = {
   node: TreeItem;

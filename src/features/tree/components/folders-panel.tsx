@@ -2,7 +2,7 @@ import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { ChevronRight, File, Folder, Mic, PenLine } from "lucide-react";
-import type { TreeItem } from "./types";
+import type { TreeItem } from "../lib/types";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import {
   SidebarMenu,
@@ -17,14 +17,11 @@ import { TreeNode } from "./tree-node";
 import { RecentTreeNode } from "./recent-tree-node";
 import type { RecentNode } from "./recent-tree-node";
 import type { NotePreview } from "@/utils/format";
+import { ROOT_ID, dropId, type EdgeSnap } from "../lib/tree-dnd";
 
-const DROP_PREFIX = "drop";
-const ROOT_ID = "root";
 const EMPTY_STRING_SET = new Set<string>();
 
-const dropId = (id: string, position: "inside") => `${DROP_PREFIX}:${id}:${position}`;
 
-export type EdgeSnap = { id: string; position: "before" | "after" } | null;
 
 type FoldersPanelProps = {
   treeData: TreeItem[];
@@ -512,4 +509,3 @@ export function FoldersPanel({
   );
 }
 
-export { DROP_PREFIX, ROOT_ID, dropId };

@@ -1,6 +1,6 @@
 import { ChevronRight, Folder } from "lucide-react";
 import { useRef } from "react";
-import type { FlattenedItem } from "@/features/tree/types";
+import type { FlattenedItem } from "@/features/tree/lib/types";
 import { getDisplayFolderName } from "../types";
 
 type MobileFoldersScreenProps = {

@@ -1,7 +1,7 @@
 import type { FolderNode } from "@/types";
 import type { TreeItem } from "./types";
 import { flattenTree } from "./dnd-tree";
-import { DROP_PREFIX, ROOT_ID } from "./folders-panel";
+import { DROP_PREFIX, ROOT_ID } from "./tree-dnd";
 
 export function buildTreeItems(node: FolderNode): TreeItem[] {
   return node.children.map((child) => ({

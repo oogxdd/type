@@ -28,10 +28,10 @@ import { useRecordings } from "@/contexts/recordings-context";
 import { useHandwriting } from "@/contexts/handwriting-context";
 import { useSecurity } from "@/contexts/security-context";
 
-import { useDragDrop } from "@/features/tree/use-drag-drop";
-import { useKeyboardNavigation } from "@/features/tree/use-keyboard-navigation";
+import { useDragDrop } from "@/features/tree/hooks/use-drag-drop";
+import { useKeyboardNavigation } from "@/features/tree/hooks/use-keyboard-navigation";
 
-import { FoldersPanel } from "@/features/tree/folders-panel";
+import { FoldersPanel } from "@/features/tree/components/folders-panel";
 import { type SettingsSectionId } from "@/features/settings/sections";
 import { AppSidebar } from "@/desktop/app-sidebar";
 import { DesktopShell } from "@/desktop/desktop-shell";
@@ -43,7 +43,7 @@ import { useLayoutMode } from "@/mobile/use-layout-mode";
 import { focusNoScroll } from "@/utils/dom";
 import { getNoteParentPath } from "@/utils/notes";
 import { computeRangeSelection, resolveTargetPaths } from "@/utils/selection";
-import { findNode } from "@/features/tree/tree-ops";
+import { findNode } from "@/features/tree/lib/tree-ops";
 import {
   ARCHIEVE_FOLDER_PATH,
   FEED_FOLDER_PATH,

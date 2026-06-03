@@ -10,7 +10,7 @@ import { logGroup } from "@/data/invoke";
 import type { DragData, FolderNode } from "@/types";
 import { isSystemFolder } from "@/constants";
 import { getNoteParentPath } from "@/utils/notes";
-import { DROP_PREFIX } from "./folders-panel";
+import { DROP_PREFIX } from "../lib/tree-dnd";
 import {
   findNode,
   findParentAndIndex,
@@ -27,9 +27,9 @@ import {
   buildNoteOrderMap,
   reorderList,
   flattenTree,
-} from "./tree-ops";
-import type { TreeItem } from "./types";
-import type { FlattenedItem } from "./types";
+} from "../lib/tree-ops";
+import type { TreeItem } from "../lib/types";
+import type { FlattenedItem } from "../lib/types";
 
 type UseDragDropArgs = {
   tree: FolderNode | null;
