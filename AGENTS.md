@@ -4,124 +4,102 @@ This document is for AI agents and developers who need to understand and modify 
 
 ## What this app is
 
-A local-first markdown notes app built with Tauri v2 (Rust backend) + React (TypeScript frontend). It runs on desktop (macOS/Windows/Linux) and iOS. Notes are stored as `.md` files in a local folder tree. Optional Git sync lets you push/pull notes across devices. Audio recording with AssemblyAI transcription is supported. The app also supports optional at-rest note body encryption, lock screen, and panic-password local wipe.
+A local-first markdown notes app built with Tauri v2 (Rust backend) + React (TypeScript frontend). It runs on desktop (macOS/Windows/Linux) and iOS. Notes are stored as `.md` files in a local folder tree. Optional Git sync pushes/pulls notes across devices — including a one-button local-network server (`git daemon`) for syncing to a phone with no external host. Audio recording is supported, with transcription via a self-provisioning local Whisper on desktop (no manual install) and AssemblyAI on iOS. The app also supports optional at-rest note-body encryption, a lock screen, and panic-password local wipe.
 
 ## Tech stack
 
 - **Frontend**: React 19, TypeScript, Vite, Tiptap (editor), DnD Kit (drag-and-drop), Tailwind + Shadcn/ui
-- **Backend**: Tauri v2 (Rust) — domain modules for security, profiles, notes, git, recordings, handwriting, iOS
-- **Build**: `npm run build` runs `tsc && vite build`. Rust: `cargo check --manifest-path src-tauri/Cargo.toml`
+- **Backend**: Tauri v2 (Rust), organized as **ports / adapters / commands** (hexagonal) across domains: notes, profiles, security, recordings (+ whisper_env), handwriting, git_sync, local_sync, platform, plus iOS native
+- **Build**: `npm run build` runs `tsc && vite build` (plus an OTA asset build). Rust: `cargo check --manifest-path src-tauri/Cargo.toml`
 
-## Backend module structure (src-tauri/src/)
+## Backend structure (src-tauri/src/)
 
-The Rust backend is split into domain modules. `lib.rs` is a thin hub that declares modules, re-exports all `pub(crate)` symbols, and holds shared utilities. `commands.rs` contains all `#[tauri::command]` handlers and uses `use super::*;` to access everything via lib.rs re-exports.
-
-### lib.rs — shared hub (~140 lines)
-
-- **Module declarations** and `pub(crate) use module::*;` re-exports for all 7 domain modules
-- **Shared crate re-exports**: `BASE64`, `fs`, `HashMap`, `HashSet`, `PathBuf`, `Manager`, git2 types, objc types (iOS)
-- **Shared constants**: `RECORDING_STATUS_PENDING/QUEUED/PROCESSING/COMPLETED/FAILED`
-- **Shared utilities**: `app_data_dir`, `now_ms`, `time_to_ms`, `note_parent_folder_path`, `decode_base64_payload`, `decode_audio_base64`, `decode_image_base64`, `response_error`
-- **macOS**: `MACOS_WINDOW_ALPHA`, `apply_macos_window_alpha`
-- **Entry point**: `pub fn run()` delegates to `commands::run()`
-
-### commands.rs (~1,280 lines)
-
-All `#[tauri::command]` functions. Each is a thin wrapper calling `_impl` functions from domain modules. Also contains `pub fn run()` which builds the Tauri app, registers commands, and sets up plugins. Uses `use super::*;` — never needs direct module imports. Includes `generate_ssh_key`, `get_ssh_public_key`, `delete_ssh_key` commands for SSH key management. Git push/pull/connect commands automatically use the app-generated SSH key if it exists.
-
-### security.rs (~450 lines)
-
-Encryption at rest using XChaCha20-Poly1305 with Argon2-derived keys.
-
-- **Runtime state**: `SECURITY_RUNTIME` (OnceLock<Mutex>) holds the derived key in memory after unlock
-- **Config persistence**: `.notes-security.json` in app data (password hashes, salt, encrypted key, preferences)
-- **Key functions**: `encrypt_note_body_for_write`, `decrypt_note_body_for_read`, `ensure_security_unlocked_for_app`
-- **Command impls**: `get_security_state_impl`, `enable_security_impl`, `lock_security_impl`, `unlock_security_impl`, `set_security_preferences_impl`
-- **Panic flow**: `panic_reset_local_data` — wipes notes/profiles/security, seeds dummy notes
-- **Cross-module deps**: profiles (reset/migrate), notes (collect/parse/write notes for migration)
-
-### profiles.rs (~400 lines)
-
-Multi-profile management with per-profile notes root directories.
-
-- **Config persistence**: `.notes-profiles.json` in app data
-- **Legacy migration**: from `.notes-sessions.json` format (renames fields, copies data)
-- **Key functions**: `ensure_profiles_state` (load + migrate + normalize), `find_profile`, `write_profiles_state`
-- **CRUD**: `create_profile_state`, `update_profile_state`, `delete_profile_state`, `set_active_profile_state`, `set_profile_notes_root_state`
-- **Path handling**: `profile_root_for_id`, `normalize_notes_root_path`, `copy_dir_recursive`, `move_dir_contents`
-
-### notes.rs (~700 lines)
-
-Note filesystem operations, front-matter parsing, folder tree building, ordering.
-
-- **Constants**: `ORDER_FILE`, `FEED_FOLDER`, `ARCHIEVE_FOLDER`, `RECORDINGS_STORAGE_FOLDER`, `ATTACHMENTS_STORAGE_FOLDER`, `PROTECTED_SYSTEM_FOLDERS`
-- **Front-matter**: `parse_note_front_matter` (YAML-like key-value), `render_note_with_front_matter`, `write_note_with_front_matter`
-- **File naming**: `allocate_note_file_name` dispatches to UTC-timestamp-slug, UUID-v7, or UUID-v7-prefix-slug mode. `slug_from_content` extracts Unicode-aware slugs.
-- **Folder tree**: `build_folder_node` (recursive), `ensure_system_folders`, `migrate_legacy_system_folders`
-- **Ordering**: `read_order_file`, `write_order_file`, `sort_by_order`, `update_order_remove/append/rename`
-- **Collection**: `collect_markdown_note_files` enumerates `.md` files in a folder
-
-### git.rs (~750 lines)
-
-Git operations via libgit2 — repo init, fetch, push, merge, status, commit history, SSH key management.
-
-- **Repo management**: `ensure_git_repo`, `open_repo`, `git_repo_initialized`
-- **Sync operations**: `perform_fetch`, `fast_forward_to`, `merge_fetched_commit`, `commit_all_changes`
-- **Conflict resolution**: `merge_fetched_commit` saves remote version as `.conflict.md` sibling file instead of rolling back. Both-modified → keep ours + save theirs as `.conflict.md`. Delete/modify → keep whichever version exists. Merge always completes, sync is never blocked.
-- **Status**: `build_git_status` (ahead/behind counts, remote URL, branch, dirty state)
-- **History**: `build_git_history` with `GIT_NOTE_TIMESTAMPS_CACHE` for per-note commit timestamps
-- **Auth**: `build_callbacks` sets up credential callbacks — tries SSH key file first (from app data dir), then SSH agent, then username/password
-- **SSH key management**: `generate_ssh_keypair` (Ed25519 via ssh-keygen), `read_ssh_public_key`, `delete_ssh_keypair`, `ssh_private_key_if_exists`, `ssh_public_key_if_exists`. Keys stored in `<app_data_dir>/ssh/`
-- **Bootstrap detection**: `worktree_has_only_bootstrap_artifacts`, `clear_bootstrap_artifacts`
-
-### recordings.rs (~600 lines)
-
-Audio recording save and AssemblyAI transcription queue.
-
-- **Save flow**: `recording_audio_file_path` → save bytes → `write_note_with_front_matter` with recording metadata
-- **Transcription queue**: `TRANSCRIPTION_QUEUE` (OnceLock<Mutex>) with `spawn_transcription_worker_if_needed` background thread
-- **AssemblyAI**: `transcribe_audio_bytes_with_assembly` — upload → poll transcript endpoint until complete
-- **Listing**: `collect_recording_notes` — enumerate recording-type notes with audio paths and status
-- **Queue snapshot**: `recording_queue_snapshot` for frontend status display
-
-### handwriting.rs (~500 lines)
-
-Handwriting attachment save and OCR queue (OpenAI or HuggingFace).
-
-- **Save flow**: `handwriting_attachment_file_path` → save image → `write_note_with_front_matter` with attachment metadata
-- **OCR queue**: `HANDWRITING_OCR_QUEUE` with `spawn_handwriting_ocr_worker_if_needed` background thread
-- **Providers**: `HandwritingOcrProvider::OpenAi` (GPT-4o via responses API) and `HandwritingOcrProvider::HuggingFace` (with retry logic for 503s)
-- **Listing**: `collect_handwriting_notes` — enumerate handwriting-type notes with attachment paths and status
-
-### ios.rs (~470 lines, `#[cfg(target_os = "ios")]`)
-
-iOS-specific native functionality via Objective-C runtime interop.
-
-- **Native recording**: `create_ios_audio_recorder` (AVAudioRecorder), `configure_ios_audio_for_recording` (AVAudioSession), `ios_recorder_is_recording`, `ios_ensure_recorder_active`
-- **WKWebView recovery**: `install_ios_webview_termination_recovery` — registers an ObjC class that observes `WKWebView` and reloads on termination
-- **State**: `IOS_NATIVE_RECORDER` (active recording path + recorder pointer), `IOS_WEBVIEW_TERMINATION_PROXIES`
-- **ObjC helpers**: `ns_class`, `ns_string`, `ns_error_message`, `ensure_avfoundation_loaded`
-
-### Cross-module dependency graph
+The Rust backend uses a **ports / adapters / commands** (hexagonal) layout so the
+domain logic can move to another shell (e.g. UniFFI for React Native) without a
+rewrite. `src-tauri/README.md` covers the rationale; this is the navigation map.
 
 ```
-lib.rs (shared utils) ← all modules
-profiles ← security (panic reset, enable migration)
-profiles ← notes (notes_root resolution)
-notes ← security (encrypt_note_body_for_write)
-notes ← recordings (front matter, file naming, collection)
-notes ← handwriting (front matter, file naming, collection)
-notes ← git (constants for bootstrap detection)
+src/
+  main.rs              Binary entry point → lib::run().
+  lib.rs               Crate root: declares the three layers, glob-re-exports every
+                       adapter symbol, and holds shared constants/utilities.
+  ports/<domain>.rs    Platform-agnostic contract per domain.
+  adapters/<domain>.rs The real Rust implementation (filesystem, git2, crypto, …).
+  commands/<domain>.rs Thin #[tauri::command] wrappers that call adapters.
 ```
 
-Circular references (security↔notes, profiles↔notes) are fine — same crate, all resolved via `crate::` paths.
+**Layer wiring.** `lib.rs` does `pub(crate) use adapters::*;`, so both adapters
+and command modules reach shared symbols via `use crate::*;`. The
+`generate_handler![]` macro in `commands/mod.rs` uses qualified paths
+(`notes::read_note`, `git_sync::git_pull`, …) to disambiguate from the
+identically-named adapter modules. Each command is short: unlock-gate the request
+with `ensure_security_unlocked_for_app`, then run the adapter call on a blocking
+thread via `run_blocking_command`.
 
-### Visibility rules
+### lib.rs — shared hub
 
-1. Types/functions used outside their module → `pub(crate)`
-2. Struct fields accessed from commands.rs or other modules → `pub(crate)`
-3. Module-internal helpers → private (no `pub` modifier)
-4. `pub(crate) use module::*;` in lib.rs re-exports everything, so commands.rs sees all symbols via `use super::*;`
+- Layer declarations: `pub mod ports;`, `mod adapters; pub(crate) use adapters::*;`, `mod commands;`
+- Shared crate re-exports: `BASE64`, `fs`, `HashMap`, `HashSet`, `PathBuf`, `Manager`, git2 types, objc types (iOS)
+- Shared constants: `RECORDING_STATUS_PENDING/QUEUED/PROCESSING/COMPLETED/FAILED`
+- Shared utilities: `app_data_dir`, `now_ms`, `time_to_ms`, `note_parent_folder_path`, `decode_base64_payload` (+ audio/image variants), `response_error`
+- macOS: `MACOS_WINDOW_ALPHA`, `apply_macos_window_alpha`
+- Entry point: `pub fn run()` → `commands::run()`
+
+### commands/ — Tauri IPC layer
+
+`commands/mod.rs` holds `run()` (builds the Tauri app, registers plugins, calls
+`generate_handler![]`) and the shared `run_blocking_command` helper. One file per
+domain, each a set of thin wrappers:
+
+| File | Commands |
+|------|----------|
+| `security.rs`   | state, enable, lock, unlock, set preferences |
+| `platform.rs`   | set native theme, present file-export sheet |
+| `profiles.rs`   | profile CRUD, backup zip, export to Documents |
+| `notes.rs`      | tree, read/create/write, meta, move/delete/rename, order, timestamp |
+| `recordings.rs` | native recorder caps/start/stop, save, queue (AssemblyAI + local Whisper), retrigger, Whisper status, list, read audio |
+| `handwriting.rs`| save attachment, queue OCR, list OCR jobs |
+| `git_sync.rs`   | SSH key gen/get/delete, status, history, connect, pull, push |
+| `local_sync.rs` | local server status/start/stop, discover peers |
+
+### adapters/ — implementations
+
+Key symbols live in `adapters/<domain>.rs`:
+
+- **notes** — filesystem notes, front-matter, tree, ordering. Constants `ORDER_FILE`, `FEED_FOLDER`, `ARCHIEVE_FOLDER`, `RECORDINGS_STORAGE_FOLDER`, `ATTACHMENTS_STORAGE_FOLDER`, `PROTECTED_SYSTEM_FOLDERS`. `parse/render/write_note_with_front_matter`. `allocate_note_file_name` (UTC-slug / uuid_v7 / uuid_v7_prefix_slug) + Unicode-aware `slug_from_content`. `build_folder_node`, `ensure_system_folders`, `migrate_legacy_system_folders`, order helpers, `collect_markdown_note_files`. `ensured_notes_root` resolves the active profile's root.
+- **profiles** — `.notes-profiles.json` persistence; legacy `.notes-sessions.json` migration. `ensure_profiles_state`, `find_profile`, the `*_state` CRUD fns, `profile_root_for_id`, `normalize_notes_root_path`, dir copy/move helpers.
+- **security** — XChaCha20-Poly1305 at-rest body encryption with an Argon2id-derived key. `SECURITY_RUNTIME` (OnceLock<Mutex>) holds the in-memory key after unlock. `.notes-security.json` config. `encrypt_note_body_for_write`, `decrypt_note_body_for_read`, `ensure_security_unlocked_for_app` (the lock gate most commands call), panic flow `panic_reset_local_data`.
+- **recordings** — save audio → note with metadata. `TRANSCRIPTION_QUEUE` worker drives AssemblyAI (cloud, used on iOS) and the local Whisper path (desktop, via `whisper_env`). `collect_recording_notes`, queue snapshot for the UI, `check_whisper_availability`.
+- **whisper_env** — desktop only. Provisions and owns an isolated CPython + faster-whisper under app-data using [`uv`](https://docs.astral.sh/uv/) (downloading `uv` itself on first use if absent), so the user installs nothing. `whisper_env_ready`, `managed_python`, `ensure_whisper_env`.
+- **handwriting** — save image attachment → note; `HANDWRITING_OCR_QUEUE` worker. Providers `HandwritingOcrProvider::OpenAi` (GPT-4o) and `::HuggingFace` (503 retry). `collect_handwriting_notes`.
+- **git** (the `git_sync` domain) — libgit2 sync. `ensure_git_repo`/`open_repo`, `perform_fetch`/`fast_forward_to`/`merge_fetched_commit`/`commit_all_changes`, `resolve_target_branch`/`switch_or_prepare_branch`. Conflicts keep "ours" and write "theirs" as `.conflict.md` siblings — merge never blocks. `build_git_status`, `build_git_history` (+ `GIT_NOTE_TIMESTAMPS_CACHE`). `build_callbacks` auth order: app SSH key file → SSH agent → username/password. Ed25519 keypair under `<app_data_dir>/ssh/`. Bootstrap-artifact detection for first sync.
+- **local_sync** — desktop hosts a `git daemon` over plain `git://` so a phone on the same Wi-Fi / hotspot can push/pull with no external host. Supervises the child in a process-global `Mutex<Option<RunningDaemon>>` (idempotent start, reaps dead handles, killed on app exit). `receive.denyCurrentBranch=updateInstead` lets phone pushes update the live working tree. Detects the outbound LAN IP via a connected UDP socket; advertises/browses the `_typenotes-sync._tcp` mDNS service for tap-to-discover. See `docs/LOCAL_SYNC.md`.
+- **ios** (`#[cfg(target_os = "ios")]`) — native AVAudioRecorder/AVAudioSession recording and WKWebView termination recovery via Objective-C interop. State in `IOS_NATIVE_RECORDER`, `IOS_WEBVIEW_TERMINATION_PROXIES`.
+
+### ports/ — contracts
+
+Each `ports/<domain>.rs` is documentation-first: the `Serialize` DTOs, a trait
+naming the operations, and an "Implementation Notes" block spelling out the
+inputs, outputs, and invariants of every operation. They are the spec a future
+non-Tauri shell (UniFFI) would re-implement, so keep them in sync with adapter
+behavior when a contract changes. (The adapters currently provide behavior as
+free functions rather than `impl Trait`, so the traits read as the contract, not
+a compile-time constraint.)
+
+### Cross-domain dependencies & visibility
+
+```
+lib.rs (shared utils) ← everything
+profiles       ← security (panic reset, enable migration)
+profiles       ← notes    (notes_root resolution)
+notes          ← security (encrypt_note_body_for_write)
+notes          ← recordings / handwriting (front matter, file naming, collection)
+git/local_sync ← notes (notes_root) + git helpers (repo/branch)
+```
+
+Circular references (security↔notes, profiles↔notes) are fine — one crate, all
+resolved via `crate::` paths. Symbols used outside their module are `pub(crate)`;
+module-internal helpers stay private.
 
 ## System folders and storage
 
