@@ -131,6 +131,25 @@ Then:
 2. If this is the first device with local notes: tap **Push**
 3. If this device should download existing notes: tap **Pull** first
 
+Or just tap **Sync now** — it connects (if needed), pushes local work, pulls and
+merges remote changes, then pushes the result in one step.
+
+### Three sync setups
+
+The app supports three ways to sync, all driven from the same UI:
+
+1. **Remote repo** — point the Remote URL at any internet Git host
+   (`https://…` or `ssh://…`) and **Sync now**.
+2. **Local repo over SSH** — same Wi-Fi, more secure. Enable Remote Login on the
+   computer, use the `ssh://` URL shown by the server card, and the app's SSH key.
+3. **Local repo over `git://`** — same Wi-Fi *or* your phone's personal hotspot.
+   On the desktop, **Settings → Sync → Local network server → Start server**
+   spawns a `git daemon` and shows a `git://` URL to paste on the phone. No
+   internet and no external host required.
+
+See [LOCAL_GIT_SERVER_LAN_HOTSPOT.md](LOCAL_GIT_SERVER_LAN_HOTSPOT.md) for the
+local-network flow.
+
 ### SSH key auth (recommended)
 
 For passwordless sync over SSH:

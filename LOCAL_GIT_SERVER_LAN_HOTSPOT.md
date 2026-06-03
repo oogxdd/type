@@ -1,6 +1,54 @@
 # Local Git Server (LAN / iPhone Hotspot)
 
-This guide sets up a local bare Git repo on your computer and syncs it from desktop + iPhone over the same network.
+Sync your notes between this computer and your phone over your local network — no
+internet, no external Git host. Works on the same Wi-Fi, or with your computer
+connected to your **phone's personal hotspot**.
+
+## Easiest way: the in-app button (recommended)
+
+The desktop app can host the server for you. No terminal needed.
+
+**On the computer (desktop app):**
+
+1. Open **Settings → Sync → Local network server**.
+2. Click **Start server**.
+3. The app shows a ready-to-paste address, e.g. `git://192.168.1.15/notes`.
+   Click **Copy**.
+
+**On the phone:**
+
+1. Open **Settings → Profile → Git**.
+2. Paste the address into **Remote URL**, set **Branch** to `main`, tap **Apply
+   Git settings**.
+3. Go to **Settings → Sync** and tap **Sync now**.
+
+That's it. Tap **Sync now** on either device whenever you want to sync. Pushes
+from the phone update the computer's notes in place (the repo is configured with
+`receive.denyCurrentBranch=updateInstead`).
+
+Notes:
+
+- Hosting is desktop-only and needs the Git command-line tools. On macOS, if the
+  app says they're missing, run `xcode-select --install` and try again.
+- Keep the desktop app open while syncing; **Stop server** (or quitting the app)
+  shuts the server down.
+- If the app can't auto-detect your IP, open System Settings → Network and use
+  `git://<your-ip>/<notes-folder-name>`.
+
+## More secure option: SSH on the same network
+
+`git://` is plaintext and unauthenticated (fine for a trusted home network /
+hotspot). For an authenticated transport, enable **Remote Login** on the Mac
+(System Settings → General → Sharing), add the app's SSH key to
+`~/.ssh/authorized_keys` (Settings → SSH key → Generate), and use the `ssh://`
+URL the server card shows instead.
+
+---
+
+## Manual setup (under the hood / advanced)
+
+The steps below are what the **Start server** button automates. Use them only if
+you want to run the server yourself from a terminal.
 
 ## 1. Create a bare repository on your computer
 

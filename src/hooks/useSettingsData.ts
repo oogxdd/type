@@ -22,6 +22,8 @@ export function useSettingsData() {
     !gitStatus?.has_uncommitted_changes;
   const canPush = !gitSyncBusy && Boolean(gitStatus?.repo_initialized);
   const canConnect = !gitSyncBusy && syncSettings.gitRemoteUrl.trim().length > 0;
+  // One-tap sync connects on demand, so it only needs a remote URL.
+  const canSync = !gitSyncBusy && syncSettings.gitRemoteUrl.trim().length > 0;
   const canQueue = !isRecordingBusy && syncSettings.assemblyAiApiKey.trim().length > 0;
 
   const syncActionLabel =
@@ -54,6 +56,7 @@ export function useSettingsData() {
     canPull,
     canPush,
     canConnect,
+    canSync,
     canQueue,
     syncActionLabel,
     recorderState,

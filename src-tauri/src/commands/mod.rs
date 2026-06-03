@@ -1,5 +1,6 @@
 mod git_sync;
 mod handwriting;
+mod local_sync;
 mod notes;
 mod platform;
 mod profiles;
@@ -90,6 +91,9 @@ pub(super) fn run() {
             git_sync::connect_git_repo,
             git_sync::git_pull,
             git_sync::git_push,
+            local_sync::get_local_sync_server_status,
+            local_sync::start_local_sync_server,
+            local_sync::stop_local_sync_server,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
@@ -106,7 +110,17 @@ pub(super) fn run() {
             _ => {}
         }
 
-        #[cfg(not(target_os = "ios"))]
+        // Tear down the local sync git daemon when the app exits so we never
+        // leave an orphaned process holding port 9418.
+        #[cfg(desktop)]
+        {
+            if matches!(event, tauri::RunEvent::Exit) {
+                crate::shutdown_local_sync_server();
+            }
+            let _ = app_handle;
+        }
+
+        #[cfg(not(any(target_os = "ios", desktop)))]
         let _ = (app_handle, event);
     });
 }

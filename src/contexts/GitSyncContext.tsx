@@ -29,6 +29,7 @@ type GitSyncContextValue = {
   connectGitRepo: () => Promise<void>;
   gitPull: (opts?: { onAfterPull?: () => Promise<void> }) => Promise<void>;
   gitPush: () => Promise<void>;
+  syncNow: (opts?: { onAfterPull?: () => Promise<void> }) => Promise<void>;
   setGitStatus: (status: GitSyncStatus | null) => void;
   setGitSyncError: (error: string | null) => void;
 };
@@ -201,6 +202,76 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
     }
   }, [refreshGitHistory, syncSettings, updateSyncSettings]);
 
+  // One-tap sync: connect (if needed) → push local work → pull/merge remote →
+  // push the merged result. Reuses the same primitives as the manual buttons.
+  // Pushing first commits local edits so the working tree is clean before the
+  // pull (which refuses to run with uncommitted changes); a non-fast-forward
+  // rejection on that first push is expected when the other device pushed since,
+  // so it is swallowed and reconciled by the pull + final push.
+  const syncNow = useCallback(
+    async (opts?: { onAfterPull?: () => Promise<void> }) => {
+      const remoteUrl = syncSettings.gitRemoteUrl.trim();
+      if (!remoteUrl) {
+        setGitSyncError("Remote repository URL is required.");
+        return;
+      }
+      const branch = syncSettings.gitBranch.trim() || undefined;
+      const username = syncSettings.gitUsername.trim() || undefined;
+      const password = syncSettings.gitPassword || undefined;
+      const message = syncSettings.gitCommitMessage.trim() || undefined;
+
+      setGitSyncAction("sync");
+      await yieldToUi();
+      try {
+        let status = gitStatus;
+        if (!status?.repo_initialized) {
+          status = await api.connectGitRepo(remoteUrl, branch, username, password);
+          setGitStatus(status);
+        }
+
+        // Commit + push local work first (best effort).
+        try {
+          const beforeFirstPush = await api.getGitStatus();
+          if (beforeFirstPush.push_required) {
+            status = await api.gitPush(message, branch, username, password);
+            setGitStatus(status);
+          }
+        } catch {
+          // Likely a non-fast-forward rejection — the pull below reconciles it.
+        }
+
+        // Merge remote changes (the working tree is clean now).
+        const beforePull = await api.getGitStatus();
+        setGitStatus(beforePull);
+        if (!beforePull.has_uncommitted_changes) {
+          status = await api.gitPull(branch, username, password);
+          setGitStatus(status);
+          if (opts?.onAfterPull) {
+            await opts.onAfterPull();
+          }
+        }
+
+        // Deliver the merged result.
+        const beforeFinalPush = await api.getGitStatus();
+        setGitStatus(beforeFinalPush);
+        if (beforeFinalPush.push_required) {
+          status = await api.gitPush(message, branch, username, password);
+          setGitStatus(status);
+        }
+
+        setGitSyncError(null);
+        updateSyncSettings({ lastSuccessfulSyncAt: new Date().toISOString() });
+        void refreshGitHistory();
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        setGitSyncError(errorMessage);
+      } finally {
+        setGitSyncAction("idle");
+      }
+    },
+    [gitStatus, refreshGitHistory, syncSettings, updateSyncSettings]
+  );
+
   return (
     <GitSyncContext.Provider
       value={{
@@ -216,6 +287,7 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
         connectGitRepo,
         gitPull,
         gitPush,
+        syncNow,
         setGitStatus,
         setGitSyncError,
       }}

@@ -26,9 +26,10 @@ export function MobileSyncSection() {
     connectGitRepo,
     gitPull,
     gitPush,
+    syncNow,
   } = useGitSync();
   const { refreshTree } = useNotesTree();
-  const { canPull, canPush, canConnect } = useSettingsData();
+  const { canPull, canPush, canConnect, canSync } = useSettingsData();
 
   const lastSuccessfulSyncAt = syncSettings.lastSuccessfulSyncAt
     ? new Date(syncSettings.lastSuccessfulSyncAt).toLocaleString()
@@ -69,10 +70,18 @@ export function MobileSyncSection() {
 
       <Group title="Actions">
         <div className="mobile-native-actions single">
+          <button
+            type="button"
+            className="mobile-primary-btn"
+            onClick={() => void syncNow({ onAfterPull: () => refreshTree() })}
+            disabled={!canSync}
+          >
+            {gitSyncAction === "sync" ? "Syncing..." : "Sync now"}
+          </button>
           {!gitStatus?.repo_initialized ? (
             <button
               type="button"
-              className="mobile-primary-btn"
+              className="mobile-secondary-btn"
               onClick={() => void connectGitRepo()}
               disabled={!canConnect}
             >

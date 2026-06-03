@@ -41,6 +41,18 @@ export type GitSyncStatus = {
   notes_root: string;
 };
 
+export type LocalSyncServerStatus = {
+  supported: boolean;
+  git_available: boolean;
+  running: boolean;
+  host: string | null;
+  port: number;
+  git_url: string | null;
+  ssh_url: string | null;
+  repo_path: string;
+  error: string | null;
+};
+
 export type GitCommitHistorySyncState = "synced" | "local";
 
 export type GitCommitHistoryEntry = {
@@ -182,7 +194,13 @@ export type SetOrderArgs = {
 
 export type AppMode = "notes" | "settings";
 export type PaneId = "folders" | "middle" | "right";
-export type GitSyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
+export type GitSyncAction =
+  | "idle"
+  | "refresh"
+  | "connect"
+  | "pull"
+  | "push"
+  | "sync";
 export type NoteFileNameFormat =
   | "utc_timestamp_slug"
   | "uuid_v7"

@@ -10,6 +10,7 @@ import {
   getSyncHint,
 } from "../../utils/format";
 import { Button } from "../ui/button";
+import { LocalSyncServerCard } from "./LocalSyncServerCard";
 
 export function SettingsSyncSection() {
   const { syncSettings } = useProfiles();
@@ -26,9 +27,10 @@ export function SettingsSyncSection() {
     connectGitRepo,
     gitPull,
     gitPush,
+    syncNow,
   } = useGitSync();
   const { refreshTree } = useNotesTree();
-  const { canPull, canPush, canConnect } = useSettingsData();
+  const { canPull, canPush, canConnect, canSync } = useSettingsData();
 
   useEffect(() => {
     void refreshGitStatus();
@@ -76,8 +78,17 @@ export function SettingsSyncSection() {
           {syncHint ? <p className="text-xs text-muted-foreground">{syncHint}</p> : null}
 
           <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              type="button"
+              onClick={() => void syncNow({ onAfterPull: () => refreshTree() })}
+              disabled={!canSync}
+            >
+              {gitSyncAction === "sync" ? "Syncing..." : "Sync now"}
+            </Button>
             {!gitStatus?.repo_initialized ? (
               <Button
+                variant="outline"
                 size="sm"
                 type="button"
                 onClick={() => void connectGitRepo()}
@@ -118,6 +129,8 @@ export function SettingsSyncSection() {
             </Button>
           </div>
         </section>
+
+        <LocalSyncServerCard />
 
         {visibleCommits.length > 0 || gitHistoryBusy ? (
           <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">

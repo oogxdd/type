@@ -6,6 +6,7 @@
 
 pub(crate) mod git;
 pub(crate) mod handwriting;
+pub(crate) mod local_sync;
 pub(crate) mod notes;
 pub(crate) mod profiles;
 pub(crate) mod recordings;
@@ -18,6 +19,7 @@ pub(crate) mod ios;
 // Re-export all adapter symbols so the rest of the crate can use them directly.
 pub(crate) use git::*;
 pub(crate) use handwriting::*;
+pub(crate) use local_sync::*;
 pub(crate) use notes::*;
 pub(crate) use profiles::*;
 pub(crate) use recordings::*;

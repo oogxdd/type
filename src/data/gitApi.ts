@@ -1,5 +1,9 @@
 import { invokeLogged } from "./invoke";
-import type { GitCommitHistoryEntry, GitSyncStatus } from "../types";
+import type {
+  GitCommitHistoryEntry,
+  GitSyncStatus,
+  LocalSyncServerStatus,
+} from "../types";
 
 export const generateSshKey = (): Promise<string> =>
   invokeLogged<string>("generate_ssh_key");
@@ -60,3 +64,14 @@ export const gitPush = (
       password,
     },
   });
+
+// ── Local network ("LAN" / iPhone-hotspot) git server (desktop host role) ──
+
+export const getLocalSyncServerStatus = (): Promise<LocalSyncServerStatus> =>
+  invokeLogged<LocalSyncServerStatus>("get_local_sync_server_status");
+
+export const startLocalSyncServer = (): Promise<LocalSyncServerStatus> =>
+  invokeLogged<LocalSyncServerStatus>("start_local_sync_server");
+
+export const stopLocalSyncServer = (): Promise<LocalSyncServerStatus> =>
+  invokeLogged<LocalSyncServerStatus>("stop_local_sync_server");
