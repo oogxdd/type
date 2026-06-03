@@ -20,8 +20,8 @@ import { MobileNavBar } from "@/mobile/ui/nav-bar";
 import { MobilePromptSheet } from "@/mobile/ui/prompt-sheet";
 import { MobileToast } from "@/mobile/ui/toast";
 
-import { useTheme } from "@/contexts/theme-context";
-import { useSelection } from "@/contexts/selection-context";
+import { useTheme } from "@/app/state/theme-context";
+import { useSelection } from "@/app/state/selection-context";
 import { useEditor } from "@/contexts/editor-context";
 import { useNotesTree } from "@/contexts/notes-tree-context";
 import { useGitSync } from "@/contexts/git-sync-context";

@@ -3,7 +3,7 @@ import { createNote, deleteItems, writeNote } from "@/data/notes-api";
 import { useEditor } from "@/contexts/editor-context";
 import { useNotesTree } from "@/contexts/notes-tree-context";
 import { useProfiles } from "@/contexts/profiles-context";
-import { useSelection } from "@/contexts/selection-context";
+import { useSelection } from "@/app/state/selection-context";
 import { MobileEditorScreen } from "@/mobile/views/editor-view";
 import { FEED_FOLDER_PATH } from "../types";
 

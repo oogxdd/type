@@ -110,10 +110,13 @@ The app uses `libgit2` (embedded Git) from Tauri commands. You do not need shell
 
 ### What gets synced
 
-- All note markdown files (`.md`)
-- Recording audio files (`Recordings/recording-*/audio.*`)
-- Recording transcripts (`Recordings/recording-*/transcript.md`)
-- Recording transcription state (`Recordings/recording-*/.transcription-status.json`)
+- All note markdown files (`.md`), including recording notes — a recording is a
+  regular note whose frontmatter references its audio file and tracks
+  transcription state (`recording_audio_path`, `transcription_status`,
+  `transcription_id`, `transcription_error`), and whose body receives the
+  transcript text once transcription completes (no separate transcript file)
+- Recording audio files, stored flat in the hidden `Recordings/` folder as
+  `Recordings/audio-<id>.<ext>`
 - Folder structure and all `.notes-order.json` files
 
 ### One-time setup per device
@@ -235,6 +238,26 @@ Mobile uses AssemblyAI for cloud-based transcription.
 
 - Add your AssemblyAI key in **Settings → Recordings**
 - Enable auto-queue in settings for automatic transcription on mobile
+
+## TODO / Roadmap
+
+> Rough, early ideas — not yet designed or scheduled.
+
+- **Note "revisions" / multi-view notes (keep transcripts in the note, not in
+  sidecar files).** Today the transcript result is already injected into the
+  recording note's body, but everything still collapses into one flat body. The
+  idea is to let a single note hold several distinct "revisions" (views/tabs),
+  all stored inside the *same* markdown file — no separate files. For a
+  recording that could be:
+  - a. raw sentence/utterance-level transcript
+  - b. the same transcript reformatted/cleaned up by an LLM
+  - c. the user's own personal notes
+  - d. anything else the user wants
+
+  This is **not recording-specific** — any note could expose extra views/tabs
+  (e.g. the main note plus a side tab of related info the user types). The open
+  questions are how to encode multiple views in one markdown file and how the
+  editor surfaces them. Needs deeper design before any implementation.
 
 ## Mobile UX
 

@@ -13,7 +13,7 @@ import { FEED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH, isSystemFolder } from "../const
 import { collectAllNotes } from "../utils/notes";
 import { useNotePreviews } from "@/features/notes/use-note-previews";
 import { useProfiles } from "./profiles-context";
-import { useSelection } from "./selection-context";
+import { useSelection } from "@/app/state/selection-context";
 import { useEditor } from "./editor-context";
 import {
   buildTreeItems,
@@ -26,7 +26,7 @@ import { confirmAction, focusNoScroll } from "../utils/dom";
 import type { TreeItem } from "@/features/tree/types";
 import type { FlattenedItem } from "@/features/tree/types";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
-import { useTheme } from "./theme-context";
+import { useTheme } from "@/app/state/theme-context";
 
 type NotesTreeContextValue = {
   tree: FolderNode | null;

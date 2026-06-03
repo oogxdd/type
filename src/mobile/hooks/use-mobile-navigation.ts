@@ -6,7 +6,7 @@ import {
   type MobileAction,
 } from "../navigation";
 import type { LayoutMode } from "../navigation";
-import { useSelection } from "@/contexts/selection-context";
+import { useSelection } from "@/app/state/selection-context";
 import { useEditor } from "@/contexts/editor-context";
 import { FEED_FOLDER_PATH } from "../types";
 

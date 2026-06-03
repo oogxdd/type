@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Menu } from "lucide-react";
-import { useSelection } from "@/contexts/selection-context";
+import { useSelection } from "@/app/state/selection-context";
 import { useEditor } from "@/contexts/editor-context";
 import { useNotesTree } from "@/contexts/notes-tree-context";
 
