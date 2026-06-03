@@ -5,7 +5,7 @@ import {
   formatGitCommitTime,
   getSyncHint,
 } from "@/utils/format";
-import * as gitApi from "@/data/gitApi";
+import * as gitApi from "@/data/git-api";
 import type { DiscoveredServer } from "@/types";
 import { useSettingsData } from "@/features/settings/use-settings-data";
 import { useProfiles } from "@/contexts/profiles-context";

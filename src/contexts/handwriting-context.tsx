@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import * as api from "../data/handwritingApi";
+import * as api from "../data/handwriting-api";
 import type {
   HandwritingOcrListItem,
   HandwritingOcrQueueSnapshot,

@@ -97,7 +97,7 @@ src/
       - `src/components/` now contains only `ui/` (shadcn). Entry stubs (main.tsx,
         ota-bootstrap.ts) stay at src/ root, now import `./app/main-app`.
 - [x] **10. contexts/** — kebab-rename ✅ tsc clean (theme-context, profiles-context, …)
-- [ ] **11. data/** — kebab-rename
+- [x] **11. data/** — kebab-rename ✅ tsc clean (notes-api, git-api, …; invoke.ts unchanged)
 - [ ] **12. utils/ + constants/types** — final kebab pass
 - [ ] **13. Docs** — rewrite AGENTS.md frontend section; delete this file; restore stashed README
 

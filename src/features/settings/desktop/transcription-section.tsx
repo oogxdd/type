@@ -5,7 +5,7 @@ import { useProfiles } from "@/contexts/profiles-context";
 import { useRecordings } from "@/contexts/recordings-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import * as api from "@/data/recordingsApi";
+import * as api from "@/data/recordings-api";
 import type { RecordingListItem, WhisperStatusResult } from "@/types";
 
 /** Normalised, display-ready status for a recording (queued/processing take

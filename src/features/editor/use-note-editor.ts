@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { deleteItems, readNote, renameItem, writeNote } from "@/data/notesApi";
+import { deleteItems, readNote, renameItem, writeNote } from "@/data/notes-api";
 import type { NoteFileNameFormat } from "@/types";
 import { stripFrontmatter } from "@/utils/frontmatter";
 import { stripInlineAnnotationMetadata } from "./note-annotations";

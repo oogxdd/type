@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import * as api from "../data/gitApi";
+import * as api from "../data/git-api";
 import type {
   GitCommitHistoryEntry,
   GitSyncAction,

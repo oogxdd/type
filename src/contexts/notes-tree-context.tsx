@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import * as api from "../data/notesApi";
+import * as api from "../data/notes-api";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "../types";
 import { FEED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH, isSystemFolder } from "../constants";
 import { collectAllNotes } from "../utils/notes";

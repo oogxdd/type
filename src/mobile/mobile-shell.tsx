@@ -25,7 +25,7 @@ import { useSelection } from "@/contexts/selection-context";
 import { useEditor } from "@/contexts/editor-context";
 import { useNotesTree } from "@/contexts/notes-tree-context";
 import { useGitSync } from "@/contexts/git-sync-context";
-import { parseSyncDeepLink } from "@/data/localSyncLink";
+import { parseSyncDeepLink } from "@/data/local-sync-link";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 import { useKeyboardInsets } from "@/mobile/use-keyboard-insets";
 import { useEdgeSwipe } from "@/mobile/hooks/use-edge-swipe";

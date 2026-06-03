@@ -7,7 +7,7 @@ import {
   type FormEvent as ReactFormEvent,
 } from "react";
 import { Brush, Eye, EyeOff, MessageSquarePlus, X } from "lucide-react";
-import { readNote, writeNote } from "@/data/notesApi";
+import { readNote, writeNote } from "@/data/notes-api";
 import { NoteReadonlyContent } from "./note-readonly-content";
 import { sanitizeRecordingEditorContent } from "@/utils/format";
 import { stripFrontmatter } from "@/utils/frontmatter";
