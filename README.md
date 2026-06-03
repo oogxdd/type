@@ -207,38 +207,27 @@ Both files are plain readable markdown. Compare them, edit the original, delete 
 
 ### Desktop: local transcription (faster-whisper)
 
-Desktop uses [faster-whisper](https://github.com/SYSTRAN/faster-whisper) to transcribe audio locally on your machine. No API key needed.
+Desktop transcribes audio locally with [faster-whisper](https://github.com/SYSTRAN/faster-whisper) — no API key, nothing leaves your machine.
 
-**Prerequisites (macOS with Apple Silicon):**
+**No manual setup.** You do *not* need to install Python or faster-whisper. The
+app provisions and owns an isolated Python + faster-whisper environment under its
+app-data directory using [`uv`](https://docs.astral.sh/uv/) (it even fetches `uv`
+itself on first use). Open **Settings → Recordings** and tap **Set up / Download
+model**, or just record — the first transcription provisions automatically. The
+first run downloads the engine and model, so it can take a few minutes.
 
-1. Install Python 3 (if not already present):
-   ```bash
-   brew install python
-   ```
-
-2. Install faster-whisper:
-   ```bash
-   pip3 install faster-whisper
-   ```
-
-3. The model (`large-v3`) downloads automatically on first transcription (~3 GB). This is cached in `~/.cache/huggingface/hub/` and reused for subsequent runs.
+**Model.** Defaults to `large-v3`. Change it in **Settings → Recordings** to
+another model name (`medium`, `small`, …) or an absolute path to a local model
+directory.
 
 **How it works:**
 
 - After a recording is saved, the app auto-queues it for transcription
-- A background worker runs faster-whisper via Python subprocess
+- A background worker runs faster-whisper in the managed environment
 - Plain transcript text is written into the recording note body
 - Word-level timestamps JSON is saved alongside the audio file as `<audio-name>.transcription.json`
-- Check whisper status in **Settings → Recordings → Local transcription**
+- Check status (and provision/retry) in **Settings → Recordings**
 - Use the **Retranscribe** button on any recording to re-run transcription
-
-**Verify setup:**
-
-```bash
-python3 -c "from faster_whisper import WhisperModel; print('OK')"
-```
-
-You can also check status in **Settings → Recordings** — it shows whether Python and faster-whisper are detected.
 
 ### Mobile: cloud transcription (AssemblyAI)
 
