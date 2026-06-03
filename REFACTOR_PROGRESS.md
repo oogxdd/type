@@ -98,8 +98,24 @@ src/
         ota-bootstrap.ts) stay at src/ root, now import `./app/main-app`.
 - [x] **10. contexts/** — kebab-rename ✅ tsc clean (theme-context, profiles-context, …)
 - [x] **11. data/** — kebab-rename ✅ tsc clean (notes-api, git-api, …; invoke.ts unchanged)
-- [ ] **12. utils/ + constants/types** — final kebab pass
-- [ ] **13. Docs** — rewrite AGENTS.md frontend section; delete this file; restore stashed README
+- [x] **12. utils/ + constants/types** — final kebab pass ✅ no-op: all remaining files
+      (utils/{dom,format,frontmatter,jobs,notes,selection,storage}, constants, types) were
+      already single-word lowercase. Verified no PascalCase/camelCase filenames remain in src.
+- [x] **13. Docs** — rewrote AGENTS.md "How the frontend is structured" + iOS Widget paths ✅
+
+## Verification
+
+- `npx tsc --noEmit` clean after every stage.
+- Full `vite build` (main): 2081 modules transformed ✅
+- OTA `vite build --config vite.ota.config.ts` (entry src/main.tsx): 2091 modules ✅
+- (Pre-existing chunk-size warning is unrelated to this refactor.)
+
+## Remaining housekeeping (for the user)
+
+- This file (`REFACTOR_PROGRESS.md`) is temporary — delete when satisfied.
+- The pre-existing uncommitted `README.md` edit was stashed at the start and restored
+  to the working tree at the end (left uncommitted, untouched).
+- `features/tree/keyboard-coordinates.ts` has no importers — candidate for deletion.
 
 ## Notes / surprises log
 
