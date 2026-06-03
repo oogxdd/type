@@ -149,8 +149,8 @@ The app supports three ways to sync, all driven from the same UI:
    with the Camera. Manual URL entry still works as a fallback. No internet and
    no external host required.
 
-See [LOCAL_GIT_SERVER_LAN_HOTSPOT.md](LOCAL_GIT_SERVER_LAN_HOTSPOT.md) for the
-local-network flow.
+See [docs/LOCAL_GIT_SERVER_LAN_HOTSPOT.md](docs/LOCAL_GIT_SERVER_LAN_HOTSPOT.md)
+for the local-network flow.
 
 ### SSH key auth (recommended)
 
@@ -310,4 +310,4 @@ The Rust backend (`src-tauri/src/`) is organized into domain modules:
 
 ## Contributing
 
-See [agents.md](./agents.md) for architecture, module map, and codebase patterns.
+See [AGENTS.md](./AGENTS.md) for architecture, module map, and codebase patterns.

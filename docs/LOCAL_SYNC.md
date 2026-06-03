@@ -5,7 +5,7 @@ Git host**, over a shared Wi-Fi or the phone's personal hotspot. This document
 explains the model, the moving parts, and the trade-offs so the feature is easy
 to reason about and extend.
 
-> User-facing setup lives in [../LOCAL_GIT_SERVER_LAN_HOTSPOT.md](../LOCAL_GIT_SERVER_LAN_HOTSPOT.md)
+> User-facing setup lives in [LOCAL_GIT_SERVER_LAN_HOTSPOT.md](./LOCAL_GIT_SERVER_LAN_HOTSPOT.md)
 > and the README "Git sync setup" section. This file is for contributors.
 
 ---
