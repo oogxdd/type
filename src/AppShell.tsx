@@ -42,6 +42,8 @@ import { useLayoutMode } from "./mobile/useLayoutMode";
 
 import { focusNoScroll } from "./utils/dom";
 import { getNoteParentPath } from "./utils/notes";
+import { computeRangeSelection, resolveTargetPaths } from "./utils/selection";
+import { findNode } from "./utils/treeOps";
 import {
   ARCHIEVE_FOLDER_PATH,
   FEED_FOLDER_PATH,
@@ -185,16 +187,16 @@ export function AppShell() {
   // -- Keyboard navigation
   const deleteSelectedNotesByShortcut = useCallback(() => {
     const selected = selectedNotesRef.current;
-    const paths =
-      selected.size > 0
-        ? activeNote && selected.has(activeNote)
-          ? Array.from(selected)
-          : activeNote
-            ? [activeNote]
-            : Array.from(selected)
-        : activeNote
-          ? [activeNote]
-          : [];
+    // The active note acts as the anchor: when it sits outside the current
+    // selection, delete just it; otherwise delete the whole selection.
+    let paths: string[];
+    if (activeNote && !selected.has(activeNote)) {
+      paths = [activeNote];
+    } else if (selected.size > 0) {
+      paths = Array.from(selected);
+    } else {
+      paths = activeNote ? [activeNote] : [];
+    }
     if (paths.length === 0) return;
     void deleteNotes(paths);
   }, [activeNote, deleteNotes]);
@@ -244,27 +246,9 @@ export function AppShell() {
   // -- Folder handlers
   const handleFolderClick = (event: ReactMouseEvent, path: string) => {
     event.stopPropagation();
-    const nextSelected = new Set(selectedFolders);
-    if (event.shiftKey && lastSelectedFolder) {
-      const visibleFolders = orderedIds;
-      const start = visibleFolders.indexOf(lastSelectedFolder);
-      const end = visibleFolders.indexOf(path);
-      if (start !== -1 && end !== -1) {
-        const [from, to] = start < end ? [start, end] : [end, start];
-        nextSelected.clear();
-        visibleFolders.slice(from, to + 1).forEach((p) => nextSelected.add(p));
-      } else {
-        nextSelected.clear();
-        nextSelected.add(path);
-      }
-    } else if (event.metaKey || event.ctrlKey) {
-      if (nextSelected.has(path)) nextSelected.delete(path);
-      else nextSelected.add(path);
-    } else {
-      nextSelected.clear();
-      nextSelected.add(path);
-    }
-    setSelectedFolders(nextSelected);
+    setSelectedFolders(
+      computeRangeSelection(event, selectedFolders, orderedIds, lastSelectedFolder, path)
+    );
     setLastSelectedFolder(path);
     setActiveFolder(path);
     setSelectedNotes(new Set());
@@ -302,12 +286,7 @@ export function AppShell() {
             action: () => {
               const path = folderContextPathRef.current;
               if (!path) return;
-              const selected = selectedFoldersRef.current;
-              const paths =
-                selected.size > 1 && selected.has(path)
-                  ? Array.from(selected)
-                  : [path];
-              void deleteFolders(paths);
+              void deleteFolders(resolveTargetPaths(selectedFoldersRef.current, path));
             },
           },
         ],
@@ -340,29 +319,12 @@ export function AppShell() {
     parentPath?: string
   ) => {
     const noteParentPath = parentPath ?? getNoteParentPath(notePath);
-    const parentNode = tree ? findNodeInTree(tree, noteParentPath) : null;
+    const parentNode = findNode(tree, noteParentPath);
     if (!parentNode) return;
     const notePaths = parentNode.notes.map((n) => n.path);
-    const nextSelected = new Set(selectedNotes);
-    if (event.shiftKey && lastSelectedNote) {
-      const start = notePaths.indexOf(lastSelectedNote);
-      const end = notePaths.indexOf(notePath);
-      if (start !== -1 && end !== -1) {
-        const [from, to] = start < end ? [start, end] : [end, start];
-        nextSelected.clear();
-        notePaths.slice(from, to + 1).forEach((p) => nextSelected.add(p));
-      } else {
-        nextSelected.clear();
-        nextSelected.add(notePath);
-      }
-    } else if (event.metaKey || event.ctrlKey) {
-      if (nextSelected.has(notePath)) nextSelected.delete(notePath);
-      else nextSelected.add(notePath);
-    } else {
-      nextSelected.clear();
-      nextSelected.add(notePath);
-    }
-    setSelectedNotes(nextSelected);
+    setSelectedNotes(
+      computeRangeSelection(event, selectedNotes, notePaths, lastSelectedNote, notePath)
+    );
     setLastSelectedNote(notePath);
     setSelectedFolders(new Set(noteParentPath ? [noteParentPath] : []));
     setLastSelectedFolder(noteParentPath);
@@ -392,12 +354,7 @@ export function AppShell() {
             action: () => {
               const path = noteContextPathRef.current;
               if (!path) return;
-              const selected = selectedNotesRef.current;
-              const paths =
-                selected.size > 1 && selected.has(path)
-                  ? Array.from(selected)
-                  : [path];
-              void deleteNotes(paths);
+              void deleteNotes(resolveTargetPaths(selectedNotesRef.current, path));
             },
           },
           {
@@ -406,12 +363,7 @@ export function AppShell() {
             action: () => {
               const path = noteContextPathRef.current;
               if (!path) return;
-              const selected = selectedNotesRef.current;
-              const paths =
-                selected.size > 1 && selected.has(path)
-                  ? Array.from(selected)
-                  : [path];
-              void moveNotesToArchive(paths);
+              void moveNotesToArchive(resolveTargetPaths(selectedNotesRef.current, path));
             },
           },
         ],
@@ -654,14 +606,4 @@ export function AppShell() {
       </DragOverlay>
     </DndContext>
   );
-}
-
-// Helper needed for note click handler
-function findNodeInTree(node: import("./types").FolderNode, path: string): import("./types").FolderNode | null {
-  if (node.path === path) return node;
-  for (const child of node.children) {
-    const found = findNodeInTree(child, path);
-    if (found) return found;
-  }
-  return null;
 }
