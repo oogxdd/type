@@ -132,146 +132,165 @@ module-internal helpers stay private.
 
 ## How the frontend is structured
 
-The frontend is **feature-sliced**. Cross-cutting state lives in `contexts/`, IPC in
-`data/`, shared design-system primitives in `components/ui/`. Each user-facing feature
-owns its components + hooks + utils together under `features/<name>/`. The two platform
-presentations are thin composition shells in `desktop/` and `mobile/`.
+The frontend is **feature-sliced**. There are four kinds of place code can live:
 
-Imports use the `@/` → `src/` alias for cross-directory references (configured in
-`tsconfig.json`, `vite.config.ts`, and `vite.ota.config.ts`); same-folder and
-intra-feature imports stay relative.
+- `app/` — the composition root (providers, gates, the orchestrating shell) plus the
+  handful of app-global stores that belong to no single domain (`app/state/`).
+- `shared/` — domain-agnostic building blocks usable by anything: `ui/` (shadcn
+  primitives), `lib/` (pure helpers), `api/` (the `invoke` IPC wrapper), `hooks/`,
+  `types.ts`, `constants.ts`. **`shared/` is a leaf** — it must not import from `features/`
+  (one documented exception, see below).
+- `features/<name>/` — one folder per user-facing domain. Each owns its code in
+  **segments**: `components/` (`.tsx`), `hooks/` (React hooks *and* context providers),
+  `lib/` (pure helpers), `api/` (Tauri IPC wrappers). Not every feature needs every segment.
+- `desktop/` and `mobile/` — the two platform **composition shells**. They import feature
+  components/hooks and arrange them; they are not themselves features.
+
+**Imports** use the `@/` → `src/` alias for cross-directory references (configured in
+`tsconfig.json`, `vite.config.ts`, `vite.ota.config.ts`); imports within the same
+segment/folder stay relative. There are intentionally **no `index.ts` barrels** — deep
+segment paths (`@/features/editor/components/note-editor`) keep each import's role explicit
+and avoid an `editor`↔`notes` cycle (`notes-api` is used by editor/tree while `notes` uses
+`editor-context`).
 
 ```
 src/
-  main.tsx, ota-bootstrap.ts   entry stubs — ota-bootstrap.ts is the index.html entry;
-                               main.tsx is the OTA bundle entry (see vite.ota.config.ts).
-                               Both call mountApp() from app/main-app.
-  app/                         composition root: app, app-shell, main-app,
-                               error-boundary, launch-screen, app.css
-  contexts/                    cross-cutting React state (*-context.tsx)
-  data/                        Tauri IPC wrappers (*-api.ts, invoke.ts)
-  components/ui/               shadcn/ui primitives
-  lib/utils.ts                 cn() helper
-  hooks/use-mobile.ts          shadcn breakpoint hook (used by components/ui/sidebar)
-  utils/                       cross-cutting helpers (dom, format, frontmatter,
-                               jobs, notes, selection, storage)
-  types.ts, constants.ts       global types / constants
-  features/
-    tree/        folder navigation tree + DnD + keyboard nav
-    editor/      note editor, multi-note lens, recording/handwriting headers
-    notes/       note-list row + previews
-    settings/    section registry + desktop/ and mobile/ UI variants
-    security/    lock screen
-    recording/   audio recorder hook
-  desktop/       desktop composition shell (shell + 3 panes + sidebar)
-  mobile/        mobile composition shell (shell, tablet-layout, hooks/, ui/,
-                 views/, screens/)
+  main.tsx, ota-bootstrap.ts   entry stubs (ota-bootstrap = index.html entry;
+                               main.tsx = OTA bundle entry — vite.ota.config.ts)
+  app/
+    app.tsx, app-shell.tsx, main-app.tsx, error-boundary.tsx, launch-screen.ts, app.css
+    state/      selection-context, theme-context, appearance-api  (app-global stores)
+  shared/
+    ui/         shadcn primitives          lib/   dom, format, frontmatter, jobs,
+    api/invoke  IPC logging wrapper                notes, selection, storage, utils (cn)
+    hooks/use-mobile   types.ts   constants.ts
+  features/<name>/   components/  hooks/  lib/  api/
+    notes editor tree recording handwriting profiles sync security settings
+  desktop/    desktop-shell, middle-pane, right-pane, app-sidebar
+  mobile/     mobile-shell, tablet-layout, navigation, types, use-layout-mode,
+              use-keyboard-insets, hooks/, ui/, views/, screens/
 ```
 
 ### Provider tree (`src/app/app.tsx`)
 
-`app.tsx` is a thin composition layer. All state lives in React contexts:
+`app.tsx` is a thin composition layer. State lives in feature contexts (each provider is
+imported from its feature's `hooks/`, or from `app/state/`):
 
 ```
-ErrorBoundary                 — app-root crash guard; renders a recoverable fallback
-  ThemeProvider               — theme mode, notes list mode, editor font size
-    SecurityProvider          — security state, unlock/lock/enable, auto-lock preference
-      SecurityGate            — renders lock screen when encrypted state is locked
-        ProfilesProvider      — profile list, active profile, per-profile sync settings
-          GitSyncProvider     — git status, connect/pull/push operations, commit history (git log)
-            SelectionProvider — folder/note selection state, mobile selection helpers
-              EditorProvider  — note editor state (wraps useNoteEditor hook)
-                NotesTreeProvider — folder tree, CRUD operations, rename
-                  RecordingsProvider  — audio recording, transcription queue, playback
-                    HandwritingProvider — image import, OCR queue (OpenAI / HuggingFace)
+ErrorBoundary                 — app-root crash guard
+  ThemeProvider               — theme mode, notes list mode, editor font size   (app/state)
+    SecurityProvider          — security state, unlock/lock/enable               (features/security)
+      SecurityGate            — renders the lock screen when encrypted + locked
+        ProfilesProvider      — profile list, active profile, per-profile sync   (features/profiles)
+          GitSyncProvider     — git status, connect/pull/push, commit history    (features/sync)
+            SelectionProvider — folder/note selection state, mobile helpers      (app/state)
+              EditorProvider  — note editor state (wraps useNoteEditor)          (features/editor)
+                NotesTreeProvider — folder tree, CRUD, rename                    (features/notes)
+                  RecordingsProvider  — recording, transcription queue, playback (features/recording)
+                    HandwritingProvider — image import, OCR queue                (features/handwriting)
                       AppShell  — UI rendering, DnD wiring, keyboard shortcuts
 ```
 
+**Don't reorder these providers** without understanding the dependencies: NotesTree consumes
+Selection + Editor; Editor consumes Selection + Profiles; most consume Profiles.
+
 ### app-shell.tsx (`src/app/app-shell.tsx`)
 
-Orchestrates desktop-specific behavior. Owns local UI state: `appMode` (notes/settings), `sidebarCollapsed`, pane sizes, settings section. Renders either `DesktopShell` (`src/desktop/desktop-shell.tsx`) or `MobileShell` (`src/mobile/mobile-shell.tsx`) depending on viewport. Wires up `useDragDrop()` and `useKeyboardNavigation()` (both from `features/tree/`). Contains folder/note click handlers and context-menu setup. Desktop pane content is delegated to `DesktopMiddlePane` / `DesktopRightPane` (`src/desktop/middle-pane.tsx`, `src/desktop/right-pane.tsx`). Uses `SecurityContext.lockSecurity()` for the global lock shortcut (`Cmd/Ctrl+Shift+L`).
+Orchestrates desktop behavior. Owns local UI state (`appMode`, `sidebarCollapsed`, pane
+sizes, settings section). Renders `DesktopShell` (`src/desktop/`) or `MobileShell`
+(`src/mobile/`) by viewport. Wires `useDragDrop()` + `useKeyboardNavigation()` (from
+`features/tree/hooks`). Builds the folder/note click + native context-menu handlers.
 
-All child components consume contexts directly — no prop drilling. `MobileShell` receives only 3 props.
+### app/state (`src/app/state/`)
 
-### Contexts in detail (`src/contexts/`, kebab-cased files)
+The cross-cutting stores that have no single domain home and are consumed everywhere:
 
-**ThemeContext** (`theme-context.tsx`): Persists theme and notesListMode to localStorage. Toggles `document.documentElement` dark class. Provides font size controls (increase/decrease/reset with min 12, max 28).
+- `theme-context.tsx` — theme + notesListMode (localStorage), `document` dark class, font
+  size controls. `appearance-api.ts` is its native-theme IPC.
+- `selection-context.tsx` — `selectedFolders`/`selectedNotes`/`activeFolder`/`activeNote`
+  (+ setters) and the mobile selection helpers. Resets on profile / notes-root change.
 
-**SecurityContext** (`security-context.tsx`): Loads security state from backend (`get_security_state`) and drives lock/unlock/enable flows. Exposes `enableSecurity`, `unlockSecurity`, `lockSecurity`, `setAutoLockOnBackground`. Implements client-side panic reset (clears localStorage + reloads when backend reports panic wipe). Auto-locks on `document.visibilitychange` when encryption is enabled and the preference is on.
+(Features may import these from `@/app/state/...`; this is the one accepted upward edge.)
 
-**ProfilesContext** (`profiles-context.tsx`): Multi-profile support. Each profile has its own `notes_root` and sync settings. Exposes `activeProfileNotesRoot` and `setProfileNotesRoot(profileId, notesRoot)`. `syncSettings` is one object (gitRemoteUrl, gitBranch, gitUsername, gitPassword, gitCommitMessage, lastSuccessfulSyncAt, assemblyAiApiKey, mobileAutoTranscriptionEnabled) persisted to localStorage keyed by profile ID. Takes a `flushSaveRef` prop to flush the editor before profile switching or path migration.
+### features/
 
-**GitSyncContext** (`git-sync-context.tsx`): Reads sync settings from ProfilesContext. Manages git status polling and connect/pull/push. Exposes `gitCommitHistory` (from `get_git_history`) + `refreshGitHistory()`. `gitPull` accepts an optional `onAfterPull` callback (used to refresh the tree after pull).
+Each feature's context provider lives in `hooks/` alongside its hooks.
 
-**SelectionContext** (`selection-context.tsx`): Owns folder/note selection state (`selectedFolders`, `selectedNotes`, `activeFolder`, `activeNote`, `lastSelectedFolder`, `lastSelectedNote`) + setters. Mobile helpers: `selectFolderForMobile`, `selectNoteForMobile`, `enterMobileHome`. Resets selection when `activeProfileId`/`activeProfileNotesRoot` change. Consumed by most UI and by NotesTreeContext for CRUD-driven selection updates.
+- **notes** — `components/note-row`; `hooks/notes-tree-context` (owns the folder tree,
+  computed `treeData`/`flatItems`/`visibleItems`/`orderedIds`, rename state, and all CRUD:
+  createNewNote / deleteNotes / deleteFolders / moveNotesToArchive / rename; consumes
+  Selection + Editor to update them after CRUD), `hooks/use-note-previews`; `api/notes-api`
+  (the IPC surface — `getTree`, `readNote`, `createNote`, `writeNote`, `getNoteMeta`,
+  `deleteItems`, `moveItems`, `renameItem`, `setOrder`, …). `notes-api` is also used by
+  editor and tree.
+- **editor** — `components/note-editor` (Tiptap; shared desktop+mobile) and
+  `components/lens/` (the multi-note "lens": `multi-note-lens` orchestrator + `lens-toolbar`
+  + `lens-note-stage` + `note-readonly-content`); `hooks/{editor-context, use-note-editor,
+  use-lens-annotations}`; `lib/{markdown-editor, note-annotations, lens-backmatter,
+  lens-geometry}`. `use-note-editor`: debounced 400ms autosave, dirty/saving/error, empty-note
+  cleanup, placeholder→slug rename. `use-lens-annotations`: all lens annotation state +
+  per-note serialized persistence.
+- **tree** — `components/{folders-panel, tree-node, tree-row, nav-note-row, recent-tree-node}`;
+  `hooks/{use-drag-drop, use-keyboard-navigation}`; `lib/{tree-ops, dnd-tree,
+  keyboard-coordinates, tree-dnd (DnD id/edge primitives), types}`. Tree components are
+  presentational — data/handlers come from app-shell (which reads NotesTreeContext).
+- **recording** — `components/recording-note-header`; `hooks/{recordings-context,
+  use-audio-recorder}`; `api/recordings-api`. Dual-mode recorder (web MediaRecorder / native iOS).
+- **handwriting** — `components/handwriting-note-header`; `hooks/handwriting-context`;
+  `api/handwriting-api` (OpenAI / HuggingFace OCR queue).
+- **profiles** — `hooks/profiles-context` (multi-profile; per-profile `notes_root` + sync
+  settings in localStorage; `flushSaveRef` to flush the editor before switching);
+  `api/profiles-api`. Heavily depended upon.
+- **sync** — `components/local-sync-server-card`; `hooks/git-sync-context`;
+  `api/{git-api (libgit2 IPC + SSH key lifecycle), local-sync-link}`.
+- **security** — `components/lock-screen`; `hooks/security-context` (unlock/lock/enable,
+  panic reset, auto-lock on background); `api/security-api`.
+- **settings** — the aggregator UI. `components/desktop/` (settings-panel + 8 sections) and
+  `components/mobile/` (settings-screen + 7 sections + helpers); `hooks/use-settings-data`
+  (shared computed values); `lib/sections` (the `SettingsSectionId` registry + desktop and
+  mobile section lists). Settings legitimately imports from many other features.
 
-**EditorContext** (`editor-context.tsx`): Wraps the `useNoteEditor` hook (`features/editor/use-note-editor.ts`), providing `noteContent`, `draftNoteContent`, `handleEditorChange`, `isSaving`, `lastSaveError`, `flushSave`, `clearNote`, `clearDraft`, `retrySave`. Owns `rightPaneRef`. Watches `activeNote` to load/save notes; handles flush-on-visibility/unload; clears on profile/root change.
+### Cross-context bridges (all in `src/app/app.tsx`)
 
-**NotesTreeContext** (`notes-tree-context.tsx`): Owns the folder tree, computed tree data (treeData, flatItems, visibleItems, orderedIds), and rename state. Provides all CRUD: createNewNote, deleteNotes, deleteFolders, moveNotesToArchive, rename. New notes use the per-profile filename mode (`utc_timestamp_slug`, `uuid_v7`, `uuid_v7_prefix_slug`). Consumes SelectionContext and EditorContext to update them after CRUD. Resets on profile/root change.
+1. **SecurityGate** — keeps the provider-heavy app unmounted while encrypted + locked.
+2. **FlushSaveBridge** — writes EditorContext's `flushSave` into ProfilesProvider's
+   `flushSaveRef` so profile switches flush unsaved edits.
+3. **RecordingsProvider.onRecordingComplete** — refreshes the tree + selects the new note.
+4. **GitSyncContext.gitPull({ onAfterPull })** — app-shell passes `refreshTree`.
+5. **NotesTreeContext → Selection/Editor** — CRUD ops update selection + editor state.
 
-**RecordingsContext** (`recordings-context.tsx`): Wraps `useAudioRecorder` (`features/recording/use-audio-recorder.ts`). Manages recording target folder, recording list/queue polling, audio playback (blob URLs), auto-queue transcription timer. Takes `onRecordingComplete` (wired in `app.tsx`) to refresh the tree and select the new note.
+### shared/
 
-**HandwritingContext** (`handwriting-context.tsx`): Image import + OCR queue (OpenAI / HuggingFace), wired similarly to recordings.
+`shared/api/invoke.ts` — `invokeLogged` (dev-only sanitized IPC tracing) used by every
+feature `api/`. `shared/lib/` — `dom`, `format` (formatters + `NotePreview` + `parseNotePreview`),
+`frontmatter`, `jobs`, `notes`, `selection`, `storage`, `utils` (`cn`). `shared/ui/` — shadcn.
+`shared/types.ts` — `FolderNode`, `NoteEntry`, `GitSyncStatus`, `ProfileSyncSettings`,
+`ThemeMode`, `NotesListMode`, `SecurityState`, … `shared/hooks/use-mobile.ts` — shadcn breakpoint.
 
-### Cross-context bridges
+> **The one accepted `shared → feature` edge:** `shared/lib/format.ts`'s `parseNotePreview`
+> imports `stripInlineAnnotationMetadata` from `features/editor/lib/note-annotations` to keep
+> editor metadata out of previews. It is a single pure function and is commented in place;
+> keep it the only such import.
 
-These are the trickiest part of the architecture (all in `src/app/app.tsx`):
+### Desktop shell (`src/desktop/`)
 
-1. **SecurityGate**: Keeps provider-heavy app state unmounted while locked, preventing data fetches when encrypted mode is locked.
-2. **FlushSaveBridge**: Tiny component that reads `flushSave` from EditorContext and writes it into ProfilesProvider's `flushSaveRef`, so profile switching can flush unsaved editor content.
-3. **RecordingsProvider.onRecordingComplete**: Defined in `AppInner`; on recording finish it refreshes the tree (NotesTreeContext) and selects the new note (SelectionContext).
-4. **GitSyncContext.gitPull({ onAfterPull })**: app-shell passes `() => refreshTree()` so the tree reloads after a pull.
-5. **NotesTreeContext → SelectionContext/EditorContext**: CRUD ops update selection and editor state.
+- `desktop-shell.tsx` — 2-pane / 3-pane resizable layout.
+- `middle-pane.tsx` — notes list (`SortableContext` + note-row) or settings sections.
+- `right-pane.tsx` — editor (note-editor / multi-note-lens) or settings detail.
+- `app-sidebar.tsx` — desktop left rail (feed / new / record / handwriting / settings / trash).
 
-### Feature: tree (`src/features/tree/`)
+### Mobile shell (`src/mobile/`)
 
-- `folders-panel.tsx` — top-level folders panel: tree rendering, recent section, "new folder" button, drop zones. Exports `EdgeSnap`, `DROP_PREFIX`, `dropId`, `ROOT_ID`.
-- `tree-node.tsx` — recursive folder node (renders `tree-row` + child `nav-note-row`s + subfolders).
-- `tree-row.tsx` — single folder row: drag-drop, rename input, expand/collapse, tree guides, note-count badge.
-- `nav-note-row.tsx` — note row inside the folder tree (nested-notes navigation mode).
-- `recent-tree-node.tsx` — recursive node for the "Recent" tab (time-based buckets).
-- `use-drag-drop.ts` — all DnD Kit handlers (folder reorder w/ edge-snap + auto-expand, note reorder/move). Tree state passed in as params for testability.
-- `use-keyboard-navigation.ts` — global shortcuts (Cmd+T/W/J/K/N, font zoom, lock) + arrow-key folder/note navigation, including the nested-notes mode.
-- `tree-ops.ts` — tree build/flatten/find/insert/remove/reorder.
-- `dnd-tree.ts` — DnD sortable-tree projection/flatten helpers.
-- `keyboard-coordinates.ts` — sortable keyboard coordinate getter (currently unused; the DnD context uses only PointerSensor).
-- `types.ts` — `TreeItem` (DnD tree node), `FlattenedItem` (flattened for rendering).
-
-### Feature: editor (`src/features/editor/`)
-
-- `note-editor.tsx` — Tiptap editor; shared by desktop and mobile.
-- `multi-note-lens.tsx` + `note-readonly-content.tsx` — desktop multi-note "lens" view.
-- `recording-note-header.tsx`, `handwriting-note-header.tsx` — note headers (shared).
-- `use-note-editor.ts` — loads note content on `activeNote` change, flushes previous if dirty, debounced autosave (400ms), dirty/saving/error state, `flushSave()`. On switch: empty dirty notes auto-delete; placeholder filenames auto-rename to `...-<slug>.md` when content allows (mode-dependent).
-- `markdown-editor.ts` — markdown ↔ HTML conversion. `lens-backmatter.ts`, `note-annotations.ts` — annotation/backmatter helpers.
-
-### Feature: notes (`src/features/notes/`)
-
-- `note-row.tsx` — desktop middle-pane note row.
-- `use-note-previews.ts` — given `NoteEntry[]`, fetches each note's meta + content in parallel, returns previews (title, date, summary).
-
-### Feature: settings (`src/features/settings/`)
-
-- `sections.ts` — `SettingsSectionId` + `SETTINGS_SECTIONS` registry. **Single source** for section ids, consumed by both shells.
-- `use-settings-data.ts` — shared computed values for settings UI (`isRecordingBusy`, `syncActionLabel`, `canPull/Push/Connect/Queue`, `recorderState`, `playButtonText()`).
-- `desktop/` — `settings-panel.tsx` (SettingsMiddlePane + SettingsDetailPane), 8 section components (general, profile, sync, updates, appearance, transcription, recordings, security) + `local-sync-server-card.tsx`. `profile-section.tsx` has the SSH-key UI (generate/copy/delete Ed25519).
-- `mobile/` — `settings-screen.tsx` (tabs + section switcher), 7 sections (no `transcription`), `helpers.tsx` (Group/ChoiceRow/InputRow/StatRow). `profile-section.tsx` has the SSH-key UI.
-
-### Feature: security (`src/features/security/`)
-
-- `lock-screen.tsx` — the unlock screen rendered by `SecurityGate` while encrypted-and-locked.
-
-### Feature: recording (`src/features/recording/`)
-
-- `use-audio-recorder.ts` — dual-mode: Web MediaRecorder (desktop) / native iOS via Tauri commands. Recovers when native recording survives app backgrounding.
-
-### Hooks (`src/hooks/`)
-
-- `use-mobile.ts` — shadcn breakpoint hook (used by `components/ui/sidebar.tsx`). Every other hook now lives with its feature: `use-drag-drop` / `use-keyboard-navigation` → tree, `use-note-editor` → editor, `use-note-previews` → notes, `use-audio-recorder` → recording, `use-settings-data` → settings, `use-edge-swipe` → `mobile/hooks/`.
-
-### Data layer (`src/data/`)
-
-`notes-api.ts` wraps all Tauri IPC commands (1:1 with Rust commands; re-implement these exports to swap backends). Key commands: `getTree`, `readNote`, `createNote`, `writeNote`, `getNoteMeta`, `deleteItems`, `moveItems`, `renameItem`, `setOrder`, `getGitStatus`, `getGitHistory`, `connectGitRepo`, `gitPull`, `gitPush`, `generateSshKey`, `getSshPublicKey`, `deleteSshKey`, `getProfiles`, `setActiveProfile`, `createProfile`, `setProfileNotesRoot`, `listRecordings`, `saveAudioRecording`, `queueRecordingTranscriptions`, `readRecordingAudio`, `startNativeAudioRecording`, `stopNativeAudioRecording`, `nativeRecorderCapabilities`, `getSecurityState`, `enableSecurity`, `lockSecurity`, `unlockSecurity`, `setSecurityPreferences`. `git-api.ts` also exposes the SSH key lifecycle. `invoke.ts` holds the shared `invokeLogged` wrapper.
+- `mobile-shell.tsx` — phone (nav bar + route renderer + drawer) or tablet layout, plus
+  action-sheet / prompt / toast overlays. `tablet-layout.tsx` — tablet two-pane.
+- `navigation.ts` — route types + `useReducer` state machine. `types.ts` — mobile constants/helpers.
+- `hooks/` — `use-mobile-navigation`, `use-action-sheets`, `use-phone-nav-header`,
+  `use-recent-buckets`, `use-edge-swipe`. `use-layout-mode.ts`, `use-keyboard-insets.ts`.
+- `ui/` — primitives: `action-sheet`, `nav-bar`, `tab-bar`, `prompt-sheet`, `toast`.
+- `views/` — reusable screen bodies used by phone screens + tablet: `folders-view`,
+  `notes-view`, `editor-view`, `recent-view`, `recording-view`.
+- `screens/` — one phone route screen per `route.kind` (`home/folders/notes/recent-date/
+  recording/editor/settings-screen` + `index.tsx` route renderer).
 
 ### Layout modes
 
@@ -282,30 +301,6 @@ These are the trickiest part of the architecture (all in `src/app/app.tsx`):
 | desktop | > 1024px | DesktopShell | Resizable three-pane |
 
 Detection in `src/mobile/use-layout-mode.ts`.
-
-### Types
-
-`src/types.ts`: FolderNode, NoteEntry, GitSyncStatus, GitCommitHistoryEntry, ProfileSyncSettings, RecordingListItem, RecordingQueueSnapshot, AppMode, PaneId, GitSyncAction, VisibleNavigationItem, `SecurityState`, `SecurityUnlockResult`, plus `ThemeMode` and `NotesListMode` (cross-cutting — moved here from the old SettingsPanel).
-
-`src/features/tree/types.ts`: TreeItem (DnD tree node), FlattenedItem (flattened for rendering).
-
-### Desktop shell (`src/desktop/`)
-
-- `desktop-shell.tsx` — lightweight wrapper for the 2-pane / 3-pane resizable layout.
-- `middle-pane.tsx` — notes list (`SortableContext` + `note-row`) or `SettingsMiddlePane`, by `appMode`.
-- `right-pane.tsx` — editor (`note-editor` / `multi-note-lens`) or `SettingsDetailPane`, by `appMode`.
-- `app-sidebar.tsx` — desktop left rail (feed / new note / record / handwriting / settings / trash).
-
-### Mobile shell (`src/mobile/`)
-
-- `mobile-shell.tsx` — thin shell: wires navigation/action-sheet/edge-swipe hooks; renders the phone layout (nav bar + route renderer + drawer) or the tablet layout, plus action-sheet / prompt / toast overlays. Only 3 props from app-shell.
-- `tablet-layout.tsx` — tablet two-pane layout (left: folders or settings sections; right: notes+editor or settings detail).
-- `navigation.ts` — route types + `useReducer` navigation state machine. `types.ts` — mobile constants (`FEED_FOLDER_PATH`, `ARCHIVE_FOLDER_PATH`, `SYSTEM_FOLDER_PATHS`) + helpers (`getDisplayFolderName`, `getDisplayRouteTitle`).
-- `use-layout-mode.ts`, `use-keyboard-insets.ts`.
-- `hooks/` — `use-mobile-navigation`, `use-action-sheets`, `use-phone-nav-header`, `use-recent-buckets`, `use-edge-swipe`.
-- `ui/` — UI primitives: `action-sheet`, `nav-bar`, `tab-bar`, `prompt-sheet`, `toast`.
-- `views/` — reusable screen bodies used by both phone screens and the tablet layout: `folders-view`, `notes-view`, `editor-view`, `recent-view`, `recording-view`.
-- `screens/` — one phone route screen per `route.kind`: `home-screen`, `folders-screen`, `notes-screen`, `recent-date-screen`, `recording-screen`, `editor-screen`, `settings-screen`, plus `index.tsx` (`PhoneRouteRenderer` dispatch).
 
 ## iOS Widget (Quick Record)
 

@@ -163,9 +163,26 @@ src/
 - [x] **P2.9 features/security** — security-context, security-api, lock-screen
 - [x] **P2.10 features/settings** — components/{desktop,mobile}, hooks/use-settings-data, lib/sections
 - [x] **P2.11 shared/** — ui, lib, api/invoke, types, constants, hooks/use-mobile (global @/ prefix sed)
-- [~] **P2.12 index.ts barrels** — EVALUATED - [ ] **P2.12 index.ts barrels** — public API per feature; route shell/cross-feature imports through them SKIPPED: notes-api is used by editor+tree while notes uses editor-context, so `export *` barrels would create a fragile editor<->notes import cycle. Deep segment imports are cycle-free and make the component/hook/lib role explicit at the call site.
-- [x] **P2.13 code-quality pass** — relocated MOBILE_SETTINGS_SECTIONS to settings/lib (fixed shared->settings); documented the one intentional shared->editor edge (format/parseNotePreview); deduped profile-section git-draft type. (Lens god-component already decomposed in P2.2b; tree-dnd extracted in P2.3.)
-- [ ] **P2.14 docs** — rewrite AGENTS.md + README; finalize this file
+- [~] **P2.12 index.ts barrels** — EVALUATED & SKIPPED on purpose: `notes-api` is used by
+      editor+tree while `notes` uses `editor-context`, so `export *` barrels would create a
+      fragile editor↔notes import cycle. Deep segment imports are cycle-free and make the
+      component/hook/lib role explicit at the call site.
+- [x] **P2.13 code-quality pass** — relocated MOBILE_SETTINGS_SECTIONS to settings/lib (fixed
+      shared→settings); documented the one intentional shared→editor edge; deduped
+      profile-section git-draft type. (Lens god-component decomposed in P2.2b; tree-dnd in P2.3.)
+- [x] **P2.14 docs** — rewrote AGENTS.md "How the frontend is structured" for full FSD;
+      README needs no change (delegates architecture to AGENTS.md; its src/ refs are valid).
+
+## Phase 2 verification & decisions
+
+- `tsc --noEmit` clean after every substage; final main + OTA (`src/main.tsx`) builds succeed.
+- **No top-level `contexts/` or `data/`** — fully dissolved into features + `shared/`.
+- **app/state/** holds `selection-context`, `theme-context`, `appearance-api` (app-global, no
+  single domain). Features may import these — the one accepted upward edge.
+- **shared/** is a leaf except ONE documented edge: `shared/lib/format.ts` `parseNotePreview`
+  → `editor/lib/note-annotations` (commented in place).
+- **No barrels** (see P2.12). **multi-note-lens** 872→ lib+hook+3 components. **tree DnD
+  primitives** moved out of the folders-panel component into `tree/lib/tree-dnd`.
 
 ## Notes / surprises log
 
