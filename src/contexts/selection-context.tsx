@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useProfiles } from "./ProfilesContext";
+import { useProfiles } from "./profiles-context";
 import { getNoteParentPath } from "../utils/notes";
 
 type SelectionContextValue = {

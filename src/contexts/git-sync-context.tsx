@@ -13,7 +13,7 @@ import type {
   GitSyncStatus,
 } from "../types";
 import { yieldToUi } from "../utils/notes";
-import { useProfiles } from "./ProfilesContext";
+import { useProfiles } from "./profiles-context";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 
 type GitSyncContextValue = {

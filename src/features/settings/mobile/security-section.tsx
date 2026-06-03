@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useSecurity } from "@/contexts/SecurityContext";
+import { useSecurity } from "@/contexts/security-context";
 import { Group, InputRow } from "./helpers";
 
 export function MobileSecuritySection() {

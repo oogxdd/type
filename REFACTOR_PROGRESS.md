@@ -96,7 +96,7 @@ src/
 - [x] **9. app/** — App/AppShell/mainApp/ErrorBoundary/launchScreen + update entry stubs ✅ tsc clean
       - `src/components/` now contains only `ui/` (shadcn). Entry stubs (main.tsx,
         ota-bootstrap.ts) stay at src/ root, now import `./app/main-app`.
-- [ ] **10. contexts/** — kebab-rename
+- [x] **10. contexts/** — kebab-rename ✅ tsc clean (theme-context, profiles-context, …)
 - [ ] **11. data/** — kebab-rename
 - [ ] **12. utils/ + constants/types** — final kebab pass
 - [ ] **13. Docs** — rewrite AGENTS.md frontend section; delete this file; restore stashed README

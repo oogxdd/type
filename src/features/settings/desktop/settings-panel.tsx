@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { useEditor } from "@/contexts/EditorContext";
+import { useEditor } from "@/contexts/editor-context";
 import {
   SETTINGS_SECTIONS,
   type SettingsSection,

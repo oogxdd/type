@@ -8,10 +8,10 @@ import { MobileSettingsScreen } from "@/features/settings/mobile/settings-screen
 import { MobileNavBar } from "@/mobile/ui/nav-bar";
 import { MobileTabBar } from "@/mobile/ui/tab-bar";
 import { MOBILE_SETTINGS_SECTIONS } from "@/constants";
-import { useTheme } from "@/contexts/ThemeContext";
-import { useSelection } from "@/contexts/SelectionContext";
-import { useEditor } from "@/contexts/EditorContext";
-import { useNotesTree } from "@/contexts/NotesTreeContext";
+import { useTheme } from "@/contexts/theme-context";
+import { useSelection } from "@/contexts/selection-context";
+import { useEditor } from "@/contexts/editor-context";
+import { useNotesTree } from "@/contexts/notes-tree-context";
 import { useKeyboardInsets } from "@/mobile/use-keyboard-insets";
 import { getDisplayRouteTitle, ARCHIVE_FOLDER_PATH } from "./types";
 

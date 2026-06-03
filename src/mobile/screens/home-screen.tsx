@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import { createNote, deleteItems, writeNote } from "@/data/notesApi";
-import { useEditor } from "@/contexts/EditorContext";
-import { useNotesTree } from "@/contexts/NotesTreeContext";
-import { useProfiles } from "@/contexts/ProfilesContext";
-import { useSelection } from "@/contexts/SelectionContext";
+import { useEditor } from "@/contexts/editor-context";
+import { useNotesTree } from "@/contexts/notes-tree-context";
+import { useProfiles } from "@/contexts/profiles-context";
+import { useSelection } from "@/contexts/selection-context";
 import { MobileEditorScreen } from "@/mobile/views/editor-view";
 import { FEED_FOLDER_PATH } from "../types";
 

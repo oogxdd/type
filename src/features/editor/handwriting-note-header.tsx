@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { PenLine } from "lucide-react";
-import { useProfiles } from "@/contexts/ProfilesContext";
-import { useHandwriting } from "@/contexts/HandwritingContext";
+import { useProfiles } from "@/contexts/profiles-context";
+import { useHandwriting } from "@/contexts/handwriting-context";
 import {
   formatHandwritingStatus,
   formatRecordingStatusLabel,

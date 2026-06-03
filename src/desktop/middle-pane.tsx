@@ -1,8 +1,8 @@
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
-import { useNotesTree } from "@/contexts/NotesTreeContext";
-import { useSelection } from "@/contexts/SelectionContext";
+import { useNotesTree } from "@/contexts/notes-tree-context";
+import { useSelection } from "@/contexts/selection-context";
 
 import { NoteRow } from "@/features/notes/note-row";
 import { SettingsMiddlePane } from "@/features/settings/desktop/settings-panel";

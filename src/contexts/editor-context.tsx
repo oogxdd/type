@@ -6,8 +6,8 @@ import {
   type ReactNode,
 } from "react";
 import { useNoteEditor } from "@/features/editor/use-note-editor";
-import { useSelection } from "./SelectionContext";
-import { useProfiles } from "./ProfilesContext";
+import { useSelection } from "./selection-context";
+import { useProfiles } from "./profiles-context";
 
 type EditorContextValue = {
   noteContent: string;

@@ -1,6 +1,6 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useProfiles } from "@/contexts/ProfilesContext";
+import { useProfiles } from "@/contexts/profiles-context";
 import * as gitApi from "@/data/gitApi";
 import { Button } from "@/components/ui/button";
 import {

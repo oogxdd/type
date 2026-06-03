@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Menu } from "lucide-react";
-import { useSelection } from "@/contexts/SelectionContext";
-import { useEditor } from "@/contexts/EditorContext";
-import { useNotesTree } from "@/contexts/NotesTreeContext";
+import { useSelection } from "@/contexts/selection-context";
+import { useEditor } from "@/contexts/editor-context";
+import { useNotesTree } from "@/contexts/notes-tree-context";
 
 import { NoteEditor } from "@/features/editor/note-editor";
 import { MultiNoteLens } from "@/features/editor/multi-note-lens";

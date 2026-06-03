@@ -12,9 +12,9 @@ import type { FolderNode, NoteEntry, VisibleNavigationItem } from "../types";
 import { FEED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH, isSystemFolder } from "../constants";
 import { collectAllNotes } from "../utils/notes";
 import { useNotePreviews } from "@/features/notes/use-note-previews";
-import { useProfiles } from "./ProfilesContext";
-import { useSelection } from "./SelectionContext";
-import { useEditor } from "./EditorContext";
+import { useProfiles } from "./profiles-context";
+import { useSelection } from "./selection-context";
+import { useEditor } from "./editor-context";
 import {
   buildTreeItems,
   findNode,
@@ -26,7 +26,7 @@ import { confirmAction, focusNoScroll } from "../utils/dom";
 import type { TreeItem } from "@/features/tree/types";
 import type { FlattenedItem } from "@/features/tree/types";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
-import { useTheme } from "./ThemeContext";
+import { useTheme } from "./theme-context";
 
 type NotesTreeContextValue = {
   tree: FolderNode | null;

@@ -4,9 +4,9 @@ import {
   formatRecordingStatus,
   formatUpdatedAt,
 } from "@/utils/format";
-import { useProfiles } from "@/contexts/ProfilesContext";
-import { useRecordings } from "@/contexts/RecordingsContext";
-import { useHandwriting } from "@/contexts/HandwritingContext";
+import { useProfiles } from "@/contexts/profiles-context";
+import { useRecordings } from "@/contexts/recordings-context";
+import { useHandwriting } from "@/contexts/handwriting-context";
 import { Group, ChoiceRow, InputRow, StatRow } from "./helpers";
 
 const getJobTitle = (notePath: string): string => {

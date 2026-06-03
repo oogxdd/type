@@ -20,11 +20,11 @@ import { MobileNavBar } from "@/mobile/ui/nav-bar";
 import { MobilePromptSheet } from "@/mobile/ui/prompt-sheet";
 import { MobileToast } from "@/mobile/ui/toast";
 
-import { useTheme } from "@/contexts/ThemeContext";
-import { useSelection } from "@/contexts/SelectionContext";
-import { useEditor } from "@/contexts/EditorContext";
-import { useNotesTree } from "@/contexts/NotesTreeContext";
-import { useGitSync } from "@/contexts/GitSyncContext";
+import { useTheme } from "@/contexts/theme-context";
+import { useSelection } from "@/contexts/selection-context";
+import { useEditor } from "@/contexts/editor-context";
+import { useNotesTree } from "@/contexts/notes-tree-context";
+import { useGitSync } from "@/contexts/git-sync-context";
 import { parseSyncDeepLink } from "@/data/localSyncLink";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 import { useKeyboardInsets } from "@/mobile/use-keyboard-insets";

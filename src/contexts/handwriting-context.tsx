@@ -14,7 +14,7 @@ import type {
 } from "../types";
 import { FEED_FOLDER_PATH } from "../constants";
 import { toBase64 } from "../utils/notes";
-import { useProfiles } from "./ProfilesContext";
+import { useProfiles } from "./profiles-context";
 import { jobListSignature } from "../utils/jobs";
 import type { LayoutMode } from "../mobile/navigation";
 

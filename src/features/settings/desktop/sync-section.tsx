@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
-import { useNotesTree } from "@/contexts/NotesTreeContext";
-import { useGitSync } from "@/contexts/GitSyncContext";
-import { useProfiles } from "@/contexts/ProfilesContext";
+import { useNotesTree } from "@/contexts/notes-tree-context";
+import { useGitSync } from "@/contexts/git-sync-context";
+import { useProfiles } from "@/contexts/profiles-context";
 import { useSettingsData } from "@/features/settings/use-settings-data";
 import {
   formatCommitSummaryForApp,

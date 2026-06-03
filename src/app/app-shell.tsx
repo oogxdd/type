@@ -20,13 +20,13 @@ import { snapCenterToCursor } from "@dnd-kit/modifiers";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu } from "@tauri-apps/api/menu";
 
-import { useTheme } from "@/contexts/ThemeContext";
-import { useNotesTree } from "@/contexts/NotesTreeContext";
-import { useSelection } from "@/contexts/SelectionContext";
-import { useEditor } from "@/contexts/EditorContext";
-import { useRecordings } from "@/contexts/RecordingsContext";
-import { useHandwriting } from "@/contexts/HandwritingContext";
-import { useSecurity } from "@/contexts/SecurityContext";
+import { useTheme } from "@/contexts/theme-context";
+import { useNotesTree } from "@/contexts/notes-tree-context";
+import { useSelection } from "@/contexts/selection-context";
+import { useEditor } from "@/contexts/editor-context";
+import { useRecordings } from "@/contexts/recordings-context";
+import { useHandwriting } from "@/contexts/handwriting-context";
+import { useSecurity } from "@/contexts/security-context";
 
 import { useDragDrop } from "@/features/tree/use-drag-drop";
 import { useKeyboardNavigation } from "@/features/tree/use-keyboard-navigation";

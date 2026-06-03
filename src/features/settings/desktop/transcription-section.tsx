@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { formatRecordingStatus, formatUpdatedAt } from "@/utils/format";
-import { useProfiles } from "@/contexts/ProfilesContext";
-import { useRecordings } from "@/contexts/RecordingsContext";
+import { useProfiles } from "@/contexts/profiles-context";
+import { useRecordings } from "@/contexts/recordings-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import * as api from "@/data/recordingsApi";

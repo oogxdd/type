@@ -1,4 +1,4 @@
-import { useProfiles } from "@/contexts/ProfilesContext";
+import { useProfiles } from "@/contexts/profiles-context";
 import type { NoteFileNameFormat } from "@/types";
 
 const noteFileNameOptions: Array<{ value: NoteFileNameFormat; label: string; hint: string }> = [

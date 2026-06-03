@@ -3,8 +3,8 @@ import {
   formatHandwritingStatus,
   formatUpdatedAt,
 } from "@/utils/format";
-import { useProfiles } from "@/contexts/ProfilesContext";
-import { useHandwriting } from "@/contexts/HandwritingContext";
+import { useProfiles } from "@/contexts/profiles-context";
+import { useHandwriting } from "@/contexts/handwriting-context";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 

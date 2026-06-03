@@ -1,4 +1,4 @@
-import { useTheme } from "@/contexts/ThemeContext";
+import { useTheme } from "@/contexts/theme-context";
 import type { NotesListMode, ThemeMode } from "@/types";
 
 export function MobileAppearanceSection() {

@@ -1,7 +1,7 @@
 import { useCallback } from "react";
-import { useProfiles } from "@/contexts/ProfilesContext";
-import { useGitSync } from "@/contexts/GitSyncContext";
-import { useRecordings } from "@/contexts/RecordingsContext";
+import { useProfiles } from "@/contexts/profiles-context";
+import { useGitSync } from "@/contexts/git-sync-context";
+import { useRecordings } from "@/contexts/recordings-context";
 
 export function useSettingsData() {
   const { syncSettings } = useProfiles();
