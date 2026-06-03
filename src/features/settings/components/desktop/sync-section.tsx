@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useGitSync } from "@/features/sync/hooks/git-sync-context";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
-import { useSettingsData } from "@/features/settings/use-settings-data";
+import { useSettingsData } from "@/features/settings/hooks/use-settings-data";
 import {
   formatCommitSummaryForApp,
   formatGitCommitStateLabel,

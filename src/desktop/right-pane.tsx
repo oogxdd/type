@@ -8,8 +8,8 @@ import { NoteEditor } from "@/features/editor/components/note-editor";
 import { MultiNoteLens } from "@/features/editor/components/lens/multi-note-lens";
 import { RecordingNoteHeader } from "@/features/recording/components/recording-note-header";
 import { HandwritingNoteHeader } from "@/features/handwriting/components/handwriting-note-header";
-import { SettingsDetailPane } from "@/features/settings/desktop/settings-panel";
-import type { SettingsSectionId } from "@/features/settings/sections";
+import { SettingsDetailPane } from "@/features/settings/components/desktop/settings-panel";
+import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import { sanitizeRecordingEditorContent } from "@/utils/format";
 
 import { focusNoScroll } from "@/utils/dom";

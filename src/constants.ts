@@ -1,4 +1,4 @@
-import type { SettingsSectionId } from "@/features/settings/sections";
+import type { SettingsSectionId } from "@/features/settings/lib/sections";
 
 export const indentationWidth = 18;
 export const FEED_FOLDER_PATH = "Feed";

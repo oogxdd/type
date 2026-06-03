@@ -4,7 +4,7 @@ import {
   SETTINGS_SECTIONS,
   type SettingsSection,
   type SettingsSectionId,
-} from "../sections";
+} from "../../lib/sections";
 import { SettingsGeneralSection } from "./general-section";
 import { SettingsProfileSection } from "./profile-section";
 import { SettingsSyncSection } from "./sync-section";

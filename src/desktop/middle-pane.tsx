@@ -5,8 +5,8 @@ import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useSelection } from "@/app/state/selection-context";
 
 import { NoteRow } from "@/features/notes/components/note-row";
-import { SettingsMiddlePane } from "@/features/settings/desktop/settings-panel";
-import type { SettingsSectionId } from "@/features/settings/sections";
+import { SettingsMiddlePane } from "@/features/settings/components/desktop/settings-panel";
+import type { SettingsSectionId } from "@/features/settings/lib/sections";
 
 import { focusNoScroll } from "@/utils/dom";
 import type { AppMode } from "@/types";

@@ -3,7 +3,7 @@ import type { MobileAction, MobileRoute } from "../navigation";
 import type { NoteEntry } from "@/types";
 import type { NotePreview } from "@/utils/format";
 import type { FlattenedItem } from "@/features/tree/lib/types";
-import type { SettingsSectionId } from "@/features/settings/sections";
+import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import type { RecentBucket } from "@/mobile/hooks/use-recent-buckets";
 
 import { PhoneHomeScreen } from "@/mobile/screens/home-screen";

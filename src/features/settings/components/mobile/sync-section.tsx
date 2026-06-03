@@ -7,7 +7,7 @@ import {
 } from "@/utils/format";
 import * as gitApi from "@/features/sync/api/git-api";
 import type { DiscoveredServer } from "@/types";
-import { useSettingsData } from "@/features/settings/use-settings-data";
+import { useSettingsData } from "@/features/settings/hooks/use-settings-data";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useGitSync } from "@/features/sync/hooks/git-sync-context";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";

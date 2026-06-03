@@ -1,4 +1,4 @@
-import type { SettingsSectionId } from "@/features/settings/sections";
+import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import { MobileGeneralSection } from "./general-section";
 import { MobileProfileSection } from "./profile-section";
 import { MobileSyncSection } from "./sync-section";

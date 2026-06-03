@@ -32,7 +32,7 @@ import { useDragDrop } from "@/features/tree/hooks/use-drag-drop";
 import { useKeyboardNavigation } from "@/features/tree/hooks/use-keyboard-navigation";
 
 import { FoldersPanel } from "@/features/tree/components/folders-panel";
-import { type SettingsSectionId } from "@/features/settings/sections";
+import { type SettingsSectionId } from "@/features/settings/lib/sections";
 import { AppSidebar } from "@/desktop/app-sidebar";
 import { DesktopShell } from "@/desktop/desktop-shell";
 import { DesktopMiddlePane } from "@/desktop/middle-pane";

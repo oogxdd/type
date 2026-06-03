@@ -1,4 +1,4 @@
-import type { SettingsSectionId } from "@/features/settings/sections";
+import type { SettingsSectionId } from "@/features/settings/lib/sections";
 
 export type LayoutMode = "desktop" | "tablet" | "phone";
 
