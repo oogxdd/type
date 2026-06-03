@@ -4,7 +4,7 @@ import {
   formatRecordingStatus,
   formatUpdatedAt,
 } from "@/utils/format";
-import { useProfiles } from "@/contexts/profiles-context";
+import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
 import { Group, ChoiceRow, InputRow, StatRow } from "./helpers";

@@ -6,15 +6,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import * as api from "../data/profiles-api";
-import type { NotesProfileSnapshot, ProfileSyncSettings } from "../types";
+import * as api from "../api/profiles-api";
+import type { NotesProfileSnapshot, ProfileSyncSettings } from "@/types";
 import {
   DEFAULT_PROFILE_SYNC_SETTINGS,
   getProfileSyncSettings,
   removeProfileSyncSettings,
   readProfileSyncStore,
   writeProfileSyncStore,
-} from "../utils/storage";
+} from "@/utils/storage";
 
 type ProfilesContextValue = {
   profilesSnapshot: NotesProfileSnapshot | null;

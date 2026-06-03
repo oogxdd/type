@@ -12,7 +12,7 @@ import type { RecordingListItem, RecordingQueueSnapshot } from "@/types";
 import { FEED_FOLDER_PATH } from "@/constants";
 import { toBase64, fromBase64 } from "@/utils/notes";
 import { useAudioRecorder } from "./use-audio-recorder";
-import { useProfiles } from "@/contexts/profiles-context";
+import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { jobListSignature } from "@/utils/jobs";
 import type { LayoutMode } from "@/mobile/navigation";
 

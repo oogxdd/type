@@ -3,7 +3,7 @@ import "./app.css";
 import "@/mobile/mobile.css";
 
 import { ThemeProvider, useTheme } from "@/app/state/theme-context";
-import { ProfilesProvider, useProfiles } from "@/contexts/profiles-context";
+import { ProfilesProvider, useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { GitSyncProvider } from "@/contexts/git-sync-context";
 import { SelectionProvider, useSelection } from "@/app/state/selection-context";
 import { EditorProvider, useEditor } from "@/features/editor/hooks/editor-context";

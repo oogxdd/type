@@ -1,4 +1,4 @@
-import { useProfiles } from "@/contexts/profiles-context";
+import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import type { NoteFileNameFormat } from "@/types";
 import { ChoiceRow, Group } from "./helpers";
 

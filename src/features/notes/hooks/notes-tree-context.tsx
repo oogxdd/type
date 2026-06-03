@@ -12,7 +12,7 @@ import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/types";
 import { FEED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH, isSystemFolder } from "@/constants";
 import { collectAllNotes } from "@/utils/notes";
 import { useNotePreviews } from "./use-note-previews";
-import { useProfiles } from "@/contexts/profiles-context";
+import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useSelection } from "@/app/state/selection-context";
 import { useEditor } from "@/features/editor/hooks/editor-context";
 import {
