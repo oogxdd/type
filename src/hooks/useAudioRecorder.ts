@@ -295,6 +295,36 @@ export const useAudioRecorder = ({ onRecordingReady }: UseAudioRecorderArgs) => 
   const recordingElapsedLabel =
     recordingElapsedMs !== null ? formatElapsed(recordingElapsedMs) : null;
 
+  const startRecording = useCallback(async () => {
+    try {
+      if (nativeSupported) {
+        if (isRecording || isFinalizing) {
+          return;
+        }
+        setError(null);
+        await api.startNativeAudioRecording();
+        setIsRecording(true);
+        setClockNowMs(Date.now());
+        setRecordingStartedAtMs(Date.now());
+        setNativeRecoveryNotice(null);
+        return;
+      }
+      if (!webSupported) {
+        setError("This device does not support audio recording in-app.");
+        return;
+      }
+      if (isRecording || isFinalizing) {
+        return;
+      }
+      await startWebRecording();
+    } catch (cause) {
+      setError(toErrorMessage(cause));
+      stopStream();
+    }
+  }, [isFinalizing, isRecording, nativeSupported, startWebRecording, stopStream, webSupported]);
+
+  const clearError = useCallback(() => setError(null), []);
+
   return {
     isSupported,
     isRecording,
@@ -302,34 +332,8 @@ export const useAudioRecorder = ({ onRecordingReady }: UseAudioRecorderArgs) => 
     error,
     nativeRecoveryNotice,
     recordingElapsedLabel,
-    startRecording: async () => {
-      try {
-        if (nativeSupported) {
-          if (isRecording || isFinalizing) {
-            return;
-          }
-          setError(null);
-          await api.startNativeAudioRecording();
-          setIsRecording(true);
-          setClockNowMs(Date.now());
-          setRecordingStartedAtMs(Date.now());
-          setNativeRecoveryNotice(null);
-          return;
-        }
-        if (!webSupported) {
-          setError("This device does not support audio recording in-app.");
-          return;
-        }
-        if (isRecording || isFinalizing) {
-          return;
-        }
-        await startWebRecording();
-      } catch (cause) {
-        setError(toErrorMessage(cause));
-        stopStream();
-      }
-    },
+    startRecording,
     stopRecording,
-    clearError: () => setError(null),
+    clearError,
   };
 };

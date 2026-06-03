@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback } from "react";
 import { useProfiles } from "../contexts/ProfilesContext";
 import { useGitSync } from "../contexts/GitSyncContext";
 import { useRecordings } from "../contexts/RecordingsContext";
@@ -45,8 +45,8 @@ export function useSettingsData() {
         ? "Saving"
         : "Idle";
 
-  const playButtonText = useMemo(
-    () => (audioPath: string) =>
+  const playButtonText = useCallback(
+    (audioPath: string) =>
       activeAudioPath && activeAudioPath === audioPath ? "Playing" : "Play",
     [activeAudioPath]
   );

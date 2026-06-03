@@ -8,7 +8,6 @@ type UseKeyboardNavigationArgs = {
   appMode: AppMode;
   shouldNestNotesInNavigation: boolean;
   sidebarCollapsed: boolean;
-  editorFontSize: number;
   increaseEditorFontSize: () => void;
   decreaseEditorFontSize: () => void;
   resetEditorFontSize: () => void;

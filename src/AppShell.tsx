@@ -206,7 +206,6 @@ export function AppShell() {
     appMode,
     shouldNestNotesInNavigation,
     sidebarCollapsed,
-    editorFontSize,
     increaseEditorFontSize,
     decreaseEditorFontSize,
     resetEditorFontSize,

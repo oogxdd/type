@@ -249,17 +249,20 @@ export function useNoteEditor(
     };
   }, [activeNote, noteContent, noteDirty, saveNow]);
 
-  const handleEditorChange = (markdown: string) => {
-    if (!activeNote) {
-      setDraftNoteContent((prev) => (prev === markdown ? prev : markdown));
-      return;
-    }
-    setNoteContent((prev) => (prev === markdown ? prev : markdown));
-    noteContentRef.current = markdown;
-    setNoteDirty(true);
-    noteDirtyRef.current = true;
-    setSaveError(null);
-  };
+  const handleEditorChange = useCallback(
+    (markdown: string) => {
+      if (!activeNote) {
+        setDraftNoteContent((prev) => (prev === markdown ? prev : markdown));
+        return;
+      }
+      setNoteContent((prev) => (prev === markdown ? prev : markdown));
+      noteContentRef.current = markdown;
+      setNoteDirty(true);
+      noteDirtyRef.current = true;
+      setSaveError(null);
+    },
+    [activeNote]
+  );
 
   const clearNote = useCallback(() => {
     setNoteContent("");
