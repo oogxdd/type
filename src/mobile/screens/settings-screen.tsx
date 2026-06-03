@@ -1,6 +1,6 @@
 import type { SettingsSectionId } from "@/features/settings/sections";
 import { MobileSettingsScreen } from "@/features/settings/mobile/settings-screen";
-import { MOBILE_SETTINGS_SECTIONS } from "../../constants";
+import { MOBILE_SETTINGS_SECTIONS } from "@/constants";
 
 type PhoneSettingsScreenProps = {
   activeSettingsSection: SettingsSectionId;

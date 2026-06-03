@@ -25,7 +25,7 @@ import { type NotePreview } from "../utils/format";
 import { confirmAction, focusNoScroll } from "../utils/dom";
 import type { TreeItem } from "@/features/tree/types";
 import type { FlattenedItem } from "@/features/tree/types";
-import { useLayoutMode } from "../mobile/useLayoutMode";
+import { useLayoutMode } from "@/mobile/use-layout-mode";
 import { useTheme } from "./ThemeContext";
 
 type NotesTreeContextValue = {

@@ -14,7 +14,7 @@ import type {
 } from "../types";
 import { yieldToUi } from "../utils/notes";
 import { useProfiles } from "./ProfilesContext";
-import { useLayoutMode } from "../mobile/useLayoutMode";
+import { useLayoutMode } from "@/mobile/use-layout-mode";
 
 type GitSyncContextValue = {
   gitStatus: GitSyncStatus | null;

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
-import { createNote, deleteItems, writeNote } from "../../data/notesApi";
-import { useEditor } from "../../contexts/EditorContext";
-import { useNotesTree } from "../../contexts/NotesTreeContext";
-import { useProfiles } from "../../contexts/ProfilesContext";
-import { useSelection } from "../../contexts/SelectionContext";
-import { MobileEditorScreen } from "../components/MobileEditorScreen";
+import { createNote, deleteItems, writeNote } from "@/data/notesApi";
+import { useEditor } from "@/contexts/EditorContext";
+import { useNotesTree } from "@/contexts/NotesTreeContext";
+import { useProfiles } from "@/contexts/ProfilesContext";
+import { useSelection } from "@/contexts/SelectionContext";
+import { MobileEditorScreen } from "@/mobile/views/editor-view";
 import { FEED_FOLDER_PATH } from "../types";
 
 type PhoneHomeScreenProps = {

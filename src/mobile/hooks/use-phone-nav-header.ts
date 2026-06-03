@@ -9,7 +9,7 @@ import {
 import { createElement, type ReactNode } from "react";
 import type { MobileAction, MobileRoute } from "../navigation";
 import { getDisplayRouteTitle } from "../types";
-import type { RecentBucket } from "./useRecentBuckets";
+import type { RecentBucket } from "@/mobile/hooks/use-recent-buckets";
 
 type NavAction = {
   label: string;

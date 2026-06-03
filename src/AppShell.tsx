@@ -37,8 +37,8 @@ import { AppSidebar } from "@/desktop/app-sidebar";
 import { DesktopShell } from "@/desktop/desktop-shell";
 import { DesktopMiddlePane } from "@/desktop/middle-pane";
 import { DesktopRightPane } from "@/desktop/right-pane";
-import { MobileShell } from "./mobile/MobileShell";
-import { useLayoutMode } from "./mobile/useLayoutMode";
+import { MobileShell } from "@/mobile/mobile-shell";
+import { useLayoutMode } from "@/mobile/use-layout-mode";
 
 import { focusNoScroll } from "./utils/dom";
 import { getNoteParentPath } from "./utils/notes";

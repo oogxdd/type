@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import type { NoteEntry } from "../../types";
-import { useNotesTree } from "../../contexts/NotesTreeContext";
+import type { NoteEntry } from "@/types";
+import { useNotesTree } from "@/contexts/NotesTreeContext";
 import { DAY_MS } from "../types";
 
 export type RecentBucket = {

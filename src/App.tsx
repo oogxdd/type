@@ -12,7 +12,7 @@ import { RecordingsProvider } from "./contexts/RecordingsContext";
 import { HandwritingProvider } from "./contexts/HandwritingContext";
 import { SecurityProvider, useSecurity } from "./contexts/SecurityContext";
 import { AppShell } from "./AppShell";
-import { useLayoutMode } from "./mobile/useLayoutMode";
+import { useLayoutMode } from "@/mobile/use-layout-mode";
 import { SecurityLockScreen } from "@/features/security/lock-screen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { hideLaunchSplash } from "./utils/launchScreen";

@@ -1,18 +1,19 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { MobileNotesScreen } from "../components/MobileNotesScreen";
-import type { NotePreview } from "../../utils/format";
-import type { RecentBucket } from "../hooks/useRecentBuckets";
+import { MobileNotesScreen } from "@/mobile/views/notes-view";
+import type { NoteEntry } from "@/types";
+import type { NotePreview } from "@/utils/format";
+import { getDisplayRouteTitle } from "../types";
 
-type PhoneRecentDateScreenProps = {
-  bucketId: string;
-  recentBucketById: Map<string, RecentBucket>;
-  allNotePreviews: Record<string, NotePreview>;
+type PhoneNotesScreenProps = {
+  folderPath: string;
+  activeFolderTitle: string;
+  notes: NoteEntry[];
+  notePreviews: Record<string, NotePreview>;
   activeNote: string | null;
   openEditorRoute: (notePath: string, folderPath?: string) => void;
   createNewNote: (
     preferredFolderPath?: string,
-    initialContent?: string,
-    targetTimestampMs?: number
+    initialContent?: string
   ) => Promise<string | null>;
   showToast: (message: string, tone?: "info" | "success" | "error") => void;
   onDeleteNote: (path: string) => Promise<boolean>;
@@ -23,13 +24,14 @@ type PhoneRecentDateScreenProps = {
     notePath: string,
     parentPath?: string
   ) => Promise<void>;
-  refreshTree: () => Promise<void>;
+  refreshNotesFeed: (folderPath: string) => Promise<void>;
 };
 
-export function PhoneRecentDateScreen({
-  bucketId,
-  recentBucketById,
-  allNotePreviews,
+export function PhoneNotesScreen({
+  folderPath,
+  activeFolderTitle,
+  notes,
+  notePreviews,
   activeNote,
   openEditorRoute,
   createNewNote,
@@ -38,28 +40,24 @@ export function PhoneRecentDateScreen({
   onArchiveNote,
   openNoteActionSheet,
   onNoteContextMenu,
-  refreshTree,
-}: PhoneRecentDateScreenProps) {
-  const bucket = recentBucketById.get(bucketId);
-  const bucketNotes = bucket?.notes ?? [];
-  const bucketTitle = bucket?.label ?? "Recent";
-
+  refreshNotesFeed,
+}: PhoneNotesScreenProps) {
   return (
     <MobileNotesScreen
-      folderTitle={bucketTitle}
-      notes={bucketNotes}
-      previews={allNotePreviews}
+      folderTitle={activeFolderTitle}
+      notes={notes}
+      previews={notePreviews}
       activeNote={activeNote}
       onSelect={(path) => {
-        openEditorRoute(path);
+        openEditorRoute(path, folderPath);
       }}
       onCreate={() => {
         void (async () => {
-          const path = await createNewNote(undefined, "", bucket?.dayEndMs ?? undefined);
+          const path = await createNewNote(folderPath);
           if (!path) {
             return;
           }
-          openEditorRoute(path);
+          openEditorRoute(path, folderPath);
         })();
       }}
       onDelete={(path) => {
@@ -88,12 +86,12 @@ export function PhoneRecentDateScreen({
       }}
       onLongPress={openNoteActionSheet}
       onContextMenu={(event, path) => {
-        void onNoteContextMenu(event, path);
+        void onNoteContextMenu(event, path, folderPath);
       }}
       onPullRefresh={async () => {
-        await refreshTree();
+        await refreshNotesFeed(folderPath);
       }}
-      emptyStateText={`No notes in ${bucketTitle}.`}
+      emptyStateText={`No notes in ${getDisplayRouteTitle(activeFolderTitle)}.`}
       createButtonLabel="Create note"
     />
   );

@@ -15,30 +15,30 @@ import {
 } from "react";
 import type { SettingsSectionId } from "@/features/settings/sections";
 import type { MobileToastState } from "./navigation";
-import { MobileActionSheet } from "./components/MobileActionSheet";
-import { MobileNavBar } from "./components/MobileNavBar";
-import { MobilePromptSheet } from "./components/MobilePromptSheet";
-import { MobileToast } from "./components/MobileToast";
+import { MobileActionSheet } from "@/mobile/ui/action-sheet";
+import { MobileNavBar } from "@/mobile/ui/nav-bar";
+import { MobilePromptSheet } from "@/mobile/ui/prompt-sheet";
+import { MobileToast } from "@/mobile/ui/toast";
 
-import { useTheme } from "../contexts/ThemeContext";
-import { useSelection } from "../contexts/SelectionContext";
-import { useEditor } from "../contexts/EditorContext";
-import { useNotesTree } from "../contexts/NotesTreeContext";
-import { useGitSync } from "../contexts/GitSyncContext";
-import { parseSyncDeepLink } from "../data/localSyncLink";
-import { useLayoutMode } from "./useLayoutMode";
-import { useKeyboardInsets } from "./useKeyboardInsets";
-import { useEdgeSwipe } from "../hooks/useEdgeSwipe";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useSelection } from "@/contexts/SelectionContext";
+import { useEditor } from "@/contexts/EditorContext";
+import { useNotesTree } from "@/contexts/NotesTreeContext";
+import { useGitSync } from "@/contexts/GitSyncContext";
+import { parseSyncDeepLink } from "@/data/localSyncLink";
+import { useLayoutMode } from "@/mobile/use-layout-mode";
+import { useKeyboardInsets } from "@/mobile/use-keyboard-insets";
+import { useEdgeSwipe } from "@/mobile/hooks/use-edge-swipe";
 
-import { useMobileNavigation } from "./hooks/useMobileNavigation";
-import { useActionSheets } from "./hooks/useActionSheets";
-import { usePhoneNavHeader } from "./hooks/usePhoneNavHeader";
-import { useRecentBuckets } from "./hooks/useRecentBuckets";
-import { PhoneRouteRenderer } from "./screens";
-import { TabletLayout } from "./TabletLayout";
+import { useMobileNavigation } from "@/mobile/hooks/use-mobile-navigation";
+import { useActionSheets } from "@/mobile/hooks/use-action-sheets";
+import { usePhoneNavHeader } from "@/mobile/hooks/use-phone-nav-header";
+import { useRecentBuckets } from "@/mobile/hooks/use-recent-buckets";
+import { PhoneRouteRenderer } from "@/mobile/screens";
+import { TabletLayout } from "@/mobile/tablet-layout";
 import { FEED_FOLDER_PATH, getDisplayFolderName, ARCHIVE_FOLDER_PATH } from "./types";
-import { MobileFoldersScreen } from "./components/MobileFoldersScreen";
-import { MobileRecentScreen } from "./components/MobileRecentScreen";
+import { MobileFoldersScreen } from "@/mobile/views/folders-view";
+import { MobileRecentScreen } from "@/mobile/views/recent-view";
 
 type MobileShellProps = {
   activeSettingsSection: SettingsSectionId;

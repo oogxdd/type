@@ -1,8 +1,8 @@
 import type { MutableRefObject } from "react";
-import { MobileEditorScreen } from "../components/MobileEditorScreen";
-import { useEditor } from "../../contexts/EditorContext";
-import { useSelection } from "../../contexts/SelectionContext";
-import { useNotesTree } from "../../contexts/NotesTreeContext";
+import { MobileEditorScreen } from "@/mobile/views/editor-view";
+import { useEditor } from "@/contexts/EditorContext";
+import { useSelection } from "@/contexts/SelectionContext";
+import { useNotesTree } from "@/contexts/NotesTreeContext";
 import type { MobileAction } from "../navigation";
 
 type PhoneEditorScreenProps = {

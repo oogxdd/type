@@ -1,7 +1,7 @@
 import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { Mic, PenLine } from "lucide-react";
-import type { NoteEntry } from "../../types";
-import type { NotePreview } from "../../utils/format";
+import type { NoteEntry } from "@/types";
+import type { NotePreview } from "@/utils/format";
 
 type MobileNotesScreenProps = {
   folderTitle: string;

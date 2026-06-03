@@ -1,7 +1,7 @@
-import { MobileFoldersScreen } from "../components/MobileFoldersScreen";
-import { MobileRecentScreen } from "../components/MobileRecentScreen";
+import { MobileFoldersScreen } from "@/mobile/views/folders-view";
+import { MobileRecentScreen } from "@/mobile/views/recent-view";
 import type { FlattenedItem } from "@/features/tree/types";
-import type { RecentBucket } from "../hooks/useRecentBuckets";
+import type { RecentBucket } from "@/mobile/hooks/use-recent-buckets";
 
 type PhoneFoldersScreenProps = {
   navigationTab: "folders" | "recent";

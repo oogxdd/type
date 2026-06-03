@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import type { MobileActionSheetState, MobileToastState } from "../navigation";
 import type { SheetContext } from "../types";
 import { SYSTEM_FOLDER_PATHS, getDisplayFolderName } from "../types";
-import { useNotesTree } from "../../contexts/NotesTreeContext";
+import { useNotesTree } from "@/contexts/NotesTreeContext";
 
 export function useActionSheets(showToast: (message: string, tone?: MobileToastState["tone"]) => void) {
   const {

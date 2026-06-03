@@ -1,18 +1,18 @@
 import { Archive, Folder, Settings } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import type { SettingsSectionId } from "@/features/settings/sections";
-import { MobileEditorScreen } from "./components/MobileEditorScreen";
-import { MobileFoldersScreen } from "./components/MobileFoldersScreen";
-import { MobileNotesScreen } from "./components/MobileNotesScreen";
+import { MobileEditorScreen } from "@/mobile/views/editor-view";
+import { MobileFoldersScreen } from "@/mobile/views/folders-view";
+import { MobileNotesScreen } from "@/mobile/views/notes-view";
 import { MobileSettingsScreen } from "@/features/settings/mobile/settings-screen";
-import { MobileNavBar } from "./components/MobileNavBar";
-import { MobileTabBar } from "./components/MobileTabBar";
-import { MOBILE_SETTINGS_SECTIONS } from "../constants";
-import { useTheme } from "../contexts/ThemeContext";
-import { useSelection } from "../contexts/SelectionContext";
-import { useEditor } from "../contexts/EditorContext";
-import { useNotesTree } from "../contexts/NotesTreeContext";
-import { useKeyboardInsets } from "./useKeyboardInsets";
+import { MobileNavBar } from "@/mobile/ui/nav-bar";
+import { MobileTabBar } from "@/mobile/ui/tab-bar";
+import { MOBILE_SETTINGS_SECTIONS } from "@/constants";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useSelection } from "@/contexts/SelectionContext";
+import { useEditor } from "@/contexts/EditorContext";
+import { useNotesTree } from "@/contexts/NotesTreeContext";
+import { useKeyboardInsets } from "@/mobile/use-keyboard-insets";
 import { getDisplayRouteTitle, ARCHIVE_FOLDER_PATH } from "./types";
 
 const TABLET_LEFT_ITEMS = [
