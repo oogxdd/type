@@ -38,6 +38,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem("notes-viewer-notes-list-mode", notesListMode);
   }, [notesListMode]);
 
+  useEffect(() => {
+    window.localStorage.setItem(
+      "notes-viewer-editor-font-size",
+      String(editorFontSize)
+    );
+  }, [editorFontSize]);
+
   const increaseEditorFontSize = useCallback(() => {
     setEditorFontSize((prev) => Math.min(MAX_EDITOR_FONT_SIZE, prev + 1));
   }, []);

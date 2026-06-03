@@ -1,8 +1,7 @@
 import { ChevronRight, Folder } from "lucide-react";
 import { useRef } from "react";
 import type { FlattenedItem } from "../../tree/types";
-
-const getDisplayFolderName = (name: string) => (name === "Archieve" ? "Archive" : name);
+import { getDisplayFolderName } from "../types";
 
 type MobileFoldersScreenProps = {
   items: FlattenedItem[];

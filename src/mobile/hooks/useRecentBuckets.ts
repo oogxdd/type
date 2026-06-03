@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { NoteEntry } from "../../types";
 import { useNotesTree } from "../../contexts/NotesTreeContext";
+import { DAY_MS } from "../types";
 
 export type RecentBucket = {
   id: string;
@@ -9,8 +10,6 @@ export type RecentBucket = {
   notes: NoteEntry[];
   dayEndMs: number | null;
 };
-
-const DAY_MS = 86_400_000;
 
 export function useRecentBuckets() {
   const { allNotes, allNotePreviews } = useNotesTree();

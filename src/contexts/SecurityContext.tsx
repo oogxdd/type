@@ -16,7 +16,6 @@ type SecurityContextValue = {
   securityError: string | null;
   isSecurityEnabled: boolean;
   isLocked: boolean;
-  refreshSecurityState: () => Promise<void>;
   enableSecurity: (unlockPassword: string, panicPassword: string) => Promise<void>;
   unlockSecurity: (password: string) => Promise<SecurityUnlockResult>;
   lockSecurity: () => Promise<void>;
@@ -172,7 +171,6 @@ export function SecurityProvider({ children }: { children: ReactNode }) {
     securityError,
     isSecurityEnabled: Boolean(securityState?.encryption_enabled),
     isLocked: Boolean(securityState?.encryption_enabled && securityState?.locked),
-    refreshSecurityState,
     enableSecurity,
     unlockSecurity,
     lockSecurity,
