@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import { joinFrontmatter, splitFrontmatter } from "@/utils/frontmatter";
+import { joinFrontmatter, splitFrontmatter } from "@/shared/lib/frontmatter";
 import {
   appendRawLensBackmatterBlock,
   splitLensBackmatterBlock,

@@ -7,8 +7,8 @@ import {
   type FormEvent as ReactFormEvent,
 } from "react";
 import { readNote, writeNote } from "@/features/notes/api/notes-api";
-import { sanitizeRecordingEditorContent } from "@/utils/format";
-import { stripFrontmatter } from "@/utils/frontmatter";
+import { sanitizeRecordingEditorContent } from "@/shared/lib/format";
+import { stripFrontmatter } from "@/shared/lib/frontmatter";
 import {
   parseNoteAnnotations,
   stripInlineAnnotationMetadata,

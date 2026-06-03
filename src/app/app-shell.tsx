@@ -40,17 +40,17 @@ import { DesktopRightPane } from "@/desktop/right-pane";
 import { MobileShell } from "@/mobile/mobile-shell";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 
-import { focusNoScroll } from "@/utils/dom";
-import { getNoteParentPath } from "@/utils/notes";
-import { computeRangeSelection, resolveTargetPaths } from "@/utils/selection";
+import { focusNoScroll } from "@/shared/lib/dom";
+import { getNoteParentPath } from "@/shared/lib/notes";
+import { computeRangeSelection, resolveTargetPaths } from "@/shared/lib/selection";
 import { findNode } from "@/features/tree/lib/tree-ops";
 import {
   ARCHIEVE_FOLDER_PATH,
   FEED_FOLDER_PATH,
   indentationWidth,
   isSystemFolder,
-} from "@/constants";
-import type { AppMode } from "@/types";
+} from "@/shared/constants";
+import type { AppMode } from "@/shared/types";
 
 export function AppShell() {
   const layoutMode = useLayoutMode();

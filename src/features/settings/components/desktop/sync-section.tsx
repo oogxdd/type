@@ -8,8 +8,8 @@ import {
   formatGitCommitStateLabel,
   formatGitCommitTime,
   getSyncHint,
-} from "@/utils/format";
-import { Button } from "@/components/ui/button";
+} from "@/shared/lib/format";
+import { Button } from "@/shared/ui/button";
 import { LocalSyncServerCard } from "@/features/sync/components/local-sync-server-card";
 
 export function SettingsSyncSection() {

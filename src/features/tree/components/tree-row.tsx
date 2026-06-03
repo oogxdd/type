@@ -3,7 +3,7 @@ import { useCallback } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { TreeItem } from "../lib/types";
-import type { DragData } from "@/types";
+import type { DragData } from "@/shared/types";
 import { dropId } from "../lib/tree-dnd";
 
 export type TreeRowProps = {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
-import type { AppMode, PaneId, VisibleNavigationItem } from "@/types";
+import type { AppMode, PaneId, VisibleNavigationItem } from "@/shared/types";
 import type { FlattenedItem } from "../lib/types";
-import { focusNoScroll, scrollIntoViewIfNeeded, escapeSelectorValue } from "@/utils/dom";
+import { focusNoScroll, scrollIntoViewIfNeeded, escapeSelectorValue } from "@/shared/lib/dom";
 
 type UseKeyboardNavigationArgs = {
   layoutMode: string;

@@ -3,8 +3,8 @@
 import * as React from "react"
 import { CirclePlus, FilePenLine, Home, MessageCircle, Mic, Search, Settings2, Square, Trash2 } from "lucide-react"
 
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { cn } from "@/shared/lib/utils"
+import { Button } from "@/shared/ui/button"
 import {
   Sidebar,
   SidebarContent,
@@ -16,7 +16,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-} from "@/components/ui/sidebar"
+} from "@/shared/ui/sidebar"
 
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   feedActive: boolean

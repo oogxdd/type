@@ -8,12 +8,12 @@ import {
   type ReactNode,
 } from "react";
 import * as api from "../api/recordings-api";
-import type { RecordingListItem, RecordingQueueSnapshot } from "@/types";
-import { FEED_FOLDER_PATH } from "@/constants";
-import { toBase64, fromBase64 } from "@/utils/notes";
+import type { RecordingListItem, RecordingQueueSnapshot } from "@/shared/types";
+import { FEED_FOLDER_PATH } from "@/shared/constants";
+import { toBase64, fromBase64 } from "@/shared/lib/notes";
 import { useAudioRecorder } from "./use-audio-recorder";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
-import { jobListSignature } from "@/utils/jobs";
+import { jobListSignature } from "@/shared/lib/jobs";
 import type { LayoutMode } from "@/mobile/navigation";
 
 type RecordingsContextValue = {

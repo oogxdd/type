@@ -7,14 +7,14 @@ import {
   type ReactNode,
 } from "react";
 import * as api from "../api/profiles-api";
-import type { NotesProfileSnapshot, ProfileSyncSettings } from "@/types";
+import type { NotesProfileSnapshot, ProfileSyncSettings } from "@/shared/types";
 import {
   DEFAULT_PROFILE_SYNC_SETTINGS,
   getProfileSyncSettings,
   removeProfileSyncSettings,
   readProfileSyncStore,
   writeProfileSyncStore,
-} from "@/utils/storage";
+} from "@/shared/lib/storage";
 
 type ProfilesContextValue = {
   profilesSnapshot: NotesProfileSnapshot | null;

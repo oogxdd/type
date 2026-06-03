@@ -11,11 +11,11 @@ import * as api from "../api/handwriting-api";
 import type {
   HandwritingOcrListItem,
   HandwritingOcrQueueSnapshot,
-} from "@/types";
-import { FEED_FOLDER_PATH } from "@/constants";
-import { toBase64 } from "@/utils/notes";
+} from "@/shared/types";
+import { FEED_FOLDER_PATH } from "@/shared/constants";
+import { toBase64 } from "@/shared/lib/notes";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
-import { jobListSignature } from "@/utils/jobs";
+import { jobListSignature } from "@/shared/lib/jobs";
 import type { LayoutMode } from "@/mobile/navigation";
 
 type HandwritingContextValue = {

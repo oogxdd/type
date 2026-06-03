@@ -1,10 +1,10 @@
-import { invokeLogged } from "@/data/invoke";
+import { invokeLogged } from "@/shared/api/invoke";
 import type {
   NotesProfile,
   NotesProfileSnapshot,
   ProfilesBackupArchive,
   ProfilesDocumentsExport,
-} from "@/types";
+} from "@/shared/types";
 
 type NotesProfilesSnapshotPayload = {
   active_profile_id: string;

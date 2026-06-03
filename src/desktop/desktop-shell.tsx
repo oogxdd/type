@@ -1,5 +1,5 @@
 import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from "react";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/shared/ui/resizable";
 
 type DesktopShellProps = {
   theme: "light" | "dark";

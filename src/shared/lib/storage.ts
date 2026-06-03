@@ -1,4 +1,4 @@
-import type { ThemeMode, NotesListMode } from "@/types";
+import type { ThemeMode, NotesListMode } from "@/shared/types";
 import type { ProfileSyncSettings } from "../types";
 import {
   PROFILE_SYNC_STORAGE_KEY,

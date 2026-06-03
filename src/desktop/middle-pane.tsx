@@ -8,8 +8,8 @@ import { NoteRow } from "@/features/notes/components/note-row";
 import { SettingsMiddlePane } from "@/features/settings/components/desktop/settings-panel";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 
-import { focusNoScroll } from "@/utils/dom";
-import type { AppMode } from "@/types";
+import { focusNoScroll } from "@/shared/lib/dom";
+import type { AppMode } from "@/shared/types";
 
 type DesktopMiddlePaneProps = {
   appMode: AppMode;

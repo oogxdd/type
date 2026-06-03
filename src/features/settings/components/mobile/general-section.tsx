@@ -1,5 +1,5 @@
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
-import type { NoteFileNameFormat } from "@/types";
+import type { NoteFileNameFormat } from "@/shared/types";
 import { ChoiceRow, Group } from "./helpers";
 
 const noteFileNameOptions: Array<{

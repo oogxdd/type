@@ -1,6 +1,6 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { MobileNotesScreen } from "@/mobile/views/notes-view";
-import type { NotePreview } from "@/utils/format";
+import type { NotePreview } from "@/shared/lib/format";
 import type { RecentBucket } from "@/mobile/hooks/use-recent-buckets";
 
 type PhoneRecentDateScreenProps = {

@@ -1,4 +1,4 @@
-import type { ThemeMode } from "@/types";
+import type { ThemeMode } from "@/shared/types";
 
 export const LIGHT_LAUNCH_BACKGROUND = "#f5f6fb";
 export const DARK_LAUNCH_BACKGROUND = "#14171b";

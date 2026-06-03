@@ -10,16 +10,16 @@ import { RecordingNoteHeader } from "@/features/recording/components/recording-n
 import { HandwritingNoteHeader } from "@/features/handwriting/components/handwriting-note-header";
 import { SettingsDetailPane } from "@/features/settings/components/desktop/settings-panel";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
-import { sanitizeRecordingEditorContent } from "@/utils/format";
+import { sanitizeRecordingEditorContent } from "@/shared/lib/format";
 
-import { focusNoScroll } from "@/utils/dom";
-import type { AppMode } from "@/types";
+import { focusNoScroll } from "@/shared/lib/dom";
+import type { AppMode } from "@/shared/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/shared/ui/dropdown-menu";
 
 type DesktopRightPaneProps = {
   appMode: AppMode;

@@ -1,10 +1,10 @@
-import { invokeLogged } from "@/data/invoke";
+import { invokeLogged } from "@/shared/api/invoke";
 import type {
   DiscoveredServer,
   GitCommitHistoryEntry,
   GitSyncStatus,
   LocalSyncServerStatus,
-} from "@/types";
+} from "@/shared/types";
 
 export const generateSshKey = (): Promise<string> =>
   invokeLogged<string>("generate_ssh_key");

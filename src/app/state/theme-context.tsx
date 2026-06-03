@@ -1,13 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import type { ThemeMode, NotesListMode } from "@/types";
+import type { ThemeMode, NotesListMode } from "@/shared/types";
 import {
   DEFAULT_EDITOR_FONT_SIZE,
   MIN_EDITOR_FONT_SIZE,
   MAX_EDITOR_FONT_SIZE,
-} from "@/constants";
+} from "@/shared/constants";
 import { setNativeTheme } from "./appearance-api";
 import { applyThemeToDocument } from "@/app/launch-screen";
-import { getInitialTheme, getInitialNotesListMode, getInitialEditorFontSize } from "@/utils/storage";
+import { getInitialTheme, getInitialNotesListMode, getInitialEditorFontSize } from "@/shared/lib/storage";
 
 type ThemeContextValue = {
   theme: ThemeMode;

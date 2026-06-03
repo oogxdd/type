@@ -2,8 +2,8 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS as DndCSS } from "@dnd-kit/utilities";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Mic, PenLine } from "lucide-react";
-import type { DragData, NoteEntry } from "@/types";
-import type { NotePreview } from "@/utils/format";
+import type { DragData, NoteEntry } from "@/shared/types";
+import type { NotePreview } from "@/shared/lib/format";
 
 export function NoteRow({
   note,

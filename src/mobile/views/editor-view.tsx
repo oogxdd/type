@@ -2,8 +2,8 @@ import { NoteEditor } from "@/features/editor/components/note-editor";
 import { useRef, useState } from "react";
 import { RecordingNoteHeader } from "@/features/recording/components/recording-note-header";
 import { HandwritingNoteHeader } from "@/features/handwriting/components/handwriting-note-header";
-import type { NotePreview } from "@/utils/format";
-import { sanitizeRecordingEditorContent } from "@/utils/format";
+import type { NotePreview } from "@/shared/lib/format";
+import { sanitizeRecordingEditorContent } from "@/shared/lib/format";
 
 type MobileEditorScreenProps = {
   markdown: string;

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { ChevronRight, File, Folder, Mic, PenLine } from "lucide-react";
 import type { TreeItem } from "../lib/types";
-import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent } from "@/shared/ui/collapsible";
 import {
   SidebarMenu,
   SidebarMenuBadge,
@@ -11,12 +11,12 @@ import {
   SidebarMenuItem,
   SidebarMenuSub,
   SidebarMenuSubButton,
-} from "@/components/ui/sidebar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+} from "@/shared/ui/sidebar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { TreeNode } from "./tree-node";
 import { RecentTreeNode } from "./recent-tree-node";
 import type { RecentNode } from "./recent-tree-node";
-import type { NotePreview } from "@/utils/format";
+import type { NotePreview } from "@/shared/lib/format";
 import { ROOT_ID, dropId, type EdgeSnap } from "../lib/tree-dnd";
 
 const EMPTY_STRING_SET = new Set<string>();

@@ -5,7 +5,7 @@ import {
   formatRecordingStatus,
   formatRecordingStatusLabel,
   type NotePreview,
-} from "@/utils/format";
+} from "@/shared/lib/format";
 
 type RecordingNoteHeaderProps = {
   notePath: string | null;

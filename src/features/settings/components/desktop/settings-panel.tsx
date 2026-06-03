@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@/shared/ui/button";
 import { useEditor } from "@/features/editor/hooks/editor-context";
 import {
   SETTINGS_SECTIONS,

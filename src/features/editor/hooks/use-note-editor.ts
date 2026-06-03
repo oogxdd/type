@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteItems, readNote, renameItem, writeNote } from "@/features/notes/api/notes-api";
-import type { NoteFileNameFormat } from "@/types";
-import { stripFrontmatter } from "@/utils/frontmatter";
+import type { NoteFileNameFormat } from "@/shared/types";
+import { stripFrontmatter } from "@/shared/lib/frontmatter";
 import { stripInlineAnnotationMetadata } from "../lib/note-annotations";
 
 const UUID_V7_FILE_NAME_RE =

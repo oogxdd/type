@@ -7,7 +7,7 @@ import { MobileNotesScreen } from "@/mobile/views/notes-view";
 import { MobileSettingsScreen } from "@/features/settings/components/mobile/settings-screen";
 import { MobileNavBar } from "@/mobile/ui/nav-bar";
 import { MobileTabBar } from "@/mobile/ui/tab-bar";
-import { MOBILE_SETTINGS_SECTIONS } from "@/constants";
+import { MOBILE_SETTINGS_SECTIONS } from "@/shared/constants";
 import { useTheme } from "@/app/state/theme-context";
 import { useSelection } from "@/app/state/selection-context";
 import { useEditor } from "@/features/editor/hooks/editor-context";

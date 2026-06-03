@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { OTA_APPLY_PENDING_KEY } from "@/constants";
+import { OTA_APPLY_PENDING_KEY } from "@/shared/constants";
 import { Group } from "./helpers";
 
 type CheckState =

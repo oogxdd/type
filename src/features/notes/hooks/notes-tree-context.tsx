@@ -8,9 +8,9 @@ import {
   type ReactNode,
 } from "react";
 import * as api from "../api/notes-api";
-import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/types";
-import { FEED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH, isSystemFolder } from "@/constants";
-import { collectAllNotes } from "@/utils/notes";
+import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/shared/types";
+import { FEED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH, isSystemFolder } from "@/shared/constants";
+import { collectAllNotes } from "@/shared/lib/notes";
 import { useNotePreviews } from "./use-note-previews";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useSelection } from "@/app/state/selection-context";
@@ -21,8 +21,8 @@ import {
   flattenTree,
 } from "@/features/tree/lib/tree-ops";
 import { removeChildrenOf } from "@/features/tree/lib/dnd-tree";
-import { type NotePreview } from "@/utils/format";
-import { confirmAction, focusNoScroll } from "@/utils/dom";
+import { type NotePreview } from "@/shared/lib/format";
+import { confirmAction, focusNoScroll } from "@/shared/lib/dom";
 import type { TreeItem } from "@/features/tree/lib/types";
 import type { FlattenedItem } from "@/features/tree/lib/types";
 import { useLayoutMode } from "@/mobile/use-layout-mode";

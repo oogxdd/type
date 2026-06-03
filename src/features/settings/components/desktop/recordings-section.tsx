@@ -2,11 +2,11 @@ import { useEffect } from "react";
 import {
   formatHandwritingStatus,
   formatUpdatedAt,
-} from "@/utils/format";
+} from "@/shared/lib/format";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Button } from "@/shared/ui/button";
 
 export function SettingsRecordingsSection() {
   const { syncSettings, updateSyncSettings } = useProfiles();

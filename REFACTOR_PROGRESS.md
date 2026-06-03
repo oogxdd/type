@@ -162,7 +162,7 @@ src/
 - [x] **P2.8 features/sync** — git-sync-context, git-api, local-sync-link, local-sync-server-card
 - [x] **P2.9 features/security** — security-context, security-api, lock-screen
 - [x] **P2.10 features/settings** — components/{desktop,mobile}, hooks/use-settings-data, lib/sections
-- [ ] **P2.11 shared/** — ui, lib, api/invoke, types, constants, hooks/use-mobile (global @/ prefix sed)
+- [x] **P2.11 shared/** — ui, lib, api/invoke, types, constants, hooks/use-mobile (global @/ prefix sed)
 - [ ] **P2.12 index.ts barrels** — public API per feature; route shell/cross-feature imports through them
 - [ ] **P2.13 code-quality pass** — audit remaining large files (app-shell, use-keyboard-navigation, …); fix smells
 - [ ] **P2.14 docs** — rewrite AGENTS.md + README; finalize this file

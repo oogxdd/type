@@ -4,9 +4,9 @@ import {
   formatGitCommitStateLabel,
   formatGitCommitTime,
   getSyncHint,
-} from "@/utils/format";
+} from "@/shared/lib/format";
 import * as gitApi from "@/features/sync/api/git-api";
-import type { DiscoveredServer } from "@/types";
+import type { DiscoveredServer } from "@/shared/types";
 import { useSettingsData } from "@/features/settings/hooks/use-settings-data";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useGitSync } from "@/features/sync/hooks/git-sync-context";

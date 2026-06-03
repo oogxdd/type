@@ -3,7 +3,7 @@ import type { TreeItem } from "../lib/types";
 import type { EdgeSnap } from "../lib/tree-dnd";
 import { TreeRow } from "./tree-row";
 import { NavNoteRow } from "./nav-note-row";
-import type { NotePreview } from "@/utils/format";
+import type { NotePreview } from "@/shared/lib/format";
 
 export type TreeNodeProps = {
   node: TreeItem;

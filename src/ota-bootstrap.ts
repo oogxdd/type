@@ -1,4 +1,4 @@
-import { OTA_APPLY_PENDING_KEY } from "./constants";
+import { OTA_APPLY_PENDING_KEY } from "@/shared/constants";
 
 const isLikelyIosWebView = () => {
   if (typeof window === "undefined") {

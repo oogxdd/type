@@ -1,5 +1,5 @@
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
-import type { NoteFileNameFormat } from "@/types";
+import type { NoteFileNameFormat } from "@/shared/types";
 
 const noteFileNameOptions: Array<{ value: NoteFileNameFormat; label: string; hint: string }> = [
   {

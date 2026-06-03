@@ -1,11 +1,11 @@
-import { invokeLogged } from "@/data/invoke";
+import { invokeLogged } from "@/shared/api/invoke";
 import type {
   CreateNoteResult,
   FolderNode,
   NoteFileNameFormat,
   NoteMeta,
   SetOrderArgs,
-} from "@/types";
+} from "@/shared/types";
 
 export const getTree = (): Promise<FolderNode> =>
   invokeLogged<FolderNode>("get_tree");

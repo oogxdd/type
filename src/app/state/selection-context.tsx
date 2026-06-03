@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
-import { getNoteParentPath } from "@/utils/notes";
+import { getNoteParentPath } from "@/shared/lib/notes";
 
 type SelectionContextValue = {
   selectedFolders: Set<string>;

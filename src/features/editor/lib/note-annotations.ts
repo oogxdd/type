@@ -1,10 +1,10 @@
-import { fromBase64 } from "@/utils/notes";
+import { fromBase64 } from "@/shared/lib/notes";
 import {
   joinFrontmatter,
   readFrontmatterScalar,
   removeFrontmatterScalar,
   splitFrontmatter,
-} from "@/utils/frontmatter";
+} from "@/shared/lib/frontmatter";
 import {
   appendLensBackmatterBlock,
   extractLensBackmatter,

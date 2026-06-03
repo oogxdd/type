@@ -1,7 +1,7 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { MobileNotesScreen } from "@/mobile/views/notes-view";
-import type { NoteEntry } from "@/types";
-import type { NotePreview } from "@/utils/format";
+import type { NoteEntry } from "@/shared/types";
+import type { NotePreview } from "@/shared/lib/format";
 import { getDisplayRouteTitle } from "../types";
 
 type PhoneNotesScreenProps = {

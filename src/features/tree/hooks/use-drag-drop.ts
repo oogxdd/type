@@ -6,10 +6,10 @@ import type {
   DragStartEvent,
 } from "@dnd-kit/core";
 import { moveItems, setOrder } from "@/features/notes/api/notes-api";
-import { logGroup } from "@/data/invoke";
-import type { DragData, FolderNode } from "@/types";
-import { isSystemFolder } from "@/constants";
-import { getNoteParentPath } from "@/utils/notes";
+import { logGroup } from "@/shared/api/invoke";
+import type { DragData, FolderNode } from "@/shared/types";
+import { isSystemFolder } from "@/shared/constants";
+import { getNoteParentPath } from "@/shared/lib/notes";
 import { DROP_PREFIX } from "../lib/tree-dnd";
 import {
   findNode,

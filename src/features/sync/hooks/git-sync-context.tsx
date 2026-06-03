@@ -11,8 +11,8 @@ import type {
   GitCommitHistoryEntry,
   GitSyncAction,
   GitSyncStatus,
-} from "@/types";
-import { yieldToUi } from "@/utils/notes";
+} from "@/shared/types";
+import { yieldToUi } from "@/shared/lib/notes";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 

@@ -1,5 +1,5 @@
-import type { ThemeMode } from "@/types";
-import { invokeLogged } from "@/data/invoke";
+import type { ThemeMode } from "@/shared/types";
+import { invokeLogged } from "@/shared/api/invoke";
 
 const hasTauriRuntime = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

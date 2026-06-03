@@ -6,7 +6,7 @@ import {
   formatHandwritingStatus,
   formatRecordingStatusLabel,
   type NotePreview,
-} from "@/utils/format";
+} from "@/shared/lib/format";
 
 type HandwritingNoteHeaderProps = {
   notePath: string | null;

@@ -3,7 +3,7 @@ import {
   formatHandwritingStatus,
   formatRecordingStatus,
   formatUpdatedAt,
-} from "@/utils/format";
+} from "@/shared/lib/format";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
