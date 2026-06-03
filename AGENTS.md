@@ -137,16 +137,18 @@ module-internal helpers stay private.
 App.tsx is a thin composition layer. All state lives in React contexts:
 
 ```
-ThemeProvider                 — theme mode, notes list mode, editor font size
-  SecurityProvider            — security state, unlock/lock/enable, auto-lock preference
-    SecurityGate              — renders lock screen when encrypted state is locked
-      ProfilesProvider        — profile list, active profile, per-profile sync settings
-        GitSyncProvider       — git status, connect/pull/push operations, commit history (git log)
-          SelectionProvider   — folder/note selection state, mobile selection helpers
-            EditorProvider    — note editor state (wraps useNoteEditor hook)
-              NotesTreeProvider — folder tree, CRUD operations, rename
-                RecordingsProvider — audio recording, transcription queue, playback
-                  AppShell    — UI rendering, DnD wiring, keyboard shortcuts
+ErrorBoundary                 — app-root crash guard; renders a recoverable fallback
+  ThemeProvider               — theme mode, notes list mode, editor font size
+    SecurityProvider          — security state, unlock/lock/enable, auto-lock preference
+      SecurityGate            — renders lock screen when encrypted state is locked
+        ProfilesProvider      — profile list, active profile, per-profile sync settings
+          GitSyncProvider     — git status, connect/pull/push operations, commit history (git log)
+            SelectionProvider — folder/note selection state, mobile selection helpers
+              EditorProvider  — note editor state (wraps useNoteEditor hook)
+                NotesTreeProvider — folder tree, CRUD operations, rename
+                  RecordingsProvider  — audio recording, transcription queue, playback
+                    HandwritingProvider — image import, OCR queue (OpenAI / HuggingFace)
+                      AppShell  — UI rendering, DnD wiring, keyboard shortcuts
 ```
 
 ### AppShell.tsx (~600 lines)
