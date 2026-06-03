@@ -1,12 +1,12 @@
 import { useEffect, useMemo } from "react";
 import { PenLine } from "lucide-react";
-import { useProfiles } from "../contexts/ProfilesContext";
-import { useHandwriting } from "../contexts/HandwritingContext";
+import { useProfiles } from "@/contexts/ProfilesContext";
+import { useHandwriting } from "@/contexts/HandwritingContext";
 import {
   formatHandwritingStatus,
   formatRecordingStatusLabel,
   type NotePreview,
-} from "../utils/format";
+} from "@/utils/format";
 
 type HandwritingNoteHeaderProps = {
   notePath: string | null;

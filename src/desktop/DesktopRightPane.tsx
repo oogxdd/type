@@ -4,10 +4,10 @@ import { useSelection } from "../contexts/SelectionContext";
 import { useEditor } from "../contexts/EditorContext";
 import { useNotesTree } from "../contexts/NotesTreeContext";
 
-import { NoteEditor } from "../components/NoteEditor";
-import { MultiNoteLens } from "../components/MultiNoteLens";
-import { RecordingNoteHeader } from "../components/RecordingNoteHeader";
-import { HandwritingNoteHeader } from "../components/HandwritingNoteHeader";
+import { NoteEditor } from "@/features/editor/note-editor";
+import { MultiNoteLens } from "@/features/editor/multi-note-lens";
+import { RecordingNoteHeader } from "@/features/editor/recording-note-header";
+import { HandwritingNoteHeader } from "@/features/editor/handwriting-note-header";
 import {
   SettingsDetailPane,
   type SettingsSectionId,

@@ -7,10 +7,10 @@ import {
   type FormEvent as ReactFormEvent,
 } from "react";
 import { Brush, Eye, EyeOff, MessageSquarePlus, X } from "lucide-react";
-import { readNote, writeNote } from "../data/notesApi";
-import { NoteReadonlyContent } from "./NoteReadonlyContent";
-import { sanitizeRecordingEditorContent } from "../utils/format";
-import { stripFrontmatter } from "../utils/frontmatter";
+import { readNote, writeNote } from "@/data/notesApi";
+import { NoteReadonlyContent } from "./note-readonly-content";
+import { sanitizeRecordingEditorContent } from "@/utils/format";
+import { stripFrontmatter } from "@/utils/frontmatter";
 import {
   parseNoteAnnotations,
   stripInlineAnnotationMetadata,
@@ -18,7 +18,7 @@ import {
   type NoteAnnotationAnchor,
   type NoteAnnotationPoint,
   type NoteAnnotationsPayload,
-} from "../utils/noteAnnotations";
+} from "./note-annotations";
 
 type LensNote = {
   path: string;

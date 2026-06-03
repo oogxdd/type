@@ -1,7 +1,7 @@
-import { NoteEditor } from "../../components/NoteEditor";
+import { NoteEditor } from "@/features/editor/note-editor";
 import { useRef, useState } from "react";
-import { RecordingNoteHeader } from "../../components/RecordingNoteHeader";
-import { HandwritingNoteHeader } from "../../components/HandwritingNoteHeader";
+import { RecordingNoteHeader } from "@/features/editor/recording-note-header";
+import { HandwritingNoteHeader } from "@/features/editor/handwriting-note-header";
 import type { NotePreview } from "../../utils/format";
 import { sanitizeRecordingEditorContent } from "../../utils/format";
 

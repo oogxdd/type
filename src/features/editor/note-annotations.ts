@@ -1,15 +1,15 @@
-import { fromBase64 } from "./notes";
+import { fromBase64 } from "@/utils/notes";
 import {
   joinFrontmatter,
   readFrontmatterScalar,
   removeFrontmatterScalar,
   splitFrontmatter,
-} from "./frontmatter";
+} from "@/utils/frontmatter";
 import {
   appendLensBackmatterBlock,
   extractLensBackmatter,
   stripLensBackmatterBlock,
-} from "./lensBackmatter";
+} from "./lens-backmatter";
 
 const NOTE_ANNOTATIONS_KEY = "type_annotations_b64";
 const COORD_SCALE = 4095;

@@ -5,7 +5,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { useNoteEditor } from "../hooks/useNoteEditor";
+import { useNoteEditor } from "@/features/editor/use-note-editor";
 import { useSelection } from "./SelectionContext";
 import { useProfiles } from "./ProfilesContext";
 

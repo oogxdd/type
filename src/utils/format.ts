@@ -4,7 +4,7 @@ import type {
   RecordingListItem,
 } from "../types";
 import { stripFrontmatter } from "./frontmatter";
-import { stripInlineAnnotationMetadata } from "./noteAnnotations";
+import { stripInlineAnnotationMetadata } from "@/features/editor/note-annotations";
 
 const RECORDING_NOTE_TYPE = "audio_recording";
 const HANDWRITING_NOTE_TYPE = "handwriting_attachment";

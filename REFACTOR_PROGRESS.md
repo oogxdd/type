@@ -80,8 +80,8 @@ src/
 
 ## Staged checklist
 
-- [ ] **0. Setup** — branch `refactor-frontend-structure`, this doc. (README change stashed.)
-- [ ] **1. features/editor/** — editor components + headers + lens + useNoteEditor + editor utils
+- [x] **0. Setup** — branch `refactor-frontend-structure`, this doc. (README change stashed.)
+- [x] **1. features/editor/** — editor components + headers + lens + useNoteEditor + editor utils ✅ tsc clean
 - [ ] **2. features/tree/** — tree components + useDragDrop + useKeyboardNavigation + src/tree/* + treeOps
 - [ ] **3. features/notes/** — note-row + use-note-previews
 - [ ] **4. features/security/** — lock-screen

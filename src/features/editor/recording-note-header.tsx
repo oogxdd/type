@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Mic } from "lucide-react";
-import { useRecordings } from "../contexts/RecordingsContext";
+import { useRecordings } from "@/contexts/RecordingsContext";
 import {
   formatRecordingStatus,
   formatRecordingStatusLabel,
   type NotePreview,
-} from "../utils/format";
+} from "@/utils/format";
 
 type RecordingNoteHeaderProps = {
   notePath: string | null;
