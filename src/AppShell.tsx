@@ -33,10 +33,10 @@ import { useKeyboardNavigation } from "@/features/tree/use-keyboard-navigation";
 
 import { FoldersPanel } from "@/features/tree/folders-panel";
 import { type SettingsSectionId } from "@/features/settings/sections";
-import { AppSidebar } from "./components/app-sidebar";
-import { DesktopShell } from "./desktop/DesktopShell";
-import { DesktopMiddlePane } from "./desktop/DesktopMiddlePane";
-import { DesktopRightPane } from "./desktop/DesktopRightPane";
+import { AppSidebar } from "@/desktop/app-sidebar";
+import { DesktopShell } from "@/desktop/desktop-shell";
+import { DesktopMiddlePane } from "@/desktop/middle-pane";
+import { DesktopRightPane } from "@/desktop/right-pane";
 import { MobileShell } from "./mobile/MobileShell";
 import { useLayoutMode } from "./mobile/useLayoutMode";
 

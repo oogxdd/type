@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Menu } from "lucide-react";
-import { useSelection } from "../contexts/SelectionContext";
-import { useEditor } from "../contexts/EditorContext";
-import { useNotesTree } from "../contexts/NotesTreeContext";
+import { useSelection } from "@/contexts/SelectionContext";
+import { useEditor } from "@/contexts/EditorContext";
+import { useNotesTree } from "@/contexts/NotesTreeContext";
 
 import { NoteEditor } from "@/features/editor/note-editor";
 import { MultiNoteLens } from "@/features/editor/multi-note-lens";
@@ -10,16 +10,16 @@ import { RecordingNoteHeader } from "@/features/editor/recording-note-header";
 import { HandwritingNoteHeader } from "@/features/editor/handwriting-note-header";
 import { SettingsDetailPane } from "@/features/settings/desktop/settings-panel";
 import type { SettingsSectionId } from "@/features/settings/sections";
-import { sanitizeRecordingEditorContent } from "../utils/format";
+import { sanitizeRecordingEditorContent } from "@/utils/format";
 
-import { focusNoScroll } from "../utils/dom";
-import type { AppMode } from "../types";
+import { focusNoScroll } from "@/utils/dom";
+import type { AppMode } from "@/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "../components/ui/dropdown-menu";
+} from "@/components/ui/dropdown-menu";
 
 type DesktopRightPaneProps = {
   appMode: AppMode;

@@ -89,7 +89,7 @@ src/
 - [x] **6. features/settings/** — desktop + mobile sections, sections.ts, use-settings-data ✅ tsc clean
       - `SettingsPanel` split: registry → `sections.ts`; panes → `desktop/settings-panel.tsx`.
       - `ThemeMode`/`NotesListMode` moved to `src/types.ts` (cross-cutting, not settings-only).
-- [ ] **7. desktop/** — kebab-rename shells + move app-sidebar
+- [x] **7. desktop/** — kebab-rename shells + move app-sidebar ✅ tsc clean
 - [ ] **8. mobile/** — ui/ + screens/ + views/ + hooks/, flatten components/, move use-edge-swipe
 - [ ] **9. app/** — App/AppShell/mainApp/ErrorBoundary/launchScreen + update entry stubs
 - [ ] **10. contexts/** — kebab-rename
