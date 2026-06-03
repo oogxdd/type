@@ -163,8 +163,8 @@ src/
 - [x] **P2.9 features/security** — security-context, security-api, lock-screen
 - [x] **P2.10 features/settings** — components/{desktop,mobile}, hooks/use-settings-data, lib/sections
 - [x] **P2.11 shared/** — ui, lib, api/invoke, types, constants, hooks/use-mobile (global @/ prefix sed)
-- [ ] **P2.12 index.ts barrels** — public API per feature; route shell/cross-feature imports through them
-- [ ] **P2.13 code-quality pass** — audit remaining large files (app-shell, use-keyboard-navigation, …); fix smells
+- [~] **P2.12 index.ts barrels** — EVALUATED - [ ] **P2.12 index.ts barrels** — public API per feature; route shell/cross-feature imports through them SKIPPED: notes-api is used by editor+tree while notes uses editor-context, so `export *` barrels would create a fragile editor<->notes import cycle. Deep segment imports are cycle-free and make the component/hook/lib role explicit at the call site.
+- [x] **P2.13 code-quality pass** — relocated MOBILE_SETTINGS_SECTIONS to settings/lib (fixed shared->settings); documented the one intentional shared->editor edge (format/parseNotePreview); deduped profile-section git-draft type. (Lens god-component already decomposed in P2.2b; tree-dnd extracted in P2.3.)
 - [ ] **P2.14 docs** — rewrite AGENTS.md + README; finalize this file
 
 ## Notes / surprises log

@@ -21,13 +21,8 @@ type GitDraftSettings = {
   gitPassword: string;
 };
 
-const getGitDraftFromSyncSettings = (syncSettings: {
-  gitRemoteUrl: string;
-  gitBranch: string;
-  gitCommitMessage: string;
-  gitUsername: string;
-  gitPassword: string;
-}): GitDraftSettings => ({
+// Pick just the git fields out of the (larger) profile sync settings.
+const getGitDraftFromSyncSettings = (syncSettings: GitDraftSettings): GitDraftSettings => ({
   gitRemoteUrl: syncSettings.gitRemoteUrl,
   gitBranch: syncSettings.gitBranch,
   gitCommitMessage: syncSettings.gitCommitMessage,
