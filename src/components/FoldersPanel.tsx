@@ -1,4 +1,4 @@
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { ChevronRight, File, Folder, Mic, PenLine } from "lucide-react";
@@ -335,6 +335,63 @@ export function FoldersPanel({
     });
   };
 
+  // The folder tree is rendered in three places (tabbed folders view, embedded
+  // sidebar, and the plain pane). They share the same drop-target root and the
+  // same TreeNode mapping, so both live here as helpers instead of inline copies.
+  const renderTreeNodes = () =>
+    treeData.map((node) => (
+      <TreeNode
+        key={node.id}
+        node={node}
+        depth={0}
+        showNotesAsChildren={showNotesAsChildren}
+        selectedNoteIds={selectedNoteIds}
+        edgeSnap={edgeSnap}
+        expanded={expanded}
+        onToggle={onToggle}
+        selectedIds={selectedIds}
+        onSelect={onSelect}
+        onNoteSelect={handleNoteSelect}
+        onNoteContextMenu={handleNoteContextMenu}
+        notePreviews={notePreviews}
+        renamingFolder={renamingFolder}
+        renameValue={renameValue}
+        setRenameValue={setRenameValue}
+        submitRenameFolder={submitRenameFolder}
+        cancelRenameFolder={cancelRenameFolder}
+        onContextMenu={onContextMenu}
+        indentationWidth={indentationWidth}
+      />
+    ));
+
+  const renderDroppablePaneBody = (children: ReactNode) => (
+    <div className="nav-scroll-area">
+      <div
+        ref={(node) => {
+          setRootDropRef(node);
+          if (typeof paneBodyRef === "function") {
+            paneBodyRef(node);
+          } else if (paneBodyRef && "current" in paneBodyRef) {
+            paneBodyRef.current = node;
+          }
+        }}
+        className={`pane-body tree-root${isOver ? " drop-inside" : ""}`}
+        tabIndex={0}
+        onKeyDownCapture={onPaneKeyDown}
+        onClick={(event) => {
+          if (onPaneClick) {
+            onPaneClick();
+          }
+          if (event.target === event.currentTarget) {
+            onClearSelection();
+          }
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+
   const sectionContent = (
     <div className={embedded ? "pane-section sidebar-folders-section" : "pane-section"}>
       {showRecentTab ? (
@@ -354,54 +411,7 @@ export function FoldersPanel({
             </TabsList>
           </div>
           <TabsContent value="folders" className="folders-tab-content">
-            <div className="nav-scroll-area">
-              <div
-                ref={(node) => {
-                  setRootDropRef(node);
-                  if (typeof paneBodyRef === "function") {
-                    paneBodyRef(node);
-                  } else if (paneBodyRef && "current" in paneBodyRef) {
-                    paneBodyRef.current = node;
-                  }
-                }}
-                className={`pane-body tree-root${isOver ? " drop-inside" : ""}`}
-                tabIndex={0}
-                onKeyDownCapture={onPaneKeyDown}
-                onClick={(event) => {
-                  if (onPaneClick) {
-                    onPaneClick();
-                  }
-                  if (event.target === event.currentTarget) {
-                    onClearSelection();
-                  }
-                }}
-              >
-                {treeData.map((node) => (
-                  <TreeNode
-                    key={node.id}
-                    node={node}
-                    depth={0}
-                    showNotesAsChildren={showNotesAsChildren}
-                    selectedNoteIds={selectedNoteIds}
-                    edgeSnap={edgeSnap}
-                    expanded={expanded}
-                    onToggle={onToggle}
-                    selectedIds={selectedIds}
-                    onSelect={onSelect}
-                    onNoteSelect={handleNoteSelect}
-                    onNoteContextMenu={handleNoteContextMenu}
-                    notePreviews={notePreviews}
-                    renamingFolder={renamingFolder}
-                    renameValue={renameValue}
-                    setRenameValue={setRenameValue}
-                    submitRenameFolder={submitRenameFolder}
-                    cancelRenameFolder={cancelRenameFolder}
-                    onContextMenu={onContextMenu}
-                    indentationWidth={indentationWidth}
-                  />
-                ))}
-              </div>
-            </div>
+            {renderDroppablePaneBody(renderTreeNodes())}
           </TabsContent>
           <TabsContent value="recent" className="folders-tab-content">
             <div className="nav-scroll-area">
@@ -442,84 +452,43 @@ export function FoldersPanel({
       ) : (
         <>
           {sectionTitle ? <div className="pane-section-title">{sectionTitle}</div> : null}
-          <div className="nav-scroll-area">
-            <div
-              ref={(node) => {
-                setRootDropRef(node);
-                if (typeof paneBodyRef === "function") {
-                  paneBodyRef(node);
-                } else if (paneBodyRef && "current" in paneBodyRef) {
-                  paneBodyRef.current = node;
-                }
-              }}
-              className={`pane-body tree-root${isOver ? " drop-inside" : ""}`}
-              tabIndex={0}
-              onKeyDownCapture={onPaneKeyDown}
-              onClick={(event) => {
-                if (onPaneClick) {
-                  onPaneClick();
-                }
-                if (event.target === event.currentTarget) {
-                  onClearSelection();
-                }
-              }}
-            >
-              {embedded ? (
-                <SidebarMenu className="sidebar-filetree-menu">
-                  {treeData.length === 0 ? <div className="empty">No folders yet.</div> : null}
-                  {treeData.map((node) => (
-                    <SidebarFileTreeNode
-                      key={node.id}
-                      node={node}
-                      selectedIds={selectedIds}
-                      selectedNoteIds={selectedNoteIds}
-                      showNotesAsChildren={showNotesAsChildren}
-                      expanded={expanded}
-                      onSelect={onSelect}
-                      onToggle={onToggle}
-                      onNoteSelect={handleNoteSelect}
-                      onNoteContextMenu={handleNoteContextMenu}
-                      notePreviews={notePreviews}
-                      renamingFolder={renamingFolder}
-                      renameValue={renameValue}
-                      setRenameValue={setRenameValue}
-                      submitRenameFolder={submitRenameFolder}
-                      cancelRenameFolder={cancelRenameFolder}
-                      onContextMenu={onContextMenu}
-                    />
-                  ))}
-                </SidebarMenu>
-              ) : (
-                <>
-                  {treeData.length === 0 ? <div className="empty">No folders yet.</div> : null}
-                  {treeData.map((node) => (
-                    <TreeNode
-                      key={node.id}
-                      node={node}
-                      depth={0}
-                      showNotesAsChildren={showNotesAsChildren}
-                      selectedNoteIds={selectedNoteIds}
-                      edgeSnap={edgeSnap}
-                      expanded={expanded}
-                      onToggle={onToggle}
-                      selectedIds={selectedIds}
-                      onSelect={onSelect}
-                      onNoteSelect={handleNoteSelect}
-                      onNoteContextMenu={handleNoteContextMenu}
-                      notePreviews={notePreviews}
-                      renamingFolder={renamingFolder}
-                      renameValue={renameValue}
-                      setRenameValue={setRenameValue}
-                      submitRenameFolder={submitRenameFolder}
-                      cancelRenameFolder={cancelRenameFolder}
-                      onContextMenu={onContextMenu}
-                      indentationWidth={indentationWidth}
-                    />
-                  ))}
-                </>
-              )}
-            </div>
-          </div>
+          {renderDroppablePaneBody(
+            embedded ? (
+              <SidebarMenu className="sidebar-filetree-menu">
+                {treeData.length === 0 ? (
+                  <div className="empty">No folders yet.</div>
+                ) : null}
+                {treeData.map((node) => (
+                  <SidebarFileTreeNode
+                    key={node.id}
+                    node={node}
+                    selectedIds={selectedIds}
+                    selectedNoteIds={selectedNoteIds}
+                    showNotesAsChildren={showNotesAsChildren}
+                    expanded={expanded}
+                    onSelect={onSelect}
+                    onToggle={onToggle}
+                    onNoteSelect={handleNoteSelect}
+                    onNoteContextMenu={handleNoteContextMenu}
+                    notePreviews={notePreviews}
+                    renamingFolder={renamingFolder}
+                    renameValue={renameValue}
+                    setRenameValue={setRenameValue}
+                    submitRenameFolder={submitRenameFolder}
+                    cancelRenameFolder={cancelRenameFolder}
+                    onContextMenu={onContextMenu}
+                  />
+                ))}
+              </SidebarMenu>
+            ) : (
+              <>
+                {treeData.length === 0 ? (
+                  <div className="empty">No folders yet.</div>
+                ) : null}
+                {renderTreeNodes()}
+              </>
+            )
+          )}
         </>
       )}
     </div>
