@@ -21,7 +21,7 @@ import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu } from "@tauri-apps/api/menu";
 
 import { useTheme } from "@/app/state/theme-context";
-import { useNotesTree } from "@/contexts/notes-tree-context";
+import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useSelection } from "@/app/state/selection-context";
 import { useEditor } from "@/features/editor/hooks/editor-context";
 import { useRecordings } from "@/contexts/recordings-context";

@@ -6,7 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type FormEvent as ReactFormEvent,
 } from "react";
-import { readNote, writeNote } from "@/data/notes-api";
+import { readNote, writeNote } from "@/features/notes/api/notes-api";
 import { sanitizeRecordingEditorContent } from "@/utils/format";
 import { stripFrontmatter } from "@/utils/frontmatter";
 import {

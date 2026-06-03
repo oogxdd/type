@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { useNotesTree } from "@/contexts/notes-tree-context";
+import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useGitSync } from "@/contexts/git-sync-context";
 import { useProfiles } from "@/contexts/profiles-context";
 import { useSettingsData } from "@/features/settings/use-settings-data";

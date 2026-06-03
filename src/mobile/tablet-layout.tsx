@@ -11,7 +11,7 @@ import { MOBILE_SETTINGS_SECTIONS } from "@/constants";
 import { useTheme } from "@/app/state/theme-context";
 import { useSelection } from "@/app/state/selection-context";
 import { useEditor } from "@/features/editor/hooks/editor-context";
-import { useNotesTree } from "@/contexts/notes-tree-context";
+import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useKeyboardInsets } from "@/mobile/use-keyboard-insets";
 import { getDisplayRouteTitle, ARCHIVE_FOLDER_PATH } from "./types";
 

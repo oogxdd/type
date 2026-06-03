@@ -23,7 +23,7 @@ import { MobileToast } from "@/mobile/ui/toast";
 import { useTheme } from "@/app/state/theme-context";
 import { useSelection } from "@/app/state/selection-context";
 import { useEditor } from "@/features/editor/hooks/editor-context";
-import { useNotesTree } from "@/contexts/notes-tree-context";
+import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useGitSync } from "@/contexts/git-sync-context";
 import { parseSyncDeepLink } from "@/data/local-sync-link";
 import { useLayoutMode } from "@/mobile/use-layout-mode";

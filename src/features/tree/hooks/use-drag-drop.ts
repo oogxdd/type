@@ -5,7 +5,7 @@ import type {
   DragOverEvent,
   DragStartEvent,
 } from "@dnd-kit/core";
-import { moveItems, setOrder } from "@/data/notes-api";
+import { moveItems, setOrder } from "@/features/notes/api/notes-api";
 import { logGroup } from "@/data/invoke";
 import type { DragData, FolderNode } from "@/types";
 import { isSystemFolder } from "@/constants";

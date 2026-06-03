@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
-import { createNote, deleteItems, writeNote } from "@/data/notes-api";
+import { createNote, deleteItems, writeNote } from "@/features/notes/api/notes-api";
 import { useEditor } from "@/features/editor/hooks/editor-context";
-import { useNotesTree } from "@/contexts/notes-tree-context";
+import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useProfiles } from "@/contexts/profiles-context";
 import { useSelection } from "@/app/state/selection-context";
 import { MobileEditorScreen } from "@/mobile/views/editor-view";

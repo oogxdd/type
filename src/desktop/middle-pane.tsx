@@ -1,10 +1,10 @@
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
-import { useNotesTree } from "@/contexts/notes-tree-context";
+import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useSelection } from "@/app/state/selection-context";
 
-import { NoteRow } from "@/features/notes/note-row";
+import { NoteRow } from "@/features/notes/components/note-row";
 import { SettingsMiddlePane } from "@/features/settings/desktop/settings-panel";
 import type { SettingsSectionId } from "@/features/settings/sections";
 

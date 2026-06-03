@@ -155,7 +155,7 @@ src/
 - [x] **P2.2 features/editor** — segments + decompose multi-note-lens (god component) into
       hook (use-lens-annotations) + lens sub-components + lib/lens-geometry
 - [x] **P2.3 features/tree** — segments
-- [ ] **P2.4 features/notes** — note-row, notes-tree-context, use-note-previews, notes-api
+- [x] **P2.4 features/notes** — note-row, notes-tree-context, use-note-previews, notes-api
 - [ ] **P2.5 features/recording** — recordings-context, use-audio-recorder, recordings-api, recording-note-header
 - [ ] **P2.6 features/handwriting** — handwriting-context, handwriting-api, handwriting-note-header
 - [ ] **P2.7 features/profiles** — profiles-context, profiles-api

@@ -10,7 +10,7 @@ import type { DiscoveredServer } from "@/types";
 import { useSettingsData } from "@/features/settings/use-settings-data";
 import { useProfiles } from "@/contexts/profiles-context";
 import { useGitSync } from "@/contexts/git-sync-context";
-import { useNotesTree } from "@/contexts/notes-tree-context";
+import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { ChoiceRow, Group, StatRow } from "./helpers";
 
 export function MobileSyncSection() {

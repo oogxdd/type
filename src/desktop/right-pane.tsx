@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Menu } from "lucide-react";
 import { useSelection } from "@/app/state/selection-context";
 import { useEditor } from "@/features/editor/hooks/editor-context";
-import { useNotesTree } from "@/contexts/notes-tree-context";
+import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 
 import { NoteEditor } from "@/features/editor/components/note-editor";
 import { MultiNoteLens } from "@/features/editor/components/lens/multi-note-lens";
