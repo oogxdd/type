@@ -11,7 +11,7 @@ import * as api from "../data/notesApi";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "../types";
 import { FEED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH, isSystemFolder } from "../constants";
 import { collectAllNotes } from "../utils/notes";
-import { useNotePreviews } from "../hooks/useNotePreviews";
+import { useNotePreviews } from "@/features/notes/use-note-previews";
 import { useProfiles } from "./ProfilesContext";
 import { useSelection } from "./SelectionContext";
 import { useEditor } from "./EditorContext";

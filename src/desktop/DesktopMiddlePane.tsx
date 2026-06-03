@@ -4,7 +4,7 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { useNotesTree } from "../contexts/NotesTreeContext";
 import { useSelection } from "../contexts/SelectionContext";
 
-import { NoteRow } from "../components/NoteRow";
+import { NoteRow } from "@/features/notes/note-row";
 import {
   SettingsMiddlePane,
   type SettingsSectionId,

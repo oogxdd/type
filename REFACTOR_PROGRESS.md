@@ -83,7 +83,7 @@ src/
 - [x] **0. Setup** — branch `refactor-frontend-structure`, this doc. (README change stashed.)
 - [x] **1. features/editor/** — editor components + headers + lens + useNoteEditor + editor utils ✅ tsc clean
 - [x] **2. features/tree/** — tree components + useDragDrop + useKeyboardNavigation + src/tree/* + treeOps ✅ tsc clean (src/tree/ root removed)
-- [ ] **3. features/notes/** — note-row + use-note-previews
+- [x] **3. features/notes/** — note-row + use-note-previews ✅ tsc clean
 - [ ] **4. features/security/** — lock-screen
 - [ ] **5. features/recording/** — use-audio-recorder
 - [ ] **6. features/settings/** — desktop + mobile sections, sections.ts, use-settings-data

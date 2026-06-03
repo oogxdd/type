@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { getNoteMeta, readNote } from "../data/notesApi";
-import { parseNotePreview, type NotePreview } from "../utils/format";
-import type { NoteEntry } from "../types";
+import { getNoteMeta, readNote } from "@/data/notesApi";
+import { parseNotePreview, type NotePreview } from "@/utils/format";
+import type { NoteEntry } from "@/types";
 
 // Cap how many notes we read at once so a large vault can't flood the Tauri IPC
 // bridge (and the main thread) in a single burst.
