@@ -13,7 +13,7 @@ import { HandwritingProvider } from "./contexts/HandwritingContext";
 import { SecurityProvider, useSecurity } from "./contexts/SecurityContext";
 import { AppShell } from "./AppShell";
 import { useLayoutMode } from "./mobile/useLayoutMode";
-import { SecurityLockScreen } from "./components/SecurityLockScreen";
+import { SecurityLockScreen } from "@/features/security/lock-screen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { hideLaunchSplash } from "./utils/launchScreen";
 
