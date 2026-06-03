@@ -13,21 +13,8 @@ import { FEED_FOLDER_PATH } from "../constants";
 import { toBase64, fromBase64 } from "../utils/notes";
 import { useAudioRecorder } from "../hooks/useAudioRecorder";
 import { useProfiles } from "./ProfilesContext";
-
-const recordingsPreviewSignature = (items: RecordingListItem[]) =>
-  items
-    .map((item) =>
-      [
-        item.note_path,
-        item.status,
-        item.updated_ms ?? "",
-        item.error ?? "",
-        item.is_queued ? "1" : "0",
-        item.is_processing ? "1" : "0",
-      ].join("|")
-    )
-    .sort()
-    .join("||");
+import { jobListSignature } from "../utils/jobs";
+import type { LayoutMode } from "../mobile/navigation";
 
 type RecordingsContextValue = {
   recordingSupported: boolean;
@@ -64,7 +51,7 @@ export function RecordingsProvider({
 }: {
   children: ReactNode;
   activeFolder: string;
-  layoutMode: string;
+  layoutMode: LayoutMode;
   onRecordingComplete: (result: {
     folder_path: string;
     note_path: string;
@@ -97,7 +84,7 @@ export function RecordingsProvider({
       const snapshot = await api.listRecordings();
       setRecordingsQueue(snapshot.queue);
       setRecordingsList(snapshot.recordings);
-      const nextSignature = recordingsPreviewSignature(snapshot.recordings);
+      const nextSignature = jobListSignature(snapshot.recordings);
       if (recordingsSignatureRef.current !== nextSignature) {
         recordingsSignatureRef.current = nextSignature;
         window.dispatchEvent(new CustomEvent("note-previews-invalidated"));

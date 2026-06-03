@@ -15,21 +15,8 @@ import type {
 import { FEED_FOLDER_PATH } from "../constants";
 import { toBase64 } from "../utils/notes";
 import { useProfiles } from "./ProfilesContext";
-
-const handwritingPreviewSignature = (items: HandwritingOcrListItem[]) =>
-  items
-    .map((item) =>
-      [
-        item.note_path,
-        item.status,
-        item.updated_ms ?? "",
-        item.error ?? "",
-        item.is_queued ? "1" : "0",
-        item.is_processing ? "1" : "0",
-      ].join("|")
-    )
-    .sort()
-    .join("||");
+import { jobListSignature } from "../utils/jobs";
+import type { LayoutMode } from "../mobile/navigation";
 
 type HandwritingContextValue = {
   handwritingImportBusy: boolean;
@@ -58,7 +45,7 @@ export function HandwritingProvider({
 }: {
   children: ReactNode;
   activeFolder: string;
-  layoutMode: string;
+  layoutMode: LayoutMode;
   onHandwritingComplete: (result: {
     folder_path: string;
     note_path: string;
@@ -120,7 +107,7 @@ export function HandwritingProvider({
       const snapshot = await api.listHandwritingOcrJobs();
       setHandwritingQueue(snapshot.queue);
       setHandwritingJobs(snapshot.jobs);
-      const nextSignature = handwritingPreviewSignature(snapshot.jobs);
+      const nextSignature = jobListSignature(snapshot.jobs);
       if (signatureRef.current !== nextSignature) {
         signatureRef.current = nextSignature;
         window.dispatchEvent(new CustomEvent("note-previews-invalidated"));
