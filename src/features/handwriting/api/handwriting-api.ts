@@ -1,10 +1,10 @@
-import { invokeLogged } from "./invoke";
+import { invokeLogged } from "@/data/invoke";
 import type {
   HandwritingAttachmentWriteResult,
   HandwritingOcrListResult,
   HandwritingOcrQueueResult,
   NoteFileNameFormat,
-} from "../types";
+} from "@/types";
 
 export const saveHandwritingAttachment = (
   imageBase64: string,

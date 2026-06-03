@@ -25,7 +25,7 @@ import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useSelection } from "@/app/state/selection-context";
 import { useEditor } from "@/features/editor/hooks/editor-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
-import { useHandwriting } from "@/contexts/handwriting-context";
+import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
 import { useSecurity } from "@/contexts/security-context";
 
 import { useDragDrop } from "@/features/tree/hooks/use-drag-drop";

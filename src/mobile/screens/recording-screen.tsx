@@ -1,7 +1,7 @@
 import { MobileRecordingScreen } from "@/mobile/views/recording-view";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { useProfiles } from "@/contexts/profiles-context";
-import { useHandwriting } from "@/contexts/handwriting-context";
+import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
 import { useRef, type ChangeEvent } from "react";
 
 type PhoneRecordingScreenProps = {

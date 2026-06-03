@@ -7,16 +7,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import * as api from "../data/handwriting-api";
+import * as api from "../api/handwriting-api";
 import type {
   HandwritingOcrListItem,
   HandwritingOcrQueueSnapshot,
-} from "../types";
-import { FEED_FOLDER_PATH } from "../constants";
-import { toBase64 } from "../utils/notes";
-import { useProfiles } from "./profiles-context";
-import { jobListSignature } from "../utils/jobs";
-import type { LayoutMode } from "../mobile/navigation";
+} from "@/types";
+import { FEED_FOLDER_PATH } from "@/constants";
+import { toBase64 } from "@/utils/notes";
+import { useProfiles } from "@/contexts/profiles-context";
+import { jobListSignature } from "@/utils/jobs";
+import type { LayoutMode } from "@/mobile/navigation";
 
 type HandwritingContextValue = {
   handwritingImportBusy: boolean;

@@ -6,7 +6,7 @@ import {
 } from "@/utils/format";
 import { useProfiles } from "@/contexts/profiles-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
-import { useHandwriting } from "@/contexts/handwriting-context";
+import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
 import { Group, ChoiceRow, InputRow, StatRow } from "./helpers";
 
 const getJobTitle = (notePath: string): string => {

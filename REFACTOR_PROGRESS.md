@@ -157,7 +157,7 @@ src/
 - [x] **P2.3 features/tree** — segments
 - [x] **P2.4 features/notes** — note-row, notes-tree-context, use-note-previews, notes-api
 - [x] **P2.5 features/recording** — recordings-context, use-audio-recorder, recordings-api, recording-note-header
-- [ ] **P2.6 features/handwriting** — handwriting-context, handwriting-api, handwriting-note-header
+- [x] **P2.6 features/handwriting** — handwriting-context, handwriting-api, handwriting-note-header
 - [ ] **P2.7 features/profiles** — profiles-context, profiles-api
 - [ ] **P2.8 features/sync** — git-sync-context, git-api, local-sync-link, local-sync-server-card
 - [ ] **P2.9 features/security** — security-context, security-api, lock-screen
