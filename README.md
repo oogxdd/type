@@ -1,4 +1,4 @@
-# Apple Notes Viewer
+# Type
 
 Local markdown notes app with filesystem storage and optional Git sync. Runs on desktop and iOS via Tauri v2.
 
@@ -294,19 +294,20 @@ cargo check --manifest-path src-tauri/Cargo.toml
 
 ## Backend structure
 
-The Rust backend (`src-tauri/src/`) is organized into domain modules:
+The Rust backend (`src-tauri/src/`) uses a **ports / adapters / commands**
+(hexagonal) layout so the domain logic can move to another shell later (e.g.
+UniFFI for React Native) without a rewrite:
 
-| File | Domain |
-|------|--------|
-| `lib.rs` | Module hub — shared utilities, constants, re-exports |
-| `commands.rs` | All `#[tauri::command]` handlers (IPC layer) |
-| `security.rs` | Encryption, password hashing, lock mode |
-| `profiles.rs` | Multi-profile management, legacy migration |
-| `notes.rs` | Note filesystem ops, front-matter, folder tree, ordering |
-| `git.rs` | Git sync via libgit2 — fetch, push, merge, status, history, SSH key management |
-| `recordings.rs` | Audio recording, AssemblyAI transcription queue |
-| `handwriting.rs` | Handwriting attachment OCR (OpenAI / HuggingFace) |
-| `ios.rs` | iOS-specific: native AVAudioRecorder, WKWebView recovery |
+- **`ports/`** — platform-agnostic contracts, one file per domain: the documented
+  interface each domain exposes.
+- **`adapters/`** — the Rust implementations (filesystem notes, libgit2 sync,
+  XChaCha20-Poly1305 crypto, recording/OCR queues, iOS native interop).
+- **`commands/`** — thin `#[tauri::command]` wrappers bridging the frontend to the
+  adapters, one file per domain.
+
+Domains: `notes`, `profiles`, `security`, `recordings`, `handwriting`,
+`git_sync`, `local_sync`, `platform`. See
+[src-tauri/README.md](src-tauri/README.md) for the full layout and rationale.
 
 ## Contributing
 
