@@ -85,7 +85,7 @@ src/
 - [x] **2. features/tree/** — tree components + useDragDrop + useKeyboardNavigation + src/tree/* + treeOps ✅ tsc clean (src/tree/ root removed)
 - [x] **3. features/notes/** — note-row + use-note-previews ✅ tsc clean
 - [x] **4. features/security/** — lock-screen ✅ tsc clean
-- [ ] **5. features/recording/** — use-audio-recorder
+- [x] **5. features/recording/** — use-audio-recorder ✅ tsc clean
 - [ ] **6. features/settings/** — desktop + mobile sections, sections.ts, use-settings-data
 - [ ] **7. desktop/** — kebab-rename shells + move app-sidebar
 - [ ] **8. mobile/** — ui/ + screens/ + views/ + hooks/, flatten components/, move use-edge-swipe
