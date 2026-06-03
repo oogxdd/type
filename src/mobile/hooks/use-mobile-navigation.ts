@@ -7,7 +7,7 @@ import {
 } from "../navigation";
 import type { LayoutMode } from "../navigation";
 import { useSelection } from "@/app/state/selection-context";
-import { useEditor } from "@/contexts/editor-context";
+import { useEditor } from "@/features/editor/hooks/editor-context";
 import { FEED_FOLDER_PATH } from "../types";
 
 export function useMobileNavigation(layoutMode: LayoutMode) {

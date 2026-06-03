@@ -6,7 +6,7 @@ import { ThemeProvider, useTheme } from "@/app/state/theme-context";
 import { ProfilesProvider, useProfiles } from "@/contexts/profiles-context";
 import { GitSyncProvider } from "@/contexts/git-sync-context";
 import { SelectionProvider, useSelection } from "@/app/state/selection-context";
-import { EditorProvider, useEditor } from "@/contexts/editor-context";
+import { EditorProvider, useEditor } from "@/features/editor/hooks/editor-context";
 import { NotesTreeProvider, useNotesTree } from "@/contexts/notes-tree-context";
 import { RecordingsProvider } from "@/contexts/recordings-context";
 import { HandwritingProvider } from "@/contexts/handwriting-context";

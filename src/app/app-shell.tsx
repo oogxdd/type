@@ -23,7 +23,7 @@ import { Menu } from "@tauri-apps/api/menu";
 import { useTheme } from "@/app/state/theme-context";
 import { useNotesTree } from "@/contexts/notes-tree-context";
 import { useSelection } from "@/app/state/selection-context";
-import { useEditor } from "@/contexts/editor-context";
+import { useEditor } from "@/features/editor/hooks/editor-context";
 import { useRecordings } from "@/contexts/recordings-context";
 import { useHandwriting } from "@/contexts/handwriting-context";
 import { useSecurity } from "@/contexts/security-context";

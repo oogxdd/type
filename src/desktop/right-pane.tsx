@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Menu } from "lucide-react";
 import { useSelection } from "@/app/state/selection-context";
-import { useEditor } from "@/contexts/editor-context";
+import { useEditor } from "@/features/editor/hooks/editor-context";
 import { useNotesTree } from "@/contexts/notes-tree-context";
 
-import { NoteEditor } from "@/features/editor/note-editor";
-import { MultiNoteLens } from "@/features/editor/multi-note-lens";
-import { RecordingNoteHeader } from "@/features/editor/recording-note-header";
-import { HandwritingNoteHeader } from "@/features/editor/handwriting-note-header";
+import { NoteEditor } from "@/features/editor/components/note-editor";
+import { MultiNoteLens } from "@/features/editor/components/lens/multi-note-lens";
+import { RecordingNoteHeader } from "@/features/recording/components/recording-note-header";
+import { HandwritingNoteHeader } from "@/features/handwriting/components/handwriting-note-header";
 import { SettingsDetailPane } from "@/features/settings/desktop/settings-panel";
 import type { SettingsSectionId } from "@/features/settings/sections";
 import { sanitizeRecordingEditorContent } from "@/utils/format";

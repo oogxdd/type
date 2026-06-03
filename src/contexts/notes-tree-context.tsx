@@ -14,7 +14,7 @@ import { collectAllNotes } from "../utils/notes";
 import { useNotePreviews } from "@/features/notes/use-note-previews";
 import { useProfiles } from "./profiles-context";
 import { useSelection } from "@/app/state/selection-context";
-import { useEditor } from "./editor-context";
+import { useEditor } from "@/features/editor/hooks/editor-context";
 import {
   buildTreeItems,
   findNode,

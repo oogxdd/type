@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteItems, readNote, renameItem, writeNote } from "@/data/notes-api";
 import type { NoteFileNameFormat } from "@/types";
 import { stripFrontmatter } from "@/utils/frontmatter";
-import { stripInlineAnnotationMetadata } from "./note-annotations";
+import { stripInlineAnnotationMetadata } from "../lib/note-annotations";
 
 const UUID_V7_FILE_NAME_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}\.md$/i;

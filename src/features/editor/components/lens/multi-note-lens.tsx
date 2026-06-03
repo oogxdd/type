@@ -18,7 +18,7 @@ import {
   type NoteAnnotationAnchor,
   type NoteAnnotationPoint,
   type NoteAnnotationsPayload,
-} from "./note-annotations";
+} from "../../lib/note-annotations";
 
 type LensNote = {
   path: string;

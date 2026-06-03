@@ -6,9 +6,9 @@ import { joinFrontmatter, splitFrontmatter } from "@/utils/frontmatter";
 import {
   appendRawLensBackmatterBlock,
   splitLensBackmatterBlock,
-} from "./lens-backmatter";
-import { htmlToMarkdown, markdownToHtml } from "./markdown-editor";
-import { stripInlineAnnotationMetadata } from "./note-annotations";
+} from "../lib/lens-backmatter";
+import { htmlToMarkdown, markdownToHtml } from "../lib/markdown-editor";
+import { stripInlineAnnotationMetadata } from "../lib/note-annotations";
 
 type NoteEditorProps = {
   markdown: string;
