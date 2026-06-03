@@ -67,6 +67,34 @@ export function ProfilesProvider({
     setSyncSettings((prev) => ({ ...prev, ...patch }));
   }, []);
 
+  // Every profile mutation shares the same shape: flush any pending editor save,
+  // run the API call (which returns the new snapshot), then reflect it — while
+  // tracking busy state and surfacing errors uniformly. `onSuccess` runs after
+  // the call resolves, before the snapshot is applied (e.g. local cleanup).
+  const runProfileMutation = useCallback(
+    async (
+      mutate: () => Promise<NotesProfileSnapshot>,
+      onSuccess?: () => void
+    ) => {
+      setProfilesBusy(true);
+      try {
+        if (flushSaveRef.current) {
+          await flushSaveRef.current();
+        }
+        const snapshot = await mutate();
+        onSuccess?.();
+        setProfilesSnapshot(snapshot);
+        setProfilesError(null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setProfilesError(message);
+      } finally {
+        setProfilesBusy(false);
+      }
+    },
+    [flushSaveRef]
+  );
+
   // Load sync settings when active profile changes
   useEffect(() => {
     if (!activeProfileId) {
@@ -109,22 +137,9 @@ export function ProfilesProvider({
       if (!normalizedId || normalizedId === activeProfileId) {
         return;
       }
-      setProfilesBusy(true);
-      try {
-        if (flushSaveRef.current) {
-          await flushSaveRef.current();
-        }
-        const snapshot = await api.setActiveProfile(normalizedId);
-        setProfilesSnapshot(snapshot);
-        setProfilesError(null);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setProfilesError(message);
-      } finally {
-        setProfilesBusy(false);
-      }
+      await runProfileMutation(() => api.setActiveProfile(normalizedId));
     },
-    [activeProfileId, flushSaveRef]
+    [activeProfileId, runProfileMutation]
   );
 
   const createProfile = useCallback(
@@ -140,23 +155,9 @@ export function ProfilesProvider({
       }
       const name = input?.name?.trim() || fallbackName;
       const description = input?.description?.trim() ?? "";
-
-      setProfilesBusy(true);
-      try {
-        if (flushSaveRef.current) {
-          await flushSaveRef.current();
-        }
-        const snapshot = await api.createProfile(name, description);
-        setProfilesSnapshot(snapshot);
-        setProfilesError(null);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setProfilesError(message);
-      } finally {
-        setProfilesBusy(false);
-      }
+      await runProfileMutation(() => api.createProfile(name, description));
     },
-    [flushSaveRef, profiles]
+    [profiles, runProfileMutation]
   );
 
   const updateProfile = useCallback(
@@ -165,22 +166,9 @@ export function ProfilesProvider({
       if (!normalizedProfileId) {
         return;
       }
-      setProfilesBusy(true);
-      try {
-        if (flushSaveRef.current) {
-          await flushSaveRef.current();
-        }
-        const snapshot = await api.updateProfile(normalizedProfileId, patch);
-        setProfilesSnapshot(snapshot);
-        setProfilesError(null);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setProfilesError(message);
-      } finally {
-        setProfilesBusy(false);
-      }
+      await runProfileMutation(() => api.updateProfile(normalizedProfileId, patch));
     },
-    [flushSaveRef]
+    [runProfileMutation]
   );
 
   const deleteProfile = useCallback(
@@ -189,23 +177,12 @@ export function ProfilesProvider({
       if (!normalizedProfileId) {
         return;
       }
-      setProfilesBusy(true);
-      try {
-        if (flushSaveRef.current) {
-          await flushSaveRef.current();
-        }
-        const snapshot = await api.deleteProfile(normalizedProfileId);
-        removeProfileSyncSettings(normalizedProfileId);
-        setProfilesSnapshot(snapshot);
-        setProfilesError(null);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setProfilesError(message);
-      } finally {
-        setProfilesBusy(false);
-      }
+      await runProfileMutation(
+        () => api.deleteProfile(normalizedProfileId),
+        () => removeProfileSyncSettings(normalizedProfileId)
+      );
     },
-    [flushSaveRef]
+    [runProfileMutation]
   );
 
   const setProfileNotesRoot = useCallback(
@@ -215,22 +192,11 @@ export function ProfilesProvider({
       if (!normalizedProfileId || !normalizedRoot) {
         return;
       }
-      setProfilesBusy(true);
-      try {
-        if (flushSaveRef.current) {
-          await flushSaveRef.current();
-        }
-        const snapshot = await api.setProfileNotesRoot(normalizedProfileId, normalizedRoot);
-        setProfilesSnapshot(snapshot);
-        setProfilesError(null);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setProfilesError(message);
-      } finally {
-        setProfilesBusy(false);
-      }
+      await runProfileMutation(() =>
+        api.setProfileNotesRoot(normalizedProfileId, normalizedRoot)
+      );
     },
-    [flushSaveRef]
+    [runProfileMutation]
   );
 
   return (
