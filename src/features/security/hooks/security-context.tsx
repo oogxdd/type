@@ -7,8 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import * as api from "../data/security-api";
-import type { SecurityState, SecurityUnlockResult } from "../types";
+import * as api from "../api/security-api";
+import type { SecurityState, SecurityUnlockResult } from "@/types";
 
 type SecurityContextValue = {
   securityState: SecurityState | null;

@@ -10,10 +10,10 @@ import { EditorProvider, useEditor } from "@/features/editor/hooks/editor-contex
 import { NotesTreeProvider, useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { RecordingsProvider } from "@/features/recording/hooks/recordings-context";
 import { HandwritingProvider } from "@/features/handwriting/hooks/handwriting-context";
-import { SecurityProvider, useSecurity } from "@/contexts/security-context";
+import { SecurityProvider, useSecurity } from "@/features/security/hooks/security-context";
 import { AppShell } from "./app-shell";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
-import { SecurityLockScreen } from "@/features/security/lock-screen";
+import { SecurityLockScreen } from "@/features/security/components/lock-screen";
 import { ErrorBoundary } from "./error-boundary";
 import { hideLaunchSplash } from "./launch-screen";
 

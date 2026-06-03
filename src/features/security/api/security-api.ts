@@ -1,5 +1,5 @@
-import { invokeLogged } from "./invoke";
-import type { SecurityState, SecurityUnlockResult } from "../types";
+import { invokeLogged } from "@/data/invoke";
+import type { SecurityState, SecurityUnlockResult } from "@/types";
 
 export const getSecurityState = (): Promise<SecurityState> =>
   invokeLogged<SecurityState>("get_security_state");

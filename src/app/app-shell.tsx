@@ -26,7 +26,7 @@ import { useSelection } from "@/app/state/selection-context";
 import { useEditor } from "@/features/editor/hooks/editor-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
-import { useSecurity } from "@/contexts/security-context";
+import { useSecurity } from "@/features/security/hooks/security-context";
 
 import { useDragDrop } from "@/features/tree/hooks/use-drag-drop";
 import { useKeyboardNavigation } from "@/features/tree/hooks/use-keyboard-navigation";

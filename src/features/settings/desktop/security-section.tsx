@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useSecurity } from "@/contexts/security-context";
+import { useSecurity } from "@/features/security/hooks/security-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 

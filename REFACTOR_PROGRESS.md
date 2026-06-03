@@ -160,7 +160,7 @@ src/
 - [x] **P2.6 features/handwriting** — handwriting-context, handwriting-api, handwriting-note-header
 - [x] **P2.7 features/profiles** — profiles-context, profiles-api
 - [x] **P2.8 features/sync** — git-sync-context, git-api, local-sync-link, local-sync-server-card
-- [ ] **P2.9 features/security** — security-context, security-api, lock-screen
+- [x] **P2.9 features/security** — security-context, security-api, lock-screen
 - [ ] **P2.10 features/settings** — components/{desktop,mobile}, hooks/use-settings-data, lib/sections
 - [ ] **P2.11 shared/** — ui, lib, api/invoke, types, constants, hooks/use-mobile (global @/ prefix sed)
 - [ ] **P2.12 index.ts barrels** — public API per feature; route shell/cross-feature imports through them
