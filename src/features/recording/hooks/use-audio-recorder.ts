@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import * as api from "@/data/recordings-api";
+import * as api from "../api/recordings-api";
 
 type UseAudioRecorderArgs = {
   onRecordingReady: (blob: Blob, mimeType: string) => Promise<void>;

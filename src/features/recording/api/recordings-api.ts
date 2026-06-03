@@ -1,4 +1,4 @@
-import { invokeLogged } from "./invoke";
+import { invokeLogged } from "@/data/invoke";
 import type {
   NativeRecorderCapabilities,
   NoteFileNameFormat,
@@ -7,7 +7,7 @@ import type {
   RecordingTranscriptionQueueResult,
   RecordingWriteResult,
   WhisperStatusResult,
-} from "../types";
+} from "@/types";
 
 export const saveAudioRecording = (
   audioBase64: string,

@@ -7,14 +7,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import * as api from "../data/recordings-api";
-import type { RecordingListItem, RecordingQueueSnapshot } from "../types";
-import { FEED_FOLDER_PATH } from "../constants";
-import { toBase64, fromBase64 } from "../utils/notes";
-import { useAudioRecorder } from "@/features/recording/use-audio-recorder";
-import { useProfiles } from "./profiles-context";
-import { jobListSignature } from "../utils/jobs";
-import type { LayoutMode } from "../mobile/navigation";
+import * as api from "../api/recordings-api";
+import type { RecordingListItem, RecordingQueueSnapshot } from "@/types";
+import { FEED_FOLDER_PATH } from "@/constants";
+import { toBase64, fromBase64 } from "@/utils/notes";
+import { useAudioRecorder } from "./use-audio-recorder";
+import { useProfiles } from "@/contexts/profiles-context";
+import { jobListSignature } from "@/utils/jobs";
+import type { LayoutMode } from "@/mobile/navigation";
 
 type RecordingsContextValue = {
   recordingSupported: boolean;

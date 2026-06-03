@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Mic } from "lucide-react";
-import { useRecordings } from "@/contexts/recordings-context";
+import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import {
   formatRecordingStatus,
   formatRecordingStatusLabel,

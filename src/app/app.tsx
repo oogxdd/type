@@ -8,7 +8,7 @@ import { GitSyncProvider } from "@/contexts/git-sync-context";
 import { SelectionProvider, useSelection } from "@/app/state/selection-context";
 import { EditorProvider, useEditor } from "@/features/editor/hooks/editor-context";
 import { NotesTreeProvider, useNotesTree } from "@/features/notes/hooks/notes-tree-context";
-import { RecordingsProvider } from "@/contexts/recordings-context";
+import { RecordingsProvider } from "@/features/recording/hooks/recordings-context";
 import { HandwritingProvider } from "@/contexts/handwriting-context";
 import { SecurityProvider, useSecurity } from "@/contexts/security-context";
 import { AppShell } from "./app-shell";

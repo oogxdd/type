@@ -24,7 +24,7 @@ import { useTheme } from "@/app/state/theme-context";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useSelection } from "@/app/state/selection-context";
 import { useEditor } from "@/features/editor/hooks/editor-context";
-import { useRecordings } from "@/contexts/recordings-context";
+import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { useHandwriting } from "@/contexts/handwriting-context";
 import { useSecurity } from "@/contexts/security-context";
 
