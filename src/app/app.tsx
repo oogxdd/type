@@ -1,21 +1,21 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import "./App.css";
-import "./mobile/mobile.css";
+import "./app.css";
+import "@/mobile/mobile.css";
 
-import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
-import { ProfilesProvider, useProfiles } from "./contexts/ProfilesContext";
-import { GitSyncProvider } from "./contexts/GitSyncContext";
-import { SelectionProvider, useSelection } from "./contexts/SelectionContext";
-import { EditorProvider, useEditor } from "./contexts/EditorContext";
-import { NotesTreeProvider, useNotesTree } from "./contexts/NotesTreeContext";
-import { RecordingsProvider } from "./contexts/RecordingsContext";
-import { HandwritingProvider } from "./contexts/HandwritingContext";
-import { SecurityProvider, useSecurity } from "./contexts/SecurityContext";
-import { AppShell } from "./AppShell";
+import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
+import { ProfilesProvider, useProfiles } from "@/contexts/ProfilesContext";
+import { GitSyncProvider } from "@/contexts/GitSyncContext";
+import { SelectionProvider, useSelection } from "@/contexts/SelectionContext";
+import { EditorProvider, useEditor } from "@/contexts/EditorContext";
+import { NotesTreeProvider, useNotesTree } from "@/contexts/NotesTreeContext";
+import { RecordingsProvider } from "@/contexts/RecordingsContext";
+import { HandwritingProvider } from "@/contexts/HandwritingContext";
+import { SecurityProvider, useSecurity } from "@/contexts/SecurityContext";
+import { AppShell } from "./app-shell";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 import { SecurityLockScreen } from "@/features/security/lock-screen";
-import { ErrorBoundary } from "./components/ErrorBoundary";
-import { hideLaunchSplash } from "./utils/launchScreen";
+import { ErrorBoundary } from "./error-boundary";
+import { hideLaunchSplash } from "./launch-screen";
 
 function StartupScreen({ theme }: { theme: "light" | "dark" }) {
   return (

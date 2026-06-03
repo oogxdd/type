@@ -20,13 +20,13 @@ import { snapCenterToCursor } from "@dnd-kit/modifiers";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu } from "@tauri-apps/api/menu";
 
-import { useTheme } from "./contexts/ThemeContext";
-import { useNotesTree } from "./contexts/NotesTreeContext";
-import { useSelection } from "./contexts/SelectionContext";
-import { useEditor } from "./contexts/EditorContext";
-import { useRecordings } from "./contexts/RecordingsContext";
-import { useHandwriting } from "./contexts/HandwritingContext";
-import { useSecurity } from "./contexts/SecurityContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useNotesTree } from "@/contexts/NotesTreeContext";
+import { useSelection } from "@/contexts/SelectionContext";
+import { useEditor } from "@/contexts/EditorContext";
+import { useRecordings } from "@/contexts/RecordingsContext";
+import { useHandwriting } from "@/contexts/HandwritingContext";
+import { useSecurity } from "@/contexts/SecurityContext";
 
 import { useDragDrop } from "@/features/tree/use-drag-drop";
 import { useKeyboardNavigation } from "@/features/tree/use-keyboard-navigation";
@@ -40,17 +40,17 @@ import { DesktopRightPane } from "@/desktop/right-pane";
 import { MobileShell } from "@/mobile/mobile-shell";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 
-import { focusNoScroll } from "./utils/dom";
-import { getNoteParentPath } from "./utils/notes";
-import { computeRangeSelection, resolveTargetPaths } from "./utils/selection";
+import { focusNoScroll } from "@/utils/dom";
+import { getNoteParentPath } from "@/utils/notes";
+import { computeRangeSelection, resolveTargetPaths } from "@/utils/selection";
 import { findNode } from "@/features/tree/tree-ops";
 import {
   ARCHIEVE_FOLDER_PATH,
   FEED_FOLDER_PATH,
   indentationWidth,
   isSystemFolder,
-} from "./constants";
-import type { AppMode } from "./types";
+} from "@/constants";
+import type { AppMode } from "@/types";
 
 export function AppShell() {
   const layoutMode = useLayoutMode();

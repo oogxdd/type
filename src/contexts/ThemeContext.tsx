@@ -6,7 +6,7 @@ import {
   MAX_EDITOR_FONT_SIZE,
 } from "../constants";
 import { setNativeTheme } from "../data/appearanceApi";
-import { applyThemeToDocument } from "../utils/launchScreen";
+import { applyThemeToDocument } from "@/app/launch-screen";
 import { getInitialTheme, getInitialNotesListMode, getInitialEditorFontSize } from "../utils/storage";
 
 type ThemeContextValue = {

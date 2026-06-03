@@ -16,7 +16,7 @@ const setStatus = (message: string) => {
 };
 
 const mountBundledApp = async () => {
-  const { mountApp } = await import("./mainApp");
+  const { mountApp } = await import("./app/main-app");
   mountApp();
 };
 

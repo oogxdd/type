@@ -93,7 +93,9 @@ src/
 - [x] **8. mobile/** — ui/ + screens/ + views/ + hooks/, flatten components/, move use-edge-swipe ✅ tsc clean
       - components/ removed: UI primitives → ui/, reusable bodies (Mobile*Screen) → views/ (*-view).
       - Phone* route screens → screens/ (*-screen). Cross-layer imports → @/, intra-mobile relative.
-- [ ] **9. app/** — App/AppShell/mainApp/ErrorBoundary/launchScreen + update entry stubs
+- [x] **9. app/** — App/AppShell/mainApp/ErrorBoundary/launchScreen + update entry stubs ✅ tsc clean
+      - `src/components/` now contains only `ui/` (shadcn). Entry stubs (main.tsx,
+        ota-bootstrap.ts) stay at src/ root, now import `./app/main-app`.
 - [ ] **10. contexts/** — kebab-rename
 - [ ] **11. data/** — kebab-rename
 - [ ] **12. utils/ + constants/types** — final kebab pass
