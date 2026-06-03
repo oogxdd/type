@@ -14,6 +14,7 @@ import { SecurityProvider, useSecurity } from "./contexts/SecurityContext";
 import { AppShell } from "./AppShell";
 import { useLayoutMode } from "./mobile/useLayoutMode";
 import { SecurityLockScreen } from "./components/SecurityLockScreen";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { hideLaunchSplash } from "./utils/launchScreen";
 
 function StartupScreen({ theme }: { theme: "light" | "dark" }) {
@@ -139,10 +140,7 @@ function SecurityGate({
           busy={securityBusy}
           error={securityError}
           onUnlock={async (password) => {
-            const result = await unlockSecurity(password);
-            if (!result.unlocked) {
-              return;
-            }
+            await unlockSecurity(password);
           }}
         />
       </LaunchReveal>
@@ -156,11 +154,13 @@ function App() {
   const flushSaveRef = useRef<(() => Promise<void>) | null>(null);
 
   return (
-    <ThemeProvider>
-      <SecurityProvider>
-        <SecurityGate flushSaveRef={flushSaveRef} />
-      </SecurityProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <SecurityProvider>
+          <SecurityGate flushSaveRef={flushSaveRef} />
+        </SecurityProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 
