@@ -24,6 +24,8 @@ import { useTheme } from "../contexts/ThemeContext";
 import { useSelection } from "../contexts/SelectionContext";
 import { useEditor } from "../contexts/EditorContext";
 import { useNotesTree } from "../contexts/NotesTreeContext";
+import { useGitSync } from "../contexts/GitSyncContext";
+import { parseSyncDeepLink } from "../data/localSyncLink";
 import { useLayoutMode } from "./useLayoutMode";
 import { useKeyboardInsets } from "./useKeyboardInsets";
 import { useEdgeSwipe } from "../hooks/useEdgeSwipe";
@@ -74,6 +76,7 @@ export function MobileShell({
     refreshTree,
     createNewNote,
   } = useNotesTree();
+  const { syncNow } = useGitSync();
 
   const appStyle = useMemo(
     () => ({ "--editor-font-size": `${editorFontSize}px` }) as CSSProperties,
@@ -223,26 +226,42 @@ export function MobileShell({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [foldersDrawerOpen]);
 
-  // -- Deep link listener
+  // -- Deep link listener (record shortcut + type2://sync from a desktop QR)
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    const handleUrls = (urls: string[]) => {
+      for (const url of urls) {
+        const sync = parseSyncDeepLink(url);
+        if (sync) {
+          void syncNow({
+            remote: sync.remote,
+            branch: sync.branch,
+            onAfterPull: () => refreshTree(),
+          });
+          break;
+        }
+        if (url.includes("record")) {
+          openRecordingRoute(FEED_FOLDER_PATH, true);
+          break;
+        }
+      }
+    };
     import("@tauri-apps/plugin-deep-link")
-      .then(({ onOpenUrl }) =>
-        onOpenUrl((urls: string[]) => {
-          for (const url of urls) {
-            if (url.includes("record")) {
-              openRecordingRoute(FEED_FOLDER_PATH, true);
-              break;
-            }
+      .then(async (mod) => {
+        unlisten = await mod.onOpenUrl(handleUrls);
+        // Catch a cold-start launch URL (app opened by the deep link).
+        try {
+          const current = await mod.getCurrent();
+          if (current && current.length > 0) {
+            handleUrls(current);
           }
-        })
-      )
-      .then((fn) => {
-        unlisten = fn;
+        } catch {
+          // getCurrent unsupported on some platforms — ignore.
+        }
       })
       .catch(() => {});
     return () => unlisten?.();
-  }, [openRecordingRoute]);
+  }, [openRecordingRoute, syncNow, refreshTree]);
 
   // -- Route key for animation
   const routeKey =

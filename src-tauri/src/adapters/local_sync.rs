@@ -11,6 +11,12 @@
 
 use serde::Serialize;
 
+use mdns_sd::{ServiceDaemon, ServiceEvent};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
+
 use crate::ensured_notes_root;
 
 #[cfg(desktop)]
@@ -21,11 +27,13 @@ use std::{
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::Mutex,
-    time::Duration,
 };
 
 /// Default git-daemon port (the well-known `git://` port).
 pub(crate) const LOCAL_SYNC_PORT: u16 = 9418;
+
+/// Bonjour/mDNS service type the desktop advertises and clients browse for.
+const MDNS_SERVICE_TYPE: &str = "_typenotes-sync._tcp.local.";
 
 #[cfg(desktop)]
 const GIT_MISSING_MSG: &str = "Hosting a local sync server needs the Git command-line tools. On macOS install them with: xcode-select --install";
@@ -40,10 +48,21 @@ pub(crate) struct LocalSyncServerStatus {
     pub running: bool,
     pub host: Option<String>,
     pub port: u16,
+    pub branch: Option<String>,
     pub git_url: Option<String>,
     pub ssh_url: Option<String>,
     pub repo_path: String,
     pub error: Option<String>,
+}
+
+/// A server found on the local network via mDNS.
+#[derive(Serialize, Clone)]
+pub(crate) struct DiscoveredServer {
+    pub name: String,
+    pub host: String,
+    pub port: u16,
+    pub git_url: String,
+    pub branch: String,
 }
 
 // ── Running daemon state ─────────────────────────────────────────────────────
@@ -53,7 +72,16 @@ struct RunningDaemon {
     child: Child,
     host: Option<String>,
     served_name: String,
+    branch: String,
     repo_path: PathBuf,
+    /// mDNS advertisement handle, present when discovery is active.
+    mdns: Option<MdnsAdvert>,
+}
+
+#[cfg(desktop)]
+struct MdnsAdvert {
+    daemon: ServiceDaemon,
+    fullname: String,
 }
 
 #[cfg(desktop)]
@@ -174,11 +202,21 @@ pub(crate) fn start_local_sync_server_impl(
             ));
         }
 
+        // Advertise over mDNS so phones can auto-discover this server without
+        // typing or scanning anything. Best-effort: failure never blocks hosting.
+        let host = detect_lan_ip();
+        let mdns = host.as_ref().and_then(|ip| {
+            let git_url = format!("git://{ip}/{served_name}");
+            advertise_mdns(ip, &served_name, &branch, &git_url)
+        });
+
         let daemon = RunningDaemon {
             child,
-            host: detect_lan_ip(),
+            host,
             served_name,
+            branch,
             repo_path: root,
+            mdns,
         };
         let status = running_status(&daemon);
         *guard = Some(daemon);
@@ -198,9 +236,8 @@ pub(crate) fn stop_local_sync_server_impl(
     #[cfg(desktop)]
     {
         if let Ok(mut guard) = DAEMON.lock() {
-            if let Some(mut daemon) = guard.take() {
-                let _ = daemon.child.kill();
-                let _ = daemon.child.wait();
+            if let Some(daemon) = guard.take() {
+                teardown_daemon(daemon);
             }
         }
         local_sync_server_status(app)
@@ -211,11 +248,21 @@ pub(crate) fn stop_local_sync_server_impl(
 #[cfg(desktop)]
 pub(crate) fn shutdown_local_sync_server() {
     if let Ok(mut guard) = DAEMON.lock() {
-        if let Some(mut daemon) = guard.take() {
-            let _ = daemon.child.kill();
-            let _ = daemon.child.wait();
+        if let Some(daemon) = guard.take() {
+            teardown_daemon(daemon);
         }
     }
+}
+
+/// Stop the mDNS advertisement (if any) and kill the git daemon child.
+#[cfg(desktop)]
+fn teardown_daemon(mut daemon: RunningDaemon) {
+    if let Some(advert) = daemon.mdns.take() {
+        let _ = advert.daemon.unregister(&advert.fullname);
+        let _ = advert.daemon.shutdown();
+    }
+    let _ = daemon.child.kill();
+    let _ = daemon.child.wait();
 }
 
 // ── Status builders ──────────────────────────────────────────────────────────
@@ -228,6 +275,7 @@ fn unsupported_status(repo_path: String) -> LocalSyncServerStatus {
         running: false,
         host: None,
         port: LOCAL_SYNC_PORT,
+        branch: None,
         git_url: None,
         ssh_url: None,
         repo_path,
@@ -243,6 +291,7 @@ fn idle_status(git_available: bool, repo_path: String) -> LocalSyncServerStatus 
         running: false,
         host: None,
         port: LOCAL_SYNC_PORT,
+        branch: None,
         git_url: None,
         ssh_url: None,
         repo_path,
@@ -266,6 +315,7 @@ fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
         running: true,
         host: daemon.host.clone(),
         port: LOCAL_SYNC_PORT,
+        branch: Some(daemon.branch.clone()),
         git_url,
         ssh_url,
         repo_path: daemon.repo_path.to_string_lossy().to_string(),
@@ -334,4 +384,135 @@ fn current_user() -> String {
     std::env::var("USER")
         .or_else(|_| std::env::var("USERNAME"))
         .unwrap_or_else(|_| "user".to_string())
+}
+
+/// Human-friendly label for this computer, shown on the phone's discovery list.
+#[cfg(desktop)]
+fn computer_label() -> String {
+    // macOS: the user-set "Computer Name" is the friendliest.
+    if let Ok(out) = Command::new("scutil").arg("--get").arg("ComputerName").output() {
+        if out.status.success() {
+            let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !name.is_empty() {
+                return name;
+            }
+        }
+    }
+    if let Ok(out) = Command::new("hostname").output() {
+        if out.status.success() {
+            let name = String::from_utf8_lossy(&out.stdout)
+                .trim()
+                .trim_end_matches(".local")
+                .to_string();
+            if !name.is_empty() {
+                return name;
+            }
+        }
+    }
+    format!("{}'s computer", current_user())
+}
+
+/// DNS-label-safe version of a free-text name (for the mDNS host name).
+#[cfg(desktop)]
+fn sanitize_host_label(value: &str) -> String {
+    let cleaned: String = value
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    let trimmed = cleaned.trim_matches('-').to_string();
+    if trimmed.is_empty() {
+        "type-sync".to_string()
+    } else {
+        trimmed
+    }
+}
+
+/// Register an mDNS service for the running server. Returns a handle to keep the
+/// advertisement alive; dropping/unregistering it removes the service.
+#[cfg(desktop)]
+fn advertise_mdns(host: &str, served_name: &str, branch: &str, git_url: &str) -> Option<MdnsAdvert> {
+    use mdns_sd::ServiceInfo;
+
+    let daemon = ServiceDaemon::new().ok()?;
+    let label = computer_label();
+    // host_name owns the A record we publish for `host`; it just has to be unique.
+    let host_name = format!("{}.local.", sanitize_host_label(&label));
+    let properties = [
+        ("url", git_url),
+        ("branch", branch),
+        ("path", served_name),
+        ("name", label.as_str()),
+    ];
+    let info = ServiceInfo::new(
+        MDNS_SERVICE_TYPE,
+        &label,
+        &host_name,
+        host,
+        LOCAL_SYNC_PORT,
+        &properties[..],
+    )
+    .ok()?;
+    let fullname = info.get_fullname().to_string();
+    daemon.register(info).ok()?;
+    Some(MdnsAdvert { daemon, fullname })
+}
+
+// ── Discovery (all platforms) ────────────────────────────────────────────────
+
+/// Browse the local network for advertised sync servers for up to `timeout_ms`.
+pub(crate) fn discover_local_sync_servers_impl(
+    timeout_ms: u64,
+) -> Result<Vec<DiscoveredServer>, String> {
+    let timeout_ms = timeout_ms.clamp(500, 10_000);
+    let mdns = ServiceDaemon::new().map_err(|e| format!("mDNS init failed: {e}"))?;
+    let receiver = mdns
+        .browse(MDNS_SERVICE_TYPE)
+        .map_err(|e| format!("mDNS browse failed: {e}"))?;
+
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+    let mut found: HashMap<String, DiscoveredServer> = HashMap::new();
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        match receiver.recv_timeout(remaining) {
+            Ok(ServiceEvent::ServiceResolved(info)) => {
+                if let Some(server) = discovered_from_info(&info) {
+                    found.insert(info.fullname.clone(), server);
+                }
+            }
+            Ok(_) => {}
+            Err(_) => break,
+        }
+    }
+    let _ = mdns.shutdown();
+
+    let mut servers: Vec<DiscoveredServer> = found.into_values().collect();
+    servers.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(servers)
+}
+
+fn discovered_from_info(info: &mdns_sd::ResolvedService) -> Option<DiscoveredServer> {
+    let host = info.get_addresses_v4().into_iter().next().map(|v4| v4.to_string())?;
+    let path = info.get_property_val_str("path").unwrap_or("notes");
+    let git_url = info
+        .get_property_val_str("url")
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| format!("git://{host}/{path}"));
+    let branch = info
+        .get_property_val_str("branch")
+        .unwrap_or("main")
+        .to_string();
+    let name = info
+        .get_property_val_str("name")
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| info.fullname.clone());
+    Some(DiscoveredServer {
+        name,
+        host,
+        port: info.port,
+        git_url,
+        branch,
+    })
 }

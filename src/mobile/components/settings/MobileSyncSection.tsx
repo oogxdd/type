@@ -1,15 +1,17 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   formatCommitSummaryForApp,
   formatGitCommitStateLabel,
   formatGitCommitTime,
   getSyncHint,
 } from "../../../utils/format";
+import * as gitApi from "../../../data/gitApi";
+import type { DiscoveredServer } from "../../../types";
 import { useSettingsData } from "../../../hooks/useSettingsData";
 import { useProfiles } from "../../../contexts/ProfilesContext";
 import { useGitSync } from "../../../contexts/GitSyncContext";
 import { useNotesTree } from "../../../contexts/NotesTreeContext";
-import { Group, StatRow } from "./SettingsHelpers";
+import { ChoiceRow, Group, StatRow } from "./SettingsHelpers";
 
 export function MobileSyncSection() {
   const { syncSettings } = useProfiles();
@@ -37,6 +39,35 @@ export function MobileSyncSection() {
 
   const syncHint = getSyncHint(gitSyncError);
   const visibleCommits = gitCommitHistory.slice(0, 8);
+
+  const [discovering, setDiscovering] = useState(false);
+  const [discovered, setDiscovered] = useState<DiscoveredServer[]>([]);
+  const [discoverError, setDiscoverError] = useState<string | null>(null);
+  const [didDiscover, setDidDiscover] = useState(false);
+
+  const handleDiscover = useCallback(async () => {
+    setDiscovering(true);
+    setDiscoverError(null);
+    try {
+      setDiscovered(await gitApi.discoverLocalSyncServers(2500));
+      setDidDiscover(true);
+    } catch (error) {
+      setDiscoverError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDiscovering(false);
+    }
+  }, []);
+
+  const handlePickServer = useCallback(
+    (server: DiscoveredServer) => {
+      void syncNow({
+        remote: server.git_url,
+        branch: server.branch,
+        onAfterPull: () => refreshTree(),
+      });
+    },
+    [syncNow, refreshTree]
+  );
 
   useEffect(() => {
     void refreshGitStatus();
@@ -116,6 +147,39 @@ export function MobileSyncSection() {
             {gitSyncAction === "refresh" || gitHistoryBusy ? "Refreshing..." : "Refresh"}
           </button>
         </div>
+      </Group>
+
+      <Group title="Find on local network">
+        <p className="mobile-native-note">
+          Discover a computer running the sync server on this Wi-Fi or your hotspot — no URL to
+          type. Tap one to sync.
+        </p>
+        <div className="mobile-native-actions single">
+          <button
+            type="button"
+            className="mobile-secondary-btn"
+            onClick={() => void handleDiscover()}
+            disabled={discovering || gitSyncBusy}
+          >
+            {discovering ? "Searching..." : "Find on local network"}
+          </button>
+        </div>
+        {discovered.map((server) => (
+          <ChoiceRow
+            key={server.git_url}
+            label={server.name}
+            subtitle={server.git_url}
+            selected={syncSettings.gitRemoteUrl === server.git_url}
+            onClick={() => handlePickServer(server)}
+          />
+        ))}
+        {discoverError ? <p className="mobile-native-note">{discoverError}</p> : null}
+        {didDiscover && !discovering && discovered.length === 0 && !discoverError ? (
+          <p className="mobile-native-note">
+            No servers found. On the computer, tap “Start server” in Settings → Sync, and make sure
+            you allowed local-network access on this phone.
+          </p>
+        ) : null}
       </Group>
 
       {visibleCommits.length > 0 || gitHistoryBusy ? (

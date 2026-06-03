@@ -11,16 +11,17 @@ The desktop app can host the server for you. No terminal needed.
 **On the computer (desktop app):**
 
 1. Open **Settings → Sync → Local network server**.
-2. Click **Start server**.
-3. The app shows a ready-to-paste address, e.g. `git://192.168.1.15/notes`.
-   Click **Copy**.
+2. Click **Start server**. The app shows a **QR code** and a ready-to-paste
+   address, e.g. `git://192.168.1.15/notes`.
 
-**On the phone:**
+**On the phone — pick whichever is easiest (no typing):**
 
-1. Open **Settings → Profile → Git**.
-2. Paste the address into **Remote URL**, set **Branch** to `main`, tap **Apply
-   Git settings**.
-3. Go to **Settings → Sync** and tap **Sync now**.
+- **Find it automatically.** Settings → Sync → **Find on local network**, then
+  tap your computer. (Uses Bonjour/mDNS; allow the local-network prompt.)
+- **Scan the QR.** Point your phone's **Camera** at the QR on the computer; it
+  opens the app and syncs.
+- **By hand.** Settings → Profile → Git: paste the **Remote URL**, set **Branch**
+  to `main`, **Apply**, then Settings → Sync → **Sync now**.
 
 That's it. Tap **Sync now** on either device whenever you want to sync. Pushes
 from the phone update the computer's notes in place (the repo is configured with

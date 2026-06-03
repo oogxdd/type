@@ -1,5 +1,6 @@
 import { invokeLogged } from "./invoke";
 import type {
+  DiscoveredServer,
   GitCommitHistoryEntry,
   GitSyncStatus,
   LocalSyncServerStatus,
@@ -75,3 +76,11 @@ export const startLocalSyncServer = (): Promise<LocalSyncServerStatus> =>
 
 export const stopLocalSyncServer = (): Promise<LocalSyncServerStatus> =>
   invokeLogged<LocalSyncServerStatus>("stop_local_sync_server");
+
+// Browse the local network (mDNS) for advertised sync servers.
+export const discoverLocalSyncServers = (
+  timeoutMs?: number
+): Promise<DiscoveredServer[]> =>
+  invokeLogged<DiscoveredServer[]>("discover_local_sync_servers", {
+    timeout_ms: timeoutMs,
+  });

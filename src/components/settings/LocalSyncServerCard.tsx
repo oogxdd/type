@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import * as gitApi from "../../data/gitApi";
+import { buildSyncDeepLink } from "../../data/localSyncLink";
 import type { LocalSyncServerStatus } from "../../types";
 import { Button } from "../ui/button";
 
@@ -54,6 +56,17 @@ export function LocalSyncServerCard() {
 
   const running = Boolean(status?.running);
 
+  const deepLink = useMemo(() => {
+    if (!status?.git_url) {
+      return null;
+    }
+    return buildSyncDeepLink({
+      remote: status.git_url,
+      branch: status.branch ?? undefined,
+      name: status.host ? `Computer (${status.host})` : undefined,
+    });
+  }, [status?.git_url, status?.branch, status?.host]);
+
   return (
     <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
       <div className="space-y-1">
@@ -95,32 +108,50 @@ export function LocalSyncServerCard() {
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
 
       {running ? (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {status?.host ? null : (
             <p className="text-xs text-destructive">
               Couldn't auto-detect this computer's network address. Find it in System Settings →
               Network and use <code>git://&lt;your-ip&gt;/{status?.repo_path.split("/").pop()}</code>.
             </p>
           )}
-          <UrlRow
-            label="On your phone, paste this Remote URL"
-            value={status?.git_url ?? ""}
-            copied={copied}
-            onCopy={copy}
-          />
-          {status?.ssh_url ? (
+
+          {deepLink ? (
+            <div className="flex flex-col items-center gap-2 rounded-md border border-border/70 bg-background/60 p-4">
+              <div className="rounded-md bg-white p-3">
+                <QRCodeSVG value={deepLink} size={168} marginSize={0} />
+              </div>
+              <p className="text-center text-xs text-muted-foreground">
+                <strong className="text-foreground">Point your phone's Camera at this</strong> to
+                open the app and sync — nothing to type.
+              </p>
+            </div>
+          ) : null}
+
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Or set it up by hand:</p>
             <UrlRow
-              label="Or, with macOS Remote Login enabled (more secure)"
-              value={status.ssh_url}
+              label="Remote URL"
+              value={status?.git_url ?? ""}
               copied={copied}
               onCopy={copy}
             />
-          ) : null}
-          <ol className="list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
-            <li>On the phone: open Settings → Profile → Git.</li>
-            <li>Paste the Remote URL above, set Branch to <code>main</code>, tap Apply Git settings.</li>
-            <li>Tap <strong>Sync now</strong> in Settings → Sync.</li>
-          </ol>
+            {status?.ssh_url ? (
+              <UrlRow
+                label="Or, with macOS Remote Login enabled (more secure)"
+                value={status.ssh_url}
+                copied={copied}
+                onCopy={copy}
+              />
+            ) : null}
+            <ol className="list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
+              <li>On the phone: Settings → Sync → <strong>Find on local network</strong>, then tap this computer.</li>
+              <li>
+                No luck? Settings → Profile → Git: paste the Remote URL, set Branch to{" "}
+                <code>{status?.branch ?? "main"}</code>, Apply, then <strong>Sync now</strong>.
+              </li>
+            </ol>
+          </div>
         </div>
       ) : null}
     </section>

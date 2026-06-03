@@ -47,10 +47,19 @@ export type LocalSyncServerStatus = {
   running: boolean;
   host: string | null;
   port: number;
+  branch: string | null;
   git_url: string | null;
   ssh_url: string | null;
   repo_path: string;
   error: string | null;
+};
+
+export type DiscoveredServer = {
+  name: string;
+  host: string;
+  port: number;
+  git_url: string;
+  branch: string;
 };
 
 export type GitCommitHistorySyncState = "synced" | "local";

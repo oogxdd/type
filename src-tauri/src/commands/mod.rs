@@ -94,6 +94,7 @@ pub(super) fn run() {
             local_sync::get_local_sync_server_status,
             local_sync::start_local_sync_server,
             local_sync::stop_local_sync_server,
+            local_sync::discover_local_sync_servers,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

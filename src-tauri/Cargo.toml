@@ -34,6 +34,7 @@ argon2 = "0.5"
 chacha20poly1305 = { version = "0.10", features = ["std"] }
 zeroize = "1.8"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
+mdns-sd = "0.20.0"
 
 # Desktop-only auto-updater. The updater + process plugins are not built for
 # mobile (iOS/Android), so they are gated to desktop targets here and behind

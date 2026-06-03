@@ -29,7 +29,11 @@ type GitSyncContextValue = {
   connectGitRepo: () => Promise<void>;
   gitPull: (opts?: { onAfterPull?: () => Promise<void> }) => Promise<void>;
   gitPush: () => Promise<void>;
-  syncNow: (opts?: { onAfterPull?: () => Promise<void> }) => Promise<void>;
+  syncNow: (opts?: {
+    remote?: string;
+    branch?: string;
+    onAfterPull?: () => Promise<void>;
+  }) => Promise<void>;
   setGitStatus: (status: GitSyncStatus | null) => void;
   setGitSyncError: (error: string | null) => void;
 };
@@ -209,16 +213,29 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
   // rejection on that first push is expected when the other device pushed since,
   // so it is swallowed and reconciled by the pull + final push.
   const syncNow = useCallback(
-    async (opts?: { onAfterPull?: () => Promise<void> }) => {
-      const remoteUrl = syncSettings.gitRemoteUrl.trim();
+    async (opts?: {
+      remote?: string;
+      branch?: string;
+      onAfterPull?: () => Promise<void>;
+    }) => {
+      // An explicit remote (from mDNS discovery or a QR deep link) wins over the
+      // stored setting and is persisted so the fields reflect what we synced.
+      const remoteUrl = (opts?.remote ?? syncSettings.gitRemoteUrl).trim();
       if (!remoteUrl) {
         setGitSyncError("Remote repository URL is required.");
         return;
       }
-      const branch = syncSettings.gitBranch.trim() || undefined;
+      const branch = (opts?.branch ?? syncSettings.gitBranch).trim() || undefined;
       const username = syncSettings.gitUsername.trim() || undefined;
       const password = syncSettings.gitPassword || undefined;
       const message = syncSettings.gitCommitMessage.trim() || undefined;
+
+      if (opts?.remote) {
+        updateSyncSettings({
+          gitRemoteUrl: opts.remote,
+          ...(opts.branch ? { gitBranch: opts.branch } : {}),
+        });
+      }
 
       setGitSyncAction("sync");
       await yieldToUi();

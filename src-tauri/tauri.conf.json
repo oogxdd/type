@@ -44,6 +44,11 @@
       "endpoints": [
         "https://github.com/oogxdd/type_new/releases/latest/download/latest.json"
       ]
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": ["type2"]
+      }
     }
   }
 }

@@ -23,3 +23,15 @@ pub(super) async fn stop_local_sync_server(
     ensure_security_unlocked_for_app(&app)?;
     super::run_blocking_command(move || stop_local_sync_server_impl(&app)).await
 }
+
+#[tauri::command]
+pub(super) async fn discover_local_sync_servers(
+    app: tauri::AppHandle,
+    timeout_ms: Option<u64>,
+) -> Result<Vec<DiscoveredServer>, String> {
+    ensure_security_unlocked_for_app(&app)?;
+    super::run_blocking_command(move || {
+        discover_local_sync_servers_impl(timeout_ms.unwrap_or(2500))
+    })
+    .await
+}

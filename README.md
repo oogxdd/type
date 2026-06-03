@@ -144,8 +144,10 @@ The app supports three ways to sync, all driven from the same UI:
    computer, use the `ssh://` URL shown by the server card, and the app's SSH key.
 3. **Local repo over `git://`** — same Wi-Fi *or* your phone's personal hotspot.
    On the desktop, **Settings → Sync → Local network server → Start server**
-   spawns a `git daemon` and shows a `git://` URL to paste on the phone. No
-   internet and no external host required.
+   spawns a `git daemon`. The phone connects with **no typing**: tap **Find on
+   local network** (mDNS/Bonjour discovery) or scan the desktop's **QR code**
+   with the Camera. Manual URL entry still works as a fallback. No internet and
+   no external host required.
 
 See [LOCAL_GIT_SERVER_LAN_HOTSPOT.md](LOCAL_GIT_SERVER_LAN_HOTSPOT.md) for the
 local-network flow.
