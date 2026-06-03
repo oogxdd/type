@@ -117,6 +117,56 @@ src/
   to the working tree at the end (left uncommitted, untouched).
 - `features/tree/keyboard-coordinates.ts` has no importers — candidate for deletion.
 
+---
+
+# Phase 2 — full feature-sliced + code-quality (in progress)
+
+User feedback after Phase 1: dissolve `contexts/` and `data/` into features; add
+in-feature **segments** so components/helpers/state are distinguishable; review and
+improve the code itself (not just layout). Confirmed decisions:
+
+- **Full feature-sliced**: no top-level `contexts/` or `data/`.
+- **Segment names**: `components/` (.tsx), `hooks/` (hooks + context providers),
+  `lib/` (pure helpers), `api/` (IPC). Optional `index.ts` barrel per feature.
+- 9 features: notes, tree, editor, recording, handwriting, profiles, sync, security, settings.
+- `app/state/`: cross-cutting stores with no single domain — `selection-context`,
+  `theme-context`, `appearance-api`. (Pragmatic: features may import these from app/state.)
+- `shared/`: `ui/` (shadcn), `lib/` (dom, format, frontmatter, jobs, notes, selection,
+  storage, cn), `api/invoke`, `types.ts`, `constants.ts`, `hooks/use-mobile`.
+- Domain note-headers move to their feature (recording/handwriting). Lens →
+  `editor/components/lens/`. `desktop/` + `mobile/` stay as composition shells.
+
+### Target
+
+```
+src/
+  main.tsx ota-bootstrap.ts          entries
+  app/        app, app-shell, main-app, error-boundary, launch-screen, app.css
+    state/    selection-context, theme-context, appearance-api
+  shared/     ui/  lib/  api/(invoke)  hooks/(use-mobile)  types.ts  constants.ts
+  features/<name>/  components/  hooks/  lib/  api/  index.ts
+    notes editor tree recording handwriting profiles sync security settings
+  desktop/  mobile/   composition shells
+```
+
+### Stages (each: move/refactor → tsc clean → commit+push)
+
+- [ ] **P2.1 app/state** — selection-context, theme-context, appearance-api → app/state/
+- [ ] **P2.2 features/editor** — segments + decompose multi-note-lens (god component) into
+      hook (use-lens-annotations) + lens sub-components + lib/lens-geometry
+- [ ] **P2.3 features/tree** — segments
+- [ ] **P2.4 features/notes** — note-row, notes-tree-context, use-note-previews, notes-api
+- [ ] **P2.5 features/recording** — recordings-context, use-audio-recorder, recordings-api, recording-note-header
+- [ ] **P2.6 features/handwriting** — handwriting-context, handwriting-api, handwriting-note-header
+- [ ] **P2.7 features/profiles** — profiles-context, profiles-api
+- [ ] **P2.8 features/sync** — git-sync-context, git-api, local-sync-link, local-sync-server-card
+- [ ] **P2.9 features/security** — security-context, security-api, lock-screen
+- [ ] **P2.10 features/settings** — components/{desktop,mobile}, hooks/use-settings-data, lib/sections
+- [ ] **P2.11 shared/** — ui, lib, api/invoke, types, constants, hooks/use-mobile (global @/ prefix sed)
+- [ ] **P2.12 index.ts barrels** — public API per feature; route shell/cross-feature imports through them
+- [ ] **P2.13 code-quality pass** — audit remaining large files (app-shell, use-keyboard-navigation, …); fix smells
+- [ ] **P2.14 docs** — rewrite AGENTS.md + README; finalize this file
+
 ## Notes / surprises log
 
 - `main.tsx` is the **OTA bundle entry** (`vite.ota.config.ts`), not dead code.
