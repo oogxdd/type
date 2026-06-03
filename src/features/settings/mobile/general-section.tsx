@@ -1,6 +1,6 @@
-import { useProfiles } from "../../../contexts/ProfilesContext";
-import type { NoteFileNameFormat } from "../../../types";
-import { ChoiceRow, Group } from "./SettingsHelpers";
+import { useProfiles } from "@/contexts/ProfilesContext";
+import type { NoteFileNameFormat } from "@/types";
+import { ChoiceRow, Group } from "./helpers";
 
 const noteFileNameOptions: Array<{
   value: NoteFileNameFormat;

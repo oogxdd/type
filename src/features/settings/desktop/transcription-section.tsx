@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { formatRecordingStatus, formatUpdatedAt } from "../../utils/format";
-import { useProfiles } from "../../contexts/ProfilesContext";
-import { useRecordings } from "../../contexts/RecordingsContext";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import * as api from "../../data/recordingsApi";
-import type { RecordingListItem, WhisperStatusResult } from "../../types";
+import { formatRecordingStatus, formatUpdatedAt } from "@/utils/format";
+import { useProfiles } from "@/contexts/ProfilesContext";
+import { useRecordings } from "@/contexts/RecordingsContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import * as api from "@/data/recordingsApi";
+import type { RecordingListItem, WhisperStatusResult } from "@/types";
 
 /** Normalised, display-ready status for a recording (queued/processing take
  *  precedence over the persisted note status). */

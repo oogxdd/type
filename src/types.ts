@@ -1,3 +1,6 @@
+export type ThemeMode = "light" | "dark";
+export type NotesListMode = "separate" | "nested";
+
 export type NoteEntry = {
   name: string;
   path: string;

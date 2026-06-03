@@ -3,11 +3,11 @@ import {
   formatHandwritingStatus,
   formatRecordingStatus,
   formatUpdatedAt,
-} from "../../../utils/format";
-import { useProfiles } from "../../../contexts/ProfilesContext";
-import { useRecordings } from "../../../contexts/RecordingsContext";
-import { useHandwriting } from "../../../contexts/HandwritingContext";
-import { Group, ChoiceRow, InputRow, StatRow } from "./SettingsHelpers";
+} from "@/utils/format";
+import { useProfiles } from "@/contexts/ProfilesContext";
+import { useRecordings } from "@/contexts/RecordingsContext";
+import { useHandwriting } from "@/contexts/HandwritingContext";
+import { Group, ChoiceRow, InputRow, StatRow } from "./helpers";
 
 const getJobTitle = (notePath: string): string => {
   const trimmed = notePath.trim();

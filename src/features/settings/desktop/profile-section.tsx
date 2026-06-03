@@ -1,8 +1,8 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useProfiles } from "../../contexts/ProfilesContext";
-import * as gitApi from "../../data/gitApi";
-import { Button } from "../ui/button";
+import { useProfiles } from "@/contexts/ProfilesContext";
+import * as gitApi from "@/data/gitApi";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -10,8 +10,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../ui/dialog";
-import { Input } from "../ui/input";
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 type GitDraftSettings = {
   gitRemoteUrl: string;

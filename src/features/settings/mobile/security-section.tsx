@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { useSecurity } from "../../../contexts/SecurityContext";
-import { Group, InputRow } from "./SettingsHelpers";
+import { useSecurity } from "@/contexts/SecurityContext";
+import { Group, InputRow } from "./helpers";
 
 export function MobileSecuritySection() {
   const {

@@ -1,16 +1,16 @@
 import { useEffect, useMemo } from "react";
-import { useNotesTree } from "../../contexts/NotesTreeContext";
-import { useGitSync } from "../../contexts/GitSyncContext";
-import { useProfiles } from "../../contexts/ProfilesContext";
-import { useSettingsData } from "../../hooks/useSettingsData";
+import { useNotesTree } from "@/contexts/NotesTreeContext";
+import { useGitSync } from "@/contexts/GitSyncContext";
+import { useProfiles } from "@/contexts/ProfilesContext";
+import { useSettingsData } from "@/features/settings/use-settings-data";
 import {
   formatCommitSummaryForApp,
   formatGitCommitStateLabel,
   formatGitCommitTime,
   getSyncHint,
-} from "../../utils/format";
-import { Button } from "../ui/button";
-import { LocalSyncServerCard } from "./LocalSyncServerCard";
+} from "@/utils/format";
+import { Button } from "@/components/ui/button";
+import { LocalSyncServerCard } from "./local-sync-server-card";
 
 export function SettingsSyncSection() {
   const { syncSettings } = useProfiles();

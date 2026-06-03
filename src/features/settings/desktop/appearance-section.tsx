@@ -1,5 +1,5 @@
-import { useTheme } from "../../contexts/ThemeContext";
-import type { NotesListMode, ThemeMode } from "../SettingsPanel";
+import { useTheme } from "@/contexts/ThemeContext";
+import type { NotesListMode, ThemeMode } from "@/types";
 
 export function SettingsAppearanceSection() {
   const { theme, setTheme, notesListMode, setNotesListMode } = useTheme();

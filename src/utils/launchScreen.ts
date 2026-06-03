@@ -1,4 +1,4 @@
-import type { ThemeMode } from "../components/SettingsPanel";
+import type { ThemeMode } from "@/types";
 
 export const LIGHT_LAUNCH_BACKGROUND = "#f5f6fb";
 export const DARK_LAUNCH_BACKGROUND = "#14171b";

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import type { ThemeMode, NotesListMode } from "../components/SettingsPanel";
+import type { ThemeMode, NotesListMode } from "@/types";
 import {
   DEFAULT_EDITOR_FONT_SIZE,
   MIN_EDITOR_FONT_SIZE,

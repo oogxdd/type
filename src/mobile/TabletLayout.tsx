@@ -1,10 +1,10 @@
 import { Archive, Folder, Settings } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import type { SettingsSectionId } from "../components/SettingsPanel";
+import type { SettingsSectionId } from "@/features/settings/sections";
 import { MobileEditorScreen } from "./components/MobileEditorScreen";
 import { MobileFoldersScreen } from "./components/MobileFoldersScreen";
 import { MobileNotesScreen } from "./components/MobileNotesScreen";
-import { MobileSettingsScreen } from "./components/MobileSettingsScreen";
+import { MobileSettingsScreen } from "@/features/settings/mobile/settings-screen";
 import { MobileNavBar } from "./components/MobileNavBar";
 import { MobileTabBar } from "./components/MobileTabBar";
 import { MOBILE_SETTINGS_SECTIONS } from "../constants";

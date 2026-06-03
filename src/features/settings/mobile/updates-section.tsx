@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { OTA_APPLY_PENDING_KEY } from "../../../constants";
-import { Group } from "./SettingsHelpers";
+import { OTA_APPLY_PENDING_KEY } from "@/constants";
+import { Group } from "./helpers";
 
 type CheckState =
   | { status: "idle" }

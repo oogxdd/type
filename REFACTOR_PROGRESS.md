@@ -86,7 +86,9 @@ src/
 - [x] **3. features/notes/** — note-row + use-note-previews ✅ tsc clean
 - [x] **4. features/security/** — lock-screen ✅ tsc clean
 - [x] **5. features/recording/** — use-audio-recorder ✅ tsc clean
-- [ ] **6. features/settings/** — desktop + mobile sections, sections.ts, use-settings-data
+- [x] **6. features/settings/** — desktop + mobile sections, sections.ts, use-settings-data ✅ tsc clean
+      - `SettingsPanel` split: registry → `sections.ts`; panes → `desktop/settings-panel.tsx`.
+      - `ThemeMode`/`NotesListMode` moved to `src/types.ts` (cross-cutting, not settings-only).
 - [ ] **7. desktop/** — kebab-rename shells + move app-sidebar
 - [ ] **8. mobile/** — ui/ + screens/ + views/ + hooks/, flatten components/, move use-edge-swipe
 - [ ] **9. app/** — App/AppShell/mainApp/ErrorBoundary/launchScreen + update entry stubs

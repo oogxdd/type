@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { OTA_APPLY_PENDING_KEY } from "../../constants";
+import { OTA_APPLY_PENDING_KEY } from "@/constants";
 
 type DesktopUpdateState =
   | { status: "idle" }

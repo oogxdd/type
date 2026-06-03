@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import * as gitApi from "../../data/gitApi";
-import { buildSyncDeepLink } from "../../data/localSyncLink";
-import type { LocalSyncServerStatus } from "../../types";
-import { Button } from "../ui/button";
+import * as gitApi from "@/data/gitApi";
+import { buildSyncDeepLink } from "@/data/localSyncLink";
+import type { LocalSyncServerStatus } from "@/types";
+import { Button } from "@/components/ui/button";
 
 /**
  * Desktop-only "host" control: starts/stops a local `git daemon` so a phone on

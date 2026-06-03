@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { useSecurity } from "../../contexts/SecurityContext";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+import { useSecurity } from "@/contexts/SecurityContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export function SettingsSecuritySection() {
   const {

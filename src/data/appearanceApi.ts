@@ -1,4 +1,4 @@
-import type { ThemeMode } from "../components/SettingsPanel";
+import type { ThemeMode } from "@/types";
 import { invokeLogged } from "./invoke";
 
 const hasTauriRuntime = () =>

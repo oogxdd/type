@@ -5,10 +5,8 @@ import { useNotesTree } from "../contexts/NotesTreeContext";
 import { useSelection } from "../contexts/SelectionContext";
 
 import { NoteRow } from "@/features/notes/note-row";
-import {
-  SettingsMiddlePane,
-  type SettingsSectionId,
-} from "../components/SettingsPanel";
+import { SettingsMiddlePane } from "@/features/settings/desktop/settings-panel";
+import type { SettingsSectionId } from "@/features/settings/sections";
 
 import { focusNoScroll } from "../utils/dom";
 import type { AppMode } from "../types";

@@ -1,5 +1,5 @@
-import type { SettingsSectionId } from "../../components/SettingsPanel";
-import { MobileSettingsScreen } from "../components/MobileSettingsScreen";
+import type { SettingsSectionId } from "@/features/settings/sections";
+import { MobileSettingsScreen } from "@/features/settings/mobile/settings-screen";
 import { MOBILE_SETTINGS_SECTIONS } from "../../constants";
 
 type PhoneSettingsScreenProps = {

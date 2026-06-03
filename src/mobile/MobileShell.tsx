@@ -13,7 +13,7 @@ import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import type { SettingsSectionId } from "../components/SettingsPanel";
+import type { SettingsSectionId } from "@/features/settings/sections";
 import type { MobileToastState } from "./navigation";
 import { MobileActionSheet } from "./components/MobileActionSheet";
 import { MobileNavBar } from "./components/MobileNavBar";

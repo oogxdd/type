@@ -1,4 +1,4 @@
-import type { SettingsSectionId } from "../components/SettingsPanel";
+import type { SettingsSectionId } from "@/features/settings/sections";
 
 export type LayoutMode = "desktop" | "tablet" | "phone";
 

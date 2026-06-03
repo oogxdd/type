@@ -1,11 +1,11 @@
-import type { SettingsSectionId } from "../../components/SettingsPanel";
-import { MobileGeneralSection } from "./settings/MobileGeneralSection";
-import { MobileProfileSection } from "./settings/MobileProfileSection";
-import { MobileSyncSection } from "./settings/MobileSyncSection";
-import { MobileUpdatesSection } from "./settings/MobileUpdatesSection";
-import { MobileAppearanceSection } from "./settings/MobileAppearanceSection";
-import { MobileRecordingsSection } from "./settings/MobileRecordingsSection";
-import { MobileSecuritySection } from "./settings/MobileSecuritySection";
+import type { SettingsSectionId } from "@/features/settings/sections";
+import { MobileGeneralSection } from "./general-section";
+import { MobileProfileSection } from "./profile-section";
+import { MobileSyncSection } from "./sync-section";
+import { MobileUpdatesSection } from "./updates-section";
+import { MobileAppearanceSection } from "./appearance-section";
+import { MobileRecordingsSection } from "./recordings-section";
+import { MobileSecuritySection } from "./security-section";
 
 type MobileSettingsScreenProps = {
   activeSection: SettingsSectionId;

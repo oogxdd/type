@@ -1,41 +1,18 @@
-import { Button } from "./ui/button";
-import { useEditor } from "../contexts/EditorContext";
-import { SettingsGeneralSection } from "./settings/SettingsGeneralSection";
-import { SettingsProfileSection } from "./settings/SettingsProfileSection";
-import { SettingsSyncSection } from "./settings/SettingsSyncSection";
-import { SettingsAppearanceSection } from "./settings/SettingsAppearanceSection";
-import { SettingsRecordingsSection } from "./settings/SettingsRecordingsSection";
-import { SettingsTranscriptionSection } from "./settings/SettingsTranscriptionSection";
-import { SettingsUpdatesSection } from "./settings/SettingsUpdatesSection";
-import { SettingsSecuritySection } from "./settings/SettingsSecuritySection";
-
-export type ThemeMode = "light" | "dark";
-export type NotesListMode = "separate" | "nested";
-
-export type SettingsSectionId =
-  | "general"
-  | "profile"
-  | "sync"
-  | "updates"
-  | "appearance"
-  | "transcription"
-  | "recordings"
-  | "security";
-type SettingsSection = {
-  id: SettingsSectionId;
-  title: string;
-};
-
-const SETTINGS_SECTIONS: SettingsSection[] = [
-  { id: "general", title: "General" },
-  { id: "profile", title: "Profile" },
-  { id: "sync", title: "Sync" },
-  { id: "updates", title: "Updates" },
-  { id: "appearance", title: "Appearance" },
-  { id: "transcription", title: "Transcription" },
-  { id: "recordings", title: "Recordings" },
-  { id: "security", title: "Security" },
-];
+import { Button } from "@/components/ui/button";
+import { useEditor } from "@/contexts/EditorContext";
+import {
+  SETTINGS_SECTIONS,
+  type SettingsSection,
+  type SettingsSectionId,
+} from "../sections";
+import { SettingsGeneralSection } from "./general-section";
+import { SettingsProfileSection } from "./profile-section";
+import { SettingsSyncSection } from "./sync-section";
+import { SettingsAppearanceSection } from "./appearance-section";
+import { SettingsRecordingsSection } from "./recordings-section";
+import { SettingsTranscriptionSection } from "./transcription-section";
+import { SettingsUpdatesSection } from "./updates-section";
+import { SettingsSecuritySection } from "./security-section";
 
 const shouldIgnorePaneFocusClick = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) {

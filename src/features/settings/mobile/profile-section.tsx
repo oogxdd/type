@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useProfiles } from "../../../contexts/ProfilesContext";
-import * as gitApi from "../../../data/gitApi";
-import { exportProfilesToDocuments } from "../../../data/profilesApi";
-import { Group, ChoiceRow, InputRow } from "./SettingsHelpers";
+import { useProfiles } from "@/contexts/ProfilesContext";
+import * as gitApi from "@/data/gitApi";
+import { exportProfilesToDocuments } from "@/data/profilesApi";
+import { Group, ChoiceRow, InputRow } from "./helpers";
 
 type GitDraftSettings = {
   gitRemoteUrl: string;

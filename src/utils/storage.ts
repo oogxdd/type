@@ -1,4 +1,4 @@
-import type { ThemeMode, NotesListMode } from "../components/SettingsPanel";
+import type { ThemeMode, NotesListMode } from "@/types";
 import type { ProfileSyncSettings } from "../types";
 import {
   PROFILE_SYNC_STORAGE_KEY,
