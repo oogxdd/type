@@ -152,7 +152,7 @@ src/
 ### Stages (each: move/refactor → tsc clean → commit+push)
 
 - [x] **P2.1 app/state** — selection-context, theme-context, appearance-api → app/state/
-- [ ] **P2.2 features/editor** — segments + decompose multi-note-lens (god component) into
+- [x] **P2.2 features/editor** — segments + decompose multi-note-lens (god component) into
       hook (use-lens-annotations) + lens sub-components + lib/lens-geometry
 - [ ] **P2.3 features/tree** — segments
 - [ ] **P2.4 features/notes** — note-row, notes-tree-context, use-note-previews, notes-api
