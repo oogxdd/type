@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import * as gitApi from "@/data/git-api";
-import { buildSyncDeepLink } from "@/data/local-sync-link";
+import * as gitApi from "@/features/sync/api/git-api";
+import { buildSyncDeepLink } from "@/features/sync/api/local-sync-link";
 import type { LocalSyncServerStatus } from "@/types";
 import { Button } from "@/components/ui/button";
 

@@ -5,11 +5,11 @@ import {
   formatGitCommitTime,
   getSyncHint,
 } from "@/utils/format";
-import * as gitApi from "@/data/git-api";
+import * as gitApi from "@/features/sync/api/git-api";
 import type { DiscoveredServer } from "@/types";
 import { useSettingsData } from "@/features/settings/use-settings-data";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
-import { useGitSync } from "@/contexts/git-sync-context";
+import { useGitSync } from "@/features/sync/hooks/git-sync-context";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { ChoiceRow, Group, StatRow } from "./helpers";
 

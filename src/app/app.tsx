@@ -4,7 +4,7 @@ import "@/mobile/mobile.css";
 
 import { ThemeProvider, useTheme } from "@/app/state/theme-context";
 import { ProfilesProvider, useProfiles } from "@/features/profiles/hooks/profiles-context";
-import { GitSyncProvider } from "@/contexts/git-sync-context";
+import { GitSyncProvider } from "@/features/sync/hooks/git-sync-context";
 import { SelectionProvider, useSelection } from "@/app/state/selection-context";
 import { EditorProvider, useEditor } from "@/features/editor/hooks/editor-context";
 import { NotesTreeProvider, useNotesTree } from "@/features/notes/hooks/notes-tree-context";

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
-import * as gitApi from "@/data/git-api";
+import * as gitApi from "@/features/sync/api/git-api";
 import { exportProfilesToDocuments } from "@/features/profiles/api/profiles-api";
 import { Group, ChoiceRow, InputRow } from "./helpers";
 

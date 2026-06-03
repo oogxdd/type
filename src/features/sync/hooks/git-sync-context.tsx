@@ -6,13 +6,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import * as api from "../data/git-api";
+import * as api from "../api/git-api";
 import type {
   GitCommitHistoryEntry,
   GitSyncAction,
   GitSyncStatus,
-} from "../types";
-import { yieldToUi } from "../utils/notes";
+} from "@/types";
+import { yieldToUi } from "@/utils/notes";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 
