@@ -12,6 +12,7 @@ import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useGitSync } from "@/features/sync/hooks/git-sync-context";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { ChoiceRow, Group, StatRow } from "./helpers";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 export function MobileSyncSection() {
   const { syncSettings } = useProfiles();
@@ -52,7 +53,7 @@ export function MobileSyncSection() {
       setDiscovered(await gitApi.discoverLocalSyncServers(2500));
       setDidDiscover(true);
     } catch (error) {
-      setDiscoverError(error instanceof Error ? error.message : String(error));
+      setDiscoverError(getErrorMessage(error));
     } finally {
       setDiscovering(false);
     }

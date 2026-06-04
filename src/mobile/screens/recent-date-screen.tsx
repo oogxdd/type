@@ -2,6 +2,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { MobileNotesScreen } from "@/mobile/views/notes-view";
 import type { NotePreview } from "@/shared/lib/format";
 import type { RecentBucket } from "@/mobile/hooks/use-recent-buckets";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 type PhoneRecentDateScreenProps = {
   bucketId: string;
@@ -70,7 +71,7 @@ export function PhoneRecentDateScreen({
               showToast("Note deleted", "success");
             }
           } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
+            const message = getErrorMessage(error);
             showToast(message, "error");
           }
         })();
@@ -81,7 +82,7 @@ export function PhoneRecentDateScreen({
             await onArchiveNote(path);
             showToast("Moved to Archive", "success");
           } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
+            const message = getErrorMessage(error);
             showToast(message, "error");
           }
         })();

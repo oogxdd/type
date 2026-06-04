@@ -4,6 +4,7 @@ import * as gitApi from "@/features/sync/api/git-api";
 import { buildSyncDeepLink } from "@/features/sync/api/local-sync-link";
 import type { LocalSyncServerStatus } from "@/shared/types";
 import { Button } from "@/shared/ui/button";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 /**
  * Desktop-only "host" control: starts/stops a local `git daemon` so a phone on
@@ -20,7 +21,7 @@ export function LocalSyncServerCard() {
     try {
       setStatus(await gitApi.getLocalSyncServerStatus());
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(getErrorMessage(err));
     }
   }, []);
 
@@ -37,7 +38,7 @@ export function LocalSyncServerCard() {
         : await gitApi.startLocalSyncServer();
       setStatus(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(getErrorMessage(err));
     } finally {
       setBusy(false);
     }

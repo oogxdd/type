@@ -7,6 +7,7 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import * as api from "@/features/recording/api/recordings-api";
 import type { RecordingListItem, WhisperStatusResult } from "@/shared/types";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 /** Normalised, display-ready status for a recording (queued/processing take
  *  precedence over the persisted note status). */
@@ -132,7 +133,7 @@ export function SettingsTranscriptionSection() {
       setWhisperStatus({
         available: false,
         python_found: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
       });
     }
   }, []);
@@ -150,7 +151,7 @@ export function SettingsTranscriptionSection() {
       setWhisperStatus({
         available: false,
         python_found: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
       });
     } finally {
       setWhisperSettingUp(false);

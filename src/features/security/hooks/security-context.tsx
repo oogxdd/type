@@ -9,6 +9,7 @@ import {
 } from "react";
 import * as api from "../api/security-api";
 import type { SecurityState, SecurityUnlockResult } from "@/shared/types";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 type SecurityContextValue = {
   securityState: SecurityState | null;
@@ -46,7 +47,7 @@ export function SecurityProvider({ children }: { children: ReactNode }) {
       setSecurityState(next);
       setSecurityError(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       setSecurityError(message);
     } finally {
       setSecurityBusy(false);
@@ -65,7 +66,7 @@ export function SecurityProvider({ children }: { children: ReactNode }) {
         setSecurityState(next);
         setSecurityError(null);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         setSecurityError(message);
         throw error;
       } finally {
@@ -102,7 +103,7 @@ export function SecurityProvider({ children }: { children: ReactNode }) {
       }
       return result;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       setSecurityError(message);
       throw error;
     } finally {
@@ -117,7 +118,7 @@ export function SecurityProvider({ children }: { children: ReactNode }) {
       setSecurityState(next);
       setSecurityError(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       setSecurityError(message);
       throw error;
     } finally {
@@ -132,7 +133,7 @@ export function SecurityProvider({ children }: { children: ReactNode }) {
       setSecurityState(next);
       setSecurityError(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       setSecurityError(message);
       throw error;
     } finally {

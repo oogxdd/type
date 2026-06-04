@@ -3,6 +3,7 @@ import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useSshKey } from "@/features/sync/hooks/use-ssh-key";
 import { exportProfilesToDocuments } from "@/features/profiles/api/profiles-api";
 import { Group, ChoiceRow, InputRow } from "./helpers";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 type GitDraftSettings = {
   gitRemoteUrl: string;
@@ -401,7 +402,7 @@ export function MobileProfileSection() {
                     `Export ready: ${exported.export_name} (${sizeLabel}, ${exported.file_count} files). Open Files > On My iPhone > Type > Type Export.`
                   );
                 } catch (error) {
-                  const message = error instanceof Error ? error.message : String(error);
+                  const message = getErrorMessage(error);
                   setExportStatus(message);
                 } finally {
                   setExportBusy(false);

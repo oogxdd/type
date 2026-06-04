@@ -30,6 +30,7 @@ import {
   TEXT_TOOL,
   type LensTool,
 } from "../lib/lens-geometry";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 export type LensNote = {
   path: string;
@@ -145,7 +146,7 @@ export function useLensAnnotations({
         if (cancelled) {
           return;
         }
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         setLoadError(message);
       })
       .finally(() => {
@@ -317,7 +318,7 @@ export function useLensAnnotations({
             setSaveMessage(null);
           }, 1200);
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message = getErrorMessage(error);
           setSaveError(message);
           setSaveMessage(null);
         }

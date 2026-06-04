@@ -15,6 +15,7 @@ import type {
 import { yieldToUi } from "@/shared/lib/notes";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 type GitSyncContextValue = {
   gitStatus: GitSyncStatus | null;
@@ -60,7 +61,7 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
       setGitStatus(status);
       setGitSyncError(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       setGitSyncError(message);
     } finally {
       setGitSyncAction("idle");
@@ -75,7 +76,7 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
       setGitCommitHistory(history);
       setGitHistoryError(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       setGitHistoryError(message);
       setGitCommitHistory([]);
     } finally {
@@ -140,7 +141,7 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
       setGitSyncError(null);
       void refreshGitHistory();
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       setGitSyncError(message);
     } finally {
       setGitSyncAction("idle");
@@ -166,7 +167,7 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
           await opts.onAfterPull();
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         setGitSyncError(message);
       } finally {
         setGitSyncAction("idle");
@@ -199,7 +200,7 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
       updateSyncSettings({ lastSuccessfulSyncAt: new Date().toISOString() });
       void refreshGitHistory();
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       setGitSyncError(message);
     } finally {
       setGitSyncAction("idle");
@@ -280,7 +281,7 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
         updateSyncSettings({ lastSuccessfulSyncAt: new Date().toISOString() });
         void refreshGitHistory();
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = getErrorMessage(error);
         setGitSyncError(errorMessage);
       } finally {
         setGitSyncAction("idle");

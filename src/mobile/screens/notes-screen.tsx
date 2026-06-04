@@ -3,6 +3,7 @@ import { MobileNotesScreen } from "@/mobile/views/notes-view";
 import type { NoteEntry } from "@/shared/types";
 import type { NotePreview } from "@/shared/lib/format";
 import { getDisplayRouteTitle } from "../types";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 type PhoneNotesScreenProps = {
   folderPath: string;
@@ -68,7 +69,7 @@ export function PhoneNotesScreen({
               showToast("Note deleted", "success");
             }
           } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
+            const message = getErrorMessage(error);
             showToast(message, "error");
           }
         })();
@@ -79,7 +80,7 @@ export function PhoneNotesScreen({
             await onArchiveNote(path);
             showToast("Moved to Archive", "success");
           } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
+            const message = getErrorMessage(error);
             showToast(message, "error");
           }
         })();

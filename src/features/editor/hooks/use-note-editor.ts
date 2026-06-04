@@ -3,6 +3,7 @@ import { deleteItems, readNote, renameItem, writeNote } from "@/features/notes/a
 import type { NoteFileNameFormat } from "@/shared/types";
 import { stripFrontmatter } from "@/shared/lib/frontmatter";
 import { stripInlineAnnotationMetadata } from "../lib/note-annotations";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 const UUID_V7_FILE_NAME_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}\.md$/i;
@@ -162,7 +163,7 @@ export function useNoteEditor(
           noteDirtyRef.current = false;
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         setSaveError(message);
         throw error;
       } finally {

@@ -17,6 +17,7 @@ import { toBase64 } from "@/shared/lib/notes";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { jobListSignature } from "@/shared/lib/jobs";
 import type { LayoutMode } from "@/mobile/navigation";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 type HandwritingContextValue = {
   handwritingImportBusy: boolean;
@@ -114,7 +115,7 @@ export function HandwritingProvider({
       }
       setHandwritingError(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       setHandwritingError(message);
     } finally {
       setHandwritingBusy(false);
@@ -154,7 +155,7 @@ export function HandwritingProvider({
             : `Auto queue: scanned ${result.scanned}, queued ${result.queued}.`;
         setHandwritingStatusMessage(label);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         setHandwritingStatusMessage(message);
       } finally {
         queueBusyRef.current = false;
@@ -184,7 +185,7 @@ export function HandwritingProvider({
           await queueHandwritingOcr("auto");
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         setHandwritingStatusMessage(message);
         throw error;
       } finally {

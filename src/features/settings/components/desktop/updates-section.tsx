@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { OTA_APPLY_PENDING_KEY } from "@/shared/constants";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 type DesktopUpdateState =
   | { status: "idle" }
@@ -47,7 +48,7 @@ function DesktopAppUpdates() {
     } catch (error) {
       setState({
         status: "error",
-        message: error instanceof Error ? error.message : String(error),
+        message: getErrorMessage(error),
       });
     }
   };
@@ -81,7 +82,7 @@ function DesktopAppUpdates() {
     } catch (error) {
       setState({
         status: "error",
-        message: error instanceof Error ? error.message : String(error),
+        message: getErrorMessage(error),
       });
     }
   };

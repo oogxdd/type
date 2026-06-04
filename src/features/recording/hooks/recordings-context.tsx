@@ -15,6 +15,7 @@ import { useAudioRecorder } from "./use-audio-recorder";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { jobListSignature } from "@/shared/lib/jobs";
 import type { LayoutMode } from "@/mobile/navigation";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 type RecordingsContextValue = {
   recordingSupported: boolean;
@@ -104,7 +105,7 @@ export function RecordingsProvider({
       }
       setRecordingsError(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       setRecordingsError(message);
     } finally {
       setRecordingsBusy(false);
@@ -127,7 +128,7 @@ export function RecordingsProvider({
       setActiveAudioSrc(objectUrl);
       setRecordingsError(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       setRecordingsError(message);
     }
   }, []);
@@ -174,7 +175,7 @@ export function RecordingsProvider({
             : `Auto queue: scanned ${result.scanned}, queued ${result.queued}.`;
         setRecordingStatusMessage(label);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         setRecordingStatusMessage(message);
       } finally {
         transcriptionQueueBusyRef.current = false;
@@ -195,7 +196,7 @@ export function RecordingsProvider({
         setRecordingStatusMessage(`Re-queued ${notePath} for transcription.`);
         void refreshRecordings();
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         setRecordingStatusMessage(`Retrigger failed: ${message}`);
       }
     },

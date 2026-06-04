@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import * as gitApi from "@/features/sync/api/git-api";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 const DELETE_CONFIRM_MESSAGE =
   "Delete the SSH keypair? You will need to re-add the public key to your server.";
@@ -49,7 +50,7 @@ export const useSshKey = (): SshKeyState => {
       const pubKey = await gitApi.generateSshKey();
       setSshPublicKey(pubKey);
     } catch (error) {
-      setSshError(error instanceof Error ? error.message : String(error));
+      setSshError(getErrorMessage(error));
     } finally {
       setSshBusy(false);
     }
@@ -65,7 +66,7 @@ export const useSshKey = (): SshKeyState => {
       await gitApi.deleteSshKey();
       setSshPublicKey(null);
     } catch (error) {
-      setSshError(error instanceof Error ? error.message : String(error));
+      setSshError(getErrorMessage(error));
     } finally {
       setSshBusy(false);
     }

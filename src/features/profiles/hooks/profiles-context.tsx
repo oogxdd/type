@@ -15,6 +15,7 @@ import {
   readProfileSyncStore,
   writeProfileSyncStore,
 } from "@/shared/lib/storage";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 type ProfilesContextValue = {
   profilesSnapshot: NotesProfileSnapshot | null;
@@ -86,7 +87,7 @@ export function ProfilesProvider({
         setProfilesSnapshot(snapshot);
         setProfilesError(null);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         setProfilesError(message);
       } finally {
         setProfilesBusy(false);
@@ -123,7 +124,7 @@ export function ProfilesProvider({
         await refreshProfiles();
         setProfilesError(null);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         setProfilesError(message);
       } finally {
         setProfilesBusy(false);

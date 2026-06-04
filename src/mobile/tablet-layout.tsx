@@ -14,6 +14,7 @@ import { useEditor } from "@/features/editor/hooks/editor-context";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useKeyboardInsets } from "@/mobile/use-keyboard-insets";
 import { getDisplayRouteTitle, ARCHIVE_FOLDER_PATH } from "./types";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 const TABLET_LEFT_ITEMS = [
   { id: "folders", label: "Folders", icon: <Folder size={16} /> },
@@ -110,7 +111,7 @@ export function TabletLayout({
               showToast("Note deleted", "success");
             }
           } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
+            const message = getErrorMessage(error);
             showToast(message, "error");
           }
         })();
@@ -121,7 +122,7 @@ export function TabletLayout({
             await onArchiveNote(path);
             showToast("Moved to Archive", "success");
           } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
+            const message = getErrorMessage(error);
             showToast(message, "error");
           }
         })();

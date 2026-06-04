@@ -3,6 +3,7 @@ import type { MobileActionSheetState, MobileToastState } from "../navigation";
 import type { SheetContext } from "../types";
 import { SYSTEM_FOLDER_PATHS, getDisplayFolderName } from "../types";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 export function useActionSheets(showToast: (message: string, tone?: MobileToastState["tone"]) => void) {
   const {
@@ -137,7 +138,7 @@ export function useActionSheets(showToast: (message: string, tone?: MobileToastS
           }
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         showToast(message, "error");
       }
     },
@@ -162,7 +163,7 @@ export function useActionSheets(showToast: (message: string, tone?: MobileToastS
         setRenamePrompt(null);
         showToast("Folder renamed", "success");
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = getErrorMessage(error);
         showToast(message, "error");
       }
     },
