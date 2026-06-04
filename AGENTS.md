@@ -134,8 +134,9 @@ module-internal helpers stay private.
 
 The frontend is **feature-sliced**. There are four kinds of place code can live:
 
-- `app/` — the composition root (providers, gates, the orchestrating shell) plus the
-  handful of app-global stores that belong to no single domain (`app/state/`).
+- `app/` — the composition root (providers, gates, the orchestrating shell), the
+  app-global stores that belong to no single domain (`app/state/`), and the
+  orchestration hooks the shell delegates to (`app/hooks/`).
 - `shared/` — domain-agnostic building blocks usable by anything: `ui/` (shadcn
   primitives), `lib/` (pure helpers), `api/` (the `invoke` IPC wrapper), `hooks/`,
   `types.ts`, `constants.ts`. **`shared/` is a leaf** — it must not import from `features/`
@@ -159,6 +160,7 @@ src/
                                main.tsx = OTA bundle entry — vite.ota.config.ts)
   app/
     app.tsx, app-shell.tsx, main-app.tsx, error-boundary.tsx, launch-screen.ts, app.css
+    hooks/      use-tree-interactions, use-note-opener  (app-shell orchestration glue)
     state/      selection-context, theme-context, appearance-api  (app-global stores)
   shared/
     ui/         shadcn primitives          lib/   dom, format, frontmatter, jobs,
@@ -199,7 +201,9 @@ Selection + Editor; Editor consumes Selection + Profiles; most consume Profiles.
 Orchestrates desktop behavior. Owns local UI state (`appMode`, `sidebarCollapsed`, pane
 sizes, settings section). Renders `DesktopShell` (`src/desktop/`) or `MobileShell`
 (`src/mobile/`) by viewport. Wires `useDragDrop()` + `useKeyboardNavigation()` (from
-`features/tree/hooks`). Builds the folder/note click + native context-menu handlers.
+`features/tree/hooks`). The folder/note click + native context-menu handlers and the
+programmatic open-folder/open-note navigation are factored out into `app/hooks/` (see
+below), so the shell reads as composition rather than a pile of inline handlers.
 
 ### app/state (`src/app/state/`)
 
@@ -211,6 +215,19 @@ The cross-cutting stores that have no single domain home and are consumed everyw
   (+ setters) and the mobile selection helpers. Resets on profile / notes-root change.
 
 (Features may import these from `@/app/state/...`; this is the one accepted upward edge.)
+
+### app/hooks (`src/app/hooks/`)
+
+Orchestration glue the shell delegates to — composition logic that wires several
+contexts together but belongs to no single feature. It lives here (not in a feature)
+because it depends on NotesTree, and `notes-tree-context` already depends on
+`features/tree/lib`; routing it through the composition root keeps that edge one-way.
+
+- `use-tree-interactions.ts` — folder/note click selection, expand/collapse toggle, and
+  the native Tauri right-click menus. Reads Selection + NotesTree from context; takes only
+  `foldersPanelRef` (for post-action focus). Consumed by the desktop + mobile shells.
+- `use-note-opener.ts` — `openPinnedFolder` (sidebar Feed/Trash) and the `open-note`
+  window-event handler that jumps to a recording's note from the Transcription page.
 
 ### features/
 
@@ -241,8 +258,9 @@ Each feature's context provider lives in `hooks/` alongside its hooks.
 - **profiles** — `hooks/profiles-context` (multi-profile; per-profile `notes_root` + sync
   settings in localStorage; `flushSaveRef` to flush the editor before switching);
   `api/profiles-api`. Heavily depended upon.
-- **sync** — `components/local-sync-server-card`; `hooks/git-sync-context`;
-  `api/{git-api (libgit2 IPC + SSH key lifecycle), local-sync-link}`.
+- **sync** — `components/local-sync-server-card`; `hooks/{git-sync-context, use-ssh-key
+  (app-managed Ed25519 keypair lifecycle: load/generate/delete, shared by the desktop +
+  mobile settings)}`; `api/{git-api (libgit2 IPC + SSH key lifecycle), local-sync-link}`.
 - **security** — `components/lock-screen`; `hooks/security-context` (unlock/lock/enable,
   panic reset, auto-lock on background); `api/security-api`.
 - **settings** — the aggregator UI. `components/desktop/` (settings-panel + 8 sections) and
