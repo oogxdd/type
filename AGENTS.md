@@ -232,7 +232,7 @@ Each feature's context provider lives in `hooks/` alongside its hooks.
   per-note serialized persistence.
 - **tree** — `components/{folders-panel, tree-node, tree-row, nav-note-row, recent-tree-node}`;
   `hooks/{use-drag-drop, use-keyboard-navigation}`; `lib/{tree-ops, dnd-tree,
-  keyboard-coordinates, tree-dnd (DnD id/edge primitives), types}`. Tree components are
+  tree-dnd (DnD id/edge primitives), types}`. Tree components are
   presentational — data/handlers come from app-shell (which reads NotesTreeContext).
 - **recording** — `components/recording-note-header`; `hooks/{recordings-context,
   use-audio-recorder}`; `api/recordings-api`. Dual-mode recorder (web MediaRecorder / native iOS).

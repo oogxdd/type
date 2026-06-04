@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
-import * as gitApi from "@/features/sync/api/git-api";
+import { useSshKey } from "@/features/sync/hooks/use-ssh-key";
 import { exportProfilesToDocuments } from "@/features/profiles/api/profiles-api";
 import { Group, ChoiceRow, InputRow } from "./helpers";
 
@@ -67,51 +67,8 @@ export function MobileProfileSection() {
   );
   const [exportBusy, setExportBusy] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
-  const [sshPublicKey, setSshPublicKey] = useState<string | null>(null);
-  const [sshBusy, setSshBusy] = useState(false);
-  const [sshError, setSshError] = useState<string | null>(null);
-
-  const refreshSshKey = useCallback(async () => {
-    try {
-      const key = await gitApi.getSshPublicKey();
-      setSshPublicKey(key);
-    } catch {
-      setSshPublicKey(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshSshKey();
-  }, [refreshSshKey]);
-
-  const handleGenerateSshKey = async () => {
-    setSshBusy(true);
-    setSshError(null);
-    try {
-      const pubKey = await gitApi.generateSshKey();
-      setSshPublicKey(pubKey);
-    } catch (error) {
-      setSshError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setSshBusy(false);
-    }
-  };
-
-  const handleDeleteSshKey = async () => {
-    if (!window.confirm("Delete the SSH keypair? You will need to re-add the public key to your server.")) {
-      return;
-    }
-    setSshBusy(true);
-    setSshError(null);
-    try {
-      await gitApi.deleteSshKey();
-      setSshPublicKey(null);
-    } catch (error) {
-      setSshError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setSshBusy(false);
-    }
-  };
+  const { sshPublicKey, sshBusy, sshError, generateSshKey, deleteSshKey } =
+    useSshKey();
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -373,7 +330,7 @@ export function MobileProfileSection() {
                 type="button"
                 className="mobile-secondary-btn"
                 disabled={sshBusy}
-                onClick={() => void handleDeleteSshKey()}
+                onClick={() => void deleteSshKey()}
               >
                 Delete key
               </button>
@@ -389,7 +346,7 @@ export function MobileProfileSection() {
                 type="button"
                 className="mobile-secondary-btn"
                 disabled={sshBusy}
-                onClick={() => void handleGenerateSshKey()}
+                onClick={() => void generateSshKey()}
               >
                 {sshBusy ? "Generating..." : "Generate SSH key"}
               </button>
