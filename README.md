@@ -53,7 +53,13 @@ npm run tauri ios build  # release
 ```bash
 npm run build                                   # tsc + web build + OTA fallback assets
 cargo check --manifest-path src-tauri/Cargo.toml
+
+npm test                                        # Vitest (frontend pure logic)
+cargo test --manifest-path src-tauri/Cargo.toml --lib   # Rust unit tests
 ```
+
+CI (`.github/workflows/ci.yml`) runs the typecheck and both test suites on every
+pull request and on pushes to `main`.
 
 Manual smoke checks:
 

@@ -11,6 +11,7 @@ A local-first markdown notes app built with Tauri v2 (Rust backend) + React (Typ
 - **Frontend**: React 19, TypeScript, Vite, Tiptap (editor), DnD Kit (drag-and-drop), Tailwind + Shadcn/ui
 - **Backend**: Tauri v2 (Rust), organized as **ports / adapters / commands** (hexagonal) across domains: notes, profiles, security, recordings (+ whisper_env), handwriting, git_sync, local_sync, platform, plus iOS native
 - **Build**: `npm run build` runs `tsc && vite build` (plus an OTA asset build). Rust: `cargo check --manifest-path src-tauri/Cargo.toml`
+- **Tests**: `npm test` (Vitest — frontend pure logic; co-located `*.test.ts`) and `cargo test --manifest-path src-tauri/Cargo.toml --lib` (Rust unit tests in `#[cfg(test)]` modules). CI (`.github/workflows/ci.yml`) runs both, plus `tsc --noEmit`, on PRs and pushes to main.
 
 ## Backend structure (src-tauri/src/)
 
