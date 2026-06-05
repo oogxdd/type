@@ -2,6 +2,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useState } from "react";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useSshKey } from "@/features/sync/hooks/use-ssh-key";
+import { confirmAction } from "@/shared/lib/dom";
 import { Button } from "@/shared/ui/button";
 import {
   Dialog,
@@ -467,8 +468,8 @@ export function SettingsProfileSection() {
                         variant="destructive"
                         size="sm"
                         disabled={profilesBusy || profiles.length <= 1}
-                        onClick={() => {
-                          if (!window.confirm(`Delete profile "${profile.name}"?`)) {
+                        onClick={async () => {
+                          if (!(await confirmAction(`Delete profile "${profile.name}"?`))) {
                             return;
                           }
                           void deleteProfile(profile.id);

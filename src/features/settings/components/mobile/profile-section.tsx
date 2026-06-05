@@ -4,6 +4,7 @@ import { useSshKey } from "@/features/sync/hooks/use-ssh-key";
 import { exportProfilesToDocuments } from "@/features/profiles/api/profiles-api";
 import { Group, ChoiceRow, InputRow } from "./helpers";
 import { getErrorMessage } from "@/shared/lib/errors";
+import { confirmAction } from "@/shared/lib/dom";
 
 type GitDraftSettings = {
   gitRemoteUrl: string;
@@ -186,8 +187,8 @@ export function MobileProfileSection() {
                   type="button"
                   className="mobile-secondary-btn"
                   disabled={profilesBusy || profiles.length <= 1}
-                  onClick={() => {
-                    if (!window.confirm(`Delete profile "${profile.name}"?`)) {
+                  onClick={async () => {
+                    if (!(await confirmAction(`Delete profile "${profile.name}"?`))) {
                       return;
                     }
                     void deleteProfile(profile.id);

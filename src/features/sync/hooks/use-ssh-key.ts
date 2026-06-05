@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import * as gitApi from "@/features/sync/api/git-api";
 import { getErrorMessage } from "@/shared/lib/errors";
+import { confirmAction } from "@/shared/lib/dom";
 
 const DELETE_CONFIRM_MESSAGE =
   "Delete the SSH keypair? You will need to re-add the public key to your server.";
@@ -57,7 +58,7 @@ export const useSshKey = (): SshKeyState => {
   }, []);
 
   const deleteSshKey = useCallback(async () => {
-    if (!window.confirm(DELETE_CONFIRM_MESSAGE)) {
+    if (!(await confirmAction(DELETE_CONFIRM_MESSAGE))) {
       return;
     }
     setSshBusy(true);
