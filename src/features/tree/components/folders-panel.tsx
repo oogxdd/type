@@ -1,27 +1,17 @@
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { ChevronRight, File, Folder, Mic, PenLine } from "lucide-react";
 import type { TreeItem } from "../lib/types";
-import { Collapsible, CollapsibleContent } from "@/shared/ui/collapsible";
-import {
-  SidebarMenu,
-  SidebarMenuBadge,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-} from "@/shared/ui/sidebar";
+import { SidebarMenu } from "@/shared/ui/sidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { TreeNode } from "./tree-node";
+import { SidebarFileTreeNode } from "./sidebar-file-tree-node";
 import { RecentTreeNode } from "./recent-tree-node";
 import type { RecentNode } from "./recent-tree-node";
 import type { NotePreview } from "@/shared/lib/format";
 import { ROOT_ID, dropId, type EdgeSnap } from "../lib/tree-dnd";
 
 const EMPTY_STRING_SET = new Set<string>();
-
-
 
 type FoldersPanelProps = {
   treeData: TreeItem[];
@@ -93,170 +83,6 @@ const RECENT_EXPANDED_NODES: RecentNode[] = [
     ],
   },
 ];
-
-type SidebarFileTreeNodeProps = {
-  node: TreeItem;
-  selectedIds: Set<string>;
-  selectedNoteIds: Set<string>;
-  showNotesAsChildren: boolean;
-  expanded: Set<string>;
-  onSelect: (event: ReactMouseEvent, id: string) => void;
-  onToggle: (event: ReactMouseEvent, id: string) => void;
-  onNoteSelect: (notePath: string, event: ReactMouseEvent, parentPath: string) => void;
-  onNoteContextMenu: (
-    event: ReactMouseEvent,
-    notePath: string,
-    parentPath: string
-  ) => void;
-  notePreviews: Record<string, NotePreview>;
-  renamingFolder: string | null;
-  renameValue: string;
-  setRenameValue: (value: string) => void;
-  submitRenameFolder: () => void;
-  cancelRenameFolder: () => void;
-  onContextMenu: (event: ReactMouseEvent, id: string) => void;
-};
-
-function SidebarFileTreeNode({
-  node,
-  selectedIds,
-  selectedNoteIds,
-  showNotesAsChildren,
-  expanded,
-  onSelect,
-  onToggle,
-  onNoteSelect,
-  onNoteContextMenu,
-  notePreviews,
-  renamingFolder,
-  renameValue,
-  setRenameValue,
-  submitRenameFolder,
-  cancelRenameFolder,
-  onContextMenu,
-}: SidebarFileTreeNodeProps) {
-  const notes = showNotesAsChildren ? node.notes || [] : [];
-  const hasNestedItems = node.children.length > 0 || notes.length > 0;
-  const isExpanded = !hasNestedItems || expanded.has(node.id);
-  const isRenaming = renamingFolder === node.id;
-
-  return (
-    <SidebarMenuItem>
-      <Collapsible open={isExpanded} className="group/collapsible">
-        <SidebarMenuButton
-          isActive={selectedIds.has(node.id)}
-          className="sidebar-filetree-button"
-          asChild
-        >
-          <div
-            className="sidebar-filetree-button-inner"
-            onClick={(event) => {
-              onSelect(event, node.id);
-            }}
-            onContextMenu={(event) => {
-              onContextMenu(event, node.id);
-            }}
-          >
-            {hasNestedItems ? (
-              <button
-                type="button"
-                className="sidebar-filetree-toggle"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggle(event, node.id);
-                }}
-                aria-label={isExpanded ? "Collapse folder" : "Expand folder"}
-              >
-                <ChevronRight
-                  className={`sidebar-filetree-chevron${isExpanded ? " is-open" : ""}`}
-                />
-              </button>
-            ) : (
-              <span className="sidebar-filetree-toggle-spacer" aria-hidden />
-            )}
-            <Folder />
-            {isRenaming ? (
-              <input
-                className="rename-input sidebar-filetree-rename-input"
-                value={renameValue}
-                autoFocus
-                onChange={(event) => setRenameValue(event.target.value)}
-                onBlur={submitRenameFolder}
-                onKeyDown={(event) => {
-                  event.stopPropagation();
-                  if (event.key === "Enter") {
-                    submitRenameFolder();
-                  }
-                  if (event.key === "Escape") {
-                    cancelRenameFolder();
-                  }
-                }}
-                onMouseDown={(event) => event.stopPropagation()}
-                onClick={(event) => event.stopPropagation()}
-              />
-            ) : (
-              <span>{node.name}</span>
-            )}
-          </div>
-        </SidebarMenuButton>
-        {!isRenaming && node.noteCount ? <SidebarMenuBadge>{node.noteCount}</SidebarMenuBadge> : null}
-        {hasNestedItems ? (
-          <CollapsibleContent>
-            <SidebarMenuSub>
-              {notes.map((note) => {
-                const preview = notePreviews[note.path];
-                return (
-                  <SidebarMenuSubButton
-                    key={note.path}
-                    asChild
-                    isActive={selectedNoteIds.has(note.path)}
-                    size="md"
-                  >
-                    <button
-                      type="button"
-                      className="sidebar-filetree-note-button"
-                      onClick={(event) => onNoteSelect(note.path, event, node.id)}
-                      onContextMenu={(event) => onNoteContextMenu(event, note.path, node.id)}
-                    >
-                      <File />
-                      <span>{preview?.title || note.name}</span>
-                      {preview?.isRecording ? (
-                        <Mic size={12} className="sidebar-filetree-note-mic" />
-                      ) : preview?.isHandwriting ? (
-                        <PenLine size={12} className="sidebar-filetree-note-mic" />
-                      ) : null}
-                    </button>
-                  </SidebarMenuSubButton>
-                );
-              })}
-              {node.children.map((child) => (
-                <SidebarFileTreeNode
-                  key={child.id}
-                  node={child}
-                  selectedIds={selectedIds}
-                  selectedNoteIds={selectedNoteIds}
-                  showNotesAsChildren={showNotesAsChildren}
-                  expanded={expanded}
-                  onSelect={onSelect}
-                  onToggle={onToggle}
-                  onNoteSelect={onNoteSelect}
-                  onNoteContextMenu={onNoteContextMenu}
-                  notePreviews={notePreviews}
-                  renamingFolder={renamingFolder}
-                  renameValue={renameValue}
-                  setRenameValue={setRenameValue}
-                  submitRenameFolder={submitRenameFolder}
-                  cancelRenameFolder={cancelRenameFolder}
-                  onContextMenu={onContextMenu}
-                />
-              ))}
-            </SidebarMenuSub>
-          </CollapsibleContent>
-        ) : null}
-      </Collapsible>
-    </SidebarMenuItem>
-  );
-}
 
 export function FoldersPanel({
   treeData,
