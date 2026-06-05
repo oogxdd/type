@@ -935,3 +935,85 @@ pub(crate) fn update_order_rename(
     }
     write_order_file(dir, &order)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::note_parent_folder_path;
+
+    #[test]
+    fn slug_from_content_basic_kebab() {
+        assert_eq!(slug_from_content("Hello World", "fallback"), "hello-world");
+    }
+
+    #[test]
+    fn slug_from_content_is_unicode_aware() {
+        // Cyrillic letters are alphanumeric and must survive slugging.
+        assert_eq!(
+            slug_from_content("Привет мир друзья", "fallback"),
+            "привет-мир-друзья"
+        );
+    }
+
+    #[test]
+    fn slug_from_content_falls_back_when_too_short() {
+        // "hi" is below the minimum content-char threshold, so the fallback wins.
+        assert_eq!(slug_from_content("Hi", "2024-note"), "2024-note");
+    }
+
+    #[test]
+    fn slug_from_content_strips_empty_line_token_noise() {
+        // The NV_EMPTY_LINE_TOKEN marker and its trailing hash are dropped.
+        assert_eq!(
+            slug_from_content("nv empty line token a1b2c3d4 hello world friend", "fb"),
+            "hello-world-friend"
+        );
+    }
+
+    #[test]
+    fn slug_from_content_truncates_to_max_chars() {
+        let slug = slug_from_content(&"a".repeat(100), "fb");
+        assert_eq!(slug.chars().count(), 56);
+    }
+
+    #[test]
+    fn note_parent_folder_path_extracts_parent() {
+        assert_eq!(note_parent_folder_path("Feed/note.md"), "Feed");
+        assert_eq!(note_parent_folder_path("a/b/c.md"), "a/b");
+        assert_eq!(note_parent_folder_path("note.md"), "");
+    }
+
+    #[test]
+    fn render_front_matter_emits_only_set_fields() {
+        let meta = NoteFrontMatter {
+            id: Some("abc".to_string()),
+            created_ms: Some(1_700_000_000_000),
+            note_type: Some("recording".to_string()),
+            ..Default::default()
+        };
+        let rendered = render_note_with_front_matter(&meta, "Hello body");
+        assert!(rendered.starts_with("---\n"));
+        assert!(rendered.contains("id: abc"));
+        assert!(rendered.contains("created_ms: 1700000000000"));
+        assert!(rendered.contains("type: recording"));
+        // updated_ms was None, so it must not be serialized.
+        assert!(!rendered.contains("updated_ms:"));
+        assert!(rendered.ends_with("Hello body"));
+    }
+
+    #[test]
+    fn front_matter_round_trips_through_parse() {
+        let meta = NoteFrontMatter {
+            id: Some("note-1".to_string()),
+            created_ms: Some(42),
+            note_type: Some("recording".to_string()),
+            ..Default::default()
+        };
+        let rendered = render_note_with_front_matter(&meta, "Body text");
+        let (parsed, body) = parse_note_front_matter(&rendered);
+        assert_eq!(parsed.id.as_deref(), Some("note-1"));
+        assert_eq!(parsed.created_ms, Some(42));
+        assert_eq!(parsed.note_type.as_deref(), Some("recording"));
+        assert_eq!(body.trim(), "Body text");
+    }
+}
