@@ -210,165 +210,190 @@ export function useDragDrop({
     []
   );
 
-  const handleDragEnd = useCallback(
+  // Folder drops: reparent / reorder the dragged folder subtree, then persist
+  // the moves + per-parent folder order and refresh if any parent changed.
+  const handleFolderDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { over } = event;
+
+      setActiveId(null);
+      setEdgeSnap(null);
+      document.body.style.setProperty("cursor", "");
+      dragStartPoint.current = null;
+      activeDrag.current = null;
+      if (expandTimeoutRef.current) {
+        window.clearTimeout(expandTimeoutRef.current);
+        expandTimeoutRef.current = null;
+      }
+      expandTargetRef.current = null;
+
+      if (!over) return;
+
+      const resolvedId =
+        edgeSnap ? `${DROP_PREFIX}:${edgeSnap.id}:${edgeSnap.position}` : over.id;
+      const dropTarget = parseDropTargetId(resolvedId);
+      if (!dropTarget) {
+        logGroup("drop ignored", { reason: "invalid target", overId: over.id });
+        return;
+      }
+
+      const selectedIdsList = Array.from(selectedFolders);
+      const draggingIds = getTopLevelSelected(selectedIdsList, parentById);
+      if (draggingIds.length === 0) {
+        logGroup("drop ignored", { reason: "no dragging ids" });
+        return;
+      }
+
+      if (dropTarget.type === "item" && draggingIds.includes(dropTarget.itemId)) {
+        logGroup("drop ignored", { reason: "target is dragged item", target: dropTarget });
+        return;
+      }
+
+      if (
+        dropTarget.type === "item" &&
+        isInDraggedSubtree(treeData, draggingIds, dropTarget.itemId)
+      ) {
+        logGroup("drop ignored", {
+          reason: "target inside dragged subtree",
+          target: dropTarget,
+        });
+        return;
+      }
+
+      const orderedDraggingIds = sortIdsByTreeOrder(draggingIds, orderedIds);
+      if (orderedDraggingIds.some(isSystemFolder)) {
+        logGroup("drop ignored", { reason: "system folder drag blocked" });
+        return;
+      }
+      const { tree: prunedTree, removed } = removeNodes(treeData, orderedDraggingIds);
+      const removedMap = new Map(removed.map((node) => [node.id, node]));
+      const nodesToInsert = orderedDraggingIds
+        .map((id) => removedMap.get(id))
+        .filter(Boolean) as TreeItem[];
+
+      if (nodesToInsert.length === 0) return;
+
+      let targetParentId: string | null = null;
+      let targetIndex = 0;
+
+      if (dropTarget.type === "root") {
+        targetParentId = null;
+        targetIndex = prunedTree.length;
+      } else if (dropTarget.position === "inside") {
+        targetParentId = dropTarget.itemId;
+        const parentNode = getNodeById(prunedTree, dropTarget.itemId);
+        targetIndex = parentNode?.children?.length ?? 0;
+      } else {
+        const position = findParentAndIndex(prunedTree, dropTarget.itemId);
+        if (!position) return;
+        targetParentId = position.parentId;
+        targetIndex = position.index + (dropTarget.position === "after" ? 1 : 0);
+      }
+
+      const nextTree = insertNodes(prunedTree, targetParentId, targetIndex, nodesToInsert);
+      logGroup("folder drag drop", {
+        dropTarget,
+        draggingIds: orderedDraggingIds,
+        targetParentId: targetParentId ?? "",
+        targetIndex,
+        selectedFolders: Array.from(selectedFolders),
+      });
+
+      const oldParentById: Record<string, string | null> = {};
+      flatItems.forEach((item) => {
+        oldParentById[item.id] = item.parentId;
+      });
+      const newParentById: Record<string, string | null> = {};
+      flattenTree(nextTree).forEach((item) => {
+        newParentById[item.id] = item.parentId;
+      });
+
+      for (const id of orderedDraggingIds) {
+        const oldParent = oldParentById[id] ?? null;
+        const newParent = newParentById[id] ?? null;
+        if (oldParent !== newParent) {
+          await moveItems([id], newParent ?? "");
+        }
+      }
+
+      const noteOrderMap: Record<string, string[]> = {};
+      buildNoteOrderMap(tree, noteOrderMap);
+
+      const currentOrderMap: Record<string, string[]> = {};
+      const nextOrderMap: Record<string, string[]> = {};
+      buildFolderOrderMap(treeData, null, currentOrderMap);
+      buildFolderOrderMap(nextTree, null, nextOrderMap);
+
+      const changedParents = Object.keys(nextOrderMap).filter(
+        (parent) => !arraysEqual(nextOrderMap[parent], currentOrderMap[parent])
+      );
+
+      logGroup("folder order delta", {
+        changedParents,
+        totalParents: Object.keys(nextOrderMap).length,
+      });
+
+      for (const parentPath of changedParents) {
+        await setOrder({
+          parent: parentPath,
+          folderOrder: nextOrderMap[parentPath],
+          noteOrder: noteOrderMap[parentPath] || [],
+        });
+      }
+
+      if (changedParents.length > 0 && tree) {
+        setTree(applyFolderOrder(tree, nextOrderMap));
+      }
+
+      if (orderedDraggingIds.some((id) => oldParentById[id] !== newParentById[id])) {
+        await refreshTree();
+      }
+    },
+    [edgeSnap, flatItems, orderedIds, parentById, refreshTree, selectedFolders, setTree, tree, treeData]
+  );
+
+  // Note drops: move the dragged note(s) to a folder / another note's parent,
+  // or reorder within the current parent.
+  const handleNoteDragEnd = useCallback(
     async (event: DragEndEvent) => {
       const { active, over } = event;
       const data = active.data.current as DragData | undefined;
       const overData = over?.data.current as DragData | undefined;
-      if (!data) return;
+      if (!data || data.type !== "note") return;
 
-      if (data.type === "folder") {
-        setActiveId(null);
-        setEdgeSnap(null);
-        document.body.style.setProperty("cursor", "");
-        dragStartPoint.current = null;
-        activeDrag.current = null;
-        if (expandTimeoutRef.current) {
-          window.clearTimeout(expandTimeoutRef.current);
-          expandTimeoutRef.current = null;
-        }
-        expandTargetRef.current = null;
-
-        if (!over) return;
-
-        const resolvedId =
-          edgeSnap ? `${DROP_PREFIX}:${edgeSnap.id}:${edgeSnap.position}` : over.id;
-        const dropTarget = parseDropTargetId(resolvedId);
-        if (!dropTarget) {
-          logGroup("drop ignored", { reason: "invalid target", overId: over.id });
-          return;
-        }
-
-        const selectedIdsList = Array.from(selectedFolders);
-        const draggingIds = getTopLevelSelected(selectedIdsList, parentById);
-        if (draggingIds.length === 0) {
-          logGroup("drop ignored", { reason: "no dragging ids" });
-          return;
-        }
-
-        if (dropTarget.type === "item" && draggingIds.includes(dropTarget.itemId)) {
-          logGroup("drop ignored", { reason: "target is dragged item", target: dropTarget });
-          return;
-        }
-
-        if (
-          dropTarget.type === "item" &&
-          isInDraggedSubtree(treeData, draggingIds, dropTarget.itemId)
-        ) {
-          logGroup("drop ignored", {
-            reason: "target inside dragged subtree",
-            target: dropTarget,
-          });
-          return;
-        }
-
-        const orderedDraggingIds = sortIdsByTreeOrder(draggingIds, orderedIds);
-        if (orderedDraggingIds.some(isSystemFolder)) {
-          logGroup("drop ignored", { reason: "system folder drag blocked" });
-          return;
-        }
-        const { tree: prunedTree, removed } = removeNodes(treeData, orderedDraggingIds);
-        const removedMap = new Map(removed.map((node) => [node.id, node]));
-        const nodesToInsert = orderedDraggingIds
-          .map((id) => removedMap.get(id))
-          .filter(Boolean) as TreeItem[];
-
-        if (nodesToInsert.length === 0) return;
-
-        let targetParentId: string | null = null;
-        let targetIndex = 0;
-
-        if (dropTarget.type === "root") {
-          targetParentId = null;
-          targetIndex = prunedTree.length;
-        } else if (dropTarget.position === "inside") {
-          targetParentId = dropTarget.itemId;
-          const parentNode = getNodeById(prunedTree, dropTarget.itemId);
-          targetIndex = parentNode?.children?.length ?? 0;
-        } else {
-          const position = findParentAndIndex(prunedTree, dropTarget.itemId);
-          if (!position) return;
-          targetParentId = position.parentId;
-          targetIndex = position.index + (dropTarget.position === "after" ? 1 : 0);
-        }
-
-        const nextTree = insertNodes(prunedTree, targetParentId, targetIndex, nodesToInsert);
-        logGroup("folder drag drop", {
-          dropTarget,
-          draggingIds: orderedDraggingIds,
-          targetParentId: targetParentId ?? "",
-          targetIndex,
-          selectedFolders: Array.from(selectedFolders),
-        });
-
-        const oldParentById: Record<string, string | null> = {};
-        flatItems.forEach((item) => {
-          oldParentById[item.id] = item.parentId;
-        });
-        const newParentById: Record<string, string | null> = {};
-        flattenTree(nextTree).forEach((item) => {
-          newParentById[item.id] = item.parentId;
-        });
-
-        for (const id of orderedDraggingIds) {
-          const oldParent = oldParentById[id] ?? null;
-          const newParent = newParentById[id] ?? null;
-          if (oldParent !== newParent) {
-            await moveItems([id], newParent ?? "");
-          }
-        }
-
-        const noteOrderMap: Record<string, string[]> = {};
-        buildNoteOrderMap(tree, noteOrderMap);
-
-        const currentOrderMap: Record<string, string[]> = {};
-        const nextOrderMap: Record<string, string[]> = {};
-        buildFolderOrderMap(treeData, null, currentOrderMap);
-        buildFolderOrderMap(nextTree, null, nextOrderMap);
-
-        const changedParents = Object.keys(nextOrderMap).filter(
-          (parent) => !arraysEqual(nextOrderMap[parent], currentOrderMap[parent])
-        );
-
-        logGroup("folder order delta", {
-          changedParents,
-          totalParents: Object.keys(nextOrderMap).length,
-        });
-
-        for (const parentPath of changedParents) {
-          await setOrder({
-            parent: parentPath,
-            folderOrder: nextOrderMap[parentPath],
-            noteOrder: noteOrderMap[parentPath] || [],
-          });
-        }
-
-        if (changedParents.length > 0 && tree) {
-          setTree(applyFolderOrder(tree, nextOrderMap));
-        }
-
-        if (orderedDraggingIds.some((id) => oldParentById[id] !== newParentById[id])) {
-          await refreshTree();
-        }
+      activeDrag.current = null;
+      if (!over || !overData) {
+        logGroup("note drop ignored", { reason: "missing target" });
         return;
       }
-
-      if (data.type === "note") {
-        activeDrag.current = null;
-        if (!over || !overData) {
-          logGroup("note drop ignored", { reason: "missing target" });
-          return;
+      const selectedList = selectedNotes.has(data.path)
+        ? Array.from(selectedNotes)
+        : [data.path];
+      const sourceParentPath = getNoteParentPath(data.path);
+      if (overData.type === "folder") {
+        logGroup("note move to folder", {
+          notes: selectedList,
+          destination: overData.path,
+        });
+        await moveItems(selectedList, overData.path);
+        if (selectedList.includes(activeNote || "")) {
+          setActiveNote(null);
+          clearNote();
         }
-        const selectedList = selectedNotes.has(data.path)
-          ? Array.from(selectedNotes)
-          : [data.path];
-        const sourceParentPath = getNoteParentPath(data.path);
-        if (overData.type === "folder") {
-          logGroup("note move to folder", {
+        setSelectedNotes(new Set());
+        setLastSelectedNote("");
+        await refreshTree();
+        return;
+      }
+      if (overData.type === "note") {
+        const destinationParentPath = getNoteParentPath(overData.path);
+        if (destinationParentPath !== sourceParentPath) {
+          logGroup("note move to note parent", {
             notes: selectedList,
-            destination: overData.path,
+            destination: destinationParentPath,
+            over: overData.path,
           });
-          await moveItems(selectedList, overData.path);
+          await moveItems(selectedList, destinationParentPath);
           if (selectedList.includes(activeNote || "")) {
             setActiveNote(null);
             clearNote();
@@ -378,78 +403,67 @@ export function useDragDrop({
           await refreshTree();
           return;
         }
-        if (overData.type === "note") {
-          const destinationParentPath = getNoteParentPath(overData.path);
-          if (destinationParentPath !== sourceParentPath) {
-            logGroup("note move to note parent", {
-              notes: selectedList,
-              destination: destinationParentPath,
-              over: overData.path,
-            });
-            await moveItems(selectedList, destinationParentPath);
-            if (selectedList.includes(activeNote || "")) {
-              setActiveNote(null);
-              clearNote();
-            }
-            setSelectedNotes(new Set());
-            setLastSelectedNote("");
-            await refreshTree();
-            return;
-          }
 
-          const parentNode = findNode(tree, destinationParentPath);
-          if (!parentNode) {
-            logGroup("note drop ignored", {
-              reason: "missing destination parent",
-              destinationParentPath,
-            });
-            return;
-          }
-
-          const movingInParent = selectedList.filter(
-            (notePath) => getNoteParentPath(notePath) === destinationParentPath
-          );
-          const movingNotes =
-            movingInParent.length > 0 ? movingInParent : [data.path];
-          if (movingNotes.includes(overData.path)) return;
-
-          const notePaths = parentNode.notes.map((n) => n.path);
-          const newOrder = reorderList(notePaths, movingNotes, overData.path);
-          const folderOrder = parentNode.children.map((c) => c.name);
-          const noteOrder = newOrder.map((p) => p.split("/").pop() || p);
-          logGroup("note reorder", {
-            parent: parentNode.path,
-            dragging: movingNotes,
-            over: overData.path,
-            noteOrder,
-            folderOrder,
+        const parentNode = findNode(tree, destinationParentPath);
+        if (!parentNode) {
+          logGroup("note drop ignored", {
+            reason: "missing destination parent",
+            destinationParentPath,
           });
-          await setOrder({
-            parent: parentNode.path,
-            folderOrder,
-            noteOrder,
-          });
-          await refreshTree();
+          return;
         }
+
+        const movingInParent = selectedList.filter(
+          (notePath) => getNoteParentPath(notePath) === destinationParentPath
+        );
+        const movingNotes =
+          movingInParent.length > 0 ? movingInParent : [data.path];
+        if (movingNotes.includes(overData.path)) return;
+
+        const notePaths = parentNode.notes.map((n) => n.path);
+        const newOrder = reorderList(notePaths, movingNotes, overData.path);
+        const folderOrder = parentNode.children.map((c) => c.name);
+        const noteOrder = newOrder.map((p) => p.split("/").pop() || p);
+        logGroup("note reorder", {
+          parent: parentNode.path,
+          dragging: movingNotes,
+          over: overData.path,
+          noteOrder,
+          folderOrder,
+        });
+        await setOrder({
+          parent: parentNode.path,
+          folderOrder,
+          noteOrder,
+        });
+        await refreshTree();
       }
     },
     [
       activeNote,
       clearNote,
-      edgeSnap,
-      flatItems,
-      orderedIds,
-      parentById,
       refreshTree,
-      selectedFolders,
       selectedNotes,
       setActiveNote,
       setLastSelectedNote,
       setSelectedNotes,
-      setTree,
       tree,
-      treeData,
     ]
+  );
+
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const data = event.active.data.current as DragData | undefined;
+      if (!data) return;
+      if (data.type === "folder") {
+        await handleFolderDragEnd(event);
+        return;
+      }
+      if (data.type === "note") {
+        await handleNoteDragEnd(event);
+      }
+    },
+    [handleFolderDragEnd, handleNoteDragEnd]
   );
 
   const handleDragCancel = useCallback(() => {
