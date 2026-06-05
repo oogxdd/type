@@ -1,47 +1,39 @@
 //! Audio recording: save, transcription queue (local Whisper + AssemblyAI fallback), listing.
 
-use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashSet, VecDeque},
     fs,
     path::{Path, PathBuf},
-    process::Command,
     sync::{Mutex, OnceLock},
     thread,
-    time::Duration,
 };
 use uuid::Uuid;
 
 use crate::{
     allocate_note_file_name, collect_markdown_note_files, generate_note_id, is_storage_folder_path,
-    notes_root, now_ms, parse_note_front_matter, resolve_path, response_error, sanitize_relative,
+    notes_root, now_ms, parse_note_front_matter, resolve_path, sanitize_relative,
     strip_root, uuid_tail_without_timestamp_prefix, write_note_with_front_matter,
     NoteFileNameFormat, NoteFrontMatter, FEED_FOLDER, LEGACY_RECORDINGS_FOLDER,
     RECORDINGS_STORAGE_FOLDER, RECORDING_STATUS_COMPLETED, RECORDING_STATUS_FAILED,
     RECORDING_STATUS_PENDING, RECORDING_STATUS_PROCESSING,
 };
 
+// Transcription backends — the worker below dispatches to whichever the job
+// selects (local Whisper on desktop, AssemblyAI on iOS).
+mod assembly;
+mod whisper;
+pub(crate) use assembly::transcribe_audio_bytes_with_assembly;
+pub(crate) use whisper::{
+    check_whisper_availability, save_word_level_json, transcribe_audio_local_whisper,
+};
+
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const AUDIO_FILE_NAME_PREFIX: &str = "audio";
 pub(crate) const RECORDING_FRONTMATTER_TYPE: &str = "audio_recording";
-const ASSEMBLY_UPLOAD_URL: &str = "https://api.assemblyai.com/v2/upload";
-const ASSEMBLY_TRANSCRIPT_URL: &str = "https://api.assemblyai.com/v2/transcript";
-const ASSEMBLY_SPEECH_MODEL: &str = "universal-2";
-const ASSEMBLY_POLL_INTERVAL: Duration = Duration::from_secs(2);
-const ASSEMBLY_MAX_POLL_ATTEMPTS: usize = 180;
 
 pub(crate) const DEFAULT_WHISPER_MODEL: &str = "large-v3";
-
-/// Python script executed as a subprocess for local whisper transcription.
-/// Source lives in `whisper_scripts/transcribe.py` (embedded at compile time).
-const WHISPER_TRANSCRIBE_SCRIPT: &str = include_str!("whisper_scripts/transcribe.py");
-
-/// Lightweight check script — just verifies faster_whisper can be imported.
-/// If a model is provided as an argument, it also tries to load it (which may trigger download).
-/// Source lives in `whisper_scripts/check.py` (embedded at compile time).
-const WHISPER_CHECK_SCRIPT: &str = include_str!("whisper_scripts/check.py");
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -205,39 +197,6 @@ pub(crate) struct TranscriptionQueueState {
     pub(crate) current_recording: Option<String>,
     pub(crate) pending: VecDeque<QueuedTranscriptionJob>,
     pub(crate) known_recordings: HashSet<String>,
-}
-
-#[derive(Deserialize)]
-struct AssemblyUploadResponse {
-    upload_url: String,
-}
-
-#[derive(Deserialize)]
-struct AssemblyTranscriptResponse {
-    id: String,
-    status: String,
-    text: Option<String>,
-    error: Option<String>,
-}
-
-/// JSON output from the local whisper Python script.
-#[derive(Deserialize)]
-struct WhisperScriptOutput {
-    text: String,
-    #[allow(dead_code)]
-    language: Option<String>,
-    #[allow(dead_code)]
-    language_probability: Option<f64>,
-    #[allow(dead_code)]
-    duration: Option<f64>,
-    #[allow(dead_code)]
-    words: Option<serde_json::Value>,
-}
-
-#[derive(Deserialize)]
-struct WhisperCheckOutput {
-    available: bool,
-    error: Option<String>,
 }
 
 // ── Static ─────────────────────────────────────────────────────────────────────
@@ -429,225 +388,6 @@ pub(crate) fn update_recording_note_status(
     meta.transcription_id = transcript_id;
     let next_body = recording_note_body(status, transcript_text);
     write_note_with_front_matter(note_path, &meta, &next_body)
-}
-
-// ── Local Whisper transcription ────────────────────────────────────────────────
-
-/// Report whether local transcription is ready, optionally provisioning it.
-///
-/// With `setup == false` this is a cheap, side-effect-free probe (safe to call
-/// on UI mount / while polling). With `setup == true` it provisions the managed
-/// env and, when a model name is supplied, loads it — triggering a download of
-/// the model weights when not already cached.
-pub(crate) fn check_whisper_availability(
-    app: &tauri::AppHandle,
-    model: Option<&str>,
-    setup: bool,
-) -> WhisperStatusResult {
-    if !setup {
-        let ready = crate::whisper_env_ready(app);
-        return WhisperStatusResult {
-            available: ready,
-            python_found: ready,
-            error: None,
-        };
-    }
-
-    let python = match crate::ensure_whisper_env(app) {
-        Ok(path) => path,
-        Err(error) => {
-            return WhisperStatusResult {
-                available: false,
-                python_found: false,
-                error: Some(error),
-            }
-        }
-    };
-
-    let mut cmd = Command::new(&python);
-    cmd.arg("-c").arg(WHISPER_CHECK_SCRIPT);
-    if let Some(m) = model {
-        cmd.arg(m);
-    }
-    
-    let output = match cmd.output() {
-        Ok(o) => o,
-        Err(e) => {
-            return WhisperStatusResult {
-                available: false,
-                python_found: true,
-                error: Some(format!("Failed to run check script: {}", e)),
-            }
-        }
-    };
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return WhisperStatusResult {
-            available: false,
-            python_found: true,
-            error: Some(format!("Check script failed: {}", stderr.trim())),
-        };
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    match serde_json::from_str::<WhisperCheckOutput>(&stdout) {
-        Ok(result) => WhisperStatusResult {
-            available: result.available,
-            python_found: true,
-            error: result.error,
-        },
-        Err(e) => WhisperStatusResult {
-            available: false,
-            python_found: true,
-            error: Some(format!("Failed to parse check output: {}. Raw: {}", e, stdout.trim())),
-        },
-    }
-}
-
-/// Transcribe audio using local faster-whisper via the managed Python subprocess.
-/// Returns (plain_text, full_json_string_with_words).
-fn transcribe_audio_local_whisper(
-    audio_path: &Path,
-    model: &str,
-    python: &Path,
-) -> Result<(String, String), String> {
-    // Write embedded script to a temp file for reliable execution
-    let script_path = std::env::temp_dir().join("type_whisper_transcribe.py");
-    fs::write(&script_path, WHISPER_TRANSCRIBE_SCRIPT)
-        .map_err(|e| format!("Failed to write whisper script: {}", e))?;
-
-    let audio_path_str = audio_path
-        .to_str()
-        .ok_or_else(|| "Audio path contains invalid UTF-8".to_string())?;
-
-    eprintln!(
-        "[recordings] starting local whisper transcription: model={}, audio={}",
-        model, audio_path_str
-    );
-
-    let output = Command::new(python)
-        .arg(&script_path)
-        .arg(audio_path_str)
-        .arg(model)
-        .output()
-        .map_err(|e| format!("Failed to spawn whisper process: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Whisper transcription failed: {}", stderr.trim()));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let parsed: WhisperScriptOutput = serde_json::from_str(&stdout)
-        .map_err(|e| format!("Failed to parse whisper output: {}. Raw: {}", e, &stdout[..stdout.len().min(500)]))?;
-
-    let text = parsed.text.clone();
-    // Keep the full JSON (including words) as-is for saving
-    let full_json = stdout.trim().to_string();
-
-    eprintln!(
-        "[recordings] whisper transcription complete: {} chars, language={:?}",
-        text.len(),
-        parsed.language
-    );
-
-    Ok((text, full_json))
-}
-
-/// Save word-level transcription JSON alongside the audio file.
-/// e.g. audio-xxxx.webm → audio-xxxx.transcription.json
-fn save_word_level_json(audio_path: &Path, json_content: &str) -> Result<PathBuf, String> {
-    let stem = audio_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("audio");
-    let json_path = audio_path
-        .parent()
-        .unwrap_or(audio_path)
-        .join(format!("{}.transcription.json", stem));
-    fs::write(&json_path, json_content)
-        .map_err(|e| format!("Failed to write transcription JSON: {}", e))?;
-    Ok(json_path)
-}
-
-// ── AssemblyAI transcription ───────────────────────────────────────────────────
-
-fn transcribe_audio_bytes_with_assembly(
-    audio_bytes: Vec<u8>,
-    api_key: &str,
-) -> Result<(String, String), String> {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(120))
-        .build()
-        .map_err(|error| error.to_string())?;
-
-    let upload_response = client
-        .post(ASSEMBLY_UPLOAD_URL)
-        .header("authorization", api_key)
-        .header("content-type", "application/octet-stream")
-        .body(audio_bytes)
-        .send()
-        .map_err(|error| format!("AssemblyAI upload request failed: {}", error))?;
-    if !upload_response.status().is_success() {
-        let status = upload_response.status();
-        let body = upload_response.text().unwrap_or_default();
-        return Err(response_error(status, body, "AssemblyAI upload"));
-    }
-    let upload_payload = upload_response
-        .json::<AssemblyUploadResponse>()
-        .map_err(|error| format!("AssemblyAI upload response parse failed: {}", error))?;
-
-    let transcript_create_response = client
-        .post(ASSEMBLY_TRANSCRIPT_URL)
-        .header("authorization", api_key)
-        .json(&serde_json::json!({
-            "audio_url": upload_payload.upload_url,
-            "speech_models": [ASSEMBLY_SPEECH_MODEL]
-        }))
-        .send()
-        .map_err(|error| format!("AssemblyAI transcript request failed: {}", error))?;
-    if !transcript_create_response.status().is_success() {
-        let status = transcript_create_response.status();
-        let body = transcript_create_response.text().unwrap_or_default();
-        return Err(response_error(
-            status,
-            body,
-            "AssemblyAI transcript request",
-        ));
-    }
-    let transcript_create_payload = transcript_create_response
-        .json::<AssemblyTranscriptResponse>()
-        .map_err(|error| format!("AssemblyAI transcript response parse failed: {}", error))?;
-    let transcript_id = transcript_create_payload.id;
-
-    for _ in 0..ASSEMBLY_MAX_POLL_ATTEMPTS {
-        thread::sleep(ASSEMBLY_POLL_INTERVAL);
-        let poll_response = client
-            .get(format!("{}/{}", ASSEMBLY_TRANSCRIPT_URL, transcript_id))
-            .header("authorization", api_key)
-            .send()
-            .map_err(|error| format!("AssemblyAI polling request failed: {}", error))?;
-        if !poll_response.status().is_success() {
-            let status = poll_response.status();
-            let body = poll_response.text().unwrap_or_default();
-            return Err(response_error(status, body, "AssemblyAI polling"));
-        }
-        let poll_payload = poll_response
-            .json::<AssemblyTranscriptResponse>()
-            .map_err(|error| format!("AssemblyAI polling response parse failed: {}", error))?;
-        match poll_payload.status.as_str() {
-            "completed" => {
-                let transcript_text = poll_payload.text.unwrap_or_default();
-                return Ok((transcript_text, transcript_id));
-            }
-            "error" => {
-                return Err(poll_payload
-                    .error
-                    .unwrap_or_else(|| "AssemblyAI reported a transcription error.".to_string()));
-            }
-            _ => {}
-        }
-    }
-    Err("AssemblyAI transcription timed out.".to_string())
 }
 
 // ── Worker ─────────────────────────────────────────────────────────────────────

@@ -26,6 +26,8 @@ src/
                        adapter symbol, and holds shared constants/utilities.
   ports/<domain>.rs    Platform-agnostic contract per domain.
   adapters/<domain>.rs The real Rust implementation (filesystem, git2, crypto, …).
+                       A large domain may instead be a folder module
+                       (adapters/<domain>/mod.rs + submodules) — see recordings/.
   commands/<domain>.rs Thin #[tauri::command] wrappers that call adapters.
 ```
 
@@ -70,7 +72,7 @@ Key symbols live in `adapters/<domain>.rs`:
 - **notes** — filesystem notes, front-matter, tree, ordering. Constants `ORDER_FILE`, `FEED_FOLDER`, `ARCHIEVE_FOLDER`, `RECORDINGS_STORAGE_FOLDER`, `ATTACHMENTS_STORAGE_FOLDER`, `PROTECTED_SYSTEM_FOLDERS`. `parse/render/write_note_with_front_matter`. `allocate_note_file_name` (UTC-slug / uuid_v7 / uuid_v7_prefix_slug) + Unicode-aware `slug_from_content`. `build_folder_node`, `ensure_system_folders`, `migrate_legacy_system_folders`, order helpers, `collect_markdown_note_files`. `ensured_notes_root` resolves the active profile's root.
 - **profiles** — `.notes-profiles.json` persistence; legacy `.notes-sessions.json` migration. `ensure_profiles_state`, `find_profile`, the `*_state` CRUD fns, `profile_root_for_id`, `normalize_notes_root_path`, dir copy/move helpers.
 - **security** — XChaCha20-Poly1305 at-rest body encryption with an Argon2id-derived key. `SECURITY_RUNTIME` (OnceLock<Mutex>) holds the in-memory key after unlock. `.notes-security.json` config. `encrypt_note_body_for_write`, `decrypt_note_body_for_read`, `ensure_security_unlocked_for_app` (the lock gate most commands call), panic flow `panic_reset_local_data`.
-- **recordings** — save audio → note with metadata. `TRANSCRIPTION_QUEUE` worker drives AssemblyAI (cloud, used on iOS) and the local Whisper path (desktop, via `whisper_env`). `collect_recording_notes`, queue snapshot for the UI, `check_whisper_availability`.
+- **recordings** — a folder module (`recordings/mod.rs` + `whisper.rs` + `assembly.rs`): save audio → note with metadata. `mod.rs` owns the `TRANSCRIPTION_QUEUE` worker (which dispatches to a backend), types, queue state, note scanning, and file naming. The two transcription backends live in their own submodules — `whisper.rs` (desktop, managed-Python `faster-whisper` via `whisper_env`; `check_whisper_availability`, `transcribe_audio_local_whisper`) and `assembly.rs` (AssemblyAI cloud, used on iOS). `collect_recording_notes`, queue snapshot for the UI.
 - **whisper_env** — desktop only. Provisions and owns an isolated CPython + faster-whisper under app-data using [`uv`](https://docs.astral.sh/uv/) (downloading `uv` itself on first use if absent), so the user installs nothing. `whisper_env_ready`, `managed_python`, `ensure_whisper_env`.
 - **handwriting** — save image attachment → note; `HANDWRITING_OCR_QUEUE` worker. Providers `HandwritingOcrProvider::OpenAi` (GPT-4o) and `::HuggingFace` (503 retry). `collect_handwriting_notes`.
 - **git** (the `git_sync` domain) — libgit2 sync. `ensure_git_repo`/`open_repo`, `perform_fetch`/`fast_forward_to`/`merge_fetched_commit`/`commit_all_changes`, `resolve_target_branch`/`switch_or_prepare_branch`. Conflicts keep "ours" and write "theirs" as `.conflict.md` siblings — merge never blocks. `build_git_status`, `build_git_history` (+ `GIT_NOTE_TIMESTAMPS_CACHE`). `build_callbacks` auth order: app SSH key file → SSH agent → username/password. Ed25519 keypair under `<app_data_dir>/ssh/`. Bootstrap-artifact detection for first sync.
