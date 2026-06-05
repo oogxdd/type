@@ -1,10 +1,4 @@
-import {
-  Archive,
-  Clock3,
-  Folder,
-  Mic,
-  X,
-} from "lucide-react";
+import { Mic } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -37,8 +31,7 @@ import { useRecentBuckets } from "@/mobile/hooks/use-recent-buckets";
 import { PhoneRouteRenderer } from "@/mobile/screens";
 import { TabletLayout } from "@/mobile/tablet-layout";
 import { FEED_FOLDER_PATH, getDisplayFolderName, ARCHIVE_FOLDER_PATH } from "./types";
-import { MobileFoldersScreen } from "@/mobile/views/folders-view";
-import { MobileRecentScreen } from "@/mobile/views/recent-view";
+import { MobileNavigationDrawer } from "@/mobile/navigation-drawer";
 
 type MobileShellProps = {
   activeSettingsSection: SettingsSectionId;
@@ -349,88 +342,34 @@ export function MobileShell({
             </button>
           ) : null}
           {foldersDrawerOpen ? (
-            <div className="mobile-drawer-overlay" role="dialog" aria-modal="true" aria-label="Navigation">
-              <button
-                type="button"
-                className="mobile-drawer-backdrop"
-                onClick={() => setFoldersDrawerOpen(false)}
-                aria-label="Close navigation"
-              />
-              <aside className="mobile-drawer-panel">
-                <div className="mobile-drawer-header">
-                  <h2>Navigation</h2>
-                  <button
-                    type="button"
-                    className="mobile-drawer-close"
-                    onClick={() => setFoldersDrawerOpen(false)}
-                    aria-label="Close navigation"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-                <div className="mobile-drawer-content">
-                  <div className="mobile-drawer-tabs" role="tablist" aria-label="Navigation tabs">
-                    <button
-                      type="button"
-                      className={`mobile-drawer-tab${navigationTabState === "folders" ? " active" : ""}`}
-                      onClick={() => setNavigationTab("folders")}
-                    >
-                      <Folder size={15} />
-                      <span>Folders</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`mobile-drawer-tab${navigationTabState === "recent" ? " active" : ""}`}
-                      onClick={() => setNavigationTab("recent")}
-                    >
-                      <Clock3 size={15} />
-                      <span>Recent</span>
-                    </button>
-                  </div>
-                  <div className="mobile-drawer-main">
-                    {navigationTabState === "folders" ? (
-                      <MobileFoldersScreen
-                        items={navigationFolders}
-                        activeFolder={activeFolder}
-                        expanded={expanded}
-                        onToggle={onToggleFolder}
-                        onSelect={(folderPath) => {
-                          openNotesRoute(folderPath);
-                          setFoldersDrawerOpen(false);
-                        }}
-                        onLongPress={openFolderActionSheet}
-                      />
-                    ) : (
-                      <MobileRecentScreen
-                        buckets={recentBuckets.map((bucket) => ({
-                          id: bucket.id,
-                          label: bucket.label,
-                          subtitle: bucket.subtitle,
-                          count: bucket.notes.length,
-                        }))}
-                        onSelect={(bucketId) => {
-                          openRecentBucketRoute(bucketId);
-                          setFoldersDrawerOpen(false);
-                        }}
-                      />
-                    )}
-                  </div>
-                  <div className="mobile-drawer-footer">
-                    <button
-                      type="button"
-                      className="mobile-drawer-archive-btn"
-                      onClick={() => {
-                        openArchiveRoute();
-                        setFoldersDrawerOpen(false);
-                      }}
-                    >
-                      <Archive size={16} />
-                      <span>Archive</span>
-                    </button>
-                  </div>
-                </div>
-              </aside>
-            </div>
+            <MobileNavigationDrawer
+              navigationTab={navigationTabState}
+              onNavigationTabChange={setNavigationTab}
+              folders={navigationFolders}
+              activeFolder={activeFolder}
+              expanded={expanded}
+              onToggleFolder={onToggleFolder}
+              onSelectFolder={(folderPath) => {
+                openNotesRoute(folderPath);
+                setFoldersDrawerOpen(false);
+              }}
+              onFolderLongPress={openFolderActionSheet}
+              recentBuckets={recentBuckets.map((bucket) => ({
+                id: bucket.id,
+                label: bucket.label,
+                subtitle: bucket.subtitle,
+                count: bucket.notes.length,
+              }))}
+              onSelectRecentBucket={(bucketId) => {
+                openRecentBucketRoute(bucketId);
+                setFoldersDrawerOpen(false);
+              }}
+              onOpenArchive={() => {
+                openArchiveRoute();
+                setFoldersDrawerOpen(false);
+              }}
+              onClose={() => setFoldersDrawerOpen(false)}
+            />
           ) : null}
         </>
       ) : (
