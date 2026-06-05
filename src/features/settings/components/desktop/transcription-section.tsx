@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { formatRecordingStatus, formatUpdatedAt } from "@/shared/lib/format";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { Button } from "@/shared/ui/button";
-import { Input } from "@/shared/ui/input";
-import * as api from "@/features/recording/api/recordings-api";
-import type { RecordingListItem, WhisperStatusResult } from "@/shared/types";
-import { getErrorMessage } from "@/shared/lib/errors";
+import type { RecordingListItem } from "@/shared/types";
+import { WhisperEngineCard } from "./whisper-engine-card";
 
 /** Normalised, display-ready status for a recording (queued/processing take
  *  precedence over the persisted note status). */
@@ -103,10 +100,6 @@ export function SettingsTranscriptionSection() {
     activeAudioSrc,
   } = useRecordings();
 
-  const [whisperStatus, setWhisperStatus] = useState<WhisperStatusResult | null>(
-    null
-  );
-  const [whisperSettingUp, setWhisperSettingUp] = useState(false);
   const [busyPaths, setBusyPaths] = useState<Set<string>>(new Set());
 
   // Navigate to the note itself. AppShell listens for this and leaves Settings.
@@ -125,43 +118,9 @@ export function SettingsTranscriptionSection() {
     });
   }, []);
 
-  // Lightweight readiness probe (does NOT provision — safe on mount).
-  const probeWhisper = useCallback(async () => {
-    try {
-      setWhisperStatus(await api.checkWhisperStatus());
-    } catch (error) {
-      setWhisperStatus({
-        available: false,
-        python_found: false,
-        error: getErrorMessage(error),
-      });
-    }
-  }, []);
-
-  // Explicit provisioning: installs the env and downloads the chosen model.
-  const setUpWhisper = useCallback(async () => {
-    setWhisperSettingUp(true);
-    try {
-      const status = await api.checkWhisperStatus(
-        syncSettings.whisperModel.trim() || undefined,
-        true
-      );
-      setWhisperStatus(status);
-    } catch (error) {
-      setWhisperStatus({
-        available: false,
-        python_found: false,
-        error: getErrorMessage(error),
-      });
-    } finally {
-      setWhisperSettingUp(false);
-    }
-  }, [syncSettings.whisperModel]);
-
   useEffect(() => {
     void refreshRecordings();
-    void probeWhisper();
-  }, [refreshRecordings, probeWhisper]);
+  }, [refreshRecordings]);
 
   // Live polling while any job is queued or processing.
   const hasActiveWork =
@@ -217,8 +176,6 @@ export function SettingsTranscriptionSection() {
     }
   }, [failedItems, retriggerTranscription, setPathBusy]);
 
-  const envReady = whisperStatus?.available ?? false;
-
   return (
     <div className="space-y-4">
       <div className="space-y-1">
@@ -231,103 +188,10 @@ export function SettingsTranscriptionSection() {
         </p>
       </div>
 
-      {/* ── Engine / setup ─────────────────────────────────────────────── */}
-      <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-foreground">
-            Local engine (Whisper)
-          </h3>
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${
-              envReady
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                : "bg-muted text-muted-foreground"
-            }`}
-          >
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                envReady ? "bg-emerald-500" : "bg-muted-foreground/50"
-              }`}
-            />
-            {whisperStatus === null
-              ? "Checking…"
-              : envReady
-                ? "Ready"
-                : "Not set up"}
-          </span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          No API key needed — the app manages its own Python environment. The first
-          setup downloads the engine and model and can take a few minutes.
-        </p>
-
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between gap-4">
-            <span className="text-sm text-foreground">Model / Path</span>
-            <div className="flex flex-1 items-center gap-2 max-w-[300px]">
-              <Input
-                type="text"
-                className="h-8 text-xs font-mono"
-                value={syncSettings.whisperModel}
-                onChange={(e) =>
-                  updateSyncSettings({ whisperModel: e.target.value })
-                }
-                placeholder="large-v3"
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck="false"
-              />
-              <Button
-                variant="secondary"
-                size="sm"
-                className="h-8 px-2 text-xs"
-                onClick={async () => {
-                  try {
-                    const selected = await open({
-                      directory: true,
-                      multiple: false,
-                      title: "Select Whisper model directory",
-                    });
-                    if (selected && typeof selected === "string") {
-                      updateSyncSettings({ whisperModel: selected });
-                    }
-                  } catch (err) {
-                    console.error("Failed to open dialog", err);
-                  }
-                }}
-              >
-                Browse
-              </Button>
-            </div>
-          </div>
-          <p className="text-[10px] text-muted-foreground leading-relaxed">
-            Model name (e.g. <code>large-v3</code>, <code>medium</code>,{" "}
-            <code>small</code>) or an absolute path to a local model directory.
-          </p>
-        </div>
-
-        {whisperStatus?.error ? (
-          <p className="text-xs text-destructive break-words">
-            {whisperStatus.error}
-          </p>
-        ) : null}
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            type="button"
-            onClick={() => void setUpWhisper()}
-            disabled={whisperSettingUp}
-          >
-            {whisperSettingUp
-              ? "Setting up…"
-              : envReady
-                ? "Re-check / Download model"
-                : "Set up / Download model"}
-          </Button>
-        </div>
-      </section>
+      <WhisperEngineCard
+        whisperModel={syncSettings.whisperModel}
+        onWhisperModelChange={(value) => updateSyncSettings({ whisperModel: value })}
+      />
 
       {/* ── Overview + bulk actions ────────────────────────────────────── */}
       <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
