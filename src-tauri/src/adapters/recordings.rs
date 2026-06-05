@@ -35,69 +35,13 @@ const ASSEMBLY_MAX_POLL_ATTEMPTS: usize = 180;
 pub(crate) const DEFAULT_WHISPER_MODEL: &str = "large-v3";
 
 /// Python script executed as a subprocess for local whisper transcription.
-const WHISPER_TRANSCRIBE_SCRIPT: &str = r#"
-import sys, json
-
-def main():
-    audio_path = sys.argv[1]
-    model_size = sys.argv[2] if len(sys.argv) > 2 else "large-v3"
-
-    from faster_whisper import WhisperModel
-
-    model = WhisperModel(model_size, device="auto", compute_type="auto")
-    segments, info = model.transcribe(audio_path, word_timestamps=True)
-
-    text_parts = []
-    words = []
-    for segment in segments:
-        text_parts.append(segment.text)
-        if segment.words:
-            for w in segment.words:
-                words.append({
-                    "word": w.word.strip(),
-                    "start": round(w.start, 3),
-                    "end": round(w.end, 3),
-                    "probability": round(w.probability, 3),
-                })
-
-    result = {
-        "text": " ".join(text_parts).strip(),
-        "language": info.language,
-        "language_probability": round(info.language_probability, 3),
-        "duration": round(info.duration, 3),
-        "words": words,
-    }
-    json.dump(result, sys.stdout, ensure_ascii=False)
-
-main()
-"#;
+/// Source lives in `whisper_scripts/transcribe.py` (embedded at compile time).
+const WHISPER_TRANSCRIBE_SCRIPT: &str = include_str!("whisper_scripts/transcribe.py");
 
 /// Lightweight check script — just verifies faster_whisper can be imported.
 /// If a model is provided as an argument, it also tries to load it (which may trigger download).
-const WHISPER_CHECK_SCRIPT: &str = r#"
-import json, sys
-try:
-    from faster_whisper import WhisperModel
-    model_size = sys.argv[1] if len(sys.argv) > 1 else None
-    available = True
-    error = None
-
-    if model_size:
-        try:
-            # Try to load the model to verify it's available.
-            # This will trigger a download if model_size is a name and not yet cached.
-            # We use CPU and int8 for a lightweight check.
-            WhisperModel(model_size, device="cpu", compute_type="int8", local_files_only=False)
-        except Exception as e:
-            available = False
-            error = str(e)
-
-    json.dump({"available": available, "error": error}, sys.stdout)
-except Exception as e:
-    available = False
-    error = str(e)
-    json.dump({"available": available, "error": error}, sys.stdout)
-"#;
+/// Source lives in `whisper_scripts/check.py` (embedded at compile time).
+const WHISPER_CHECK_SCRIPT: &str = include_str!("whisper_scripts/check.py");
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
