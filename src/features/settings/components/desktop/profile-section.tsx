@@ -2,34 +2,10 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useState } from "react";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useSshKey } from "@/features/sync/hooks/use-ssh-key";
-import { confirmAction } from "@/shared/lib/dom";
 import { Button } from "@/shared/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/shared/ui/dialog";
 import { Input } from "@/shared/ui/input";
-
-type GitDraftSettings = {
-  gitRemoteUrl: string;
-  gitBranch: string;
-  gitCommitMessage: string;
-  gitUsername: string;
-  gitPassword: string;
-};
-
-// Pick just the git fields out of the (larger) profile sync settings.
-const getGitDraftFromSyncSettings = (syncSettings: GitDraftSettings): GitDraftSettings => ({
-  gitRemoteUrl: syncSettings.gitRemoteUrl,
-  gitBranch: syncSettings.gitBranch,
-  gitCommitMessage: syncSettings.gitCommitMessage,
-  gitUsername: syncSettings.gitUsername,
-  gitPassword: syncSettings.gitPassword,
-});
+import { GitSettingsCard } from "./git-settings-card";
+import { ProfileManagerDialog } from "./profile-manager-dialog";
 
 export function SettingsProfileSection() {
   const {
@@ -48,14 +24,6 @@ export function SettingsProfileSection() {
   } = useProfiles();
   const [notesRootInput, setNotesRootInput] = useState("");
   const [profileManagerOpen, setProfileManagerOpen] = useState(false);
-  const [newProfileName, setNewProfileName] = useState("");
-  const [newProfileDescription, setNewProfileDescription] = useState("");
-  const [profileDrafts, setProfileDrafts] = useState<
-    Record<string, { name: string; description: string }>
-  >({});
-  const [gitDraft, setGitDraft] = useState<GitDraftSettings>(() =>
-    getGitDraftFromSyncSettings(syncSettings)
-  );
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
@@ -65,37 +33,6 @@ export function SettingsProfileSection() {
   useEffect(() => {
     setNotesRootInput(activeProfile?.notes_root ?? "");
   }, [activeProfile?.notes_root]);
-
-  useEffect(() => {
-    setProfileDrafts((prev) => {
-      const next: Record<string, { name: string; description: string }> = {};
-      profiles.forEach((profile) => {
-        next[profile.id] = prev[profile.id] ?? {
-          name: profile.name,
-          description: profile.description ?? "",
-        };
-      });
-      return next;
-    });
-  }, [profiles]);
-
-  useEffect(() => {
-    setGitDraft(getGitDraftFromSyncSettings(syncSettings));
-  }, [activeProfileId]);
-
-  const hasUnsavedGitChanges =
-    gitDraft.gitRemoteUrl !== syncSettings.gitRemoteUrl ||
-    gitDraft.gitBranch !== syncSettings.gitBranch ||
-    gitDraft.gitCommitMessage !== syncSettings.gitCommitMessage ||
-    gitDraft.gitUsername !== syncSettings.gitUsername ||
-    gitDraft.gitPassword !== syncSettings.gitPassword;
-
-  useEffect(() => {
-    if (hasUnsavedGitChanges) {
-      return;
-    }
-    setGitDraft(getGitDraftFromSyncSettings(syncSettings));
-  }, [hasUnsavedGitChanges, syncSettings]);
 
   const { sshPublicKey, sshBusy, sshError, generateSshKey, deleteSshKey } =
     useSshKey();
@@ -116,7 +53,6 @@ export function SettingsProfileSection() {
     }
   };
 
-  const createProfileDisabled = profilesBusy || !newProfileName.trim();
   const cardClass = "space-y-3 rounded-lg border border-border/70 bg-card/30 p-4";
   const controlClass = "grid gap-2 text-sm";
   const labelClass = "text-sm font-medium text-foreground";
@@ -164,86 +100,12 @@ export function SettingsProfileSection() {
           {profilesError ? <p className={warningClass}>{profilesError}</p> : null}
         </section>
 
-        <section className={cardClass}>
-          <h3 className="text-sm font-semibold text-foreground">Git</h3>
-          <label className={controlClass}>
-            <span className={labelClass}>Remote URL</span>
-            <Input
-              type="text"
-              value={gitDraft.gitRemoteUrl}
-              onChange={(event) => setGitDraft((prev) => ({ ...prev, gitRemoteUrl: event.target.value }))}
-              placeholder="git://192.168.1.15/notes.git"
-            />
-          </label>
-          <label className={controlClass}>
-            <span className={labelClass}>Branch</span>
-            <Input
-              type="text"
-              value={gitDraft.gitBranch}
-              onChange={(event) => setGitDraft((prev) => ({ ...prev, gitBranch: event.target.value }))}
-              placeholder="main"
-            />
-          </label>
-          <label className={controlClass}>
-            <span className={labelClass}>Commit message</span>
-            <Input
-              type="text"
-              value={gitDraft.gitCommitMessage}
-              onChange={(event) =>
-                setGitDraft((prev) => ({ ...prev, gitCommitMessage: event.target.value }))
-              }
-              placeholder="Sync notes"
-            />
-          </label>
-          <label className={controlClass}>
-            <span className={labelClass}>Username</span>
-            <Input
-              type="text"
-              value={gitDraft.gitUsername}
-              onChange={(event) => setGitDraft((prev) => ({ ...prev, gitUsername: event.target.value }))}
-              placeholder="Optional"
-              autoCapitalize="off"
-              autoCorrect="off"
-            />
-          </label>
-          <label className={controlClass}>
-            <span className={labelClass}>Password / Token</span>
-            <Input
-              type="password"
-              value={gitDraft.gitPassword}
-              onChange={(event) => setGitDraft((prev) => ({ ...prev, gitPassword: event.target.value }))}
-              placeholder="Optional"
-              autoCapitalize="off"
-              autoCorrect="off"
-            />
-          </label>
-          <div className={actionRowClass}>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!activeProfileId || profilesBusy || !hasUnsavedGitChanges}
-              onClick={() =>
-                updateSyncSettings({
-                  gitRemoteUrl: gitDraft.gitRemoteUrl,
-                  gitBranch: gitDraft.gitBranch,
-                  gitCommitMessage: gitDraft.gitCommitMessage,
-                  gitUsername: gitDraft.gitUsername,
-                  gitPassword: gitDraft.gitPassword,
-                })
-              }
-            >
-              Apply Git settings
-            </Button>
-          </div>
-          <p className={hintClass}>
-            Changes only take effect after clicking Apply Git settings.
-            {hasUnsavedGitChanges ? " You have unsaved changes." : ""}
-          </p>
-          <p className={hintClass}>
-            Supported remote schemes: <code>git://</code>, <code>ssh://</code>, and <code>https://</code>.
-          </p>
-        </section>
+        <GitSettingsCard
+          gitSettings={syncSettings}
+          activeProfileId={activeProfileId}
+          busy={profilesBusy}
+          onApply={(next) => updateSyncSettings(next)}
+        />
 
         <section className={cardClass}>
           <h3 className="text-sm font-semibold text-foreground">SSH key</h3>
@@ -338,154 +200,19 @@ export function SettingsProfileSection() {
             </div>
           </div>
         </section>
-
       </div>
 
-      <Dialog open={profileManagerOpen} onOpenChange={setProfileManagerOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Manage profiles</DialogTitle>
-            <DialogDescription>
-              Create, rename, and remove profiles. Deleting a profile keeps its notes folder on disk.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <section className={cardClass}>
-              <h3 className="text-sm font-semibold text-foreground">Create profile</h3>
-              <label className={controlClass}>
-                <span className={labelClass}>Name</span>
-                <Input
-                  type="text"
-                  value={newProfileName}
-                  onChange={(event) => setNewProfileName(event.target.value)}
-                  placeholder="Work"
-                />
-              </label>
-              <label className={controlClass}>
-                <span className={labelClass}>Description</span>
-                <Input
-                  type="text"
-                  value={newProfileDescription}
-                  onChange={(event) => setNewProfileDescription(event.target.value)}
-                  placeholder="Short label for this profile"
-                />
-              </label>
-              <div className={actionRowClass}>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={createProfileDisabled}
-                  onClick={() => {
-                    void createProfile({
-                      name: newProfileName.trim(),
-                      description: newProfileDescription.trim(),
-                    });
-                    setNewProfileName("");
-                    setNewProfileDescription("");
-                  }}
-                >
-                  {profilesBusy ? "Working..." : "Create profile"}
-                </Button>
-              </div>
-            </section>
-
-            <section className={cardClass}>
-              <h3 className="text-sm font-semibold text-foreground">Existing profiles</h3>
-              {profiles.map((profile) => {
-                const draft = profileDrafts[profile.id] ?? {
-                  name: profile.name,
-                  description: profile.description ?? "",
-                };
-                const hasDraftChanges =
-                  draft.name !== profile.name ||
-                  draft.description !== (profile.description ?? "");
-                return (
-                  <div
-                    key={profile.id}
-                    className="space-y-3 rounded-md border border-border/60 bg-background/50 p-3"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button
-                        type="button"
-                        variant={activeProfileId === profile.id ? "secondary" : "outline"}
-                        size="sm"
-                        onClick={() => void switchProfile(profile.id)}
-                        disabled={profilesBusy}
-                      >
-                        {activeProfileId === profile.id ? "Active" : "Switch"}
-                      </Button>
-                    </div>
-                    <label className={controlClass}>
-                      <span className={labelClass}>Name</span>
-                      <Input
-                        type="text"
-                        value={draft.name}
-                        onChange={(event) =>
-                          setProfileDrafts((prev) => ({
-                            ...prev,
-                            [profile.id]: {
-                              name: event.target.value,
-                              description: draft.description,
-                            },
-                          }))
-                        }
-                      />
-                    </label>
-                    <label className={controlClass}>
-                      <span className={labelClass}>Description</span>
-                      <Input
-                        type="text"
-                        value={draft.description}
-                        onChange={(event) =>
-                          setProfileDrafts((prev) => ({
-                            ...prev,
-                            [profile.id]: {
-                              name: draft.name,
-                              description: event.target.value,
-                            },
-                          }))
-                        }
-                        placeholder="Short label for this profile"
-                      />
-                    </label>
-                    <div className={actionRowClass}>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={profilesBusy || !hasDraftChanges}
-                        onClick={() =>
-                          void updateProfile(profile.id, {
-                            name: draft.name,
-                            description: draft.description,
-                          })
-                        }
-                      >
-                        Save
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        disabled={profilesBusy || profiles.length <= 1}
-                        onClick={async () => {
-                          if (!(await confirmAction(`Delete profile "${profile.name}"?`))) {
-                            return;
-                          }
-                          void deleteProfile(profile.id);
-                        }}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </section>
-          </div>
-          <DialogFooter showCloseButton />
-        </DialogContent>
-      </Dialog>
+      <ProfileManagerDialog
+        open={profileManagerOpen}
+        onOpenChange={setProfileManagerOpen}
+        profiles={profiles}
+        activeProfileId={activeProfileId}
+        profilesBusy={profilesBusy}
+        switchProfile={switchProfile}
+        createProfile={createProfile}
+        updateProfile={updateProfile}
+        deleteProfile={deleteProfile}
+      />
     </div>
   );
 }
