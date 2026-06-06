@@ -1,6 +1,7 @@
 export type SettingsSectionId =
   | "general"
   | "profile"
+  | "import"
   | "sync"
   | "updates"
   | "appearance"
@@ -16,6 +17,7 @@ export type SettingsSection = {
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "general", title: "General" },
   { id: "profile", title: "Profile" },
+  { id: "import", title: "Import" },
   { id: "sync", title: "Sync" },
   { id: "updates", title: "Updates" },
   { id: "appearance", title: "Appearance" },

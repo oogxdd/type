@@ -7,6 +7,7 @@ import {
 } from "../../lib/sections";
 import { SettingsGeneralSection } from "./general-section";
 import { SettingsProfileSection } from "./profile-section";
+import { SettingsImportSection } from "./import-section";
 import { SettingsSyncSection } from "./sync-section";
 import { SettingsAppearanceSection } from "./appearance-section";
 import { SettingsRecordingsSection } from "./recordings-section";
@@ -50,6 +51,7 @@ function SettingsRow({
 function SettingsDetail({ sectionId }: { sectionId: SettingsSectionId }) {
   if (sectionId === "general") return <SettingsGeneralSection />;
   if (sectionId === "profile") return <SettingsProfileSection />;
+  if (sectionId === "import") return <SettingsImportSection />;
   if (sectionId === "sync") return <SettingsSyncSection />;
   if (sectionId === "updates") return <SettingsUpdatesSection />;
   if (sectionId === "appearance") return <SettingsAppearanceSection />;
