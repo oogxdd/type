@@ -25,5 +25,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-notes
-notes/
+
+# A profile's local notes data dir when it lives at the repo root. Anchored with
+# a leading slash so it never swallows source folders named "notes" (e.g.
+# src-tauri/src/adapters/notes/).
+/notes/
