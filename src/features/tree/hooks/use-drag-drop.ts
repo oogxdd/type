@@ -140,6 +140,8 @@ export function useDragDrop({
         return;
       }
 
+      // Spring-load: hovering a collapsed folder for 500ms auto-expands it, so
+      // you can drill into a nested folder mid-drag without dropping first.
       const overNode = getNodeById(treeData, dropTarget.itemId);
       const hasChildren = Boolean(overNode?.children && overNode.children.length > 0);
       const isCollapsed = hasChildren && !expanded.has(dropTarget.itemId);
@@ -169,6 +171,8 @@ export function useDragDrop({
         return;
       }
 
+      // Prefer the live pointer position (drag-start point + dnd-kit delta);
+      // fall back to the dragged row's center when the drag wasn't mouse-driven.
       let pointerY: number | null = null;
       if (dragStartPoint.current && typeof event.delta?.y === "number") {
         pointerY = dragStartPoint.current.y + event.delta.y;
@@ -182,6 +186,8 @@ export function useDragDrop({
         return;
       }
 
+      // Top/bottom edge zones snap to before/after the row (reorder); the middle
+      // means "drop inside". The zone is ~35% of row height, capped at 14px.
       const height = overRect.bottom - overRect.top;
       const threshold = Math.min(14, height * 0.35);
 
@@ -191,6 +197,8 @@ export function useDragDrop({
       }
       if (pointerY > overRect.bottom - threshold) {
         if (hasChildren) {
+          // "After" is ambiguous for a folder with children (after the row, or
+          // after its whole subtree?), so fall back to dropping inside it.
           setEdgeSnap(null);
           return;
         }
@@ -265,6 +273,8 @@ export function useDragDrop({
         logGroup("drop ignored", { reason: "system folder drag blocked" });
         return;
       }
+      // Optimistic local rebuild: pull the dragged subtrees out, then splice
+      // them back in at the resolved target before persisting to the backend.
       const { tree: prunedTree, removed } = removeNodes(treeData, orderedDraggingIds);
       const removedMap = new Map(removed.map((node) => [node.id, node]));
       const nodesToInsert = orderedDraggingIds
@@ -308,6 +318,8 @@ export function useDragDrop({
         newParentById[item.id] = item.parentId;
       });
 
+      // Only folders whose parent actually changed need a filesystem move;
+      // pure reordering within a parent is persisted via setOrder below.
       for (const id of orderedDraggingIds) {
         const oldParent = oldParentById[id] ?? null;
         const newParent = newParentById[id] ?? null;
@@ -324,6 +336,8 @@ export function useDragDrop({
       buildFolderOrderMap(treeData, null, currentOrderMap);
       buildFolderOrderMap(nextTree, null, nextOrderMap);
 
+      // Diff the per-parent child order so we only rewrite the .notes-order.json
+      // of parents whose sequence actually changed, not every folder in the tree.
       const changedParents = Object.keys(nextOrderMap).filter(
         (parent) => !arraysEqual(nextOrderMap[parent], currentOrderMap[parent])
       );
