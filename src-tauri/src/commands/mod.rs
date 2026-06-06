@@ -1,5 +1,6 @@
 mod git_sync;
 mod handwriting;
+mod import;
 mod local_sync;
 mod notes;
 mod platform;
@@ -83,6 +84,9 @@ pub(super) fn run() {
             handwriting::save_handwriting_attachment,
             handwriting::queue_handwriting_ocr,
             handwriting::list_handwriting_ocr_jobs,
+            import::scan_apple_notes_folder,
+            import::start_apple_notes_import,
+            import::apple_import_status,
             git_sync::generate_ssh_key,
             git_sync::get_ssh_public_key,
             git_sync::delete_ssh_key,
