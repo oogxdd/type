@@ -30,6 +30,7 @@ import { useTreeInteractions } from "@/app/hooks/use-tree-interactions";
 import { useNoteOpener } from "@/app/hooks/use-note-opener";
 
 import { FoldersPanel } from "@/features/tree/components/folders-panel";
+import { CommandPalette } from "@/features/command-palette/components/command-palette";
 import { type SettingsSectionId } from "@/features/settings/lib/sections";
 import { AppSidebar } from "@/desktop/app-sidebar";
 import { DesktopShell } from "@/desktop/desktop-shell";
@@ -340,6 +341,20 @@ export function AppShell() {
         accept="image/png,image/jpeg,image/webp,image/gif"
         style={{ display: "none" }}
         onChange={onHandwritingImportChange}
+      />
+      <CommandPalette
+        onOpenSettings={(section) => {
+          setActiveSettingsSection(section);
+          setAppMode("settings");
+        }}
+        onOpenFeed={() => openPinnedFolder(FEED_FOLDER_PATH)}
+        onOpenArchive={() => openPinnedFolder(ARCHIEVE_FOLDER_PATH)}
+        onNewRecording={() => {
+          if (!isRecordingAudio) {
+            void startRecording(activeFolder || undefined);
+          }
+        }}
+        onImportHandwriting={() => handwritingInputRef.current?.click()}
       />
       <div className={`window-shell theme-${theme}`}>
         {layoutMode === "desktop" ? (

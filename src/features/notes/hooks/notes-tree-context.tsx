@@ -10,7 +10,7 @@ import {
 import * as api from "../api/notes-api";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/shared/types";
 import { FEED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH, isSystemFolder } from "@/shared/constants";
-import { collectAllNotes } from "@/shared/lib/notes";
+import { collectAllNotes, getNoteParentPath } from "@/shared/lib/notes";
 import { useNotePreviews } from "./use-note-previews";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useSelection } from "@/app/state/selection-context";
@@ -61,6 +61,7 @@ type NotesTreeContextValue = {
   deleteNotes: (paths: string[]) => Promise<boolean>;
   deleteFolders: (paths: string[]) => Promise<void>;
   moveNotesToArchive: (paths: string[]) => Promise<void>;
+  flattenIntoFeed: (folderPaths: string[], notePaths: string[]) => Promise<void>;
   showNoteInfo: (path: string) => Promise<void>;
   renameFolderFromMobile: (path: string, nextName: string) => Promise<void>;
   shouldNestNotesInNavigation: boolean;
@@ -419,6 +420,69 @@ export function NotesTreeProvider({
     [clearNote, refreshTree, setActiveFolder, setActiveNote, setLastSelectedFolder, setLastSelectedNote, setSelectedFolders, setSelectedNotes]
   );
 
+  // Collapse a selection of folders + notes into Feed: every note under the
+  // chosen folders (recursively) plus any directly-chosen notes is moved into
+  // Feed, then the emptied (non-system) folders are removed. Notes keep their
+  // frontmatter — and therefore their original dates — since this is a move.
+  const flattenIntoFeed = useCallback(
+    async (folderPaths: string[], notePaths: string[]) => {
+      const treeSnapshot = tree;
+      if (!treeSnapshot) return;
+
+      const noteSet = new Set<string>(notePaths);
+      const foldersToRemove: string[] = [];
+      for (const folderPath of folderPaths) {
+        if (!folderPath) continue;
+        const node = findNode(treeSnapshot, folderPath);
+        if (node) {
+          collectAllNotes(node).forEach((note) => noteSet.add(note.path));
+        }
+        // System folders (Feed/Archieve) stay put; everything else is removed
+        // once emptied so the structure is genuinely flattened.
+        if (!isSystemFolder(folderPath)) {
+          foldersToRemove.push(folderPath);
+        }
+      }
+
+      const notesToMove = Array.from(noteSet).filter(
+        (path) => getNoteParentPath(path) !== FEED_FOLDER_PATH
+      );
+      if (notesToMove.length === 0 && foldersToRemove.length === 0) return;
+
+      const folderSuffix =
+        foldersToRemove.length > 0
+          ? ` and remove ${foldersToRemove.length} folder(s)`
+          : "";
+      const confirmed = await confirmAction(
+        `Move ${notesToMove.length} note(s) into Feed${folderSuffix}?`
+      );
+      if (!confirmed) return;
+
+      if (notesToMove.length > 0) {
+        await api.moveItems(notesToMove, FEED_FOLDER_PATH);
+      }
+      if (foldersToRemove.length > 0) {
+        await api.deleteItems(foldersToRemove);
+      }
+
+      setSelectedFolders(new Set([FEED_FOLDER_PATH]));
+      setLastSelectedFolder(FEED_FOLDER_PATH);
+      setActiveFolder(FEED_FOLDER_PATH);
+      setSelectedNotes(new Set());
+      setLastSelectedNote("");
+      await refreshTree();
+    },
+    [
+      refreshTree,
+      setActiveFolder,
+      setLastSelectedFolder,
+      setLastSelectedNote,
+      setSelectedFolders,
+      setSelectedNotes,
+      tree,
+    ]
+  );
+
   const showNoteInfo = useCallback(async (path: string) => {
     try {
       const meta = await api.getNoteMeta(path);
@@ -463,6 +527,7 @@ export function NotesTreeProvider({
         deleteNotes,
         deleteFolders,
         moveNotesToArchive,
+        flattenIntoFeed,
         showNoteInfo,
         renameFolderFromMobile,
         shouldNestNotesInNavigation,
