@@ -50,6 +50,7 @@ pub(crate) const RECORDING_STATUS_FAILED: &str = "failed";
 pub(crate) const MACOS_WINDOW_ALPHA: f64 = 1.0;
 
 /// Set window background to transparent at the given alpha level.
+#[allow(unexpected_cfgs)]
 #[cfg(target_os = "macos")]
 pub(crate) fn apply_macos_window_alpha(
     window: &tauri::WebviewWindow,
