@@ -28,6 +28,7 @@ type ProfilesContextValue = {
   syncSettings: ProfileSyncSettings;
   updateAppConfig: (patch: Partial<AppConfig>) => Promise<void>;
   updateActiveProfileSettings: (patch: Partial<ProfileSettings>) => Promise<void>;
+  updateSyncSettings: (patch: Partial<ProfileSyncSettings>) => Promise<void>;
   refreshProfiles: () => Promise<NotesProfileSnapshot>;
   switchProfile: (profileId: string) => Promise<void>;
   createProfile: (input?: { name?: string; description?: string }) => Promise<void>;
@@ -147,6 +148,55 @@ export function ProfilesProvider({
       api.updateProfileSettings(activeProfileId, { ...activeProfileSettings, ...patch })
     );
   }, [activeProfileId, activeProfileSettings, runProfileMutation]);
+
+  const updateSyncSettings = useCallback(
+    async (patch: Partial<ProfileSyncSettings>) => {
+      const appConfigPatch: Partial<AppConfig> = {};
+      const profileSettingsPatch: Partial<ProfileSettings> = {};
+
+      if ("noteFileNameFormat" in patch)
+        appConfigPatch.note_file_name_format = patch.noteFileNameFormat;
+      if ("assemblyAiApiKey" in patch)
+        appConfigPatch.assemblyai_api_key = patch.assemblyAiApiKey!;
+      if ("whisperModel" in patch)
+        appConfigPatch.whisper_model = patch.whisperModel!;
+      if ("handwritingOcrProvider" in patch)
+        appConfigPatch.handwriting_ocr_provider = patch.handwritingOcrProvider!;
+      if ("openAiApiKey" in patch)
+        appConfigPatch.openai_api_key = patch.openAiApiKey!;
+      if ("openAiModel" in patch)
+        appConfigPatch.openai_model = patch.openAiModel!;
+      if ("huggingFaceApiKey" in patch)
+        appConfigPatch.huggingface_api_key = patch.huggingFaceApiKey!;
+      if ("huggingFaceModel" in patch)
+        appConfigPatch.huggingface_model = patch.huggingFaceModel!;
+
+      if ("gitRemoteUrl" in patch)
+        profileSettingsPatch.git_remote_url = patch.gitRemoteUrl!;
+      if ("gitBranch" in patch)
+        profileSettingsPatch.git_branch = patch.gitBranch!;
+      if ("gitUsername" in patch)
+        profileSettingsPatch.git_username = patch.gitUsername!;
+      if ("gitPassword" in patch)
+        profileSettingsPatch.git_password = patch.gitPassword!;
+      if ("gitCommitMessage" in patch)
+        profileSettingsPatch.git_commit_message = patch.gitCommitMessage!;
+      if ("mobileAutoTranscriptionEnabled" in patch)
+        profileSettingsPatch.mobile_auto_transcription_enabled =
+          patch.mobileAutoTranscriptionEnabled!;
+      if ("mobileAutoHandwritingOcrEnabled" in patch)
+        profileSettingsPatch.mobile_auto_handwriting_ocr_enabled =
+          patch.mobileAutoHandwritingOcrEnabled!;
+
+      if (Object.keys(appConfigPatch).length > 0) {
+        await updateAppConfig(appConfigPatch);
+      }
+      if (Object.keys(profileSettingsPatch).length > 0) {
+        await updateActiveProfileSettings(profileSettingsPatch);
+      }
+    },
+    [updateAppConfig, updateActiveProfileSettings]
+  );
 
   // Initial fetch
   useEffect(() => {
