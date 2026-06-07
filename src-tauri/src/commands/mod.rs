@@ -8,6 +8,9 @@ mod profiles;
 mod recordings;
 mod security;
 
+#[cfg(target_os = "macos")]
+use tauri::Manager;
+
 pub(crate) async fn run_blocking_command<T, F>(operation: F) -> Result<T, String>
 where
     T: Send + 'static,
