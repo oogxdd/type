@@ -1,16 +1,22 @@
 //! Notes filesystem: folder tree, front-matter parsing, ordering, system folders.
 //!
-//! Split into focused submodules. This hub holds the shared constants and DTO
-//! types plus root/path resolution, then re-exports each submodule so the
-//! crate-root notes::* surface is unchanged.
+//! Split into focused submodules. This hub holds filesystem root/path
+//! resolution, then re-exports each submodule so the crate-root notes::* surface
+//! is unchanged.
 
-use serde::{Deserialize, Serialize};
 use std::{
     fs,
     path::{Component, Path, PathBuf},
 };
 
-use crate::{ensure_profiles_state, find_profile};
+use crate::ports::notes::{
+    NoteBodyCrypto, NoteClock, NoteDocumentCodec, NoteHistory, NoteIdGenerator,
+    NoteStorageEntryKind, NotesRepository,
+};
+use crate::{
+    ensure_profiles_state, find_profile, FolderNode, NoteEntry, NoteFileNameFormat,
+    NoteFrontMatter, OrderFile,
+};
 
 mod front_matter;
 mod naming;
@@ -50,111 +56,6 @@ const HIDDEN_ROOT_FOLDERS: [&str; 3] = [
     RECORDINGS_STORAGE_FOLDER,
     LEGACY_RECORDINGS_FOLDER,
 ];
-
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-/// A note's display name and relative path.
-#[derive(Serialize)]
-pub(crate) struct NoteEntry {
-    pub(crate) name: String,
-    pub(crate) path: String,
-}
-
-/// Metadata returned to the frontend for a single note.
-#[derive(Serialize)]
-pub(crate) struct NoteMeta {
-    pub(crate) created_ms: Option<i64>,
-    pub(crate) updated_ms: Option<i64>,
-    pub(crate) note_type: Option<String>,
-    pub(crate) recording_audio_path: Option<String>,
-    pub(crate) handwriting_attachment_path: Option<String>,
-    pub(crate) transcription_status: Option<String>,
-    pub(crate) transcription_error: Option<String>,
-    pub(crate) transcription_updated_ms: Option<i64>,
-    pub(crate) ocr_status: Option<String>,
-    pub(crate) ocr_error: Option<String>,
-    pub(crate) ocr_updated_ms: Option<i64>,
-}
-
-/// YAML-ish front-matter fields stored at the top of each markdown note.
-#[derive(Default)]
-pub(crate) struct NoteFrontMatter {
-    pub(crate) id: Option<String>,
-    pub(crate) created_ms: Option<i64>,
-    pub(crate) updated_ms: Option<i64>,
-    pub(crate) note_type: Option<String>,
-    pub(crate) recording_audio_path: Option<String>,
-    pub(crate) handwriting_attachment_path: Option<String>,
-    pub(crate) transcription_status: Option<String>,
-    pub(crate) transcription_error: Option<String>,
-    pub(crate) transcription_updated_ms: Option<i64>,
-    pub(crate) transcription_id: Option<String>,
-    pub(crate) ocr_status: Option<String>,
-    pub(crate) ocr_error: Option<String>,
-    pub(crate) ocr_updated_ms: Option<i64>,
-    pub(crate) passthrough_lines: Vec<String>,
-}
-
-/// Arguments for setting folder and note ordering within a parent.
-#[derive(Deserialize)]
-pub(crate) struct SetOrderArgs {
-    pub(crate) parent: String,
-    #[serde(rename = "folderOrder")]
-    pub(crate) folder_order: Vec<String>,
-    #[serde(rename = "noteOrder")]
-    pub(crate) note_order: Vec<String>,
-}
-
-/// Arguments for updating a note's created timestamp.
-#[derive(Deserialize)]
-pub(crate) struct SetNoteTimestampArgs {
-    pub(crate) path: String,
-    pub(crate) timestamp_ms: i64,
-}
-
-/// Recursive tree node representing a folder with child folders and notes.
-#[derive(Serialize)]
-pub(crate) struct FolderNode {
-    pub(crate) name: String,
-    pub(crate) path: String,
-    pub(crate) children: Vec<FolderNode>,
-    pub(crate) notes: Vec<NoteEntry>,
-}
-
-/// Persisted sort order for folders and notes within a directory.
-#[derive(Default, Deserialize, Serialize)]
-pub(crate) struct OrderFile {
-    #[serde(default)]
-    pub(crate) folder_order: Vec<String>,
-    #[serde(default)]
-    pub(crate) note_order: Vec<String>,
-}
-
-/// Filename format strategy for new notes.
-#[derive(Clone, Copy, Debug, Default, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum NoteFileNameFormat {
-    #[default]
-    UtcTimestampSlug,
-    UuidV7,
-    UuidV7PrefixSlug,
-}
-
-/// Arguments for creating a new note.
-#[derive(Deserialize)]
-pub(crate) struct CreateNoteArgs {
-    pub(crate) folder_path: Option<String>,
-    pub(crate) content: Option<String>,
-    pub(crate) timestamp_ms: Option<i64>,
-    #[serde(default)]
-    pub(crate) file_name_format: NoteFileNameFormat,
-}
-
-/// Result returned after creating a note, containing its relative path.
-#[derive(Serialize)]
-pub(crate) struct CreateNoteResult {
-    pub(crate) path: String,
-}
 
 // ── Root resolution ────────────────────────────────────────────────────────────
 
@@ -217,4 +118,204 @@ pub(crate) fn strip_root(root: &Path, path: &Path) -> String {
         .unwrap_or(path)
         .to_string_lossy()
         .replace('\\', "/")
+}
+
+pub(crate) struct FilesystemNotesRepository {
+    root: PathBuf,
+}
+
+impl FilesystemNotesRepository {
+    pub(crate) fn new(root: PathBuf) -> Self {
+        Self { root }
+    }
+}
+
+impl NotesRepository for FilesystemNotesRepository {
+    fn ensured_root(&self) -> Result<PathBuf, String> {
+        if !self.root.exists() {
+            fs::create_dir_all(&self.root).map_err(|err| err.to_string())?;
+        }
+        ensure_system_folders(&self.root)?;
+        Ok(self.root.clone())
+    }
+
+    fn resolve_path(&self, rel: &str) -> Result<PathBuf, String> {
+        let rel_path = sanitize_relative(rel)?;
+        Ok(self.root.join(rel_path))
+    }
+
+    fn strip_root(&self, path: &Path) -> String {
+        strip_root(&self.root, path)
+    }
+
+    fn build_tree(&self) -> Result<FolderNode, String> {
+        build_folder_node(&self.root, "")
+    }
+
+    fn read_to_string(&self, path: &Path) -> Result<String, String> {
+        fs::read_to_string(path).map_err(|err| err.to_string())
+    }
+
+    fn entry_kind(&self, path: &Path) -> Result<Option<NoteStorageEntryKind>, String> {
+        let metadata = match fs::metadata(path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error.to_string()),
+        };
+        let kind = if metadata.is_file() {
+            NoteStorageEntryKind::File
+        } else if metadata.is_dir() {
+            NoteStorageEntryKind::Directory
+        } else {
+            NoteStorageEntryKind::Other
+        };
+        Ok(Some(kind))
+    }
+
+    fn file_times(
+        &self,
+        path: &Path,
+    ) -> Result<(Option<std::time::SystemTime>, Option<std::time::SystemTime>), String> {
+        let metadata = fs::metadata(path).map_err(|err| err.to_string())?;
+        Ok((metadata.created().ok(), metadata.modified().ok()))
+    }
+
+    fn create_dir_all(&self, path: &Path) -> Result<(), String> {
+        fs::create_dir_all(path).map_err(|err| err.to_string())
+    }
+
+    fn rename(&self, source: &Path, target: &Path) -> Result<(), String> {
+        fs::rename(source, target).map_err(|err| err.to_string())
+    }
+
+    fn remove_dir_all(&self, path: &Path) -> Result<(), String> {
+        fs::remove_dir_all(path).map_err(|err| err.to_string())
+    }
+
+    fn remove_file(&self, path: &Path) -> Result<(), String> {
+        fs::remove_file(path).map_err(|err| err.to_string())
+    }
+
+    fn write_note(&self, path: &Path, meta: &NoteFrontMatter, body: &str) -> Result<(), String> {
+        write_note_with_front_matter(path, meta, body)
+    }
+
+    fn allocate_note_file_name(
+        &self,
+        folder: &Path,
+        timestamp_ms: i64,
+        note_id: &str,
+        content: &str,
+        fallback_slug: &str,
+        file_name_format: NoteFileNameFormat,
+    ) -> Result<String, String> {
+        allocate_note_file_name(
+            folder,
+            timestamp_ms,
+            note_id,
+            content,
+            fallback_slug,
+            file_name_format,
+        )
+    }
+
+    fn is_feed_folder_path(&self, path: &Path) -> bool {
+        is_feed_folder_path(&self.root, path)
+    }
+
+    fn is_storage_folder_path(&self, path: &Path) -> bool {
+        is_storage_folder_path(&self.root, path)
+    }
+
+    fn is_system_folder_path(&self, path: &Path) -> bool {
+        is_system_folder_path(&self.root, path)
+    }
+
+    fn update_order_append(
+        &self,
+        dir: &Path,
+        names: &[String],
+        is_folder: bool,
+    ) -> Result<(), String> {
+        update_order_append(dir, names, is_folder)
+    }
+
+    fn update_order_remove(
+        &self,
+        dir: &Path,
+        names: &[String],
+        is_folder: bool,
+    ) -> Result<(), String> {
+        update_order_remove(dir, names, is_folder)
+    }
+
+    fn update_order_rename(
+        &self,
+        dir: &Path,
+        old_name: &str,
+        new_name: &str,
+        is_folder: bool,
+    ) -> Result<(), String> {
+        update_order_rename(dir, old_name, new_name, is_folder)
+    }
+
+    fn write_order_file(&self, dir: &Path, order: &OrderFile) -> Result<(), String> {
+        write_order_file(dir, order)
+    }
+}
+
+pub(crate) struct FrontMatterNoteDocumentCodec;
+
+impl NoteDocumentCodec for FrontMatterNoteDocumentCodec {
+    fn parse(&self, raw: &str) -> (NoteFrontMatter, String) {
+        parse_note_front_matter(raw)
+    }
+}
+
+pub(crate) struct RuntimeNoteBodyCrypto;
+
+impl NoteBodyCrypto for RuntimeNoteBodyCrypto {
+    fn decrypt_note_body(&self, body: &str) -> Result<String, String> {
+        crate::decrypt_note_body_for_read(body)
+    }
+}
+
+pub(crate) struct GitNoteHistoryAdapter {
+    root: PathBuf,
+}
+
+impl GitNoteHistoryAdapter {
+    pub(crate) fn new(root: PathBuf) -> Self {
+        Self { root }
+    }
+}
+
+impl NoteHistory for GitNoteHistoryAdapter {
+    fn note_timestamps(&self, note_rel: &str) -> Result<(Option<i64>, Option<i64>), String> {
+        Ok(crate::git_note_timestamps_from_history(&self.root, note_rel).unwrap_or((None, None)))
+    }
+}
+
+pub(crate) struct UuidNoteIdGenerator;
+
+impl NoteIdGenerator for UuidNoteIdGenerator {
+    fn generate_note_id(&self) -> String {
+        generate_note_id()
+    }
+
+    fn uuid_tail_without_timestamp_prefix(&self, note_id: &str) -> String {
+        uuid_tail_without_timestamp_prefix(note_id)
+    }
+}
+
+pub(crate) struct SystemNoteClock;
+
+impl NoteClock for SystemNoteClock {
+    fn now_ms(&self) -> Option<i64> {
+        crate::now_ms()
+    }
+
+    fn time_to_ms(&self, time: std::time::SystemTime) -> Option<i64> {
+        crate::time_to_ms(time)
+    }
 }

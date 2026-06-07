@@ -1,7 +1,12 @@
 // Port interfaces — platform-agnostic service contracts.
 // Read these to understand what each domain does. When migrating to another
 // language (JS, Dart, Swift …), reimplement the traits defined here.
+pub mod domain;
+pub(crate) use domain::notes::*;
+
 pub mod ports;
+
+mod application;
 
 // Adapters — Rust/Tauri implementations of the port contracts.
 // Each adapter module lives in adapters/ and is re-exported at the crate root
