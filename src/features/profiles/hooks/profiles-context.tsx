@@ -4,17 +4,16 @@ import {
   useContext,
   useEffect,
   useState,
+  useMemo,
   type ReactNode,
 } from "react";
 import * as api from "../api/profiles-api";
-import type { NotesProfileSnapshot, ProfileSyncSettings } from "@/shared/types";
-import {
-  DEFAULT_PROFILE_SYNC_SETTINGS,
-  getProfileSyncSettings,
-  removeProfileSyncSettings,
-  readProfileSyncStore,
-  writeProfileSyncStore,
-} from "@/shared/lib/storage";
+import type {
+  AppConfig,
+  NotesProfileSnapshot,
+  ProfileSettings,
+  ProfileSyncSettings,
+} from "@/shared/types";
 import { getErrorMessage } from "@/shared/lib/errors";
 
 type ProfilesContextValue = {
@@ -24,8 +23,11 @@ type ProfilesContextValue = {
   profiles: NotesProfileSnapshot["profiles"];
   activeProfileId: string | null;
   activeProfileNotesRoot: string | null;
+  appConfig: AppConfig | null;
+  activeProfileSettings: ProfileSettings | null;
   syncSettings: ProfileSyncSettings;
-  updateSyncSettings: (patch: Partial<ProfileSyncSettings>) => void;
+  updateAppConfig: (patch: Partial<AppConfig>) => Promise<void>;
+  updateActiveProfileSettings: (patch: Partial<ProfileSettings>) => Promise<void>;
   refreshProfiles: () => Promise<NotesProfileSnapshot>;
   switchProfile: (profileId: string) => Promise<void>;
   createProfile: (input?: { name?: string; description?: string }) => Promise<void>;
@@ -50,13 +52,59 @@ export function ProfilesProvider({
   const [profilesSnapshot, setProfilesSnapshot] = useState<NotesProfileSnapshot | null>(null);
   const [profilesBusy, setProfilesBusy] = useState(false);
   const [profilesError, setProfilesError] = useState<string | null>(null);
-  const [syncSettings, setSyncSettings] = useState<ProfileSyncSettings>(DEFAULT_PROFILE_SYNC_SETTINGS);
-  const [syncSettingsProfileId, setSyncSettingsProfileId] = useState<string | null>(null);
 
   const profiles = profilesSnapshot?.profiles ?? [];
   const activeProfileId = profilesSnapshot?.activeProfileId ?? null;
-  const activeProfileNotesRoot =
-    profiles.find((profile) => profile.id === activeProfileId)?.notes_root ?? null;
+  const activeProfile = useMemo(
+    () => profiles.find((p) => p.id === activeProfileId) ?? null,
+    [profiles, activeProfileId]
+  );
+  const activeProfileNotesRoot = activeProfile?.notes_root ?? null;
+  const activeProfileSettings = activeProfile?.settings ?? null;
+  const appConfig = profilesSnapshot?.appConfig ?? null;
+
+  // Derived legacy settings object for backward compatibility
+  const syncSettings = useMemo((): ProfileSyncSettings => {
+    if (!appConfig || !activeProfileSettings) {
+      return {
+        gitRemoteUrl: "",
+        gitBranch: "main",
+        gitUsername: "",
+        gitPassword: "",
+        gitCommitMessage: "Sync notes",
+        lastSuccessfulSyncAt: "",
+        noteFileNameFormat: "utc_timestamp_slug",
+        assemblyAiApiKey: "",
+        mobileAutoTranscriptionEnabled: true,
+        whisperModel: "large-v3",
+        handwritingOcrProvider: "openai",
+        openAiApiKey: "",
+        openAiModel: "gpt-4.1-mini",
+        huggingFaceApiKey: "",
+        huggingFaceModel: "microsoft/trocr-base-handwritten",
+        mobileAutoHandwritingOcrEnabled: true,
+      };
+    }
+
+    return {
+      gitRemoteUrl: activeProfileSettings.git_remote_url,
+      gitBranch: activeProfileSettings.git_branch,
+      gitUsername: activeProfileSettings.git_username,
+      gitPassword: activeProfileSettings.git_password,
+      gitCommitMessage: activeProfileSettings.git_commit_message,
+      lastSuccessfulSyncAt: "", // Not yet implemented on backend
+      noteFileNameFormat: appConfig.note_file_name_format as any,
+      assemblyAiApiKey: appConfig.assemblyai_api_key,
+      mobileAutoTranscriptionEnabled: activeProfileSettings.mobile_auto_transcription_enabled,
+      whisperModel: appConfig.whisper_model,
+      handwritingOcrProvider: appConfig.handwriting_ocr_provider as any,
+      openAiApiKey: appConfig.openai_api_key,
+      openAiModel: appConfig.openai_model,
+      huggingFaceApiKey: appConfig.huggingface_api_key,
+      huggingFaceModel: appConfig.huggingface_model,
+      mobileAutoHandwritingOcrEnabled: activeProfileSettings.mobile_auto_handwriting_ocr_enabled,
+    };
+  }, [appConfig, activeProfileSettings]);
 
   const refreshProfiles = useCallback(async () => {
     const snapshot = await api.getProfiles();
@@ -64,14 +112,6 @@ export function ProfilesProvider({
     return snapshot;
   }, []);
 
-  const updateSyncSettings = useCallback((patch: Partial<ProfileSyncSettings>) => {
-    setSyncSettings((prev) => ({ ...prev, ...patch }));
-  }, []);
-
-  // Every profile mutation shares the same shape: flush any pending editor save,
-  // run the API call (which returns the new snapshot), then reflect it — while
-  // tracking busy state and surfacing errors uniformly. `onSuccess` runs after
-  // the call resolves, before the snapshot is applied (e.g. local cleanup).
   const runProfileMutation = useCallback(
     async (
       mutate: () => Promise<NotesProfileSnapshot>,
@@ -96,25 +136,17 @@ export function ProfilesProvider({
     [flushSaveRef]
   );
 
-  // Load sync settings when active profile changes
-  useEffect(() => {
-    if (!activeProfileId) {
-      return;
-    }
-    const settings = getProfileSyncSettings(activeProfileId);
-    setSyncSettings(settings);
-    setSyncSettingsProfileId(activeProfileId);
-  }, [activeProfileId]);
+  const updateAppConfig = useCallback(async (patch: Partial<AppConfig>) => {
+    if (!appConfig) return;
+    await runProfileMutation(() => api.updateAppConfig({ ...appConfig, ...patch }));
+  }, [appConfig, runProfileMutation]);
 
-  // Persist sync settings when they change
-  useEffect(() => {
-    if (!activeProfileId || syncSettingsProfileId !== activeProfileId) {
-      return;
-    }
-    const store = readProfileSyncStore();
-    store[activeProfileId] = syncSettings;
-    writeProfileSyncStore(store);
-  }, [activeProfileId, syncSettings, syncSettingsProfileId]);
+  const updateActiveProfileSettings = useCallback(async (patch: Partial<ProfileSettings>) => {
+    if (!activeProfileId || !activeProfileSettings) return;
+    await runProfileMutation(() => 
+      api.updateProfileSettings(activeProfileId, { ...activeProfileSettings, ...patch })
+    );
+  }, [activeProfileId, activeProfileSettings, runProfileMutation]);
 
   // Initial fetch
   useEffect(() => {
@@ -178,10 +210,7 @@ export function ProfilesProvider({
       if (!normalizedProfileId) {
         return;
       }
-      await runProfileMutation(
-        () => api.deleteProfile(normalizedProfileId),
-        () => removeProfileSyncSettings(normalizedProfileId)
-      );
+      await runProfileMutation(() => api.deleteProfile(normalizedProfileId));
     },
     [runProfileMutation]
   );
@@ -209,8 +238,11 @@ export function ProfilesProvider({
         profiles,
         activeProfileId,
         activeProfileNotesRoot,
+        appConfig,
+        activeProfileSettings,
         syncSettings,
-        updateSyncSettings,
+        updateAppConfig,
+        updateActiveProfileSettings,
         refreshProfiles,
         switchProfile,
         createProfile,

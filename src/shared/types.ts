@@ -82,11 +82,24 @@ export type NotesProfile = {
   name: string;
   description: string;
   notes_root: string;
+  settings: ProfileSettings;
+};
+
+export type AppConfig = {
+  assemblyai_api_key: string;
+  whisper_model: string;
+  handwriting_ocr_provider: string;
+  openai_api_key: string;
+  openai_model: string;
+  huggingface_api_key: string;
+  huggingface_model: string;
+  note_file_name_format: string;
 };
 
 export type NotesProfileSnapshot = {
   activeProfileId: string;
   profiles: NotesProfile[];
+  appConfig: AppConfig;
 };
 
 export type ProfilesBackupArchive = {
@@ -229,6 +242,16 @@ export type VisibleNavigationItem =
       id: string;
       parentId: string;
     };
+
+export type ProfileSettings = {
+  git_remote_url: string;
+  git_branch: string;
+  git_username: string;
+  git_password: string;
+  git_commit_message: string;
+  mobile_auto_transcription_enabled: boolean;
+  mobile_auto_handwriting_ocr_enabled: boolean;
+};
 
 export type ProfileSyncSettings = {
   gitRemoteUrl: string;
