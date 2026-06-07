@@ -14,6 +14,8 @@ OTA JS bundles). You can release **both at once, or just one platform** at a tim
   [MACOS_APP_STORE_TESTFLIGHT.md](./MACOS_APP_STORE_TESTFLIGHT.md).
 - For the local iOS/TestFlight upload flow, see
   [IOS_TESTFLIGHT_LOCAL.md](./IOS_TESTFLIGHT_LOCAL.md).
+- For Gatekeeper-compatible public DMGs, see
+  [MACOS_SIGNING_NOTARIZATION.md](./MACOS_SIGNING_NOTARIZATION.md).
 
 ---
 
