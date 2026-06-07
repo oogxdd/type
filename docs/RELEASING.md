@@ -12,6 +12,8 @@ OTA JS bundles). You can release **both at once, or just one platform** at a tim
   updater internals and one-time signing-key setup.
 - For future Mac App Store / TestFlight releases, see
   [MACOS_APP_STORE_TESTFLIGHT.md](./MACOS_APP_STORE_TESTFLIGHT.md).
+- For the local iOS/TestFlight upload flow, see
+  [IOS_TESTFLIGHT_LOCAL.md](./IOS_TESTFLIGHT_LOCAL.md).
 
 ---
 
