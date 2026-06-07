@@ -14,6 +14,12 @@ import type {
   ProfileSettings,
   ProfileSyncSettings,
 } from "@/shared/types";
+import {
+  DEFAULT_PROFILE_SYNC_SETTINGS,
+  getProfileSyncSettings,
+  readProfileSyncStore,
+} from "@/shared/lib/storage";
+import { PROFILE_SYNC_STORAGE_KEY } from "@/shared/constants";
 import { getErrorMessage } from "@/shared/lib/errors";
 
 type ProfilesContextValue = {
@@ -148,6 +154,84 @@ export function ProfilesProvider({
       api.updateProfileSettings(activeProfileId, { ...activeProfileSettings, ...patch })
     );
   }, [activeProfileId, activeProfileSettings, runProfileMutation]);
+
+  // One-time migration from localStorage to backend
+  useEffect(() => {
+    if (!profilesSnapshot || profilesBusy) return;
+
+    const store = readProfileSyncStore();
+    if (Object.keys(store).length === 0) return;
+
+    const migrate = async () => {
+      setProfilesBusy(true);
+      try {
+        const firstProfileId = activeProfileId || Object.keys(store)[0];
+        const firstSettings = getProfileSyncSettings(firstProfileId);
+
+        await api.updateAppConfig({
+          assemblyai_api_key: firstSettings.assemblyAiApiKey,
+          whisper_model: firstSettings.whisperModel,
+          handwriting_ocr_provider: firstSettings.handwritingOcrProvider,
+          openai_api_key: firstSettings.openAiApiKey,
+          openai_model: firstSettings.openAiModel,
+          huggingface_api_key: firstSettings.huggingFaceApiKey,
+          huggingface_model: firstSettings.huggingFaceModel,
+          note_file_name_format: firstSettings.noteFileNameFormat,
+        });
+
+        for (const profile of profiles) {
+          const settings = store[profile.id];
+          if (settings) {
+            await api.updateProfileSettings(profile.id, {
+              git_remote_url: settings.gitRemoteUrl ?? "",
+              git_branch: settings.gitBranch ?? "main",
+              git_username: settings.gitUsername ?? "",
+              git_password: settings.gitPassword ?? "",
+              git_commit_message: settings.gitCommitMessage ?? "Sync notes",
+              mobile_auto_transcription_enabled:
+                settings.mobileAutoTranscriptionEnabled ?? true,
+              mobile_auto_handwriting_ocr_enabled:
+                settings.mobileAutoHandwritingOcrEnabled ?? true,
+            });
+          }
+        }
+
+        window.localStorage.removeItem(PROFILE_SYNC_STORAGE_KEY);
+        const legacyKeys = [
+          "notes-viewer-git-remote",
+          "notes-viewer-git-branch",
+          "notes-viewer-git-username",
+          "notes-viewer-git-password",
+          "notes-viewer-git-commit-message",
+          "notes-viewer-git-last-sync-at",
+          "notes-viewer-note-file-name-format",
+          "notes-viewer-assemblyai-api-key",
+          "notes-viewer-mobile-auto-transcription-enabled",
+          "notes-viewer-handwriting-ocr-provider",
+          "notes-viewer-openai-api-key",
+          "notes-viewer-openai-model",
+          "notes-viewer-huggingface-api-key",
+          "notes-viewer-huggingface-model",
+          "notes-viewer-mobile-auto-handwriting-ocr-enabled",
+        ];
+        legacyKeys.forEach((k) => window.localStorage.removeItem(k));
+
+        await refreshProfiles();
+      } catch (e) {
+        console.error("Migration failed", e);
+      } finally {
+        setProfilesBusy(false);
+      }
+    };
+
+    void migrate();
+  }, [
+    profilesSnapshot,
+    profilesBusy,
+    activeProfileId,
+    profiles,
+    refreshProfiles,
+  ]);
 
   const updateSyncSettings = useCallback(
     async (patch: Partial<ProfileSyncSettings>) => {
