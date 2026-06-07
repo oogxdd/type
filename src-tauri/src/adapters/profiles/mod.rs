@@ -5,15 +5,17 @@
 //! crate-root profiles surface is flat.
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::app_data_dir;
 use crate::ports::profiles::ProfilesGateway;
 
 mod backup;
+mod settings;
 mod state;
 
 pub(crate) use backup::*;
+pub(crate) use settings::*;
 pub(crate) use state::*;
 
 /// Tauri-backed profile gateway. It owns app-data path resolution and profile
@@ -35,28 +37,30 @@ impl ProfilesGateway for TauriProfilesAdapter {
     type SetNotesRootArgs = SetProfileNotesRootArgs;
     type UpdateArgs = UpdateProfileArgs;
     type DeleteArgs = DeleteProfileArgs;
+    type UpdateSettingsArgs = UpdateProfileSettingsArgs;
+    type UpdateAppConfigArgs = UpdateAppConfigArgs;
     type Backup = ProfilesBackupArchive;
     type Export = ProfilesDocumentsExport;
 
     fn list(&self) -> Result<Self::Snapshot, String> {
         let state =
             ensure_profiles_state(&self.app).or_else(|_| default_profiles_state(&self.app))?;
-        Ok(profiles_snapshot(&state))
+        Ok(profiles_snapshot(&self.app, &state))
     }
 
     fn create(&self, args: Self::CreateArgs) -> Result<Self::Snapshot, String> {
         let state = create_profile_state(&self.app, &args.name, args.description.as_deref())?;
-        Ok(profiles_snapshot(&state))
+        Ok(profiles_snapshot(&self.app, &state))
     }
 
     fn set_active(&self, args: Self::SetActiveArgs) -> Result<Self::Snapshot, String> {
         let state = set_active_profile_state(&self.app, &args.profile_id)?;
-        Ok(profiles_snapshot(&state))
+        Ok(profiles_snapshot(&self.app, &state))
     }
 
     fn set_notes_root(&self, args: Self::SetNotesRootArgs) -> Result<Self::Snapshot, String> {
         let state = set_profile_notes_root_state(&self.app, &args.profile_id, &args.notes_root)?;
-        Ok(profiles_snapshot(&state))
+        Ok(profiles_snapshot(&self.app, &state))
     }
 
     fn update(&self, args: Self::UpdateArgs) -> Result<Self::Snapshot, String> {
@@ -66,12 +70,27 @@ impl ProfilesGateway for TauriProfilesAdapter {
             args.name.as_deref(),
             args.description.as_deref(),
         )?;
-        Ok(profiles_snapshot(&state))
+        Ok(profiles_snapshot(&self.app, &state))
     }
 
     fn delete(&self, args: Self::DeleteArgs) -> Result<Self::Snapshot, String> {
         let state = delete_profile_state(&self.app, &args.profile_id)?;
-        Ok(profiles_snapshot(&state))
+        Ok(profiles_snapshot(&self.app, &state))
+    }
+
+    fn update_settings(&self, args: Self::UpdateSettingsArgs) -> Result<Self::Snapshot, String> {
+        let state = ensure_profiles_state(&self.app)?;
+        let profile = find_profile(&state, &args.profile_id)
+            .ok_or_else(|| format!("Profile not found: {}", args.profile_id))?;
+        save_profile_settings(Path::new(&profile.notes_root), &args.settings.into())?;
+        Ok(profiles_snapshot(&self.app, &state))
+    }
+
+    fn update_app_config(&self, args: Self::UpdateAppConfigArgs) -> Result<Self::Snapshot, String> {
+        let app_data = app_data_dir(&self.app)?;
+        save_app_config(&app_data, &args.config.into())?;
+        let state = ensure_profiles_state(&self.app)?;
+        Ok(profiles_snapshot(&self.app, &state))
     }
 
     fn create_backup(&self) -> Result<Self::Backup, String> {
@@ -122,7 +141,17 @@ struct LegacyProfilesMigrationFile {
 #[derive(Serialize)]
 pub(crate) struct NotesProfilesSnapshot {
     pub(crate) active_profile_id: String,
-    pub(crate) profiles: Vec<NotesProfileEntry>,
+    pub(crate) profiles: Vec<NotesProfileEntryWithSettings>,
+    pub(crate) app_config: crate::ports::profiles::AppConfig,
+}
+
+#[derive(Serialize)]
+pub(crate) struct NotesProfileEntryWithSettings {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) notes_root: String,
+    pub(crate) settings: crate::ports::profiles::ProfileSettings,
 }
 
 /// Arguments for creating a new profile.
@@ -159,24 +188,105 @@ pub(crate) struct DeleteProfileArgs {
     pub(crate) profile_id: String,
 }
 
-/// Result of creating a zip backup of all profiles.
-#[derive(Serialize)]
-pub(crate) struct ProfilesBackupArchive {
-    pub(crate) archive_path: String,
-    pub(crate) archive_name: String,
-    pub(crate) profile_count: usize,
-    pub(crate) file_count: usize,
-    pub(crate) total_bytes: u64,
+/// Arguments for updating a profile's settings.
+#[derive(Deserialize)]
+pub(crate) struct UpdateProfileSettingsArgs {
+    pub(crate) profile_id: String,
+    pub(crate) settings: crate::ports::profiles::ProfileSettings,
 }
 
-/// Result of exporting all profiles to the Documents directory.
-#[derive(Serialize)]
-pub(crate) struct ProfilesDocumentsExport {
-    pub(crate) export_path: String,
-    pub(crate) export_name: String,
-    pub(crate) profile_count: usize,
-    pub(crate) file_count: usize,
-    pub(crate) total_bytes: u64,
+/// Arguments for updating global app config.
+#[derive(Deserialize)]
+pub(crate) struct UpdateAppConfigArgs {
+    pub(crate) config: crate::ports::profiles::AppConfig,
+}
+
+impl From<crate::ports::profiles::ProfileSettings> for ProfileSettings {
+    fn from(s: crate::ports::profiles::ProfileSettings) -> Self {
+        Self {
+            git_remote_url: s.git_remote_url,
+            git_branch: s.git_branch,
+            git_username: s.git_username,
+            git_password: s.git_password,
+            git_commit_message: s.git_commit_message,
+            mobile_auto_transcription_enabled: s.mobile_auto_transcription_enabled,
+            mobile_auto_handwriting_ocr_enabled: s.mobile_auto_handwriting_ocr_enabled,
+        }
+    }
+}
+
+impl From<ProfileSettings> for crate::ports::profiles::ProfileSettings {
+    fn from(s: ProfileSettings) -> Self {
+        Self {
+            git_remote_url: s.git_remote_url,
+            git_branch: s.git_branch,
+            git_username: s.git_username,
+            git_password: s.git_password,
+            git_commit_message: s.git_commit_message,
+            mobile_auto_transcription_enabled: s.mobile_auto_transcription_enabled,
+            mobile_auto_handwriting_ocr_enabled: s.mobile_auto_handwriting_ocr_enabled,
+        }
+    }
+}
+
+impl From<crate::ports::profiles::AppConfig> for AppConfig {
+    fn from(c: crate::ports::profiles::AppConfig) -> Self {
+        Self {
+            assemblyai_api_key: c.assemblyai_api_key,
+            whisper_model: c.whisper_model,
+            handwriting_ocr_provider: c.handwriting_ocr_provider,
+            openai_api_key: c.openai_api_key,
+            openai_model: c.openai_model,
+            huggingface_api_key: c.huggingface_api_key,
+            huggingface_model: c.huggingface_model,
+            note_file_name_format: c.note_file_name_format,
+        }
+    }
+}
+
+impl From<AppConfig> for crate::ports::profiles::AppConfig {
+    fn from(c: AppConfig) -> Self {
+        Self {
+            assemblyai_api_key: c.assemblyai_api_key,
+            whisper_model: c.whisper_model,
+            handwriting_ocr_provider: c.handwriting_ocr_provider,
+            openai_api_key: c.openai_api_key,
+            openai_model: c.openai_model,
+            huggingface_api_key: c.huggingface_api_key,
+            huggingface_model: c.huggingface_model,
+            note_file_name_format: c.note_file_name_format,
+        }
+    }
+}
+
+/// Convert internal profiles state to the frontend-facing snapshot.
+pub(crate) fn profiles_snapshot(
+    app: &tauri::AppHandle,
+    state: &NotesProfilesFile,
+) -> NotesProfilesSnapshot {
+    let app_data = app_data_dir(app).unwrap_or_default();
+    let app_config = load_app_config(&app_data);
+
+    let profiles = state
+        .profiles
+        .iter()
+        .map(|p| {
+            let settings = load_profile_settings(Path::new(&p.notes_root));
+            NotesProfileEntryWithSettings {
+                id: p.id.clone(),
+                name: p.name.clone(),
+                description: p.description.clone(),
+                notes_root: p.notes_root.clone(),
+                settings: settings.into(),
+            }
+        })
+        .collect();
+
+    NotesProfilesSnapshot {
+        active_profile_id: state.active_profile_id.clone(),
+        profiles,
+        app_config: app_config.into(),
+    }
 }
 
 // ── Paths ──────────────────────────────────────────────────────────────────────
