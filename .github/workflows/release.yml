@@ -123,7 +123,7 @@ jobs:
           prerelease: false
           # Apple Silicon build. For Intel/universal, add --target universal-apple-darwin
           # and a matching darwin-x86_64 entry (tauri-action handles latest.json).
-          args: --bundles dmg,updater
+          args: --bundles app,dmg
 
       # The desktop updater endpoint reads .../releases/latest/download/latest.json,
       # so the desktop release must be GitHub's "latest". A `-desktop` tag is
