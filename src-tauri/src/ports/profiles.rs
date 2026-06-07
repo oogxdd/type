@@ -42,7 +42,7 @@ pub struct ProfileSettings {
 }
 
 #[derive(Serialize)]
-pub struct BackupArchive {
+pub struct ProfilesBackupArchive {
     pub archive_path: String,
     pub archive_name: String,
     pub profile_count: usize,
@@ -51,7 +51,7 @@ pub struct BackupArchive {
 }
 
 #[derive(Serialize)]
-pub struct DocumentsExport {
+pub struct ProfilesDocumentsExport {
     pub export_path: String,
     pub export_name: String,
     pub profile_count: usize,
@@ -87,8 +87,8 @@ pub trait ProfileService {
         settings: ProfileSettings,
     ) -> Result<ProfilesSnapshot, String>;
     fn update_app_config(&self, config: AppConfig) -> Result<ProfilesSnapshot, String>;
-    fn create_backup_zip(&self) -> Result<BackupArchive, String>;
-    fn export_to_documents(&self) -> Result<DocumentsExport, String>;
+    fn create_backup_zip(&self) -> Result<ProfilesBackupArchive, String>;
+    fn export_to_documents(&self) -> Result<ProfilesDocumentsExport, String>;
 }
 
 /// Internal gateway used by profile application services. Persistence details

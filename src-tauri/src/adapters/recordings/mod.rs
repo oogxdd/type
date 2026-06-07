@@ -72,10 +72,6 @@ pub(crate) struct QueueLocalTranscriptionsArgs {
     pub(crate) model: Option<String>,
 }
 
-fn default_whisper_model() -> String {
-    DEFAULT_WHISPER_MODEL.to_string()
-}
-
 /// Arguments for re-triggering a single note's transcription.
 #[derive(Deserialize)]
 pub(crate) struct RetriggerTranscriptionArgs {

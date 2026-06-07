@@ -18,6 +18,8 @@ pub(crate) use backup::*;
 pub(crate) use settings::*;
 pub(crate) use state::*;
 
+pub(crate) use crate::ports::profiles::{ProfilesBackupArchive, ProfilesDocumentsExport};
+
 /// Tauri-backed profile gateway. It owns app-data path resolution and profile
 /// state persistence while application code works through the port.
 pub(crate) struct TauriProfilesAdapter {
