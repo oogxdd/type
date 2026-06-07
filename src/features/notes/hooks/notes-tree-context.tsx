@@ -15,11 +15,7 @@ import { useNotePreviews } from "./use-note-previews";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useSelection } from "@/app/state/selection-context";
 import { useEditor } from "@/features/editor/hooks/editor-context";
-import {
-  buildTreeItems,
-  findNode,
-  flattenTree,
-} from "@/features/tree/lib/tree-ops";
+import { buildTreeItems, findNode, flattenTree } from "@/features/tree/lib/tree-ops";
 import { removeChildrenOf } from "@/features/tree/lib/dnd-tree";
 import { type NotePreview } from "@/shared/lib/format";
 import { confirmAction, focusNoScroll } from "@/shared/lib/dom";
@@ -27,6 +23,15 @@ import type { TreeItem } from "@/features/tree/lib/types";
 import type { FlattenedItem } from "@/features/tree/lib/types";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 import { useTheme } from "@/app/state/theme-context";
+import {
+  applyFolderRenameToSelection,
+  buildNotePreviews,
+  buildVisibleNavigationItems,
+  collectNotesForFlattening,
+  getFirstSelectableFolderPath,
+  mapParentById,
+  selectPreviewSourceNotes,
+} from "@/features/notes/lib/notes-tree-model";
 
 type NotesTreeContextValue = {
   tree: FolderNode | null;
@@ -133,87 +138,37 @@ export function NotesTreeProvider({
   const allNotes = useMemo(() => collectAllNotes(tree), [tree]);
   const shouldWarmNotePreviews =
     layoutMode !== "phone" || Boolean(activeFolder) || Boolean(activeNote);
-  const previewSourceNotes = useMemo<NoteEntry[]>(() => {
-    if (!shouldWarmNotePreviews) {
-      return [];
-    }
-    if (layoutMode === "desktop" && !shouldNestNotesInNavigation) {
-      return notes;
-    }
-    // On phone, the home composer and editor don't render the notes list — only
-    // the active note's own preview is used (recording/handwriting header). When
-    // no folder list is on screen, warming every note in the vault here is pure
-    // waste, and it's what froze the UI on the first keystroke of a new note:
-    // creating the note flips `activeNote` truthy, which would otherwise kick off
-    // a full-vault read (getNoteMeta + readNote per note) on the main thread.
-    if (layoutMode === "phone" && !activeFolder) {
-      if (!activeNote) {
-        return [];
-      }
-      const active = allNotes.find((note) => note.path === activeNote);
-      return active ? [active] : [];
-    }
-    return allNotes;
-  }, [
-    shouldWarmNotePreviews,
-    layoutMode,
-    shouldNestNotesInNavigation,
-    notes,
-    activeFolder,
-    activeNote,
-    allNotes,
-  ]);
+  const previewSourceNotes = useMemo<NoteEntry[]>(
+    () =>
+      shouldWarmNotePreviews
+        ? selectPreviewSourceNotes({
+            layoutMode,
+            activeFolder,
+            activeNote,
+            notes,
+            allNotes,
+            shouldNestNotesInNavigation,
+          })
+        : [],
+    [
+      shouldWarmNotePreviews,
+      layoutMode,
+      activeFolder,
+      activeNote,
+      notes,
+      allNotes,
+      shouldNestNotesInNavigation,
+    ]
+  );
   const allNotePreviews = useNotePreviews(previewSourceNotes);
-  const notePreviews = useMemo(() => {
-    const previews: Record<string, NotePreview> = {};
-    notes.forEach((note) => {
-      const preview = allNotePreviews[note.path];
-      if (preview) {
-        previews[note.path] = preview;
-      }
-    });
-    return previews;
-  }, [allNotePreviews, notes]);
+  const notePreviews = useMemo(() => buildNotePreviews(notes, allNotePreviews), [allNotePreviews, notes]);
 
-  const parentById = useMemo(() => {
-    const map: Record<string, string | null> = {};
-    flatItems.forEach((item) => {
-      map[item.id] = item.parentId;
-    });
-    return map;
-  }, [flatItems]);
+  const parentById = useMemo(() => mapParentById(flatItems), [flatItems]);
 
-  const visibleNavigationItems = useMemo(() => {
-    if (!shouldNestNotesInNavigation) {
-      return [] as VisibleNavigationItem[];
-    }
-
-    const items: VisibleNavigationItem[] = [];
-    const walk = (nodes: TreeItem[], parentId: string | null) => {
-      nodes.forEach((node) => {
-        items.push({
-          type: "folder",
-          id: node.id,
-          parentId,
-        });
-        const notesInNode = node.notes || [];
-        const hasNestedItems = node.children.length > 0 || notesInNode.length > 0;
-        if (!hasNestedItems || !expanded.has(node.id)) {
-          return;
-        }
-        notesInNode.forEach((note) => {
-          items.push({
-            type: "note",
-            id: note.path,
-            parentId: node.id,
-          });
-        });
-        walk(node.children, node.id);
-      });
-    };
-    walk(treeData, null);
-    return items;
-  }, [expanded, shouldNestNotesInNavigation, treeData]);
+  const visibleNavigationItems = useMemo(
+    () => buildVisibleNavigationItems(treeData, expanded, shouldNestNotesInNavigation),
+    [expanded, shouldNestNotesInNavigation, treeData]
+  );
 
   // -- Profile change: reset tree state and refresh
   useEffect(() => {
@@ -237,8 +192,7 @@ export function NotesTreeProvider({
     if (layoutMode !== "tablet" || !tree || activeFolder) {
       return;
     }
-    const feed = findNode(tree, FEED_FOLDER_PATH);
-    const firstFolderPath = feed?.path || tree.children[0]?.path || "";
+    const firstFolderPath = getFirstSelectableFolderPath(tree);
     if (!firstFolderPath) {
       return;
     }
@@ -316,14 +270,10 @@ export function NotesTreeProvider({
   // Carry an active/selected folder over to its new path after a rename.
   const applyFolderRename = useCallback(
     (oldPath: string, newPath: string) => {
-      if (activeFolder === oldPath) {
-        setActiveFolder(newPath);
-      }
-      if (selectedFolders.has(oldPath)) {
-        const nextSelected = new Set(selectedFolders);
-        nextSelected.delete(oldPath);
-        nextSelected.add(newPath);
-        setSelectedFolders(nextSelected);
+      const next = applyFolderRenameToSelection(activeFolder, selectedFolders, oldPath, newPath);
+      setActiveFolder(next.activeFolder);
+      if (next.selectedFolderChanged) {
+        setSelectedFolders(next.selectedFolders);
         setLastSelectedFolder(newPath);
       }
     },
@@ -429,22 +379,13 @@ export function NotesTreeProvider({
       const treeSnapshot = tree;
       if (!treeSnapshot) return;
 
-      const noteSet = new Set<string>(notePaths);
-      const foldersToRemove: string[] = [];
-      for (const folderPath of folderPaths) {
-        if (!folderPath) continue;
-        const node = findNode(treeSnapshot, folderPath);
-        if (node) {
-          collectAllNotes(node).forEach((note) => noteSet.add(note.path));
-        }
-        // System folders (Feed/Archieve) stay put; everything else is removed
-        // once emptied so the structure is genuinely flattened.
-        if (!isSystemFolder(folderPath)) {
-          foldersToRemove.push(folderPath);
-        }
-      }
+      const { notePaths: notePathsToMove, foldersToRemove } = collectNotesForFlattening(
+        treeSnapshot,
+        folderPaths,
+        notePaths
+      );
 
-      const notesToMove = Array.from(noteSet).filter(
+      const notesToMove = notePathsToMove.filter(
         (path) => getNoteParentPath(path) !== FEED_FOLDER_PATH
       );
       if (notesToMove.length === 0 && foldersToRemove.length === 0) return;
