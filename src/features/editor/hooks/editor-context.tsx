@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { useNoteEditor } from "./use-note-editor";
-import { useSelection } from "@/app/state/selection-context";
+import { useSelection } from "@/app/state/selection-store";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 
 type EditorContextValue = {
@@ -31,7 +31,7 @@ export function EditorProvider({
   children: ReactNode;
 }) {
   const { activeProfileId, activeProfileNotesRoot, syncSettings } = useProfiles();
-  const { activeNote } = useSelection();
+  const activeNote = useSelection((state) => state.activeNote);
 
   const {
     noteContent,

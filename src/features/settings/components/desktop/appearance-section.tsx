@@ -1,8 +1,17 @@
-import { useTheme } from "@/app/state/theme-context";
+import { useShallow } from "zustand/react/shallow";
+
+import { useAppearance } from "@/app/state/appearance-store";
 import type { NotesListMode, ThemeMode } from "@/shared/types";
 
 export function SettingsAppearanceSection() {
-  const { theme, setTheme, notesListMode, setNotesListMode } = useTheme();
+  const { theme, setTheme, notesListMode, setNotesListMode } = useAppearance(
+    useShallow((state) => ({
+      theme: state.theme,
+      setTheme: state.setTheme,
+      notesListMode: state.notesListMode,
+      setNotesListMode: state.setNotesListMode,
+    }))
+  );
 
   return (
     <div className="space-y-4">

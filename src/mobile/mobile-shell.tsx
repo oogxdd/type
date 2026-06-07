@@ -7,6 +7,7 @@ import {
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import { useShallow } from "zustand/react/shallow";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import type { MobileToastState } from "./navigation";
 import { MobileActionSheet } from "@/mobile/ui/action-sheet";
@@ -14,8 +15,8 @@ import { MobileNavBar } from "@/mobile/ui/nav-bar";
 import { MobilePromptSheet } from "@/mobile/ui/prompt-sheet";
 import { MobileToast } from "@/mobile/ui/toast";
 
-import { useTheme } from "@/app/state/theme-context";
-import { useSelection } from "@/app/state/selection-context";
+import { useAppearance } from "@/app/state/appearance-store";
+import { useSelection } from "@/app/state/selection-store";
 import { useEditor } from "@/features/editor/hooks/editor-context";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useGitSync } from "@/features/sync/hooks/git-sync-context";
@@ -50,14 +51,27 @@ export function MobileShell({
 }: MobileShellProps) {
   const layoutMode = useLayoutMode();
   const { keyboardInset } = useKeyboardInsets();
-  const { theme, editorFontSize } = useTheme();
+  const { theme, editorFontSize } = useAppearance(
+    useShallow((state) => ({
+      theme: state.theme,
+      editorFontSize: state.editorFontSize,
+    }))
+  );
   const {
     activeFolder,
     activeNote,
     selectFolderForMobile,
     selectNoteForMobile,
     enterMobileHome,
-  } = useSelection();
+  } = useSelection(
+    useShallow((state) => ({
+      activeFolder: state.activeFolder,
+      activeNote: state.activeNote,
+      selectFolderForMobile: state.selectFolderForMobile,
+      selectNoteForMobile: state.selectNoteForMobile,
+      enterMobileHome: state.enterMobileHome,
+    }))
+  );
   const { clearNote, clearDraft } = useEditor();
   const {
     visibleItems,

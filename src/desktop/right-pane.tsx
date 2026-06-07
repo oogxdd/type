@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Menu } from "lucide-react";
-import { useSelection } from "@/app/state/selection-context";
+import { useShallow } from "zustand/react/shallow";
+import { useSelection } from "@/app/state/selection-store";
 import { useEditor } from "@/features/editor/hooks/editor-context";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 
@@ -30,7 +31,12 @@ export function DesktopRightPane({
   appMode,
   activeSettingsSection,
 }: DesktopRightPaneProps) {
-  const { activeNote, selectedNotes } = useSelection();
+  const { activeNote, selectedNotes } = useSelection(
+    useShallow((state) => ({
+      activeNote: state.activeNote,
+      selectedNotes: state.selectedNotes,
+    }))
+  );
   const [isLensPinned, setIsLensPinned] = useState(false);
   const [isLensMenuOpen, setIsLensMenuOpen] = useState(false);
   const {

@@ -178,7 +178,7 @@ src/
   app/
     app.tsx, app-shell.tsx, main-app.tsx, error-boundary.tsx, launch-screen.ts, app.css
     hooks/      use-tree-interactions, use-note-opener  (app-shell orchestration glue)
-    state/      selection-context, theme-context, appearance-api  (app-global stores)
+    state/      selection-store, appearance-store, appearance-api (app-global state)
   shared/
     ui/         shadcn primitives          lib/   dom, format, frontmatter, jobs,
     api/invoke  IPC logging wrapper                notes, selection, storage, utils (cn)
@@ -197,12 +197,12 @@ imported from its feature's `hooks/`, or from `app/state/`):
 
 ```
 ErrorBoundary                 — app-root crash guard
-  ThemeProvider               — theme mode, notes list mode, editor font size   (app/state)
+  AppearanceProvider          — persists appearance store + native theme        (app/state)
     SecurityProvider          — security state, unlock/lock/enable               (features/security)
       SecurityGate            — renders the lock screen when encrypted + locked
         ProfilesProvider      — profile list, active profile, per-profile sync   (features/profiles)
           GitSyncProvider     — git status, connect/pull/push, commit history    (features/sync)
-            SelectionProvider — folder/note selection state, mobile helpers      (app/state)
+            SelectionProvider — resets selection store on profile changes        (app/state)
               EditorProvider  — note editor state (wraps useNoteEditor)          (features/editor)
                 NotesTreeProvider — folder tree, CRUD, rename                    (features/notes)
                   RecordingsProvider  — recording, transcription queue, playback (features/recording)
@@ -215,21 +215,22 @@ Selection + Editor; Editor consumes Selection + Profiles; most consume Profiles.
 
 ### app-shell.tsx (`src/app/app-shell.tsx`)
 
-Orchestrates desktop behavior. Owns local UI state (`appMode`, `sidebarCollapsed`, pane
-sizes, settings section). Renders `DesktopShell` (`src/desktop/`) or `MobileShell`
-(`src/mobile/`) by viewport. Wires `useDragDrop()` + `useKeyboardNavigation()` (from
-`features/tree/hooks`). The folder/note click + native context-menu handlers and the
-programmatic open-folder/open-note navigation are factored out into `app/hooks/` (see
-below), so the shell reads as composition rather than a pile of inline handlers.
+The cross-platform composition boundary. It owns only shared command-palette/file-picker
+coordination and chooses `DesktopAppShell` or `MobileShell` by viewport. Desktop-only
+state and behavior (pane sizes, DnD, keyboard navigation, pane refs) live in
+`src/desktop/desktop-app-shell.tsx`, so mobile does not initialize desktop interaction
+hooks. Shared folder/note interaction and programmatic navigation remain in `app/hooks/`.
 
 ### app/state (`src/app/state/`)
 
 The cross-cutting stores that have no single domain home and are consumed everywhere:
 
-- `theme-context.tsx` — theme + notesListMode (localStorage), `document` dark class, font
-  size controls. `appearance-api.ts` is its native-theme IPC.
-- `selection-context.tsx` — `selectedFolders`/`selectedNotes`/`activeFolder`/`activeNote`
-  (+ setters) and the mobile selection helpers. Resets on profile / notes-root change.
+- `appearance-store.tsx` — Zustand store for theme, notes-list mode, and editor font
+  size. Consumers use selectors; `AppearanceProvider` owns localStorage, document-theme,
+  and native-theme synchronization. `appearance-api.ts` is the native-theme IPC.
+- `selection-store.tsx` — Zustand store for folder/note selection and atomic mobile
+  selection actions. Consumers use selectors so unrelated selection changes do not
+  re-render them. `SelectionProvider` only resets the store on profile/root changes.
 
 (Features may import these from `@/app/state/...`; this is the one accepted upward edge.)
 

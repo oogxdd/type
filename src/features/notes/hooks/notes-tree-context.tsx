@@ -7,13 +7,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useShallow } from "zustand/react/shallow";
 import * as api from "../api/notes-api";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/shared/types";
 import { FEED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH, isSystemFolder } from "@/shared/constants";
 import { collectAllNotes, getNoteParentPath } from "@/shared/lib/notes";
 import { useNotePreviews } from "./use-note-previews";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
-import { useSelection } from "@/app/state/selection-context";
+import { useSelection } from "@/app/state/selection-store";
 import { useEditor } from "@/features/editor/hooks/editor-context";
 import { buildTreeItems, findNode, flattenTree } from "@/features/tree/lib/tree-ops";
 import { removeChildrenOf } from "@/features/tree/lib/dnd-tree";
@@ -22,7 +23,7 @@ import { confirmAction, focusNoScroll } from "@/shared/lib/dom";
 import type { TreeItem } from "@/features/tree/lib/types";
 import type { FlattenedItem } from "@/features/tree/lib/types";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
-import { useTheme } from "@/app/state/theme-context";
+import { useAppearance } from "@/app/state/appearance-store";
 import {
   applyFolderRenameToSelection,
   buildNotePreviews,
@@ -81,7 +82,7 @@ export function NotesTreeProvider({
   children: ReactNode;
 }) {
   const { activeProfileId, activeProfileNotesRoot, syncSettings } = useProfiles();
-  const { notesListMode } = useTheme();
+  const notesListMode = useAppearance((state) => state.notesListMode);
   const layoutMode = useLayoutMode();
   const {
     selectedFolders,
@@ -93,7 +94,19 @@ export function NotesTreeProvider({
     setLastSelectedNote,
     activeNote,
     setActiveNote,
-  } = useSelection();
+  } = useSelection(
+    useShallow((state) => ({
+      selectedFolders: state.selectedFolders,
+      setSelectedFolders: state.setSelectedFolders,
+      setLastSelectedFolder: state.setLastSelectedFolder,
+      activeFolder: state.activeFolder,
+      setActiveFolder: state.setActiveFolder,
+      setSelectedNotes: state.setSelectedNotes,
+      setLastSelectedNote: state.setLastSelectedNote,
+      activeNote: state.activeNote,
+      setActiveNote: state.setActiveNote,
+    }))
+  );
   const { clearNote, clearDraft, rightPaneRef } = useEditor();
 
   // -- Folder tree state

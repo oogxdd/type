@@ -2,7 +2,7 @@ import { useRef, useState, type ChangeEvent } from "react";
 
 import { useTreeInteractions } from "@/app/hooks/use-tree-interactions";
 import { useNoteOpener } from "@/app/hooks/use-note-opener";
-import { useSelection } from "@/app/state/selection-context";
+import { useSelection } from "@/app/state/selection-store";
 import { DesktopAppShell } from "@/desktop/desktop-app-shell";
 import { CommandPalette } from "@/features/command-palette/components/command-palette";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
@@ -21,7 +21,7 @@ export function AppShell() {
   const handwritingInputRef = useRef<HTMLInputElement | null>(null);
   const mobileFoldersPanelRef = useRef<HTMLDivElement | null>(null);
 
-  const { activeFolder } = useSelection();
+  const activeFolder = useSelection((state) => state.activeFolder);
   const { isRecordingAudio, startRecording } = useRecordings();
   const { importHandwritingFile } = useHandwriting();
   const { handleNoteContextMenu } = useTreeInteractions({

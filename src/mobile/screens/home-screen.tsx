@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { createNote, deleteItems, writeNote } from "@/features/notes/api/notes-api";
 import { useEditor } from "@/features/editor/hooks/editor-context";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
-import { useSelection } from "@/app/state/selection-context";
+import { useSelection } from "@/app/state/selection-store";
 import { MobileEditorScreen } from "@/mobile/views/editor-view";
 import { FEED_FOLDER_PATH } from "../types";
 
@@ -34,7 +35,18 @@ export function PhoneHomeScreen({ keyboardInset }: PhoneHomeScreenProps) {
     setSelectedNotes,
     setLastSelectedNote,
     setActiveNote,
-  } = useSelection();
+  } = useSelection(
+    useShallow((state) => ({
+      activeNote: state.activeNote,
+      enterMobileHome: state.enterMobileHome,
+      setSelectedFolders: state.setSelectedFolders,
+      setLastSelectedFolder: state.setLastSelectedFolder,
+      setActiveFolder: state.setActiveFolder,
+      setSelectedNotes: state.setSelectedNotes,
+      setLastSelectedNote: state.setLastSelectedNote,
+      setActiveNote: state.setActiveNote,
+    }))
+  );
   const editorMarkdown = activeNote ? noteContent : draftNoteContent;
   const latestMarkdownRef = useRef(editorMarkdown);
   const createPromiseRef = useRef<Promise<string | null> | null>(null);

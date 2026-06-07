@@ -16,10 +16,11 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { snapCenterToCursor } from "@dnd-kit/modifiers";
+import { useShallow } from "zustand/react/shallow";
 
 import { useTreeInteractions } from "@/app/hooks/use-tree-interactions";
-import { useSelection } from "@/app/state/selection-context";
-import { useTheme } from "@/app/state/theme-context";
+import { useSelection } from "@/app/state/selection-store";
+import { useAppearance } from "@/app/state/appearance-store";
 import { useEditor } from "@/features/editor/hooks/editor-context";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
@@ -65,7 +66,15 @@ export function DesktopAppShell({
     increaseEditorFontSize,
     decreaseEditorFontSize,
     resetEditorFontSize,
-  } = useTheme();
+  } = useAppearance(
+    useShallow((state) => ({
+      theme: state.theme,
+      editorFontSize: state.editorFontSize,
+      increaseEditorFontSize: state.increaseEditorFontSize,
+      decreaseEditorFontSize: state.decreaseEditorFontSize,
+      resetEditorFontSize: state.resetEditorFontSize,
+    }))
+  );
   const {
     recordingSupported,
     isRecordingAudio,
@@ -88,7 +97,22 @@ export function DesktopAppShell({
     setLastSelectedNote,
     activeNote,
     setActiveNote,
-  } = useSelection();
+  } = useSelection(
+    useShallow((state) => ({
+      selectedFolders: state.selectedFolders,
+      setSelectedFolders: state.setSelectedFolders,
+      lastSelectedFolder: state.lastSelectedFolder,
+      setLastSelectedFolder: state.setLastSelectedFolder,
+      activeFolder: state.activeFolder,
+      setActiveFolder: state.setActiveFolder,
+      selectedNotes: state.selectedNotes,
+      setSelectedNotes: state.setSelectedNotes,
+      lastSelectedNote: state.lastSelectedNote,
+      setLastSelectedNote: state.setLastSelectedNote,
+      activeNote: state.activeNote,
+      setActiveNote: state.setActiveNote,
+    }))
+  );
   const { clearNote, rightPaneRef } = useEditor();
   const {
     tree,

@@ -24,7 +24,8 @@ macOS, Windows, Linux, and iOS.
 
 ## Tech stack & architecture
 
-- **Frontend** — React 19, TypeScript, Vite, Tiptap, DnD Kit, Tailwind + shadcn/ui.
+- **Frontend** — React 19, TypeScript, Vite, Zustand, Tiptap, DnD Kit, Tailwind +
+  shadcn/ui. Feature-sliced domains feed separate desktop and mobile composition shells.
   Feature-sliced under `src/`: `app/` (composition root), `shared/` (domain-agnostic
   building blocks), `features/<domain>/`, plus thin `desktop/` and `mobile/` shells.
 - **Backend** — Tauri v2 (Rust) in a pragmatic **domain / application / ports / adapters / commands**

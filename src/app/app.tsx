@@ -1,11 +1,12 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
 import "./app.css";
 import "@/mobile/mobile.css";
 
-import { ThemeProvider, useTheme } from "@/app/state/theme-context";
+import { AppearanceProvider, useAppearance } from "@/app/state/appearance-store";
 import { ProfilesProvider, useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { GitSyncProvider } from "@/features/sync/hooks/git-sync-context";
-import { SelectionProvider, useSelection } from "@/app/state/selection-context";
+import { SelectionProvider, useSelection } from "@/app/state/selection-store";
 import { EditorProvider, useEditor } from "@/features/editor/hooks/editor-context";
 import { NotesTreeProvider, useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { RecordingsProvider } from "@/features/recording/hooks/recordings-context";
@@ -34,7 +35,7 @@ function LaunchReveal({ children }: { children: ReactNode }) {
 }
 
 function AppReadyGate({ children }: { children: ReactNode }) {
-  const { theme } = useTheme();
+  const theme = useAppearance((state) => state.theme);
   const { profilesSnapshot, activeProfileId } = useProfiles();
   const { tree } = useNotesTree();
 
@@ -48,7 +49,17 @@ function AppReadyGate({ children }: { children: ReactNode }) {
 
 function AppInner() {
   const notesTree = useNotesTree();
-  const selection = useSelection();
+  const selection = useSelection(
+    useShallow((state) => ({
+      activeFolder: state.activeFolder,
+      setSelectedFolders: state.setSelectedFolders,
+      setLastSelectedFolder: state.setLastSelectedFolder,
+      setActiveFolder: state.setActiveFolder,
+      setSelectedNotes: state.setSelectedNotes,
+      setLastSelectedNote: state.setLastSelectedNote,
+      setActiveNote: state.setActiveNote,
+    }))
+  );
   const editor = useEditor();
   const layoutMode = useLayoutMode();
   const handleCapturedNoteComplete = async (result: {
@@ -120,7 +131,7 @@ function SecurityGate({
 }: {
   flushSaveRef: React.RefObject<(() => Promise<void>) | null>;
 }) {
-  const { theme } = useTheme();
+  const theme = useAppearance((state) => state.theme);
   const {
     securityState,
     securityBusy,
@@ -155,11 +166,11 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <ThemeProvider>
+      <AppearanceProvider>
         <SecurityProvider>
           <SecurityGate flushSaveRef={flushSaveRef} />
         </SecurityProvider>
-      </ThemeProvider>
+      </AppearanceProvider>
     </ErrorBoundary>
   );
 }

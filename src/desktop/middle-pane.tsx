@@ -2,7 +2,7 @@ import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
-import { useSelection } from "@/app/state/selection-context";
+import { useSelection } from "@/app/state/selection-store";
 
 import { NoteRow } from "@/features/notes/components/note-row";
 import { SettingsMiddlePane } from "@/features/settings/components/desktop/settings-panel";
@@ -35,7 +35,7 @@ export function DesktopMiddlePane({
   onNoteContextMenu,
 }: DesktopMiddlePaneProps) {
   const { notes, notePreviews } = useNotesTree();
-  const { selectedNotes } = useSelection();
+  const selectedNotes = useSelection((state) => state.selectedNotes);
 
   if (appMode === "notes") {
     return (

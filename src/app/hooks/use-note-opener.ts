@@ -4,8 +4,9 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
+import { useShallow } from "zustand/react/shallow";
 
-import { useSelection } from "@/app/state/selection-context";
+import { useSelection } from "@/app/state/selection-store";
 import { getNoteParentPath } from "@/shared/lib/notes";
 import type { AppMode } from "@/shared/types";
 
@@ -33,7 +34,16 @@ export const useNoteOpener = ({ setAppMode }: UseNoteOpenerArgs): NoteOpener => 
     setSelectedNotes,
     setLastSelectedNote,
     setActiveNote,
-  } = useSelection();
+  } = useSelection(
+    useShallow((state) => ({
+      setSelectedFolders: state.setSelectedFolders,
+      setLastSelectedFolder: state.setLastSelectedFolder,
+      setActiveFolder: state.setActiveFolder,
+      setSelectedNotes: state.setSelectedNotes,
+      setLastSelectedNote: state.setLastSelectedNote,
+      setActiveNote: state.setActiveNote,
+    }))
+  );
 
   const openPinnedFolder = useCallback(
     (folderPath: string) => {

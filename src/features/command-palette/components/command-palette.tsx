@@ -1,4 +1,5 @@
 import { useEffect, useState, type ComponentType } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   ArchiveIcon,
   DownloadIcon,
@@ -21,9 +22,9 @@ import {
   CommandItem,
   CommandList,
 } from "@/shared/ui/command";
-import { useSelection } from "@/app/state/selection-context";
+import { useSelection } from "@/app/state/selection-store";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
-import { useTheme } from "@/app/state/theme-context";
+import { useAppearance } from "@/app/state/appearance-store";
 import { FEED_FOLDER_PATH, isSystemFolder } from "@/shared/constants";
 import { getNoteParentPath } from "@/shared/lib/notes";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
@@ -68,7 +69,14 @@ export function CommandPalette({
 }: CommandPaletteProps) {
   const [open, setOpen] = useState(false);
 
-  const { selectedNotes, selectedFolders, activeNote, activeFolder } = useSelection();
+  const { selectedNotes, selectedFolders, activeNote, activeFolder } = useSelection(
+    useShallow((state) => ({
+      selectedNotes: state.selectedNotes,
+      selectedFolders: state.selectedFolders,
+      activeNote: state.activeNote,
+      activeFolder: state.activeFolder,
+    }))
+  );
   const {
     createNewNote,
     deleteNotes,
@@ -77,7 +85,12 @@ export function CommandPalette({
     flattenIntoFeed,
     startRenameFolder,
   } = useNotesTree();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme } = useAppearance(
+    useShallow((state) => ({
+      theme: state.theme,
+      setTheme: state.setTheme,
+    }))
+  );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

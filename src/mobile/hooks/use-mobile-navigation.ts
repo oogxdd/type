@@ -6,12 +6,18 @@ import {
   type MobileAction,
 } from "../navigation";
 import type { LayoutMode } from "../navigation";
-import { useSelection } from "@/app/state/selection-context";
+import { useSelection } from "@/app/state/selection-store";
+import { useShallow } from "zustand/react/shallow";
 import { useEditor } from "@/features/editor/hooks/editor-context";
 import { FEED_FOLDER_PATH } from "../types";
 
 export function useMobileNavigation(layoutMode: LayoutMode) {
-  const { selectFolderForMobile, selectNoteForMobile } = useSelection();
+  const { selectFolderForMobile, selectNoteForMobile } = useSelection(
+    useShallow((state) => ({
+      selectFolderForMobile: state.selectFolderForMobile,
+      selectNoteForMobile: state.selectNoteForMobile,
+    }))
+  );
   const { flushSave } = useEditor();
 
   const [navigationState, dispatch] = useReducer(

@@ -1,8 +1,9 @@
 import { useRef, type RefObject, type MouseEvent as ReactMouseEvent } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu } from "@tauri-apps/api/menu";
 
-import { useSelection } from "@/app/state/selection-context";
+import { useSelection } from "@/app/state/selection-store";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { findNode } from "@/features/tree/lib/tree-ops";
 import { focusNoScroll } from "@/shared/lib/dom";
@@ -58,7 +59,20 @@ export const useTreeInteractions = ({
     lastSelectedNote,
     setLastSelectedNote,
     setActiveNote,
-  } = useSelection();
+  } = useSelection(
+    useShallow((state) => ({
+      selectedFolders: state.selectedFolders,
+      setSelectedFolders: state.setSelectedFolders,
+      lastSelectedFolder: state.lastSelectedFolder,
+      setLastSelectedFolder: state.setLastSelectedFolder,
+      setActiveFolder: state.setActiveFolder,
+      selectedNotes: state.selectedNotes,
+      setSelectedNotes: state.setSelectedNotes,
+      lastSelectedNote: state.lastSelectedNote,
+      setLastSelectedNote: state.setLastSelectedNote,
+      setActiveNote: state.setActiveNote,
+    }))
+  );
 
   const {
     tree,
