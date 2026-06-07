@@ -62,6 +62,8 @@ pub(super) fn run() {
             profiles::set_profile_notes_root,
             profiles::update_profile,
             profiles::delete_profile,
+            profiles::update_profile_settings,
+            profiles::update_app_config,
             profiles::create_profiles_backup_zip,
             profiles::export_profiles_to_documents,
             notes::get_tree,

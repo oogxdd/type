@@ -35,6 +35,14 @@ impl<G: ProfilesGateway> ProfilesUseCases<G> {
         self.gateway.delete(args)
     }
 
+    pub(crate) fn update_settings(&self, args: G::UpdateSettingsArgs) -> Result<G::Snapshot, String> {
+        self.gateway.update_settings(args)
+    }
+
+    pub(crate) fn update_app_config(&self, args: G::UpdateAppConfigArgs) -> Result<G::Snapshot, String> {
+        self.gateway.update_app_config(args)
+    }
+
     pub(crate) fn create_backup(&self) -> Result<G::Backup, String> {
         self.gateway.create_backup()
     }
