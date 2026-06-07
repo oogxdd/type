@@ -10,6 +10,8 @@ OTA JS bundles). You can release **both at once, or just one platform** at a tim
   before building. (The version committed in the repo is just the dev baseline.)
 - See also: [DESKTOP_AUTO_UPDATE.md](./DESKTOP_AUTO_UPDATE.md) for the desktop
   updater internals and one-time signing-key setup.
+- For future Mac App Store / TestFlight releases, see
+  [MACOS_APP_STORE_TESTFLIGHT.md](./MACOS_APP_STORE_TESTFLIGHT.md).
 
 ---
 
