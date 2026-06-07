@@ -33,6 +33,9 @@ macOS, Windows, Linux, and iOS.
 For the full module map and conventions see **[AGENTS.md](./AGENTS.md)**; for the backend,
 **[src-tauri/README.md](src-tauri/README.md)**.
 
+If you want a gentler architecture introduction in Russian, read
+**[docs/architecture](docs/architecture/README.md)**.
+
 ## Quick start
 
 ```bash
