@@ -24,8 +24,6 @@ pub(crate) use objc::runtime::Object;
 #[cfg(target_os = "ios")]
 pub(crate) use objc::{msg_send, sel, sel_impl};
 
-pub(crate) use git2::{Direction, PushOptions, Repository};
-
 pub(crate) use std::{
     collections::{HashMap, HashSet},
     fs,

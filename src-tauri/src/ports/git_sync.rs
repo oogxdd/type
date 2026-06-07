@@ -31,12 +31,48 @@ pub struct GitCommitEntry {
 pub trait GitSyncService {
     fn get_status(&self) -> Result<GitSyncStatus, String>;
     fn get_history(&self, limit: Option<usize>) -> Result<Vec<GitCommitEntry>, String>;
-    fn connect(&self, remote_url: &str, branch: Option<&str>, username: Option<&str>, password: Option<&str>) -> Result<GitSyncStatus, String>;
-    fn pull(&self, branch: Option<&str>, username: Option<&str>, password: Option<&str>) -> Result<GitSyncStatus, String>;
-    fn push(&self, message: Option<&str>, branch: Option<&str>, username: Option<&str>, password: Option<&str>) -> Result<GitSyncStatus, String>;
+    fn connect(
+        &self,
+        remote_url: &str,
+        branch: Option<&str>,
+        username: Option<&str>,
+        password: Option<&str>,
+    ) -> Result<GitSyncStatus, String>;
+    fn pull(
+        &self,
+        branch: Option<&str>,
+        username: Option<&str>,
+        password: Option<&str>,
+    ) -> Result<GitSyncStatus, String>;
+    fn push(
+        &self,
+        message: Option<&str>,
+        branch: Option<&str>,
+        username: Option<&str>,
+        password: Option<&str>,
+    ) -> Result<GitSyncStatus, String>;
     fn generate_ssh_key(&self) -> Result<String, String>;
     fn get_ssh_public_key(&self) -> Result<Option<String>, String>;
     fn delete_ssh_key(&self) -> Result<(), String>;
+}
+
+/// Internal gateway for libgit2 and SSH-key infrastructure.
+pub(crate) trait GitSyncGateway {
+    type Status;
+    type HistoryArgs;
+    type History;
+    type ConnectArgs;
+    type PullArgs;
+    type PushArgs;
+
+    fn generate_ssh_key(&self) -> Result<String, String>;
+    fn ssh_public_key(&self) -> Result<Option<String>, String>;
+    fn delete_ssh_key(&self) -> Result<(), String>;
+    fn status(&self) -> Result<Self::Status, String>;
+    fn history(&self, args: Option<Self::HistoryArgs>) -> Result<Vec<Self::History>, String>;
+    fn connect(&self, args: Self::ConnectArgs) -> Result<Self::Status, String>;
+    fn pull(&self, args: Self::PullArgs) -> Result<Self::Status, String>;
+    fn push(&self, args: Self::PushArgs) -> Result<Self::Status, String>;
 }
 
 // ─── Implementation Notes ─────────────────────────────────────────────────────

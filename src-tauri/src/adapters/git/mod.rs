@@ -1,8 +1,9 @@
 //! Git operations: repo init, fetch, push, merge, status, history.
 
 use git2::{
-    build::CheckoutBuilder, AnnotatedCommit, Cred, CredentialType, FetchOptions, IndexAddOption,
-    Oid, RemoteCallbacks, Repository, ResetType, Signature, Sort, StatusOptions,
+    build::CheckoutBuilder, AnnotatedCommit, Cred, CredentialType, Direction, FetchOptions,
+    IndexAddOption, Oid, PushOptions, RemoteCallbacks, Repository, ResetType, Signature, Sort,
+    StatusOptions,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -12,6 +13,7 @@ use std::{
     sync::{Mutex, OnceLock},
 };
 
+use crate::ports::git_sync::GitSyncGateway;
 use crate::{is_system_folder_name, ORDER_FILE, PROTECTED_SYSTEM_FOLDERS};
 
 mod ssh_keys;
@@ -84,6 +86,202 @@ pub(crate) struct GitHistoryArgs {
 
 static GIT_NOTE_TIMESTAMPS_CACHE: OnceLock<Mutex<HashMap<String, (Option<i64>, Option<i64>)>>> =
     OnceLock::new();
+
+/// Tauri-backed Git sync gateway. libgit2 operations, SSH key lookup, and notes
+/// root resolution remain in this outer adapter.
+pub(crate) struct TauriGitSyncAdapter {
+    app: tauri::AppHandle,
+}
+
+impl TauriGitSyncAdapter {
+    pub(crate) fn new(app: tauri::AppHandle) -> Self {
+        Self { app }
+    }
+}
+
+impl GitSyncGateway for TauriGitSyncAdapter {
+    type Status = GitSyncStatus;
+    type HistoryArgs = GitHistoryArgs;
+    type History = GitCommitHistoryEntry;
+    type ConnectArgs = ConnectGitArgs;
+    type PullArgs = GitSyncArgs;
+    type PushArgs = GitPushArgs;
+
+    fn generate_ssh_key(&self) -> Result<String, String> {
+        generate_ssh_keypair(&self.app)
+    }
+
+    fn ssh_public_key(&self) -> Result<Option<String>, String> {
+        read_ssh_public_key(&self.app)
+    }
+
+    fn delete_ssh_key(&self) -> Result<(), String> {
+        delete_ssh_keypair(&self.app)
+    }
+
+    fn status(&self) -> Result<Self::Status, String> {
+        let root = crate::ensured_notes_root(&self.app)?;
+        Ok(build_git_status(&root))
+    }
+
+    fn history(&self, args: Option<Self::HistoryArgs>) -> Result<Vec<Self::History>, String> {
+        let root = crate::ensured_notes_root(&self.app)?;
+        let limit = args.and_then(|value| value.limit).unwrap_or(40);
+        build_git_history(&root, limit)
+    }
+
+    fn connect(&self, args: Self::ConnectArgs) -> Result<Self::Status, String> {
+        let root = crate::ensured_notes_root(&self.app)?;
+        let repo = ensure_git_repo(&root)?;
+        prepare_bootstrap_worktree_for_sync(&root, &repo)?;
+        ensure_origin_remote(&repo, &args.remote_url)?;
+        let target_branch = resolve_target_branch(&repo, args.branch.clone());
+        switch_or_prepare_branch(&repo, &target_branch)?;
+        let ssh_priv = ssh_private_key_if_exists(&self.app);
+        let ssh_pub = ssh_public_key_if_exists(&self.app);
+        let fetched = match perform_fetch(
+            &repo,
+            &target_branch,
+            args.username.as_deref(),
+            args.password.as_deref(),
+            ssh_priv,
+            ssh_pub,
+        ) {
+            Ok(commit) => Some(commit),
+            Err(error) => {
+                let lower = error.to_lowercase();
+                if lower.contains("couldn't find remote ref") {
+                    None
+                } else {
+                    return Err(error);
+                }
+            }
+        };
+        if let Some(fetched_commit) = fetched {
+            let analysis = repo
+                .merge_analysis(&[&fetched_commit])
+                .map_err(map_git_error)?
+                .0;
+            if analysis.is_fast_forward() || analysis.is_up_to_date() {
+                fast_forward_to(&repo, &target_branch, &fetched_commit)?;
+            }
+        }
+        Ok(build_git_status(&root))
+    }
+
+    fn pull(&self, args: Self::PullArgs) -> Result<Self::Status, String> {
+        let root = crate::ensured_notes_root(&self.app)?;
+        if !git_repo_initialized(&root) {
+            return Err("Repository is not initialized. Connect a remote first.".to_string());
+        }
+        let repo = open_repo(&root)?;
+        prepare_bootstrap_worktree_for_sync(&root, &repo)?;
+        if git_has_changes(&repo) {
+            return Err("Local changes detected. Push or commit before pulling.".to_string());
+        }
+        let target_branch = resolve_target_branch(&repo, args.branch.clone());
+        switch_or_prepare_branch(&repo, &target_branch)?;
+        let ssh_priv = ssh_private_key_if_exists(&self.app);
+        let ssh_pub = ssh_public_key_if_exists(&self.app);
+        let fetched = perform_fetch(
+            &repo,
+            &target_branch,
+            args.username.as_deref(),
+            args.password.as_deref(),
+            ssh_priv,
+            ssh_pub,
+        )?;
+        let (analysis, _) = repo.merge_analysis(&[&fetched]).map_err(map_git_error)?;
+        if analysis.is_up_to_date() {
+            return Ok(build_git_status(&root));
+        }
+        if analysis.is_fast_forward() {
+            fast_forward_to(&repo, &target_branch, &fetched)?;
+            return Ok(build_git_status(&root));
+        }
+        if analysis.is_normal() {
+            merge_fetched_commit(&repo, &target_branch, &fetched)?;
+            return Ok(build_git_status(&root));
+        }
+        Err("Pull failed because local and remote history could not be merged.".to_string())
+    }
+
+    fn push(&self, args: Self::PushArgs) -> Result<Self::Status, String> {
+        let root = crate::ensured_notes_root(&self.app)?;
+        if !git_repo_initialized(&root) {
+            return Err("Repository is not initialized. Connect a remote first.".to_string());
+        }
+        let repo = open_repo(&root)?;
+        let target_branch = resolve_target_branch(&repo, args.branch.clone());
+        switch_or_prepare_branch(&repo, &target_branch)?;
+        let message = args
+            .message
+            .as_ref()
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("Sync notes");
+        let status_before_push = build_git_status(&root);
+        if !status_before_push.push_required {
+            return Ok(status_before_push);
+        }
+        let _ = commit_all_changes(&repo, message, &target_branch)?;
+        let ssh_priv = ssh_private_key_if_exists(&self.app);
+        let ssh_pub = ssh_public_key_if_exists(&self.app);
+        remote_push(
+            &repo,
+            &target_branch,
+            args.username.as_deref(),
+            args.password.as_deref(),
+            ssh_priv,
+            ssh_pub,
+        )?;
+        Ok(build_git_status(&root))
+    }
+}
+
+fn remote_push(
+    repo: &Repository,
+    branch: &str,
+    username: Option<&str>,
+    password: Option<&str>,
+    ssh_private_key: Option<PathBuf>,
+    ssh_public_key: Option<PathBuf>,
+) -> Result<(), String> {
+    let callbacks = build_callbacks(
+        username,
+        password,
+        ssh_private_key.clone(),
+        ssh_public_key.clone(),
+    );
+    let mut push_options = PushOptions::new();
+    push_options.remote_callbacks(callbacks);
+    let mut remote = repo.find_remote("origin").map_err(map_git_error)?;
+    remote
+        .connect_auth(
+            Direction::Push,
+            Some(build_callbacks(
+                username,
+                password,
+                ssh_private_key,
+                ssh_public_key,
+            )),
+            None,
+        )
+        .map_err(map_git_error)?;
+    remote
+        .push(
+            &[&format!("refs/heads/{0}:refs/heads/{0}", branch)],
+            Some(&mut push_options),
+        )
+        .map_err(map_git_error)?;
+    let mut local = repo
+        .find_branch(branch, git2::BranchType::Local)
+        .map_err(map_git_error)?;
+    local
+        .set_upstream(Some(&format!("origin/{}", branch)))
+        .map_err(map_git_error)?;
+    Ok(())
+}
 
 // ── Core helpers ───────────────────────────────────────────────────────────────
 
@@ -474,9 +672,7 @@ pub(crate) fn build_callbacks(
         if allowed.contains(CredentialType::SSH_KEY) {
             // Try key file first.
             if let Some(private_key) = &ssh_private_key {
-                let ssh_user = username_from_url
-                    .or(user.as_deref())
-                    .unwrap_or("git");
+                let ssh_user = username_from_url.or(user.as_deref()).unwrap_or("git");
                 let pub_key = ssh_public_key.as_deref();
                 if let Ok(cred) = Cred::ssh_key(ssh_user, pub_key, private_key, None) {
                     return Ok(cred);
@@ -643,7 +839,10 @@ pub(crate) fn fast_forward_to(
 /// Build a `.conflict` sibling path: `dir/note.md` → `dir/note.conflict.md`.
 fn make_conflict_path(rel_path: &str) -> String {
     let p = Path::new(rel_path);
-    let stem = p.file_stem().map(|s| s.to_string_lossy()).unwrap_or_default();
+    let stem = p
+        .file_stem()
+        .map(|s| s.to_string_lossy())
+        .unwrap_or_default();
     let new_name = match p.extension().map(|s| s.to_string_lossy()) {
         Some(ext) => format!("{stem}.conflict.{ext}"),
         None => format!("{stem}.conflict"),
@@ -734,8 +933,7 @@ pub(crate) fn merge_fetched_commit(
                         if let Some(parent) = full_path.parent() {
                             let _ = fs::create_dir_all(parent);
                         }
-                        fs::write(&full_path, their_blob.content())
-                            .map_err(|e| e.to_string())?;
+                        fs::write(&full_path, their_blob.content()).map_err(|e| e.to_string())?;
                     }
                     (None, None) => continue,
                 }
@@ -749,9 +947,7 @@ pub(crate) fn merge_fetched_commit(
                     .conflict_remove(Path::new(rel_path))
                     .map_err(map_git_error)?;
                 if workdir.join(rel_path).exists() {
-                    index
-                        .add_path(Path::new(rel_path))
-                        .map_err(map_git_error)?;
+                    index.add_path(Path::new(rel_path)).map_err(map_git_error)?;
                 }
                 let conflict_rel = make_conflict_path(rel_path);
                 if workdir.join(&conflict_rel).exists() {

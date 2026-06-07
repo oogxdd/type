@@ -15,12 +15,13 @@ use std::{
 };
 use uuid::Uuid;
 
+use crate::ports::handwriting::HandwritingGateway;
 use crate::{
-    allocate_note_file_name, collect_markdown_note_files, generate_note_id, is_storage_folder_path,
-    notes_root, now_ms, parse_note_front_matter, resolve_path, sanitize_relative,
-    strip_root, uuid_tail_without_timestamp_prefix, write_note_with_front_matter,
-    NoteFileNameFormat, NoteFrontMatter, ATTACHMENTS_STORAGE_FOLDER, FEED_FOLDER,
-    RECORDING_STATUS_COMPLETED, RECORDING_STATUS_FAILED, RECORDING_STATUS_PENDING,
+    allocate_note_file_name, collect_markdown_note_files, decode_image_base64, generate_note_id,
+    is_storage_folder_path, note_parent_folder_path, notes_root, now_ms, parse_note_front_matter,
+    resolve_path, sanitize_relative, strip_root, uuid_tail_without_timestamp_prefix,
+    write_note_with_front_matter, NoteFileNameFormat, NoteFrontMatter, ATTACHMENTS_STORAGE_FOLDER,
+    FEED_FOLDER, RECORDING_STATUS_COMPLETED, RECORDING_STATUS_FAILED, RECORDING_STATUS_PENDING,
     RECORDING_STATUS_PROCESSING,
 };
 
@@ -145,6 +146,194 @@ pub(crate) struct HandwritingOcrQueueState {
     pub(crate) current_note: Option<String>,
     pub(crate) pending: VecDeque<QueuedHandwritingOcrJob>,
     pub(crate) known_notes: HashSet<String>,
+}
+
+/// Tauri-backed handwriting gateway. It owns attachment persistence and the
+/// process-global OCR queue.
+pub(crate) struct TauriHandwritingAdapter {
+    app: tauri::AppHandle,
+}
+
+impl TauriHandwritingAdapter {
+    pub(crate) fn new(app: tauri::AppHandle) -> Self {
+        Self { app }
+    }
+}
+
+impl HandwritingGateway for TauriHandwritingAdapter {
+    type SaveArgs = SaveHandwritingAttachmentArgs;
+    type WriteResult = HandwritingAttachmentWriteResult;
+    type QueueArgs = QueueHandwritingOcrArgs;
+    type QueueResult = HandwritingOcrQueueResult;
+    type ListResult = HandwritingOcrListResult;
+
+    fn save(&self, args: Self::SaveArgs) -> Result<Self::WriteResult, String> {
+        let root = crate::ensured_notes_root(&self.app)?;
+        let image_bytes = decode_image_base64(&args.image_base64)?;
+        if image_bytes.is_empty() {
+            return Err("Image payload is empty.".to_string());
+        }
+
+        let extension =
+            supported_image_extension(args.mime_type.as_deref(), args.file_name.as_deref())?;
+        let (target_folder_rel, target_folder_path) =
+            resolve_handwriting_target_folder(&self.app, args.folder_path.as_deref())?;
+        let attachment_path = handwriting_attachment_file_path(&root, extension)?;
+        fs::write(&attachment_path, image_bytes).map_err(|error| error.to_string())?;
+
+        let now = now_ms().unwrap_or(0);
+        let note_id = generate_note_id();
+        let note_file_name =
+            handwriting_note_file_name(&target_folder_path, now, &note_id, args.file_name_format)?;
+        let note_path = target_folder_path.join(&note_file_name);
+        let mut meta = NoteFrontMatter::default();
+        meta.id = Some(note_id);
+        meta.created_ms = Some(now);
+        meta.updated_ms = Some(now);
+        meta.note_type = Some(HANDWRITING_FRONTMATTER_TYPE.to_string());
+        meta.handwriting_attachment_path = Some(strip_root(&root, &attachment_path));
+        meta.ocr_status = Some(RECORDING_STATUS_PENDING.to_string());
+        meta.ocr_error = None;
+        meta.ocr_updated_ms = Some(now);
+
+        write_note_with_front_matter(&note_path, &meta, &handwriting_initial_body())?;
+        if !crate::is_feed_folder_path(&root, &target_folder_path) {
+            crate::update_order_append(&target_folder_path, &[note_file_name], false)?;
+        }
+
+        Ok(HandwritingAttachmentWriteResult {
+            folder_path: target_folder_rel,
+            note_path: strip_root(&root, &note_path),
+            attachment_path: strip_root(&root, &attachment_path),
+        })
+    }
+
+    fn queue(&self, args: Self::QueueArgs) -> Result<Self::QueueResult, String> {
+        let provider = parse_handwriting_ocr_provider(&args.provider)?;
+        let api_key = args.api_key.trim();
+        if api_key.is_empty() {
+            return Err("OCR API key is required.".to_string());
+        }
+        let model = args.model.trim();
+        if model.is_empty() {
+            return Err("OCR model is required.".to_string());
+        }
+
+        let root = crate::ensured_notes_root(&self.app)?;
+        let notes = collect_handwriting_notes(&root)?;
+        let active_notes = active_handwriting_note_paths();
+        let mut scanned = 0usize;
+        let mut skipped = 0usize;
+        let mut candidates = Vec::new();
+
+        for note in notes {
+            scanned += 1;
+            if !note.attachment_path.exists() {
+                let _ = update_handwriting_note_status(
+                    &note.note_path,
+                    RECORDING_STATUS_FAILED,
+                    Some("Attachment file is missing.".to_string()),
+                    None,
+                );
+                skipped += 1;
+                continue;
+            }
+
+            let status = note.status.as_str();
+            let is_active = active_notes.contains(&note.note_rel);
+            if status == RECORDING_STATUS_COMPLETED {
+                skipped += 1;
+                continue;
+            }
+            if matches!(
+                status,
+                crate::RECORDING_STATUS_QUEUED | RECORDING_STATUS_PROCESSING
+            ) && is_active
+            {
+                skipped += 1;
+                continue;
+            }
+
+            update_handwriting_note_status(
+                &note.note_path,
+                crate::RECORDING_STATUS_QUEUED,
+                None,
+                None,
+            )?;
+            candidates.push(QueuedHandwritingOcrJob {
+                note_rel: note.note_rel,
+                note_path: note.note_path,
+                attachment_path: note.attachment_path,
+                provider,
+                api_key: api_key.to_string(),
+                model: model.to_string(),
+            });
+        }
+
+        let queued = {
+            let queue = handwriting_ocr_queue_state();
+            let mut state = queue.lock().expect("handwriting ocr queue poisoned");
+            let mut added = 0usize;
+            for job in candidates {
+                if state.known_notes.contains(&job.note_rel) {
+                    continue;
+                }
+                state.known_notes.insert(job.note_rel.clone());
+                state.pending.push_back(job);
+                added += 1;
+            }
+            added
+        };
+
+        spawn_handwriting_ocr_worker_if_needed();
+        let in_flight = handwriting_queue_snapshot().in_flight;
+
+        Ok(HandwritingOcrQueueResult {
+            scanned,
+            queued,
+            skipped,
+            in_flight,
+        })
+    }
+
+    fn list(&self) -> Result<Self::ListResult, String> {
+        let root = crate::ensured_notes_root(&self.app)?;
+        let queue = handwriting_queue_snapshot();
+        let pending_set = queue
+            .pending
+            .iter()
+            .map(String::as_str)
+            .collect::<HashSet<_>>();
+
+        let mut jobs = collect_handwriting_notes(&root)?
+            .into_iter()
+            .map(|note| {
+                let folder_path = note_parent_folder_path(&note.note_rel);
+                let attachment_exists = note.attachment_path.exists();
+                let mut error = note.error.clone();
+                if !attachment_exists {
+                    error = Some("Attachment file is missing.".to_string());
+                }
+                HandwritingOcrListItem {
+                    note_path: note.note_rel.clone(),
+                    folder_path,
+                    attachment_path: if attachment_exists {
+                        Some(note.attachment_rel.clone())
+                    } else {
+                        None
+                    },
+                    status: note.status.clone(),
+                    error,
+                    updated_ms: note.updated_ms,
+                    is_queued: pending_set.contains(note.note_rel.as_str()),
+                    is_processing: queue.current_note.as_deref() == Some(note.note_rel.as_str()),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        jobs.sort_by(|a, b| b.updated_ms.unwrap_or(0).cmp(&a.updated_ms.unwrap_or(0)));
+        Ok(HandwritingOcrListResult { queue, jobs })
+    }
 }
 
 // ── Static ─────────────────────────────────────────────────────────────────────
