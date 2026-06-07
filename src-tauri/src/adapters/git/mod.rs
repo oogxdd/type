@@ -53,7 +53,7 @@ pub(crate) struct GitCommitHistoryEntry {
 /// Arguments for connecting to a remote git repository.
 #[derive(Deserialize)]
 pub(crate) struct ConnectGitArgs {
-    pub(crate) remote_url: String,
+    pub(crate) remote_url: Option<String>,
     pub(crate) branch: Option<String>,
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
@@ -97,6 +97,12 @@ impl TauriGitSyncAdapter {
     pub(crate) fn new(app: tauri::AppHandle) -> Self {
         Self { app }
     }
+
+    fn resolve_settings(&self) -> (PathBuf, crate::ProfileSettings) {
+        let root = crate::ensured_notes_root(&self.app).unwrap_or_default();
+        let settings = crate::load_profile_settings(&root);
+        (root, settings)
+    }
 }
 
 impl GitSyncGateway for TauriGitSyncAdapter {
@@ -120,30 +126,70 @@ impl GitSyncGateway for TauriGitSyncAdapter {
     }
 
     fn status(&self) -> Result<Self::Status, String> {
-        let root = crate::ensured_notes_root(&self.app)?;
+        let (root, _) = self.resolve_settings();
         Ok(build_git_status(&root))
     }
 
     fn history(&self, args: Option<Self::HistoryArgs>) -> Result<Vec<Self::History>, String> {
-        let root = crate::ensured_notes_root(&self.app)?;
+        let (root, _) = self.resolve_settings();
         let limit = args.and_then(|value| value.limit).unwrap_or(40);
         build_git_history(&root, limit)
     }
 
     fn connect(&self, args: Self::ConnectArgs) -> Result<Self::Status, String> {
-        let root = crate::ensured_notes_root(&self.app)?;
+        let (root, settings) = self.resolve_settings();
+
+        let remote_url = args
+            .remote_url
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(settings.git_remote_url.as_str());
+        if remote_url.is_empty() {
+            return Err("Remote URL is required.".to_string());
+        }
+
+        let branch = args
+            .branch
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(settings.git_branch.as_str());
+
+        let username = args
+            .username
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                if !settings.git_username.is_empty() {
+                    Some(settings.git_username.as_str())
+                } else {
+                    None
+                }
+            });
+
+        let password = args
+            .password
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                if !settings.git_password.is_empty() {
+                    Some(settings.git_password.as_str())
+                } else {
+                    None
+                }
+            });
+
         let repo = ensure_git_repo(&root)?;
         prepare_bootstrap_worktree_for_sync(&root, &repo)?;
-        ensure_origin_remote(&repo, &args.remote_url)?;
-        let target_branch = resolve_target_branch(&repo, args.branch.clone());
+        ensure_origin_remote(&repo, remote_url)?;
+        let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
         switch_or_prepare_branch(&repo, &target_branch)?;
         let ssh_priv = ssh_private_key_if_exists(&self.app);
         let ssh_pub = ssh_public_key_if_exists(&self.app);
         let fetched = match perform_fetch(
             &repo,
             &target_branch,
-            args.username.as_deref(),
-            args.password.as_deref(),
+            username,
+            password,
             ssh_priv,
             ssh_pub,
         ) {
@@ -170,24 +216,55 @@ impl GitSyncGateway for TauriGitSyncAdapter {
     }
 
     fn pull(&self, args: Self::PullArgs) -> Result<Self::Status, String> {
-        let root = crate::ensured_notes_root(&self.app)?;
+        let (root, settings) = self.resolve_settings();
         if !git_repo_initialized(&root) {
             return Err("Repository is not initialized. Connect a remote first.".to_string());
         }
+
+        let branch = args
+            .branch
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(settings.git_branch.as_str());
+
+        let username = args
+            .username
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                if !settings.git_username.is_empty() {
+                    Some(settings.git_username.as_str())
+                } else {
+                    None
+                }
+            });
+
+        let password = args
+            .password
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                if !settings.git_password.is_empty() {
+                    Some(settings.git_password.as_str())
+                } else {
+                    None
+                }
+            });
+
         let repo = open_repo(&root)?;
         prepare_bootstrap_worktree_for_sync(&root, &repo)?;
         if git_has_changes(&repo) {
             return Err("Local changes detected. Push or commit before pulling.".to_string());
         }
-        let target_branch = resolve_target_branch(&repo, args.branch.clone());
+        let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
         switch_or_prepare_branch(&repo, &target_branch)?;
         let ssh_priv = ssh_private_key_if_exists(&self.app);
         let ssh_pub = ssh_public_key_if_exists(&self.app);
         let fetched = perform_fetch(
             &repo,
             &target_branch,
-            args.username.as_deref(),
-            args.password.as_deref(),
+            username,
+            password,
             ssh_priv,
             ssh_pub,
         )?;
@@ -207,31 +284,63 @@ impl GitSyncGateway for TauriGitSyncAdapter {
     }
 
     fn push(&self, args: Self::PushArgs) -> Result<Self::Status, String> {
-        let root = crate::ensured_notes_root(&self.app)?;
+        let (root, settings) = self.resolve_settings();
         if !git_repo_initialized(&root) {
             return Err("Repository is not initialized. Connect a remote first.".to_string());
         }
-        let repo = open_repo(&root)?;
-        let target_branch = resolve_target_branch(&repo, args.branch.clone());
-        switch_or_prepare_branch(&repo, &target_branch)?;
-        let message = args
+
+        let branch = args
+            .branch
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(settings.git_branch.as_str());
+
+        let username = args
+            .username
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                if !settings.git_username.is_empty() {
+                    Some(settings.git_username.as_str())
+                } else {
+                    None
+                }
+            });
+
+        let password = args
+            .password
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                if !settings.git_password.is_empty() {
+                    Some(settings.git_password.as_str())
+                } else {
+                    None
+                }
+            });
+
+        let commit_message = args
             .message
-            .as_ref()
-            .map(|value| value.trim())
-            .filter(|value| !value.is_empty())
-            .unwrap_or("Sync notes");
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(settings.git_commit_message.as_str());
+
+        let repo = open_repo(&root)?;
+        let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
+        switch_or_prepare_branch(&repo, &target_branch)?;
+
         let status_before_push = build_git_status(&root);
         if !status_before_push.push_required {
             return Ok(status_before_push);
         }
-        let _ = commit_all_changes(&repo, message, &target_branch)?;
+        let _ = commit_all_changes(&repo, commit_message, &target_branch)?;
         let ssh_priv = ssh_private_key_if_exists(&self.app);
         let ssh_pub = ssh_public_key_if_exists(&self.app);
         remote_push(
             &repo,
             &target_branch,
-            args.username.as_deref(),
-            args.password.as_deref(),
+            username,
+            password,
             ssh_priv,
             ssh_pub,
         )?;

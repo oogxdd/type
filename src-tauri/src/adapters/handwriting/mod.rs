@@ -66,9 +66,9 @@ pub(crate) struct HandwritingAttachmentWriteResult {
 #[derive(Deserialize)]
 /// Arguments for queuing OCR (provider name, API key, model).
 pub(crate) struct QueueHandwritingOcrArgs {
-    pub(crate) provider: String,
-    pub(crate) api_key: String,
-    pub(crate) model: String,
+    pub(crate) provider: Option<String>,
+    pub(crate) api_key: Option<String>,
+    pub(crate) model: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -209,12 +209,40 @@ impl HandwritingGateway for TauriHandwritingAdapter {
     }
 
     fn queue(&self, args: Self::QueueArgs) -> Result<Self::QueueResult, String> {
-        let provider = parse_handwriting_ocr_provider(&args.provider)?;
-        let api_key = args.api_key.trim();
+        let app_data = crate::app_data_dir(&self.app)?;
+        let app_config = crate::load_app_config(&app_data);
+
+        let provider_str = args
+            .provider
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(app_config.handwriting_ocr_provider.as_str());
+        let provider = parse_handwriting_ocr_provider(provider_str)?;
+
+        let api_key = args
+            .api_key
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| match provider {
+                HandwritingOcrProvider::OpenAi => app_config.openai_api_key.as_str(),
+                HandwritingOcrProvider::HuggingFace => app_config.huggingface_api_key.as_str(),
+            })
+            .trim();
+
         if api_key.is_empty() {
             return Err("OCR API key is required.".to_string());
         }
-        let model = args.model.trim();
+
+        let model = args
+            .model
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| match provider {
+                HandwritingOcrProvider::OpenAi => app_config.openai_model.as_str(),
+                HandwritingOcrProvider::HuggingFace => app_config.huggingface_model.as_str(),
+            })
+            .trim();
+
         if model.is_empty() {
             return Err("OCR model is required.".to_string());
         }
