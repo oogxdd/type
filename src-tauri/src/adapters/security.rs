@@ -21,6 +21,7 @@ use std::{
 };
 use zeroize::Zeroize;
 
+use crate::ports::security::SecurityGateway;
 use crate::{
     app_data_dir, collect_markdown_note_files, default_profiles_state, ensure_profiles_state,
     ensure_system_folders, find_profile, generate_note_id, legacy_profiles_file_path, now_ms,
@@ -114,6 +115,46 @@ pub(crate) struct SecurityUnlockResult {
 // ── Static ─────────────────────────────────────────────────────────────────────
 
 static SECURITY_RUNTIME: OnceLock<Mutex<SecurityRuntimeState>> = OnceLock::new();
+
+/// Tauri-backed security gateway. All app-data and runtime-key handling stays
+/// outside the application layer.
+pub(crate) struct TauriSecurityAdapter {
+    app: tauri::AppHandle,
+}
+
+impl TauriSecurityAdapter {
+    pub(crate) fn new(app: tauri::AppHandle) -> Self {
+        Self { app }
+    }
+}
+
+impl SecurityGateway for TauriSecurityAdapter {
+    type State = SecurityState;
+    type EnableArgs = EnableSecurityArgs;
+    type UnlockArgs = UnlockSecurityArgs;
+    type UnlockResult = SecurityUnlockResult;
+    type PreferencesArgs = SetSecurityPreferencesArgs;
+
+    fn state(&self) -> Result<Self::State, String> {
+        get_security_state_impl(&self.app)
+    }
+
+    fn enable(&self, args: Self::EnableArgs) -> Result<Self::State, String> {
+        enable_security_impl(&self.app, args)
+    }
+
+    fn lock(&self) -> Result<Self::State, String> {
+        lock_security_impl(&self.app)
+    }
+
+    fn unlock(&self, args: Self::UnlockArgs) -> Result<Self::UnlockResult, String> {
+        unlock_security_impl(&self.app, args)
+    }
+
+    fn set_preferences(&self, args: Self::PreferencesArgs) -> Result<Self::State, String> {
+        set_security_preferences_impl(&self.app, args)
+    }
+}
 
 // ── Internal helpers ───────────────────────────────────────────────────────────
 

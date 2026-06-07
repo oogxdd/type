@@ -22,6 +22,7 @@
 //! `write_note_with_front_matter` reads the unlocked key from the global
 //! security runtime.
 
+use crate::ports::import::ImportGateway;
 use crate::*;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -46,6 +47,49 @@ const CREATED_KEYS: &[&str] = &[
 const MAX_TRACKED_ERRORS: usize = 25;
 /// Default target folder when preserving structure and no name is supplied.
 const DEFAULT_IMPORT_FOLDER: &str = "Imported Notes";
+
+/// Tauri-backed import gateway. Resolving the active profile and spawning the
+/// worker are adapter concerns because both depend on process/runtime state.
+pub(crate) struct TauriImportAdapter {
+    app: tauri::AppHandle,
+}
+
+impl TauriImportAdapter {
+    pub(crate) fn new(app: tauri::AppHandle) -> Self {
+        Self { app }
+    }
+}
+
+impl ImportGateway for TauriImportAdapter {
+    type Scan = AppleImportScan;
+    type Args = AppleImportArgs;
+    type State = AppleImportState;
+
+    fn scan(&self, path: &str) -> Result<Self::Scan, String> {
+        scan_apple_import_source(Path::new(path.trim()))
+    }
+
+    fn start(&self, args: Self::Args) -> Result<(), String> {
+        let notes_root = ensured_notes_root(&self.app)?;
+        let target_label = match args.mode {
+            AppleImportMode::Flatten => "Feed".to_string(),
+            AppleImportMode::Preserve => args
+                .target_folder
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .unwrap_or_else(|| "Imported Notes".to_string()),
+        };
+        begin_apple_import(target_label)?;
+        std::thread::spawn(move || run_apple_notes_import(notes_root, args));
+        Ok(())
+    }
+
+    fn status(&self) -> Result<Self::State, String> {
+        Ok(apple_import_snapshot())
+    }
+}
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -464,7 +508,10 @@ fn split_front_matter(raw: &str) -> (Option<i64>, String) {
     // Track byte offsets as we go (`lines()` drops separators, so we re-walk
     // with `split_inclusive` from just past the opening fence). When we hit the
     // closing fence, `offset` already points at the start of the body.
-    let body_scan_start = normalized.find('\n').map(|idx| idx + 1).unwrap_or(normalized.len());
+    let body_scan_start = normalized
+        .find('\n')
+        .map(|idx| idx + 1)
+        .unwrap_or(normalized.len());
     let mut offset = body_scan_start;
     for line in normalized[body_scan_start..].split_inclusive('\n') {
         let trimmed = line.trim_end_matches(['\n', '\r']);
@@ -487,16 +534,15 @@ fn split_front_matter(raw: &str) -> (Option<i64>, String) {
         .iter()
         .find_map(|key| fields.get(*key))
         .and_then(|value| parse_date_value(value));
-    let body = normalized[offset..].trim_start_matches(['\n', '\r']).to_string();
+    let body = normalized[offset..]
+        .trim_start_matches(['\n', '\r'])
+        .to_string();
     (date, body)
 }
 
 /// Parse a front-matter date value into epoch milliseconds.
 fn parse_date_value(value: &str) -> Option<i64> {
-    let v = value
-        .trim()
-        .trim_matches(|c| c == '"' || c == '\'')
-        .trim();
+    let v = value.trim().trim_matches(|c| c == '"' || c == '\'').trim();
     if v.is_empty() {
         return None;
     }
@@ -520,7 +566,12 @@ fn parse_date_value(value: &str) -> Option<i64> {
     // Date only.
     let date_fmt = format_description!("[year]-[month]-[day]");
     if let Ok(date) = Date::parse(v, &date_fmt) {
-        return Some(date.midnight().assume_utc().unix_timestamp().saturating_mul(1000));
+        return Some(
+            date.midnight()
+                .assume_utc()
+                .unix_timestamp()
+                .saturating_mul(1000),
+        );
     }
     None
 }
@@ -715,7 +766,10 @@ fn decode_entities(input: &str) -> String {
 }
 
 fn decode_numeric_entity(entity: &str) -> Option<char> {
-    let code = if let Some(hex) = entity.strip_prefix("#x").or_else(|| entity.strip_prefix("#X")) {
+    let code = if let Some(hex) = entity
+        .strip_prefix("#x")
+        .or_else(|| entity.strip_prefix("#X"))
+    {
         u32::from_str_radix(hex, 16).ok()?
     } else if let Some(dec) = entity.strip_prefix('#') {
         dec.parse::<u32>().ok()?

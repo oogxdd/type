@@ -57,3 +57,15 @@ pub trait ImportPort {
     /// Current/last import progress.
     fn status() -> Self::State;
 }
+
+/// Shell-facing import gateway. The adapter resolves the active notes root and
+/// owns the worker thread; the application layer only invokes the use case.
+pub(crate) trait ImportGateway {
+    type Scan;
+    type Args;
+    type State;
+
+    fn scan(&self, path: &str) -> Result<Self::Scan, String>;
+    fn start(&self, args: Self::Args) -> Result<(), String>;
+    fn status(&self) -> Result<Self::State, String>;
+}

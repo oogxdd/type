@@ -18,6 +18,7 @@ use std::{
 };
 
 use crate::ensured_notes_root;
+use crate::ports::local_sync::LocalSyncGateway;
 
 #[cfg(desktop)]
 use crate::{commit_all_changes, ensure_git_repo, resolve_target_branch, switch_or_prepare_branch};
@@ -86,6 +87,39 @@ struct MdnsAdvert {
 
 #[cfg(desktop)]
 static DAEMON: Mutex<Option<RunningDaemon>> = Mutex::new(None);
+
+/// Tauri-backed local-sync gateway. Child-process and mDNS state stay in this
+/// outer adapter rather than leaking into commands or application services.
+pub(crate) struct TauriLocalSyncAdapter {
+    app: tauri::AppHandle,
+}
+
+impl TauriLocalSyncAdapter {
+    pub(crate) fn new(app: tauri::AppHandle) -> Self {
+        Self { app }
+    }
+}
+
+impl LocalSyncGateway for TauriLocalSyncAdapter {
+    type Status = LocalSyncServerStatus;
+    type Discovered = DiscoveredServer;
+
+    fn status(&self) -> Result<Self::Status, String> {
+        local_sync_server_status(&self.app)
+    }
+
+    fn start(&self) -> Result<Self::Status, String> {
+        start_local_sync_server_impl(&self.app)
+    }
+
+    fn stop(&self) -> Result<Self::Status, String> {
+        stop_local_sync_server_impl(&self.app)
+    }
+
+    fn discover(&self, timeout_ms: u64) -> Result<Vec<Self::Discovered>, String> {
+        discover_local_sync_servers_impl(timeout_ms)
+    }
+}
 
 // ── Public API (called by the command layer) ─────────────────────────────────
 
@@ -305,10 +339,13 @@ fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
         .host
         .as_ref()
         .map(|host| format!("git://{host}/{}", daemon.served_name));
-    let ssh_url = daemon
-        .host
-        .as_ref()
-        .map(|host| format!("ssh://{}@{host}{}", current_user(), daemon.repo_path.display()));
+    let ssh_url = daemon.host.as_ref().map(|host| {
+        format!(
+            "ssh://{}@{host}{}",
+            current_user(),
+            daemon.repo_path.display()
+        )
+    });
     LocalSyncServerStatus {
         supported: true,
         git_available: true,
@@ -335,16 +372,13 @@ fn locate_git() -> Option<PathBuf> {
         "/opt/homebrew/bin/git",
         "/usr/local/bin/git",
     ];
-    candidates
-        .into_iter()
-        .map(PathBuf::from)
-        .find(|candidate| {
-            Command::new(candidate)
-                .arg("--version")
-                .output()
-                .map(|out| out.status.success())
-                .unwrap_or(false)
-        })
+    candidates.into_iter().map(PathBuf::from).find(|candidate| {
+        Command::new(candidate)
+            .arg("--version")
+            .output()
+            .map(|out| out.status.success())
+            .unwrap_or(false)
+    })
 }
 
 /// Best-effort detection of the outbound LAN/hotspot IPv4. Uses the classic
@@ -390,7 +424,11 @@ fn current_user() -> String {
 #[cfg(desktop)]
 fn computer_label() -> String {
     // macOS: the user-set "Computer Name" is the friendliest.
-    if let Ok(out) = Command::new("scutil").arg("--get").arg("ComputerName").output() {
+    if let Ok(out) = Command::new("scutil")
+        .arg("--get")
+        .arg("ComputerName")
+        .output()
+    {
         if out.status.success() {
             let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
             if !name.is_empty() {
@@ -430,7 +468,12 @@ fn sanitize_host_label(value: &str) -> String {
 /// Register an mDNS service for the running server. Returns a handle to keep the
 /// advertisement alive; dropping/unregistering it removes the service.
 #[cfg(desktop)]
-fn advertise_mdns(host: &str, served_name: &str, branch: &str, git_url: &str) -> Option<MdnsAdvert> {
+fn advertise_mdns(
+    host: &str,
+    served_name: &str,
+    branch: &str,
+    git_url: &str,
+) -> Option<MdnsAdvert> {
     use mdns_sd::ServiceInfo;
 
     let daemon = ServiceDaemon::new().ok()?;
@@ -494,7 +537,11 @@ pub(crate) fn discover_local_sync_servers_impl(
 }
 
 fn discovered_from_info(info: &mdns_sd::ResolvedService) -> Option<DiscoveredServer> {
-    let host = info.get_addresses_v4().into_iter().next().map(|v4| v4.to_string())?;
+    let host = info
+        .get_addresses_v4()
+        .into_iter()
+        .next()
+        .map(|v4| v4.to_string())?;
     let path = info.get_property_val_str("path").unwrap_or("notes");
     let git_url = info
         .get_property_val_str("url")

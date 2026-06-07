@@ -38,13 +38,48 @@ pub struct DocumentsExport {
 
 pub trait ProfileService {
     fn get_profiles(&self) -> Result<ProfilesSnapshot, String>;
-    fn create_profile(&self, name: &str, description: Option<&str>) -> Result<ProfilesSnapshot, String>;
+    fn create_profile(
+        &self,
+        name: &str,
+        description: Option<&str>,
+    ) -> Result<ProfilesSnapshot, String>;
     fn set_active_profile(&self, profile_id: &str) -> Result<ProfilesSnapshot, String>;
-    fn update_profile(&self, profile_id: &str, name: Option<&str>, description: Option<&str>) -> Result<ProfilesSnapshot, String>;
+    fn update_profile(
+        &self,
+        profile_id: &str,
+        name: Option<&str>,
+        description: Option<&str>,
+    ) -> Result<ProfilesSnapshot, String>;
     fn delete_profile(&self, profile_id: &str) -> Result<ProfilesSnapshot, String>;
-    fn set_profile_notes_root(&self, profile_id: &str, notes_root: &str) -> Result<ProfilesSnapshot, String>;
+    fn set_profile_notes_root(
+        &self,
+        profile_id: &str,
+        notes_root: &str,
+    ) -> Result<ProfilesSnapshot, String>;
     fn create_backup_zip(&self) -> Result<BackupArchive, String>;
     fn export_to_documents(&self) -> Result<DocumentsExport, String>;
+}
+
+/// Internal gateway used by profile application services. Persistence details
+/// and Tauri path resolution remain in the concrete adapter.
+pub(crate) trait ProfilesGateway {
+    type Snapshot;
+    type CreateArgs;
+    type SetActiveArgs;
+    type SetNotesRootArgs;
+    type UpdateArgs;
+    type DeleteArgs;
+    type Backup;
+    type Export;
+
+    fn list(&self) -> Result<Self::Snapshot, String>;
+    fn create(&self, args: Self::CreateArgs) -> Result<Self::Snapshot, String>;
+    fn set_active(&self, args: Self::SetActiveArgs) -> Result<Self::Snapshot, String>;
+    fn set_notes_root(&self, args: Self::SetNotesRootArgs) -> Result<Self::Snapshot, String>;
+    fn update(&self, args: Self::UpdateArgs) -> Result<Self::Snapshot, String>;
+    fn delete(&self, args: Self::DeleteArgs) -> Result<Self::Snapshot, String>;
+    fn create_backup(&self) -> Result<Self::Backup, String>;
+    fn export_to_documents(&self) -> Result<Self::Export, String>;
 }
 
 // ─── Implementation Notes ─────────────────────────────────────────────────────

@@ -32,6 +32,17 @@ pub trait LocalSyncServer {
     fn stop(&self) -> Result<LocalSyncServerStatus, String>;
 }
 
+/// Application-facing gateway for the process and mDNS-backed implementation.
+pub(crate) trait LocalSyncGateway {
+    type Status;
+    type Discovered;
+
+    fn status(&self) -> Result<Self::Status, String>;
+    fn start(&self) -> Result<Self::Status, String>;
+    fn stop(&self) -> Result<Self::Status, String>;
+    fn discover(&self, timeout_ms: u64) -> Result<Vec<Self::Discovered>, String>;
+}
+
 // ─── Implementation Notes ─────────────────────────────────────────────────────
 //
 // LocalSyncServer lets a desktop machine host its own notes repository over the

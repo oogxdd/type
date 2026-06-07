@@ -28,6 +28,22 @@ pub trait SecurityService {
     fn is_unlocked(&self) -> Result<(), String>;
 }
 
+/// Internal application-facing gateway implemented by the Tauri security
+/// adapter. Associated DTOs preserve the existing IPC contract during migration.
+pub(crate) trait SecurityGateway {
+    type State;
+    type EnableArgs;
+    type UnlockArgs;
+    type UnlockResult;
+    type PreferencesArgs;
+
+    fn state(&self) -> Result<Self::State, String>;
+    fn enable(&self, args: Self::EnableArgs) -> Result<Self::State, String>;
+    fn lock(&self) -> Result<Self::State, String>;
+    fn unlock(&self, args: Self::UnlockArgs) -> Result<Self::UnlockResult, String>;
+    fn set_preferences(&self, args: Self::PreferencesArgs) -> Result<Self::State, String>;
+}
+
 // ─── Implementation Notes ─────────────────────────────────────────────────────
 //
 // SecurityService manages optional encryption and app locking.

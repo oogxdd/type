@@ -8,12 +8,80 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use crate::app_data_dir;
+use crate::ports::profiles::ProfilesGateway;
 
 mod backup;
 mod state;
 
 pub(crate) use backup::*;
 pub(crate) use state::*;
+
+/// Tauri-backed profile gateway. It owns app-data path resolution and profile
+/// state persistence while application code works through the port.
+pub(crate) struct TauriProfilesAdapter {
+    app: tauri::AppHandle,
+}
+
+impl TauriProfilesAdapter {
+    pub(crate) fn new(app: tauri::AppHandle) -> Self {
+        Self { app }
+    }
+}
+
+impl ProfilesGateway for TauriProfilesAdapter {
+    type Snapshot = NotesProfilesSnapshot;
+    type CreateArgs = CreateProfileArgs;
+    type SetActiveArgs = SetActiveProfileArgs;
+    type SetNotesRootArgs = SetProfileNotesRootArgs;
+    type UpdateArgs = UpdateProfileArgs;
+    type DeleteArgs = DeleteProfileArgs;
+    type Backup = ProfilesBackupArchive;
+    type Export = ProfilesDocumentsExport;
+
+    fn list(&self) -> Result<Self::Snapshot, String> {
+        let state =
+            ensure_profiles_state(&self.app).or_else(|_| default_profiles_state(&self.app))?;
+        Ok(profiles_snapshot(&state))
+    }
+
+    fn create(&self, args: Self::CreateArgs) -> Result<Self::Snapshot, String> {
+        let state = create_profile_state(&self.app, &args.name, args.description.as_deref())?;
+        Ok(profiles_snapshot(&state))
+    }
+
+    fn set_active(&self, args: Self::SetActiveArgs) -> Result<Self::Snapshot, String> {
+        let state = set_active_profile_state(&self.app, &args.profile_id)?;
+        Ok(profiles_snapshot(&state))
+    }
+
+    fn set_notes_root(&self, args: Self::SetNotesRootArgs) -> Result<Self::Snapshot, String> {
+        let state = set_profile_notes_root_state(&self.app, &args.profile_id, &args.notes_root)?;
+        Ok(profiles_snapshot(&state))
+    }
+
+    fn update(&self, args: Self::UpdateArgs) -> Result<Self::Snapshot, String> {
+        let state = update_profile_state(
+            &self.app,
+            &args.profile_id,
+            args.name.as_deref(),
+            args.description.as_deref(),
+        )?;
+        Ok(profiles_snapshot(&state))
+    }
+
+    fn delete(&self, args: Self::DeleteArgs) -> Result<Self::Snapshot, String> {
+        let state = delete_profile_state(&self.app, &args.profile_id)?;
+        Ok(profiles_snapshot(&state))
+    }
+
+    fn create_backup(&self) -> Result<Self::Backup, String> {
+        create_profiles_backup_zip_impl(&self.app)
+    }
+
+    fn export_to_documents(&self) -> Result<Self::Export, String> {
+        export_profiles_to_documents_impl(&self.app)
+    }
+}
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -127,4 +195,3 @@ pub(crate) fn legacy_profiles_file_path(app: &tauri::AppHandle) -> Result<PathBu
 pub(crate) fn profile_root_for_id(app: &tauri::AppHandle, id: &str) -> Result<PathBuf, String> {
     Ok(app_data_dir(app)?.join("profiles").join(id).join("notes"))
 }
-

@@ -1,11 +1,18 @@
-use crate::*;
+use crate::{
+    application::local_sync::LocalSyncUseCases, ensure_security_unlocked_for_app, DiscoveredServer,
+    LocalSyncServerStatus, TauriLocalSyncAdapter,
+};
+
+fn local_sync_use_cases(app: tauri::AppHandle) -> LocalSyncUseCases<TauriLocalSyncAdapter> {
+    LocalSyncUseCases::new(TauriLocalSyncAdapter::new(app))
+}
 
 #[tauri::command]
 pub(super) async fn get_local_sync_server_status(
     app: tauri::AppHandle,
 ) -> Result<LocalSyncServerStatus, String> {
     ensure_security_unlocked_for_app(&app)?;
-    super::run_blocking_command(move || local_sync_server_status(&app)).await
+    super::run_blocking_command(move || local_sync_use_cases(app).status()).await
 }
 
 #[tauri::command]
@@ -13,7 +20,7 @@ pub(super) async fn start_local_sync_server(
     app: tauri::AppHandle,
 ) -> Result<LocalSyncServerStatus, String> {
     ensure_security_unlocked_for_app(&app)?;
-    super::run_blocking_command(move || start_local_sync_server_impl(&app)).await
+    super::run_blocking_command(move || local_sync_use_cases(app).start()).await
 }
 
 #[tauri::command]
@@ -21,7 +28,7 @@ pub(super) async fn stop_local_sync_server(
     app: tauri::AppHandle,
 ) -> Result<LocalSyncServerStatus, String> {
     ensure_security_unlocked_for_app(&app)?;
-    super::run_blocking_command(move || stop_local_sync_server_impl(&app)).await
+    super::run_blocking_command(move || local_sync_use_cases(app).stop()).await
 }
 
 #[tauri::command]
@@ -31,7 +38,7 @@ pub(super) async fn discover_local_sync_servers(
 ) -> Result<Vec<DiscoveredServer>, String> {
     ensure_security_unlocked_for_app(&app)?;
     super::run_blocking_command(move || {
-        discover_local_sync_servers_impl(timeout_ms.unwrap_or(2500))
+        local_sync_use_cases(app).discover(timeout_ms.unwrap_or(2500))
     })
     .await
 }
