@@ -69,7 +69,7 @@ Paste the **full single-line contents** of `~/.tauri/type-updater.key.pub`.
 ### 3. Install JS deps (already done once, but for fresh clones)
 
 ```bash
-npm install     # or: yarn install
+npm install
 ```
 
 ---
@@ -83,7 +83,7 @@ Keep it in sync with `package.json`:
 
 ```bash
 npm version patch        # or minor / major — bumps package.json
-yarn version:sync        # copies the new version into tauri.conf.json
+npm run version:sync     # copies the new version into tauri.conf.json
 ```
 
 ### 2. Build the signed bundle (on a Mac)

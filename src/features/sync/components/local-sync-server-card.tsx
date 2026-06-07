@@ -1,0 +1,186 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
+import * as gitApi from "@/features/sync/api/git-api";
+import { buildSyncDeepLink } from "@/features/sync/api/local-sync-link";
+import type { LocalSyncServerStatus } from "@/shared/types";
+import { Button } from "@/shared/ui/button";
+import { getErrorMessage } from "@/shared/lib/errors";
+
+/**
+ * Desktop-only "host" control: starts/stops a local `git daemon` so a phone on
+ * the same Wi-Fi (or connected to the phone's hotspot) can sync over `git://`
+ * with no external remote. Renders nothing on devices that cannot host (mobile).
+ */
+export function LocalSyncServerCard() {
+  const [status, setStatus] = useState<LocalSyncServerStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      setStatus(await gitApi.getLocalSyncServerStatus());
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const toggleServer = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = status?.running
+        ? await gitApi.stopLocalSyncServer()
+        : await gitApi.startLocalSyncServer();
+      setStatus(next);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [status?.running]);
+
+  const copy = useCallback((value: string) => {
+    void navigator.clipboard.writeText(value);
+    setCopied(value);
+    window.setTimeout(() => setCopied((current) => (current === value ? null : current)), 1500);
+  }, []);
+
+  // Hosting isn't possible on this device (e.g. iOS) — hide the card entirely.
+  if (status && !status.supported) {
+    return null;
+  }
+
+  const running = Boolean(status?.running);
+
+  const deepLink = useMemo(() => {
+    if (!status?.git_url) {
+      return null;
+    }
+    return buildSyncDeepLink({
+      remote: status.git_url,
+      branch: status.branch ?? undefined,
+      name: status.host ? `Computer (${status.host})` : undefined,
+    });
+  }, [status?.git_url, status?.branch, status?.host]);
+
+  return (
+    <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
+      <div className="space-y-1">
+        <h3 className="text-sm font-semibold text-foreground">Local network server</h3>
+        <p className="text-xs text-muted-foreground">
+          Host this computer's notes over your local network so your phone can sync without an
+          internet remote — same Wi-Fi, or your phone's personal hotspot.
+        </p>
+      </div>
+
+      {status && !status.git_available ? (
+        <p className="text-xs text-destructive">
+          Hosting needs the Git command-line tools. On macOS run <code>xcode-select --install</code>{" "}
+          and try again.
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          type="button"
+          variant={running ? "destructive" : "default"}
+          onClick={() => void toggleServer()}
+          disabled={busy || (status ? !status.git_available : true)}
+        >
+          {busy
+            ? running
+              ? "Stopping..."
+              : "Starting..."
+            : running
+              ? "Stop server"
+              : "Start server"}
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          {running ? "Running — keep this app open while syncing." : "Stopped"}
+        </span>
+      </div>
+
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+
+      {running ? (
+        <div className="space-y-4">
+          {status?.host ? null : (
+            <p className="text-xs text-destructive">
+              Couldn't auto-detect this computer's network address. Find it in System Settings →
+              Network and use <code>git://&lt;your-ip&gt;/{status?.repo_path.split("/").pop()}</code>.
+            </p>
+          )}
+
+          {deepLink ? (
+            <div className="flex flex-col items-center gap-2 rounded-md border border-border/70 bg-background/60 p-4">
+              <div className="rounded-md bg-white p-3">
+                <QRCodeSVG value={deepLink} size={168} marginSize={0} />
+              </div>
+              <p className="text-center text-xs text-muted-foreground">
+                <strong className="text-foreground">Point your phone's Camera at this</strong> to
+                open the app and sync — nothing to type.
+              </p>
+            </div>
+          ) : null}
+
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Or set it up by hand:</p>
+            <UrlRow
+              label="Remote URL"
+              value={status?.git_url ?? ""}
+              copied={copied}
+              onCopy={copy}
+            />
+            {status?.ssh_url ? (
+              <UrlRow
+                label="Or, with macOS Remote Login enabled (more secure)"
+                value={status.ssh_url}
+                copied={copied}
+                onCopy={copy}
+              />
+            ) : null}
+            <ol className="list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
+              <li>On the phone: Settings → Sync → <strong>Find on local network</strong>, then tap this computer.</li>
+              <li>
+                No luck? Settings → Profile → Git: paste the Remote URL, set Branch to{" "}
+                <code>{status?.branch ?? "main"}</code>, Apply, then <strong>Sync now</strong>.
+              </li>
+            </ol>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function UrlRow({
+  label,
+  value,
+  copied,
+  onCopy,
+}: {
+  label: string;
+  value: string;
+  copied: string | null;
+  onCopy: (value: string) => void;
+}) {
+  return (
+    <div className="grid gap-1.5 text-sm">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <div className="flex items-center gap-2">
+        <code className="block flex-1 break-all rounded bg-muted/50 p-2 text-xs text-foreground select-all">
+          {value}
+        </code>
+        <Button type="button" variant="outline" size="sm" onClick={() => onCopy(value)}>
+          {copied === value ? "Copied" : "Copy"}
+        </Button>
+      </div>
+    </div>
+  );
+}

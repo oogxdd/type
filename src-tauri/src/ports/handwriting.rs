@@ -48,9 +48,34 @@ pub struct OcrListResult {
 // ── Trait ──────────────────────────────────────────────────────────────────────
 
 pub trait HandwritingService {
-    fn save_attachment(&self, image_base64: &str, mime_type: Option<&str>, file_name: Option<&str>, folder_path: Option<&str>, file_name_format: NoteFileNameFormat) -> Result<HandwritingWriteResult, String>;
-    fn queue_ocr(&self, provider: &str, api_key: &str, model: &str) -> Result<OcrQueueResult, String>;
+    fn save_attachment(
+        &self,
+        image_base64: &str,
+        mime_type: Option<&str>,
+        file_name: Option<&str>,
+        folder_path: Option<&str>,
+        file_name_format: NoteFileNameFormat,
+    ) -> Result<HandwritingWriteResult, String>;
+    fn queue_ocr(
+        &self,
+        provider: &str,
+        api_key: &str,
+        model: &str,
+    ) -> Result<OcrQueueResult, String>;
     fn list_ocr_jobs(&self) -> Result<OcrListResult, String>;
+}
+
+/// Internal gateway for attachment persistence and OCR queue workers.
+pub(crate) trait HandwritingGateway {
+    type SaveArgs;
+    type WriteResult;
+    type QueueArgs;
+    type QueueResult;
+    type ListResult;
+
+    fn save(&self, args: Self::SaveArgs) -> Result<Self::WriteResult, String>;
+    fn queue(&self, args: Self::QueueArgs) -> Result<Self::QueueResult, String>;
+    fn list(&self) -> Result<Self::ListResult, String>;
 }
 
 // ─── Implementation Notes ─────────────────────────────────────────────────────

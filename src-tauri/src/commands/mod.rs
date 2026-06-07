@@ -1,5 +1,7 @@
 mod git_sync;
 mod handwriting;
+mod import;
+mod local_sync;
 mod notes;
 mod platform;
 mod profiles;
@@ -82,6 +84,9 @@ pub(super) fn run() {
             handwriting::save_handwriting_attachment,
             handwriting::queue_handwriting_ocr,
             handwriting::list_handwriting_ocr_jobs,
+            import::scan_apple_notes_folder,
+            import::start_apple_notes_import,
+            import::apple_import_status,
             git_sync::generate_ssh_key,
             git_sync::get_ssh_public_key,
             git_sync::delete_ssh_key,
@@ -90,6 +95,10 @@ pub(super) fn run() {
             git_sync::connect_git_repo,
             git_sync::git_pull,
             git_sync::git_push,
+            local_sync::get_local_sync_server_status,
+            local_sync::start_local_sync_server,
+            local_sync::stop_local_sync_server,
+            local_sync::discover_local_sync_servers,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
@@ -106,7 +115,17 @@ pub(super) fn run() {
             _ => {}
         }
 
-        #[cfg(not(target_os = "ios"))]
+        // Tear down the local sync git daemon when the app exits so we never
+        // leave an orphaned process holding port 9418.
+        #[cfg(desktop)]
+        {
+            if matches!(event, tauri::RunEvent::Exit) {
+                crate::shutdown_local_sync_server();
+            }
+            let _ = app_handle;
+        }
+
+        #[cfg(not(any(target_os = "ios", desktop)))]
         let _ = (app_handle, event);
     });
 }

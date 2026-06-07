@@ -1,63 +1,122 @@
-use serde::{Deserialize, Serialize};
+use std::{path::PathBuf, time::SystemTime};
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-#[derive(Serialize)]
-pub struct NoteEntry {
-    pub name: String,
-    pub path: String,
-}
-
-#[derive(Serialize)]
-pub struct NoteMeta {
-    pub created_ms: Option<i64>,
-    pub updated_ms: Option<i64>,
-    pub note_type: Option<String>,
-    pub recording_audio_path: Option<String>,
-    pub handwriting_attachment_path: Option<String>,
-    pub transcription_status: Option<String>,
-    pub transcription_error: Option<String>,
-    pub transcription_updated_ms: Option<i64>,
-    pub ocr_status: Option<String>,
-    pub ocr_error: Option<String>,
-    pub ocr_updated_ms: Option<i64>,
-}
-
-#[derive(Serialize)]
-pub struct FolderNode {
-    pub name: String,
-    pub path: String,
-    pub children: Vec<FolderNode>,
-    pub notes: Vec<NoteEntry>,
-}
-
-#[derive(Serialize)]
-pub struct CreateNoteResult {
-    pub path: String,
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum NoteFileNameFormat {
-    #[default]
-    UtcTimestampSlug,
-    UuidV7,
-    UuidV7PrefixSlug,
-}
+pub use crate::domain::notes::{
+    CreateNoteResult, FolderNode, NoteFileNameFormat, NoteFrontMatter, NoteMeta, OrderFile,
+};
 
 // ── Trait ──────────────────────────────────────────────────────────────────────
 
 pub trait NoteService {
     fn get_tree(&self) -> Result<FolderNode, String>;
     fn read_note(&self, path: &str) -> Result<String, String>;
-    fn create_note(&self, folder_path: Option<&str>, content: Option<&str>, timestamp_ms: Option<i64>, file_name_format: NoteFileNameFormat) -> Result<CreateNoteResult, String>;
+    fn create_note(
+        &self,
+        folder_path: Option<&str>,
+        content: Option<&str>,
+        timestamp_ms: Option<i64>,
+        file_name_format: NoteFileNameFormat,
+    ) -> Result<CreateNoteResult, String>;
     fn write_note(&self, path: &str, content: &str) -> Result<(), String>;
     fn set_note_timestamp(&self, path: &str, timestamp_ms: i64) -> Result<(), String>;
     fn get_note_meta(&self, path: &str) -> Result<NoteMeta, String>;
     fn move_items(&self, items: &[String], destination: &str) -> Result<(), String>;
     fn delete_items(&self, items: &[String]) -> Result<(), String>;
     fn rename_item(&self, path: &str, new_name: &str) -> Result<String, String>;
-    fn set_order(&self, parent: &str, folder_order: Vec<String>, note_order: Vec<String>) -> Result<(), String>;
+    fn set_order(
+        &self,
+        parent: &str,
+        folder_order: Vec<String>,
+        note_order: Vec<String>,
+    ) -> Result<(), String>;
+}
+
+/// Storage classification used by note use cases without exposing `std::fs::Metadata`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum NoteStorageEntryKind {
+    File,
+    Directory,
+    Other,
+}
+
+/// Outbound storage port. Implementations may use a filesystem, database, or
+/// another persistence mechanism; application code only sees these operations.
+pub(crate) trait NotesRepository {
+    fn ensured_root(&self) -> Result<PathBuf, String>;
+    fn resolve_path(&self, rel: &str) -> Result<PathBuf, String>;
+    fn strip_root(&self, path: &std::path::Path) -> String;
+    fn build_tree(&self) -> Result<FolderNode, String>;
+    fn read_to_string(&self, path: &std::path::Path) -> Result<String, String>;
+    fn entry_kind(&self, path: &std::path::Path) -> Result<Option<NoteStorageEntryKind>, String>;
+    fn file_times(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<(Option<SystemTime>, Option<SystemTime>), String>;
+    fn create_dir_all(&self, path: &std::path::Path) -> Result<(), String>;
+    fn rename(&self, source: &std::path::Path, target: &std::path::Path) -> Result<(), String>;
+    fn remove_dir_all(&self, path: &std::path::Path) -> Result<(), String>;
+    fn remove_file(&self, path: &std::path::Path) -> Result<(), String>;
+    fn write_note(
+        &self,
+        path: &std::path::Path,
+        meta: &NoteFrontMatter,
+        body: &str,
+    ) -> Result<(), String>;
+    fn allocate_note_file_name(
+        &self,
+        folder: &std::path::Path,
+        timestamp_ms: i64,
+        note_id: &str,
+        content: &str,
+        fallback_slug: &str,
+        file_name_format: NoteFileNameFormat,
+    ) -> Result<String, String>;
+    fn is_feed_folder_path(&self, path: &std::path::Path) -> bool;
+    fn is_storage_folder_path(&self, path: &std::path::Path) -> bool;
+    fn is_system_folder_path(&self, path: &std::path::Path) -> bool;
+    fn update_order_append(
+        &self,
+        dir: &std::path::Path,
+        names: &[String],
+        is_folder: bool,
+    ) -> Result<(), String>;
+    fn update_order_remove(
+        &self,
+        dir: &std::path::Path,
+        names: &[String],
+        is_folder: bool,
+    ) -> Result<(), String>;
+    fn update_order_rename(
+        &self,
+        dir: &std::path::Path,
+        old_name: &str,
+        new_name: &str,
+        is_folder: bool,
+    ) -> Result<(), String>;
+    fn write_order_file(&self, dir: &std::path::Path, order: &OrderFile) -> Result<(), String>;
+}
+
+/// Frontmatter parsing is an adapter concern because the persisted document
+/// format may change independently of the note use cases.
+pub(crate) trait NoteDocumentCodec {
+    fn parse(&self, raw: &str) -> (NoteFrontMatter, String);
+}
+
+pub(crate) trait NoteBodyCrypto {
+    fn decrypt_note_body(&self, body: &str) -> Result<String, String>;
+}
+
+pub(crate) trait NoteHistory {
+    fn note_timestamps(&self, note_rel: &str) -> Result<(Option<i64>, Option<i64>), String>;
+}
+
+pub(crate) trait NoteIdGenerator {
+    fn generate_note_id(&self) -> String;
+    fn uuid_tail_without_timestamp_prefix(&self, note_id: &str) -> String;
+}
+
+pub(crate) trait NoteClock {
+    fn now_ms(&self) -> Option<i64>;
+    fn time_to_ms(&self, time: std::time::SystemTime) -> Option<i64>;
 }
 
 // ─── Implementation Notes ─────────────────────────────────────────────────────

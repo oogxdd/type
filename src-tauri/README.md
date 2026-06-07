@@ -1,9 +1,9 @@
 # src-tauri — Rust Backend
 
 This is the Rust backend for the app, built on Tauri v2. The code is organised
-using a **ports & adapters** (hexagonal) architecture so that the core business
-logic can be migrated to a different shell later (e.g. UniFFI bindings for a
-React Native mobile app) without rewriting domain logic.
+using a pragmatic **clean / hexagonal architecture** so that core use cases can
+move to a different shell later (e.g. UniFFI bindings for a React Native mobile
+app) without rewriting domain logic.
 
 ## Directory layout
 
@@ -13,7 +13,22 @@ src/
 │                       utility functions, and the public run() entry point.
 ├── main.rs             Binary entry point (calls lib::run).
 │
-├── ports/              Port interfaces (platform-agnostic trait definitions).
+├── domain/             Framework-free core DTOs and domain state.
+│   └── notes.rs        Note tree, metadata, frontmatter, create/order args.
+│
+├── application/        Use-case services. Owns workflows and depends on ports,
+│                       never on Tauri command handlers.
+│   ├── notes.rs        Real note CRUD/tree/order workflows.
+│   ├── profiles.rs     Profile use-case facade.
+│   ├── security.rs     Lock/encryption use-case facade.
+│   ├── recordings.rs   Recording/native capture/transcription facade.
+│   ├── handwriting.rs  Attachment/OCR facade.
+│   ├── import.rs       Import scan/start/status facade.
+│   ├── git_sync.rs     Git sync facade.
+│   ├── local_sync.rs   Local sync server facade.
+│   └── platform.rs     Native platform facade.
+│
+├── ports/              Port interfaces and gateway traits.
 │   ├── mod.rs          Module index.
 │   ├── notes.rs        Note CRUD, tree, ordering.
 │   ├── profiles.rs     Multi-profile management.
@@ -23,9 +38,9 @@ src/
 │   ├── git_sync.rs     Git sync (SSH/HTTPS, merge, history).
 │   └── platform.rs     Platform-specific capabilities (theme, export).
 │
-├── adapters/           Adapter implementations (Rust/Tauri-specific).
+├── adapters/           Adapter implementations (Rust/Tauri/filesystem-specific).
 │   ├── mod.rs          Module index + crate-level re-exports.
-│   ├── notes.rs        Filesystem-backed note storage.
+│   ├── notes/          Filesystem-backed note storage + document codec.
 │   ├── profiles.rs     JSON-file profile state management.
 │   ├── security.rs     XChaCha20-Poly1305 encryption, Argon2 KDF.
 │   ├── recordings.rs   Audio file handling, Whisper/AssemblyAI transcription.
@@ -47,19 +62,26 @@ src/
 
 ## Architecture rationale
 
-### Why three layers?
+### Why these layers?
 
 | Layer | Role | Depends on |
 |-------|------|------------|
-| **ports** | Define *what* each domain can do via Rust traits. | Nothing — pure interface. |
-| **adapters** | Implement *how* it's done (filesystem, git2, crypto, HTTP). | Port traits + external crates. |
-| **commands** | Wire adapters to the current shell (Tauri `#[command]`). | Adapters + Tauri framework. |
+| **domain** | Framework-free DTOs and domain state. | Nothing app-specific. |
+| **application** | Use-case orchestration and policy. | `ports` + `domain`. |
+| **ports** | Traits for outbound dependencies and gateway contracts. | `domain` types. |
+| **adapters** | Concrete filesystem, git2, crypto, HTTP, native APIs. | `ports`, external crates, Tauri where needed. |
+| **commands** | IPC transport, security gate, blocking-thread dispatch. | `application`, concrete adapters, Tauri. |
 
-The key benefit: **only the `commands/` layer knows about Tauri**. The adapters
-are plain Rust functions that could be called from any context. When migrating
-to UniFFI (for React Native) or another binding system, you replace `commands/`
-with a new thin layer that exposes the same adapter functions through a
-different mechanism — the adapters and ports stay untouched.
+The key rule: **commands do not own business workflows**. They unlock-gate the
+request, construct the relevant application service, and dispatch blocking work
+when needed. Application services depend on traits, while adapters own Tauri
+handles, filesystem paths, git2, HTTP, crypto, native APIs, and worker queues.
+
+The notes domain is the strictest implementation: note DTOs live in `domain/`,
+note use cases live in `application/notes.rs`, and filesystem/frontmatter/git
+history/time/id/encryption dependencies are accessed through ports. Other
+domains now follow the same command -> application -> port -> adapter direction
+through gateway traits while their deeper persistence logic remains in adapters.
 
 ### Why split commands by domain?
 
@@ -73,22 +95,21 @@ command handler. Splitting into domain modules:
 3. **Parallel work** — contributors can work on different domains without merge
    conflicts in a single monolithic file.
 
-### How commands reference adapters
+### How commands reference use cases
 
-Each command submodule starts with `use crate::*;` which pulls in all adapter
-functions and shared types re-exported from `lib.rs`. The `generate_handler![]`
-macro in `commands/mod.rs` uses qualified paths (`security::get_security_state`,
-`notes::read_note`, etc.) to avoid ambiguity with identically-named adapter
-modules.
+Each command submodule imports its application service and concrete Tauri
+adapter explicitly. The `generate_handler![]` macro in `commands/mod.rs` uses
+qualified paths (`security::get_security_state`, `notes::read_note`, etc.) to
+avoid ambiguity with identically-named adapter modules.
 
 ### Future: UniFFI migration path
 
 The planned migration to React Native with `uniffi-bindgen-react-native`:
 
-1. Keep `ports/` and `adapters/` as-is.
-2. Replace `commands/` with UniFFI `#[uniffi::export]` functions that call the
-   same adapter layer.
+1. Keep `domain/`, `application/`, `ports/`, and most `adapters/` as-is.
+2. Replace `commands/` with UniFFI `#[uniffi::export]` functions that construct
+   the same application services.
 3. The frontend moves from Tauri's IPC to UniFFI-generated TypeScript bindings.
 
-Because the command layer is intentionally thin (most functions are 1–5 lines
-delegating to an adapter), this swap is mechanical rather than architectural.
+Because the command layer is intentionally thin, this swap is mechanical rather
+than architectural.

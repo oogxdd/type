@@ -1,4 +1,4 @@
-import { OTA_APPLY_PENDING_KEY } from "./constants";
+import { OTA_APPLY_PENDING_KEY } from "@/shared/constants";
 
 const isLikelyIosWebView = () => {
   if (typeof window === "undefined") {
@@ -16,7 +16,7 @@ const setStatus = (message: string) => {
 };
 
 const mountBundledApp = async () => {
-  const { mountApp } = await import("./mainApp");
+  const { mountApp } = await import("./app/main-app");
   mountApp();
 };
 

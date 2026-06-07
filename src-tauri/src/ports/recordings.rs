@@ -68,8 +68,17 @@ pub struct WhisperStatus {
 // ── Trait ──────────────────────────────────────────────────────────────────────
 
 pub trait RecordingService {
-    fn save_recording(&self, audio_base64: &str, mime_type: Option<&str>, folder_path: Option<&str>, file_name_format: NoteFileNameFormat) -> Result<RecordingWriteResult, String>;
-    fn queue_transcriptions_assembly(&self, api_key: &str) -> Result<TranscriptionQueueResult, String>;
+    fn save_recording(
+        &self,
+        audio_base64: &str,
+        mime_type: Option<&str>,
+        folder_path: Option<&str>,
+        file_name_format: NoteFileNameFormat,
+    ) -> Result<RecordingWriteResult, String>;
+    fn queue_transcriptions_assembly(
+        &self,
+        api_key: &str,
+    ) -> Result<TranscriptionQueueResult, String>;
     fn queue_transcriptions_local(&self, model: &str) -> Result<TranscriptionQueueResult, String>;
     fn retrigger_transcription(&self, note_path: &str) -> Result<(), String>;
     fn list_recordings(&self) -> Result<RecordingsListResult, String>;
@@ -78,6 +87,33 @@ pub trait RecordingService {
     fn native_recorder_capabilities(&self) -> Result<NativeRecorderCapabilities, String>;
     fn start_native_recording(&self) -> Result<(), String>;
     fn stop_native_recording(&self) -> Result<RecordingAudioPayload, String>;
+}
+
+/// Internal gateway for recording storage, native capture, and queue workers.
+pub(crate) trait RecordingsGateway {
+    type NativeCapabilities;
+    type AudioPayload;
+    type SaveArgs;
+    type WriteResult;
+    type CloudQueueArgs;
+    type LocalQueueArgs;
+    type QueueResult;
+    type RetriggerArgs;
+    type WhisperArgs;
+    type WhisperStatus;
+    type ListResult;
+    type ReadArgs;
+
+    fn native_capabilities(&self) -> Result<Self::NativeCapabilities, String>;
+    fn start_native(&self) -> Result<(), String>;
+    fn stop_native(&self) -> Result<Self::AudioPayload, String>;
+    fn save(&self, args: Self::SaveArgs) -> Result<Self::WriteResult, String>;
+    fn queue_cloud(&self, args: Self::CloudQueueArgs) -> Result<Self::QueueResult, String>;
+    fn queue_local(&self, args: Self::LocalQueueArgs) -> Result<Self::QueueResult, String>;
+    fn retrigger(&self, args: Self::RetriggerArgs) -> Result<(), String>;
+    fn whisper_status(&self, args: Self::WhisperArgs) -> Self::WhisperStatus;
+    fn list(&self) -> Result<Self::ListResult, String>;
+    fn read_audio(&self, args: Self::ReadArgs) -> Result<Self::AudioPayload, String>;
 }
 
 // ─── Implementation Notes ─────────────────────────────────────────────────────

@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Local environment files (keep .env.example tracked as the template)
+.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -22,5 +25,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-notes
-notes/
+
+# A profile's local notes data dir when it lives at the repo root. Anchored with
+# a leading slash so it never swallows source folders named "notes" (e.g.
+# src-tauri/src/adapters/notes/).
+/notes/

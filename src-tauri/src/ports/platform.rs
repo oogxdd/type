@@ -5,6 +5,13 @@ pub trait PlatformService {
     fn present_file_export_sheet(&self, path: &str) -> Result<(), String>;
 }
 
+/// Internal gateway that isolates application services from target-specific
+/// native APIs.
+pub(crate) trait PlatformGateway {
+    fn set_native_theme(&self, theme: &str) -> Result<(), String>;
+    fn present_file_export_sheet(&self, path: &str) -> Result<(), String>;
+}
+
 // ─── Implementation Notes ─────────────────────────────────────────────────────
 //
 // PlatformService wraps OS-specific native features that differ per target platform.

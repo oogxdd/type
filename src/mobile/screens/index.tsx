@@ -1,18 +1,18 @@
 import type { MutableRefObject, MouseEvent as ReactMouseEvent } from "react";
 import type { MobileAction, MobileRoute } from "../navigation";
-import type { NoteEntry } from "../../types";
-import type { NotePreview } from "../../utils/format";
-import type { FlattenedItem } from "../../tree/types";
-import type { SettingsSectionId } from "../../components/SettingsPanel";
-import type { RecentBucket } from "../hooks/useRecentBuckets";
+import type { NoteEntry } from "@/shared/types";
+import type { NotePreview } from "@/shared/lib/format";
+import type { FlattenedItem } from "@/features/tree/lib/types";
+import type { SettingsSectionId } from "@/features/settings/lib/sections";
+import type { RecentBucket } from "@/mobile/hooks/use-recent-buckets";
 
-import { PhoneHomeScreen } from "./PhoneHomeScreen";
-import { PhoneFoldersScreen } from "./PhoneFoldersScreen";
-import { PhoneNotesScreen } from "./PhoneNotesScreen";
-import { PhoneRecentDateScreen } from "./PhoneRecentDateScreen";
-import { PhoneRecordingScreen } from "./PhoneRecordingScreen";
-import { PhoneEditorScreen } from "./PhoneEditorScreen";
-import { PhoneSettingsScreen } from "./PhoneSettingsScreen";
+import { PhoneHomeScreen } from "@/mobile/screens/home-screen";
+import { PhoneFoldersScreen } from "@/mobile/screens/folders-screen";
+import { PhoneNotesScreen } from "@/mobile/screens/notes-screen";
+import { PhoneRecentDateScreen } from "@/mobile/screens/recent-date-screen";
+import { PhoneRecordingScreen } from "@/mobile/screens/recording-screen";
+import { PhoneEditorScreen } from "@/mobile/screens/editor-screen";
+import { PhoneSettingsScreen } from "@/mobile/screens/settings-screen";
 
 type PhoneRouteRendererProps = {
   currentRoute: MobileRoute;
