@@ -62,6 +62,26 @@ Open `src-tauri/tauri.conf.json` and replace the placeholder:
 
 Paste the **full single-line contents** of `~/.tauri/type-updater.key.pub`.
 
+To do it without manually editing JSON:
+
+```bash
+PUBKEY="$(tr -d '\n' < ~/.tauri/type-updater.key.pub)"
+node -e '
+const fs = require("fs");
+const path = "src-tauri/tauri.conf.json";
+const config = JSON.parse(fs.readFileSync(path, "utf8"));
+config.plugins.updater.pubkey = process.env.PUBKEY;
+fs.writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`);
+'
+```
+
+Commit this config change. The `.pub` key is public and safe to commit; the
+private `~/.tauri/type-updater.key` must never be committed.
+
+If you see `failed to decode pubkey ... Invalid symbol 95, offset 7`, the
+placeholder `REPLACE_WITH_UPDATER_PUBLIC_KEY` is still in the config. The `_`
+character is symbol 95.
+
 > The endpoint already points at your GitHub repo's latest release. Change it if
 > you host releases elsewhere. `{{target}}`, `{{arch}}`, `{{current_version}}`
 > placeholders are supported in the URL if you want per-platform manifests.

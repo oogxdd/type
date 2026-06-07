@@ -48,6 +48,19 @@ if [ "$DO_DESKTOP" = true ]; then
   : "${TAURI_SIGNING_PRIVATE_KEY:?set TAURI_SIGNING_PRIVATE_KEY (the updater private key)}"
   : "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:?set TAURI_SIGNING_PRIVATE_KEY_PASSWORD}"
 
+  PUBKEY=$(node -e 'const c = require("./src-tauri/tauri.conf.json"); process.stdout.write((c.plugins?.updater?.pubkey || "").trim())')
+  if [ -z "$PUBKEY" ] || [ "$PUBKEY" = "REPLACE_WITH_UPDATER_PUBLIC_KEY" ]; then
+    echo "Updater pubkey is not configured in src-tauri/tauri.conf.json." >&2
+    echo "Generate it with: npm run tauri signer generate -- -w ~/.tauri/type-updater.key" >&2
+    echo "Then paste ~/.tauri/type-updater.key.pub into plugins.updater.pubkey and commit it." >&2
+    exit 1
+  fi
+  if ! printf '%s' "$PUBKEY" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
+    echo "Updater pubkey in src-tauri/tauri.conf.json is not valid base64." >&2
+    echo "Paste the full single-line contents of ~/.tauri/type-updater.key.pub." >&2
+    exit 1
+  fi
+
   echo "==> Building desktop bundle (.dmg + updater)"
   # macOS updater artifacts are produced from the `app` bundle target when
   # `bundle.createUpdaterArtifacts` is enabled. Building only `dmg` creates the
