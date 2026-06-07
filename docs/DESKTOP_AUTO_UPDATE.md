@@ -94,7 +94,7 @@ The updater needs the signing key available as env vars at build time:
 export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/type-updater.key)"
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<the password you set>"
 
-npm run tauri build -- --bundles dmg,updater
+npm run tauri build -- --bundles app,dmg
 ```
 
 This produces, in `src-tauri/target/release/bundle/`:
@@ -102,6 +102,9 @@ This produces, in `src-tauri/target/release/bundle/`:
 - `dmg/Type_<version>_aarch64.dmg` — the installer (for first-time installs).
 - `macos/Type.app.tar.gz` — the **update payload**.
 - `macos/Type.app.tar.gz.sig` — the **signature** for that payload.
+
+`dmg` alone is not enough for auto-update publishing: Tauri will create the
+installer, but not the updater payload/signature. Include `app,dmg`.
 
 > Build on Apple Silicon → `aarch64`. For Intel Macs you'd also build the
 > `x86_64-apple-darwin` target (or a `universal-apple-darwin` build) and add a

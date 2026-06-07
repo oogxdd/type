@@ -49,7 +49,10 @@ if [ "$DO_DESKTOP" = true ]; then
   : "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:?set TAURI_SIGNING_PRIVATE_KEY_PASSWORD}"
 
   echo "==> Building desktop bundle (.dmg + updater)"
-  npm run tauri build -- --bundles dmg,updater
+  # macOS updater artifacts are produced from the `app` bundle target when
+  # `bundle.createUpdaterArtifacts` is enabled. Building only `dmg` creates the
+  # installer but not `Type.app.tar.gz` / `.sig`.
+  npm run tauri build -- --bundles app,dmg
 
   DMG=$(find src-tauri/target/release/bundle/dmg -name "*.dmg" | head -1)
   TARGZ=$(find src-tauri/target/release/bundle/macos -name "*.app.tar.gz" | head -1)

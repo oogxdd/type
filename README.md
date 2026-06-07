@@ -43,6 +43,26 @@ npm install
 npm run dev          # desktop dev
 ```
 
+### Isolated desktop dev
+
+If the production macOS app is installed on the same machine, use the isolated
+dev flavor so development does not touch production app data:
+
+```bash
+npm run tauri:dev:isolated
+```
+
+Production uses `com.digital.type2` and stores app data under
+`~/Library/Application Support/com.digital.type2/`. The isolated dev flavor uses
+`com.digital.type2.dev` and stores app data under
+`~/Library/Application Support/com.digital.type2.dev/`.
+
+To build an isolated dev DMG:
+
+```bash
+npm run tauri:build:dev
+```
+
 ### iOS
 
 ```bash
