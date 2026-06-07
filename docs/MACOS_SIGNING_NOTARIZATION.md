@@ -37,6 +37,19 @@ App Store Connect -> Users and Access -> Integrations
 Download its `AuthKey_XXXXXXXXXX.p8` file. Apple only allows downloading this
 private key once, so keep a secure backup.
 
+Keep the `.p8` contents in a file. Do not paste the private key into
+`APPLE_API_KEY`; that variable is only the key ID.
+
+```bash
+mkdir -p ~/.apple
+mv ~/Downloads/AuthKey_XXXXXXXXXX.p8 ~/.apple/
+chmod 600 ~/.apple/AuthKey_XXXXXXXXXX.p8
+```
+
+If the `.p8` private key contents are pasted into chat, logs, shell history, or
+any other shared place, treat the key as compromised: revoke that App Store
+Connect API key and create a new one.
+
 ## Local release
 
 Export the Apple signing, notarization, and updater-signing credentials:
@@ -45,7 +58,7 @@ Export the Apple signing, notarization, and updater-signing credentials:
 export APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAM_ID)"
 
 export APPLE_API_ISSUER="issuer-uuid"
-export APPLE_API_KEY="XXXXXXXXXX"
+export APPLE_API_KEY="XXXXXXXXXX" # Key ID, not the .p8 contents
 export APPLE_API_KEY_PATH="$HOME/.apple/AuthKey_XXXXXXXXXX.p8"
 
 export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/type-updater.key)"
