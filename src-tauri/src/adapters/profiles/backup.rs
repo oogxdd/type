@@ -251,7 +251,12 @@ pub(crate) fn export_profiles_to_documents_impl(
     let profiles_state_path = profiles_file_path(app)?;
     if profiles_state_path.exists() {
         let target = export_path.join(".notes-profiles.json");
-        copy_path_with_stats(&profiles_state_path, &target, &mut file_count, &mut total_bytes)?;
+        copy_path_with_stats(
+            &profiles_state_path,
+            &target,
+            &mut file_count,
+            &mut total_bytes,
+        )?;
     }
 
     let security_path = app_data_dir(app)?.join(".notes-security.json");

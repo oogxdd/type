@@ -102,7 +102,11 @@ pub(crate) fn check_whisper_availability(
         Err(e) => WhisperStatusResult {
             available: false,
             python_found: true,
-            error: Some(format!("Failed to parse check output: {}. Raw: {}", e, stdout.trim())),
+            error: Some(format!(
+                "Failed to parse check output: {}. Raw: {}",
+                e,
+                stdout.trim()
+            )),
         },
     }
 }
@@ -141,8 +145,13 @@ pub(crate) fn transcribe_audio_local_whisper(
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let parsed: WhisperScriptOutput = serde_json::from_str(&stdout)
-        .map_err(|e| format!("Failed to parse whisper output: {}. Raw: {}", e, &stdout[..stdout.len().min(500)]))?;
+    let parsed: WhisperScriptOutput = serde_json::from_str(&stdout).map_err(|e| {
+        format!(
+            "Failed to parse whisper output: {}. Raw: {}",
+            e,
+            &stdout[..stdout.len().min(500)]
+        )
+    })?;
 
     let text = parsed.text.clone();
     // Keep the full JSON (including words) as-is for saving
@@ -159,7 +168,10 @@ pub(crate) fn transcribe_audio_local_whisper(
 
 /// Save word-level transcription JSON alongside the audio file.
 /// e.g. audio-xxxx.webm → audio-xxxx.transcription.json
-pub(crate) fn save_word_level_json(audio_path: &Path, json_content: &str) -> Result<PathBuf, String> {
+pub(crate) fn save_word_level_json(
+    audio_path: &Path,
+    json_content: &str,
+) -> Result<PathBuf, String> {
     let stem = audio_path
         .file_stem()
         .and_then(|s| s.to_str())

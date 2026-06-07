@@ -541,4 +541,3 @@ pub(crate) fn set_profile_notes_root_state(
     write_profiles_state(app, &state)?;
     Ok(state)
 }
-

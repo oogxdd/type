@@ -6,8 +6,8 @@ use std::{thread, time::Duration};
 use crate::response_error;
 
 use super::{
-    HUGGINGFACE_INFERENCE_BASE_URL, HUGGINGFACE_MAX_RETRIES, HUGGINGFACE_RETRY_DELAY,
-    HUGGINGFACE_RETRYABLE_STATUS,
+    HUGGINGFACE_INFERENCE_BASE_URL, HUGGINGFACE_MAX_RETRIES, HUGGINGFACE_RETRYABLE_STATUS,
+    HUGGINGFACE_RETRY_DELAY,
 };
 
 fn parse_huggingface_text(payload: &serde_json::Value) -> Option<String> {

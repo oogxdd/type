@@ -9,41 +9,46 @@ A local-first markdown notes app built with Tauri v2 (Rust backend) + React (Typ
 ## Tech stack
 
 - **Frontend**: React 19, TypeScript, Vite, Tiptap (editor), DnD Kit (drag-and-drop), Tailwind + Shadcn/ui
-- **Backend**: Tauri v2 (Rust), organized as **ports / adapters / commands** (hexagonal) across domains: notes, profiles, security, recordings (+ whisper_env), handwriting, import, git_sync, local_sync, platform, plus iOS native
+- **Backend**: Tauri v2 (Rust), organized as **domain / application / ports / adapters / commands** (clean/hexagonal) across domains: notes, profiles, security, recordings (+ whisper_env), handwriting, import, git_sync, local_sync, platform, plus iOS native
 - **Build**: `npm run build` runs `tsc && vite build` (plus an OTA asset build). Rust: `cargo check --manifest-path src-tauri/Cargo.toml`
 - **Tests**: `npm test` (Vitest — frontend pure logic; co-located `*.test.ts`) and `cargo test --manifest-path src-tauri/Cargo.toml --lib` (Rust unit tests in `#[cfg(test)]` modules). CI (`.github/workflows/ci.yml`) runs both, plus `tsc --noEmit`, on PRs and pushes to main.
 
 ## Backend structure (src-tauri/src/)
 
-The Rust backend uses a **ports / adapters / commands** (hexagonal) layout so the
-domain logic can move to another shell (e.g. UniFFI for React Native) without a
-rewrite. `src-tauri/README.md` covers the rationale; this is the navigation map.
+The Rust backend uses a pragmatic **domain / application / ports / adapters /
+commands** layout so use cases can move to another shell (e.g. UniFFI for React
+Native) without a rewrite. `src-tauri/README.md` covers the rationale; this is
+the navigation map.
 
 ```
 src/
   main.rs              Binary entry point → lib::run().
-  lib.rs               Crate root: declares the three layers, glob-re-exports every
-                       adapter symbol, and holds shared constants/utilities.
-  ports/<domain>.rs    Platform-agnostic contract per domain.
+  lib.rs               Crate root: declares the backend layers, re-exports domain
+                       note DTOs + adapter symbols, and holds shared utilities.
+  domain/<domain>.rs   Framework-free core DTOs/state. Notes has been moved here.
+  application/<domain>.rs
+                       Use-case services. Commands call these instead of owning
+                       workflows directly.
+  ports/<domain>.rs    Platform-agnostic contracts and gateway traits.
   adapters/<domain>.rs The real Rust implementation (filesystem, git2, crypto, …).
                        A large domain may instead be a folder module
                        (adapters/<domain>/mod.rs + submodules) — see recordings/,
                        notes/, profiles/, and handwriting/.
-  commands/<domain>.rs Thin #[tauri::command] wrappers that call adapters.
+  commands/<domain>.rs Thin #[tauri::command] wrappers that lock-gate requests,
+                       construct application services, and dispatch blocking work.
 ```
 
-**Layer wiring.** `lib.rs` does `pub(crate) use adapters::*;`, so both adapters
-and command modules reach shared symbols via `use crate::*;`. The
-`generate_handler![]` macro in `commands/mod.rs` uses qualified paths
-(`notes::read_note`, `git_sync::git_pull`, …) to disambiguate from the
-identically-named adapter modules. Each command is short: unlock-gate the request
-with `ensure_security_unlocked_for_app`, then run the adapter call on a blocking
-thread via `run_blocking_command`.
+**Layer wiring.** Commands import application services plus concrete Tauri
+adapters explicitly. Application services depend on port traits/gateways.
+Adapters own Tauri handles, filesystem roots, git2, crypto, HTTP/native APIs,
+and process-global workers. The `generate_handler![]` macro in `commands/mod.rs`
+uses qualified paths (`notes::read_note`, `git_sync::git_pull`, …) to
+disambiguate command modules.
 
 ### lib.rs — shared hub
 
-- Layer declarations: `pub mod ports;`, `mod adapters; pub(crate) use adapters::*;`, `mod commands;`
-- Shared crate re-exports: `BASE64`, `fs`, `HashMap`, `HashSet`, `PathBuf`, `Manager`, git2 types, objc types (iOS)
+- Layer declarations: `pub mod domain;`, `pub mod ports;`, `mod application;`, `mod adapters;`, `mod commands;`
+- Shared crate re-exports: note domain DTOs, adapter symbols, `BASE64`, `fs`, `HashMap`, `HashSet`, `PathBuf`, `Manager`, objc types (iOS)
 - Shared constants: `RECORDING_STATUS_PENDING/QUEUED/PROCESSING/COMPLETED/FAILED`
 - Shared utilities: `app_data_dir`, `now_ms`, `time_to_ms`, `note_parent_folder_path`, `decode_base64_payload` (+ audio/image variants), `response_error`
 - macOS: `MACOS_WINDOW_ALPHA`, `apply_macos_window_alpha`
@@ -53,7 +58,7 @@ thread via `run_blocking_command`.
 
 `commands/mod.rs` holds `run()` (builds the Tauri app, registers plugins, calls
 `generate_handler![]`) and the shared `run_blocking_command` helper. One file per
-domain, each a set of thin wrappers:
+domain, each a set of thin wrappers around application services:
 
 | File | Commands |
 |------|----------|
@@ -67,11 +72,19 @@ domain, each a set of thin wrappers:
 | `git_sync.rs`   | SSH key gen/get/delete, status, history, connect, pull, push |
 | `local_sync.rs` | local server status/start/stop, discover peers |
 
+### application/ — use-case boundary
+
+Each `application/<domain>.rs` exposes a small service struct. Notes contains the
+real note workflows (tree, read/write, create, move/delete/rename/order) and
+talks only to ports for storage, document parsing, encryption, history, IDs, and
+time. Other domains expose use-case facades over gateway traits so commands no
+longer own workflows; their deeper persistence/worker logic remains in adapters.
+
 ### adapters/ — implementations
 
 Key symbols live in `adapters/<domain>.rs`:
 
-- **notes** — a folder module (`notes/mod.rs` + `front_matter.rs` + `naming.rs` + `tree.rs`) for filesystem notes, front-matter, tree, ordering. `mod.rs` is the hub: shared constants (`ORDER_FILE`, `FEED_FOLDER`, `ARCHIEVE_FOLDER`, `RECORDINGS_STORAGE_FOLDER`, `ATTACHMENTS_STORAGE_FOLDER`, `PROTECTED_SYSTEM_FOLDERS`) + DTO types + root/path resolution (`ensured_notes_root` resolves the active profile's root, `resolve_path`, `strip_root`), and it re-exports the submodules so the crate-root `notes::*` surface is flat. `front_matter.rs`: `parse/render/write_note_with_front_matter`. `naming.rs`: `allocate_note_file_name` (UTC-slug / uuid_v7 / uuid_v7_prefix_slug) + Unicode-aware `slug_from_content`. `tree.rs`: `build_folder_node`, `ensure_system_folders`, `migrate_legacy_system_folders`, order helpers, `collect_markdown_note_files`.
+- **notes** — a folder module (`notes/mod.rs` + `front_matter.rs` + `naming.rs` + `tree.rs`) for filesystem notes, front-matter, tree, ordering. `mod.rs` is the hub: shared constants (`ORDER_FILE`, `FEED_FOLDER`, `ARCHIEVE_FOLDER`, `RECORDINGS_STORAGE_FOLDER`, `ATTACHMENTS_STORAGE_FOLDER`, `PROTECTED_SYSTEM_FOLDERS`) + root/path resolution (`ensured_notes_root` resolves the active profile's root, `resolve_path`, `strip_root`) + concrete port adapters (`FilesystemNotesRepository`, `FrontMatterNoteDocumentCodec`, `RuntimeNoteBodyCrypto`, `GitNoteHistoryAdapter`, `UuidNoteIdGenerator`, `SystemNoteClock`). Note DTOs live in `domain/notes.rs`. `front_matter.rs`: `parse/render/write_note_with_front_matter`. `naming.rs`: `allocate_note_file_name` (UTC-slug / uuid_v7 / uuid_v7_prefix_slug) + Unicode-aware `slug_from_content`. `tree.rs`: `build_folder_node`, `ensure_system_folders`, `migrate_legacy_system_folders`, order helpers, `collect_markdown_note_files`.
 - **profiles** — a folder module (`profiles/mod.rs` + `state.rs` + `backup.rs`) for multi-profile support. `mod.rs`: `.notes-profiles.json` constants + DTO types + `profiles_file_path`/`profile_root_for_id`. `state.rs`: filesystem discovery, normalization, persistence, legacy `.notes-sessions.json` migration, and the `ensure_profiles_state`/`find_profile`/`*_state` CRUD (+ `normalize_notes_root_path`, dir copy/move helpers). `backup.rs`: profile backup zip + Documents export.
 - **security** — XChaCha20-Poly1305 at-rest body encryption with an Argon2id-derived key. `SECURITY_RUNTIME` (OnceLock<Mutex>) holds the in-memory key after unlock. `.notes-security.json` config. `encrypt_note_body_for_write`, `decrypt_note_body_for_read`, `ensure_security_unlocked_for_app` (the lock gate most commands call), panic flow `panic_reset_local_data`.
 - **recordings** — a folder module (`recordings/mod.rs` + `whisper.rs` + `assembly.rs`): save audio → note with metadata. `mod.rs` owns the `TRANSCRIPTION_QUEUE` worker (which dispatches to a backend), types, queue state, note scanning, and file naming. The two transcription backends live in their own submodules — `whisper.rs` (desktop, managed-Python `faster-whisper` via `whisper_env`; `check_whisper_availability`, `transcribe_audio_local_whisper`) and `assembly.rs` (AssemblyAI cloud, used on iOS). `collect_recording_notes`, queue snapshot for the UI.
@@ -84,13 +97,10 @@ Key symbols live in `adapters/<domain>.rs`:
 
 ### ports/ — contracts
 
-Each `ports/<domain>.rs` is documentation-first: the `Serialize` DTOs, a trait
-naming the operations, and an "Implementation Notes" block spelling out the
-inputs, outputs, and invariants of every operation. They are the spec a future
-non-Tauri shell (UniFFI) would re-implement, so keep them in sync with adapter
-behavior when a contract changes. (The adapters currently provide behavior as
-free functions rather than `impl Trait`, so the traits read as the contract, not
-a compile-time constraint.)
+Each `ports/<domain>.rs` is documentation-first and now also carries
+application-facing gateway traits. Public traits document the user-facing
+contracts; `pub(crate)` gateway traits are what application services depend on.
+Keep these in sync with adapter behavior when a contract changes.
 
 ### Cross-domain dependencies & visibility
 

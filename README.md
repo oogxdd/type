@@ -27,8 +27,8 @@ macOS, Windows, Linux, and iOS.
 - **Frontend** — React 19, TypeScript, Vite, Tiptap, DnD Kit, Tailwind + shadcn/ui.
   Feature-sliced under `src/`: `app/` (composition root), `shared/` (domain-agnostic
   building blocks), `features/<domain>/`, plus thin `desktop/` and `mobile/` shells.
-- **Backend** — Tauri v2 (Rust) in a **ports / adapters / commands** (hexagonal) layout, so
-  the domain logic can move to another shell (e.g. UniFFI for React Native) without a rewrite.
+- **Backend** — Tauri v2 (Rust) in a pragmatic **domain / application / ports / adapters / commands**
+  layout, so use cases can move to another shell (e.g. UniFFI for React Native) without a rewrite.
 
 For the full module map and conventions see **[AGENTS.md](./AGENTS.md)**; for the backend,
 **[src-tauri/README.md](src-tauri/README.md)**.
