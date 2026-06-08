@@ -1,13 +1,11 @@
 import {
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
   type Dispatch,
   type SetStateAction,
   type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
 } from "react";
 import {
   DndContext,
@@ -31,6 +29,7 @@ import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { useSecurity } from "@/features/security/hooks/security-context";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import { DesktopContextMenu } from "./desktop-context-menu";
+import { useDesktopNavigation } from "./hooks/use-desktop-navigation";
 import { FoldersPanel } from "@/features/tree/components/folders-panel";
 import { FeedPanel } from "@/features/tree/components/feed-panel";
 import { useDragDrop } from "@/features/tree/hooks/use-drag-drop";
@@ -42,7 +41,6 @@ import {
   isSystemFolder,
 } from "@/shared/constants";
 import { focusNoScroll } from "@/shared/lib/dom";
-import { computeRangeSelection } from "@/shared/lib/selection";
 import type { AppMode } from "@/shared/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { AppSidebar } from "./app-sidebar";
@@ -160,9 +158,12 @@ export function DesktopAppShell({
     deleteNotes,
     shouldNestNotesInNavigation,
   } = useNotesTree();
+  const customFoldersTreeData = useMemo(
+    () => treeData.filter((node) => !isSystemFolder(node.id)),
+    [treeData]
+  );
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeNavigationTab, setActiveNavigationTab] = useState<"feed" | "folders">("folders");
   const [threePaneLayout, setThreePaneLayout] = useState<Record<string, number>>({
     nav: 22,
     middle: 25,
@@ -176,9 +177,6 @@ export function DesktopAppShell({
   const notesPanelRef = useRef<HTMLDivElement | null>(null);
   const foldersPanelRef = useRef<HTMLDivElement | null>(null);
   const middlePaneRef = useRef<HTMLDivElement | null>(null);
-  const lastNonFeedFolderRef = useRef<string>("");
-  const selectedNotesRef = useRef<Set<string>>(new Set());
-  selectedNotesRef.current = selectedNotes;
 
   const {
     handleFolderClick,
@@ -190,26 +188,45 @@ export function DesktopAppShell({
     openDesktopContextMenu,
     closeDesktopContextMenu,
   } = useTreeInteractions({ foldersPanelRef, useNativeContextMenus: false });
-
-  useEffect(() => {
-    if (activeFolder && activeFolder !== FEED_FOLDER_PATH) {
-      lastNonFeedFolderRef.current = activeFolder;
-    }
-  }, [activeFolder]);
-
-  useEffect(() => {
-    if (activeFolder === FEED_FOLDER_PATH && activeNavigationTab !== "feed") {
-      setActiveNavigationTab("feed");
-      return;
-    }
-    if (activeFolder !== FEED_FOLDER_PATH && activeNavigationTab === "feed") {
-      setActiveNavigationTab("folders");
-    }
-  }, [activeFolder, activeNavigationTab]);
-  const customFoldersTreeData = useMemo(
-    () => treeData.filter((node) => !isSystemFolder(node.id)),
-    [treeData]
-  );
+  const {
+    activeNavigationTab,
+    deleteSelectedNotesByShortcut,
+    openFeedTab,
+    openFoldersTab,
+    middlePaneNotes,
+    middlePaneNotePreviews,
+    middlePaneTitle,
+    middlePaneNoteClick,
+    middlePaneNoteContextMenu,
+  } = useDesktopNavigation({
+    onAppModeChange,
+    onOpenPinnedFolder,
+    customFoldersTreeData,
+    activeFolder,
+    activeNote,
+    activeFeedGroup,
+    activeFeedNode,
+    feedNotes,
+    selectedNotes,
+    lastSelectedNote,
+    setSelectedFolders,
+    setLastSelectedFolder,
+    setActiveFolder,
+    setSelectedNotes,
+    setLastSelectedNote,
+    setActiveNote,
+    setActiveFeedGroup,
+    clearNote,
+    openDesktopContextMenu,
+    closeDesktopContextMenu,
+    handleNoteClick,
+    handleNoteContextMenu,
+    notes,
+    notePreviews,
+    activeNode,
+    feedNotePreviews,
+    deleteNotes,
+  });
   const {
     activeId,
     edgeSnap,
@@ -238,134 +255,6 @@ export function DesktopAppShell({
     refreshTree,
     parentById,
   });
-
-  const deleteSelectedNotesByShortcut = useCallback(() => {
-    const selected = selectedNotesRef.current;
-    const paths =
-      activeNote && !selected.has(activeNote)
-        ? [activeNote]
-        : selected.size > 0
-          ? Array.from(selected)
-          : activeNote
-            ? [activeNote]
-            : [];
-    if (paths.length > 0) {
-      void deleteNotes(paths);
-    }
-  }, [activeNote, deleteNotes]);
-
-  const openFeedTab = useCallback(() => {
-    closeDesktopContextMenu();
-    onAppModeChange("notes");
-    if (activeFolder && activeFolder !== FEED_FOLDER_PATH) {
-      lastNonFeedFolderRef.current = activeFolder;
-    }
-    setActiveNavigationTab("feed");
-    onOpenPinnedFolder(FEED_FOLDER_PATH);
-  }, [activeFolder, closeDesktopContextMenu, onAppModeChange, onOpenPinnedFolder]);
-
-  const openFoldersTab = useCallback(() => {
-    closeDesktopContextMenu();
-    onAppModeChange("notes");
-    setActiveNavigationTab("folders");
-    const fallbackFolder =
-      lastNonFeedFolderRef.current || customFoldersTreeData[0]?.id || "";
-    if (fallbackFolder) {
-      onOpenPinnedFolder(fallbackFolder);
-      return;
-    }
-    setSelectedFolders(new Set());
-    setLastSelectedFolder("");
-    setSelectedNotes(new Set());
-    setLastSelectedNote("");
-    setActiveFolder("");
-    setActiveNote(null);
-    clearNote();
-  }, [
-    clearNote,
-    closeDesktopContextMenu,
-    customFoldersTreeData,
-    onAppModeChange,
-    onOpenPinnedFolder,
-    setActiveFolder,
-    setActiveNote,
-    setLastSelectedFolder,
-    setLastSelectedNote,
-    setSelectedFolders,
-    setSelectedNotes,
-  ]);
-
-  const handleFeedMiddleNoteClick = useCallback(
-    (notePath: string, event: ReactMouseEvent) => {
-      const notePaths = feedNotes.map((note) => note.path);
-      setSelectedNotes(
-        computeRangeSelection(event, selectedNotes, notePaths, lastSelectedNote, notePath)
-      );
-      setLastSelectedNote(notePath);
-      setSelectedFolders(new Set([FEED_FOLDER_PATH]));
-      setLastSelectedFolder(FEED_FOLDER_PATH);
-      setActiveFolder(FEED_FOLDER_PATH);
-      setActiveNote(notePath);
-      setActiveFeedGroup(activeFeedGroup || activeFeedNode?.id || "");
-    },
-    [
-      activeFeedGroup,
-      activeFeedNode?.id,
-      feedNotes,
-      lastSelectedNote,
-      setActiveFeedGroup,
-      setActiveFolder,
-      setActiveNote,
-      setLastSelectedFolder,
-      setLastSelectedNote,
-      setSelectedFolders,
-      setSelectedNotes,
-      selectedNotes,
-    ]
-  );
-
-  const handleFeedMiddleNoteContextMenu = useCallback(
-    (event: ReactMouseEvent, notePath: string) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const notePaths = feedNotes.map((note) => note.path);
-      const targetPaths =
-        selectedNotes.size > 1 && selectedNotes.has(notePath)
-          ? Array.from(selectedNotes)
-          : [notePath];
-      setSelectedFolders(new Set([FEED_FOLDER_PATH]));
-      setLastSelectedFolder(FEED_FOLDER_PATH);
-      setActiveFolder(FEED_FOLDER_PATH);
-      if (!selectedNotes.has(notePath)) {
-        setSelectedNotes(new Set([notePath]));
-        setLastSelectedNote(notePath);
-      }
-      setActiveNote(notePath);
-      setActiveFeedGroup(activeFeedGroup || activeFeedNode?.id || "");
-      openDesktopContextMenu({
-        kind: "note",
-        x: event.clientX,
-        y: event.clientY,
-        path: notePath,
-        parentPath: activeFeedGroup || activeFeedNode?.id || FEED_FOLDER_PATH,
-        targetPaths: targetPaths.length > 0 ? targetPaths : notePaths,
-      });
-    },
-    [
-      activeFeedGroup,
-      activeFeedNode?.id,
-      feedNotes,
-      openDesktopContextMenu,
-      selectedNotes,
-      setActiveFeedGroup,
-      setActiveFolder,
-      setActiveNote,
-      setLastSelectedFolder,
-      setLastSelectedNote,
-      setSelectedFolders,
-      setSelectedNotes,
-    ]
-  );
 
   const { handleNotesKeyDown, handleFoldersKeyDown, lastLeftPaneFocusRef } =
     useKeyboardNavigation({
@@ -401,7 +290,7 @@ export function DesktopAppShell({
       setSelectedNotes,
       setLastSelectedNote,
       setActiveNote,
-      notes: activeNavigationTab === "feed" ? feedNotes : notes,
+      notes: middlePaneNotes,
       activeFeedGroup,
       setActiveFeedGroup,
       foldersPanelRef,
@@ -417,19 +306,6 @@ export function DesktopAppShell({
     () => ({ "--editor-font-size": `${editorFontSize}px` }) as CSSProperties,
     [editorFontSize]
   );
-  const middlePaneNotes = activeNavigationTab === "feed" ? feedNotes : notes;
-  const middlePaneNotePreviews =
-    activeNavigationTab === "feed" ? feedNotePreviews : notePreviews;
-  const middlePaneTitle =
-    activeNavigationTab === "feed"
-      ? activeFeedNode?.name || "Feed"
-      : activeNode?.name || activeFolder || "Notes";
-  const middlePaneNoteClick =
-    activeNavigationTab === "feed" ? handleFeedMiddleNoteClick : handleNoteClick;
-  const middlePaneNoteContextMenu =
-    activeNavigationTab === "feed"
-      ? handleFeedMiddleNoteContextMenu
-      : handleNoteContextMenu;
   const leftPane = (
     <div className="pane-with-drag">
       <div className="pane-drag-region" data-tauri-drag-region aria-hidden />
