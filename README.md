@@ -30,6 +30,9 @@ macOS, Windows, Linux, and iOS.
   Feature-sliced under `src/`: `app/` (composition root), `shared/` (domain-agnostic
   building blocks), `features/<domain>/`, optional `features/extensions/`, shared
   queue plumbing under `features/processing/`, plus thin `desktop/` and `mobile/` shells.
+  Context providers are intentionally slim: state/action/workflow hooks carry the notes tree,
+  profile, git sync, processing, command palette, and desktop editor/navigation workflows.
+  Optional surfaces such as multi-note lens are extension-gated and lazy-loaded where possible.
 - **Backend** — Tauri v2 (Rust) in a pragmatic **domain / application / ports / adapters / commands**
   layout, so use cases can move to another shell (e.g. UniFFI for React Native) without a rewrite.
 

@@ -252,10 +252,10 @@ because it depends on NotesTree, and `notes-tree-context` already depends on
 
 Each feature's context provider lives in `hooks/` alongside its hooks.
 
-- **notes** — `components/note-row`; `hooks/notes-tree-context` (owns the folder tree,
-  computed `treeData`/`flatItems`/`visibleItems`/`orderedIds`, rename state, and all CRUD:
-  createNewNote / deleteNotes / deleteFolders / moveNotesToArchive / flattenIntoFeed / rename;
-  consumes Selection + Editor to update them after CRUD), `hooks/use-note-previews`;
+- **notes** — `components/note-row`; `hooks/notes-tree-context` (thin provider wiring),
+  `hooks/use-notes-tree-state` (tree loading/derived data/feed model/rename state),
+  `hooks/use-notes-tree-actions` (create/delete/move/flatten/rename/info workflows;
+  consumes Selection + Editor setters to update UI state after CRUD), `hooks/use-note-previews`;
   `lib/{notes-tree-model,feed-tree-model,note-autoname}`; `api/notes-api` (the IPC surface —
   `getTree`, `readNote`, `createNote`, `writeNote`, `getNoteMeta`, `deleteItems`, `moveItems`,
   `renameItem`, `setOrder`, …). `notes-api` is also used by editor and tree.
@@ -271,7 +271,7 @@ Each feature's context provider lives in `hooks/` alongside its hooks.
   OCR each keep their own queue/workers, but both use this shared plumbing for snapshot refresh,
   preview invalidation, and timer behavior.
 - **tree** — `components/{folders-panel, tree-node, tree-row, nav-note-row, recent-tree-node}`;
-  `hooks/{use-drag-drop, use-keyboard-navigation}`; `lib/{tree-ops, dnd-tree,
+  `hooks/{use-drag-drop, use-keyboard-navigation, use-feed-keyboard-navigation}`; `lib/{tree-ops, dnd-tree,
   tree-dnd (DnD id/edge primitives), types}`. Tree components are
   presentational — data/handlers come from app-shell (which reads NotesTreeContext).
 - **recording** — `components/recording-note-header`; `hooks/{recordings-context,
@@ -283,11 +283,14 @@ Each feature's context provider lives in `hooks/` alongside its hooks.
 - **import** — Apple Notes importer. `api/import-api` (scan/start/status IPC + folder picker);
   `hooks/use-apple-import` (pick → scan → import state machine that polls `apple_import_status`).
   Its UI is the desktop settings "Import" section. Desktop-only (needs a folder picker).
-- **profiles** — `hooks/profiles-context` (multi-profile; per-profile `notes_root` + sync
-  settings in localStorage; `lib/profile-sync-settings` maps app-wide vs profile-local sync
-  settings; `flushSaveRef` to flush the editor before switching);
+- **profiles** — `hooks/profiles-context` (thin provider), `hooks/use-profile-actions`
+  (profile CRUD + settings writes with editor flush), `hooks/use-legacy-profile-sync-migration`
+  (one-time localStorage -> backend migration); per-profile `notes_root` + sync settings are
+  stored by the backend. `lib/profile-sync-settings` maps app-wide vs profile-local sync
+  settings; `flushSaveRef` flushes the editor before switching;
   `api/profiles-api`. Heavily depended upon.
-- **sync** — `components/local-sync-server-card`; `hooks/{git-sync-context, use-ssh-key
+- **sync** — `components/local-sync-server-card`; `hooks/{git-sync-context,
+  use-git-sync-workflows, use-ssh-key
   (app-managed Ed25519 keypair lifecycle: load/generate/delete, shared by the desktop +
   mobile settings)}`; `api/{git-api (libgit2 IPC + SSH key lifecycle), local-sync-link}`.
 - **security** — `components/lock-screen`; `hooks/security-context` (unlock/lock/enable,
@@ -300,12 +303,11 @@ Each feature's context provider lives in `hooks/` alongside its hooks.
   imports from many other features.
 - **extensions** — typed frontend feature registry for optional surfaces. `registry.ts`
   controls whether multi-lens, security, and other extension-only UI is surfaced.
-- **command-palette** — `components/command-palette` (⌘K / Ctrl+K). A self-contained dialog
-  with a global keydown listener that reads the live Selection + NotesTree + Theme from
-  context and builds context-aware commands (act on the selected notes/folders) plus
-  always-on create/navigate/theme commands. Cross-shell navigation (open a settings section,
-  jump to Feed/Archive, start a recording, pick an image) is passed in as callbacks by
-  app-shell. Like settings, it aggregates across features.
+- **command-palette** — `components/command-palette` (renderer) +
+  `hooks/use-command-palette-commands` (⌘K / Ctrl+K listener, command construction,
+  move-to-folder dialog state). It reads live Selection + NotesTree + Theme from context,
+  builds context-aware commands (selected notes/folders) plus always-on create/navigate/theme
+  commands, and receives cross-shell navigation callbacks from app-shell.
 
 ### Cross-context bridges (all in `src/app/app.tsx`)
 
@@ -328,7 +330,10 @@ feature `api/`. `shared/lib/` — `dom`, `format` (formatters + `NotePreview` + 
 
 - `desktop-shell.tsx` — 2-pane / 3-pane resizable layout.
 - `middle-pane.tsx` — notes list (`SortableContext` + note-row) or settings sections.
-- `right-pane.tsx` — editor (note-editor / multi-note-lens) or settings detail.
+- `right-pane.tsx` — editor or settings detail; `hooks/use-desktop-editor-pane` owns
+  editor/lens mode state, and the multi-note lens is lazy-loaded behind the extension gate.
+- `hooks/use-desktop-navigation` — Feed/Folders tab state and desktop middle-pane note list
+  selection/context-menu behavior.
 - `app-sidebar.tsx` — desktop left rail (feed / new / record / handwriting / settings / trash).
 
 ### Mobile shell (`src/mobile/`)
