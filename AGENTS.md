@@ -4,7 +4,7 @@ This document is for AI agents and developers who need to understand and modify 
 
 ## What this app is
 
-A local-first markdown notes app built with Tauri v2 (Rust backend) + React (TypeScript frontend). It runs on desktop (macOS/Windows/Linux) and iOS. Notes are stored as `.md` files in a local folder tree. Optional Git sync pushes/pulls notes across devices — including a one-button local-network server (`git daemon`) for syncing to a phone with no external host. Audio recording is supported, with transcription via a self-provisioning local Whisper on desktop (no manual install) and AssemblyAI on iOS. The app also supports optional at-rest note-body encryption, a lock screen, and panic-password local wipe.
+A local-first markdown notes app built with Tauri v2 (Rust backend) + React (TypeScript frontend). It runs on desktop (macOS/Windows/Linux) and iOS. Notes are stored as `.md` files in a local folder tree. Optional Git sync pushes/pulls notes across devices — including a one-button local-network server (`git daemon`) for syncing to a phone with no external host. Audio recording is supported, with transcription via a self-provisioning local Whisper on desktop (no manual install) and AssemblyAI on iOS. Handwriting OCR and voice transcription use independent queues with shared frontend queue plumbing. At-rest note-body encryption, the lock screen, panic-password local wipe, and the multi-note lens are optional frontend extension surfaces.
 
 ## Tech stack
 
@@ -156,8 +156,7 @@ The frontend is **feature-sliced**. There are four kinds of place code can live:
   orchestration hooks the shell delegates to (`app/hooks/`).
 - `shared/` — domain-agnostic building blocks usable by anything: `ui/` (shadcn
   primitives), `lib/` (pure helpers), `api/` (the `invoke` IPC wrapper), `hooks/`,
-  `types.ts`, `constants.ts`. **`shared/` is a leaf** — it must not import from `features/`
-  (one documented exception, see below).
+  `types.ts`, `constants.ts`. **`shared/` is a leaf** — it must not import from `features/`.
 - `features/<name>/` — one folder per user-facing domain. Each owns its code in
   **segments**: `components/` (`.tsx`), `hooks/` (React hooks *and* context providers),
   `lib/` (pure helpers), `api/` (Tauri IPC wrappers). Not every feature needs every segment.
@@ -181,10 +180,12 @@ src/
     state/      selection-store, appearance-store, appearance-api (app-global state)
   shared/
     ui/         shadcn primitives          lib/   dom, format, frontmatter, jobs,
-    api/invoke  IPC logging wrapper                notes, selection, storage, utils (cn)
+    api/invoke  IPC logging wrapper                annotation-metadata, lens-backmatter,
+                                                   notes, selection, storage, utils (cn)
     hooks/use-mobile   types.ts   constants.ts
   features/<name>/   components/  hooks/  lib/  api/
-    notes editor tree recording handwriting import profiles sync security settings command-palette
+    notes editor tree recording handwriting processing import profiles sync
+    security settings command-palette extensions
   desktop/    desktop-shell, middle-pane, right-pane, app-sidebar
   mobile/     mobile-shell, tablet-layout, navigation, types, use-layout-mode,
               use-keyboard-insets, hooks/, ui/, views/, screens/
@@ -198,8 +199,8 @@ imported from its feature's `hooks/`, or from `app/state/`):
 ```
 ErrorBoundary                 — app-root crash guard
   AppearanceProvider          — persists appearance store + native theme        (app/state)
-    SecurityProvider          — security state, unlock/lock/enable               (features/security)
-      SecurityGate            — renders the lock screen when encrypted + locked
+    SecurityProvider          — security state; UI is extension-gated            (features/security)
+      SecurityGate            — renders lock screen only when extension enabled
         ProfilesProvider      — profile list, active profile, per-profile sync   (features/profiles)
           GitSyncProvider     — git status, connect/pull/push, commit history    (features/sync)
             SelectionProvider — resets selection store on profile changes        (app/state)
@@ -254,41 +255,51 @@ Each feature's context provider lives in `hooks/` alongside its hooks.
 - **notes** — `components/note-row`; `hooks/notes-tree-context` (owns the folder tree,
   computed `treeData`/`flatItems`/`visibleItems`/`orderedIds`, rename state, and all CRUD:
   createNewNote / deleteNotes / deleteFolders / moveNotesToArchive / flattenIntoFeed / rename;
-  consumes Selection + Editor to update them after CRUD), `hooks/use-note-previews`; `api/notes-api`
-  (the IPC surface — `getTree`, `readNote`, `createNote`, `writeNote`, `getNoteMeta`,
-  `deleteItems`, `moveItems`, `renameItem`, `setOrder`, …). `notes-api` is also used by
-  editor and tree.
+  consumes Selection + Editor to update them after CRUD), `hooks/use-note-previews`;
+  `lib/{notes-tree-model,feed-tree-model,note-autoname}`; `api/notes-api` (the IPC surface —
+  `getTree`, `readNote`, `createNote`, `writeNote`, `getNoteMeta`, `deleteItems`, `moveItems`,
+  `renameItem`, `setOrder`, …). `notes-api` is also used by editor and tree.
 - **editor** — `components/note-editor` (Tiptap; shared desktop+mobile) and
   `components/lens/` (the multi-note "lens": `multi-note-lens` orchestrator + `lens-toolbar`
   + `lens-note-stage` + `note-readonly-content`); `hooks/{editor-context, use-note-editor,
-  use-lens-annotations}`; `lib/{markdown-editor, note-annotations, lens-backmatter,
-  lens-geometry}`. `use-note-editor`: debounced 400ms autosave, dirty/saving/error, empty-note
-  cleanup, placeholder→slug rename. `use-lens-annotations`: all lens annotation state +
+  use-lens-annotations}`; `lib/{markdown-editor, note-annotations, lens-geometry}`.
+  `use-note-editor`: debounced 400ms autosave, dirty/saving/error, empty-note cleanup, and the
+  flush/rename bridge into the notes domain. `use-lens-annotations`: all lens annotation state +
   per-note serialized persistence.
+- **processing** — shared queue helpers for the background job domains:
+  `hooks/{use-processing-queue, use-auto-queue-loop}`. Recording transcription and handwriting
+  OCR each keep their own queue/workers, but both use this shared plumbing for snapshot refresh,
+  preview invalidation, and timer behavior.
 - **tree** — `components/{folders-panel, tree-node, tree-row, nav-note-row, recent-tree-node}`;
   `hooks/{use-drag-drop, use-keyboard-navigation}`; `lib/{tree-ops, dnd-tree,
   tree-dnd (DnD id/edge primitives), types}`. Tree components are
   presentational — data/handlers come from app-shell (which reads NotesTreeContext).
 - **recording** — `components/recording-note-header`; `hooks/{recordings-context,
   use-audio-recorder}`; `api/recordings-api`. Dual-mode recorder (web MediaRecorder / native iOS).
+  Transcription queue bookkeeping uses the shared `processing` hooks above.
 - **handwriting** — `components/handwriting-note-header`; `hooks/handwriting-context`;
-  `api/handwriting-api` (OpenAI / HuggingFace OCR queue).
+  `api/handwriting-api` (OpenAI / HuggingFace OCR queue). OCR queue bookkeeping uses the
+  shared `processing` hooks above.
 - **import** — Apple Notes importer. `api/import-api` (scan/start/status IPC + folder picker);
   `hooks/use-apple-import` (pick → scan → import state machine that polls `apple_import_status`).
   Its UI is the desktop settings "Import" section. Desktop-only (needs a folder picker).
 - **profiles** — `hooks/profiles-context` (multi-profile; per-profile `notes_root` + sync
-  settings in localStorage; `flushSaveRef` to flush the editor before switching);
+  settings in localStorage; `lib/profile-sync-settings` maps app-wide vs profile-local sync
+  settings; `flushSaveRef` to flush the editor before switching);
   `api/profiles-api`. Heavily depended upon.
 - **sync** — `components/local-sync-server-card`; `hooks/{git-sync-context, use-ssh-key
   (app-managed Ed25519 keypair lifecycle: load/generate/delete, shared by the desktop +
   mobile settings)}`; `api/{git-api (libgit2 IPC + SSH key lifecycle), local-sync-link}`.
 - **security** — `components/lock-screen`; `hooks/security-context` (unlock/lock/enable,
-  panic reset, auto-lock on background); `api/security-api`.
+  panic reset, auto-lock on background); `api/security-api`. The shell now treats this as an
+  extension surface, so the UI should be hidden unless the extension registry opts it back in.
 - **settings** — the aggregator UI. `components/desktop/` (settings-panel + 9 sections, incl.
   the desktop-only "Import" section) and `components/mobile/` (settings-screen + 7 sections +
   helpers); `hooks/use-settings-data` (shared computed values); `lib/sections` (the
   `SettingsSectionId` registry + desktop and mobile section lists). Settings legitimately
   imports from many other features.
+- **extensions** — typed frontend feature registry for optional surfaces. `registry.ts`
+  controls whether multi-lens, security, and other extension-only UI is surfaced.
 - **command-palette** — `components/command-palette` (⌘K / Ctrl+K). A self-contained dialog
   with a global keydown listener that reads the live Selection + NotesTree + Theme from
   context and builds context-aware commands (act on the selected notes/folders) plus
@@ -312,11 +323,6 @@ feature `api/`. `shared/lib/` — `dom`, `format` (formatters + `NotePreview` + 
 `frontmatter`, `jobs`, `notes`, `selection`, `storage`, `utils` (`cn`). `shared/ui/` — shadcn.
 `shared/types.ts` — `FolderNode`, `NoteEntry`, `GitSyncStatus`, `ProfileSyncSettings`,
 `ThemeMode`, `NotesListMode`, `SecurityState`, … `shared/hooks/use-mobile.ts` — shadcn breakpoint.
-
-> **The one accepted `shared → feature` edge:** `shared/lib/format.ts`'s `parseNotePreview`
-> imports `stripInlineAnnotationMetadata` from `features/editor/lib/note-annotations` to keep
-> editor metadata out of previews. It is a single pure function and is commented in place;
-> keep it the only such import.
 
 ### Desktop shell (`src/desktop/`)
 
@@ -388,7 +394,9 @@ A WidgetKit extension that lets users start a recording from the iOS home screen
 - **SSH key auth**: The app can generate and store an Ed25519 keypair in `<app_data_dir>/ssh/`. When an SSH key exists, all git operations (connect/push/pull) use it automatically before falling back to SSH agent or username/password.
 - **Merge conflict resolution**: Conflicts during pull are resolved by keeping the local version and saving the remote version as a `.conflict.md` sibling file (e.g., `note.md` + `note.conflict.md`). The merge always completes — sync is never blocked by conflicts. Users resolve manually and delete the `.conflict.md` file when done.
 - **Lock guard is backend-enforced**: most app commands return a locked error while encrypted mode is locked; only security commands remain callable.
+- **Security UI is optional**: the frontend shell hides the lock screen and security settings unless the extension registry enables them.
 - **Encryption scope is note body only**: recordings/attachments are currently stored unencrypted.
+- **Annotation cleanup is shared**: `shared/lib/annotation-metadata.ts` owns the lens/inline annotation stripping used by previews, slugging, and the editor.
 - **Sync history UX**: settings now show commit history from real git log. This cannot reliably encode which device performed push/pull for every commit.
 - **Editor saves are debounced** (400ms). `flushSave()` must be called before navigation away, profile switching, or app backgrounding.
 - **`shouldNestNotesInNavigation`**: When `notesListMode === "nested"`, notes appear inline inside the folder tree instead of in a separate middle pane. This affects keyboard navigation, rendering, and the visible navigation items computation.

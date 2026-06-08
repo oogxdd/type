@@ -11,15 +11,16 @@ macOS, Windows, Linux, and iOS.
 ## Highlights
 
 - **Plain-file storage** — notes are `.md` files in a folder tree you can point anywhere; order persists per folder.
-- **Rich markdown editor** (Tiptap) with debounced autosave and a multi-note "lens" view.
+- **Rich markdown editor** (Tiptap) with debounced autosave and content-based auto-naming.
 - **Git sync** over `https://`, `ssh://`, or `git://` — push/pull across devices via libgit2 (no shell `git` needed).
 - **One-button local sync** — host a `git daemon` on the desktop; the phone finds it by mDNS or QR code, no typing.
 - **SSH key auth** — generate an Ed25519 keypair in-app for passwordless SSH.
 - **Never-blocked merges** — conflicts keep your version and drop the remote copy beside it as `.conflict.md`.
 - **Audio recording + transcription** — zero-install local Whisper on desktop, AssemblyAI on iOS.
 - **Handwriting OCR** — import an image, get text back (OpenAI / Hugging Face).
-- **At-rest encryption** — optional note-body encryption, a lock screen, and a panic password that wipes local data.
+- **Processing queues** — voice transcription and handwriting OCR run as separate queues with shared status plumbing.
 - **Multi-profile** — independent notes roots and sync settings.
+- **Extension surfaces** — multi-note lens and note encryption/lock/panic are kept behind a typed frontend registry.
 - **Desktop & mobile UIs** — resizable three-pane on desktop; native-feeling stack/split navigation on phone/tablet.
 
 ## Tech stack & architecture
@@ -27,7 +28,8 @@ macOS, Windows, Linux, and iOS.
 - **Frontend** — React 19, TypeScript, Vite, Zustand, Tiptap, DnD Kit, Tailwind +
   shadcn/ui. Feature-sliced domains feed separate desktop and mobile composition shells.
   Feature-sliced under `src/`: `app/` (composition root), `shared/` (domain-agnostic
-  building blocks), `features/<domain>/`, plus thin `desktop/` and `mobile/` shells.
+  building blocks), `features/<domain>/`, optional `features/extensions/`, shared
+  queue plumbing under `features/processing/`, plus thin `desktop/` and `mobile/` shells.
 - **Backend** — Tauri v2 (Rust) in a pragmatic **domain / application / ports / adapters / commands**
   layout, so use cases can move to another shell (e.g. UniFFI for React Native) without a rewrite.
 
@@ -105,9 +107,12 @@ notes. A few system folders are maintained automatically inside every root: `Fee
 notes), `Archieve` (archive — the spelling is intentional and persisted), and the hidden
 `Recordings/` (audio storage).
 
-## Security mode (encryption + lock + panic)
+## Security mode extension (encryption + lock + panic)
 
-Enable in **Settings → Security**:
+The backend still contains note-body encryption, lock, and panic-reset support, but the
+frontend treats this as an optional extension surface. Enable
+`APP_EXTENSIONS.security` in `src/features/extensions/registry.ts` to show
+**Settings → Security** and the lock screen in the app shell.
 
 - Note **body** content is encrypted at rest (XChaCha20-Poly1305 with an Argon2id-derived key).
 - File names and frontmatter stay plaintext by design.
