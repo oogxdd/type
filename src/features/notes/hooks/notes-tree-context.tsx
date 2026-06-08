@@ -2,45 +2,27 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
-  useMemo,
-  useState,
   type ReactNode,
 } from "react";
 import { useShallow } from "zustand/react/shallow";
 import * as api from "../api/notes-api";
-import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/shared/types";
-import { FEED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH, isSystemFolder } from "@/shared/constants";
-import { collectAllNotes, getNoteParentPath } from "@/shared/lib/notes";
-import { useNotePreviews } from "./use-note-previews";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useSelection } from "@/app/state/selection-store";
 import { useEditor } from "@/features/editor/hooks/editor-context";
-import { buildTreeItems, findNode, flattenTree } from "@/features/tree/lib/tree-ops";
-import { removeChildrenOf } from "@/features/tree/lib/dnd-tree";
-import { type NotePreview } from "@/shared/lib/format";
+import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { confirmAction, focusNoScroll } from "@/shared/lib/dom";
-import type { TreeItem } from "@/features/tree/lib/types";
-import type { FlattenedItem } from "@/features/tree/lib/types";
-import { useLayoutMode } from "@/mobile/use-layout-mode";
-import { useAppearance } from "@/app/state/appearance-store";
-import {
-  buildFeedTree,
-  buildVisibleFeedNavigationItems,
-  collectFeedNotes,
-  findFeedNode,
-  getFirstFeedGroupId,
-  type FeedTreeNode,
-} from "@/features/notes/lib/feed-tree-model";
+import { FEED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH, isSystemFolder } from "@/shared/constants";
 import {
   applyFolderRenameToSelection,
-  buildNotePreviews,
-  buildVisibleNavigationItems,
   collectNotesForFlattening,
-  getFirstSelectableFolderPath,
-  mapParentById,
-  selectPreviewSourceNotes,
 } from "@/features/notes/lib/notes-tree-model";
+import { getNoteParentPath } from "@/shared/lib/notes";
+import { findNode } from "@/features/tree/lib/tree-ops";
+import { useNotesTreeState } from "./use-notes-tree-state";
+import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/shared/types";
+import type { NotePreview } from "@/shared/lib/format";
+import type { TreeItem } from "@/features/tree/lib/types";
+import type { FlattenedItem } from "@/features/tree/lib/types";
+import type { FeedTreeNode } from "@/features/notes/lib/feed-tree-model";
 
 type NotesTreeContextValue = {
   tree: FolderNode | null;
@@ -102,10 +84,7 @@ export function NotesTreeProvider({
 }: {
   children: ReactNode;
 }) {
-  const { activeProfileId, activeProfileNotesRoot, syncSettings } = useProfiles();
-  const notesListMode = useAppearance((state) => state.notesListMode);
-  const hideArchivedFeedNotes = useAppearance((state) => state.hideArchivedFeedNotes);
-  const layoutMode = useLayoutMode();
+  const { syncSettings } = useProfiles();
   const {
     selectedFolders,
     setSelectedFolders,
@@ -130,156 +109,38 @@ export function NotesTreeProvider({
     }))
   );
   const { clearNote, clearDraft, rightPaneRef } = useEditor();
-
-  // -- Folder tree state
-  const [tree, setTree] = useState<FolderNode | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set([""]));
-  const [activeFeedGroup, setActiveFeedGroup] = useState("");
-
-  // -- Rename state
-  const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-
-  const shouldNestNotesInNavigation = notesListMode === "nested";
-
-  // -- Tree data
-  const refreshTree = useCallback(async () => {
-    const data = await api.getTree();
-    setTree(data);
-  }, []);
-
-  const treeData = useMemo(() => {
-    if (!tree) return [] as TreeItem[];
-    return buildTreeItems(tree);
-  }, [tree]);
-
-  const flatItems = useMemo(() => flattenTree(treeData), [treeData]);
-
-  const visibleItems = useMemo(() => {
-    const collapsedIds = flatItems
-      .filter((item) => item.children.length > 0 && !expanded.has(item.id))
-      .map((item) => item.id);
-    return removeChildrenOf(flatItems, collapsedIds);
-  }, [flatItems, expanded]);
-
-  const orderedIds = useMemo(() => visibleItems.map((item) => item.id), [visibleItems]);
-  const flatItemById = useMemo(
-    () => new Map(flatItems.map((item) => [item.id, item] as const)),
-    [flatItems]
-  );
-
-  const activeNode = useMemo(() => findNode(tree, activeFolder), [tree, activeFolder]);
-
-  const notes = useMemo(() => activeNode?.notes || [], [activeNode]);
-  const allNotes = useMemo(() => collectAllNotes(tree), [tree]);
-  const feedSourceNotes = useMemo(
-    () => allNotes.filter((note) => getNoteParentPath(note.path) === FEED_FOLDER_PATH),
-    [allNotes]
-  );
-  const shouldWarmNotePreviews =
-    layoutMode !== "phone" || Boolean(activeFolder) || Boolean(activeNote);
-  const previewSourceNotes = useMemo<NoteEntry[]>(
-    () =>
-      shouldWarmNotePreviews
-        ? selectPreviewSourceNotes({
-            layoutMode,
-            activeFolder,
-            activeNote,
-            notes,
-            allNotes,
-            shouldNestNotesInNavigation,
-          })
-        : [],
-    [
-      shouldWarmNotePreviews,
-      layoutMode,
-      activeFolder,
-      activeNote,
-      notes,
-      allNotes,
-      shouldNestNotesInNavigation,
-    ]
-  );
-  const allNotePreviews = useNotePreviews(previewSourceNotes);
-  const notePreviews = useMemo(() => buildNotePreviews(notes, allNotePreviews), [allNotePreviews, notes]);
-  const feedTree = useMemo(
-    () => buildFeedTree(feedSourceNotes, allNotePreviews, hideArchivedFeedNotes),
-    [allNotePreviews, feedSourceNotes, hideArchivedFeedNotes]
-  );
-  const feedTreeData = feedTree.treeData;
-  const feedNodeById = feedTree.nodeById;
-  const feedVisibleNavigationItems = useMemo(
-    () =>
-      buildVisibleFeedNavigationItems(
-        feedTreeData,
-        expanded,
-        shouldNestNotesInNavigation
-      ),
-    [expanded, feedTreeData, shouldNestNotesInNavigation]
-  );
-
-  useEffect(() => {
-    if (feedTreeData.length === 0) {
-      if (activeFeedGroup) {
-        setActiveFeedGroup("");
-      }
-      return;
-    }
-    if (!activeFeedGroup || !feedNodeById.has(activeFeedGroup)) {
-      setActiveFeedGroup(getFirstFeedGroupId(feedTreeData));
-    }
-  }, [activeFeedGroup, feedNodeById, feedTreeData]);
-
-  const activeFeedNode = useMemo(
-    () => findFeedNode(feedTreeData, activeFeedGroup),
-    [activeFeedGroup, feedTreeData]
-  );
-  const feedNotes = useMemo(
-    () => collectFeedNotes(activeFeedNode),
-    [activeFeedNode]
-  );
-  const feedNotePreviews = useMemo(
-    () => buildNotePreviews(feedNotes, allNotePreviews),
-    [allNotePreviews, feedNotes]
-  );
-
-  const parentById = useMemo(() => mapParentById(flatItems), [flatItems]);
-
-  const visibleNavigationItems = useMemo(
-    () => buildVisibleNavigationItems(treeData, expanded, shouldNestNotesInNavigation),
-    [expanded, shouldNestNotesInNavigation, treeData]
-  );
-
-  // -- Profile change: reset tree state and refresh
-  useEffect(() => {
-    if (!activeProfileId) {
-      return;
-    }
-    setTree(null);
-    void refreshTree();
-  }, [activeProfileId, activeProfileNotesRoot, refreshTree]);
-
-  useEffect(() => {
-    const onTreeInvalidated = () => {
-      void refreshTree();
-    };
-    window.addEventListener("notes-tree-invalidated", onTreeInvalidated);
-    return () => window.removeEventListener("notes-tree-invalidated", onTreeInvalidated);
-  }, [refreshTree]);
-
-  // Mobile: auto-select first folder
-  useEffect(() => {
-    if (layoutMode !== "tablet" || !tree || activeFolder) {
-      return;
-    }
-    const firstFolderPath = getFirstSelectableFolderPath(tree);
-    if (!firstFolderPath) {
-      return;
-    }
-    setSelectedFolders(new Set([firstFolderPath]));
-    setLastSelectedFolder(firstFolderPath);
-    setActiveFolder(firstFolderPath);
-  }, [activeFolder, layoutMode, setActiveFolder, setLastSelectedFolder, setSelectedFolders, tree]);
+  const {
+    tree,
+    setTree,
+    treeData,
+    flatItems,
+    visibleItems,
+    orderedIds,
+    flatItemById,
+    expanded,
+    setExpanded,
+    notes,
+    allNotes,
+    notePreviews,
+    allNotePreviews,
+    activeNode,
+    visibleNavigationItems,
+    feedVisibleNavigationItems,
+    feedTreeData,
+    feedNodeById,
+    activeFeedGroup,
+    setActiveFeedGroup,
+    activeFeedNode,
+    feedNotes,
+    feedNotePreviews,
+    parentById,
+    renamingFolder,
+    setRenamingFolder,
+    renameValue,
+    setRenameValue,
+    refreshTree,
+    shouldNestNotesInNavigation,
+  } = useNotesTreeState({ activeFolder, activeNote });
 
   // -- Create new note
   const createNewNote = useCallback(
