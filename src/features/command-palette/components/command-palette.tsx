@@ -14,6 +14,7 @@ import {
   SunIcon,
   Trash2Icon,
 } from "lucide-react";
+import { Button } from "@/shared/ui/button";
 import {
   CommandDialog,
   CommandEmpty,
@@ -22,6 +23,15 @@ import {
   CommandItem,
   CommandList,
 } from "@/shared/ui/command";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/shared/ui/dialog";
+import { Input } from "@/shared/ui/input";
 import { useSelection } from "@/app/state/selection-store";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useAppearance } from "@/app/state/appearance-store";
@@ -68,6 +78,9 @@ export function CommandPalette({
   onImportHandwriting,
 }: CommandPaletteProps) {
   const [open, setOpen] = useState(false);
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [destinationPath, setDestinationPath] = useState("");
+  const [moveTargets, setMoveTargets] = useState<string[]>([]);
 
   const { selectedNotes, selectedFolders, activeNote, activeFolder } = useSelection(
     useShallow((state) => ({
@@ -82,8 +95,11 @@ export function CommandPalette({
     deleteNotes,
     deleteFolders,
     moveNotesToArchive,
+    moveNotesToFolder,
     flattenIntoFeed,
+    updateNoteMarkers,
     startRenameFolder,
+    allNotePreviews,
   } = useNotesTree();
   const { theme, setTheme } = useAppearance(
     useShallow((state) => ({
@@ -116,9 +132,47 @@ export function CommandPalette({
     (path) => getNoteParentPath(path) !== FEED_FOLDER_PATH
   );
   const canFlatten = removableFolders.length > 0 || notesOutsideFeed.length > 0;
+  const allArchived =
+    noteTargets.length > 0 && noteTargets.every((path) => allNotePreviews[path]?.isArchived);
+  const allReviewed =
+    noteTargets.length > 0 && noteTargets.every((path) => allNotePreviews[path]?.isReviewed);
 
   const selectionCommands: PaletteCommand[] = [];
   if (noteTargets.length > 0) {
+    selectionCommands.push({
+      id: "move-notes-folder",
+      label:
+        noteTargets.length > 1
+          ? `Move ${noteTargets.length} notes to folder...`
+          : "Move note to folder...",
+      icon: FolderInputIcon,
+      keywords: ["move", "folder", "destination"],
+      run: () => {
+        setMoveTargets(noteTargets);
+        setDestinationPath("");
+        setMoveDialogOpen(true);
+      },
+    });
+    selectionCommands.push({
+      id: "toggle-archive",
+      label: allArchived ? "Unarchive notes" : "Archive notes",
+      icon: ArchiveIcon,
+      keywords: ["archive", "hide", "review"],
+      run: () =>
+        void updateNoteMarkers(noteTargets, {
+          archived: allArchived ? null : true,
+        }),
+    });
+    selectionCommands.push({
+      id: "toggle-reviewed",
+      label: allReviewed ? "Mark notes unreviewed" : "Mark notes reviewed",
+      icon: PencilIcon,
+      keywords: ["reviewed", "done", "checked"],
+      run: () =>
+        void updateNoteMarkers(noteTargets, {
+          reviewed: allReviewed ? null : true,
+        }),
+    });
     selectionCommands.push({
       id: "archive-notes",
       label: `Archive ${noteTargets.length} note${noteTargets.length > 1 ? "s" : ""}`,
@@ -249,29 +303,92 @@ export function CommandPalette({
     command.run();
   };
 
+  const submitMoveToFolder = async () => {
+    const nextDestination = destinationPath.trim();
+    if (!nextDestination) {
+      return;
+    }
+    await moveNotesToFolder(moveTargets, nextDestination);
+    setMoveDialogOpen(false);
+    setDestinationPath("");
+    setMoveTargets([]);
+  };
+
   return (
-    <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Type a command or search…" />
-      <CommandList>
-        <CommandEmpty>No matching commands.</CommandEmpty>
-        {groups.map((group) => (
-          <CommandGroup key={group.heading} heading={group.heading}>
-            {group.items.map((command) => {
-              const Icon = command.icon;
-              return (
-                <CommandItem
-                  key={command.id}
-                  keywords={command.keywords}
-                  onSelect={() => runCommand(command)}
-                >
-                  <Icon className="text-muted-foreground" />
-                  <span>{command.label}</span>
-                </CommandItem>
-              );
-            })}
-          </CommandGroup>
-        ))}
-      </CommandList>
-    </CommandDialog>
+    <>
+      <CommandDialog open={open} onOpenChange={setOpen}>
+        <CommandInput placeholder="Type a command or search…" />
+        <CommandList>
+          <CommandEmpty>No matching commands.</CommandEmpty>
+          {groups.map((group) => (
+            <CommandGroup key={group.heading} heading={group.heading}>
+              {group.items.map((command) => {
+                const Icon = command.icon;
+                return (
+                  <CommandItem
+                    key={command.id}
+                    keywords={command.keywords}
+                    onSelect={() => runCommand(command)}
+                  >
+                    <Icon className="text-muted-foreground" />
+                    <span>{command.label}</span>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          ))}
+        </CommandList>
+      </CommandDialog>
+
+      <Dialog
+        open={moveDialogOpen}
+        onOpenChange={(nextOpen) => {
+          setMoveDialogOpen(nextOpen);
+          if (!nextOpen) {
+            setDestinationPath("");
+            setMoveTargets([]);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Move notes to folder</DialogTitle>
+            <DialogDescription>
+              Enter a folder path. Missing folders will be created.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Input
+              autoFocus
+              value={destinationPath}
+              onChange={(event) => setDestinationPath(event.target.value)}
+              placeholder="Events/Wedding/Photos"
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void submitMoveToFolder();
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setMoveDialogOpen(false);
+                setDestinationPath("");
+                setMoveTargets([]);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void submitMoveToFolder()}>
+              Move
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
