@@ -1,18 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense } from "react";
 import { Menu } from "lucide-react";
-import { useShallow } from "zustand/react/shallow";
-import { useSelection } from "@/app/state/selection-store";
-import { APP_EXTENSIONS } from "@/features/extensions/registry";
-import { useEditor } from "@/features/editor/hooks/editor-context";
-import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 
 import { NoteEditor } from "@/features/editor/components/note-editor";
-import { MultiNoteLens } from "@/features/editor/components/lens/multi-note-lens";
 import { RecordingNoteHeader } from "@/features/recording/components/recording-note-header";
 import { HandwritingNoteHeader } from "@/features/handwriting/components/handwriting-note-header";
 import { SettingsDetailPane } from "@/features/settings/components/desktop/settings-panel";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
-import { sanitizeRecordingEditorContent } from "@/shared/lib/format";
 
 import { focusNoScroll } from "@/shared/lib/dom";
 import type { AppMode } from "@/shared/types";
@@ -22,6 +15,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
+import { useDesktopEditorPane } from "./hooks/use-desktop-editor-pane";
+
+const MultiNoteLens = lazy(() =>
+  import("@/features/editor/components/lens/multi-note-lens").then((module) => ({
+    default: module.MultiNoteLens,
+  }))
+);
 
 type DesktopRightPaneProps = {
   appMode: AppMode;
@@ -32,72 +32,23 @@ export function DesktopRightPane({
   appMode,
   activeSettingsSection,
 }: DesktopRightPaneProps) {
-  const { activeNote, selectedNotes } = useSelection(
-    useShallow((state) => ({
-      activeNote: state.activeNote,
-      selectedNotes: state.selectedNotes,
-    }))
-  );
-  const [isLensPinned, setIsLensPinned] = useState(false);
-  const [isLensMenuOpen, setIsLensMenuOpen] = useState(false);
   const {
-    noteContent,
-    draftNoteContent,
+    activeNote,
+    selectedNotePaths,
+    activeNotePreview,
+    editorMarkdown,
     handleEditorChange,
     flushSave,
     rightPaneRef,
-  } = useEditor();
-  const { notes, notePreviews, allNotePreviews } = useNotesTree();
-
-  const selectedNotePaths = useMemo(() => {
-    const orderedByMiddleList = notes
-      .map((note) => note.path)
-      .filter((path) => selectedNotes.has(path));
-    const remainingSelected = Array.from(selectedNotes).filter(
-      (path) => !orderedByMiddleList.includes(path)
-    );
-    const mergedSelection = [...orderedByMiddleList, ...remainingSelected];
-    if (mergedSelection.length > 0) {
-      return mergedSelection;
-    }
-    return activeNote ? [activeNote] : [];
-  }, [activeNote, notes, selectedNotes]);
-
-  useEffect(() => {
-    if (APP_EXTENSIONS.multiLens && selectedNotes.size > 1) {
-      setIsLensPinned(true);
-    }
-  }, [selectedNotes]);
-
-  // Multi-note lens stays available as an extension, but the default editor
-  // path is always the single-note flow.
-  const shouldShowLens =
-    APP_EXTENSIONS.multiLens && (selectedNotePaths.length > 1 || isLensPinned);
-
-  const lensNotes = useMemo(
-    () =>
-      selectedNotePaths.map((path) => {
-        const preview = notePreviews[path] || allNotePreviews[path];
-        return {
-          path,
-          title: preview?.title || path.split("/").pop()?.replace(/\.md$/i, "") || path,
-          dateLabel: preview?.dateLabel || "",
-          isRecording: Boolean(preview?.isRecording),
-          transcriptionStatus: preview?.transcriptionStatus || null,
-        };
-      }),
-    [allNotePreviews, notePreviews, selectedNotePaths]
-  );
-
-  const activeNotePreview = activeNote
-    ? notePreviews[activeNote] || allNotePreviews[activeNote]
-    : undefined;
-  const editorMarkdown =
-    activeNote && activeNotePreview?.isRecording
-      ? sanitizeRecordingEditorContent(noteContent, activeNotePreview.transcriptionStatus)
-      : activeNote
-        ? noteContent
-        : draftNoteContent;
+    canOpenLens,
+    shouldShowLens,
+    lensNotes,
+    isLensMenuOpen,
+    setIsLensMenuOpen,
+    openLens,
+    closeLens,
+    syncActiveNoteContent,
+  } = useDesktopEditorPane();
 
   if (appMode === "notes") {
     return (
@@ -118,21 +69,19 @@ export function DesktopRightPane({
           }}
         >
           {shouldShowLens ? (
-            <MultiNoteLens
-              notes={lensNotes}
-              activeNote={activeNote}
-              onBeforePersist={flushSave}
-              onActiveNoteContentSync={(nextMarkdown) => {
-                if (activeNote) {
-                  handleEditorChange(nextMarkdown);
-                }
-              }}
-              onExitLens={selectedNotePaths.length > 1 ? undefined : () => setIsLensPinned(false)}
-            />
+            <Suspense fallback={<div className="empty">Loading lens...</div>}>
+              <MultiNoteLens
+                notes={lensNotes}
+                activeNote={activeNote}
+                onBeforePersist={flushSave}
+                onActiveNoteContentSync={syncActiveNoteContent}
+                onExitLens={selectedNotePaths.length > 1 ? undefined : closeLens}
+              />
+            </Suspense>
           ) : (
             <div className="editor-single">
               <div className="editor-top-row">
-                {selectedNotePaths.length > 0 ? (
+                {canOpenLens ? (
                   <div className="editor-lens-menu-area">
                     <DropdownMenu open={isLensMenuOpen} onOpenChange={setIsLensMenuOpen}>
                       <DropdownMenuTrigger asChild>
@@ -145,7 +94,7 @@ export function DesktopRightPane({
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => setIsLensPinned(true)}>
+                        <DropdownMenuItem onClick={openLens}>
                           Open Lens
                         </DropdownMenuItem>
                       </DropdownMenuContent>
