@@ -48,6 +48,12 @@ export function NoteRow({
             <PenLine size={12} className="note-row-recording-icon" />
           ) : null}
           <div className="note-row-title">{preview?.title || ""}</div>
+          {preview?.isArchived ? (
+            <span className="note-row-marker note-row-marker-archived">Archived</span>
+          ) : null}
+          {preview?.isReviewed ? (
+            <span className="note-row-marker note-row-marker-reviewed">Reviewed</span>
+          ) : null}
         </div>
         <div className="note-row-subline">
           <span className="note-row-date">{preview?.dateLabel || ""}</span>

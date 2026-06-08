@@ -1,7 +1,7 @@
 use crate::{
     application::notes::NotesService, ensure_security_unlocked_for_app, notes_root, CreateNoteArgs,
     CreateNoteResult, FilesystemNotesRepository, FolderNode, FrontMatterNoteDocumentCodec,
-    GitNoteHistoryAdapter, NoteMeta, RuntimeNoteBodyCrypto, SetNoteTimestampArgs, SetOrderArgs,
+    GitNoteHistoryAdapter, NoteMeta, RuntimeNoteBodyCrypto, SetNoteMarkersArgs, SetNoteTimestampArgs, SetOrderArgs,
     SystemNoteClock, UuidNoteIdGenerator,
 };
 
@@ -67,6 +67,15 @@ pub(super) fn set_note_timestamp(
 ) -> Result<(), String> {
     ensure_security_unlocked_for_app(&app)?;
     notes_service(&app)?.set_note_timestamp(args)
+}
+
+#[tauri::command]
+pub(super) fn update_note_markers(
+    app: tauri::AppHandle,
+    args: SetNoteMarkersArgs,
+) -> Result<(), String> {
+    ensure_security_unlocked_for_app(&app)?;
+    notes_service(&app)?.update_note_markers(&args.path, args.archived, args.reviewed)
 }
 
 #[tauri::command]

@@ -13,6 +13,7 @@ export type NavNoteRowProps = {
   depth: number;
   indentationWidth: number;
   isSelected: boolean;
+  draggable?: boolean;
   onSelect: (notePath: string, event: ReactMouseEvent, parentPath: string) => void;
   onContextMenu: (
     event: ReactMouseEvent,
@@ -28,16 +29,19 @@ export function NavNoteRow({
   depth,
   indentationWidth,
   isSelected,
+  draggable = true,
   onSelect,
   onContextMenu,
 }: NavNoteRowProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: note.path,
     data: { type: "note", path: note.path } satisfies DragData,
+    disabled: !draggable,
   });
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: note.path,
     data: { type: "note", path: note.path } satisfies DragData,
+    disabled: !draggable,
   });
   const setRefs = useCallback(
     (element: HTMLDivElement | null) => {
@@ -86,6 +90,12 @@ export function NavNoteRow({
         </svg>
       </span>
       <span className="item-label">{title}</span>
+      {preview?.isArchived ? (
+        <span className="nav-note-marker nav-note-marker-archived">Archived</span>
+      ) : null}
+      {preview?.isReviewed ? (
+        <span className="nav-note-marker nav-note-marker-reviewed">Reviewed</span>
+      ) : null}
       {preview?.isRecording ? (
         <Mic size={11} className="nav-note-recording-icon" />
       ) : preview?.isHandwriting ? (

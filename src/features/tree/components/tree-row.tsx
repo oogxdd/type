@@ -2,6 +2,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { CalendarDays } from "lucide-react";
 import type { TreeItem } from "../lib/types";
 import type { DragData } from "@/shared/types";
 import { dropId } from "../lib/tree-dnd";
@@ -22,6 +23,9 @@ export type TreeRowProps = {
   cancelRenameFolder: () => void;
   onContextMenu: (event: ReactMouseEvent, id: string) => void;
   indentationWidth: number;
+  draggable?: boolean;
+  feedMode?: boolean;
+  renamingEnabled?: boolean;
 };
 
 export function TreeRow({
@@ -40,14 +44,19 @@ export function TreeRow({
   cancelRenameFolder,
   onContextMenu,
   indentationWidth,
+  draggable = true,
+  feedMode = false,
+  renamingEnabled = true,
 }: TreeRowProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: node.id,
     data: { type: "folder", path: node.id } satisfies DragData,
+    disabled: !draggable,
   });
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: dropId(node.id, "inside"),
     data: { type: "folder", path: node.id } satisfies DragData,
+    disabled: !draggable,
   });
 
   const setRefs = useCallback(
@@ -119,7 +128,9 @@ export function TreeRow({
       )}
       {!renaming && (
         <span className="folder-glyph" aria-hidden>
-          {hasNestedItems && !isCollapsed ? (
+          {feedMode ? (
+            <CalendarDays size={15} />
+          ) : hasNestedItems && !isCollapsed ? (
             <svg viewBox="0 0 24 24">
               <path
                 d="M3 8a2.5 2.5 0 0 1 2.5-2.5h4L11.4 7h7.1A2.5 2.5 0 0 1 21 9.5V11"
@@ -150,7 +161,7 @@ export function TreeRow({
           )}
         </span>
       )}
-      {renaming ? (
+      {renaming && renamingEnabled ? (
         <input
           className="rename-input"
           value={renameValue}

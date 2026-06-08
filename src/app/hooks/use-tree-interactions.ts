@@ -1,7 +1,13 @@
-import { useRef, type RefObject, type MouseEvent as ReactMouseEvent } from "react";
-import { useShallow } from "zustand/react/shallow";
+import {
+  useCallback,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type RefObject,
+} from "react";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu } from "@tauri-apps/api/menu";
+import { useShallow } from "zustand/react/shallow";
 
 import { useSelection } from "@/app/state/selection-store";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
@@ -13,7 +19,25 @@ import { computeRangeSelection, resolveTargetPaths } from "@/shared/lib/selectio
 type UseTreeInteractionsArgs = {
   /** The folders pane body; focused after a selection change. */
   foldersPanelRef: RefObject<HTMLDivElement | null>;
+  useNativeContextMenus?: boolean;
 };
+
+export type DesktopContextMenuState =
+  | {
+      kind: "folder";
+      x: number;
+      y: number;
+      path: string;
+      targetPaths: string[];
+    }
+  | {
+      kind: "note";
+      x: number;
+      y: number;
+      path: string;
+      parentPath: string;
+      targetPaths: string[];
+    };
 
 export type TreeInteractions = {
   handleFolderClick: (event: ReactMouseEvent, path: string) => void;
@@ -32,21 +56,20 @@ export type TreeInteractions = {
     path: string,
     parentPath?: string
   ) => Promise<void>;
+  desktopContextMenuState: DesktopContextMenuState | null;
+  openDesktopContextMenu: (state: DesktopContextMenuState) => void;
+  closeDesktopContextMenu: () => void;
 };
 
 /**
  * Folder/note interaction handlers shared by the desktop and mobile shells:
- * range-aware click selection, expand/collapse toggling, and the native Tauri
- * right-click menus (rename/delete folder; note info / delete / archive). Reads
- * Selection + NotesTree from context directly; the only collaborator it can't
- * reach that way is the folders-pane DOM node, passed in for post-action focus.
- *
- * It lives in app/hooks rather than features/tree because it depends on
- * NotesTree, and notes-tree-context already depends on features/tree/lib —
- * routing this glue through the composition root keeps that edge one-way.
+ * range-aware click selection, expand/collapse toggling, and the right-click
+ * menus used by the tree UI. Desktop can switch to a React/shadcn popup menu;
+ * mobile keeps the existing action-sheet / native behavior.
  */
 export const useTreeInteractions = ({
   foldersPanelRef,
+  useNativeContextMenus = true,
 }: UseTreeInteractionsArgs): TreeInteractions => {
   const {
     selectedFolders,
@@ -98,6 +121,20 @@ export const useTreeInteractions = ({
   const selectedNotesRef = useRef<Set<string>>(new Set());
   selectedFoldersRef.current = selectedFolders;
   selectedNotesRef.current = selectedNotes;
+
+  const [desktopContextMenuState, setDesktopContextMenuState] =
+    useState<DesktopContextMenuState | null>(null);
+
+  const openDesktopContextMenu = useCallback(
+    (state: DesktopContextMenuState) => {
+      setDesktopContextMenuState(state);
+    },
+    []
+  );
+
+  const closeDesktopContextMenu = useCallback(() => {
+    setDesktopContextMenuState(null);
+  }, []);
 
   const handleFolderClick = (event: ReactMouseEvent, path: string) => {
     event.stopPropagation();
@@ -161,6 +198,20 @@ export const useTreeInteractions = ({
     setLastSelectedNote("");
     setActiveNote(null);
     focusNoScroll(foldersPanelRef.current);
+
+    if (!useNativeContextMenus) {
+      setDesktopContextMenuState({
+        kind: "folder",
+        x: event.clientX,
+        y: event.clientY,
+        path,
+        targetPaths: selectedFolders.has(path)
+          ? resolveTargetPaths(selectedFoldersRef.current, path)
+          : [path],
+      });
+      return;
+    }
+
     folderContextPathRef.current = path;
     const menu = await getFolderNativeMenu();
     await menu.popup(new LogicalPosition(event.clientX, event.clientY));
@@ -243,6 +294,21 @@ export const useTreeInteractions = ({
     if (parentPath !== undefined || shouldNestNotesInNavigation) {
       focusNoScroll(foldersPanelRef.current);
     }
+
+    if (!useNativeContextMenus) {
+      setDesktopContextMenuState({
+        kind: "note",
+        x: event.clientX,
+        y: event.clientY,
+        path,
+        parentPath: noteParentPath,
+        targetPaths: selectedNotes.has(path)
+          ? resolveTargetPaths(selectedNotesRef.current, path)
+          : [path],
+      });
+      return;
+    }
+
     noteContextPathRef.current = path;
     const menu = await getNoteNativeMenu();
     await menu.popup(new LogicalPosition(event.clientX, event.clientY));
@@ -254,5 +320,8 @@ export const useTreeInteractions = ({
     handleNoteClick,
     handleFolderContextMenu,
     handleNoteContextMenu,
+    desktopContextMenuState,
+    openDesktopContextMenu,
+    closeDesktopContextMenu,
   };
 };

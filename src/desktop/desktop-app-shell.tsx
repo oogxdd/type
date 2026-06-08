@@ -1,11 +1,13 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
   type Dispatch,
   type SetStateAction,
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import {
   DndContext,
@@ -27,7 +29,9 @@ import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { useSecurity } from "@/features/security/hooks/security-context";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
+import { DesktopContextMenu } from "./desktop-context-menu";
 import { FoldersPanel } from "@/features/tree/components/folders-panel";
+import { FeedPanel } from "@/features/tree/components/feed-panel";
 import { useDragDrop } from "@/features/tree/hooks/use-drag-drop";
 import { useKeyboardNavigation } from "@/features/tree/hooks/use-keyboard-navigation";
 import {
@@ -37,7 +41,9 @@ import {
   isSystemFolder,
 } from "@/shared/constants";
 import { focusNoScroll } from "@/shared/lib/dom";
+import { computeRangeSelection } from "@/shared/lib/selection";
 import type { AppMode } from "@/shared/types";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { AppSidebar } from "./app-sidebar";
 import { DesktopMiddlePane } from "./middle-pane";
 import { DesktopRightPane } from "./right-pane";
@@ -125,7 +131,15 @@ export function DesktopAppShell({
     expanded,
     setExpanded,
     notes,
+    notePreviews,
     allNotePreviews,
+    feedNodeById,
+    activeFeedGroup,
+    setActiveFeedGroup,
+    activeFeedNode,
+    feedNotes,
+    feedNotePreviews,
+    feedVisibleNavigationItems,
     activeNode,
     visibleNavigationItems,
     parentById,
@@ -141,6 +155,7 @@ export function DesktopAppShell({
   } = useNotesTree();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [activeNavigationTab, setActiveNavigationTab] = useState<"feed" | "folders">("folders");
   const [threePaneLayout, setThreePaneLayout] = useState<Record<string, number>>({
     nav: 22,
     middle: 25,
@@ -154,6 +169,7 @@ export function DesktopAppShell({
   const notesPanelRef = useRef<HTMLDivElement | null>(null);
   const foldersPanelRef = useRef<HTMLDivElement | null>(null);
   const middlePaneRef = useRef<HTMLDivElement | null>(null);
+  const lastNonFeedFolderRef = useRef<string>("");
   const selectedNotesRef = useRef<Set<string>>(new Set());
   selectedNotesRef.current = selectedNotes;
 
@@ -163,7 +179,30 @@ export function DesktopAppShell({
     handleNoteClick,
     handleFolderContextMenu,
     handleNoteContextMenu,
-  } = useTreeInteractions({ foldersPanelRef });
+    desktopContextMenuState,
+    openDesktopContextMenu,
+    closeDesktopContextMenu,
+  } = useTreeInteractions({ foldersPanelRef, useNativeContextMenus: false });
+
+  useEffect(() => {
+    if (activeFolder && activeFolder !== FEED_FOLDER_PATH) {
+      lastNonFeedFolderRef.current = activeFolder;
+    }
+  }, [activeFolder]);
+
+  useEffect(() => {
+    if (activeFolder === FEED_FOLDER_PATH && activeNavigationTab !== "feed") {
+      setActiveNavigationTab("feed");
+      return;
+    }
+    if (activeFolder !== FEED_FOLDER_PATH && activeNavigationTab === "feed") {
+      setActiveNavigationTab("folders");
+    }
+  }, [activeFolder, activeNavigationTab]);
+  const customFoldersTreeData = useMemo(
+    () => treeData.filter((node) => !isSystemFolder(node.id)),
+    [treeData]
+  );
   const {
     activeId,
     edgeSnap,
@@ -208,6 +247,119 @@ export function DesktopAppShell({
     }
   }, [activeNote, deleteNotes]);
 
+  const openFeedTab = useCallback(() => {
+    closeDesktopContextMenu();
+    onAppModeChange("notes");
+    if (activeFolder && activeFolder !== FEED_FOLDER_PATH) {
+      lastNonFeedFolderRef.current = activeFolder;
+    }
+    setActiveNavigationTab("feed");
+    onOpenPinnedFolder(FEED_FOLDER_PATH);
+  }, [activeFolder, closeDesktopContextMenu, onAppModeChange, onOpenPinnedFolder]);
+
+  const openFoldersTab = useCallback(() => {
+    closeDesktopContextMenu();
+    onAppModeChange("notes");
+    setActiveNavigationTab("folders");
+    const fallbackFolder =
+      lastNonFeedFolderRef.current || customFoldersTreeData[0]?.id || "";
+    if (fallbackFolder) {
+      onOpenPinnedFolder(fallbackFolder);
+      return;
+    }
+    setSelectedFolders(new Set());
+    setLastSelectedFolder("");
+    setSelectedNotes(new Set());
+    setLastSelectedNote("");
+    setActiveFolder("");
+    setActiveNote(null);
+    clearNote();
+  }, [
+    clearNote,
+    closeDesktopContextMenu,
+    customFoldersTreeData,
+    onAppModeChange,
+    onOpenPinnedFolder,
+    setActiveFolder,
+    setActiveNote,
+    setLastSelectedFolder,
+    setLastSelectedNote,
+    setSelectedFolders,
+    setSelectedNotes,
+  ]);
+
+  const handleFeedMiddleNoteClick = useCallback(
+    (notePath: string, event: ReactMouseEvent) => {
+      const notePaths = feedNotes.map((note) => note.path);
+      setSelectedNotes(
+        computeRangeSelection(event, selectedNotes, notePaths, lastSelectedNote, notePath)
+      );
+      setLastSelectedNote(notePath);
+      setSelectedFolders(new Set([FEED_FOLDER_PATH]));
+      setLastSelectedFolder(FEED_FOLDER_PATH);
+      setActiveFolder(FEED_FOLDER_PATH);
+      setActiveNote(notePath);
+      setActiveFeedGroup(activeFeedGroup || activeFeedNode?.id || "");
+    },
+    [
+      activeFeedGroup,
+      activeFeedNode?.id,
+      feedNotes,
+      lastSelectedNote,
+      setActiveFeedGroup,
+      setActiveFolder,
+      setActiveNote,
+      setLastSelectedFolder,
+      setLastSelectedNote,
+      setSelectedFolders,
+      setSelectedNotes,
+      selectedNotes,
+    ]
+  );
+
+  const handleFeedMiddleNoteContextMenu = useCallback(
+    (event: ReactMouseEvent, notePath: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const notePaths = feedNotes.map((note) => note.path);
+      const targetPaths =
+        selectedNotes.size > 1 && selectedNotes.has(notePath)
+          ? Array.from(selectedNotes)
+          : [notePath];
+      setSelectedFolders(new Set([FEED_FOLDER_PATH]));
+      setLastSelectedFolder(FEED_FOLDER_PATH);
+      setActiveFolder(FEED_FOLDER_PATH);
+      if (!selectedNotes.has(notePath)) {
+        setSelectedNotes(new Set([notePath]));
+        setLastSelectedNote(notePath);
+      }
+      setActiveNote(notePath);
+      setActiveFeedGroup(activeFeedGroup || activeFeedNode?.id || "");
+      openDesktopContextMenu({
+        kind: "note",
+        x: event.clientX,
+        y: event.clientY,
+        path: notePath,
+        parentPath: activeFeedGroup || activeFeedNode?.id || FEED_FOLDER_PATH,
+        targetPaths: targetPaths.length > 0 ? targetPaths : notePaths,
+      });
+    },
+    [
+      activeFeedGroup,
+      activeFeedNode?.id,
+      feedNotes,
+      openDesktopContextMenu,
+      selectedNotes,
+      setActiveFeedGroup,
+      setActiveFolder,
+      setActiveNote,
+      setLastSelectedFolder,
+      setLastSelectedNote,
+      setSelectedFolders,
+      setSelectedNotes,
+    ]
+  );
+
   const { handleNotesKeyDown, handleFoldersKeyDown, lastLeftPaneFocusRef } =
     useKeyboardNavigation({
       layoutMode: "desktop",
@@ -227,6 +379,9 @@ export function DesktopAppShell({
       expanded,
       setExpanded,
       visibleNavigationItems,
+      activeNavigationTab,
+      feedVisibleNavigationItems,
+      feedNodeById,
       activeFolder,
       lastSelectedFolder,
       setSelectedFolders,
@@ -237,8 +392,9 @@ export function DesktopAppShell({
       setSelectedNotes,
       setLastSelectedNote,
       setActiveNote,
-      notes,
-      activeNode,
+      notes: activeNavigationTab === "feed" ? feedNotes : notes,
+      activeFeedGroup,
+      setActiveFeedGroup,
       foldersPanelRef,
       middlePaneRef,
       rightPaneRef,
@@ -252,11 +408,19 @@ export function DesktopAppShell({
     () => ({ "--editor-font-size": `${editorFontSize}px` }) as CSSProperties,
     [editorFontSize]
   );
-  const customFoldersTreeData = useMemo(
-    () => treeData.filter((node) => !isSystemFolder(node.id)),
-    [treeData]
-  );
-
+  const middlePaneNotes = activeNavigationTab === "feed" ? feedNotes : notes;
+  const middlePaneNotePreviews =
+    activeNavigationTab === "feed" ? feedNotePreviews : notePreviews;
+  const middlePaneTitle =
+    activeNavigationTab === "feed"
+      ? activeFeedNode?.name || "Feed"
+      : activeNode?.name || activeFolder || "Notes";
+  const middlePaneNoteClick =
+    activeNavigationTab === "feed" ? handleFeedMiddleNoteClick : handleNoteClick;
+  const middlePaneNoteContextMenu =
+    activeNavigationTab === "feed"
+      ? handleFeedMiddleNoteContextMenu
+      : handleNoteContextMenu;
   const leftPane = (
     <div className="pane-with-drag">
       <div className="pane-drag-region" data-tauri-drag-region aria-hidden />
@@ -267,7 +431,7 @@ export function DesktopAppShell({
         recordingActive={isRecordingAudio}
         recordingDisabled={!recordingSupported || isRecordingFinalizing}
         handwritingImportDisabled={handwritingImportBusy}
-        onFeedClick={() => onOpenPinnedFolder(FEED_FOLDER_PATH)}
+        onFeedClick={openFeedTab}
         onNewNoteClick={() => void createNewNote()}
         onRecordingClick={() => {
           if (isRecordingAudio) {
@@ -280,43 +444,78 @@ export function DesktopAppShell({
         onSettingsClick={() => onAppModeChange("settings")}
         onTrashClick={() => onOpenPinnedFolder(ARCHIEVE_FOLDER_PATH)}
       >
-        <FoldersPanel
-          treeData={customFoldersTreeData}
-          selectedIds={selectedFolders}
-          onSelect={handleFolderClick}
-          edgeSnap={edgeSnap}
-          expanded={expanded}
-          onToggle={handleToggle}
-          showNotesAsChildren={shouldNestNotesInNavigation}
-          selectedNoteIds={selectedNotes}
-          onNoteSelect={handleNoteClick}
-          onNoteContextMenu={handleNoteContextMenu}
-          notePreviews={allNotePreviews}
-          onPaneKeyDown={handleFoldersKeyDown}
-          onPaneClick={() => {
-            lastLeftPaneFocusRef.current = "folders";
-            focusNoScroll(foldersPanelRef.current);
-          }}
-          paneBodyRef={foldersPanelRef}
-          onClearSelection={() => {
-            setSelectedFolders(new Set());
-            setLastSelectedFolder("");
-            setSelectedNotes(new Set());
-            setLastSelectedNote("");
-            if (shouldNestNotesInNavigation) {
-              setActiveNote(null);
+        <Tabs
+          value={activeNavigationTab}
+          onValueChange={(value) => {
+            if (value === "feed") {
+              openFeedTab();
+            } else {
+              openFoldersTab();
             }
           }}
-          renamingFolder={renamingFolder}
-          renameValue={renameValue}
-          setRenameValue={setRenameValue}
-          submitRenameFolder={submitRenameFolder}
-          cancelRenameFolder={cancelRenameFolder}
-          onContextMenu={handleFolderContextMenu}
-          indentationWidth={indentationWidth}
-          showRecentTab={false}
-          embedded
-        />
+          className="h-full min-h-0 flex-1"
+        >
+          <div className="pane-section-title pane-tabs-wrap">
+            <TabsList className="folders-tabs-list">
+              <TabsTrigger value="feed" className="folders-tab-trigger">
+                Feed
+              </TabsTrigger>
+              <TabsTrigger value="folders" className="folders-tab-trigger">
+                Folders
+              </TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value="feed" className="folders-tab-content min-h-0">
+            <FeedPanel
+              paneBodyRef={foldersPanelRef}
+              onPaneKeyDown={handleFoldersKeyDown}
+              onPaneClick={() => {
+                lastLeftPaneFocusRef.current = "folders";
+                focusNoScroll(foldersPanelRef.current);
+              }}
+              onOpenContextMenu={openDesktopContextMenu}
+            />
+          </TabsContent>
+          <TabsContent value="folders" className="folders-tab-content min-h-0">
+            <FoldersPanel
+              treeData={customFoldersTreeData}
+              selectedIds={selectedFolders}
+              onSelect={handleFolderClick}
+              edgeSnap={edgeSnap}
+              expanded={expanded}
+              onToggle={handleToggle}
+              showNotesAsChildren={shouldNestNotesInNavigation}
+              selectedNoteIds={selectedNotes}
+              onNoteSelect={handleNoteClick}
+              onNoteContextMenu={handleNoteContextMenu}
+              notePreviews={allNotePreviews}
+              onPaneKeyDown={handleFoldersKeyDown}
+              onPaneClick={() => {
+                lastLeftPaneFocusRef.current = "folders";
+                focusNoScroll(foldersPanelRef.current);
+              }}
+              paneBodyRef={foldersPanelRef}
+              onClearSelection={() => {
+                setSelectedFolders(new Set());
+                setLastSelectedFolder("");
+                setSelectedNotes(new Set());
+                setLastSelectedNote("");
+                if (shouldNestNotesInNavigation) {
+                  setActiveNote(null);
+                }
+              }}
+              renamingFolder={renamingFolder}
+              renameValue={renameValue}
+              setRenameValue={setRenameValue}
+              submitRenameFolder={submitRenameFolder}
+              cancelRenameFolder={cancelRenameFolder}
+              onContextMenu={handleFolderContextMenu}
+              indentationWidth={indentationWidth}
+              showRecentTab={false}
+              embedded
+            />
+          </TabsContent>
+        </Tabs>
       </AppSidebar>
     </div>
   );
@@ -351,8 +550,12 @@ export function DesktopAppShell({
             middlePaneRef={middlePaneRef}
             lastLeftPaneFocusRef={lastLeftPaneFocusRef}
             onNotesKeyDown={handleNotesKeyDown}
-            onNoteClick={handleNoteClick}
-            onNoteContextMenu={handleNoteContextMenu}
+            notesTitle={middlePaneTitle}
+            notes={middlePaneNotes}
+            notePreviews={middlePaneNotePreviews}
+            selectedNotes={selectedNotes}
+            onNoteClick={middlePaneNoteClick}
+            onNoteContextMenu={middlePaneNoteContextMenu}
           />
         }
         rightPane={
@@ -361,6 +564,10 @@ export function DesktopAppShell({
             activeSettingsSection={activeSettingsSection}
           />
         }
+      />
+      <DesktopContextMenu
+        state={desktopContextMenuState}
+        onClose={closeDesktopContextMenu}
       />
       <DragOverlay modifiers={[snapCenterToCursor]}>
         {activeId ? (

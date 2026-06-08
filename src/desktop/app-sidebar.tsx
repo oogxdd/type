@@ -119,7 +119,7 @@ export function AppSidebar({
 
         <SidebarContent className="app-sidebar-content">
           <SidebarGroup className="min-h-0 flex-1 px-0 pb-0">
-            <SidebarGroupLabel>Folders</SidebarGroupLabel>
+            <SidebarGroupLabel>Navigation</SidebarGroupLabel>
             <SidebarGroupContent className="min-h-0 flex-1">{children}</SidebarGroupContent>
           </SidebarGroup>
 

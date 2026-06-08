@@ -25,6 +25,14 @@ import type { FlattenedItem } from "@/features/tree/lib/types";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 import { useAppearance } from "@/app/state/appearance-store";
 import {
+  buildFeedTree,
+  buildVisibleFeedNavigationItems,
+  collectFeedNotes,
+  findFeedNode,
+  getFirstFeedGroupId,
+  type FeedTreeNode,
+} from "@/features/notes/lib/feed-tree-model";
+import {
   applyFolderRenameToSelection,
   buildNotePreviews,
   buildVisibleNavigationItems,
@@ -49,6 +57,14 @@ type NotesTreeContextValue = {
   allNotePreviews: Record<string, NotePreview>;
   activeNode: FolderNode | null;
   visibleNavigationItems: VisibleNavigationItem[];
+  feedVisibleNavigationItems: VisibleNavigationItem[];
+  feedTreeData: FeedTreeNode[];
+  feedNodeById: Map<string, FeedTreeNode>;
+  activeFeedGroup: string;
+  setActiveFeedGroup: React.Dispatch<React.SetStateAction<string>>;
+  activeFeedNode: FeedTreeNode | null;
+  feedNotes: Array<NoteEntry & { timestampMs: number }>;
+  feedNotePreviews: Record<string, NotePreview>;
   parentById: Record<string, string | null>;
   // Rename state
   renamingFolder: string | null;
@@ -67,6 +83,11 @@ type NotesTreeContextValue = {
   deleteNotes: (paths: string[]) => Promise<boolean>;
   deleteFolders: (paths: string[]) => Promise<void>;
   moveNotesToArchive: (paths: string[]) => Promise<void>;
+  moveNotesToFolder: (paths: string[], destinationPath: string) => Promise<void>;
+  updateNoteMarkers: (
+    paths: string[],
+    markers: { archived?: boolean | null; reviewed?: boolean | null }
+  ) => Promise<void>;
   flattenIntoFeed: (folderPaths: string[], notePaths: string[]) => Promise<void>;
   showNoteInfo: (path: string) => Promise<void>;
   renameFolderFromMobile: (path: string, nextName: string) => Promise<void>;
@@ -83,6 +104,7 @@ export function NotesTreeProvider({
 }) {
   const { activeProfileId, activeProfileNotesRoot, syncSettings } = useProfiles();
   const notesListMode = useAppearance((state) => state.notesListMode);
+  const hideArchivedFeedNotes = useAppearance((state) => state.hideArchivedFeedNotes);
   const layoutMode = useLayoutMode();
   const {
     selectedFolders,
@@ -112,6 +134,7 @@ export function NotesTreeProvider({
   // -- Folder tree state
   const [tree, setTree] = useState<FolderNode | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set([""]));
+  const [activeFeedGroup, setActiveFeedGroup] = useState("");
 
   // -- Rename state
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
@@ -149,6 +172,10 @@ export function NotesTreeProvider({
 
   const notes = useMemo(() => activeNode?.notes || [], [activeNode]);
   const allNotes = useMemo(() => collectAllNotes(tree), [tree]);
+  const feedSourceNotes = useMemo(
+    () => allNotes.filter((note) => getNoteParentPath(note.path) === FEED_FOLDER_PATH),
+    [allNotes]
+  );
   const shouldWarmNotePreviews =
     layoutMode !== "phone" || Boolean(activeFolder) || Boolean(activeNote);
   const previewSourceNotes = useMemo<NoteEntry[]>(
@@ -175,6 +202,46 @@ export function NotesTreeProvider({
   );
   const allNotePreviews = useNotePreviews(previewSourceNotes);
   const notePreviews = useMemo(() => buildNotePreviews(notes, allNotePreviews), [allNotePreviews, notes]);
+  const feedTree = useMemo(
+    () => buildFeedTree(feedSourceNotes, allNotePreviews, hideArchivedFeedNotes),
+    [allNotePreviews, feedSourceNotes, hideArchivedFeedNotes]
+  );
+  const feedTreeData = feedTree.treeData;
+  const feedNodeById = feedTree.nodeById;
+  const feedVisibleNavigationItems = useMemo(
+    () =>
+      buildVisibleFeedNavigationItems(
+        feedTreeData,
+        expanded,
+        shouldNestNotesInNavigation
+      ),
+    [expanded, feedTreeData, shouldNestNotesInNavigation]
+  );
+
+  useEffect(() => {
+    if (feedTreeData.length === 0) {
+      if (activeFeedGroup) {
+        setActiveFeedGroup("");
+      }
+      return;
+    }
+    if (!activeFeedGroup || !feedNodeById.has(activeFeedGroup)) {
+      setActiveFeedGroup(getFirstFeedGroupId(feedTreeData));
+    }
+  }, [activeFeedGroup, feedNodeById, feedTreeData]);
+
+  const activeFeedNode = useMemo(
+    () => findFeedNode(feedTreeData, activeFeedGroup),
+    [activeFeedGroup, feedTreeData]
+  );
+  const feedNotes = useMemo(
+    () => collectFeedNotes(activeFeedNode),
+    [activeFeedNode]
+  );
+  const feedNotePreviews = useMemo(
+    () => buildNotePreviews(feedNotes, allNotePreviews),
+    [allNotePreviews, feedNotes]
+  );
 
   const parentById = useMemo(() => mapParentById(flatItems), [flatItems]);
 
@@ -383,6 +450,57 @@ export function NotesTreeProvider({
     [clearNote, refreshTree, setActiveFolder, setActiveNote, setLastSelectedFolder, setLastSelectedNote, setSelectedFolders, setSelectedNotes]
   );
 
+  const moveNotesToFolder = useCallback(
+    async (paths: string[], destinationPath: string) => {
+      const normalizedDestination = destinationPath.trim();
+      if (paths.length === 0 || !normalizedDestination) {
+        return;
+      }
+      await api.moveItems(paths, normalizedDestination);
+      setSelectedNotes(new Set());
+      setLastSelectedNote("");
+      setActiveNote(null);
+      clearNote();
+      setSelectedFolders(new Set([normalizedDestination]));
+      setLastSelectedFolder(normalizedDestination);
+      setActiveFolder(normalizedDestination);
+      await refreshTree();
+    },
+    [
+      clearNote,
+      refreshTree,
+      setActiveFolder,
+      setActiveNote,
+      setLastSelectedFolder,
+      setLastSelectedNote,
+      setSelectedFolders,
+      setSelectedNotes,
+    ]
+  );
+
+  const updateNoteMarkers = useCallback(
+    async (
+      paths: string[],
+      markers: { archived?: boolean | null; reviewed?: boolean | null }
+    ) => {
+      const uniquePaths = Array.from(new Set(paths.filter(Boolean)));
+      if (uniquePaths.length === 0) {
+        return;
+      }
+      await Promise.all(
+        uniquePaths.map((path) =>
+          api.updateNoteMarkers({
+            path,
+            archived: markers.archived ?? null,
+            reviewed: markers.reviewed ?? null,
+          })
+        )
+      );
+      window.dispatchEvent(new CustomEvent("note-previews-invalidated"));
+    },
+    []
+  );
+
   // Collapse a selection of folders + notes into Feed: every note under the
   // chosen folders (recursively) plus any directly-chosen notes is moved into
   // Feed, then the emptied (non-system) folders are removed. Notes keep their
@@ -446,7 +564,15 @@ export function NotesTreeProvider({
       const updatedLabel = meta.updated_ms
         ? new Date(meta.updated_ms).toLocaleString()
         : "—";
-      window.alert(`Created: ${createdLabel}\nUpdated: ${updatedLabel}`);
+      const archivedLabel = meta.archived_ms
+        ? new Date(meta.archived_ms).toLocaleString()
+        : "—";
+      const reviewedLabel = meta.reviewed_ms
+        ? new Date(meta.reviewed_ms).toLocaleString()
+        : "—";
+      window.alert(
+        `Created: ${createdLabel}\nUpdated: ${updatedLabel}\nArchived: ${archivedLabel}\nReviewed: ${reviewedLabel}`
+      );
     } catch (error) {
       console.error("[notes] failed to show note info", error);
     }
@@ -469,6 +595,14 @@ export function NotesTreeProvider({
         allNotePreviews,
         activeNode,
         visibleNavigationItems,
+        feedVisibleNavigationItems,
+        feedTreeData,
+        feedNodeById,
+        activeFeedGroup,
+        setActiveFeedGroup,
+        activeFeedNode,
+        feedNotes,
+        feedNotePreviews,
         parentById,
         renamingFolder,
         renameValue,
@@ -481,6 +615,8 @@ export function NotesTreeProvider({
         deleteNotes,
         deleteFolders,
         moveNotesToArchive,
+        moveNotesToFolder,
+        updateNoteMarkers,
         flattenIntoFeed,
         showNoteInfo,
         renameFolderFromMobile,

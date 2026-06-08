@@ -46,6 +46,20 @@ export const getInitialNotesListMode = (): NotesListMode => {
   return "separate";
 };
 
+export const getInitialHideArchivedFeedNotes = (): boolean => {
+  if (typeof window === "undefined") {
+    return true;
+  }
+  const stored = window.localStorage.getItem("notes-viewer-hide-archived-feed-notes");
+  if (stored === "true") {
+    return true;
+  }
+  if (stored === "false") {
+    return false;
+  }
+  return true;
+};
+
 export const getStoredSyncValue = (key: string, fallback: string) => {
   if (typeof window === "undefined") {
     return fallback;
@@ -236,4 +250,3 @@ export const getInitialEditorFontSize = (): number => {
   }
   return DEFAULT_EDITOR_FONT_SIZE;
 };
-

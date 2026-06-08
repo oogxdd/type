@@ -17,6 +17,8 @@ export type NoteMeta = {
   created_ms: number | null;
   updated_ms: number | null;
   note_type?: string | null;
+  archived_ms?: number | null;
+  reviewed_ms?: number | null;
   recording_audio_path?: string | null;
   handwriting_attachment_path?: string | null;
   transcription_status?: string | null;
@@ -215,6 +217,12 @@ export type SetOrderArgs = {
   parent: string;
   folderOrder: string[];
   noteOrder: string[];
+};
+
+export type SetNoteMarkersArgs = {
+  path: string;
+  archived?: boolean | null;
+  reviewed?: boolean | null;
 };
 
 export type AppMode = "notes" | "settings";

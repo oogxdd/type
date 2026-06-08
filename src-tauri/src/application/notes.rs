@@ -181,6 +181,8 @@ where
             created_ms,
             updated_ms,
             note_type: front_matter_meta.note_type.clone(),
+            archived_ms: front_matter_meta.archived_ms,
+            reviewed_ms: front_matter_meta.reviewed_ms,
             recording_audio_path: front_matter_meta.recording_audio_path.clone(),
             handwriting_attachment_path: front_matter_meta.handwriting_attachment_path.clone(),
             transcription_status: front_matter_meta.transcription_status.clone(),
@@ -192,14 +194,55 @@ where
         })
     }
 
+    pub(crate) fn update_note_markers(
+        &self,
+        path: &str,
+        archived: Option<bool>,
+        reviewed: Option<bool>,
+    ) -> Result<(), String> {
+        let full_path = self.repository.resolve_path(path)?;
+        if self.repository.entry_kind(&full_path)? != Some(NoteStorageEntryKind::File) {
+            return Err("Note file does not exist.".to_string());
+        }
+        let raw = self.repository.read_to_string(&full_path)?;
+        let (mut meta, body) = self.documents.parse(&raw);
+        let body = self.crypto.decrypt_note_body(&body)?;
+
+        if meta.id.is_none() {
+            meta.id = Some(self.ids.generate_note_id());
+        }
+
+        let now = self.clock.now_ms();
+        let mut changed = false;
+
+        if let Some(enabled) = archived {
+            let next = enabled.then_some(now).flatten();
+            if meta.archived_ms != next {
+                meta.archived_ms = next;
+                changed = true;
+            }
+        }
+
+        if let Some(enabled) = reviewed {
+            let next = enabled.then_some(now).flatten();
+            if meta.reviewed_ms != next {
+                meta.reviewed_ms = next;
+                changed = true;
+            }
+        }
+
+        if changed {
+            meta.updated_ms = now.or(meta.updated_ms);
+            self.repository.write_note(&full_path, &meta, &body)?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn move_items(&self, items: Vec<String>, destination: String) -> Result<(), String> {
         self.repository.ensured_root()?;
         let destination_path = self.repository.resolve_path(&destination)?;
         if self.repository.entry_kind(&destination_path)? != Some(NoteStorageEntryKind::Directory) {
-            return Err(format!(
-                "Destination folder does not exist: {}",
-                destination_path.to_string_lossy()
-            ));
+            self.repository.create_dir_all(&destination_path)?;
         }
 
         let mut source_groups_folders: HashMap<PathBuf, Vec<String>> = HashMap::new();

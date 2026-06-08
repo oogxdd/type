@@ -24,6 +24,9 @@ export function selectPreviewSourceNotes({
   allNotes,
   shouldNestNotesInNavigation,
 }: PreviewSourceInput): NoteEntry[] {
+  if (activeFolder === FEED_FOLDER_PATH) {
+    return allNotes;
+  }
   if (layoutMode !== "phone" && !shouldNestNotesInNavigation) {
     return notes;
   }

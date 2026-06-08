@@ -60,6 +60,20 @@ pub(crate) fn parse_note_front_matter(raw: &str) -> (NoteFrontMatter, String) {
                     meta.note_type = Some(value);
                 }
             }
+            "archived_ms" => {
+                if let Ok(parsed) = value.parse::<i64>() {
+                    meta.archived_ms = Some(parsed);
+                } else {
+                    meta.passthrough_lines.push(trimmed.to_string());
+                }
+            }
+            "reviewed_ms" => {
+                if let Ok(parsed) = value.parse::<i64>() {
+                    meta.reviewed_ms = Some(parsed);
+                } else {
+                    meta.passthrough_lines.push(trimmed.to_string());
+                }
+            }
             "recording_audio_path" => {
                 if !value.is_empty() {
                     meta.recording_audio_path = Some(value);
@@ -143,6 +157,12 @@ pub(crate) fn render_note_with_front_matter(meta: &NoteFrontMatter, body: &str) 
     }
     if let Some(note_type) = &meta.note_type {
         output.push_str(&format!("type: {}\n", front_matter_safe_value(note_type)));
+    }
+    if let Some(archived_ms) = meta.archived_ms {
+        output.push_str(&format!("archived_ms: {}\n", archived_ms));
+    }
+    if let Some(reviewed_ms) = meta.reviewed_ms {
+        output.push_str(&format!("reviewed_ms: {}\n", reviewed_ms));
     }
     if let Some(audio_path) = &meta.recording_audio_path {
         output.push_str(&format!(
@@ -237,6 +257,8 @@ mod tests {
             id: Some("note-1".to_string()),
             created_ms: Some(42),
             note_type: Some("recording".to_string()),
+            archived_ms: Some(77),
+            reviewed_ms: Some(88),
             ..Default::default()
         };
         let rendered = render_note_with_front_matter(&meta, "Body text");
@@ -244,6 +266,8 @@ mod tests {
         assert_eq!(parsed.id.as_deref(), Some("note-1"));
         assert_eq!(parsed.created_ms, Some(42));
         assert_eq!(parsed.note_type.as_deref(), Some("recording"));
+        assert_eq!(parsed.archived_ms, Some(77));
+        assert_eq!(parsed.reviewed_ms, Some(88));
         assert_eq!(body.trim(), "Body text");
     }
 }

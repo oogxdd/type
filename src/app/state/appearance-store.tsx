@@ -9,6 +9,7 @@ import {
 } from "@/shared/constants";
 import {
   getInitialEditorFontSize,
+  getInitialHideArchivedFeedNotes,
   getInitialNotesListMode,
   getInitialTheme,
 } from "@/shared/lib/storage";
@@ -18,9 +19,11 @@ import { setNativeTheme } from "./appearance-api";
 type AppearanceState = {
   theme: ThemeMode;
   notesListMode: NotesListMode;
+  hideArchivedFeedNotes: boolean;
   editorFontSize: number;
   setTheme: (theme: ThemeMode) => void;
   setNotesListMode: (mode: NotesListMode) => void;
+  setHideArchivedFeedNotes: (hidden: boolean) => void;
   setEditorFontSize: (size: number) => void;
   increaseEditorFontSize: () => void;
   decreaseEditorFontSize: () => void;
@@ -30,9 +33,11 @@ type AppearanceState = {
 export const useAppearance = create<AppearanceState>((set) => ({
   theme: getInitialTheme(),
   notesListMode: getInitialNotesListMode(),
+  hideArchivedFeedNotes: getInitialHideArchivedFeedNotes(),
   editorFontSize: getInitialEditorFontSize(),
   setTheme: (theme) => set({ theme }),
   setNotesListMode: (notesListMode) => set({ notesListMode }),
+  setHideArchivedFeedNotes: (hideArchivedFeedNotes) => set({ hideArchivedFeedNotes }),
   setEditorFontSize: (editorFontSize) =>
     set({
       editorFontSize: Math.min(
@@ -63,6 +68,12 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
         window.localStorage.setItem(
           "notes-viewer-notes-list-mode",
           state.notesListMode
+        );
+      }
+      if (!previous || state.hideArchivedFeedNotes !== previous.hideArchivedFeedNotes) {
+        window.localStorage.setItem(
+          "notes-viewer-hide-archived-feed-notes",
+          String(state.hideArchivedFeedNotes)
         );
       }
       if (!previous || state.editorFontSize !== previous.editorFontSize) {

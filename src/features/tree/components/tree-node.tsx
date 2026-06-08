@@ -29,6 +29,9 @@ export type TreeNodeProps = {
   cancelRenameFolder: () => void;
   onContextMenu: (event: ReactMouseEvent, id: string) => void;
   indentationWidth: number;
+  draggable?: boolean;
+  feedMode?: boolean;
+  renamingEnabled?: boolean;
 };
 
 export function TreeNode({
@@ -51,6 +54,9 @@ export function TreeNode({
   cancelRenameFolder,
   onContextMenu,
   indentationWidth,
+  draggable = true,
+  feedMode = false,
+  renamingEnabled = true,
 }: TreeNodeProps) {
   const edgePosition = edgeSnap?.id === node.id ? edgeSnap.position : null;
   const notes = showNotesAsChildren ? node.notes || [] : [];
@@ -77,6 +83,9 @@ export function TreeNode({
         cancelRenameFolder={cancelRenameFolder}
         onContextMenu={onContextMenu}
         indentationWidth={indentationWidth}
+        draggable={draggable}
+        feedMode={feedMode}
+        renamingEnabled={renamingEnabled}
       />
       {hasNestedItems && !isCollapsed && (
         <div className="tree-children">
@@ -91,6 +100,7 @@ export function TreeNode({
               isSelected={selectedNoteIds.has(note.path)}
               onSelect={onNoteSelect}
               onContextMenu={onNoteContextMenu}
+              draggable={draggable}
             />
           ))}
           {node.children.map((child) => (
@@ -115,6 +125,9 @@ export function TreeNode({
               cancelRenameFolder={cancelRenameFolder}
               onContextMenu={onContextMenu}
               indentationWidth={indentationWidth}
+              draggable={draggable}
+              feedMode={feedMode}
+              renamingEnabled={renamingEnabled}
             />
           ))}
         </div>

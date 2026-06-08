@@ -15,7 +15,6 @@ import type {
   ProfileSyncSettings,
 } from "@/shared/types";
 import {
-  DEFAULT_PROFILE_SYNC_SETTINGS,
   getProfileSyncSettings,
   readProfileSyncStore,
 } from "@/shared/lib/storage";
@@ -377,6 +376,7 @@ export function ProfilesProvider({
         syncSettings,
         updateAppConfig,
         updateActiveProfileSettings,
+        updateSyncSettings,
         refreshProfiles,
         switchProfile,
         createProfile,

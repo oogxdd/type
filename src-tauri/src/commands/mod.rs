@@ -71,6 +71,7 @@ pub(super) fn run() {
             notes::create_note,
             notes::write_note,
             notes::set_note_timestamp,
+            notes::update_note_markers,
             notes::get_note_meta,
             notes::move_items,
             notes::delete_items,
