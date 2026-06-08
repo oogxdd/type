@@ -9,14 +9,16 @@ import {
   appendLensBackmatterBlock,
   extractLensBackmatter,
   stripLensBackmatterBlock,
-} from "./lens-backmatter";
+} from "@/shared/lib/lens-backmatter";
+import { stripInlineAnnotationMetadata } from "@/shared/lib/annotation-metadata";
 
 const NOTE_ANNOTATIONS_KEY = "type_annotations_b64";
 const COORD_SCALE = 4095;
-const INLINE_ANNOTATION_LINE_RE = /^type_annotations_b64:\s*[A-Za-z0-9+/=]{16,}\s*$/;
 const INLINE_ANNOTATION_CAPTURE_RE =
   /^\s*type_annotations_b64:\s*([A-Za-z0-9+/=]{16,})\s*$/m;
 const decoder = new TextDecoder();
+
+export { stripInlineAnnotationMetadata };
 
 export type NoteAnnotationAnchor = {
   hash: string;
@@ -114,16 +116,6 @@ const fallbackAnnotations = (): NoteAnnotationsPayload => ({
 });
 
 const isDefined = <T,>(value: T | null): value is T => value !== null;
-
-const removeInlineAnnotationLine = (markdown: string) =>
-  markdown
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .filter((line) => !INLINE_ANNOTATION_LINE_RE.test(line.trim()))
-    .join("\n");
-
-export const stripInlineAnnotationMetadata = (markdown: string) =>
-  removeInlineAnnotationLine(stripLensBackmatterBlock(markdown));
 
 const readInlineAnnotationScalar = (markdown: string): string | null => {
   const normalized = markdown.replace(/\r\n/g, "\n");
@@ -471,7 +463,7 @@ const stripLegacyLensMetadata = (markdown: string) => {
     NOTE_ANNOTATIONS_KEY
   );
   const { frontmatterBlock, body } = splitFrontmatter(withoutFrontmatterKey);
-  const cleanBody = removeInlineAnnotationLine(body);
+  const cleanBody = stripInlineAnnotationMetadata(body);
   return joinFrontmatter(frontmatterBlock, cleanBody);
 };
 

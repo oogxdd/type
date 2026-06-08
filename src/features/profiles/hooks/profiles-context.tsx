@@ -18,6 +18,11 @@ import {
   getProfileSyncSettings,
   readProfileSyncStore,
 } from "@/shared/lib/storage";
+import {
+  LEGACY_PROFILE_SYNC_STORAGE_KEYS,
+  profileSyncSettingsFromState,
+  splitProfileSyncSettingsPatch,
+} from "@/features/profiles/lib/profile-sync-settings";
 import { PROFILE_SYNC_STORAGE_KEY } from "@/shared/constants";
 import { getErrorMessage } from "@/shared/lib/errors";
 
@@ -69,47 +74,10 @@ export function ProfilesProvider({
   const activeProfileSettings = activeProfile?.settings ?? null;
   const appConfig = profilesSnapshot?.appConfig ?? null;
 
-  // Derived legacy settings object for backward compatibility
+  // The UI still consumes one settings object; the helper documents which
+  // fields are app-wide and which belong to the active profile.
   const syncSettings = useMemo((): ProfileSyncSettings => {
-    if (!appConfig || !activeProfileSettings) {
-      return {
-        gitRemoteUrl: "",
-        gitBranch: "main",
-        gitUsername: "",
-        gitPassword: "",
-        gitCommitMessage: "Sync notes",
-        lastSuccessfulSyncAt: "",
-        noteFileNameFormat: "utc_timestamp_slug",
-        assemblyAiApiKey: "",
-        mobileAutoTranscriptionEnabled: true,
-        whisperModel: "large-v3",
-        handwritingOcrProvider: "openai",
-        openAiApiKey: "",
-        openAiModel: "gpt-4.1-mini",
-        huggingFaceApiKey: "",
-        huggingFaceModel: "microsoft/trocr-base-handwritten",
-        mobileAutoHandwritingOcrEnabled: true,
-      };
-    }
-
-    return {
-      gitRemoteUrl: activeProfileSettings.git_remote_url,
-      gitBranch: activeProfileSettings.git_branch,
-      gitUsername: activeProfileSettings.git_username,
-      gitPassword: activeProfileSettings.git_password,
-      gitCommitMessage: activeProfileSettings.git_commit_message,
-      lastSuccessfulSyncAt: "", // Not yet implemented on backend
-      noteFileNameFormat: appConfig.note_file_name_format as any,
-      assemblyAiApiKey: appConfig.assemblyai_api_key,
-      mobileAutoTranscriptionEnabled: activeProfileSettings.mobile_auto_transcription_enabled,
-      whisperModel: appConfig.whisper_model,
-      handwritingOcrProvider: appConfig.handwriting_ocr_provider as any,
-      openAiApiKey: appConfig.openai_api_key,
-      openAiModel: appConfig.openai_model,
-      huggingFaceApiKey: appConfig.huggingface_api_key,
-      huggingFaceModel: appConfig.huggingface_model,
-      mobileAutoHandwritingOcrEnabled: activeProfileSettings.mobile_auto_handwriting_ocr_enabled,
-    };
+    return profileSyncSettingsFromState(appConfig, activeProfileSettings);
   }, [appConfig, activeProfileSettings]);
 
   const refreshProfiles = useCallback(async () => {
@@ -196,24 +164,9 @@ export function ProfilesProvider({
         }
 
         window.localStorage.removeItem(PROFILE_SYNC_STORAGE_KEY);
-        const legacyKeys = [
-          "notes-viewer-git-remote",
-          "notes-viewer-git-branch",
-          "notes-viewer-git-username",
-          "notes-viewer-git-password",
-          "notes-viewer-git-commit-message",
-          "notes-viewer-git-last-sync-at",
-          "notes-viewer-note-file-name-format",
-          "notes-viewer-assemblyai-api-key",
-          "notes-viewer-mobile-auto-transcription-enabled",
-          "notes-viewer-handwriting-ocr-provider",
-          "notes-viewer-openai-api-key",
-          "notes-viewer-openai-model",
-          "notes-viewer-huggingface-api-key",
-          "notes-viewer-huggingface-model",
-          "notes-viewer-mobile-auto-handwriting-ocr-enabled",
-        ];
-        legacyKeys.forEach((k) => window.localStorage.removeItem(k));
+        LEGACY_PROFILE_SYNC_STORAGE_KEYS.forEach((key) =>
+          window.localStorage.removeItem(key)
+        );
 
         await refreshProfiles();
       } catch (e) {
@@ -234,42 +187,8 @@ export function ProfilesProvider({
 
   const updateSyncSettings = useCallback(
     async (patch: Partial<ProfileSyncSettings>) => {
-      const appConfigPatch: Partial<AppConfig> = {};
-      const profileSettingsPatch: Partial<ProfileSettings> = {};
-
-      if ("noteFileNameFormat" in patch)
-        appConfigPatch.note_file_name_format = patch.noteFileNameFormat;
-      if ("assemblyAiApiKey" in patch)
-        appConfigPatch.assemblyai_api_key = patch.assemblyAiApiKey!;
-      if ("whisperModel" in patch)
-        appConfigPatch.whisper_model = patch.whisperModel!;
-      if ("handwritingOcrProvider" in patch)
-        appConfigPatch.handwriting_ocr_provider = patch.handwritingOcrProvider!;
-      if ("openAiApiKey" in patch)
-        appConfigPatch.openai_api_key = patch.openAiApiKey!;
-      if ("openAiModel" in patch)
-        appConfigPatch.openai_model = patch.openAiModel!;
-      if ("huggingFaceApiKey" in patch)
-        appConfigPatch.huggingface_api_key = patch.huggingFaceApiKey!;
-      if ("huggingFaceModel" in patch)
-        appConfigPatch.huggingface_model = patch.huggingFaceModel!;
-
-      if ("gitRemoteUrl" in patch)
-        profileSettingsPatch.git_remote_url = patch.gitRemoteUrl!;
-      if ("gitBranch" in patch)
-        profileSettingsPatch.git_branch = patch.gitBranch!;
-      if ("gitUsername" in patch)
-        profileSettingsPatch.git_username = patch.gitUsername!;
-      if ("gitPassword" in patch)
-        profileSettingsPatch.git_password = patch.gitPassword!;
-      if ("gitCommitMessage" in patch)
-        profileSettingsPatch.git_commit_message = patch.gitCommitMessage!;
-      if ("mobileAutoTranscriptionEnabled" in patch)
-        profileSettingsPatch.mobile_auto_transcription_enabled =
-          patch.mobileAutoTranscriptionEnabled!;
-      if ("mobileAutoHandwritingOcrEnabled" in patch)
-        profileSettingsPatch.mobile_auto_handwriting_ocr_enabled =
-          patch.mobileAutoHandwritingOcrEnabled!;
+      const { appConfigPatch, profileSettingsPatch } =
+        splitProfileSyncSettingsPatch(patch);
 
       if (Object.keys(appConfigPatch).length > 0) {
         await updateAppConfig(appConfigPatch);

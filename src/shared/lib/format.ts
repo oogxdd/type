@@ -4,11 +4,7 @@ import type {
   RecordingListItem,
 } from "../types";
 import { stripFrontmatter } from "./frontmatter";
-// Intentional shared -> feature edge: building a note preview must strip the
-// editor's inline annotation/lens metadata so it doesn't leak into the summary.
-// This is a single pure function; the alternative (duplicating the editor's
-// metadata format here) would be worse. Keep this the ONLY feature import in shared/.
-import { stripInlineAnnotationMetadata } from "@/features/editor/lib/note-annotations";
+import { stripInlineAnnotationMetadata } from "./annotation-metadata";
 
 const RECORDING_NOTE_TYPE = "audio_recording";
 const HANDWRITING_NOTE_TYPE = "handwriting_attachment";

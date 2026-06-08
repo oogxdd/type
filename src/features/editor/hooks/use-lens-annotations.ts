@@ -10,9 +10,9 @@ import { readNote, writeNote } from "@/features/notes/api/notes-api";
 import { confirmAction } from "@/shared/lib/dom";
 import { sanitizeRecordingEditorContent } from "@/shared/lib/format";
 import { stripFrontmatter } from "@/shared/lib/frontmatter";
+import { stripInlineAnnotationMetadata } from "@/shared/lib/annotation-metadata";
 import {
   parseNoteAnnotations,
-  stripInlineAnnotationMetadata,
   withNoteAnnotations,
   type NoteAnnotationAnchor,
   type NoteAnnotationPoint,
