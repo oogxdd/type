@@ -1,4 +1,5 @@
 import { Button } from "@/shared/ui/button";
+import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { useEditor } from "@/features/editor/hooks/editor-context";
 import {
   SETTINGS_SECTIONS,
@@ -57,7 +58,7 @@ function SettingsDetail({ sectionId }: { sectionId: SettingsSectionId }) {
   if (sectionId === "appearance") return <SettingsAppearanceSection />;
   if (sectionId === "transcription") return <SettingsTranscriptionSection />;
   if (sectionId === "recordings") return <SettingsRecordingsSection />;
-  if (sectionId === "security") return <SettingsSecuritySection />;
+  if (sectionId === "security" && APP_EXTENSIONS.security) return <SettingsSecuritySection />;
   return null;
 }
 

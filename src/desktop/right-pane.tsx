@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Menu } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import { useSelection } from "@/app/state/selection-store";
+import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { useEditor } from "@/features/editor/hooks/editor-context";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 
@@ -63,12 +64,15 @@ export function DesktopRightPane({
   }, [activeNote, notes, selectedNotes]);
 
   useEffect(() => {
-    if (selectedNotes.size > 1) {
+    if (APP_EXTENSIONS.multiLens && selectedNotes.size > 1) {
       setIsLensPinned(true);
     }
   }, [selectedNotes]);
 
-  const shouldShowLens = selectedNotePaths.length > 1 || isLensPinned;
+  // Multi-note lens stays available as an extension, but the default editor
+  // path is always the single-note flow.
+  const shouldShowLens =
+    APP_EXTENSIONS.multiLens && (selectedNotePaths.length > 1 || isLensPinned);
 
   const lensNotes = useMemo(
     () =>

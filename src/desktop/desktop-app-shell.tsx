@@ -22,6 +22,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { useTreeInteractions } from "@/app/hooks/use-tree-interactions";
 import { useSelection } from "@/app/state/selection-store";
+import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { useAppearance } from "@/app/state/appearance-store";
 import { useEditor } from "@/features/editor/hooks/editor-context";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
@@ -90,6 +91,12 @@ export function DesktopAppShell({
   } = useRecordings();
   const { handwritingImportBusy } = useHandwriting();
   const { lockSecurity } = useSecurity();
+  const lockAppNow = useCallback(async () => {
+    if (!APP_EXTENSIONS.security) {
+      return;
+    }
+    await lockSecurity();
+  }, [lockSecurity]);
   const {
     selectedFolders,
     setSelectedFolders,
@@ -371,7 +378,9 @@ export function DesktopAppShell({
       resetEditorFontSize,
       createNewNote: () => createNewNote(),
       deleteSelectedNotes: deleteSelectedNotesByShortcut,
-      lockAppNow: () => lockSecurity(),
+      // The lock shortcut is optional. When security is disabled, keep the
+      // command surface stable but make it a no-op.
+      lockAppNow,
       setSidebarCollapsed,
       visibleItems,
       orderedIds,

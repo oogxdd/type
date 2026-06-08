@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 import "./app.css";
 import "@/mobile/mobile.css";
 
+import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { AppearanceProvider, useAppearance } from "@/app/state/appearance-store";
 import { ProfilesProvider, useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { GitSyncProvider } from "@/features/sync/hooks/git-sync-context";
@@ -139,6 +140,10 @@ function SecurityGate({
     isLocked,
     unlockSecurity,
   } = useSecurity();
+
+  if (!APP_EXTENSIONS.security) {
+    return <UnlockedApp flushSaveRef={flushSaveRef} />;
+  }
 
   if (!securityState) {
     return <StartupScreen theme={theme} />;
