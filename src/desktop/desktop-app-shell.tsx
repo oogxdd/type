@@ -1,3 +1,5 @@
+// Desktop shell composition stays outside the notes slice; it only wires the
+// navigation panels into the current layout mode.
 import {
   useCallback,
   useMemo,
@@ -396,7 +398,6 @@ export function DesktopAppShell({
               cancelRenameFolder={cancelRenameFolder}
               onContextMenu={handleFolderContextMenu}
               indentationWidth={indentationWidth}
-              showRecentTab={false}
               embedded
             />
           </TabsContent>

@@ -1,12 +1,13 @@
+// Recursive navigation renderer for folder trees and feed buckets.
 import type { MouseEvent as ReactMouseEvent } from "react";
-import type { TreeItem } from "../model/types";
 import type { EdgeSnap } from "../model/tree-dnd";
 import { TreeRow } from "./tree-row";
 import { NavNoteRow } from "./nav-note-row";
 import type { NotePreview } from "@/shared/lib/format";
+import type { NavigationNode } from "../model/types";
 
 export type TreeNodeProps = {
-  node: TreeItem;
+  node: NavigationNode;
   depth: number;
   selectedIds: Set<string>;
   selectedNoteIds: Set<string>;
@@ -22,11 +23,11 @@ export type TreeNodeProps = {
     parentPath: string
   ) => void;
   notePreviews: Record<string, NotePreview>;
-  renamingFolder: string | null;
-  renameValue: string;
-  setRenameValue: (value: string) => void;
-  submitRenameFolder: () => void;
-  cancelRenameFolder: () => void;
+  renamingFolder?: string | null;
+  renameValue?: string;
+  setRenameValue?: (value: string) => void;
+  submitRenameFolder?: () => void;
+  cancelRenameFolder?: () => void;
   onContextMenu: (event: ReactMouseEvent, id: string) => void;
   indentationWidth: number;
   draggable?: boolean;
@@ -47,11 +48,17 @@ export function TreeNode({
   onNoteSelect,
   onNoteContextMenu,
   notePreviews,
-  renamingFolder,
-  renameValue,
-  setRenameValue,
-  submitRenameFolder,
-  cancelRenameFolder,
+  renamingFolder = null,
+  renameValue = "",
+  setRenameValue = () => {
+    return;
+  },
+  submitRenameFolder = () => {
+    return;
+  },
+  cancelRenameFolder = () => {
+    return;
+  },
   onContextMenu,
   indentationWidth,
   draggable = true,

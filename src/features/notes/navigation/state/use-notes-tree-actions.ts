@@ -1,3 +1,4 @@
+// Write side of the notes navigation slice.
 import { useCallback, type RefObject } from "react";
 
 import * as api from "@/features/notes/api/notes-api";
@@ -13,8 +14,6 @@ import { applyFolderRenameToSelection, collectNotesForFlattening } from "../mode
 import { findNode } from "@/features/notes/navigation/model/tree-ops";
 import type { FolderNode } from "@/shared/types";
 
-// Write side of the navigation slice: CRUD, rename, selection handoff, and the
-// UI side effects that have to happen after a backend mutation succeeds.
 type UseNotesTreeActionsArgs = {
   tree: FolderNode | null;
   syncSettings: ProfileSyncSettings;

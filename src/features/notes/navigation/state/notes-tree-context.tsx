@@ -1,3 +1,4 @@
+// Provider hub for the notes navigation slice.
 import { createContext, useContext, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { useShallow } from "zustand/react/shallow";
 
@@ -11,8 +12,6 @@ import type { FeedTreeNode } from "@/features/notes/navigation/model/feed-tree-m
 import { useNotesTreeState } from "./use-notes-tree-state";
 import { useNotesTreeActions } from "./use-notes-tree-actions";
 
-// The navigation slice is split into a read side and a write side.
-// This provider stitches them together so the rest of the app consumes one context.
 type NotesTreeContextValue = {
   tree: FolderNode | null;
   treeData: TreeItem[];

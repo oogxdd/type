@@ -1,3 +1,4 @@
+/* Global app styling for the desktop and mobile shells. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -610,65 +611,6 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.recent-pane-body {
-  padding: 4px 0 10px;
-}
-
-.recent-row {
-  min-height: 30px;
-  display: flex;
-  align-items: center;
-  padding: 6px 12px;
-  color: var(--ui-text);
-  font-size: 14px;
-}
-
-.recent-row:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.recent-level-1 {
-  padding-left: 24px;
-}
-
-.recent-level-2 {
-  padding-left: 36px;
-}
-
-.recent-level-3 {
-  padding-left: 48px;
-}
-
-.recent-level-4 {
-  padding-left: 60px;
-}
-
-.recent-show-more {
-  border: none;
-  background: transparent;
-  color: var(--ui-muted);
-  opacity: 0.55;
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0;
-  min-height: 30px;
-  padding: 6px 12px 6px 38px;
-  cursor: pointer;
-  width: 100%;
-  text-align: left;
-  display: block;
-  border-radius: 0;
-}
-
-.recent-show-more:hover {
-  color: var(--ui-text);
-  opacity: 0.75;
-}
-
-.recent-folder-row {
-  cursor: default;
 }
 
 .tree-pane .item-row {

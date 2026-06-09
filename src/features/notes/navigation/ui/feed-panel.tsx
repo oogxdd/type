@@ -1,3 +1,4 @@
+// Feed navigation renders synthetic time buckets, not the folder tree.
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
 import { useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -9,8 +10,6 @@ import { useSelection } from "@/app/state/selection-store";
 import { FEED_FOLDER_PATH } from "@/shared/constants";
 import { focusNoScroll } from "@/shared/lib/dom";
 import { computeRangeSelection } from "@/shared/lib/selection";
-import type { NotePreview } from "@/shared/lib/format";
-import type { TreeItem } from "../model/types";
 import { TreeNode } from "./tree-node";
 
 type FeedPanelProps = {
@@ -198,13 +197,14 @@ export function FeedPanel({
         {feedTreeData.map((node) => (
           <TreeNode
             key={node.id}
-            node={node as unknown as TreeItem}
+            node={node}
             depth={0}
             selectedIds={activeFeedGroup ? new Set([activeFeedGroup]) : new Set()}
             selectedNoteIds={selectedNotes}
             showNotesAsChildren={shouldNestNotesInNavigation}
             edgeSnap={null}
             expanded={expanded}
+            feedMode
             onSelect={(event, id) => {
               event.stopPropagation();
               selectFeedGroup(id);
@@ -212,12 +212,7 @@ export function FeedPanel({
             onToggle={handleToggle}
             onNoteSelect={handleNoteSelect}
             onNoteContextMenu={handleNoteContextMenu}
-            notePreviews={allNotePreviews as Record<string, NotePreview>}
-            renamingFolder={null}
-            renameValue=""
-            setRenameValue={() => {}}
-            submitRenameFolder={() => {}}
-            cancelRenameFolder={() => {}}
+            notePreviews={allNotePreviews}
             onContextMenu={(event, id) => {
               event.preventDefault();
               event.stopPropagation();
@@ -225,8 +220,6 @@ export function FeedPanel({
             }}
             indentationWidth={18}
             draggable={false}
-            feedMode
-            renamingEnabled={false}
           />
         ))}
       </div>

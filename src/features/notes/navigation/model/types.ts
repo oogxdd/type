@@ -1,4 +1,14 @@
+// Shared node shapes for the notes navigation surface.
+// Folder trees and feed buckets both fit this contract.
 import type { NoteEntry } from "@/shared/types";
+
+export type NavigationNode = {
+  id: string;
+  name: string;
+  children: NavigationNode[];
+  noteCount?: number;
+  notes?: NoteEntry[];
+};
 
 export type TreeItem = {
   id: string;

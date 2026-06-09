@@ -1,3 +1,4 @@
+// Read side of the notes navigation slice.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelection } from "@/app/state/selection-store";
 import { useAppearance } from "@/app/state/appearance-store";
@@ -29,8 +30,6 @@ import {
   selectPreviewSourceNotes,
 } from "@/features/notes/navigation/model/notes-tree-model";
 
-// Read-only navigation state. This hook derives tree shapes, feed buckets, and
-// preview warming; write workflows live in useNotesTreeActions.
 type UseNotesTreeStateArgs = {
   activeFolder: string;
   activeNote: string | null;

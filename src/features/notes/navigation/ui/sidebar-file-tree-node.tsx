@@ -1,3 +1,4 @@
+// Embedded-sidebar renderer for the same navigation tree shape as TreeNode.
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { ChevronRight, File, Folder, Mic, PenLine } from "lucide-react";
 import { Collapsible, CollapsibleContent } from "@/shared/ui/collapsible";
@@ -8,11 +9,11 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
 } from "@/shared/ui/sidebar";
-import type { TreeItem } from "../model/types";
+import type { NavigationNode } from "../model/types";
 import type { NotePreview } from "@/shared/lib/format";
 
 type SidebarFileTreeNodeProps = {
-  node: TreeItem;
+  node: NavigationNode;
   selectedIds: Set<string>;
   selectedNoteIds: Set<string>;
   showNotesAsChildren: boolean;
@@ -26,11 +27,11 @@ type SidebarFileTreeNodeProps = {
     parentPath: string
   ) => void;
   notePreviews: Record<string, NotePreview>;
-  renamingFolder: string | null;
-  renameValue: string;
-  setRenameValue: (value: string) => void;
-  submitRenameFolder: () => void;
-  cancelRenameFolder: () => void;
+  renamingFolder?: string | null;
+  renameValue?: string;
+  setRenameValue?: (value: string) => void;
+  submitRenameFolder?: () => void;
+  cancelRenameFolder?: () => void;
   onContextMenu: (event: ReactMouseEvent, id: string) => void;
 };
 
@@ -50,11 +51,17 @@ export function SidebarFileTreeNode({
   onNoteSelect,
   onNoteContextMenu,
   notePreviews,
-  renamingFolder,
-  renameValue,
-  setRenameValue,
-  submitRenameFolder,
-  cancelRenameFolder,
+  renamingFolder = null,
+  renameValue = "",
+  setRenameValue = () => {
+    return;
+  },
+  submitRenameFolder = () => {
+    return;
+  },
+  cancelRenameFolder = () => {
+    return;
+  },
   onContextMenu,
 }: SidebarFileTreeNodeProps) {
   const notes = showNotesAsChildren ? node.notes || [] : [];

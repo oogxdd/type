@@ -1,14 +1,16 @@
+// Shared navigation row chrome. Folder trees and feed buckets both use this
+// surface; the parent decides which behaviors are enabled.
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { CalendarDays } from "lucide-react";
-import type { TreeItem } from "../model/types";
+import type { NavigationNode } from "../model/types";
 import type { DragData } from "@/shared/types";
 import { dropId } from "../model/tree-dnd";
 
 export type TreeRowProps = {
-  node: TreeItem;
+  node: NavigationNode;
   depth: number;
   isSelected: boolean;
   hasNestedItems: boolean;
@@ -16,11 +18,11 @@ export type TreeRowProps = {
   isCollapsed: boolean;
   onSelect: (event: ReactMouseEvent, id: string) => void;
   onToggle: (event: ReactMouseEvent, id: string) => void;
-  renaming: boolean;
-  renameValue: string;
-  setRenameValue: (value: string) => void;
-  submitRenameFolder: () => void;
-  cancelRenameFolder: () => void;
+  renaming?: boolean;
+  renameValue?: string;
+  setRenameValue?: (value: string) => void;
+  submitRenameFolder?: () => void;
+  cancelRenameFolder?: () => void;
   onContextMenu: (event: ReactMouseEvent, id: string) => void;
   indentationWidth: number;
   draggable?: boolean;
@@ -37,11 +39,17 @@ export function TreeRow({
   isCollapsed,
   onSelect,
   onToggle,
-  renaming,
-  renameValue,
-  setRenameValue,
-  submitRenameFolder,
-  cancelRenameFolder,
+  renaming = false,
+  renameValue = "",
+  setRenameValue = () => {
+    return;
+  },
+  submitRenameFolder = () => {
+    return;
+  },
+  cancelRenameFolder = () => {
+    return;
+  },
   onContextMenu,
   indentationWidth,
   draggable = true,
