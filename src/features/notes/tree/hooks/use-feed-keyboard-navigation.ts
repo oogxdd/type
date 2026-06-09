@@ -6,7 +6,7 @@ import {
   type SetStateAction,
 } from "react";
 
-import type { FeedTreeNode } from "@/features/notes/lib/feed-tree-model";
+import type { FeedTreeNode } from "@/features/notes/tree/lib/feed-tree-model";
 import { FEED_FOLDER_PATH } from "@/shared/constants";
 import { escapeSelectorValue, focusNoScroll, scrollIntoViewIfNeeded } from "@/shared/lib/dom";
 import type { VisibleNavigationItem } from "@/shared/types";

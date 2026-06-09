@@ -3,8 +3,8 @@ import { useSelection } from "@/app/state/selection-store";
 import { useAppearance } from "@/app/state/appearance-store";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
-import * as api from "../api/notes-api";
-import { useNotePreviews } from "../list/hooks/use-note-previews";
+import * as api from "@/features/notes/api/notes-api";
+import { useNotePreviews } from "@/features/notes/list/hooks/use-note-previews";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/shared/types";
 import { FEED_FOLDER_PATH } from "@/shared/constants";
 import { collectAllNotes, getNoteParentPath } from "@/shared/lib/notes";
@@ -20,14 +20,14 @@ import {
   findFeedNode,
   getFirstFeedGroupId,
   type FeedTreeNode,
-} from "@/features/notes/lib/feed-tree-model";
+} from "@/features/notes/tree/lib/feed-tree-model";
 import {
   buildNotePreviews,
   buildVisibleNavigationItems,
   getFirstSelectableFolderPath,
   mapParentById,
   selectPreviewSourceNotes,
-} from "@/features/notes/lib/notes-tree-model";
+} from "@/features/notes/tree/lib/notes-tree-model";
 
 type UseNotesTreeStateArgs = {
   activeFolder: string;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
+import { useNotesTree } from "@/features/notes/tree/hooks/notes-tree-context";
 import { isSystemFolder } from "@/shared/constants";
 import { Button } from "@/shared/ui/button";
 import {

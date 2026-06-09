@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 import { useSelection } from "@/app/state/selection-store";
-import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
+import { useNotesTree } from "@/features/notes/tree/hooks/notes-tree-context";
 import { useAppearance } from "@/app/state/appearance-store";
 import { FEED_FOLDER_PATH, isSystemFolder } from "@/shared/constants";
 import { getNoteParentPath } from "@/shared/lib/notes";

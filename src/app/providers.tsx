@@ -5,7 +5,7 @@ import { AppearanceProvider } from "@/app/state/appearance-store";
 import { SelectionProvider, useSelection } from "@/app/state/selection-store";
 import { EditorProvider, useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { HandwritingProvider } from "@/features/handwriting/hooks/handwriting-context";
-import { NotesTreeProvider, useNotesTree } from "@/features/notes/hooks/notes-tree-context";
+import { NotesTreeProvider, useNotesTree } from "@/features/notes/tree/hooks/notes-tree-context";
 import { ProfilesProvider } from "@/features/profiles/hooks/profiles-context";
 import { RecordingsProvider } from "@/features/recording/hooks/recordings-context";
 import { SecurityProvider } from "@/features/security/hooks/security-context";

@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from "react";
 
 import { useAppearance } from "@/app/state/appearance-store";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
-import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
+import { useNotesTree } from "@/features/notes/tree/hooks/notes-tree-context";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { SecurityLockScreen } from "@/features/security/components/lock-screen";
 import { useSecurity } from "@/features/security/hooks/security-context";

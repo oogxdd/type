@@ -24,7 +24,7 @@ import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { useAppearance } from "@/app/state/appearance-store";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
-import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
+import { useNotesTree } from "@/features/notes/tree/hooks/notes-tree-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { useSecurity } from "@/features/security/hooks/security-context";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";

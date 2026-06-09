@@ -12,7 +12,7 @@ import { MOBILE_SETTINGS_SECTIONS } from "@/features/settings/lib/sections";
 import { useAppearance } from "@/app/state/appearance-store";
 import { useSelection } from "@/app/state/selection-store";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
-import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
+import { useNotesTree } from "@/features/notes/tree/hooks/notes-tree-context";
 import { useKeyboardInsets } from "@/mobile/use-keyboard-insets";
 import { getDisplayRouteTitle, ARCHIVE_FOLDER_PATH } from "./types";
 import { getErrorMessage } from "@/shared/lib/errors";

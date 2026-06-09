@@ -19,7 +19,7 @@ import { useAppearance } from "@/app/state/appearance-store";
 import { useSelection } from "@/app/state/selection-store";
 import { useDeepLinks } from "@/app/lifecycle/use-deep-links";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
-import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
+import { useNotesTree } from "@/features/notes/tree/hooks/notes-tree-context";
 import { useGitSync } from "@/features/sync/hooks/git-sync-context";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 import { useKeyboardInsets } from "@/mobile/use-keyboard-insets";

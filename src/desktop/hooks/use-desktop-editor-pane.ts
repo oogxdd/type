@@ -5,7 +5,7 @@ import { useSelection } from "@/app/state/selection-store";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import type { LensNote } from "@/features/lens/hooks/use-lens-annotations";
-import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
+import { useNotesTree } from "@/features/notes/tree/hooks/notes-tree-context";
 import { sanitizeRecordingEditorContent } from "@/shared/lib/format";
 
 export function useDesktopEditorPane() {

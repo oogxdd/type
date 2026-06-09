@@ -3,7 +3,7 @@ import type { AppMode, VisibleNavigationItem } from "@/shared/types";
 import type { FlattenedItem } from "../lib/types";
 import { focusNoScroll, scrollIntoViewIfNeeded, escapeSelectorValue } from "@/shared/lib/dom";
 import { usePaneShortcuts } from "./use-pane-shortcuts";
-import type { FeedTreeNode } from "@/features/notes/lib/feed-tree-model";
+import type { FeedTreeNode } from "@/features/notes/tree/lib/feed-tree-model";
 import { useFeedKeyboardNavigation } from "./use-feed-keyboard-navigation";
 
 type UseKeyboardNavigationArgs = {
