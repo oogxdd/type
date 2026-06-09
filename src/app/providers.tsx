@@ -3,7 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { AppearanceProvider } from "@/app/state/appearance-store";
 import { SelectionProvider, useSelection } from "@/app/state/selection-store";
-import { EditorProvider, useEditor } from "@/features/editor/hooks/editor-context";
+import { EditorProvider, useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { HandwritingProvider } from "@/features/handwriting/hooks/handwriting-context";
 import { NotesTreeProvider, useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { ProfilesProvider } from "@/features/profiles/hooks/profiles-context";

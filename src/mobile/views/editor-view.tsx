@@ -1,4 +1,4 @@
-import { NoteEditor } from "@/features/editor/components/note-editor";
+import { NoteEditor } from "@/features/notes/editor/components/note-editor";
 import { useRef, useState } from "react";
 import { RecordingNoteHeader } from "@/features/recording/components/recording-note-header";
 import { HandwritingNoteHeader } from "@/features/handwriting/components/handwriting-note-header";

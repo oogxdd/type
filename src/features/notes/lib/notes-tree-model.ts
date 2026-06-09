@@ -1,10 +1,10 @@
 import { FEED_FOLDER_PATH, isSystemFolder } from "@/shared/constants";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/shared/types";
 import type { LayoutMode } from "@/mobile/navigation";
-import type { TreeItem } from "@/features/tree/lib/types";
-import type { FlattenedItem } from "@/features/tree/lib/types";
+import type { TreeItem } from "@/features/notes/tree/lib/types";
+import type { FlattenedItem } from "@/features/notes/tree/lib/types";
 import { collectAllNotes } from "@/shared/lib/notes";
-import { findNode } from "@/features/tree/lib/tree-ops";
+import { findNode } from "@/features/notes/tree/lib/tree-ops";
 import type { NotePreview } from "@/shared/lib/format";
 
 type PreviewSourceInput = {

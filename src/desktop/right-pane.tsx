@@ -1,7 +1,7 @@
 import { lazy, Suspense } from "react";
 import { Menu } from "lucide-react";
 
-import { NoteEditor } from "@/features/editor/components/note-editor";
+import { NoteEditor } from "@/features/notes/editor/components/note-editor";
 import { RecordingNoteHeader } from "@/features/recording/components/recording-note-header";
 import { HandwritingNoteHeader } from "@/features/handwriting/components/handwriting-note-header";
 import { SettingsDetailPane } from "@/features/settings/components/desktop/settings-panel";
@@ -18,7 +18,7 @@ import {
 import { useDesktopEditorPane } from "./hooks/use-desktop-editor-pane";
 
 const MultiNoteLens = lazy(() =>
-  import("@/features/editor/components/lens/multi-note-lens").then((module) => ({
+  import("@/features/lens/components/multi-note-lens").then((module) => ({
     default: module.MultiNoteLens,
   }))
 );

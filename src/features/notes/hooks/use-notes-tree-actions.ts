@@ -10,7 +10,7 @@ import { confirmAction, focusNoScroll } from "@/shared/lib/dom";
 import { getNoteParentPath } from "@/shared/lib/notes";
 import type { ProfileSyncSettings } from "@/shared/types";
 import { applyFolderRenameToSelection, collectNotesForFlattening } from "../lib/notes-tree-model";
-import { findNode } from "@/features/tree/lib/tree-ops";
+import { findNode } from "@/features/notes/tree/lib/tree-ops";
 import type { FolderNode } from "@/shared/types";
 
 type UseNotesTreeActionsArgs = {

@@ -1,6 +1,6 @@
 import { Button } from "@/shared/ui/button";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
-import { useEditor } from "@/features/editor/hooks/editor-context";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import {
   SETTINGS_SECTIONS,
   type SettingsSection,

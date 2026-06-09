@@ -11,7 +11,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { useSelection } from "@/app/state/selection-store";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
-import { findNode } from "@/features/tree/lib/tree-ops";
+import { findNode } from "@/features/notes/tree/lib/tree-ops";
 import { focusNoScroll } from "@/shared/lib/dom";
 import { getNoteParentPath } from "@/shared/lib/notes";
 import { computeRangeSelection, resolveTargetPaths } from "@/shared/lib/selection";

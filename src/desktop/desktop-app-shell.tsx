@@ -22,7 +22,7 @@ import { useTreeInteractions } from "@/app/hooks/use-tree-interactions";
 import { useSelection } from "@/app/state/selection-store";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { useAppearance } from "@/app/state/appearance-store";
-import { useEditor } from "@/features/editor/hooks/editor-context";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
@@ -30,10 +30,10 @@ import { useSecurity } from "@/features/security/hooks/security-context";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import { DesktopContextMenu } from "./desktop-context-menu";
 import { useDesktopNavigation } from "./hooks/use-desktop-navigation";
-import { FoldersPanel } from "@/features/tree/components/folders-panel";
-import { FeedPanel } from "@/features/tree/components/feed-panel";
-import { useDragDrop } from "@/features/tree/hooks/use-drag-drop";
-import { useKeyboardNavigation } from "@/features/tree/hooks/use-keyboard-navigation";
+import { FoldersPanel } from "@/features/notes/tree/components/folders-panel";
+import { FeedPanel } from "@/features/notes/tree/components/feed-panel";
+import { useDragDrop } from "@/features/notes/tree/hooks/use-drag-drop";
+import { useKeyboardNavigation } from "@/features/notes/tree/hooks/use-keyboard-navigation";
 import {
   ARCHIEVE_FOLDER_PATH,
   FEED_FOLDER_PATH,

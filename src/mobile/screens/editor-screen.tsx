@@ -1,6 +1,6 @@
 import type { MutableRefObject } from "react";
 import { MobileEditorScreen } from "@/mobile/views/editor-view";
-import { useEditor } from "@/features/editor/hooks/editor-context";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useSelection } from "@/app/state/selection-store";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import type { MobileAction } from "../navigation";

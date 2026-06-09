@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getNoteMeta, readNote } from "../api/notes-api";
+import { getNoteMeta, readNote } from "../../api/notes-api";
 import { parseNotePreview, type NotePreview } from "@/shared/lib/format";
 import type { NoteEntry } from "@/shared/types";
 

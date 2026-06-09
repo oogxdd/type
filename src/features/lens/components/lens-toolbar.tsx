@@ -1,6 +1,6 @@
 import { Brush, Eye, EyeOff, MessageSquarePlus, X } from "lucide-react";
-import { DRAW_TOOL, TEXT_TOOL } from "../../lib/lens-geometry";
-import type { LensAnnotations } from "../../hooks/use-lens-annotations";
+import { DRAW_TOOL, TEXT_TOOL } from "../lib/lens-geometry";
+import type { LensAnnotations } from "../hooks/use-lens-annotations";
 
 type LensToolbarProps = {
   lens: LensAnnotations;

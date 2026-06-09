@@ -2,11 +2,11 @@ import { createContext, useContext, type Dispatch, type ReactNode, type SetState
 import { useShallow } from "zustand/react/shallow";
 
 import { useSelection } from "@/app/state/selection-store";
-import { useEditor } from "@/features/editor/hooks/editor-context";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/shared/types";
 import type { NotePreview } from "@/shared/lib/format";
-import type { TreeItem, FlattenedItem } from "@/features/tree/lib/types";
+import type { TreeItem, FlattenedItem } from "@/features/notes/tree/lib/types";
 import type { FeedTreeNode } from "@/features/notes/lib/feed-tree-model";
 import { useNotesTreeState } from "./use-notes-tree-state";
 import { useNotesTreeActions } from "./use-notes-tree-actions";

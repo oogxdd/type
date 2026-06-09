@@ -4,15 +4,15 @@ import { useAppearance } from "@/app/state/appearance-store";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 import * as api from "../api/notes-api";
-import { useNotePreviews } from "./use-note-previews";
+import { useNotePreviews } from "../list/hooks/use-note-previews";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/shared/types";
 import { FEED_FOLDER_PATH } from "@/shared/constants";
 import { collectAllNotes, getNoteParentPath } from "@/shared/lib/notes";
-import { buildTreeItems, findNode, flattenTree } from "@/features/tree/lib/tree-ops";
-import { removeChildrenOf } from "@/features/tree/lib/dnd-tree";
+import { buildTreeItems, findNode, flattenTree } from "@/features/notes/tree/lib/tree-ops";
+import { removeChildrenOf } from "@/features/notes/tree/lib/dnd-tree";
 import type { NotePreview } from "@/shared/lib/format";
-import type { TreeItem } from "@/features/tree/lib/types";
-import type { FlattenedItem } from "@/features/tree/lib/types";
+import type { TreeItem } from "@/features/notes/tree/lib/types";
+import type { FlattenedItem } from "@/features/notes/tree/lib/types";
 import {
   buildFeedTree,
   buildVisibleFeedNavigationItems,

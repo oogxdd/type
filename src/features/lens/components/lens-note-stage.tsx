@@ -1,6 +1,6 @@
 import { NoteReadonlyContent } from "./note-readonly-content";
-import { clamp01, pointsToSvgPath } from "../../lib/lens-geometry";
-import type { LensAnnotations, LoadedLensNote } from "../../hooks/use-lens-annotations";
+import { clamp01, pointsToSvgPath } from "../lib/lens-geometry";
+import type { LensAnnotations, LoadedLensNote } from "../hooks/use-lens-annotations";
 
 type LensNoteStageProps = {
   note: LoadedLensNote;

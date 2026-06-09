@@ -2,7 +2,7 @@ import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
 import { useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { useEditor } from "@/features/editor/hooks/editor-context";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { type DesktopContextMenuState } from "@/app/hooks/use-tree-interactions";
 import { useSelection } from "@/app/state/selection-store";

@@ -1,4 +1,4 @@
-import { useLensAnnotations, type LensNote } from "../../hooks/use-lens-annotations";
+import { useLensAnnotations, type LensNote } from "../hooks/use-lens-annotations";
 import { LensToolbar } from "./lens-toolbar";
 import { LensNoteStage } from "./lens-note-stage";
 

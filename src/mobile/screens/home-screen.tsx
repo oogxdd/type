@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { createNote, deleteItems, writeNote } from "@/features/notes/api/notes-api";
-import { useEditor } from "@/features/editor/hooks/editor-context";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useSelection } from "@/app/state/selection-store";

@@ -1,7 +1,7 @@
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
-import { NoteRow } from "@/features/notes/components/note-row";
+import { NoteRow } from "@/features/notes/list/components/note-row";
 import { SettingsMiddlePane } from "@/features/settings/components/desktop/settings-panel";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 

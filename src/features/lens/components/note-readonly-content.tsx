@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { markdownToHtml } from "../../lib/markdown-editor";
+import { markdownToHtml } from "@/features/notes/editor/lib/markdown-editor";
 
 type NoteReadonlyContentProps = {
   markdown: string;

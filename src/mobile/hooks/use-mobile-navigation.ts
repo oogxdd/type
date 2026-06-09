@@ -8,7 +8,7 @@ import {
 import type { LayoutMode } from "../navigation";
 import { useSelection } from "@/app/state/selection-store";
 import { useShallow } from "zustand/react/shallow";
-import { useEditor } from "@/features/editor/hooks/editor-context";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { FEED_FOLDER_PATH } from "../types";
 
 export function useMobileNavigation(layoutMode: LayoutMode) {
