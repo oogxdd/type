@@ -29,6 +29,12 @@ export type NoteMeta = {
   ocr_updated_ms?: number | null;
 };
 
+export type NotePreviewEntry = {
+  path: string;
+  content: string;
+  meta: NoteMeta;
+};
+
 export type DragData = {
   type: "folder" | "note";
   path: string;

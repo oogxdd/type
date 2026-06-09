@@ -7,10 +7,8 @@ use git2::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
     fs,
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
 };
 
 use crate::ports::git_sync::GitSyncGateway;
@@ -81,11 +79,6 @@ pub(crate) struct GitPushArgs {
 pub(crate) struct GitHistoryArgs {
     pub(crate) limit: Option<usize>,
 }
-
-// ── Static ─────────────────────────────────────────────────────────────────────
-
-static GIT_NOTE_TIMESTAMPS_CACHE: OnceLock<Mutex<HashMap<String, (Option<i64>, Option<i64>)>>> =
-    OnceLock::new();
 
 /// Tauri-backed Git sync gateway. libgit2 operations, SSH key lookup, and notes
 /// root resolution remain in this outer adapter.
@@ -437,75 +430,6 @@ pub(crate) fn git_has_changes(repo: &Repository) -> bool {
 }
 
 // ── Timestamp cache ────────────────────────────────────────────────────────────
-
-fn git_note_timestamps_cache() -> &'static Mutex<HashMap<String, (Option<i64>, Option<i64>)>> {
-    GIT_NOTE_TIMESTAMPS_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn git_commit_timestamp_ms(commit: &git2::Commit<'_>) -> Option<i64> {
-    commit.time().seconds().checked_mul(1_000)
-}
-
-fn git_tree_blob_oid(tree: &git2::Tree<'_>, path: &Path) -> Option<Oid> {
-    tree.get_path(path).ok().map(|entry| entry.id())
-}
-
-/// Walk git history to find the first and last commits that touched a note.
-pub(crate) fn git_note_timestamps_from_history(
-    root: &Path,
-    note_rel: &str,
-) -> Option<(Option<i64>, Option<i64>)> {
-    let repo = Repository::open(root).ok()?;
-    let head_oid = repo.head().ok()?.target()?;
-    let cache_key = format!("{}|{}|{}", root.to_string_lossy(), head_oid, note_rel);
-    {
-        let cache = git_note_timestamps_cache();
-        let guard = cache.lock().ok()?;
-        if let Some(cached) = guard.get(&cache_key) {
-            return Some(*cached);
-        }
-    }
-
-    let rel_path = Path::new(note_rel);
-    let mut revwalk = repo.revwalk().ok()?;
-    revwalk.push(head_oid).ok()?;
-
-    let mut created_ms: Option<i64> = None;
-    let mut updated_ms: Option<i64> = None;
-
-    for oid_result in revwalk {
-        let oid = oid_result.ok()?;
-        let commit = repo.find_commit(oid).ok()?;
-        let tree = commit.tree().ok()?;
-        let current_blob = git_tree_blob_oid(&tree, rel_path);
-        if current_blob.is_none() {
-            continue;
-        }
-
-        let parent_blob = if commit.parent_count() > 0 {
-            let parent = commit.parent(0).ok()?;
-            let parent_tree = parent.tree().ok()?;
-            git_tree_blob_oid(&parent_tree, rel_path)
-        } else {
-            None
-        };
-
-        if current_blob != parent_blob {
-            let timestamp = git_commit_timestamp_ms(&commit);
-            if updated_ms.is_none() {
-                updated_ms = timestamp;
-            }
-            created_ms = timestamp;
-        }
-    }
-
-    let result = (created_ms, updated_ms);
-    let cache = git_note_timestamps_cache();
-    if let Ok(mut guard) = cache.lock() {
-        guard.insert(cache_key, result);
-    }
-    Some(result)
-}
 
 // ── Bootstrap detection ────────────────────────────────────────────────────────
 

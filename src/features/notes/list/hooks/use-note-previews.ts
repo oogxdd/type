@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { getNoteMeta, readNote } from "../../api/notes-api";
+import { listNotePreviews } from "../../api/notes-api";
 import { parseNotePreview, type NotePreview } from "@/shared/lib/format";
 import type { NoteEntry } from "@/shared/types";
-
-// Cap how many notes we read at once so a large vault can't flood the Tauri IPC
-// bridge (and the main thread) in a single burst.
-const PREVIEW_FETCH_CONCURRENCY = 6;
 
 type CachedPreview = { updatedMs: number | null; preview: NotePreview };
 
@@ -14,7 +10,7 @@ export function useNotePreviews(notes: NoteEntry[]) {
   const [isLoading, setIsLoading] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
   // Persist resolved previews across refreshes so re-reading the tree doesn't
-  // re-read every note's full content from disk again.
+  // re-parse every note and unchanged rows keep their preview object identity.
   const cacheRef = useRef<Map<string, CachedPreview>>(new Map());
 
   useEffect(() => {
@@ -45,6 +41,7 @@ export function useNotePreviews(notes: NoteEntry[]) {
           cache.delete(path);
         }
       }
+      // Show whatever is already cached while the fresh batch loads.
       const cachedPreviews: Record<string, NotePreview> = {};
       notes.forEach((note) => {
         const cached = cache.get(note.path);
@@ -54,58 +51,32 @@ export function useNotePreviews(notes: NoteEntry[]) {
       });
       setNotePreviews(cachedPreviews);
 
-      // Pull only the content we actually need: a cheap meta (stat) tells us
-      // whether the cached preview is still current; we read the full note body
-      // only for new or modified notes.
-      const queue = [...notes];
-      const fetchNext = async (): Promise<void> => {
-        const note = queue.shift();
-        if (!note || cancelled) {
+      try {
+        // One IPC round trip for the whole list; the backend reads each file
+        // once and returns body + meta together.
+        const entries = await listNotePreviews(notes.map((note) => note.path));
+        if (cancelled) {
           return;
         }
-        try {
-          const meta = await getNoteMeta(note.path);
-          const updatedMs = meta.updated_ms ?? meta.created_ms ?? null;
-          const cached = cache.get(note.path);
-          if (!cached || cached.updatedMs !== updatedMs) {
-            const content = await readNote(note.path);
-            cache.set(note.path, {
-              updatedMs,
-              preview: parseNotePreview(content, updatedMs, meta),
-            });
-          }
-          const resolved = cache.get(note.path);
-          if (resolved && !cancelled) {
-            setNotePreviews((current) =>
-              current[note.path] === resolved.preview
-                ? current
-                : { ...current, [note.path]: resolved.preview }
-            );
-          }
-        } catch (error) {
-          console.error("[notes] failed to build preview", note.path, error);
+        const next: Record<string, NotePreview> = {};
+        for (const entry of entries) {
+          const updatedMs = entry.meta.updated_ms ?? entry.meta.created_ms ?? null;
+          const cached = cache.get(entry.path);
+          const preview =
+            cached && cached.updatedMs === updatedMs
+              ? cached.preview
+              : parseNotePreview(entry.content, updatedMs, entry.meta);
+          cache.set(entry.path, { updatedMs, preview });
+          next[entry.path] = preview;
         }
-        await fetchNext();
-      };
-
-      const workers = Array.from(
-        { length: Math.min(PREVIEW_FETCH_CONCURRENCY, queue.length) },
-        () => fetchNext()
-      );
-      await Promise.all(workers);
-
-      if (cancelled) {
-        return;
+        setNotePreviews(next);
+      } catch (error) {
+        console.error("[notes] failed to load note previews", error);
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
-      const next: Record<string, NotePreview> = {};
-      notes.forEach((note) => {
-        const cached = cache.get(note.path);
-        if (cached) {
-          next[note.path] = cached.preview;
-        }
-      });
-      setNotePreviews(next);
-      setIsLoading(false);
     };
 
     void run();

@@ -1,7 +1,8 @@
 use std::{path::PathBuf, time::SystemTime};
 
 pub use crate::domain::notes::{
-    CreateNoteResult, FolderNode, NoteFileNameFormat, NoteFrontMatter, NoteMeta, OrderFile,
+    CreateNoteResult, FolderNode, NoteFileNameFormat, NoteFrontMatter, NoteMeta, NotePreviewEntry,
+    OrderFile,
 };
 
 // ── Trait ──────────────────────────────────────────────────────────────────────
@@ -19,6 +20,7 @@ pub trait NoteService {
     fn write_note(&self, path: &str, content: &str) -> Result<(), String>;
     fn set_note_timestamp(&self, path: &str, timestamp_ms: i64) -> Result<(), String>;
     fn get_note_meta(&self, path: &str) -> Result<NoteMeta, String>;
+    fn list_note_previews(&self, paths: Vec<String>) -> Result<Vec<NotePreviewEntry>, String>;
     fn move_items(&self, items: &[String], destination: &str) -> Result<(), String>;
     fn delete_items(&self, items: &[String]) -> Result<(), String>;
     fn rename_item(&self, path: &str, new_name: &str) -> Result<String, String>;
@@ -105,10 +107,6 @@ pub(crate) trait NoteBodyCrypto {
     fn decrypt_note_body(&self, body: &str) -> Result<String, String>;
 }
 
-pub(crate) trait NoteHistory {
-    fn note_timestamps(&self, note_rel: &str) -> Result<(Option<i64>, Option<i64>), String>;
-}
-
 pub(crate) trait NoteIdGenerator {
     fn generate_note_id(&self) -> String;
     fn uuid_tail_without_timestamp_prefix(&self, note_id: &str) -> String;
@@ -166,8 +164,14 @@ pub(crate) trait NoteClock {
 // get_note_meta(path)
 //   in:  path — relative path to the note
 //   out: NoteMeta — timestamps, type, recording/handwriting paths, transcription/ocr status
-//   - Falls back to git history timestamps if front-matter has no timestamps
-//   - Falls back to filesystem timestamps if git has no history
+//   - Falls back to filesystem timestamps if front-matter has no timestamps
+//
+// list_note_previews(paths)
+//   in:  paths — relative paths of the notes to preview
+//   out: Vec<NotePreviewEntry> — per note: path, decrypted body, and NoteMeta
+//   - One bulk call so list/feed UIs don't issue per-note IPC round trips
+//   - Reads each file once; meta timestamps resolve like get_note_meta
+//   - Skips unreadable or vanished notes instead of failing the whole batch
 //
 // move_items(items, destination)
 //   in:  items — list of relative paths (notes or folders)

@@ -2,46 +2,36 @@ use std::{collections::HashMap, path::PathBuf};
 
 use crate::{
     ports::notes::{
-        NoteBodyCrypto, NoteClock, NoteDocumentCodec, NoteHistory, NoteIdGenerator,
-        NoteStorageEntryKind, NotesRepository,
+        NoteBodyCrypto, NoteClock, NoteDocumentCodec, NoteIdGenerator, NoteStorageEntryKind,
+        NotesRepository,
     },
-    CreateNoteArgs, CreateNoteResult, FolderNode, NoteFrontMatter, NoteMeta, OrderFile,
-    SetNoteTimestampArgs, SetOrderArgs, FEED_FOLDER,
+    CreateNoteArgs, CreateNoteResult, FolderNode, NoteFrontMatter, NoteMeta, NotePreviewEntry,
+    OrderFile, SetNoteTimestampArgs, SetOrderArgs, FEED_FOLDER,
 };
 
 /// Note use cases. This layer owns workflow and policy while persistence,
-/// document parsing, encryption, history, IDs, and time are supplied as ports.
-pub(crate) struct NotesService<R, D, C, H, I, T> {
+/// document parsing, encryption, IDs, and time are supplied as ports.
+pub(crate) struct NotesService<R, D, C, I, T> {
     repository: R,
     documents: D,
     crypto: C,
-    history: H,
     ids: I,
     clock: T,
 }
 
-impl<R, D, C, H, I, T> NotesService<R, D, C, H, I, T>
+impl<R, D, C, I, T> NotesService<R, D, C, I, T>
 where
     R: NotesRepository,
     D: NoteDocumentCodec,
     C: NoteBodyCrypto,
-    H: NoteHistory,
     I: NoteIdGenerator,
     T: NoteClock,
 {
-    pub(crate) fn new(
-        repository: R,
-        documents: D,
-        crypto: C,
-        history: H,
-        ids: I,
-        clock: T,
-    ) -> Self {
+    pub(crate) fn new(repository: R, documents: D, crypto: C, ids: I, clock: T) -> Self {
         Self {
             repository,
             documents,
             crypto,
-            history,
             ids,
             clock,
         }
@@ -162,20 +152,54 @@ where
         } else {
             NoteFrontMatter::default()
         };
-        let (file_created, file_modified) = self.repository.file_times(&full_path)?;
-        let note_rel = self.repository.strip_root(&full_path);
-        let (history_created_ms, history_updated_ms) = self
-            .history
-            .note_timestamps(&note_rel)
-            .unwrap_or((None, None));
+        self.note_meta_from_front_matter(&front_matter_meta, &full_path)
+    }
 
+    /// Bulk preview fetch: one filesystem pass returning decrypted body + meta
+    /// per note. Unreadable or vanished notes are skipped so a single broken
+    /// file cannot take down the whole list.
+    pub(crate) fn list_note_previews(
+        &self,
+        paths: Vec<String>,
+    ) -> Result<Vec<NotePreviewEntry>, String> {
+        let mut entries = Vec::with_capacity(paths.len());
+        for path in paths {
+            let Ok(full_path) = self.repository.resolve_path(&path) else {
+                continue;
+            };
+            if self.repository.entry_kind(&full_path)? != Some(NoteStorageEntryKind::File) {
+                continue;
+            }
+            let Ok(raw) = self.repository.read_to_string(&full_path) else {
+                continue;
+            };
+            let (front_matter_meta, body) = self.documents.parse(&raw);
+            let Ok(content) = self.crypto.decrypt_note_body(&body) else {
+                continue;
+            };
+            let Ok(meta) = self.note_meta_from_front_matter(&front_matter_meta, &full_path) else {
+                continue;
+            };
+            entries.push(NotePreviewEntry {
+                path,
+                content,
+                meta,
+            });
+        }
+        Ok(entries)
+    }
+
+    fn note_meta_from_front_matter(
+        &self,
+        front_matter_meta: &NoteFrontMatter,
+        full_path: &std::path::Path,
+    ) -> Result<NoteMeta, String> {
+        let (file_created, file_modified) = self.repository.file_times(full_path)?;
         let created_ms = front_matter_meta
             .created_ms
-            .or(history_created_ms)
             .or_else(|| file_created.and_then(|time| self.clock.time_to_ms(time)));
         let updated_ms = front_matter_meta
             .updated_ms
-            .or(history_updated_ms)
             .or_else(|| file_modified.and_then(|time| self.clock.time_to_ms(time)));
         Ok(NoteMeta {
             created_ms,

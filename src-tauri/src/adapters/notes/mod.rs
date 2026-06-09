@@ -10,8 +10,8 @@ use std::{
 };
 
 use crate::ports::notes::{
-    NoteBodyCrypto, NoteClock, NoteDocumentCodec, NoteHistory, NoteIdGenerator,
-    NoteStorageEntryKind, NotesRepository,
+    NoteBodyCrypto, NoteClock, NoteDocumentCodec, NoteIdGenerator, NoteStorageEntryKind,
+    NotesRepository,
 };
 use crate::{
     ensure_profiles_state, find_profile, FolderNode, NoteEntry, NoteFileNameFormat,
@@ -277,22 +277,6 @@ pub(crate) struct RuntimeNoteBodyCrypto;
 impl NoteBodyCrypto for RuntimeNoteBodyCrypto {
     fn decrypt_note_body(&self, body: &str) -> Result<String, String> {
         crate::decrypt_note_body_for_read(body)
-    }
-}
-
-pub(crate) struct GitNoteHistoryAdapter {
-    root: PathBuf,
-}
-
-impl GitNoteHistoryAdapter {
-    pub(crate) fn new(root: PathBuf) -> Self {
-        Self { root }
-    }
-}
-
-impl NoteHistory for GitNoteHistoryAdapter {
-    fn note_timestamps(&self, note_rel: &str) -> Result<(Option<i64>, Option<i64>), String> {
-        Ok(crate::git_note_timestamps_from_history(&self.root, note_rel).unwrap_or((None, None)))
     }
 }
 

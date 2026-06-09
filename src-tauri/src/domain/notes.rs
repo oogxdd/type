@@ -25,6 +25,14 @@ pub struct NoteMeta {
     pub ocr_updated_ms: Option<i64>,
 }
 
+/// One note's metadata plus decrypted body, returned in bulk for list previews.
+#[derive(Serialize)]
+pub struct NotePreviewEntry {
+    pub path: String,
+    pub content: String,
+    pub meta: NoteMeta,
+}
+
 /// YAML-ish front-matter fields stored at the top of each markdown note.
 #[derive(Default)]
 pub struct NoteFrontMatter {
