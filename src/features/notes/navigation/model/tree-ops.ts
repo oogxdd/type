@@ -3,6 +3,8 @@ import type { TreeItem } from "./types";
 import { flattenTree } from "./dnd-tree";
 import { DROP_PREFIX, ROOT_ID } from "./tree-dnd";
 
+// Pure tree transforms used by navigation state and drag-and-drop. Keeping
+// them side-effect free makes ordering, selection, and tests easier to follow.
 export function buildTreeItems(node: FolderNode): TreeItem[] {
   return node.children.map((child) => ({
     id: child.path,

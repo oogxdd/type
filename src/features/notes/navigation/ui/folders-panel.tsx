@@ -1,7 +1,7 @@
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import type { TreeItem } from "../lib/types";
+import type { TreeItem } from "../model/types";
 import { SidebarMenu } from "@/shared/ui/sidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { TreeNode } from "./tree-node";
@@ -9,7 +9,7 @@ import { SidebarFileTreeNode } from "./sidebar-file-tree-node";
 import { RecentTreeNode } from "./recent-tree-node";
 import type { RecentNode } from "./recent-tree-node";
 import type { NotePreview } from "@/shared/lib/format";
-import { ROOT_ID, dropId, type EdgeSnap } from "../lib/tree-dnd";
+import { ROOT_ID, dropId, type EdgeSnap } from "../model/tree-dnd";
 
 const EMPTY_STRING_SET = new Set<string>();
 

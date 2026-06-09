@@ -3,9 +3,9 @@ import { useCallback } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { CalendarDays } from "lucide-react";
-import type { TreeItem } from "../lib/types";
+import type { TreeItem } from "../model/types";
 import type { DragData } from "@/shared/types";
-import { dropId } from "../lib/tree-dnd";
+import { dropId } from "../model/tree-dnd";
 
 export type TreeRowProps = {
   node: TreeItem;

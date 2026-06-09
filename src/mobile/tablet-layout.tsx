@@ -12,7 +12,7 @@ import { MOBILE_SETTINGS_SECTIONS } from "@/features/settings/lib/sections";
 import { useAppearance } from "@/app/state/appearance-store";
 import { useSelection } from "@/app/state/selection-store";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
-import { useNotesTree } from "@/features/notes/tree/hooks/notes-tree-context";
+import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { useKeyboardInsets } from "@/mobile/use-keyboard-insets";
 import { getDisplayRouteTitle, ARCHIVE_FOLDER_PATH } from "./types";
 import { getErrorMessage } from "@/shared/lib/errors";
@@ -33,7 +33,7 @@ type TabletLayoutProps = {
     notePath: string,
     parentPath?: string
   ) => Promise<void>;
-  navigationFolders: import("@/features/notes/tree/lib/types").FlattenedItem[];
+  navigationFolders: import("@/features/notes/navigation/model/types").FlattenedItem[];
   onToggleFolder: (path: string) => void;
   openFolderActionSheet: (path: string) => void;
   onDeleteNote: (path: string) => Promise<boolean>;

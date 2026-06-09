@@ -3,14 +3,14 @@ import { useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
-import { useNotesTree } from "@/features/notes/tree/hooks/notes-tree-context";
+import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { type DesktopContextMenuState } from "@/app/hooks/use-tree-interactions";
 import { useSelection } from "@/app/state/selection-store";
 import { FEED_FOLDER_PATH } from "@/shared/constants";
 import { focusNoScroll } from "@/shared/lib/dom";
 import { computeRangeSelection } from "@/shared/lib/selection";
 import type { NotePreview } from "@/shared/lib/format";
-import type { TreeItem } from "../lib/types";
+import type { TreeItem } from "../model/types";
 import { TreeNode } from "./tree-node";
 
 type FeedPanelProps = {

@@ -10,7 +10,7 @@ import type { DiscoveredServer } from "@/shared/types";
 import { useSettingsData } from "@/features/settings/hooks/use-settings-data";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useGitSync } from "@/features/sync/hooks/git-sync-context";
-import { useNotesTree } from "@/features/notes/tree/hooks/notes-tree-context";
+import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { ChoiceRow, Group, StatRow } from "./helpers";
 import { getErrorMessage } from "@/shared/lib/errors";
 

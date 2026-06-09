@@ -10,8 +10,8 @@ import { Menu } from "@tauri-apps/api/menu";
 import { useShallow } from "zustand/react/shallow";
 
 import { useSelection } from "@/app/state/selection-store";
-import { useNotesTree } from "@/features/notes/tree/hooks/notes-tree-context";
-import { findNode } from "@/features/notes/tree/lib/tree-ops";
+import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import { findNode } from "@/features/notes/navigation/model/tree-ops";
 import { focusNoScroll } from "@/shared/lib/dom";
 import { getNoteParentPath } from "@/shared/lib/notes";
 import { computeRangeSelection, resolveTargetPaths } from "@/shared/lib/selection";

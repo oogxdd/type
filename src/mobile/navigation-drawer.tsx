@@ -1,5 +1,5 @@
 import { Archive, Clock3, Folder, X } from "lucide-react";
-import type { FlattenedItem } from "@/features/notes/tree/lib/types";
+import type { FlattenedItem } from "@/features/notes/navigation/model/types";
 import { MobileFoldersScreen } from "@/mobile/views/folders-view";
 import { MobileRecentScreen, type RecentBucketRow } from "@/mobile/views/recent-view";
 

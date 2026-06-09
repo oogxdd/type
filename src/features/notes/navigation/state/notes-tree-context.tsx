@@ -6,11 +6,13 @@ import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/shared/types";
 import type { NotePreview } from "@/shared/lib/format";
-import type { TreeItem, FlattenedItem } from "@/features/notes/tree/lib/types";
-import type { FeedTreeNode } from "@/features/notes/tree/lib/feed-tree-model";
+import type { TreeItem, FlattenedItem } from "@/features/notes/navigation/model/types";
+import type { FeedTreeNode } from "@/features/notes/navigation/model/feed-tree-model";
 import { useNotesTreeState } from "./use-notes-tree-state";
 import { useNotesTreeActions } from "./use-notes-tree-actions";
 
+// The navigation slice is split into a read side and a write side.
+// This provider stitches them together so the rest of the app consumes one context.
 type NotesTreeContextValue = {
   tree: FolderNode | null;
   treeData: TreeItem[];

@@ -8,11 +8,11 @@ import { useNotePreviews } from "@/features/notes/list/hooks/use-note-previews";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/shared/types";
 import { FEED_FOLDER_PATH } from "@/shared/constants";
 import { collectAllNotes, getNoteParentPath } from "@/shared/lib/notes";
-import { buildTreeItems, findNode, flattenTree } from "@/features/notes/tree/lib/tree-ops";
-import { removeChildrenOf } from "@/features/notes/tree/lib/dnd-tree";
+import { buildTreeItems, findNode, flattenTree } from "@/features/notes/navigation/model/tree-ops";
+import { removeChildrenOf } from "@/features/notes/navigation/model/dnd-tree";
 import type { NotePreview } from "@/shared/lib/format";
-import type { TreeItem } from "@/features/notes/tree/lib/types";
-import type { FlattenedItem } from "@/features/notes/tree/lib/types";
+import type { TreeItem } from "@/features/notes/navigation/model/types";
+import type { FlattenedItem } from "@/features/notes/navigation/model/types";
 import {
   buildFeedTree,
   buildVisibleFeedNavigationItems,
@@ -20,15 +20,17 @@ import {
   findFeedNode,
   getFirstFeedGroupId,
   type FeedTreeNode,
-} from "@/features/notes/tree/lib/feed-tree-model";
+} from "@/features/notes/navigation/model/feed-tree-model";
 import {
   buildNotePreviews,
   buildVisibleNavigationItems,
   getFirstSelectableFolderPath,
   mapParentById,
   selectPreviewSourceNotes,
-} from "@/features/notes/tree/lib/notes-tree-model";
+} from "@/features/notes/navigation/model/notes-tree-model";
 
+// Read-only navigation state. This hook derives tree shapes, feed buckets, and
+// preview warming; write workflows live in useNotesTreeActions.
 type UseNotesTreeStateArgs = {
   activeFolder: string;
   activeNote: string | null;
@@ -118,6 +120,8 @@ export function useNotesTreeState({
   );
   const shouldWarmNotePreviews =
     layoutMode !== "phone" || Boolean(activeFolder) || Boolean(activeNote);
+  // Keep preview work limited to the current navigation context unless the UI
+  // is wide enough to benefit from a broader warm cache.
   const previewSourceNotes = useMemo<NoteEntry[]>(
     () =>
       shouldWarmNotePreviews

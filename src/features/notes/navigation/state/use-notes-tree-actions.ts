@@ -9,10 +9,12 @@ import {
 import { confirmAction, focusNoScroll } from "@/shared/lib/dom";
 import { getNoteParentPath } from "@/shared/lib/notes";
 import type { ProfileSyncSettings } from "@/shared/types";
-import { applyFolderRenameToSelection, collectNotesForFlattening } from "../lib/notes-tree-model";
-import { findNode } from "@/features/notes/tree/lib/tree-ops";
+import { applyFolderRenameToSelection, collectNotesForFlattening } from "../model/notes-tree-model";
+import { findNode } from "@/features/notes/navigation/model/tree-ops";
 import type { FolderNode } from "@/shared/types";
 
+// Write side of the navigation slice: CRUD, rename, selection handoff, and the
+// UI side effects that have to happen after a backend mutation succeeds.
 type UseNotesTreeActionsArgs = {
   tree: FolderNode | null;
   syncSettings: ProfileSyncSettings;
@@ -77,6 +79,8 @@ export function useNotesTreeActions({
       const path = created.path;
       await refreshTree();
 
+      // New note creation is a workflow, not just a write: refresh the tree,
+      // sync selection, and hand focus to the editor in one pass.
       setSelectedFolders(new Set([folderPath]));
       setLastSelectedFolder(folderPath);
       setActiveFolder(folderPath);

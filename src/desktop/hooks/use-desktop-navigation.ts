@@ -14,7 +14,7 @@ import { FEED_FOLDER_PATH } from "@/shared/constants";
 import { computeRangeSelection } from "@/shared/lib/selection";
 import type { NotePreview } from "@/shared/lib/format";
 import type { AppMode, NoteEntry } from "@/shared/types";
-import type { FeedTreeNode } from "@/features/notes/tree/lib/feed-tree-model";
+import type { FeedTreeNode } from "@/features/notes/navigation/model/feed-tree-model";
 
 type FolderSummary = {
   id: string;

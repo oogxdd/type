@@ -1,12 +1,14 @@
 import { FEED_FOLDER_PATH, isSystemFolder } from "@/shared/constants";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/shared/types";
 import type { LayoutMode } from "@/mobile/navigation";
-import type { TreeItem } from "@/features/notes/tree/lib/types";
-import type { FlattenedItem } from "@/features/notes/tree/lib/types";
+import type { TreeItem } from "@/features/notes/navigation/model/types";
+import type { FlattenedItem } from "@/features/notes/navigation/model/types";
 import { collectAllNotes } from "@/shared/lib/notes";
-import { findNode } from "@/features/notes/tree/lib/tree-ops";
+import { findNode } from "@/features/notes/navigation/model/tree-ops";
 import type { NotePreview } from "@/shared/lib/format";
 
+// Pure helpers for the notes navigation view. Keep the render rules here so
+// components stay dumb and the state hook can stay mostly orchestration.
 type PreviewSourceInput = {
   layoutMode: LayoutMode;
   activeFolder: string;
@@ -55,6 +57,8 @@ export function buildVisibleNavigationItems(
 
   const items: VisibleNavigationItem[] = [];
 
+  // Nested navigation renders folders and notes in one flat list, but only for
+  // the expanded branches the current layout actually wants to show.
   const walk = (nodes: TreeItem[], parentId: string | null) => {
     nodes.forEach((node) => {
       items.push({

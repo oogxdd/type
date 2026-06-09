@@ -8,7 +8,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
 } from "@/shared/ui/sidebar";
-import type { TreeItem } from "../lib/types";
+import type { TreeItem } from "../model/types";
 import type { NotePreview } from "@/shared/lib/format";
 
 type SidebarFileTreeNodeProps = {

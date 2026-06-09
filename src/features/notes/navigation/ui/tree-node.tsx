@@ -1,6 +1,6 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
-import type { TreeItem } from "../lib/types";
-import type { EdgeSnap } from "../lib/tree-dnd";
+import type { TreeItem } from "../model/types";
+import type { EdgeSnap } from "../model/tree-dnd";
 import { TreeRow } from "./tree-row";
 import { NavNoteRow } from "./nav-note-row";
 import type { NotePreview } from "@/shared/lib/format";
