@@ -38,7 +38,6 @@ import { useDragDrop } from "@/features/notes/navigation/hooks/use-drag-drop";
 import { useKeyboardNavigation } from "@/features/notes/navigation/hooks/use-keyboard-navigation";
 import {
   ARCHIEVE_FOLDER_PATH,
-  FEED_FOLDER_PATH,
   indentationWidth,
   isSystemFolder,
 } from "@/shared/constants";
@@ -126,7 +125,7 @@ export function DesktopAppShell({
       setActiveNote: state.setActiveNote,
     }))
   );
-  const { clearNote, rightPaneRef } = useEditor();
+  const { clearDraft, clearNote, rightPaneRef } = useEditor();
   const {
     tree,
     setTree,
@@ -312,13 +311,10 @@ export function DesktopAppShell({
     <div className="pane-with-drag">
       <div className="pane-drag-region" data-tauri-drag-region aria-hidden />
       <AppSidebar
-        feedActive={appMode === "notes" && activeFolder === FEED_FOLDER_PATH}
         settingsActive={appMode === "settings"}
-        trashActive={appMode === "notes" && activeFolder === ARCHIEVE_FOLDER_PATH}
         recordingActive={isRecordingAudio}
         recordingDisabled={!recordingSupported || isRecordingFinalizing}
         handwritingImportDisabled={handwritingImportBusy}
-        onFeedClick={openFeedTab}
         onNewNoteClick={() => void createNewNote()}
         onRecordingClick={() => {
           if (isRecordingAudio) {
@@ -329,7 +325,6 @@ export function DesktopAppShell({
         }}
         onHandwritingImportClick={onImportHandwriting}
         onSettingsClick={() => onAppModeChange("settings")}
-        onTrashClick={() => onOpenPinnedFolder(ARCHIEVE_FOLDER_PATH)}
       >
         <Tabs
           value={activeNavigationTab}
@@ -355,6 +350,7 @@ export function DesktopAppShell({
           <TabsContent value="feed" className="folders-tab-content min-h-0">
             <FeedPanel
               paneBodyRef={foldersPanelRef}
+              onNavigateToNotes={() => onAppModeChange("notes")}
               onPaneKeyDown={handleFoldersKeyDown}
               onPaneClick={() => {
                 lastLeftPaneFocusRef.current = "folders";
@@ -367,13 +363,20 @@ export function DesktopAppShell({
             <FoldersPanel
               treeData={customFoldersTreeData}
               selectedIds={selectedFolders}
-              onSelect={handleFolderClick}
+              onSelect={(event, id) => {
+                onAppModeChange("notes");
+                clearDraft();
+                handleFolderClick(event, id);
+              }}
               edgeSnap={edgeSnap}
               expanded={expanded}
               onToggle={handleToggle}
               showNotesAsChildren={shouldNestNotesInNavigation}
               selectedNoteIds={selectedNotes}
-              onNoteSelect={handleNoteClick}
+              onNoteSelect={(notePath, event, parentPath) => {
+                onAppModeChange("notes");
+                handleNoteClick(notePath, event, parentPath);
+              }}
               onNoteContextMenu={handleNoteContextMenu}
               notePreviews={allNotePreviews}
               onPaneKeyDown={handleFoldersKeyDown}
@@ -421,7 +424,11 @@ export function DesktopAppShell({
         appStyle={appStyle}
         sidebarCollapsed={sidebarCollapsed}
         onToggleSidebar={() => setSidebarCollapsed((previous) => !previous)}
-        shouldNestNotesInNavigation={shouldNestNotesInNavigation}
+        showMiddlePane={
+          appMode === "settings" ||
+          activeFolder === ARCHIEVE_FOLDER_PATH ||
+          !shouldNestNotesInNavigation
+        }
         twoPaneLayout={twoPaneLayout}
         setTwoPaneLayout={setTwoPaneLayout}
         threePaneLayout={threePaneLayout}
@@ -448,6 +455,7 @@ export function DesktopAppShell({
           <DesktopRightPane
             appMode={appMode}
             activeSettingsSection={activeSettingsSection}
+            onOpenTrash={() => onOpenPinnedFolder(ARCHIEVE_FOLDER_PATH)}
           />
         }
       />

@@ -28,6 +28,8 @@ type UseFeedKeyboardNavigationArgs = {
   setSelectedNotes: Dispatch<SetStateAction<Set<string>>>;
   setLastSelectedNote: (path: string) => void;
   setActiveNote: (path: string | null) => void;
+  clearDraft: () => void;
+  clearNote: () => void;
   foldersPanelRef: RefObject<HTMLDivElement | null>;
 };
 
@@ -48,6 +50,8 @@ export function useFeedKeyboardNavigation({
   setSelectedNotes,
   setLastSelectedNote,
   setActiveNote,
+  clearDraft,
+  clearNote,
   foldersPanelRef,
 }: UseFeedKeyboardNavigationArgs) {
   return useCallback(
@@ -78,6 +82,8 @@ export function useFeedKeyboardNavigation({
         setSelectedNotes(new Set());
         setLastSelectedNote("");
         setActiveNote(null);
+        clearDraft();
+        clearNote();
         focusNoScroll(foldersPanelRef.current);
         requestAnimationFrame(() => {
           scrollIntoViewIfNeeded(
@@ -176,6 +182,8 @@ export function useFeedKeyboardNavigation({
     [
       activeFeedGroup,
       activeNote,
+      clearDraft,
+      clearNote,
       expanded,
       feedNodeById,
       feedVisibleNavigationItems,

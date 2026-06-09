@@ -14,6 +14,7 @@ import { TreeNode } from "./tree-node";
 
 type FeedPanelProps = {
   paneBodyRef: RefObject<HTMLDivElement | null>;
+  onNavigateToNotes?: () => void;
   onPaneClick?: () => void;
   onPaneKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   onOpenContextMenu: (state: DesktopContextMenuState) => void;
@@ -21,11 +22,12 @@ type FeedPanelProps = {
 
 export function FeedPanel({
   paneBodyRef,
+  onNavigateToNotes,
   onPaneClick,
   onPaneKeyDown,
   onOpenContextMenu,
 }: FeedPanelProps) {
-  const { clearNote } = useEditor();
+  const { clearDraft, clearNote } = useEditor();
   const {
     feedTreeData,
     feedNodeById,
@@ -34,6 +36,7 @@ export function FeedPanel({
     expanded,
     setExpanded,
     allNotePreviews,
+    feedLoading,
     shouldNestNotesInNavigation,
   } = useNotesTree();
   const {
@@ -60,6 +63,7 @@ export function FeedPanel({
 
   const selectFeedGroup = useCallback(
     (groupId: string) => {
+      onNavigateToNotes?.();
       setActiveFeedGroup(groupId);
       setSelectedFolders(new Set([FEED_FOLDER_PATH]));
       setLastSelectedFolder(FEED_FOLDER_PATH);
@@ -67,11 +71,14 @@ export function FeedPanel({
       setSelectedNotes(new Set());
       setLastSelectedNote("");
       setActiveNote(null);
+      clearDraft();
       clearNote();
       focusNoScroll(paneBodyRef.current);
     },
     [
+      clearDraft,
       clearNote,
+      onNavigateToNotes,
       paneBodyRef,
       setActiveFeedGroup,
       setActiveFolder,
@@ -85,6 +92,7 @@ export function FeedPanel({
 
   const handleNoteSelect = useCallback(
     (notePath: string, event: ReactMouseEvent, parentPath: string) => {
+      onNavigateToNotes?.();
       const parentNode = feedNodeById.get(parentPath);
       const notePaths = parentNode?.notes.map((note) => note.path) || [];
       setSelectedNotes(
@@ -103,6 +111,7 @@ export function FeedPanel({
     [
       feedNodeById,
       lastSelectedNote,
+      onNavigateToNotes,
       paneBodyRef,
       selectedNotes,
       setActiveFeedGroup,
@@ -175,7 +184,11 @@ export function FeedPanel({
   );
 
   if (feedTreeData.length === 0) {
-    return <div className="empty">No feed notes yet.</div>;
+    return (
+      <div className="empty">
+        {feedLoading ? "Loading feed..." : "No feed notes yet."}
+      </div>
+    );
   }
 
   return (
@@ -193,7 +206,7 @@ export function FeedPanel({
         }
       }}
     >
-      <div className="pane-body tree-root">
+      <div className="pane-body tree-root feed-navigation-tree">
         {feedTreeData.map((node) => (
           <TreeNode
             key={node.id}

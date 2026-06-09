@@ -17,6 +17,8 @@ export type FeedTreeNode = {
   name: string;
   kind: FeedTreeNodeKind;
   parentId: string | null;
+  rangeStartMs: number | null;
+  rangeEndMs: number | null;
   children: FeedTreeNode[];
   notes: Array<NoteEntry & { timestampMs: number }>;
   noteCount: number;
@@ -34,6 +36,8 @@ type FeedNodeBuilder = {
   name: string;
   kind: FeedTreeNodeKind;
   parentId: string | null;
+  rangeStartMs: number | null;
+  rangeEndMs: number | null;
   children: Map<string, FeedNodeBuilder>;
   notes: Array<NoteEntry & { timestampMs: number }>;
   latestMs: number;
@@ -56,12 +60,16 @@ const createBuilder = (
   name: string,
   kind: FeedTreeNodeKind,
   parentId: string | null,
-  rank: number
+  rank: number,
+  rangeStartMs: number | null = null,
+  rangeEndMs: number | null = null
 ): FeedNodeBuilder => ({
   id,
   name,
   kind,
   parentId,
+  rangeStartMs,
+  rangeEndMs,
   children: new Map(),
   notes: [],
   latestMs: 0,
@@ -73,13 +81,23 @@ const ensureBuilder = (
   id: string,
   name: string,
   kind: FeedTreeNodeKind,
-  rank: number
+  rank: number,
+  rangeStartMs: number | null = null,
+  rangeEndMs: number | null = null
 ) => {
   const existing = parent.children.get(id);
   if (existing) {
     return existing;
   }
-  const next = createBuilder(id, name, kind, parent.id, rank);
+  const next = createBuilder(
+    id,
+    name,
+    kind,
+    parent.id,
+    rank,
+    rangeStartMs,
+    rangeEndMs
+  );
   parent.children.set(id, next);
   return next;
 };
@@ -89,9 +107,126 @@ const getStartOfDayMs = (date: Date) => {
   return value.getTime();
 };
 
-const getWeekOfMonth = (date: Date) => Math.floor((date.getDate() - 1) / 7) + 1;
+const getEndOfDayMs = (date: Date) =>
+  new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    23,
+    59,
+    59,
+    999
+  ).getTime();
+
+type FeedDateRange = {
+  rangeStartMs: number;
+  rangeEndMs: number;
+};
+
+const clampRangeEnd = (rangeEndMs: number, now: Date) =>
+  Math.min(rangeEndMs, now.getTime());
+
+const getDayRange = (date: Date, now: Date): FeedDateRange => ({
+  rangeStartMs: getStartOfDayMs(date),
+  rangeEndMs: clampRangeEnd(getEndOfDayMs(date), now),
+});
+
+const getMonthRange = (date: Date, now: Date): FeedDateRange => ({
+  rangeStartMs: new Date(date.getFullYear(), date.getMonth(), 1).getTime(),
+  rangeEndMs: clampRangeEnd(
+    new Date(
+      date.getFullYear(),
+      date.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999
+    ).getTime(),
+    now
+  ),
+});
+
+const getYearRange = (date: Date, now: Date): FeedDateRange => ({
+  rangeStartMs: new Date(date.getFullYear(), 0, 1).getTime(),
+  rangeEndMs: clampRangeEnd(
+    new Date(date.getFullYear(), 11, 31, 23, 59, 59, 999).getTime(),
+    now
+  ),
+});
+
+const getFirstMondayDay = (date: Date) =>
+  1 + ((8 - new Date(date.getFullYear(), date.getMonth(), 1).getDay()) % 7);
+
+const getWeekOfMonth = (date: Date) => {
+  const firstMonday = getFirstMondayDay(date);
+  if (date.getDate() < firstMonday) {
+    return 0;
+  }
+  return Math.floor((date.getDate() - firstMonday) / 7) + 1;
+};
+
+const getWeekDateBounds = (date: Date, week = getWeekOfMonth(date)) => {
+  const firstMonday = getFirstMondayDay(date);
+  const startDay = week === 0 ? 1 : firstMonday + (week - 1) * 7;
+  const endDay = Math.min(
+    week === 0 ? firstMonday - 1 : startDay + 6,
+    new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+  );
+  return {
+    week,
+    start: new Date(date.getFullYear(), date.getMonth(), startDay),
+    end: new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      endDay,
+      23,
+      59,
+      59,
+      999
+    ),
+  };
+};
+
+const getWeekRange = (date: Date, now: Date): FeedDateRange => {
+  const { start, end } = getWeekDateBounds(date);
+  return {
+    rangeStartMs: start.getTime(),
+    rangeEndMs: clampRangeEnd(end.getTime(), now),
+  };
+};
+
+const getWeekRangeLabel = (date: Date, week = getWeekOfMonth(date)) => {
+  const { start, end } = getWeekDateBounds(date, week);
+  const formatDate = (value: Date) =>
+    value.toLocaleDateString([], {
+      month: "long",
+      day: "numeric",
+    });
+  const prefix = week === 0 ? "Month start" : `Week ${week}`;
+  return `${prefix} (${formatDate(start)} - ${formatDate(end)})`;
+};
 
 const getQuarter = (date: Date) => Math.floor(date.getMonth() / 3) + 1;
+
+const getQuarterRange = (date: Date, now: Date): FeedDateRange => {
+  const firstMonth = (getQuarter(date) - 1) * 3;
+  return {
+    rangeStartMs: new Date(date.getFullYear(), firstMonth, 1).getTime(),
+    rangeEndMs: clampRangeEnd(
+      new Date(
+        date.getFullYear(),
+        firstMonth + 3,
+        0,
+        23,
+        59,
+        59,
+        999
+      ).getTime(),
+      now
+    ),
+  };
+};
 
 const getQuarterSortRank = (quarter: number) => 4 - quarter;
 
@@ -140,6 +275,109 @@ const addNoteToBuilder = (builder: FeedNodeBuilder, note: NoteEntry, timestampMs
   }
 };
 
+const addNoteToMonth = (
+  month: FeedNodeBuilder,
+  monthPathSegments: Array<string | number>,
+  note: NoteEntry,
+  timestampMs: number,
+  date: Date,
+  now: Date
+) => {
+  const week = getWeekOfMonth(date);
+  const weekPathSegments = [...monthPathSegments, "week", week];
+  const weekRange = getWeekRange(date, now);
+  const weekNode = ensureBuilder(
+    month,
+    buildPathSegments(weekPathSegments),
+    getWeekRangeLabel(date),
+    "week",
+    week,
+    weekRange.rangeStartMs,
+    weekRange.rangeEndMs
+  );
+  const dayRange = getDayRange(date, now);
+  const dayNode = ensureBuilder(
+    weekNode,
+    buildPathSegments([...weekPathSegments, "day", date.getDate()]),
+    getWeekdayLabel(date),
+    "day",
+    date.getDate(),
+    dayRange.rangeStartMs,
+    dayRange.rangeEndMs
+  );
+  addNoteToBuilder(dayNode, note, timestampMs);
+};
+
+const ensureMonthCalendar = (
+  month: FeedNodeBuilder,
+  monthPathSegments: Array<string | number>,
+  date: Date,
+  now: Date
+) => {
+  const monthEndDay = new Date(
+    date.getFullYear(),
+    date.getMonth() + 1,
+    0
+  ).getDate();
+  const visibleEndDay =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth()
+      ? Math.min(monthEndDay, now.getDate())
+      : monthEndDay;
+  const firstMonday = getFirstMondayDay(date);
+  const firstWeek = firstMonday > 1 ? 0 : 1;
+  const lastWeek = getWeekOfMonth(
+    new Date(date.getFullYear(), date.getMonth(), visibleEndDay)
+  );
+
+  for (let week = firstWeek; week <= lastWeek; week += 1) {
+    const bounds = getWeekDateBounds(date, week);
+    if (bounds.start.getDate() > visibleEndDay) {
+      break;
+    }
+    const endDay = Math.min(bounds.end.getDate(), visibleEndDay);
+    const rangeDate = new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      bounds.start.getDate()
+    );
+    const weekPathSegments = [...monthPathSegments, "week", week];
+    const weekRange = getWeekRange(rangeDate, now);
+    const weekNode = ensureBuilder(
+      month,
+      buildPathSegments(weekPathSegments),
+      getWeekRangeLabel(date, week),
+      "week",
+      week,
+      weekRange.rangeStartMs,
+      Math.min(
+        weekRange.rangeEndMs,
+        getEndOfDayMs(
+          new Date(date.getFullYear(), date.getMonth(), endDay)
+        )
+      )
+    );
+
+    for (
+      let day = bounds.start.getDate();
+      day <= endDay;
+      day += 1
+    ) {
+      const dayDate = new Date(date.getFullYear(), date.getMonth(), day);
+      const dayRange = getDayRange(dayDate, now);
+      ensureBuilder(
+        weekNode,
+        buildPathSegments([...weekPathSegments, "day", day]),
+        getWeekdayLabel(dayDate),
+        "day",
+        day,
+        dayRange.rangeStartMs,
+        dayRange.rangeEndMs
+      );
+    }
+  }
+};
+
 const finalizeBuilder = (builder: FeedNodeBuilder): FeedTreeNode => {
   const children = [...builder.children.values()]
     .map((child) => finalizeBuilder(child))
@@ -158,6 +396,8 @@ const finalizeBuilder = (builder: FeedNodeBuilder): FeedTreeNode => {
     name: builder.name,
     kind: builder.kind,
     parentId: builder.parentId,
+    rangeStartMs: builder.rangeStartMs,
+    rangeEndMs: builder.rangeEndMs,
     children,
     notes: [...builder.notes].sort((left, right) => {
       if (left.timestampMs !== right.timestampMs) {
@@ -185,131 +425,140 @@ const addRecentNote = (
     (getStartOfDayMs(now) - getStartOfDayMs(date)) / DAY_MS
   );
   if (ageDays <= 0) {
+    const todayRange = getDayRange(now, now);
     const today = ensureBuilder(
       root,
       buildPathSegments(["today"]),
       getSpecialLabel("today"),
       "special",
-      SPECIAL_GROUP_ORDER.today
+      SPECIAL_GROUP_ORDER.today,
+      todayRange.rangeStartMs,
+      todayRange.rangeEndMs
     );
     addNoteToBuilder(today, note, timestampMs);
     return;
   }
 
   if (ageDays === 1) {
+    const yesterdayRange = getDayRange(date, now);
     const yesterday = ensureBuilder(
       root,
       buildPathSegments(["yesterday"]),
       getSpecialLabel("yesterday"),
       "special",
-      SPECIAL_GROUP_ORDER.yesterday
+      SPECIAL_GROUP_ORDER.yesterday,
+      yesterdayRange.rangeStartMs,
+      yesterdayRange.rangeEndMs
     );
     addNoteToBuilder(yesterday, note, timestampMs);
     return;
   }
 
   if (ageDays < 7) {
+    const lastWeekStart = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - 6
+    );
+    const lastWeekEnd = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - 2,
+      23,
+      59,
+      59,
+      999
+    );
     const lastWeek = ensureBuilder(
       root,
       buildPathSegments(["last-week"]),
       getSpecialLabel("last-week"),
       "special",
-      SPECIAL_GROUP_ORDER["last-week"]
+      SPECIAL_GROUP_ORDER["last-week"],
+      lastWeekStart.getTime(),
+      lastWeekEnd.getTime()
     );
     const dayId = buildPathSegments(["last-week", "day", date.getDay()]);
+    const dayRange = getDayRange(date, now);
     const day = ensureBuilder(
       lastWeek,
       dayId,
       getWeekdayLabel(date),
       "day",
-      getWeekdayOrder(date)
+      getWeekdayOrder(date),
+      dayRange.rangeStartMs,
+      dayRange.rangeEndMs
     );
     addNoteToBuilder(day, note, timestampMs);
     return;
   }
 
   if (date.getFullYear() === now.getFullYear()) {
-    const monthId = buildPathSegments(["month", date.getFullYear(), date.getMonth() + 1]);
+    const monthPathSegments = [
+      "month",
+      date.getFullYear(),
+      date.getMonth() + 1,
+    ];
+    const monthId = buildPathSegments(monthPathSegments);
+    const monthRange = getMonthRange(date, now);
     const month = ensureBuilder(
       root,
       monthId,
       getMonthLabel(date),
       "month",
-      10 + getMonthSortRank(date)
+      10 + getMonthSortRank(date),
+      monthRange.rangeStartMs,
+      monthRange.rangeEndMs
     );
-    addNoteToBuilder(month, note, timestampMs);
+    ensureMonthCalendar(month, monthPathSegments, date, now);
+    addNoteToMonth(month, monthPathSegments, note, timestampMs, date, now);
     return;
   }
 
   const yearId = buildPathSegments(["year", date.getFullYear()]);
+  const yearRange = getYearRange(date, now);
   const year = ensureBuilder(
     root,
     yearId,
     String(date.getFullYear()),
     "year",
-    getYearSortRank(date.getFullYear())
+    getYearSortRank(date.getFullYear()),
+    yearRange.rangeStartMs,
+    yearRange.rangeEndMs
   );
   const quarter = getQuarter(date);
   const quarterId = buildPathSegments(["year", date.getFullYear(), "quarter", quarter]);
+  const quarterRange = getQuarterRange(date, now);
   const quarterNode = ensureBuilder(
     year,
     quarterId,
     `Q${quarter}`,
     "quarter",
-    getQuarterSortRank(quarter)
+    getQuarterSortRank(quarter),
+    quarterRange.rangeStartMs,
+    quarterRange.rangeEndMs
   );
-  const monthId = buildPathSegments([
+  const monthPathSegments = [
     "year",
     date.getFullYear(),
     "quarter",
     quarter,
     "month",
     date.getMonth() + 1,
-  ]);
+  ];
+  const monthId = buildPathSegments(monthPathSegments);
+  const monthRange = getMonthRange(date, now);
   const monthNode = ensureBuilder(
     quarterNode,
     monthId,
     getMonthLabel(date),
     "month",
-    10 + getMonthSortRank(date)
+    10 + getMonthSortRank(date),
+    monthRange.rangeStartMs,
+    monthRange.rangeEndMs
   );
-  const weekId = buildPathSegments([
-    "year",
-    date.getFullYear(),
-    "quarter",
-    quarter,
-    "month",
-    date.getMonth() + 1,
-    "week",
-    getWeekOfMonth(date),
-  ]);
-  const weekNode = ensureBuilder(
-    monthNode,
-    weekId,
-    `Week ${getWeekOfMonth(date)}`,
-    "week",
-    getWeekOfMonth(date)
-  );
-  const dayId = buildPathSegments([
-    "year",
-    date.getFullYear(),
-    "quarter",
-    quarter,
-    "month",
-    date.getMonth() + 1,
-    "week",
-    getWeekOfMonth(date),
-    "day",
-    date.getDate(),
-  ]);
-  const dayNode = ensureBuilder(
-    weekNode,
-    dayId,
-    getWeekdayLabel(date),
-    "day",
-    getWeekdayOrder(date)
-  );
-  addNoteToBuilder(dayNode, note, timestampMs);
+  ensureMonthCalendar(monthNode, monthPathSegments, date, now);
+  addNoteToMonth(monthNode, monthPathSegments, note, timestampMs, date, now);
 };
 
 export function buildFeedTree(
@@ -442,4 +691,15 @@ export function findFeedNode(
     }
   }
   return null;
+}
+
+export function getLatestFeedTargetTimestamp(
+  node: FeedTreeNode | null,
+  now: Date = new Date()
+): number | null {
+  if (node?.rangeStartMs == null || node.rangeEndMs == null) {
+    return null;
+  }
+  const latestMs = Math.min(node.rangeEndMs, now.getTime());
+  return latestMs >= node.rangeStartMs ? latestMs : null;
 }

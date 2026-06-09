@@ -802,6 +802,70 @@ body {
   display: inline-block;
 }
 
+.tree-pane .feed-navigation-tree .item-row {
+  width: 100%;
+  box-sizing: border-box;
+  gap: 8px;
+}
+
+.tree-pane .feed-navigation-tree .item-row:hover {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-accent-foreground);
+}
+
+.tree-pane .feed-navigation-tree .item-row.selected {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-accent-foreground);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, currentColor 38%, transparent);
+}
+
+.tree-pane .feed-navigation-tree .tree-guides {
+  inset: 0;
+}
+
+.tree-pane .feed-navigation-tree .tree-guide-vert {
+  background: var(--sidebar-border);
+  opacity: 0.9;
+}
+
+.tree-pane .feed-navigation-tree .feed-bucket-row {
+  min-height: 32px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.tree-pane .feed-navigation-tree .feed-bucket-row .tree-toggle,
+.tree-pane .feed-navigation-tree .feed-bucket-row .icon-spacer {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+
+.tree-pane .feed-navigation-tree .feed-bucket-row .tree-toggle {
+  padding: 0;
+  opacity: 0.72;
+}
+
+.tree-pane .feed-navigation-tree .feed-bucket-row .tree-toggle:hover {
+  background: transparent;
+  opacity: 1;
+}
+
+.tree-pane .feed-navigation-tree .feed-bucket-row .tree-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tree-pane .feed-navigation-tree .feed-bucket-row .folder-glyph {
+  color: currentColor;
+  opacity: 0.74;
+}
+
+.tree-pane .feed-navigation-tree .feed-bucket-row.selected .folder-glyph,
+.tree-pane .feed-navigation-tree .feed-bucket-row:hover .folder-glyph {
+  opacity: 0.9;
+}
+
 .rename-input {
   flex: 1;
   border: 1px solid var(--ui-border-strong);

@@ -35,6 +35,7 @@ type NotesTreeContextValue = {
   activeFeedNode: FeedTreeNode | null;
   feedNotes: Array<NoteEntry & { timestampMs: number }>;
   feedNotePreviews: Record<string, NotePreview>;
+  feedLoading: boolean;
   parentById: Record<string, string | null>;
   renamingFolder: string | null;
   renameValue: string;
@@ -115,6 +116,7 @@ export function NotesTreeProvider({ children }: { children: ReactNode }) {
     activeFeedNode,
     feedNotes,
     feedNotePreviews,
+    feedLoading,
     parentById,
     renamingFolder,
     setRenamingFolder,
@@ -184,6 +186,7 @@ export function NotesTreeProvider({ children }: { children: ReactNode }) {
         activeFeedNode,
         feedNotes,
         feedNotePreviews,
+        feedLoading,
         parentById,
         renamingFolder,
         renameValue,

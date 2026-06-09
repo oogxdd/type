@@ -49,8 +49,14 @@ function SettingsRow({
   );
 }
 
-function SettingsDetail({ sectionId }: { sectionId: SettingsSectionId }) {
-  if (sectionId === "general") return <SettingsGeneralSection />;
+function SettingsDetail({
+  sectionId,
+  onOpenTrash,
+}: {
+  sectionId: SettingsSectionId;
+  onOpenTrash: () => void;
+}) {
+  if (sectionId === "general") return <SettingsGeneralSection onOpenTrash={onOpenTrash} />;
   if (sectionId === "profile") return <SettingsProfileSection />;
   if (sectionId === "import") return <SettingsImportSection />;
   if (sectionId === "sync") return <SettingsSyncSection />;
@@ -104,9 +110,11 @@ export function SettingsMiddlePane({
 
 export function SettingsDetailPane({
   activeSection,
+  onOpenTrash,
   onPaneClick,
 }: {
   activeSection: string;
+  onOpenTrash: () => void;
   onPaneClick: () => void;
 }) {
   const { rightPaneRef } = useEditor();
@@ -127,6 +135,7 @@ export function SettingsDetailPane({
         <div className="settings-detail-shell">
           <SettingsDetail
             sectionId={activeSection as SettingsSectionId}
+            onOpenTrash={onOpenTrash}
           />
         </div>
       </div>

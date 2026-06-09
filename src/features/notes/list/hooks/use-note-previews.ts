@@ -11,6 +11,7 @@ type CachedPreview = { updatedMs: number | null; preview: NotePreview };
 
 export function useNotePreviews(notes: NoteEntry[]) {
   const [notePreviews, setNotePreviews] = useState<Record<string, NotePreview>>({});
+  const [isLoading, setIsLoading] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
   // Persist resolved previews across refreshes so re-reading the tree doesn't
   // re-read every note's full content from disk again.
@@ -29,12 +30,14 @@ export function useNotePreviews(notes: NoteEntry[]) {
     if (notes.length === 0) {
       cacheRef.current.clear();
       setNotePreviews({});
+      setIsLoading(false);
       return;
     }
     let cancelled = false;
     const cache = cacheRef.current;
 
     const run = async () => {
+      setIsLoading(true);
       // Forget notes that no longer exist.
       const livePaths = new Set(notes.map((note) => note.path));
       for (const path of [...cache.keys()]) {
@@ -42,6 +45,14 @@ export function useNotePreviews(notes: NoteEntry[]) {
           cache.delete(path);
         }
       }
+      const cachedPreviews: Record<string, NotePreview> = {};
+      notes.forEach((note) => {
+        const cached = cache.get(note.path);
+        if (cached) {
+          cachedPreviews[note.path] = cached.preview;
+        }
+      });
+      setNotePreviews(cachedPreviews);
 
       // Pull only the content we actually need: a cheap meta (stat) tells us
       // whether the cached preview is still current; we read the full note body
@@ -62,6 +73,14 @@ export function useNotePreviews(notes: NoteEntry[]) {
               updatedMs,
               preview: parseNotePreview(content, updatedMs, meta),
             });
+          }
+          const resolved = cache.get(note.path);
+          if (resolved && !cancelled) {
+            setNotePreviews((current) =>
+              current[note.path] === resolved.preview
+                ? current
+                : { ...current, [note.path]: resolved.preview }
+            );
           }
         } catch (error) {
           console.error("[notes] failed to build preview", note.path, error);
@@ -86,6 +105,7 @@ export function useNotePreviews(notes: NoteEntry[]) {
         }
       });
       setNotePreviews(next);
+      setIsLoading(false);
     };
 
     void run();
@@ -94,5 +114,5 @@ export function useNotePreviews(notes: NoteEntry[]) {
     };
   }, [notes, refreshToken]);
 
-  return notePreviews;
+  return { previews: notePreviews, isLoading };
 }

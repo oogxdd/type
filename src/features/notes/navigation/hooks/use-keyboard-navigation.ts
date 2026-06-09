@@ -1,6 +1,7 @@
 import { useCallback, useRef } from "react";
 import type { AppMode, VisibleNavigationItem } from "@/shared/types";
 import type { FlattenedItem } from "../model/types";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { focusNoScroll, scrollIntoViewIfNeeded, escapeSelectorValue } from "@/shared/lib/dom";
 import { usePaneShortcuts } from "./use-pane-shortcuts";
 import type { FeedTreeNode } from "@/features/notes/navigation/model/feed-tree-model";
@@ -88,6 +89,7 @@ export function useKeyboardNavigation({
   rightPaneRef,
   notesPanelRef,
 }: UseKeyboardNavigationArgs) {
+  const { clearDraft, clearNote } = useEditor();
   const lastLeftPaneFocusRef = useRef<"folders" | "middle">("middle");
 
   usePaneShortcuts({
@@ -124,6 +126,8 @@ export function useKeyboardNavigation({
     setSelectedNotes,
     setLastSelectedNote,
     setActiveNote,
+    clearDraft,
+    clearNote,
     foldersPanelRef,
   });
 
@@ -217,6 +221,8 @@ export function useKeyboardNavigation({
           setSelectedNotes(new Set());
           setLastSelectedNote("");
           setActiveNote(null);
+          clearDraft();
+          clearNote();
           focusNoScroll(foldersPanelRef.current);
           requestAnimationFrame(() => {
             scrollIntoViewIfNeeded(
@@ -339,6 +345,8 @@ export function useKeyboardNavigation({
         setSelectedNotes(new Set());
         setLastSelectedNote("");
         setActiveNote(null);
+        clearDraft();
+        clearNote();
         requestAnimationFrame(() => {
           scrollIntoViewIfNeeded(
             foldersPanelRef.current,
@@ -366,6 +374,8 @@ export function useKeyboardNavigation({
             setSelectedNotes(new Set());
             setLastSelectedNote("");
             setActiveNote(null);
+            clearDraft();
+            clearNote();
             requestAnimationFrame(() => {
               scrollIntoViewIfNeeded(
                 foldersPanelRef.current,
@@ -398,6 +408,8 @@ export function useKeyboardNavigation({
           setSelectedNotes(new Set());
           setLastSelectedNote("");
           setActiveNote(null);
+          clearDraft();
+          clearNote();
           requestAnimationFrame(() => {
             scrollIntoViewIfNeeded(
               foldersPanelRef.current,
@@ -413,6 +425,8 @@ export function useKeyboardNavigation({
       activeFeedGroup,
       activeNavigationTab,
       appMode,
+      clearDraft,
+      clearNote,
       expanded,
       flatItemById,
       feedNodeById,

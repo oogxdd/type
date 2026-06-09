@@ -6,7 +6,7 @@ type DesktopShellProps = {
   appStyle: CSSProperties;
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
-  shouldNestNotesInNavigation: boolean;
+  showMiddlePane: boolean;
   twoPaneLayout: Record<string, number>;
   setTwoPaneLayout: Dispatch<SetStateAction<Record<string, number>>>;
   threePaneLayout: Record<string, number>;
@@ -21,7 +21,7 @@ export function DesktopShell({
   appStyle,
   sidebarCollapsed,
   onToggleSidebar,
-  shouldNestNotesInNavigation,
+  showMiddlePane,
   twoPaneLayout,
   setTwoPaneLayout,
   threePaneLayout,
@@ -62,7 +62,7 @@ export function DesktopShell({
 
       {sidebarCollapsed ? (
         <div className="app-single-pane">{rightPane}</div>
-      ) : shouldNestNotesInNavigation ? (
+      ) : !showMiddlePane ? (
         <ResizablePanelGroup
           orientation="horizontal"
           className="app-panels"

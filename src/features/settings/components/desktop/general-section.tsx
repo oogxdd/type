@@ -1,5 +1,8 @@
+import { Trash2 } from "lucide-react";
+
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import type { NoteFileNameFormat } from "@/shared/types";
+import { Button } from "@/shared/ui/button";
 
 const noteFileNameOptions: Array<{ value: NoteFileNameFormat; label: string; hint: string }> = [
   {
@@ -19,7 +22,7 @@ const noteFileNameOptions: Array<{ value: NoteFileNameFormat; label: string; hin
   },
 ];
 
-export function SettingsGeneralSection() {
+export function SettingsGeneralSection({ onOpenTrash }: { onOpenTrash: () => void }) {
   const { activeProfileId, profilesBusy, syncSettings, updateSyncSettings } = useProfiles();
 
   return (
@@ -54,6 +57,19 @@ export function SettingsGeneralSection() {
             {noteFileNameOptions.find((option) => option.value === syncSettings.noteFileNameFormat)
               ?.hint ?? "YYYY-MM-DDTHH-mm-ssZ-<slug>.md"}
           </p>
+        </section>
+
+        <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold text-foreground">Trash</h3>
+            <p className="text-xs text-muted-foreground">
+              View archived notes and restore or permanently delete them.
+            </p>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={onOpenTrash}>
+            <Trash2 aria-hidden="true" />
+            Open Trash
+          </Button>
         </section>
       </div>
     </div>

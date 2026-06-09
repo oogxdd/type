@@ -79,13 +79,17 @@ export function TreeRow({
     transform: isDragging ? undefined : CSS.Translate.toString(transform),
     paddingLeft: 12 + depth * indentationWidth,
   } as React.CSSProperties;
-  const guideBaseLeft = 12 + 20 + 6 + 8;
+  const guideBaseLeft = feedMode
+    ? 12 + indentationWidth / 2
+    : 12 + 20 + 6 + 8;
 
   return (
     <div
       ref={setRefs}
       style={style}
-      className={`item-row folder-row${isSelected ? " selected" : ""}${
+      className={`item-row folder-row${feedMode ? " feed-bucket-row" : ""}${
+        isSelected ? " selected" : ""
+      }${
         isDragging ? " is-dragging" : ""
       }${isOver && !edgePosition ? " drop-inside" : ""}${
         edgePosition === "before" ? " drop-before" : ""

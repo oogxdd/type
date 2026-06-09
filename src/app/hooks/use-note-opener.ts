@@ -7,6 +7,7 @@ import {
 import { useShallow } from "zustand/react/shallow";
 
 import { useSelection } from "@/app/state/selection-store";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { getNoteParentPath } from "@/shared/lib/notes";
 import type { AppMode } from "@/shared/types";
 
@@ -27,6 +28,7 @@ export type NoteOpener = {
  * selection update.
  */
 export const useNoteOpener = ({ setAppMode }: UseNoteOpenerArgs): NoteOpener => {
+  const { clearDraft, clearNote } = useEditor();
   const {
     setSelectedFolders,
     setLastSelectedFolder,
@@ -54,8 +56,12 @@ export const useNoteOpener = ({ setAppMode }: UseNoteOpenerArgs): NoteOpener => 
       setSelectedNotes(new Set());
       setLastSelectedNote("");
       setActiveNote(null);
+      clearDraft();
+      clearNote();
     },
     [
+      clearDraft,
+      clearNote,
       setAppMode,
       setActiveFolder,
       setActiveNote,

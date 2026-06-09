@@ -1,16 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { useSelection } from "@/app/state/selection-store";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
+import { writeNote } from "@/features/notes/api/notes-api";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import type { LensNote } from "@/features/lens/hooks/use-lens-annotations";
+import { getLatestFeedTargetTimestamp } from "@/features/notes/navigation/model/feed-tree-model";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import { FEED_FOLDER_PATH } from "@/shared/constants";
 import { sanitizeRecordingEditorContent } from "@/shared/lib/format";
 
 export function useDesktopEditorPane() {
-  const { activeNote, selectedNotes } = useSelection(
+  const { activeFolder, activeNote, selectedNotes } = useSelection(
     useShallow((state) => ({
+      activeFolder: state.activeFolder,
       activeNote: state.activeNote,
       selectedNotes: state.selectedNotes,
     }))
@@ -20,11 +24,74 @@ export function useDesktopEditorPane() {
   const {
     noteContent,
     draftNoteContent,
-    handleEditorChange,
+    handleEditorChange: updateEditorContent,
     flushSave,
+    primeNoteContent,
     rightPaneRef,
   } = useEditor();
-  const { notes, notePreviews, allNotePreviews } = useNotesTree();
+  const {
+    notes,
+    notePreviews,
+    allNotePreviews,
+    activeFeedNode,
+    createNewNote,
+  } = useNotesTree();
+  const draftCreationRef = useRef<Promise<string | null> | null>(null);
+  const pendingDraftRef = useRef("");
+
+  const handleEditorChange = useCallback(
+    (nextMarkdown: string) => {
+      updateEditorContent(nextMarkdown);
+      if (activeNote) {
+        return;
+      }
+
+      pendingDraftRef.current = nextMarkdown;
+      if (!nextMarkdown.trim() || draftCreationRef.current) {
+        return;
+      }
+
+      const folderPath = activeFolder || FEED_FOLDER_PATH;
+      const targetTimestampMs =
+        folderPath === FEED_FOLDER_PATH
+          ? getLatestFeedTargetTimestamp(activeFeedNode) ?? undefined
+          : undefined;
+      const initialContent = nextMarkdown;
+      const creation = createNewNote(
+        folderPath,
+        initialContent,
+        targetTimestampMs
+      )
+        .then(async (path) => {
+          if (!path) {
+            return null;
+          }
+          const latestContent = pendingDraftRef.current;
+          if (latestContent !== initialContent) {
+            await writeNote(path, latestContent);
+            primeNoteContent(latestContent);
+            window.dispatchEvent(new CustomEvent("note-previews-invalidated"));
+          }
+          return path;
+        })
+        .catch((error) => {
+          console.error("[notes] failed to create note from editor draft", error);
+          return null;
+        })
+        .finally(() => {
+          draftCreationRef.current = null;
+        });
+      draftCreationRef.current = creation;
+    },
+    [
+      activeFeedNode,
+      activeFolder,
+      activeNote,
+      createNewNote,
+      primeNoteContent,
+      updateEditorContent,
+    ]
+  );
 
   const selectedNotePaths = useMemo(() => {
     const orderedByMiddleList = notes

@@ -10,6 +10,7 @@ import { Menu } from "@tauri-apps/api/menu";
 import { useShallow } from "zustand/react/shallow";
 
 import { useSelection } from "@/app/state/selection-store";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { findNode } from "@/features/notes/navigation/model/tree-ops";
 import { focusNoScroll } from "@/shared/lib/dom";
@@ -71,6 +72,7 @@ export const useTreeInteractions = ({
   foldersPanelRef,
   useNativeContextMenus = true,
 }: UseTreeInteractionsArgs): TreeInteractions => {
+  const { clearDraft, clearNote } = useEditor();
   const {
     selectedFolders,
     setSelectedFolders,
@@ -146,6 +148,8 @@ export const useTreeInteractions = ({
     setSelectedNotes(new Set());
     setLastSelectedNote("");
     setActiveNote(null);
+    clearDraft();
+    clearNote();
     focusNoScroll(foldersPanelRef.current);
   };
 
@@ -197,6 +201,8 @@ export const useTreeInteractions = ({
     setSelectedNotes(new Set());
     setLastSelectedNote("");
     setActiveNote(null);
+    clearDraft();
+    clearNote();
     focusNoScroll(foldersPanelRef.current);
 
     if (!useNativeContextMenus) {

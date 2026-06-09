@@ -59,6 +59,7 @@ export type NotesTreeState = {
   activeFeedNode: FeedTreeNode | null;
   feedNotes: Array<NoteEntry & { timestampMs: number }>;
   feedNotePreviews: Record<string, NotePreview>;
+  feedLoading: boolean;
   parentById: Record<string, string | null>;
   renamingFolder: string | null;
   setRenamingFolder: React.Dispatch<React.SetStateAction<string | null>>;
@@ -129,6 +130,7 @@ export function useNotesTreeState({
             activeFolder,
             activeNote,
             notes,
+            feedNotes: feedSourceNotes,
             allNotes,
             shouldNestNotesInNavigation,
           })
@@ -139,11 +141,15 @@ export function useNotesTreeState({
       activeFolder,
       activeNote,
       notes,
+      feedSourceNotes,
       allNotes,
       shouldNestNotesInNavigation,
     ]
   );
-  const allNotePreviews = useNotePreviews(previewSourceNotes);
+  const {
+    previews: allNotePreviews,
+    isLoading: notePreviewsLoading,
+  } = useNotePreviews(previewSourceNotes);
   const notePreviews = useMemo(
     () => buildNotePreviews(notes, allNotePreviews),
     [allNotePreviews, notes]
@@ -180,6 +186,7 @@ export function useNotesTreeState({
     () => buildNotePreviews(feedNotes, allNotePreviews),
     [allNotePreviews, feedNotes]
   );
+  const feedLoading = feedSourceNotes.length > 0 && notePreviewsLoading;
 
   const parentById = useMemo(() => mapParentById(flatItems), [flatItems]);
 
@@ -246,6 +253,7 @@ export function useNotesTreeState({
     activeFeedNode,
     feedNotes,
     feedNotePreviews,
+    feedLoading,
     parentById,
     renamingFolder,
     setRenamingFolder,

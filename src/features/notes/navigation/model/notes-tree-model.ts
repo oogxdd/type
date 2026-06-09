@@ -14,6 +14,7 @@ type PreviewSourceInput = {
   activeFolder: string;
   activeNote: string | null;
   notes: NoteEntry[];
+  feedNotes: NoteEntry[];
   allNotes: NoteEntry[];
   shouldNestNotesInNavigation: boolean;
 };
@@ -23,11 +24,12 @@ export function selectPreviewSourceNotes({
   activeFolder,
   activeNote,
   notes,
+  feedNotes,
   allNotes,
   shouldNestNotesInNavigation,
 }: PreviewSourceInput): NoteEntry[] {
   if (activeFolder === FEED_FOLDER_PATH) {
-    return allNotes;
+    return feedNotes;
   }
   if (layoutMode !== "phone" && !shouldNestNotesInNavigation) {
     return notes;

@@ -26,11 +26,13 @@ const MultiNoteLens = lazy(() =>
 type DesktopRightPaneProps = {
   appMode: AppMode;
   activeSettingsSection: SettingsSectionId;
+  onOpenTrash: () => void;
 };
 
 export function DesktopRightPane({
   appMode,
   activeSettingsSection,
+  onOpenTrash,
 }: DesktopRightPaneProps) {
   const {
     activeNote,
@@ -118,6 +120,7 @@ export function DesktopRightPane({
   return (
     <SettingsDetailPane
       activeSection={activeSettingsSection}
+      onOpenTrash={onOpenTrash}
       onPaneClick={() => focusNoScroll(rightPaneRef.current)}
     />
   );
