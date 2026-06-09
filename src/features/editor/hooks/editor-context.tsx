@@ -56,24 +56,6 @@ export function EditorProvider({
     }
   }, [activeProfileId, activeProfileNotesRoot, clearNote, clearDraft]);
 
-  // Flush save on visibility/unload
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === "hidden") {
-        void flushSave();
-      }
-    };
-    const handleBeforeUnload = () => {
-      void flushSave();
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
-  }, [flushSave]);
-
   return (
     <EditorContext.Provider
       value={{

@@ -17,10 +17,10 @@ import { MobileToast } from "@/mobile/ui/toast";
 
 import { useAppearance } from "@/app/state/appearance-store";
 import { useSelection } from "@/app/state/selection-store";
+import { useDeepLinks } from "@/app/lifecycle/use-deep-links";
 import { useEditor } from "@/features/editor/hooks/editor-context";
 import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
 import { useGitSync } from "@/features/sync/hooks/git-sync-context";
-import { parseSyncDeepLink } from "@/features/sync/api/local-sync-link";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 import { useKeyboardInsets } from "@/mobile/use-keyboard-insets";
 import { useEdgeSwipe } from "@/mobile/hooks/use-edge-swipe";
@@ -233,42 +233,22 @@ export function MobileShell({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [foldersDrawerOpen]);
 
-  // -- Deep link listener (record shortcut + type2://sync from a desktop QR)
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    const handleUrls = (urls: string[]) => {
-      for (const url of urls) {
-        const sync = parseSyncDeepLink(url);
-        if (sync) {
-          void syncNow({
-            remote: sync.remote,
-            branch: sync.branch,
-            onAfterPull: () => refreshTree(),
-          });
-          break;
-        }
-        if (url.includes("record")) {
-          openRecordingRoute(FEED_FOLDER_PATH, true);
-          break;
-        }
-      }
-    };
-    import("@tauri-apps/plugin-deep-link")
-      .then(async (mod) => {
-        unlisten = await mod.onOpenUrl(handleUrls);
-        // Catch a cold-start launch URL (app opened by the deep link).
-        try {
-          const current = await mod.getCurrent();
-          if (current && current.length > 0) {
-            handleUrls(current);
-          }
-        } catch {
-          // getCurrent unsupported on some platforms — ignore.
-        }
-      })
-      .catch(() => {});
-    return () => unlisten?.();
-  }, [openRecordingRoute, syncNow, refreshTree]);
+  // -- Deep links (record shortcut + type2://sync from a desktop QR)
+  useDeepLinks({
+    onRecordLink: useCallback(() => {
+      openRecordingRoute(FEED_FOLDER_PATH, true);
+    }, [openRecordingRoute]),
+    onSyncLink: useCallback(
+      (sync) => {
+        void syncNow({
+          remote: sync.remote,
+          branch: sync.branch,
+          onAfterPull: () => refreshTree(),
+        });
+      },
+      [refreshTree, syncNow]
+    ),
+  });
 
   // -- Route key for animation
   const routeKey =
