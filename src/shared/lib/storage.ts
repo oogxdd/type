@@ -250,3 +250,19 @@ export const getInitialEditorFontSize = (): number => {
   }
   return DEFAULT_EDITOR_FONT_SIZE;
 };
+
+// Persisted note-preview snapshots (one localStorage key per profile). Shared so
+// the security feature can purge plaintext previews when encryption is enabled.
+export const NOTE_PREVIEW_CACHE_PREFIX = "notes-viewer-note-previews-v1:";
+
+export const clearPersistedNotePreviews = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+    const key = window.localStorage.key(index);
+    if (key?.startsWith(NOTE_PREVIEW_CACHE_PREFIX)) {
+      window.localStorage.removeItem(key);
+    }
+  }
+};

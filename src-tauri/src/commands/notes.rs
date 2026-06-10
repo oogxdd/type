@@ -28,9 +28,9 @@ fn notes_service(
 }
 
 #[tauri::command]
-pub(super) fn get_tree(app: tauri::AppHandle) -> Result<FolderNode, String> {
+pub(super) async fn get_tree(app: tauri::AppHandle) -> Result<FolderNode, String> {
     ensure_security_unlocked_for_app(&app)?;
-    notes_service(&app)?.get_tree()
+    super::run_blocking_command(move || notes_service(&app)?.get_tree()).await
 }
 
 #[tauri::command]

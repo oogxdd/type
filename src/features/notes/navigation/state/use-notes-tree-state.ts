@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSelection } from "@/app/state/selection-store";
 import { useAppearance } from "@/app/state/appearance-store";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import { useSecurity } from "@/features/security/hooks/security-context";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 import * as api from "@/features/notes/api/notes-api";
 import { useNotePreviews } from "@/features/notes/list/hooks/use-note-previews";
@@ -74,6 +75,7 @@ export function useNotesTreeState({
   activeNote,
 }: UseNotesTreeStateArgs): NotesTreeState {
   const { activeProfileId, activeProfileNotesRoot } = useProfiles();
+  const { isSecurityEnabled } = useSecurity();
   const notesListMode = useAppearance((state) => state.notesListMode);
   const hideArchivedFeedNotes = useAppearance((state) => state.hideArchivedFeedNotes);
   const layoutMode = useLayoutMode();
@@ -146,10 +148,18 @@ export function useNotesTreeState({
       shouldNestNotesInNavigation,
     ]
   );
+  const allNotePaths = useMemo(() => allNotes.map((note) => note.path), [allNotes]);
   const {
     previews: allNotePreviews,
     isLoading: notePreviewsLoading,
-  } = useNotePreviews(previewSourceNotes);
+  } = useNotePreviews(previewSourceNotes, {
+    resetKey: activeProfileId
+      ? `${activeProfileId}:${activeProfileNotesRoot ?? ""}`
+      : null,
+    // Plaintext preview snapshots must never persist for encrypted vaults.
+    persistKey: !isSecurityEnabled && activeProfileId ? activeProfileId : null,
+    allNotePaths,
+  });
   const notePreviews = useMemo(
     () => buildNotePreviews(notes, allNotePreviews),
     [allNotePreviews, notes]

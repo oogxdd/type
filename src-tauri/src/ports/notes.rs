@@ -127,7 +127,9 @@ pub(crate) trait NoteClock {
 //   - Hidden storage folders (Recordings/, Attachments/) are excluded from the tree
 //   - Each folder contains its child folders and the notes inside it
 //   - Folders are sorted by a persisted order file (.notes-order.json), alphabetical fallback
-//   - The "Feed" folder sorts notes by newest-first created timestamp instead
+//   - The "Feed" folder sorts notes newest-first by file name (names are
+//     timestamp/UUIDv7-prefixed); authoritative timestamp ordering happens in
+//     the UI from note previews, so get_tree never reads note bodies
 //
 // read_note(path)
 //   in:  path — relative to notes root, e.g. "Feed/my-note.md"

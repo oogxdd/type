@@ -1,17 +1,102 @@
 import { useEffect, useRef, useState } from "react";
 import { listNotePreviews } from "../../api/notes-api";
-import { parseNotePreview, type NotePreview } from "@/shared/lib/format";
+import {
+  formatNoteDateLabel,
+  parseNotePreview,
+  type NotePreview,
+} from "@/shared/lib/format";
+import { NOTE_PREVIEW_CACHE_PREFIX } from "@/shared/lib/storage";
 import type { NoteEntry } from "@/shared/types";
 
 type CachedPreview = { updatedMs: number | null; preview: NotePreview };
 
-export function useNotePreviews(notes: NoteEntry[]) {
+type UseNotePreviewsOptions = {
+  // Cache reset boundary — changes when the active profile/root changes.
+  resetKey: string | null;
+  // localStorage key suffix, or null to disable persistence (encryption on,
+  // or no profile resolved yet). Plaintext previews must never persist for
+  // encrypted vaults.
+  persistKey: string | null;
+  // Every note path in the vault, used to prune deleted notes from the
+  // persisted snapshot at write time.
+  allNotePaths: string[];
+};
+
+const readPersistedPreviews = (persistKey: string): Map<string, CachedPreview> => {
+  const hydrated = new Map<string, CachedPreview>();
+  try {
+    const raw = window.localStorage.getItem(NOTE_PREVIEW_CACHE_PREFIX + persistKey);
+    if (!raw) {
+      return hydrated;
+    }
+    const parsed = JSON.parse(raw) as Record<string, CachedPreview>;
+    for (const [path, value] of Object.entries(parsed)) {
+      if (!value || typeof value !== "object" || !value.preview) {
+        continue;
+      }
+      hydrated.set(path, {
+        updatedMs: value.updatedMs ?? null,
+        // Date labels are relative ("yesterday"); recompute for today.
+        preview: {
+          ...value.preview,
+          dateLabel: formatNoteDateLabel(value.preview.updatedMs ?? null),
+        },
+      });
+    }
+  } catch {
+    hydrated.clear();
+  }
+  return hydrated;
+};
+
+const writePersistedPreviews = (
+  persistKey: string,
+  cache: Map<string, CachedPreview>,
+  livePaths: Set<string>
+) => {
+  try {
+    const storageKey = NOTE_PREVIEW_CACHE_PREFIX + persistKey;
+    // Merge over the existing snapshot: a refresh scoped to one folder must
+    // not drop persisted previews of the rest of the vault.
+    let merged: Record<string, CachedPreview> = {};
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) {
+        merged = JSON.parse(raw) as Record<string, CachedPreview>;
+      }
+    } catch {
+      merged = {};
+    }
+    for (const path of Object.keys(merged)) {
+      if (!livePaths.has(path)) {
+        delete merged[path];
+      }
+    }
+    for (const [path, value] of cache) {
+      if (livePaths.has(path)) {
+        merged[path] = value;
+      }
+    }
+    window.localStorage.setItem(storageKey, JSON.stringify(merged));
+  } catch {
+    // Quota exceeded or storage unavailable — the cache is best-effort.
+  }
+};
+
+export function useNotePreviews(
+  notes: NoteEntry[],
+  { resetKey, persistKey, allNotePaths }: UseNotePreviewsOptions
+) {
   const [notePreviews, setNotePreviews] = useState<Record<string, NotePreview>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
-  // Persist resolved previews across refreshes so re-reading the tree doesn't
-  // re-parse every note and unchanged rows keep their preview object identity.
+  // Previews accumulate here across refreshes and navigation so revisited
+  // folders render instantly and unchanged rows keep object identity.
   const cacheRef = useRef<Map<string, CachedPreview>>(new Map());
+  const persistKeyRef = useRef(persistKey);
+  persistKeyRef.current = persistKey;
+  const allNotePathsRef = useRef(allNotePaths);
+  allNotePathsRef.current = allNotePaths;
 
   useEffect(() => {
     const onInvalidated = () => {
@@ -22,9 +107,16 @@ export function useNotePreviews(notes: NoteEntry[]) {
     return () => window.removeEventListener("note-previews-invalidated", onInvalidated);
   }, []);
 
+  // Profile/root switches replace the cache wholesale with that profile's
+  // persisted snapshot, so the first paint after launch is instant and stale
+  // entries from another profile can never leak in.
+  useEffect(() => {
+    cacheRef.current = persistKey ? readPersistedPreviews(persistKey) : new Map();
+    setRefreshToken((value) => value + 1);
+  }, [persistKey, resetKey]);
+
   useEffect(() => {
     if (notes.length === 0) {
-      cacheRef.current.clear();
       setNotePreviews({});
       setIsLoading(false);
       return;
@@ -34,14 +126,7 @@ export function useNotePreviews(notes: NoteEntry[]) {
 
     const run = async () => {
       setIsLoading(true);
-      // Forget notes that no longer exist.
-      const livePaths = new Set(notes.map((note) => note.path));
-      for (const path of [...cache.keys()]) {
-        if (!livePaths.has(path)) {
-          cache.delete(path);
-        }
-      }
-      // Show whatever is already cached while the fresh batch loads.
+      // Paint whatever is already cached while the fresh batch loads.
       const cachedPreviews: Record<string, NotePreview> = {};
       notes.forEach((note) => {
         const cached = cache.get(note.path);
@@ -70,6 +155,10 @@ export function useNotePreviews(notes: NoteEntry[]) {
           next[entry.path] = preview;
         }
         setNotePreviews(next);
+        const currentPersistKey = persistKeyRef.current;
+        if (currentPersistKey) {
+          writePersistedPreviews(currentPersistKey, cache, new Set(allNotePathsRef.current));
+        }
       } catch (error) {
         console.error("[notes] failed to load note previews", error);
       } finally {

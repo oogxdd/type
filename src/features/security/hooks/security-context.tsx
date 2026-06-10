@@ -10,6 +10,7 @@ import {
 import * as api from "../api/security-api";
 import type { SecurityState, SecurityUnlockResult } from "@/shared/types";
 import { getErrorMessage } from "@/shared/lib/errors";
+import { clearPersistedNotePreviews } from "@/shared/lib/storage";
 
 type SecurityContextValue = {
   securityState: SecurityState | null;
@@ -63,6 +64,8 @@ export function SecurityProvider({ children }: { children: ReactNode }) {
       setSecurityBusy(true);
       try {
         const next = await api.enableSecurity(unlockPassword, panicPassword);
+        // Preview snapshots persisted before encryption hold plaintext titles.
+        clearPersistedNotePreviews();
         setSecurityState(next);
         setSecurityError(null);
       } catch (error) {
