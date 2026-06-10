@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   ArchiveIcon,
@@ -19,8 +19,14 @@ import { useSelection } from "@/app/state/selection-store";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { useAppearance } from "@/app/state/appearance-store";
 import { FEED_FOLDER_PATH, isSystemFolder } from "@/shared/constants";
-import { getNoteParentPath } from "@/shared/lib/notes";
+import { collectFolderPaths, getNoteParentPath } from "@/shared/lib/notes";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
+import {
+  buildFolderSuggestions,
+  folderExists,
+  parseMoveCommand,
+  type FolderSuggestion,
+} from "../lib/folder-search";
 
 type CommandPaletteProps = {
   onOpenSettings: (section: SettingsSectionId) => void;
@@ -35,12 +41,25 @@ type PaletteCommand = {
   label: string;
   icon: ComponentType<{ className?: string }>;
   keywords?: string[];
+  /** When true, running the command leaves the palette open (e.g. entering move mode). */
+  keepOpen?: boolean;
   run: () => void;
 };
 
 type PaletteGroup = {
   heading: string;
   items: PaletteCommand[];
+};
+
+/** A single row rendered while the `mv` terminal command is active. */
+export type MoveRow =
+  | { kind: "folder"; path: string; label: string; sublabel: string }
+  | { kind: "create"; path: string; label: string };
+
+export type MoveMode = {
+  query: string;
+  noteCount: number;
+  rows: MoveRow[];
 };
 
 type UseCommandPaletteCommandsArgs = CommandPaletteProps;
@@ -55,9 +74,7 @@ export function useCommandPaletteCommands({
   onImportHandwriting,
 }: UseCommandPaletteCommandsArgs) {
   const [open, setOpen] = useState(false);
-  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
-  const [destinationPath, setDestinationPath] = useState("");
-  const [moveTargets, setMoveTargets] = useState<string[]>([]);
+  const [inputValue, setInputValue] = useState("");
 
   const { selectedNotes, selectedFolders, activeNote, activeFolder } = useSelection(
     useShallow((state) => ({
@@ -68,6 +85,7 @@ export function useCommandPaletteCommands({
     }))
   );
   const {
+    tree,
     createNewNote,
     deleteNotes,
     deleteFolders,
@@ -96,12 +114,15 @@ export function useCommandPaletteCommands({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const noteTargets =
-    selectedNotes.size > 0
-      ? Array.from(selectedNotes)
-      : activeNote
-        ? [activeNote]
-        : [];
+  const noteTargets = useMemo(
+    () =>
+      selectedNotes.size > 0
+        ? Array.from(selectedNotes)
+        : activeNote
+          ? [activeNote]
+          : [],
+    [selectedNotes, activeNote]
+  );
   const folderTargets = Array.from(selectedFolders);
   const removableFolders = folderTargets.filter((path) => !isSystemFolder(path));
   const notesOutsideFeed = noteTargets.filter(
@@ -113,21 +134,85 @@ export function useCommandPaletteCommands({
   const allReviewed =
     noteTargets.length > 0 && noteTargets.every((path) => allNotePreviews[path]?.isReviewed);
 
+  const allFolderPaths = useMemo(() => collectFolderPaths(tree), [tree]);
+
+  // --- Terminal `mv` command -------------------------------------------------
+  const parsedMove = parseMoveCommand(inputValue);
+
+  const enterMoveMode = () => setInputValue("mv ");
+
+  const runMove = (destinationPath: string) => {
+    if (noteTargets.length === 0 || !destinationPath.trim()) {
+      return;
+    }
+    void moveNotesToFolder(noteTargets, destinationPath);
+    setOpen(false);
+    setInputValue("");
+  };
+
+  /** Tab-completion: drill into a folder by appending it (with a trailing "/"). */
+  const completePath = (path: string) => setInputValue(`mv ${path}/`);
+
+  const moveMode = useMemo<MoveMode | null>(() => {
+    if (!parsedMove) {
+      return null;
+    }
+    const { query } = parsedMove;
+    const stripped = query.replace(/^\/+/, "");
+    const core = stripped.replace(/\/+$/, "");
+    const endsWithSlash = stripped.endsWith("/");
+
+    const rows: MoveRow[] = [];
+
+    // "Move into this folder" when we've drilled into an existing directory.
+    if (endsWithSlash && core && folderExists(allFolderPaths, core)) {
+      rows.push({
+        kind: "folder",
+        path: core,
+        label: `Move into "${folderName(core)}"`,
+        sublabel: core,
+      });
+    }
+
+    // "Create & move" when the typed path is not an existing folder.
+    if (core && !folderExists(allFolderPaths, core)) {
+      rows.push({
+        kind: "create",
+        path: core,
+        label: `Create & move to "${core}"`,
+      });
+    }
+
+    const suggestions: FolderSuggestion[] = buildFolderSuggestions(allFolderPaths, query);
+    for (const suggestion of suggestions) {
+      // Avoid duplicating the "move into" context row.
+      if (suggestion.path === core && endsWithSlash) {
+        continue;
+      }
+      rows.push({
+        kind: "folder",
+        path: suggestion.path,
+        label: suggestion.name,
+        sublabel: suggestion.path,
+      });
+    }
+
+    return { query, noteCount: noteTargets.length, rows };
+  }, [parsedMove, allFolderPaths, noteTargets.length]);
+
+  // --- Normal command list ---------------------------------------------------
   const selectionCommands: PaletteCommand[] = [];
   if (noteTargets.length > 0) {
     selectionCommands.push({
       id: "move-notes-folder",
       label:
         noteTargets.length > 1
-          ? `Move ${noteTargets.length} notes to folder...`
-          : "Move note to folder...",
+          ? `Move ${noteTargets.length} notes to folder…`
+          : "Move note to folder…",
       icon: FolderInputIcon,
-      keywords: ["move", "folder", "destination"],
-      run: () => {
-        setMoveTargets(noteTargets);
-        setDestinationPath("");
-        setMoveDialogOpen(true);
-      },
+      keywords: ["move", "mv", "folder", "destination"],
+      keepOpen: true,
+      run: enterMoveMode,
     });
     selectionCommands.push({
       id: "toggle-archive",
@@ -275,32 +360,28 @@ export function useCommandPaletteCommands({
   ].filter((group) => group.items.length > 0);
 
   const runCommand = (command: PaletteCommand) => {
-    setOpen(false);
+    if (!command.keepOpen) {
+      setOpen(false);
+      setInputValue("");
+    }
     command.run();
   };
 
-  const submitMoveToFolder = async () => {
-    const nextDestination = destinationPath.trim();
-    if (!nextDestination) {
-      return;
-    }
-    await moveNotesToFolder(moveTargets, nextDestination);
-    setMoveDialogOpen(false);
-    setDestinationPath("");
-    setMoveTargets([]);
+  const closePalette = () => {
+    setOpen(false);
+    setInputValue("");
   };
 
   return {
     open,
     setOpen,
+    inputValue,
+    setInputValue,
+    closePalette,
     groups,
     runCommand,
-    moveDialogOpen,
-    setMoveDialogOpen,
-    destinationPath,
-    setDestinationPath,
-    submitMoveToFolder,
-    moveTargets,
-    setMoveTargets,
+    moveMode,
+    runMove,
+    completePath,
   };
 }

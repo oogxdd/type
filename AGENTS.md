@@ -305,9 +305,14 @@ Each feature's context provider lives in `hooks/` alongside its hooks.
   controls whether multi-lens, security, and other extension-only UI is surfaced.
 - **command-palette** — `components/command-palette` (renderer) +
   `hooks/use-command-palette-commands` (⌘K / Ctrl+K listener, command construction,
-  move-to-folder dialog state). It reads live Selection + NotesTree + Theme from context,
-  builds context-aware commands (selected notes/folders) plus always-on create/navigate/theme
-  commands, and receives cross-shell navigation callbacks from app-shell.
+  terminal `mv` move-mode state) + `lib/folder-search` (pure `mv` path parsing + folder
+  autocomplete). It reads live Selection + NotesTree + Theme from context, builds
+  context-aware commands (selected notes/folders) plus always-on create/navigate/theme
+  commands, and receives cross-shell navigation callbacks from app-shell. Typing `mv `
+  (or running "Move note to folder…") switches the input into a shell-style folder picker:
+  `mv pe` fuzzy-matches every folder by name, `mv personal/` drills into children, Tab
+  completes the highlighted folder, Enter moves the active/selected notes (creating missing
+  folders).
 
 ### Cross-context bridges (all in `src/app/app.tsx`)
 
