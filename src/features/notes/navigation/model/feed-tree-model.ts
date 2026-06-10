@@ -42,7 +42,15 @@ type FeedNodeBuilder = {
   notes: Array<NoteEntry & { timestampMs: number }>;
   latestMs: number;
   rank: number;
+  calendarEnsured?: boolean;
 };
+
+// Intl is the hot path of this module: building the feed for thousands of
+// notes used to spend seconds inside toLocaleDateString/localeCompare. Labels
+// are deterministic per weekday/month/week, so they are cached, and one shared
+// Collator replaces per-call localeCompare in the sorts.
+const nameCollator = new Intl.Collator();
+const compareNames = (left: string, right: string) => nameCollator.compare(left, right);
 
 const DAY_MS = 86_400_000;
 
@@ -196,7 +204,14 @@ const getWeekRange = (date: Date, now: Date): FeedDateRange => {
   };
 };
 
+const weekRangeLabelCache = new Map<string, string>();
+
 const getWeekRangeLabel = (date: Date, week = getWeekOfMonth(date)) => {
+  const cacheKey = `${date.getFullYear()}:${date.getMonth()}:${week}`;
+  const cached = weekRangeLabelCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
   const { start, end } = getWeekDateBounds(date, week);
   const formatDate = (value: Date) =>
     value.toLocaleDateString([], {
@@ -204,7 +219,9 @@ const getWeekRangeLabel = (date: Date, week = getWeekOfMonth(date)) => {
       day: "numeric",
     });
   const prefix = week === 0 ? "Month start" : `Week ${week}`;
-  return `${prefix} (${formatDate(start)} - ${formatDate(end)})`;
+  const label = `${prefix} (${formatDate(start)} - ${formatDate(end)})`;
+  weekRangeLabelCache.set(cacheKey, label);
+  return label;
 };
 
 const getQuarter = (date: Date) => Math.floor(date.getMonth() / 3) + 1;
@@ -237,17 +254,37 @@ const getYearSortRank = (year: number) => 10_000 - year;
 const titleCase = (value: string) =>
   value.length > 0 ? value[0].toUpperCase() + value.slice(1) : value;
 
-const getMonthLabel = (date: Date) =>
-  date.toLocaleDateString([], {
+const monthLabelCache = new Map<number, string>();
+
+const getMonthLabel = (date: Date) => {
+  const cacheKey = date.getMonth();
+  const cached = monthLabelCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const label = date.toLocaleDateString([], {
     month: "long",
   });
+  monthLabelCache.set(cacheKey, label);
+  return label;
+};
 
-const getWeekdayLabel = (date: Date) =>
-  titleCase(
+const weekdayLabelCache = new Map<number, string>();
+
+const getWeekdayLabel = (date: Date) => {
+  const cacheKey = date.getDay();
+  const cached = weekdayLabelCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const label = titleCase(
     date.toLocaleDateString([], {
       weekday: "long",
     })
   );
+  weekdayLabelCache.set(cacheKey, label);
+  return label;
+};
 
 const getSpecialLabel = (kind: "today" | "yesterday" | "last-week" | "undated") => {
   if (kind === "today") return "Today";
@@ -314,6 +351,12 @@ const ensureMonthCalendar = (
   date: Date,
   now: Date
 ) => {
+  // The calendar skeleton depends only on (year, month, now) — build it once
+  // per month builder instead of once per note.
+  if (month.calendarEnsured) {
+    return;
+  }
+  month.calendarEnsured = true;
   const monthEndDay = new Date(
     date.getFullYear(),
     date.getMonth() + 1,
@@ -388,7 +431,7 @@ const finalizeBuilder = (builder: FeedNodeBuilder): FeedTreeNode => {
       if (left.latestMs !== right.latestMs) {
         return right.latestMs - left.latestMs;
       }
-      return left.name.localeCompare(right.name);
+      return compareNames(left.name, right.name);
     });
   const noteCount = builder.notes.length + children.reduce((total, child) => total + child.noteCount, 0);
   return {
@@ -403,7 +446,7 @@ const finalizeBuilder = (builder: FeedNodeBuilder): FeedTreeNode => {
       if (left.timestampMs !== right.timestampMs) {
         return right.timestampMs - left.timestampMs;
       }
-      return left.name.localeCompare(right.name);
+      return compareNames(left.name, right.name);
     }),
     noteCount,
     latestMs: builder.latestMs,
@@ -600,7 +643,7 @@ export function buildFeedTree(
       if (left.latestMs !== right.latestMs) {
         return right.latestMs - left.latestMs;
       }
-      return left.name.localeCompare(right.name);
+      return compareNames(left.name, right.name);
     });
 
   const nodeById = new Map<string, FeedTreeNode>();
@@ -660,7 +703,7 @@ export function collectFeedNotes(
       if (left.timestampMs !== right.timestampMs) {
         return right.timestampMs - left.timestampMs;
       }
-      return left.name.localeCompare(right.name);
+      return compareNames(left.name, right.name);
     });
   node.children.forEach((child) => {
     notes.push(...collectFeedNotes(child));
@@ -669,7 +712,7 @@ export function collectFeedNotes(
     if (left.timestampMs !== right.timestampMs) {
       return right.timestampMs - left.timestampMs;
     }
-    return left.name.localeCompare(right.name);
+    return compareNames(left.name, right.name);
   });
 }
 
