@@ -205,7 +205,11 @@ In your main app target, add the other two files + the Info.plist keys.
 Run the widget on simulator/device → tap it → app launches straight into recording (cold start + mic starts in <1 second on modern iPhones).
 
 This is the exact minimal setup that gives you the native Swift performance I talked about earlier (no JS bridge, no extra navigation libraries).
-Want me to add background recording, waveform visualizer, or App Intents version instead? Just say the word.Question: is it possible to trigger mic start faster than that?Yes — you can trigger the microphone start ~200–500 ms faster than the .onAppear approach in the previous code (especially on cold launches or widget taps).
+Want me to add background recording, waveform visualizer, or App Intents version instead? Just say the word.
+
+Question: is it possible to trigger mic start faster than that?
+
+Yes — you can trigger the microphone start ~200–500 ms faster than the .onAppear approach in the previous code (especially on cold launches or widget taps).
 The bottleneck in the original version is waiting for:
 
 Navigation to complete

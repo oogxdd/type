@@ -6,14 +6,65 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		ED655DF72FEA526000C61166 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED655DF62FEA526000C61166 /* WidgetKit.framework */; };
+		ED655DF92FEA526000C61166 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = ED655DF82FEA526000C61166 /* SwiftUI.framework */; };
+		ED655E082FEA526100C61166 /* Type Record WidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ED655DF42FEA526000C61166 /* Type Record WidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		ED655E062FEA526100C61166 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = ED655DD82FEA51CD00C61166 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = ED655DF32FEA526000C61166;
+			remoteInfo = "Type Record WidgetExtension";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		ED655E0D2FEA526100C61166 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				ED655E082FEA526100C61166 /* Type Record WidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		ED655DE02FEA51CD00C61166 /* Type.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Type.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		ED655DF42FEA526000C61166 /* Type Record WidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Type Record WidgetExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		ED655DF62FEA526000C61166 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		ED655DF82FEA526000C61166 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		ED655E092FEA526100C61166 /* Exceptions for "Type Record Widget" folder in "Type Record WidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = ED655DF32FEA526000C61166 /* Type Record WidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		ED655DE22FEA51CD00C61166 /* Type */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Type;
+			sourceTree = "<group>";
+		};
+		ED655DFA2FEA526000C61166 /* Type Record Widget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				ED655E092FEA526100C61166 /* Exceptions for "Type Record Widget" folder in "Type Record WidgetExtension" target */,
+			);
+			path = "Type Record Widget";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -26,6 +77,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		ED655DF12FEA526000C61166 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ED655DF92FEA526000C61166 /* SwiftUI.framework in Frameworks */,
+				ED655DF72FEA526000C61166 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -33,6 +93,8 @@
 			isa = PBXGroup;
 			children = (
 				ED655DE22FEA51CD00C61166 /* Type */,
+				ED655DFA2FEA526000C61166 /* Type Record Widget */,
+				ED655DF52FEA526000C61166 /* Frameworks */,
 				ED655DE12FEA51CD00C61166 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,8 +103,18 @@
 			isa = PBXGroup;
 			children = (
 				ED655DE02FEA51CD00C61166 /* Type.app */,
+				ED655DF42FEA526000C61166 /* Type Record WidgetExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		ED655DF52FEA526000C61166 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				ED655DF62FEA526000C61166 /* WidgetKit.framework */,
+				ED655DF82FEA526000C61166 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -55,10 +127,12 @@
 				ED655DDC2FEA51CD00C61166 /* Sources */,
 				ED655DDD2FEA51CD00C61166 /* Frameworks */,
 				ED655DDE2FEA51CD00C61166 /* Resources */,
+				ED655E0D2FEA526100C61166 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				ED655E072FEA526100C61166 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				ED655DE22FEA51CD00C61166 /* Type */,
@@ -69,6 +143,28 @@
 			productName = Type;
 			productReference = ED655DE02FEA51CD00C61166 /* Type.app */;
 			productType = "com.apple.product-type.application";
+		};
+		ED655DF32FEA526000C61166 /* Type Record WidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ED655E0A2FEA526100C61166 /* Build configuration list for PBXNativeTarget "Type Record WidgetExtension" */;
+			buildPhases = (
+				ED655DF02FEA526000C61166 /* Sources */,
+				ED655DF12FEA526000C61166 /* Frameworks */,
+				ED655DF22FEA526000C61166 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				ED655DFA2FEA526000C61166 /* Type Record Widget */,
+			);
+			name = "Type Record WidgetExtension";
+			packageProductDependencies = (
+			);
+			productName = "Type Record WidgetExtension";
+			productReference = ED655DF42FEA526000C61166 /* Type Record WidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -81,6 +177,9 @@
 				LastUpgradeCheck = 2610;
 				TargetAttributes = {
 					ED655DDF2FEA51CD00C61166 = {
+						CreatedOnToolsVersion = 26.1.1;
+					};
+					ED655DF32FEA526000C61166 = {
 						CreatedOnToolsVersion = 26.1.1;
 					};
 				};
@@ -100,12 +199,20 @@
 			projectRoot = "";
 			targets = (
 				ED655DDF2FEA51CD00C61166 /* Type */,
+				ED655DF32FEA526000C61166 /* Type Record WidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		ED655DDE2FEA51CD00C61166 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ED655DF22FEA526000C61166 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +229,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		ED655DF02FEA526000C61166 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		ED655E072FEA526100C61166 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = ED655DF32FEA526000C61166 /* Type Record WidgetExtension */;
+			targetProxy = ED655E062FEA526100C61166 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		ED655DEB2FEA51CE00C61166 /* Debug */ = {
@@ -310,6 +432,66 @@
 			};
 			name = Release;
 		};
+		ED655E0B2FEA526100C61166 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y377P5XKGJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Type Record Widget/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Type Record Widget";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.digital.Type.Type-Record-Widget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		ED655E0C2FEA526100C61166 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Y377P5XKGJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Type Record Widget/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Type Record Widget";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.digital.Type.Type-Record-Widget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -327,6 +509,15 @@
 			buildConfigurations = (
 				ED655DEE2FEA51CE00C61166 /* Debug */,
 				ED655DEF2FEA51CE00C61166 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		ED655E0A2FEA526100C61166 /* Build configuration list for PBXNativeTarget "Type Record WidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ED655E0B2FEA526100C61166 /* Debug */,
+				ED655E0C2FEA526100C61166 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
