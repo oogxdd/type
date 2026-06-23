@@ -23,6 +23,9 @@ final class AppState {
     /// recording. Kept here so the signal isn't lost across view lifecycles.
     var pendingRecordIntent = false
 
+    /// Git sync orchestrator (Stage 2). Observable; the UI reads `app.git.phase`.
+    let git = GitSyncCoordinator()
+
     init() {
         config = WorkspaceStore.load()
         tree = FolderTree(name: "Notes", path: "", folders: [], notes: [])
@@ -181,6 +184,44 @@ final class AppState {
         else { return }
         config.workspaces[index].name = trimmed
         WorkspaceStore.save(config)
+    }
+
+    // MARK: Git sync
+
+    func gitToken() -> String {
+        GitCredentialStore.secret(workspaceId: activeWorkspace.id) ?? ""
+    }
+
+    func setGitToken(_ token: String) {
+        GitCredentialStore.saveSecret(token, workspaceId: activeWorkspace.id)
+    }
+
+    func syncNow() async {
+        let workspace = activeWorkspace
+        let root = WorkspaceStore.rootURL(for: workspace)
+        // Make sure the system folders exist before the first commit.
+        try? store.ensureSystemFolders()
+
+        let settings = workspace.settings
+        let credentials = GitCredentials(
+            username: settings.gitUsername,
+            secret: GitCredentialStore.secret(workspaceId: workspace.id) ?? ""
+        )
+        let signature = GitSignature(
+            name: settings.gitAuthorName.isEmpty
+                ? GitSignature.fallback.name : settings.gitAuthorName,
+            email: settings.gitAuthorEmail.isEmpty
+                ? GitSignature.fallback.email : settings.gitAuthorEmail
+        )
+
+        await git.sync(
+            root: root,
+            remoteURL: settings.gitRemoteURL,
+            branch: settings.gitBranch,
+            signature: signature,
+            credentials: credentials
+        )
+        refreshTree()
     }
 
     // MARK: Deep links

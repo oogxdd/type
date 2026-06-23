@@ -29,7 +29,11 @@ The brief is delivered in stages; each is its own commit.
       with debounced autosave + empty-note cleanup, and the **blank-page +
       swipe-up** compose flow. Includes the **workspace** (working-directory)
       abstraction designed to become multi-profile later.
-- [ ] **Stage 2 — Git sync** compatible with the Tauri repo.
+- [x] **Stage 2 — Git sync** compatible with the Tauri repo. Behind a `GitClient`
+      protocol with a libgit2 C-API implementation gated on `#if canImport(Clibgit2)`;
+      per-workspace remote/branch/credentials (token in Keychain); commit → fetch
+      → ff/merge (keep-ours + `.conflict.md`) → push. See **[SYNC.md](./SYNC.md)**
+      for the package to add + the verify-on-device checklist.
 - [ ] **Stage 3 — Voice recording** + home-screen widget + lock-screen widget /
       Live Activity.
 - [ ] **Stage 4 — Optional on-device transcription** (iPhone-native).

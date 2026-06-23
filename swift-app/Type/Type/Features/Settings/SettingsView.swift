@@ -42,8 +42,15 @@ struct SettingsView: View {
                     )
                 }
 
+                Section("Sync") {
+                    NavigationLink {
+                        SyncSettingsView()
+                    } label: {
+                        Label("Git sync", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+
                 Section {
-                    LabeledContent("Git sync", value: "Stage 2")
                     LabeledContent("Voice recording", value: "Stage 3")
                     LabeledContent("Transcription", value: "Stage 4")
                 } header: {
