@@ -34,8 +34,11 @@ The brief is delivered in stages; each is its own commit.
       per-workspace remote/branch/credentials (token in Keychain); commit → fetch
       → ff/merge (keep-ours + `.conflict.md`) → push. See **[SYNC.md](./SYNC.md)**
       for the package to add + the verify-on-device checklist.
-- [ ] **Stage 3 — Voice recording** + home-screen widget + lock-screen widget /
-      Live Activity.
+- [x] **Stage 3 — Voice recording** + home-screen widget + lock-screen widget /
+      Live Activity. Capture runs in the app process (it owns the audio session +
+      background-audio mode); widget surfaces drive it across an App-Group +
+      Darwin-notification bridge. Records to the desktop's exact `audio_recording`
+      note shape. See **[RECORDING.md](./RECORDING.md)**.
 - [ ] **Stage 4 — Optional on-device transcription** (iPhone-native).
 - [ ] **Stage 5 — Design docs** (no code): iCloud-instead-of-git, and
       encryption / lock screen / PIN / panic-mode.
@@ -166,10 +169,15 @@ Type/Type/
     WorkspaceStore.swift   workspaces config + root URL resolution
   Features/
     Write/WriteView.swift          blank page + swipe-up
+    Record/RecordingView.swift     in-app recorder UI (Stage 3)
     Browse/BrowseView.swift        feed + folders
     Browse/FolderDetailView.swift  one folder
     Editor/NoteEditorView.swift    plain-text editor + autosave
     Settings/SettingsView.swift    workspace settings
+  Recording/                       (Stage 3 — see RECORDING.md)
+    AudioRecorder.swift            in-app capture engine + bridge observer
+    Shared/RecordingShared.swift           App-Group/Darwin bridge (dup'd to widget)
+    Shared/RecordingActivityAttributes.swift Live Activity contract (dup'd to widget)
   Support/
     Constants.swift        folder names, app group, url scheme, statuses
     Debouncer.swift        400 ms autosave debounce

@@ -14,13 +14,17 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selection: Tab = .write
 
-    enum Tab: Hashable { case write, browse, settings }
+    enum Tab: Hashable { case write, record, browse, settings }
 
     var body: some View {
         TabView(selection: $selection) {
             WriteView()
                 .tabItem { Label("Write", systemImage: "square.and.pencil") }
                 .tag(Tab.write)
+
+            RecordingView()
+                .tabItem { Label("Record", systemImage: "mic") }
+                .tag(Tab.record)
 
             BrowseView()
                 .tabItem { Label("Browse", systemImage: "folder") }
@@ -36,6 +40,11 @@ struct RootView: View {
             if phase != .active {
                 app.commitDraft()
             }
+        }
+        .onChange(of: app.pendingRecordIntent) { _, pending in
+            // A `type://record` deep link (home-screen widget) routes us to the
+            // Record tab; RecordingView consumes the flag and auto-starts.
+            if pending { selection = .record }
         }
         .overlay(alignment: .top) {
             if let error = app.loadError {

@@ -332,4 +332,64 @@ struct NotesStore {
         order.noteOrder.removeAll { names.contains($0) }
         try writeOrder(order, at: dir)
     }
+
+    // MARK: Recordings (Stage 3)
+
+    /// Allocate a unique audio file inside `Recordings/` (port of
+    /// `recording_audio_file_path`). Returns the absolute URL and the root-relative
+    /// path to store in front-matter.
+    nonisolated func allocateAudioFile(extension ext: String) throws -> (url: URL, relativePath: String) {
+        let storage = root.appendingPathComponent(NotesLayout.recordingsFolder)
+        try FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
+        for _ in 0...512 {
+            let name = "audio-\(UUIDv7.generate()).\(ext)"
+            let url = storage.appendingPathComponent(name)
+            if !FileManager.default.fileExists(atPath: url.path) {
+                return (url, "\(NotesLayout.recordingsFolder)/\(name)")
+            }
+        }
+        throw NotesStoreError.invalidName("audio file")
+    }
+
+    /// Create a recording note referencing an already-written audio file, in the
+    /// exact shape the desktop writes (port of `RecordingsGateway::save`):
+    /// `type: audio_recording`, `recording_audio_path`, `transcription_status:
+    /// pending`, empty body. Returns the note's relative path.
+    @discardableResult
+    nonisolated func createRecordingNote(
+        folderRelative: String,
+        audioRelativePath: String,
+        timestampMs: Int64? = nil,
+        format: NoteFileNameFormat
+    ) throws -> String {
+        let folderRel = folderRelative.isEmpty ? NotesLayout.feedFolder : folderRelative
+        let folderURL = url(forRelative: folderRel)
+        try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+
+        let now = timestampMs ?? Int64(Date().timeIntervalSince1970 * 1000)
+        let noteId = UUIDv7.generate(now: now)
+        let fallback = "recording-\(NoteNaming.uuidTailWithoutTimestampPrefix(noteId))"
+        let fileName = NoteNaming.allocateFileName(
+            format: format, timestampMs: now, noteId: noteId,
+            content: "", fallbackSlug: fallback
+        ) { candidate in
+            FileManager.default.fileExists(atPath: folderURL.appendingPathComponent(candidate).path)
+        }
+
+        var fm = NoteFrontMatter()
+        fm.id = noteId
+        fm.createdMs = now
+        fm.updatedMs = now
+        fm.type = kRecordingNoteType
+        fm.recordingAudioPath = audioRelativePath
+        fm.transcriptionStatus = TranscriptionStatus.pending
+        fm.transcriptionUpdatedMs = now
+
+        let rel = "\(folderRel)/\(fileName)"
+        try writeDocument(NoteDocument(frontMatter: fm, body: ""), relativePath: rel)
+        if folderRel != NotesLayout.feedFolder {
+            try appendOrder(names: [fileName], isFolder: false, at: folderURL)
+        }
+        return rel
+    }
 }

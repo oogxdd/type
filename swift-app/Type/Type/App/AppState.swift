@@ -30,6 +30,7 @@ final class AppState {
         config = WorkspaceStore.load()
         tree = FolderTree(name: "Notes", path: "", folders: [], notes: [])
         bootstrap()
+        configureRecorder()
     }
 
     // MARK: Workspace / store
@@ -175,6 +176,7 @@ final class AppState {
         else { return }
         mutate(&config.workspaces[index].settings)
         WorkspaceStore.save(config)
+        configureRecorder()
     }
 
     func renameActiveWorkspace(_ name: String) {
@@ -184,6 +186,7 @@ final class AppState {
         else { return }
         config.workspaces[index].name = trimmed
         WorkspaceStore.save(config)
+        configureRecorder()
     }
 
     // MARK: Git sync
@@ -224,10 +227,28 @@ final class AppState {
         refreshTree()
     }
 
+    // MARK: Recording (Stage 3)
+
+    /// Point the shared recorder at the active workspace and wire its completion
+    /// back into the tree. Recording runs in the app process (see `AudioRecorder`);
+    /// this also installs the cross-process command observer on first call.
+    func configureRecorder() {
+        let workspace = activeWorkspace
+        AudioRecorder.shared.configure(
+            root: WorkspaceStore.rootURL(for: workspace),
+            format: workspace.settings.noteFileNameFormat,
+            folder: NotesLayout.feedFolder,
+            workspaceName: workspace.name
+        )
+        AudioRecorder.shared.onSaved = { [weak self] _ in
+            self?.refreshTree()
+        }
+    }
+
     // MARK: Deep links
 
     func handleDeepLink(_ url: URL) {
-        // `type://record` → start recording (wired up in Stage 3).
+        // `type://record` (home-screen widget) → switch to Record + auto-start.
         if url.host == "record" || url.path.contains("record") {
             pendingRecordIntent = true
         }
