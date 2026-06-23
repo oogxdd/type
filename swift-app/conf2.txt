@@ -1,0 +1,221 @@
+Вот рабочий минимальный код под iOS 16 (iPhone X).
+Это Lock Screen Widget + App Intent (AudioRecordingIntent), который запускает AVAudioRecorder максимально быстро + Live Activity с таймером и кнопкой Stop.
+Сначала настрой проект (обязательно!):
+
+В главном приложении:
+Capabilities → Background Modes → включи Audio, AirPlay, and Picture in Picture
+Info.plist → добавь ключ Privacy - Microphone Usage Description со значением "Приложение использует микрофон для записи голоса"
+
+Добавь Widget Extension target:
+File → New → Target → Widget Extension
+Назови VoiceRecordWidget
+Поставь галочку Include Live Activity
+
+Файл StartRecordingIntent.swift создай в главном приложении и добавь его в Widget Extension target (чтобы оба таргета видели intent).
+
+1. StartRecordingIntent.swift (главный + widget target)
+Swiftimport AppIntents
+import AVFAudio
+import ActivityKit
+
+struct StartRecordingIntent: AppIntent, AudioRecordingIntent {  // ← важно для записи
+    static var title: LocalizedStringResource = "Начать запись"
+    static var description: LocalizedStringResource = "Запускает голосовую запись"
+    
+    // Чтобы intent запускался в процессе приложения (нужно для микрофона)
+    static var openAppWhenRun: Bool { true }
+    
+    func perform() async throws -> some IntentResult {
+        // Запускаем запись
+        await AudioRecorder.shared.startRecording()
+        
+        // Запускаем Live Activity (таймер + Stop)
+        await startLiveActivity()
+        
+        return .result()
+    }
+    
+    private func startLiveActivity() async {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        
+        do {
+            let attributes = RecordingAttributes()
+            let initialState = RecordingAttributes.ContentState(isRecording: true, elapsedTime: 0)
+            
+            let activity = try Activity.request(
+                attributes: attributes,
+                content: .init(state: initialState, staleDate: nil)
+            )
+            AudioRecorder.shared.currentLiveActivity = activity
+        } catch {
+            print("Live Activity error: \(error)")
+        }
+    }
+}
+2. AudioRecorder.swift (singleton в главном приложении)
+Swiftimport AVFAudio
+
+@MainActor
+class AudioRecorder: ObservableObject {
+    static let shared = AudioRecorder()
+    
+    private var recorder: AVAudioRecorder?
+    private var timer: Timer?
+    var currentLiveActivity: Activity<RecordingAttributes>?
+    
+    private init() {}
+    
+    func startRecording() async {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetooth, .defaultToSpeaker])
+            try session.setActive(true)
+            
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("recording.m4a")
+            let settings: [String: Any] = [
+                AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+                AVSampleRateKey: 44100,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+            ]
+            
+            recorder = try AVAudioRecorder(url: url, settings: settings)
+            recorder?.record()
+            
+            // Таймер для обновления Live Activity
+            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+                Task { await self.updateLiveActivity() }
+            }
+            
+            print("✅ Запись начата")
+        } catch {
+            print("❌ Ошибка записи: \(error)")
+        }
+    }
+    
+    func stopRecording() {
+        recorder?.stop()
+        timer?.invalidate()
+        timer = nil
+        currentLiveActivity?.end(dismissalPolicy: .immediate)
+        print("⏹️ Запись остановлена")
+    }
+    
+    private func updateLiveActivity() async {
+        guard let activity = currentLiveActivity else { return }
+        let newState = RecordingAttributes.ContentState(isRecording: true, elapsedTime: (timer?.fireDate.timeIntervalSinceNow ?? 0) * -1)
+        await activity.update(using: newState)
+    }
+}
+3. Live Activity (в Widget Extension)
+Swiftimport ActivityKit
+import WidgetKit
+import SwiftUI
+
+// Attributes для Live Activity
+struct RecordingAttributes: ActivityAttributes {
+    public struct ContentState: Codable, Hashable {
+        var isRecording: Bool
+        var elapsedTime: TimeInterval
+    }
+    var recordingName: String = "Новая запись"
+}
+
+// Live Activity View (в Widget Extension)
+struct RecordingLiveActivity: Widget {
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: RecordingAttributes.self) { context in
+            // Lock Screen view
+            VStack {
+                Text("🔴 Запись")
+                    .font(.headline)
+                Text(formatTime(context.state.elapsedTime))
+                    .font(.largeTitle)
+                    .monospacedDigit()
+                
+                Button(intent: StopRecordingIntent()) {
+                    Label("Остановить", systemImage: "stop.circle.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+            }
+            .padding()
+        } dynamicIsland: { context in
+            // Dynamic Island (если есть)
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.center) {
+                    Text(formatTime(context.state.elapsedTime))
+                }
+            } compactLeading: { Image(systemName: "mic.fill").foregroundColor(.red) }
+              compactTrailing: { Text(formatTime(context.state.elapsedTime)) }
+        }
+    }
+    
+    private func formatTime(_ seconds: TimeInterval) -> String {
+        let m = Int(seconds) / 60
+        let s = Int(seconds) % 60
+        return String(format: "%02d:%02d", m, s)
+    }
+}
+4. StopRecordingIntent.swift (для кнопки Stop)
+Swiftimport AppIntents
+
+struct StopRecordingIntent: AppIntent {
+    static var title: LocalizedStringResource = "Остановить запись"
+    
+    func perform() async throws -> some IntentResult {
+        await AudioRecorder.shared.stopRecording()
+        return .result()
+    }
+}
+5. Widget (Lock Screen) — VoiceRecordWidget.swift
+Swiftimport WidgetKit
+import SwiftUI
+
+struct VoiceRecordWidgetEntryView: View {
+    var body: some View {
+        Button(intent: StartRecordingIntent()) {
+            VStack {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 48))
+                    .foregroundColor(.red)
+                Text("Запись")
+                    .font(.headline)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+@main
+struct VoiceRecordWidget: Widget {
+    let kind: String = "VoiceRecordWidget"
+    
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: Provider()) { _ in
+            VoiceRecordWidgetEntryView()
+        }
+        .configurationDisplayName("Быстрая запись")
+        .description("Нажми для мгновенной записи")
+        .supportedFamilies([.accessoryCircular, .accessoryRectangular])  // lock screen
+    }
+}
+
+struct Provider: TimelineProvider {
+    func placeholder(in context: Context) -> SimpleEntry { SimpleEntry() }
+    func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> Void) { completion(SimpleEntry()) }
+    func getTimeline(in context: Context, completion: @escaping (Timeline<SimpleEntry>) -> Void) {
+        completion(Timeline(entries: [SimpleEntry()], policy: .atEnd))
+    }
+}
+
+struct SimpleEntry: TimelineEntry {
+    let date: Date = Date()
+}
+Как добавить виджет:
+
+Пересобери приложение.
+На iPhone X (iOS 16) → long-press по lock screen → Customize → добавь widget твоего приложения (выбери "Быстрая запись").
+
+Тап по виджету → запись стартует (Face ID может попросить один раз).
+Live Activity сразу появится с таймером и кнопкой Stop.
