@@ -30,6 +30,20 @@ enum NotesStoreError: LocalizedError {
     }
 }
 
+/// A recording note discovered by scanning the tree (port of the Rust
+/// `RecordingNoteInfo` produced by `recording_info_from_note_meta`).
+struct RecordingNoteInfo: Identifiable, Equatable {
+    /// Root-relative path of the `.md` note.
+    let notePath: String
+    /// Root-relative path of the referenced audio file.
+    let audioPath: String
+    let status: String
+    let error: String?
+    let updatedMs: Int64?
+
+    var id: String { notePath }
+}
+
 struct NotesStore {
     let root: URL
 
@@ -391,5 +405,101 @@ struct NotesStore {
             try appendOrder(names: [fileName], isFolder: false, at: folderURL)
         }
         return rel
+    }
+
+    // MARK: Transcription (Stage 4)
+
+    /// Recursively collect every markdown note file under `dir`, mirroring the
+    /// Rust `collect_markdown_note_files`: skips the order file, dot-folders, and
+    /// (at the root level only) the hidden storage folders.
+    nonisolated private func collectMarkdownNoteFiles(
+        in dir: URL, isRoot: Bool, into files: inout [URL]
+    ) {
+        let entries = (try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: [.isDirectoryKey], options: [])) ?? []
+        for entry in entries {
+            let name = entry.lastPathComponent
+            if name == NotesLayout.orderFileName { continue }
+            let isDir = (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            if isDir {
+                if name.hasPrefix(".") { continue }
+                if isRoot && NotesLayout.hiddenRootFolders.contains(name) { continue }
+                collectMarkdownNoteFiles(in: entry, isRoot: false, into: &files)
+            } else if entry.pathExtension == "md" {
+                files.append(entry)
+            }
+        }
+    }
+
+    /// Scan the whole workspace and return its recording notes (port of
+    /// `collect_recording_notes` + `recording_info_from_note_meta`): notes whose
+    /// `type` is `audio_recording` and whose audio path resolves inside the
+    /// (hidden) `Recordings/` storage.
+    nonisolated func collectRecordingNotes() -> [RecordingNoteInfo] {
+        var files: [URL] = []
+        collectMarkdownNoteFiles(in: root, isRoot: true, into: &files)
+
+        var result: [RecordingNoteInfo] = []
+        for file in files {
+            guard let raw = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            let meta = NoteDocument.parse(raw).frontMatter
+            guard meta.type == kRecordingNoteType else { continue }
+            guard
+                let audioRel = meta.recordingAudioPath?.trimmingCharacters(in: .whitespaces),
+                !audioRel.isEmpty
+            else { continue }
+            // Audio must live in the Recordings storage (or the legacy folder),
+            // matching `is_recording_audio_path_allowed`.
+            let normalized = audioRel.replacingOccurrences(of: "\\", with: "/")
+            let allowed =
+                normalized.hasPrefix("\(NotesLayout.recordingsFolder)/")
+                || normalized.hasPrefix("\(NotesLayout.legacyRecordingsFolder)/")
+            guard allowed else { continue }
+            result.append(
+                RecordingNoteInfo(
+                    notePath: relative(of: file),
+                    audioPath: normalized,
+                    status: meta.transcriptionStatus ?? TranscriptionStatus.pending,
+                    error: meta.transcriptionError,
+                    updatedMs: meta.transcriptionUpdatedMs ?? meta.updatedMs
+                ))
+        }
+        return result
+    }
+
+    /// Update a recording note's transcription status + body on disk (port of
+    /// `update_recording_note_status`). All other front-matter (and passthrough
+    /// lines) is preserved. Passing `nil` for `error`/`transcriptId` clears those
+    /// fields, exactly like the Rust writer.
+    nonisolated func updateRecordingTranscription(
+        relativePath: String,
+        status: String,
+        error: String?,
+        transcriptId: String?,
+        transcript: String?
+    ) throws {
+        var doc =
+            (try? readDocument(relativePath: relativePath))
+            ?? NoteDocument(frontMatter: NoteFrontMatter(), body: "")
+        if doc.frontMatter.id == nil { doc.frontMatter.id = UUIDv7.generate() }
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        if doc.frontMatter.createdMs == nil { doc.frontMatter.createdMs = now }
+        doc.frontMatter.updatedMs = now
+        doc.frontMatter.type = kRecordingNoteType
+        doc.frontMatter.transcriptionStatus = status
+        doc.frontMatter.transcriptionError = error
+        doc.frontMatter.transcriptionUpdatedMs = now
+        doc.frontMatter.transcriptionId = transcriptId
+        doc.body = NotesStore.recordingNoteBody(status: status, transcript: transcript)
+        try writeDocument(doc, relativePath: relativePath)
+    }
+
+    /// Port of `recording_note_body`: empty unless `completed`; otherwise the
+    /// trimmed transcript with a trailing newline (an empty transcript ⇒ empty
+    /// body, so a content-less completion doesn't write stray whitespace).
+    nonisolated static func recordingNoteBody(status: String, transcript: String?) -> String {
+        guard status == TranscriptionStatus.completed else { return "" }
+        let value = (transcript ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? "" : value + "\n"
     }
 }

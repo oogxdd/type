@@ -39,7 +39,12 @@ The brief is delivered in stages; each is its own commit.
       background-audio mode); widget surfaces drive it across an App-Group +
       Darwin-notification bridge. Records to the desktop's exact `audio_recording`
       note shape. See **[RECORDING.md](./RECORDING.md)**.
-- [ ] **Stage 4 — Optional on-device transcription** (iPhone-native).
+- [x] **Stage 4 — Optional on-device transcription** (iPhone-native). Apple
+      `SFSpeechRecognizer` with `requiresOnDeviceRecognition` — no Whisper, no
+      AssemblyAI, no account, audio never leaves the phone. Off by default; when
+      on, a new recording's body is filled in and `transcription_status` flips
+      `pending → processing → completed/failed` using the desktop's exact status
+      model. See **[TRANSCRIPTION.md](./TRANSCRIPTION.md)**.
 - [ ] **Stage 5 — Design docs** (no code): iCloud-instead-of-git, and
       encryption / lock screen / PIN / panic-mode.
 
@@ -178,6 +183,8 @@ Type/Type/
     AudioRecorder.swift            in-app capture engine + bridge observer
     Shared/RecordingShared.swift           App-Group/Darwin bridge (dup'd to widget)
     Shared/RecordingActivityAttributes.swift Live Activity contract (dup'd to widget)
+  Transcription/                   (Stage 4 — see TRANSCRIPTION.md)
+    TranscriptionManager.swift     on-device SFSpeechRecognizer serial queue
   Support/
     Constants.swift        folder names, app group, url scheme, statuses
     Debouncer.swift        400 ms autosave debounce

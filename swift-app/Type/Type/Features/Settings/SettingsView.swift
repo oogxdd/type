@@ -13,6 +13,8 @@ struct SettingsView: View {
     @Environment(AppState.self) private var app
     @State private var workspaceName = ""
 
+    private var transcription: TranscriptionManager { TranscriptionManager.shared }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -51,18 +53,53 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    LabeledContent("Voice recording", value: "Stage 3")
-                    LabeledContent("Transcription", value: "Stage 4")
+                    Toggle("On-device transcription", isOn: transcriptionBinding)
+
+                    if app.activeWorkspace.settings.transcriptionEnabled {
+                        Button {
+                            app.transcribePendingRecordings()
+                        } label: {
+                            Label("Transcribe pending recordings", systemImage: "waveform")
+                        }
+                        .disabled(transcription.state == .running)
+
+                        if let status = transcriptionStatusText {
+                            LabeledContent("Status", value: status)
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                        }
+                    }
                 } header: {
-                    Text("Coming next")
+                    Text("Transcription")
                 } footer: {
                     Text(
-                        "Notes are stored as plain Markdown with the same front-matter and folder layout as the desktop app, so the same git repository works on both."
+                        "Transcribes voice notes on this iPhone with Apple's on-device speech recognition — no audio leaves the device, no account needed. Needs a language your iPhone supports offline (add it under Settings ▸ General ▸ Keyboard ▸ Dictation). Notes stay plain Markdown with the same layout as the desktop app, so the same git repository works on both."
                     )
                 }
             }
             .navigationTitle("Settings")
             .onAppear { workspaceName = app.activeWorkspace.name }
+        }
+    }
+
+    private var transcriptionBinding: Binding<Bool> {
+        Binding(
+            get: { app.activeWorkspace.settings.transcriptionEnabled },
+            set: { newValue in
+                app.updateActiveSettings { $0.transcriptionEnabled = newValue }
+            }
+        )
+    }
+
+    /// A one-line summary of the transcriber's live state, or nil when idle.
+    private var transcriptionStatusText: String? {
+        switch transcription.state {
+        case .running:
+            let queued = transcription.pendingCount
+            return queued > 0 ? "Transcribing… (\(queued) queued)" : "Transcribing…"
+        case .idle:
+            if let error = transcription.lastError { return "Last error: \(error)" }
+            return nil
         }
     }
 

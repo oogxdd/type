@@ -31,6 +31,7 @@ final class AppState {
         tree = FolderTree(name: "Notes", path: "", folders: [], notes: [])
         bootstrap()
         configureRecorder()
+        configureTranscription()
     }
 
     // MARK: Workspace / store
@@ -177,6 +178,7 @@ final class AppState {
         mutate(&config.workspaces[index].settings)
         WorkspaceStore.save(config)
         configureRecorder()
+        configureTranscription()
     }
 
     func renameActiveWorkspace(_ name: String) {
@@ -187,6 +189,7 @@ final class AppState {
         config.workspaces[index].name = trimmed
         WorkspaceStore.save(config)
         configureRecorder()
+        configureTranscription()
     }
 
     // MARK: Git sync
@@ -240,9 +243,35 @@ final class AppState {
             folder: NotesLayout.feedFolder,
             workspaceName: workspace.name
         )
-        AudioRecorder.shared.onSaved = { [weak self] _ in
+        AudioRecorder.shared.onSaved = { [weak self] path in
+            guard let self else { return }
+            self.refreshTree()
+            // Hand the fresh recording to on-device transcription (a no-op when
+            // the workspace has transcription disabled).
+            TranscriptionManager.shared.enqueue(notePath: path)
+        }
+    }
+
+    // MARK: Transcription (Stage 4)
+
+    /// Point the on-device transcriber at the active workspace and wire its
+    /// completion back into the tree (so a finished transcript shows up without a
+    /// manual reload). Off unless the workspace opts in.
+    func configureTranscription() {
+        let workspace = activeWorkspace
+        TranscriptionManager.shared.configure(
+            root: WorkspaceStore.rootURL(for: workspace),
+            enabled: workspace.settings.transcriptionEnabled
+        )
+        TranscriptionManager.shared.onUpdated = { [weak self] in
             self?.refreshTree()
         }
+    }
+
+    /// Scan the workspace for recordings still needing transcription and run them
+    /// (Settings action; also useful after a sync pulls in remote recordings).
+    func transcribePendingRecordings() {
+        TranscriptionManager.shared.enqueuePending()
     }
 
     // MARK: Deep links
