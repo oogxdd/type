@@ -1,7 +1,8 @@
 name: CI
 
 # Fast feedback on every PR and on pushes to the default branch: typecheck +
-# unit tests for both the React frontend and the Rust backend. Release/build
+# unit tests for every npm workspace (desktop app, shared packages, mobile app)
+# and the Rust cargo workspace (core crates + Tauri backend). Release/build
 # workflows live in release.yml and deploy-pages.yml.
 on:
   push:
@@ -9,31 +10,29 @@ on:
   pull_request:
 
 jobs:
-  frontend:
-    name: Frontend (typecheck + vitest)
+  typescript:
+    name: TypeScript (typecheck + tests, all workspaces)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - name: Install dependencies
         run: npm install
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: npm run typecheck --workspaces --if-present
       - name: Unit tests
-        run: npm test
+        run: npm test --workspaces --if-present
 
-  backend:
-    name: Backend (cargo test)
+  rust:
+    name: Rust (cargo test, workspace)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
       # Tauri's Linux build needs these system libraries to compile the lib
       # (and therefore its test harness).
       - name: Install Linux build dependencies
@@ -46,4 +45,4 @@ jobs:
             librsvg2-dev \
             patchelf
       - name: Rust unit tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+        run: cargo test --workspace --lib

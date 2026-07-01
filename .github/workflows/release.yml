@@ -91,13 +91,12 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
 
       - name: Install dependencies
         run: npm install
 
       - name: Set app version from tag
+        working-directory: apps/desktop
         run: bash scripts/set-app-version.sh "${{ needs.setup.outputs.version }}"
 
       - name: Build, sign & publish desktop release
@@ -121,6 +120,7 @@ jobs:
           releaseBody: "Automated desktop release. Download the .dmg below; existing installs update in-app via Settings → Updates."
           releaseDraft: false
           prerelease: false
+          projectPath: apps/desktop
           # Apple Silicon build. For Intel/universal, add --target universal-apple-darwin
           # and a matching darwin-x86_64 entry (tauri-action handles latest.json).
           args: --bundles app,dmg
@@ -155,13 +155,12 @@ jobs:
         with:
           targets: aarch64-apple-ios
       - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
 
       - name: Install dependencies
         run: npm install
 
       - name: Set app version from tag
+        working-directory: apps/desktop
         run: bash scripts/set-app-version.sh "${{ needs.setup.outputs.version }}"
 
       # Give every App Store upload a unique build number (CFBundleVersion).
@@ -191,17 +190,17 @@ jobs:
           echo "$ASC_KEY_BASE64" | base64 --decode > "private_keys/AuthKey_${ASC_KEY_ID}.p8"
 
       - name: Initialize iOS project
-        run: npm run tauri ios init
+        run: npm run --workspace type tauri ios init
 
       - name: Build iOS app (App Store export)
-        run: npm run ios:build
+        run: npm run --workspace type ios:build
 
       - name: Upload to App Store Connect
         env:
           ASC_KEY_ID: ${{ secrets.APPLE_ASC_API_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.APPLE_ASC_API_ISSUER_ID }}
         run: |
-          IPA=$(find src-tauri/gen/apple/build -name "*.ipa" | head -1)
+          IPA=$(find apps/desktop/src-tauri/gen/apple/build -name "*.ipa" | head -1)
           echo "Uploading $IPA"
           xcrun altool --upload-app --type ios --file "$IPA" \
             --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"

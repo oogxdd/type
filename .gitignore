@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Cargo workspace build output (root target/ shared by all crates)
+/target/
+
 # Local environment files (keep .env.example tracked as the template)
 .env
 

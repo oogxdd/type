@@ -1,0 +1,11 @@
+# Cargo workspace for the Type monorepo.
+#
+#   apps/desktop/src-tauri  — the Tauri shell (desktop + Tauri-iOS)
+#   crates/*                — shared framework-free core + FFI bindings
+#
+# The workspace keeps one Cargo.lock and one target/ at the repo root.
+[workspace]
+resolver = "2"
+members = [
+    "apps/desktop/src-tauri",
+]

@@ -57,6 +57,7 @@ jobs:
         run: npm install
 
       - name: Build web + OTA artifacts
+        working-directory: apps/desktop
         run: |
           npx tsc
           npx vite build --base "$BASE_PATH"
@@ -67,7 +68,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: apps/desktop/dist
 
   deploy:
     needs: build
