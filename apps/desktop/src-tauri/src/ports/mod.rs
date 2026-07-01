@@ -1,9 +1,3 @@
-pub mod git_sync;
-pub mod handwriting;
-pub mod import;
-pub mod local_sync;
-pub mod notes;
+// Shell-local ports. The cross-platform contracts live in type_core::ports;
+// only the platform gateway (native theme, iOS export sheet) is Tauri-specific.
 pub mod platform;
-pub mod profiles;
-pub mod recordings;
-pub mod security;

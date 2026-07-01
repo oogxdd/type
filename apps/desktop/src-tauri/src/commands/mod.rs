@@ -41,7 +41,7 @@ pub(super) fn run() {
     let app = builder
         .setup(|_app| {
             let app_handle = _app.handle();
-            crate::ensure_security_runtime_initialized_for_setup(&app_handle)?;
+            type_core::ensure_security_runtime_initialized_for_setup(&crate::app_env(app_handle)?)?;
             #[cfg(target_os = "macos")]
             if let Some(window) = _app.get_webview_window("main") {
                 let _ = crate::apply_macos_window_alpha(&window, crate::MACOS_WINDOW_ALPHA);
@@ -127,7 +127,7 @@ pub(super) fn run() {
         #[cfg(desktop)]
         {
             if matches!(event, tauri::RunEvent::Exit) {
-                crate::shutdown_local_sync_server();
+                type_core::shutdown_local_sync_server();
             }
             let _ = app_handle;
         }

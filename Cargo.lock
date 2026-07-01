@@ -5277,13 +5277,8 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 name = "type"
 version = "0.1.0"
 dependencies = [
- "argon2",
  "base64 0.22.1",
- "chacha20poly1305",
- "git2",
- "mdns-sd",
  "objc",
- "reqwest 0.12.28",
  "serde",
  "serde_json",
  "tauri",
@@ -5294,6 +5289,21 @@ dependencies = [
  "tauri-plugin-ota",
  "tauri-plugin-process",
  "tauri-plugin-updater",
+ "type-core",
+]
+
+[[package]]
+name = "type-core"
+version = "0.1.0"
+dependencies = [
+ "argon2",
+ "base64 0.22.1",
+ "chacha20poly1305",
+ "git2",
+ "mdns-sd",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
  "time",
  "uuid",
  "zeroize",

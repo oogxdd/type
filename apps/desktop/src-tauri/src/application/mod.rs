@@ -1,9 +1,3 @@
-pub(crate) mod git_sync;
-pub(crate) mod handwriting;
-pub(crate) mod import;
-pub(crate) mod local_sync;
-pub(crate) mod notes;
+// Shell-local application services. Cross-platform use cases live in
+// type_core::application; only platform (native theme/export) stays here.
 pub(crate) mod platform;
-pub(crate) mod profiles;
-pub(crate) mod recordings;
-pub(crate) mod security;

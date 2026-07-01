@@ -1,32 +1,32 @@
-use crate::{
+use type_core::{
     application::git_sync::GitSyncUseCases, ensure_security_unlocked_for_app, ConnectGitArgs,
     GitCommitHistoryEntry, GitHistoryArgs, GitPushArgs, GitSyncArgs, GitSyncStatus,
-    TauriGitSyncAdapter,
+    GitSyncAdapter,
 };
 
-fn git_sync_use_cases(app: tauri::AppHandle) -> GitSyncUseCases<TauriGitSyncAdapter> {
-    GitSyncUseCases::new(TauriGitSyncAdapter::new(app))
+fn git_sync_use_cases(app: tauri::AppHandle) -> Result<GitSyncUseCases<GitSyncAdapter>, String> {
+    Ok(GitSyncUseCases::new(GitSyncAdapter::new(crate::app_env(&app)?)))
 }
 
 #[tauri::command]
 pub(super) fn generate_ssh_key(app: tauri::AppHandle) -> Result<String, String> {
-    git_sync_use_cases(app).generate_ssh_key()
+    git_sync_use_cases(app)?.generate_ssh_key()
 }
 
 #[tauri::command]
 pub(super) fn get_ssh_public_key(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    git_sync_use_cases(app).ssh_public_key()
+    git_sync_use_cases(app)?.ssh_public_key()
 }
 
 #[tauri::command]
 pub(super) fn delete_ssh_key(app: tauri::AppHandle) -> Result<(), String> {
-    git_sync_use_cases(app).delete_ssh_key()
+    git_sync_use_cases(app)?.delete_ssh_key()
 }
 
 #[tauri::command]
 pub(super) async fn get_git_status(app: tauri::AppHandle) -> Result<GitSyncStatus, String> {
-    ensure_security_unlocked_for_app(&app)?;
-    super::run_blocking_command(move || git_sync_use_cases(app).status()).await
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
+    super::run_blocking_command(move || git_sync_use_cases(app)?.status()).await
 }
 
 #[tauri::command]
@@ -34,8 +34,8 @@ pub(super) async fn get_git_history(
     app: tauri::AppHandle,
     args: Option<GitHistoryArgs>,
 ) -> Result<Vec<GitCommitHistoryEntry>, String> {
-    ensure_security_unlocked_for_app(&app)?;
-    super::run_blocking_command(move || git_sync_use_cases(app).history(args)).await
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
+    super::run_blocking_command(move || git_sync_use_cases(app)?.history(args)).await
 }
 
 #[tauri::command]
@@ -43,8 +43,8 @@ pub(super) async fn connect_git_repo(
     app: tauri::AppHandle,
     args: ConnectGitArgs,
 ) -> Result<GitSyncStatus, String> {
-    ensure_security_unlocked_for_app(&app)?;
-    super::run_blocking_command(move || git_sync_use_cases(app).connect(args)).await
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
+    super::run_blocking_command(move || git_sync_use_cases(app)?.connect(args)).await
 }
 
 #[tauri::command]
@@ -52,8 +52,8 @@ pub(super) async fn git_pull(
     app: tauri::AppHandle,
     args: GitSyncArgs,
 ) -> Result<GitSyncStatus, String> {
-    ensure_security_unlocked_for_app(&app)?;
-    super::run_blocking_command(move || git_sync_use_cases(app).pull(args)).await
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
+    super::run_blocking_command(move || git_sync_use_cases(app)?.pull(args)).await
 }
 
 #[tauri::command]
@@ -61,6 +61,6 @@ pub(super) async fn git_push(
     app: tauri::AppHandle,
     args: GitPushArgs,
 ) -> Result<GitSyncStatus, String> {
-    ensure_security_unlocked_for_app(&app)?;
-    super::run_blocking_command(move || git_sync_use_cases(app).push(args)).await
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
+    super::run_blocking_command(move || git_sync_use_cases(app)?.push(args)).await
 }

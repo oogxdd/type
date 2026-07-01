@@ -14,7 +14,7 @@ use std::{
 };
 use tauri::Manager;
 
-use crate::{app_data_dir, now_ms};
+use type_core::{app_data_dir, now_ms, AppEnv};
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -496,7 +496,7 @@ pub(crate) fn ios_ensure_recorder_active(recorder: *mut Object) -> bool {
 }
 
 /// Allocate a unique file path for a native recording in app data.
-pub(crate) fn next_native_recording_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn next_native_recording_path(app: &AppEnv) -> Result<PathBuf, String> {
     let root = app_data_dir(app)?.join("native-recordings");
     fs::create_dir_all(&root).map_err(|error| error.to_string())?;
     let timestamp = now_ms().unwrap_or(0);

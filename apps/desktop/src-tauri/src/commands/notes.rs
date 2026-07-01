@@ -1,4 +1,4 @@
-use crate::{
+use type_core::{
     application::notes::NotesService, ensure_security_unlocked_for_app, notes_root, CreateNoteArgs,
     CreateNoteResult, FilesystemNotesRepository, FolderNode, FrontMatterNoteDocumentCodec,
     NoteMeta, NotePreviewEntry, RuntimeNoteBodyCrypto, SetNoteMarkersArgs, SetNoteTimestampArgs,
@@ -17,7 +17,7 @@ fn notes_service(
     >,
     String,
 > {
-    let root = notes_root(app)?;
+    let root = notes_root(&crate::app_env(app)?)?;
     Ok(NotesService::new(
         FilesystemNotesRepository::new(root),
         FrontMatterNoteDocumentCodec,
@@ -29,13 +29,13 @@ fn notes_service(
 
 #[tauri::command]
 pub(super) async fn get_tree(app: tauri::AppHandle) -> Result<FolderNode, String> {
-    ensure_security_unlocked_for_app(&app)?;
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     super::run_blocking_command(move || notes_service(&app)?.get_tree()).await
 }
 
 #[tauri::command]
 pub(super) fn read_note(app: tauri::AppHandle, path: String) -> Result<String, String> {
-    ensure_security_unlocked_for_app(&app)?;
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     notes_service(&app)?.read_note(&path)
 }
 
@@ -44,7 +44,7 @@ pub(super) fn create_note(
     app: tauri::AppHandle,
     args: CreateNoteArgs,
 ) -> Result<CreateNoteResult, String> {
-    ensure_security_unlocked_for_app(&app)?;
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     notes_service(&app)?.create_note(args)
 }
 
@@ -54,7 +54,7 @@ pub(super) fn write_note(
     path: String,
     content: String,
 ) -> Result<(), String> {
-    ensure_security_unlocked_for_app(&app)?;
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     notes_service(&app)?.write_note(&path, &content)
 }
 
@@ -63,7 +63,7 @@ pub(super) fn set_note_timestamp(
     app: tauri::AppHandle,
     args: SetNoteTimestampArgs,
 ) -> Result<(), String> {
-    ensure_security_unlocked_for_app(&app)?;
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     notes_service(&app)?.set_note_timestamp(args)
 }
 
@@ -72,13 +72,13 @@ pub(super) fn update_note_markers(
     app: tauri::AppHandle,
     args: SetNoteMarkersArgs,
 ) -> Result<(), String> {
-    ensure_security_unlocked_for_app(&app)?;
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     notes_service(&app)?.update_note_markers(&args.path, args.archived, args.reviewed)
 }
 
 #[tauri::command]
 pub(super) fn get_note_meta(app: tauri::AppHandle, path: String) -> Result<NoteMeta, String> {
-    ensure_security_unlocked_for_app(&app)?;
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     notes_service(&app)?.get_note_meta(&path)
 }
 
@@ -87,7 +87,7 @@ pub(super) async fn list_note_previews(
     app: tauri::AppHandle,
     paths: Vec<String>,
 ) -> Result<Vec<NotePreviewEntry>, String> {
-    ensure_security_unlocked_for_app(&app)?;
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     super::run_blocking_command(move || notes_service(&app)?.list_note_previews(paths)).await
 }
 
@@ -97,13 +97,13 @@ pub(super) fn move_items(
     items: Vec<String>,
     destination: String,
 ) -> Result<(), String> {
-    ensure_security_unlocked_for_app(&app)?;
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     notes_service(&app)?.move_items(items, destination)
 }
 
 #[tauri::command]
 pub(super) fn delete_items(app: tauri::AppHandle, items: Vec<String>) -> Result<(), String> {
-    ensure_security_unlocked_for_app(&app)?;
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     notes_service(&app)?.delete_items(items)
 }
 
@@ -113,12 +113,12 @@ pub(super) fn rename_item(
     path: String,
     new_name: String,
 ) -> Result<String, String> {
-    ensure_security_unlocked_for_app(&app)?;
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     notes_service(&app)?.rename_item(&path, &new_name)
 }
 
 #[tauri::command]
 pub(super) fn set_order(app: tauri::AppHandle, args: SetOrderArgs) -> Result<(), String> {
-    ensure_security_unlocked_for_app(&app)?;
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     notes_service(&app)?.set_order(args)
 }
