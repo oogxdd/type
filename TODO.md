@@ -12,6 +12,11 @@ Delete this file when the branch is ready for review.
 - [ ] Confirm CI is green on the branch (typescript + rust jobs). Note: CI
       triggers on PRs and main pushes only — open a (draft) PR for the branch
       to get per-push CI.
+- [ ] Validate the macOS `codegen` job in
+      `.github/workflows/ffi-bindings-check.yml` with a manual run
+      (Actions → FFI bindings check → Run workflow). It is a DRAFT: expect
+      to tune Xcode/target flags on the first attempt. The cheap `surface`
+      job (symbol diff) is already active on PRs.
 - [ ] `npm run build` (desktop tsc + vite) after the M5 shared-package
       refactor. Branch CI does NOT cover this; typecheck + vitest are green
       locally, but rollup's resolution of the `@typenotes/shared/*` exports

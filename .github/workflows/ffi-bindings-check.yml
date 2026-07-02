@@ -1,0 +1,93 @@
+name: FFI bindings check
+
+# Guards the hand-maintained seam between crates/type-ffi and
+# packages/mobile-core/src/raw-core.ts (the "triple bookkeeping" risk —
+# see docs/architecture/08-shared-code-review.md).
+#
+# Two levels:
+#   surface  (ubuntu, cheap, on every PR touching the seam) — compares the
+#            #[uniffi::export] function list against the RawCore interface.
+#   codegen  (macOS, DRAFT, manual trigger only) — actually runs the ubrn
+#            codegen and verifies every RawCore method exists in the
+#            generated bindings. macOS minutes bill at 10× the free pool,
+#            so this is workflow_dispatch-only for now; once it proves
+#            stable, move it to the pull_request trigger too.
+
+on:
+  pull_request:
+    paths:
+      - "crates/type-ffi/**"
+      - "packages/mobile-core/**"
+      - "scripts/check-ffi-surface.mjs"
+      - ".github/workflows/ffi-bindings-check.yml"
+  workflow_dispatch:
+
+jobs:
+  surface:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Compare type-ffi exports against RawCore
+        run: node scripts/check-ffi-surface.mjs
+
+  # ---------------------------------------------------------------------------
+  # DRAFT — not yet validated on a real runner. Expected tuning on first run:
+  #  - Xcode / iOS SDK selection on the runner image
+  #  - whether `ubrn build ios` needs an explicit --targets list (a sim-only
+  #    target is enough for codegen and builds fastest)
+  #  - cocoapods is NOT needed: we never open the Xcode project, we only need
+  #    the cargo build + binding generation that --and-generate performs
+  # ---------------------------------------------------------------------------
+  codegen:
+    if: github.event_name == 'workflow_dispatch'
+    needs: surface
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # Codegen extracts uniffi metadata from a compiled library, so the
+          # crate must actually build for an Apple target. Sim target only —
+          # cheapest build that satisfies `ubrn build ios`.
+          targets: aarch64-apple-ios-sim
+      - uses: swatinem/rust-cache@v2
+
+      - name: Install workspace dependencies
+        run: npm install
+
+      # Version pin matters: ubrn 0.31.x ↔ uniffi 0.31 (crates/type-ffi).
+      - name: Install uniffi-bindgen-react-native
+        working-directory: packages/mobile-core
+        run: npm install --no-save uniffi-bindgen-react-native@0.31.0-3
+
+      - name: Generate bindings (ubrn)
+        working-directory: packages/mobile-core
+        run: |
+          npx ubrn checkout --config ubrn.config.yaml
+          # DRAFT: if full device builds are too slow/fragile in CI, try
+          # limiting to the sim target, e.g.:
+          #   npx ubrn build ios --config ubrn.config.yaml --and-generate --targets aarch64-apple-ios-sim
+          npx ubrn build ios --config ubrn.config.yaml --and-generate
+
+      - name: Verify RawCore matches the generated bindings
+        run: node scripts/check-ffi-surface.mjs --generated packages/mobile-core/src/generated
+
+      # Keep the generated output around so drift can be inspected without a Mac.
+      - name: Upload generated bindings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubrn-generated-bindings
+          path: |
+            packages/mobile-core/src/generated
+            packages/mobile-core/cpp/generated
+          if-no-files-found: warn
