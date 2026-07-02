@@ -56,7 +56,12 @@ Delete this file when the branch is ready for review.
       generation (ubrn) is a documented Mac step; wiring the generated module
       + a native TranscriptionProvider registration remain Mac-side work.
 - [ ] M7 — docs (AGENTS.md, CLAUDE.md, READMEs) + CI final pass
-- [ ] M8 (stretch) — security/PIN surfaces on mobile via FFI lock-screen
+- [x] M8 (stretch) — mobile lock screen over the security FFI: boot checks
+      `get_security_state` and gates the whole UI while encrypted + locked
+      (content stores load only after unlock, matching the backend gate),
+      unlock/panic handled like desktop (panic wipes + reseeds), optional
+      auto-lock on background via AppState. Enabling encryption remains a
+      desktop-side action for now.
 
 ## Notes / known issues to raise in the PR
 

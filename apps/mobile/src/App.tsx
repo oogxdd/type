@@ -5,7 +5,7 @@ import {
 } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { AppState, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -17,10 +17,12 @@ import { CaptureScreen } from "./screens/capture-screen";
 import { EditorScreen } from "./screens/editor-screen";
 import { FeedScreen } from "./screens/feed-screen";
 import { FolderScreen } from "./screens/folder-screen";
+import { LockScreen } from "./screens/lock-screen";
 import { RecordScreen } from "./screens/record-screen";
 import { SettingsScreen } from "./screens/settings-screen";
 import { SyncScreen } from "./screens/sync-screen";
 import { useNotesStore } from "./state/notes-store";
+import { isLocked, useSecurityStore } from "./state/security-store";
 import { useSettingsStore } from "./state/settings-store";
 import { useTheme } from "./theme";
 
@@ -37,8 +39,13 @@ export default function App() {
       try {
         const { demoMode: demo } = await bootCore();
         useSettingsStore.getState().setDemoMode(demo);
-        await useSettingsStore.getState().load();
-        await useNotesStore.getState().refresh();
+        await useSecurityStore.getState().load();
+        // While encrypted + locked, content calls are rejected by the core —
+        // the lock screen's unlock reloads these stores instead.
+        if (!isLocked(useSecurityStore.getState().state)) {
+          await useSettingsStore.getState().load();
+          await useNotesStore.getState().refresh();
+        }
         if (!cancelled) {
           setPhase({ state: "ready" });
         }
@@ -53,6 +60,24 @@ export default function App() {
     };
   }, []);
 
+  // Auto-lock when the app goes to background (if enabled in security prefs).
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (next) => {
+      const security = useSecurityStore.getState();
+      if (
+        next === "background" &&
+        security.state?.encryption_enabled &&
+        security.state.auto_lock_on_background
+      ) {
+        void security.lock();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
+  const securityState = useSecurityStore((s) => s.state);
+  const locked = isLocked(securityState);
+
   if (phase.state !== "ready") {
     return (
       <View style={[styles.boot, { backgroundColor: theme.colors.background }]}>
@@ -63,6 +88,15 @@ export default function App() {
         ) : null}
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </View>
+    );
+  }
+
+  if (locked) {
+    return (
+      <SafeAreaProvider>
+        <LockScreen />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </SafeAreaProvider>
     );
   }
 
