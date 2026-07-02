@@ -1,0 +1,21 @@
+[package]
+name = "type-ffi"
+version = "0.1.0"
+description = "UniFFI bindings over type-core for non-Tauri shells (React Native)"
+license = "GPL-3.0"
+edition = "2021"
+
+[lib]
+name = "type_ffi"
+# staticlib for iOS, cdylib for Android, lib for host-side cargo tests.
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[dependencies]
+type-core = { path = "../type-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+uniffi = { version = "0.31", features = ["tokio"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
