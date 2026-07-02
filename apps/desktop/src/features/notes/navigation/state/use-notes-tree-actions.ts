@@ -161,24 +161,6 @@ export function useNotesTreeActions({
     setRenameValue("");
   }, [setRenamingFolder, setRenameValue]);
 
-  const renameFolderFromMobile = useCallback(
-    async (path: string, nextName: string) => {
-      if (isSystemFolder(path)) {
-        window.alert(`"${path}" is a fixed folder and cannot be renamed.`);
-        return;
-      }
-      const currentName = path.split("/").pop() || "";
-      const normalizedNextName = nextName.trim();
-      if (!normalizedNextName || normalizedNextName === currentName) {
-        return;
-      }
-      const newPath = await api.renameItem(path, normalizedNextName);
-      await refreshTree();
-      applyFolderRename(path, newPath);
-    },
-    [applyFolderRename, refreshTree]
-  );
-
   const deleteFolders = useCallback(
     async (paths: string[]) => {
       if (paths.length === 0) return;
@@ -372,7 +354,6 @@ export function useNotesTreeActions({
     updateNoteMarkers,
     flattenIntoFeed,
     showNoteInfo,
-    renameFolderFromMobile,
     startRenameFolder,
     submitRenameFolder,
     cancelRenameFolder,

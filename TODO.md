@@ -12,10 +12,10 @@ Delete this file when the branch is ready for review.
 - [ ] Confirm CI is green on the branch (typescript + rust jobs). Note: CI
       triggers on PRs and main pushes only — open a (draft) PR for the branch
       to get per-push CI.
-- [ ] `npm run build` (desktop vite + OTA) after the M5 shared-package
-      refactor. Branch CI does NOT cover this (deploy-pages builds only on
-      main); typecheck + vitest are green locally, but rollup's resolution of
-      the `@typenotes/shared/*` exports map is unverified until a build runs.
+- [ ] `npm run build` (desktop tsc + vite) after the M5 shared-package
+      refactor. Branch CI does NOT cover this; typecheck + vitest are green
+      locally, but rollup's resolution of the `@typenotes/shared/*` exports
+      map is unverified until a build runs.
 - [ ] Local quirk: vitest's default parallel pool segfaults on this dev VM.
       Run `vitest run --no-file-parallelism` locally; CI is unaffected.
 - [ ] On a Mac: iOS/Android native builds of the RN app (this VM has no
@@ -25,8 +25,6 @@ Delete this file when the branch is ready for review.
       `apps/mobile/src/core/boot.ts`, Expo prebuild, pod install. Also verify
       the exact generated TS surface matches `raw-core.ts` (names are the
       uniffi camelCase convention; adjust the seam if anything drifts).
-- [ ] On a Mac: verify the Tauri iOS app still builds from `apps/desktop`
-      (Xcode project geometry was preserved in M1, unverified since).
 
 ## Milestones
 
@@ -55,7 +53,14 @@ Delete this file when the branch is ready for review.
       (demo mode), so tsc/vitest/Expo Go need no native build. Native module
       generation (ubrn) is a documented Mac step; wiring the generated module
       + a native TranscriptionProvider registration remain Mac-side work.
-- [ ] M7 — docs (AGENTS.md, CLAUDE.md, READMEs) + CI final pass
+- [x] M7 — docs (AGENTS.md, CLAUDE.md, READMEs) + CI final pass
+- [x] M9 — strip mobile/iOS/OTA from the Tauri desktop app (desktop is
+      desktop-only now): deleted src/mobile + mobile settings screens + Xcode
+      project (gen/apple, widget) + OTA plugin/bootstrap/build config + deep
+      links + iOS native recorder/WKWebView shell adapters; recordings are
+      web MediaRecorder + always-auto-queue local Whisper; release.yml is
+      desktop-only and deploy-pages.yml (OTA CDN) is gone. cargo check -p
+      type + tsc + vitest green locally.
 - [x] M8 (stretch) — mobile lock screen over the security FFI: boot checks
       `get_security_state` and gates the whole UI while encrypted + locked
       (content stores load only after unlock, matching the backend gate),

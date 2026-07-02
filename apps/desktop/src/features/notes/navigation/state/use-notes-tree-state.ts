@@ -1,10 +1,8 @@
 // Read side of the notes navigation slice.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSelection } from "@/app/state/selection-store";
 import { useAppearance } from "@/app/state/appearance-store";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useSecurity } from "@/features/security/hooks/security-context";
-import { useLayoutMode } from "@/mobile/use-layout-mode";
 import * as api from "@/features/notes/api/notes-api";
 import { useNotePreviews } from "@/features/notes/list/hooks/use-note-previews";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@typenotes/shared/types";
@@ -26,14 +24,12 @@ import {
 import {
   buildNotePreviews,
   buildVisibleNavigationItems,
-  getFirstSelectableFolderPath,
   mapParentById,
   selectPreviewSourceNotes,
 } from "@/features/notes/navigation/model/notes-tree-model";
 
 type UseNotesTreeStateArgs = {
   activeFolder: string;
-  activeNote: string | null;
 };
 
 export type NotesTreeState = {
@@ -72,13 +68,11 @@ export type NotesTreeState = {
 
 export function useNotesTreeState({
   activeFolder,
-  activeNote,
 }: UseNotesTreeStateArgs): NotesTreeState {
   const { activeProfileId, activeProfileNotesRoot } = useProfiles();
   const { isSecurityEnabled } = useSecurity();
   const notesListMode = useAppearance((state) => state.notesListMode);
   const hideArchivedFeedNotes = useAppearance((state) => state.hideArchivedFeedNotes);
-  const layoutMode = useLayoutMode();
 
   const [tree, setTree] = useState<FolderNode | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set([""]));
@@ -120,28 +114,17 @@ export function useNotesTreeState({
     () => allNotes.filter((note) => getNoteParentPath(note.path) === FEED_FOLDER_PATH),
     [allNotes]
   );
-  const shouldWarmNotePreviews =
-    layoutMode !== "phone" || Boolean(activeFolder) || Boolean(activeNote);
-  // Keep preview work limited to the current navigation context unless the UI
-  // is wide enough to benefit from a broader warm cache.
   const previewSourceNotes = useMemo<NoteEntry[]>(
     () =>
-      shouldWarmNotePreviews
-        ? selectPreviewSourceNotes({
-            layoutMode,
-            activeFolder,
-            activeNote,
-            notes,
-            feedNotes: feedSourceNotes,
-            allNotes,
-            shouldNestNotesInNavigation,
-          })
-        : [],
+      selectPreviewSourceNotes({
+        activeFolder,
+        notes,
+        feedNotes: feedSourceNotes,
+        allNotes,
+        shouldNestNotesInNavigation,
+      }),
     [
-      shouldWarmNotePreviews,
-      layoutMode,
       activeFolder,
-      activeNote,
       notes,
       feedSourceNotes,
       allNotes,
@@ -222,22 +205,6 @@ export function useNotesTreeState({
     window.addEventListener("notes-tree-invalidated", onTreeInvalidated);
     return () => window.removeEventListener("notes-tree-invalidated", onTreeInvalidated);
   }, [refreshTree]);
-
-  // Tablet layout wants a real folder selected so the two-pane view never opens
-  // on an empty shell.
-  useEffect(() => {
-    if (layoutMode !== "tablet" || !tree || activeFolder) {
-      return;
-    }
-    const firstFolderPath = getFirstSelectableFolderPath(tree);
-    if (!firstFolderPath) {
-      return;
-    }
-    const { setSelectedFolders, setLastSelectedFolder, setActiveFolder } = useSelection.getState();
-    setSelectedFolders(new Set([firstFolderPath]));
-    setLastSelectedFolder(firstFolderPath);
-    setActiveFolder(firstFolderPath);
-  }, [activeFolder, layoutMode, tree]);
 
   return {
     tree,

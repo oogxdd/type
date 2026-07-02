@@ -11,7 +11,6 @@ import type {
   GitSyncStatus,
 } from "@typenotes/shared/types";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
-import { useLayoutMode } from "@/mobile/use-layout-mode";
 import { useGitSyncWorkflows } from "./use-git-sync-workflows";
 
 type GitSyncContextValue = {
@@ -40,7 +39,6 @@ const GitSyncContext = createContext<GitSyncContextValue | null>(null);
 
 export function GitSyncProvider({ children }: { children: ReactNode }) {
   const { activeProfileId, syncSettings, updateSyncSettings } = useProfiles();
-  const layoutMode = useLayoutMode();
   const [gitStatus, setGitStatus] = useState<GitSyncStatus | null>(null);
   const [gitSyncAction, setGitSyncAction] = useState<GitSyncAction>("idle");
   const [gitSyncError, setGitSyncError] = useState<string | null>(null);
@@ -77,12 +75,9 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
       setGitHistoryError(null);
       return;
     }
-    if (layoutMode === "phone") {
-      return;
-    }
     void refreshGitStatus();
     void refreshGitHistory();
-  }, [activeProfileId, layoutMode, refreshGitHistory, refreshGitStatus]);
+  }, [activeProfileId, refreshGitHistory, refreshGitStatus]);
 
   useEffect(() => {
     if (!activeProfileId || !gitStatus?.repo_initialized) {

@@ -16,7 +16,6 @@ import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useAutoQueueLoop } from "@/features/processing/hooks/use-auto-queue-loop";
 import { useProcessingQueue } from "@/features/processing/hooks/use-processing-queue";
 import { jobListSignature } from "@typenotes/shared/jobs";
-import type { LayoutMode } from "@/mobile/navigation";
 import { getErrorMessage } from "@typenotes/shared/errors";
 
 type RecordingsContextValue = {
@@ -24,10 +23,8 @@ type RecordingsContextValue = {
   isRecordingAudio: boolean;
   isRecordingFinalizing: boolean;
   recorderError: string | null;
-  nativeRecoveryNotice: string | null;
   recordingElapsedLabel: string | null;
   recordingStatusMessage: string | null;
-  recordingLiveStatus: string | null;
   transcriptionQueueBusy: boolean;
   recordingsQueue: RecordingQueueSnapshot | null;
   recordingsList: RecordingListItem[];
@@ -41,7 +38,6 @@ type RecordingsContextValue = {
   playRecording: (audioPath: string) => Promise<void>;
   queueRecordingTranscriptions: (trigger?: "manual" | "auto") => Promise<void>;
   retriggerTranscription: (notePath: string) => Promise<void>;
-  shouldAutoQueueTranscriptions: boolean;
 };
 
 const RecordingsContext = createContext<RecordingsContextValue | null>(null);
@@ -49,12 +45,10 @@ const RecordingsContext = createContext<RecordingsContextValue | null>(null);
 export function RecordingsProvider({
   children,
   activeFolder,
-  layoutMode,
   onRecordingComplete,
 }: {
   children: ReactNode;
   activeFolder: string;
-  layoutMode: LayoutMode;
   onRecordingComplete: (result: {
     folder_path: string;
     note_path: string;
@@ -70,11 +64,6 @@ export function RecordingsProvider({
   const transcriptionQueueBusyRef = useRef(false);
   const recordingTargetFolderRef = useRef<string>(FEED_FOLDER_PATH);
   const activeAudioObjectUrlRef = useRef<string | null>(null);
-
-  const isDesktop = layoutMode === "desktop";
-
-  const shouldAutoQueueTranscriptions =
-    isDesktop || syncSettings.mobileAutoTranscriptionEnabled;
 
   const cleanupMissingActiveAudio = useCallback(
     (snapshot: { items: RecordingListItem[] }) => {
@@ -159,23 +148,10 @@ export function RecordingsProvider({
       transcriptionQueueBusyRef.current = true;
       setTranscriptionQueueBusy(true);
       try {
-        let result;
-        if (isDesktop) {
-          // Desktop: use local whisper transcription (no API key needed)
-          result = await api.queueLocalTranscriptions(
-            syncSettings.whisperModel.trim() || undefined
-          );
-        } else {
-          // Mobile: use AssemblyAI (requires API key)
-          const apiKey = syncSettings.assemblyAiApiKey.trim();
-          if (!apiKey) {
-            if (trigger === "manual") {
-              setRecordingStatusMessage("AssemblyAI API key is required.");
-            }
-            return;
-          }
-          result = await api.queueRecordingTranscriptions(apiKey);
-        }
+        // Local whisper transcription — no API key needed.
+        const result = await api.queueLocalTranscriptions(
+          syncSettings.whisperModel.trim() || undefined
+        );
         const label =
           trigger === "manual"
             ? `Scanned ${result.scanned}, queued ${result.queued}, in-flight ${result.in_flight}.`
@@ -190,12 +166,7 @@ export function RecordingsProvider({
         void refreshRecordings();
       }
     },
-    [
-      isDesktop,
-      refreshRecordings,
-      syncSettings.assemblyAiApiKey,
-      syncSettings.whisperModel,
-    ]
+    [refreshRecordings, syncSettings.whisperModel]
   );
 
   const retriggerTranscription = useCallback(
@@ -241,15 +212,12 @@ export function RecordingsProvider({
       await onRecordingComplete(result);
       setRecordingStatusMessage(`Saved ${result.note_path}.`);
       void refreshRecordings();
-      if (shouldAutoQueueTranscriptions) {
-        await queueRecordingTranscriptions("auto");
-      }
+      await queueRecordingTranscriptions("auto");
     },
     [
       onRecordingComplete,
       queueRecordingTranscriptions,
       refreshRecordings,
-      shouldAutoQueueTranscriptions,
       syncSettings.noteFileNameFormat,
     ]
   );
@@ -259,7 +227,6 @@ export function RecordingsProvider({
     isRecording: isRecordingAudio,
     isFinalizing: isRecordingFinalizing,
     error: recorderError,
-    nativeRecoveryNotice,
     recordingElapsedLabel,
     startRecording: startRecordingRaw,
     stopRecording: stopRecordingRaw,
@@ -280,21 +247,13 @@ export function RecordingsProvider({
     stopRecordingRaw();
   }, [stopRecordingRaw]);
 
-  const recordingLiveStatus =
-    isRecordingAudio && recordingElapsedLabel
-      ? `${nativeRecoveryNotice ? `${nativeRecoveryNotice} ` : "Recording in progress. "}Elapsed ${recordingElapsedLabel}.`
-      : null;
-
   const autoQueueTranscriptions = useCallback(
     () => queueRecordingTranscriptions("auto"),
     [queueRecordingTranscriptions]
   );
   useAutoQueueLoop({
-    enabled:
-      shouldAutoQueueTranscriptions &&
-      // Desktop local Whisper needs no key; mobile AssemblyAI does.
-      (isDesktop || syncSettings.assemblyAiApiKey.trim().length > 0),
-    delayMs: layoutMode === "phone" ? 3000 : 0,
+    enabled: true,
+    delayMs: 0,
     onTick: autoQueueTranscriptions,
   });
 
@@ -305,10 +264,8 @@ export function RecordingsProvider({
         isRecordingAudio,
         isRecordingFinalizing,
         recorderError,
-        nativeRecoveryNotice,
         recordingElapsedLabel,
         recordingStatusMessage,
-        recordingLiveStatus,
         transcriptionQueueBusy,
         recordingsQueue,
         recordingsList,
@@ -322,7 +279,6 @@ export function RecordingsProvider({
         playRecording,
         queueRecordingTranscriptions,
         retriggerTranscription,
-        shouldAutoQueueTranscriptions,
       }}
     >
       {children}

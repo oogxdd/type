@@ -3,15 +3,8 @@
 // The core (domain/application/ports + filesystem/git/crypto adapters) lives in
 // crates/type-core and knows nothing about Tauri. This crate contributes:
 //   - the #[tauri::command] IPC layer (commands/)
-//   - platform-native adapters that genuinely need Tauri or Objective-C
-//     (window theming, iOS AVAudioRecorder, WKWebView recovery)
 //   - `app_env()`, which maps a tauri::AppHandle onto core's `AppEnv`
-
-pub mod ports;
-mod application;
-
-mod adapters;
-pub(crate) use adapters::*;
+//   - macOS window transparency via Objective-C interop
 
 mod commands;
 
@@ -62,10 +55,6 @@ pub(crate) fn apply_macos_window_alpha(
 // Entry point
 // ---------------------------------------------------------------------------
 
-#[cfg_attr(
-    any(target_os = "ios", target_os = "android"),
-    tauri::mobile_entry_point
-)]
 pub fn run() {
     commands::run();
 }

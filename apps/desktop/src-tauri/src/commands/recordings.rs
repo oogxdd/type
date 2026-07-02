@@ -1,41 +1,17 @@
 use type_core::{
     application::recordings::RecordingsUseCases, ensure_security_unlocked_for_app,
-    CheckWhisperStatusArgs, NativeRecorderCapabilities, QueueLocalTranscriptionsArgs,
-    QueueRecordingsArgs, ReadRecordingAudioArgs, RecordingAudioPayload,
-    RecordingTranscriptionQueueResult, RecordingWriteResult, RecordingsListResult,
-    RetriggerTranscriptionArgs, SaveRecordingArgs, WhisperStatusResult,
+    CheckWhisperStatusArgs, QueueLocalTranscriptionsArgs, QueueRecordingsArgs,
+    ReadRecordingAudioArgs, RecordingAudioPayload, RecordingTranscriptionQueueResult,
+    RecordingWriteResult, RecordingsAdapter, RecordingsListResult, RetriggerTranscriptionArgs,
+    SaveRecordingArgs, WhisperStatusResult,
 };
-
-use crate::TauriRecordingsAdapter;
 
 fn recordings_use_cases(
     app: tauri::AppHandle,
-) -> Result<RecordingsUseCases<TauriRecordingsAdapter>, String> {
-    Ok(RecordingsUseCases::new(TauriRecordingsAdapter::new(
+) -> Result<RecordingsUseCases<RecordingsAdapter>, String> {
+    Ok(RecordingsUseCases::new(RecordingsAdapter::new(
         crate::app_env(&app)?,
     )))
-}
-
-#[tauri::command]
-pub(super) fn native_audio_recorder_capabilities(
-    app: tauri::AppHandle,
-) -> Result<NativeRecorderCapabilities, String> {
-    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
-    recordings_use_cases(app)?.native_capabilities()
-}
-
-#[tauri::command]
-pub(super) fn start_native_audio_recording(app: tauri::AppHandle) -> Result<(), String> {
-    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
-    recordings_use_cases(app)?.start_native()
-}
-
-#[tauri::command]
-pub(super) fn stop_native_audio_recording(
-    app: tauri::AppHandle,
-) -> Result<RecordingAudioPayload, String> {
-    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
-    recordings_use_cases(app)?.stop_native()
 }
 
 #[tauri::command]

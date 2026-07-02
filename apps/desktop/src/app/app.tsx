@@ -1,5 +1,4 @@
 import "./app.css";
-import "@/mobile/mobile.css";
 
 import { AppShell } from "./app-shell";
 import { ErrorBoundary } from "./error-boundary";

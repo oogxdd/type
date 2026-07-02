@@ -16,9 +16,7 @@ describe("selectPreviewSourceNotes", () => {
 
     expect(
       selectPreviewSourceNotes({
-        layoutMode: "desktop",
         activeFolder: FEED_FOLDER_PATH,
-        activeNote: null,
         notes: feedNotes,
         feedNotes,
         allNotes,

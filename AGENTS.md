@@ -6,7 +6,7 @@ This document is for AI agents and developers who need to understand and modify 
 
 A local-first markdown notes app. Notes are stored as `.md` files in a local folder tree ("working folders"), with optional Git sync across devices — including a one-button local-network server (`git daemon`) for syncing to a phone with no external host. Audio recording is supported, with per-folder transcription routing (local Whisper on desktop — self-provisioning, no manual install; AssemblyAI cloud; a pluggable native provider; or "leave pending for the desktop to transcribe after sync"). Handwriting OCR and voice transcription use independent queues with shared frontend queue plumbing. At-rest note-body encryption, the lock screen, panic-password local wipe, and the multi-note lens are optional frontend extension surfaces.
 
-There are **two apps over one Rust core**: the desktop app is Tauri v2 + React (also runs the legacy Tauri-iOS build), and the mobile app is React Native (Expo), talking to the same core through UniFFI bindings.
+There are **two apps over one Rust core**: the desktop app is Tauri v2 + React (macOS/Windows/Linux), and the mobile app is React Native (Expo), talking to the same core through UniFFI bindings.
 
 ## Monorepo layout
 
@@ -29,8 +29,8 @@ packages/mobile-core/  @typenotes/mobile-core — typed TS bridge to type-ffi
 
 - **Desktop frontend**: React 19, TypeScript, Vite, Tiptap (editor), DnD Kit (drag-and-drop), Tailwind + Shadcn/ui
 - **Mobile app**: React Native (Expo), react-navigation, reanimated + gesture-handler, expo-audio, zustand
-- **Rust core**: `crates/type-core`, organized as **domain / application / ports / adapters** (clean/hexagonal) across domains: notes, profiles, security, recordings (+ whisper_env), handwriting, import, git_sync, local_sync. The Tauri shell adds the `commands/` layer + platform/iOS adapters; `crates/type-ffi` adds the UniFFI layer.
-- **Build**: root `npm run desktop:build` (tsc + vite + OTA assets). Rust: `cargo check --workspace`
+- **Rust core**: `crates/type-core`, organized as **domain / application / ports / adapters** (clean/hexagonal) across domains: notes, profiles, security, recordings (+ whisper_env), handwriting, import, git_sync, local_sync. The Tauri shell adds the `commands/` layer; `crates/type-ffi` adds the UniFFI layer.
+- **Build**: root `npm run desktop:build` (tsc + vite). Rust: `cargo check --workspace`
 - **Tests**: `npm test` (Vitest per workspace — pure logic; co-located `*.test.ts`) and `cargo test --workspace --lib` (Rust unit tests in `#[cfg(test)]` modules). CI (`.github/workflows/ci.yml`) runs both, plus workspace typechecks, on PRs and pushes to main.
 
 ## Rust core structure (crates/type-core/src/ + the Tauri shell)
@@ -66,9 +66,6 @@ apps/desktop/src-tauri/src/
   commands/<domain>.rs Thin #[tauri::command] wrappers that lock-gate requests,
                        construct core application services, and dispatch
                        blocking work.
-  adapters/, ports/platform.rs, application/platform.rs
-                       Shell-only: native theme/export sheet, iOS AVAudioRecorder
-                       capture (TauriRecordingsAdapter), WKWebView recovery.
 
 crates/type-ffi/src/   #[uniffi::export] functions per domain over the same
                        services (JSON-string args/results matching the Tauri
@@ -100,10 +97,9 @@ domain, each a set of thin wrappers around application services:
 | File | Commands |
 |------|----------|
 | `security.rs`   | state, enable, lock, unlock, set preferences |
-| `platform.rs`   | set native theme, present file-export sheet |
 | `profiles.rs`   | profile CRUD, backup zip, export to Documents |
 | `notes.rs`      | tree, read/create/write, meta, bulk list previews, move/delete/rename, order, timestamp |
-| `recordings.rs` | native recorder caps/start/stop, save, queue (AssemblyAI + local Whisper), retrigger, Whisper status, list, read audio |
+| `recordings.rs` | save, queue (AssemblyAI + local Whisper), retrigger, Whisper status, list, read audio |
 | `handwriting.rs`| save attachment, queue OCR, list OCR jobs |
 | `import.rs`     | scan Apple Notes folder, start import, poll import status |
 | `git_sync.rs`   | SSH key gen/get/delete, status, history, connect, pull, push |
@@ -124,13 +120,12 @@ Key symbols live in `adapters/<domain>.rs`:
 - **notes** — a folder module (`notes/mod.rs` + `front_matter.rs` + `naming.rs` + `tree.rs`) for filesystem notes, front-matter, tree, ordering. `mod.rs` is the hub: shared constants (`ORDER_FILE`, `FEED_FOLDER`, `ARCHIEVE_FOLDER`, `RECORDINGS_STORAGE_FOLDER`, `ATTACHMENTS_STORAGE_FOLDER`, `PROTECTED_SYSTEM_FOLDERS`) + root/path resolution (`ensured_notes_root` resolves the active profile's root, `resolve_path`, `strip_root`) + concrete port adapters (`FilesystemNotesRepository`, `FrontMatterNoteDocumentCodec`, `RuntimeNoteBodyCrypto`, `UuidNoteIdGenerator`, `SystemNoteClock`). Note DTOs live in `domain/notes.rs`. `front_matter.rs`: `parse/render/write_note_with_front_matter`. `naming.rs`: `allocate_note_file_name` (UTC-slug / uuid_v7 / uuid_v7_prefix_slug) + Unicode-aware `slug_from_content`. `tree.rs`: `build_folder_node`, `ensure_system_folders`, `migrate_legacy_system_folders`, order helpers, `collect_markdown_note_files`.
 - **profiles** — a folder module (`profiles/mod.rs` + `state.rs` + `settings.rs` + `backup.rs`) for multi-profile ("working folder") support. `settings.rs`: per-folder `.type/settings.json` (`ProfileSettings` — git remote/branch/credentials/commit message, legacy mobile auto flags, and the optional `transcription_mode` with `effective_transcription_mode()` fallback) plus the device-local `config.json` (`AppConfig` — API keys etc., never synced). `update_settings` preserves a persisted `transcription_mode` when an older writer omits it. `mod.rs`: `.notes-profiles.json` constants + DTO types + `profiles_file_path`/`profile_root_for_id`. `state.rs`: filesystem discovery, normalization, persistence, legacy `.notes-sessions.json` migration, and the `ensure_profiles_state`/`find_profile`/`*_state` CRUD (+ `normalize_notes_root_path`, dir copy/move helpers). `backup.rs`: profile backup zip + Documents export.
 - **security** — XChaCha20-Poly1305 at-rest body encryption with an Argon2id-derived key. `SECURITY_RUNTIME` (OnceLock<Mutex>) holds the in-memory key after unlock. `.notes-security.json` config. `encrypt_note_body_for_write`, `decrypt_note_body_for_read`, `ensure_security_unlocked_for_app` (the lock gate most commands call), panic flow `panic_reset_local_data`.
-- **recordings** — a folder module (`recordings/mod.rs` + `whisper.rs` + `assembly.rs`): save audio → note with metadata. `mod.rs` owns the transcription queue worker (which dispatches on `TranscriptionMethod`), types, queue state, note scanning, and file naming. Backends: `whisper.rs` (desktop, managed-Python `faster-whisper` via `whisper_env`; `check_whisper_availability`, `transcribe_audio_local_whisper`), `assembly.rs` (AssemblyAI cloud, used on mobile), and `TranscriptionMethod::Provider` — a shell-registered `ports::recordings::TranscriptionProvider` (how the mobile FFI plugs native speech recognition into the same queue). `queue_recordings_with_method` is the shared scan-and-enqueue; `collect_recording_notes`, queue snapshot for the UI. Native iOS capture lives in the Tauri shell's `TauriRecordingsAdapter`, not here.
+- **recordings** — a folder module (`recordings/mod.rs` + `whisper.rs` + `assembly.rs`): save audio → note with metadata. `mod.rs` owns the transcription queue worker (which dispatches on `TranscriptionMethod`), types, queue state, note scanning, and file naming. Backends: `whisper.rs` (desktop, managed-Python `faster-whisper` via `whisper_env`; `check_whisper_availability`, `transcribe_audio_local_whisper`), `assembly.rs` (AssemblyAI cloud, used on mobile), and `TranscriptionMethod::Provider` — a shell-registered `ports::recordings::TranscriptionProvider` (how the mobile FFI plugs native speech recognition into the same queue). `queue_recordings_with_method` is the shared scan-and-enqueue; `collect_recording_notes`, queue snapshot for the UI.
 - **whisper_env** — desktop only. Provisions and owns an isolated CPython + faster-whisper under app-data using [`uv`](https://docs.astral.sh/uv/) (downloading `uv` itself on first use if absent), so the user installs nothing. `whisper_env_ready`, `managed_python`, `ensure_whisper_env`.
 - **handwriting** — a folder module (`handwriting/mod.rs` + `openai.rs` + `huggingface.rs`): save image attachment → note; `HANDWRITING_OCR_QUEUE` worker. `mod.rs` owns attachment saving, the queue + worker, note scanning, and provider dispatch; each provider's HTTP transcription lives in its own submodule — `openai.rs` (`HandwritingOcrProvider::OpenAi`, GPT-4o) and `huggingface.rs` (`::HuggingFace`, 503 retry). `collect_handwriting_notes`.
 - **import** — Apple Notes folder importer. Walks an *exported* Apple Notes tree (Markdown/HTML/plain-text — Apple Notes has no native bulk export), creating notes in the active root. Auto-detects note files, converts HTML→Markdown best-effort, strips foreign front-matter, and preserves the original creation date (front-matter `created`/`created_ms`/… → epoch ms / RFC 3339 / date-only, else filesystem time). `preserve` mirrors the source hierarchy under one target folder; `flatten` drops everything into `Feed`. Runs on a worker thread writing to a process-global progress snapshot the UI polls (no Tauri events); `scan_apple_import_source`, `run_apple_notes_import`, `apple_import_snapshot`. Notes are written via `write_note_with_front_matter`, so encryption is transparent (import requires unlock).
 - **git** (the `git_sync` domain) — libgit2 sync. `ensure_git_repo`/`open_repo`, `perform_fetch`/`fast_forward_to`/`merge_fetched_commit`/`commit_all_changes`, `resolve_target_branch`/`switch_or_prepare_branch`. Conflicts keep "ours" and write "theirs" as `.conflict.md` siblings — merge never blocks. `build_git_status`, `build_git_history`. `build_callbacks` auth order: app SSH key file → SSH agent → username/password. Ed25519 keypair under `<app_data_dir>/ssh/`. Bootstrap-artifact detection for first sync.
 - **local_sync** — desktop hosts a `git daemon` over plain `git://` so a phone on the same Wi-Fi / hotspot can push/pull with no external host. Supervises the child in a process-global `Mutex<Option<RunningDaemon>>` (idempotent start, reaps dead handles, killed on app exit). `receive.denyCurrentBranch=updateInstead` lets phone pushes update the live working tree. Detects the outbound LAN IP via a connected UDP socket; advertises/browses the `_typenotes-sync._tcp` mDNS service for tap-to-discover. See `docs/LOCAL_SYNC.md`.
-- **ios** (`#[cfg(target_os = "ios")]`, in the Tauri shell at `apps/desktop/src-tauri/src/adapters/ios.rs`) — native AVAudioRecorder/AVAudioSession recording and WKWebView termination recovery via Objective-C interop. State in `IOS_NATIVE_RECORDER`, `IOS_WEBVIEW_TERMINATION_PROXIES`.
 
 ### ports/ — contracts
 
@@ -206,52 +201,53 @@ The frontend is **feature-sliced**. There are four kinds of place code can live:
 - `features/<name>/` — one folder per user-facing domain. Each owns its code in
   **segments**: `components/` (`.tsx`), `hooks/` (React hooks *and* context providers),
   `lib/` (pure helpers), `api/` (Tauri IPC wrappers). Not every feature needs every segment.
-- `desktop/` and `mobile/` — the two platform **composition shells**. They import feature
-  components/hooks and arrange them; they are not themselves features.
+- `desktop/` — the desktop **composition shell**. It imports feature components/hooks
+  and arranges them; it is not itself a feature. (The old in-repo `mobile/` shell is
+  gone — mobile is now the separate React Native app in `apps/mobile`.)
 
 **Imports** use the `@/` → `src/` alias for cross-directory references (configured in
-`tsconfig.json`, `vite.config.ts`, `vite.ota.config.ts`); imports within the same
-segment/folder stay relative. There are intentionally **no `index.ts` barrels** — deep
-segment paths (`@/features/editor/components/note-editor`) keep each import's role explicit
-and avoid an `editor`↔`notes` cycle (`notes-api` is used by editor/tree while `notes` uses
-`editor-context`).
+`tsconfig.json` and `vite.config.ts`); imports within the same segment/folder stay
+relative. There are intentionally **no `index.ts` barrels** — deep segment paths
+(`@/features/notes/editor/components/note-editor`) keep each import's role explicit.
 
 ```
 src/
-  main.tsx, ota-bootstrap.ts   entry stubs (ota-bootstrap = index.html entry;
-                               main.tsx = OTA bundle entry — vite.ota.config.ts)
+  main.tsx    entry stub (index.html entry → mountApp)
   app/
-    app.tsx, app-shell.tsx, main-app.tsx, error-boundary.tsx, launch-screen.ts, app.css
+    app.tsx, app-shell.tsx, providers.tsx, readiness.tsx, main-app.tsx,
+    error-boundary.tsx, launch-screen.ts, app.css
     hooks/      use-tree-interactions, use-note-opener  (app-shell orchestration glue)
-    state/      selection-store, appearance-store, appearance-api (app-global state)
+    lifecycle/  use-background-save
+    state/      selection-store, appearance-store (app-global state)
   shared/
-    ui/         shadcn primitives          lib/   dom, format, frontmatter, jobs,
-    api/invoke  IPC logging wrapper                annotation-metadata, lens-backmatter,
-                                                   notes, selection, storage, utils (cn)
-    hooks/use-mobile   types.ts   constants.ts
-  features/<name>/   components/  hooks/  lib/  api/
-    notes editor tree recording handwriting processing import profiles sync
+    ui/         shadcn primitives          lib/   dom, notes, selection, storage,
+    api/invoke  IPC logging wrapper                utils (cn)
+    hooks/use-mobile   constants.ts
+  features/
+    notes/      api/notes-api + editor/ (Tiptap, autosave) + list/ (previews)
+                + navigation/ (tree state/actions/model/ui)
+    lens/       multi-note lens (extension-gated)
+    recording handwriting processing import profiles sync
     security settings command-palette extensions
-  desktop/    desktop-shell, middle-pane, right-pane, app-sidebar
-  mobile/     mobile-shell, tablet-layout, navigation, types, use-layout-mode,
-              use-keyboard-insets, hooks/, ui/, views/, screens/
+  desktop/    desktop-shell, desktop-app-shell, middle-pane, right-pane,
+              app-sidebar, desktop-context-menu, hooks/
 ```
 
-### Provider tree (`src/app/app.tsx`)
+### Provider tree (`src/app/providers.tsx`)
 
-`app.tsx` is a thin composition layer. State lives in feature contexts (each provider is
-imported from its feature's `hooks/`, or from `app/state/`):
+`app.tsx` renders `ErrorBoundary > AppProviders > AppShell`; `providers.tsx` is the
+composition layer. State lives in feature contexts:
 
 ```
-ErrorBoundary                 — app-root crash guard
-  AppearanceProvider          — persists appearance store + native theme        (app/state)
-    SecurityProvider          — security state; UI is extension-gated            (features/security)
-      SecurityGate            — renders lock screen only when extension enabled
-        ProfilesProvider      — profile list, active profile, per-profile sync   (features/profiles)
-          GitSyncProvider     — git status, connect/pull/push, commit history    (features/sync)
-            SelectionProvider — resets selection store on profile changes        (app/state)
-              EditorProvider  — note editor state (wraps useNoteEditor)          (features/editor)
-                NotesTreeProvider — folder tree, CRUD, rename                    (features/notes)
+AppearanceProvider            — persists appearance store + document theme      (app/state)
+  SecurityProvider            — security state; UI is extension-gated           (features/security)
+    AppSecurityGate           — renders lock screen only when extension enabled (app/readiness)
+      ProfilesProvider        — profile list, active profile, per-profile sync  (features/profiles)
+        GitSyncProvider       — git status, connect/pull/push, commit history   (features/sync)
+          SelectionProvider   — resets selection store on profile changes       (app/state)
+            EditorProvider    — note editor state (wraps useNoteEditor)         (features/notes/editor)
+              NotesTreeProvider — folder tree, CRUD, rename                     (features/notes/navigation)
+                AppReadinessGate — hides the launch splash once data is ready   (app/readiness)
                   RecordingsProvider  — recording, transcription queue, playback (features/recording)
                     HandwritingProvider — image import, OCR queue                (features/handwriting)
                       AppShell  — UI rendering, DnD wiring, keyboard shortcuts
@@ -262,22 +258,21 @@ Selection + Editor; Editor consumes Selection + Profiles; most consume Profiles.
 
 ### app-shell.tsx (`src/app/app-shell.tsx`)
 
-The cross-platform composition boundary. It owns only shared command-palette/file-picker
-coordination and chooses `DesktopAppShell` or `MobileShell` by viewport. Desktop-only
-state and behavior (pane sizes, DnD, keyboard navigation, pane refs) live in
-`src/desktop/desktop-app-shell.tsx`, so mobile does not initialize desktop interaction
-hooks. Shared folder/note interaction and programmatic navigation remain in `app/hooks/`.
+The composition boundary. It owns command-palette/file-picker coordination and renders
+`DesktopAppShell`; desktop state and behavior (pane sizes, DnD, keyboard navigation,
+pane refs) live in `src/desktop/desktop-app-shell.tsx`. Shared folder/note interaction
+and programmatic navigation live in `app/hooks/`.
 
 ### app/state (`src/app/state/`)
 
 The cross-cutting stores that have no single domain home and are consumed everywhere:
 
 - `appearance-store.tsx` — Zustand store for theme, notes-list mode, and editor font
-  size. Consumers use selectors; `AppearanceProvider` owns localStorage, document-theme,
-  and native-theme synchronization. `appearance-api.ts` is the native-theme IPC.
-- `selection-store.tsx` — Zustand store for folder/note selection and atomic mobile
-  selection actions. Consumers use selectors so unrelated selection changes do not
-  re-render them. `SelectionProvider` only resets the store on profile/root changes.
+  size. Consumers use selectors; `AppearanceProvider` owns localStorage and
+  document-theme synchronization.
+- `selection-store.tsx` — Zustand store for folder/note selection. Consumers use
+  selectors so unrelated selection changes do not re-render them.
+  `SelectionProvider` only resets the store on profile/root changes.
 
 (Features may import these from `@/app/state/...`; this is the one accepted upward edge.)
 
@@ -289,8 +284,8 @@ because it depends on NotesTree, and `notes-tree-context` already depends on
 `features/tree/lib`; routing it through the composition root keeps that edge one-way.
 
 - `use-tree-interactions.ts` — folder/note click selection, expand/collapse toggle, and
-  the native Tauri right-click menus. Reads Selection + NotesTree from context; takes only
-  `foldersPanelRef` (for post-action focus). Consumed by the desktop + mobile shells.
+  the right-click context-menu state (rendered by `desktop/desktop-context-menu`). Reads
+  Selection + NotesTree from context; takes only `foldersPanelRef` (for post-action focus).
 - `use-note-opener.ts` — `openPinnedFolder` (sidebar Feed/Trash) and the `open-note`
   window-event handler that jumps to a recording's note from the Transcription page.
 
@@ -298,31 +293,31 @@ because it depends on NotesTree, and `notes-tree-context` already depends on
 
 Each feature's context provider lives in `hooks/` alongside its hooks.
 
-- **notes** — `components/note-row`; `hooks/notes-tree-context` (thin provider wiring),
-  `hooks/use-notes-tree-state` (tree loading/derived data/feed model/rename state),
-  `hooks/use-notes-tree-actions` (create/delete/move/flatten/rename/info workflows;
-  consumes Selection + Editor setters to update UI state after CRUD), `hooks/use-note-previews`;
-  `lib/{notes-tree-model,feed-tree-model,note-autoname}`; `api/notes-api` (the IPC surface —
-  `getTree`, `readNote`, `createNote`, `writeNote`, `getNoteMeta`, `listNotePreviews`, `deleteItems`, `moveItems`,
-  `renameItem`, `setOrder`, …). `notes-api` is also used by editor and tree.
-- **editor** — `components/note-editor` (Tiptap; shared desktop+mobile) and
-  `components/lens/` (the multi-note "lens": `multi-note-lens` orchestrator + `lens-toolbar`
-  + `lens-note-stage` + `note-readonly-content`); `hooks/{editor-context, use-note-editor,
-  use-lens-annotations}`; `lib/{markdown-editor, note-annotations, lens-geometry}`.
-  `use-note-editor`: debounced 400ms autosave, dirty/saving/error, empty-note cleanup, and the
-  flush/rename bridge into the notes domain. `use-lens-annotations`: all lens annotation state +
-  per-note serialized persistence.
+- **notes** — the note domain, split into sub-slices:
+  - `api/notes-api` — the IPC surface (`getTree`, `readNote`, `createNote`, `writeNote`,
+    `getNoteMeta`, `listNotePreviews`, `deleteItems`, `moveItems`, `renameItem`, `setOrder`, …),
+    used by every other notes sub-slice.
+  - `editor/` — `components/note-editor` (Tiptap); `hooks/{editor-context, use-note-editor}`;
+    `lib/{markdown-editor, note-autoname}`. `use-note-editor`: debounced 400ms autosave,
+    dirty/saving/error, empty-note cleanup, and the flush/rename bridge into the notes domain.
+  - `list/` — note list components + `hooks/use-note-previews` (stale-while-revalidate
+    preview cache).
+  - `navigation/` — `state/{notes-tree-context, use-notes-tree-state, use-notes-tree-actions}`
+    (tree loading/derived data/rename state; create/delete/move/flatten/rename/info workflows
+    that consume Selection + Editor setters), `model/{notes-tree-model, feed-tree-model,
+    tree-ops, dnd-tree, tree-dnd, types}`, `ui/` (folders panel, tree rows, feed panel),
+    `hooks/` (drag-drop, keyboard navigation).
+- **lens** — the multi-note "lens" extension surface: `components/{multi-note-lens,
+  lens-toolbar, lens-note-stage, note-readonly-content}`; `hooks/use-lens-annotations`;
+  `lib/{note-annotations, lens-geometry}`. Extension-gated and lazy-loaded.
 - **processing** — shared queue helpers for the background job domains:
   `hooks/{use-processing-queue, use-auto-queue-loop}`. Recording transcription and handwriting
   OCR each keep their own queue/workers, but both use this shared plumbing for snapshot refresh,
   preview invalidation, and timer behavior.
-- **tree** — `components/{folders-panel, tree-node, tree-row, nav-note-row, recent-tree-node}`;
-  `hooks/{use-drag-drop, use-keyboard-navigation, use-feed-keyboard-navigation}`; `lib/{tree-ops, dnd-tree,
-  tree-dnd (DnD id/edge primitives), types}`. Tree components are
-  presentational — data/handlers come from app-shell (which reads NotesTreeContext).
 - **recording** — `components/recording-note-header`; `hooks/{recordings-context,
-  use-audio-recorder}`; `api/recordings-api`. Dual-mode recorder (web MediaRecorder / native iOS).
-  Transcription queue bookkeeping uses the shared `processing` hooks above.
+  use-audio-recorder}`; `api/recordings-api`. Web `MediaRecorder` capture; transcription
+  always auto-queues to local Whisper. Queue bookkeeping uses the shared `processing`
+  hooks above.
 - **handwriting** — `components/handwriting-note-header`; `hooks/handwriting-context`;
   `api/handwriting-api` (OpenAI / HuggingFace OCR queue). OCR queue bookkeeping uses the
   shared `processing` hooks above.
@@ -336,17 +331,16 @@ Each feature's context provider lives in `hooks/` alongside its hooks.
   settings; `flushSaveRef` flushes the editor before switching;
   `api/profiles-api`. Heavily depended upon.
 - **sync** — `components/local-sync-server-card`; `hooks/{git-sync-context,
-  use-git-sync-workflows, use-ssh-key
-  (app-managed Ed25519 keypair lifecycle: load/generate/delete, shared by the desktop +
-  mobile settings)}`; `api/{git-api (libgit2 IPC + SSH key lifecycle), local-sync-link}`.
+  use-git-sync-workflows, use-ssh-key (app-managed Ed25519 keypair lifecycle:
+  load/generate/delete)}`; `api/{git-api (libgit2 IPC + SSH key lifecycle),
+  local-sync-link (the `type2://sync` QR-code link format the phone parses)}`.
 - **security** — `components/lock-screen`; `hooks/security-context` (unlock/lock/enable,
   panic reset, auto-lock on background); `api/security-api`. The shell now treats this as an
   extension surface, so the UI should be hidden unless the extension registry opts it back in.
-- **settings** — the aggregator UI. `components/desktop/` (settings-panel + 9 sections, incl.
-  the desktop-only "Import" section) and `components/mobile/` (settings-screen + 7 sections +
-  helpers); `hooks/use-settings-data` (shared computed values); `lib/sections` (the
-  `SettingsSectionId` registry + desktop and mobile section lists). Settings legitimately
-  imports from many other features.
+- **settings** — the aggregator UI. `components/desktop/` (settings-panel + sections,
+  incl. "Import" and "Updates"); `hooks/use-settings-data` (shared computed values);
+  `lib/sections` (the `SettingsSectionId` registry). Settings legitimately imports from
+  many other features.
 - **extensions** — typed frontend feature registry for optional surfaces. `registry.ts`
   controls whether multi-lens, security, and other extension-only UI is surfaced.
 - **command-palette** — `components/command-palette` (renderer) +
@@ -360,9 +354,9 @@ Each feature's context provider lives in `hooks/` alongside its hooks.
   completes the highlighted folder, Enter moves the active/selected notes (creating missing
   folders).
 
-### Cross-context bridges (all in `src/app/app.tsx`)
+### Cross-context bridges (all in `src/app/providers.tsx`)
 
-1. **SecurityGate** — keeps the provider-heavy app unmounted while encrypted + locked.
+1. **AppSecurityGate** — keeps the provider-heavy app unmounted while encrypted + locked.
 2. **FlushSaveBridge** — writes EditorContext's `flushSave` into ProfilesProvider's
    `flushSaveRef` so profile switches flush unsaved edits.
 3. **RecordingsProvider.onRecordingComplete** — refreshes the tree + selects the new note.
@@ -372,13 +366,16 @@ Each feature's context provider lives in `hooks/` alongside its hooks.
 ### shared/
 
 `shared/api/invoke.ts` — `invokeLogged` (dev-only sanitized IPC tracing) used by every
-feature `api/`. `shared/lib/` — `dom`, `format` (formatters + `NotePreview` + `parseNotePreview`),
-`frontmatter`, `jobs`, `notes`, `selection`, `storage`, `utils` (`cn`). `shared/ui/` — shadcn.
-`shared/types.ts` — `FolderNode`, `NoteEntry`, `GitSyncStatus`, `ProfileSyncSettings`,
-`ThemeMode`, `NotesListMode`, `SecurityState`, … `shared/hooks/use-mobile.ts` — shadcn breakpoint.
+feature `api/`. `shared/lib/` — `dom`, `notes` (base64 + yieldToUi), `selection`,
+`storage`, `utils` (`cn`). `shared/ui/` — shadcn. `shared/hooks/use-mobile.ts` — the
+shadcn breakpoint hook (used by the sidebar primitive; not a mobile shell).
+Domain types (`FolderNode`, `NoteEntry`, `GitSyncStatus`, `ProfileSyncSettings`, …),
+`format`, `frontmatter`, and `jobs` live in `@typenotes/shared`.
 
 ### Desktop shell (`src/desktop/`)
 
+- `desktop-app-shell.tsx` — desktop interaction state (pane refs, DnD wiring, keyboard
+  navigation, context menus) around the layout.
 - `desktop-shell.tsx` — 2-pane / 3-pane resizable layout.
 - `middle-pane.tsx` — notes list (`SortableContext` + note-row) or settings sections.
 - `right-pane.tsx` — editor or settings detail; `hooks/use-desktop-editor-pane` owns
@@ -386,53 +383,6 @@ feature `api/`. `shared/lib/` — `dom`, `format` (formatters + `NotePreview` + 
 - `hooks/use-desktop-navigation` — Feed/Folders tab state and desktop middle-pane note list
   selection/context-menu behavior.
 - `app-sidebar.tsx` — desktop left rail (feed / new / record / handwriting / settings / trash).
-
-### Mobile shell (`src/mobile/`)
-
-- `mobile-shell.tsx` — phone (nav bar + route renderer + drawer) or tablet layout, plus
-  action-sheet / prompt / toast overlays. `tablet-layout.tsx` — tablet two-pane.
-- `navigation.ts` — route types + `useReducer` state machine. `types.ts` — mobile constants/helpers.
-- `hooks/` — `use-mobile-navigation`, `use-action-sheets`, `use-phone-nav-header`,
-  `use-recent-buckets`, `use-edge-swipe`. `use-layout-mode.ts`, `use-keyboard-insets.ts`.
-- `ui/` — primitives: `action-sheet`, `nav-bar`, `tab-bar`, `prompt-sheet`, `toast`.
-- `views/` — reusable screen bodies used by phone screens + tablet: `folders-view`,
-  `notes-view`, `editor-view`, `recent-view`, `recording-view`.
-- `screens/` — one phone route screen per `route.kind` (`home/folders/notes/recent-date/
-  recording/editor/settings-screen` + `index.tsx` route renderer).
-
-### Layout modes
-
-| Mode | Breakpoint | Shell | Notes panel |
-|------|-----------|-------|-------------|
-| phone | < 768px | MobileShell | Stack navigation |
-| tablet | 768–1024px | MobileShell | Split view |
-| desktop | > 1024px | DesktopShell | Resizable three-pane |
-
-Detection in `src/mobile/use-layout-mode.ts`.
-
-## iOS Widget (Quick Record)
-
-A WidgetKit extension that lets users start a recording from the iOS home screen or lock screen.
-
-### How it works
-
-1. **Widget extension** (`src-tauri/gen/apple/type-widget/RecordWidget.swift`): A `systemSmall` StaticConfiguration widget showing a mic icon and "New Recording" label. The entire widget surface links to `type2://record`.
-
-2. **URL scheme**: The `type2://` custom URL scheme is registered in `project.yml` via `CFBundleURLTypes`. When the widget is tapped, iOS opens the app with `type2://record`.
-
-3. **Deep link handling** (`src/mobile/mobile-shell.tsx`): A `useEffect` imports `@tauri-apps/plugin-deep-link` and listens for URL open events. When a URL containing "record" is received, it calls `openRecordingRoute` with `autoStart: true`.
-
-4. **Auto-start recording** (`src/mobile/views/recording-view.tsx`): When the `autoStart` prop is true and recording is supported/idle, recording begins automatically via a one-shot `useEffect` (guarded by a ref to prevent re-firing).
-
-### Files
-
-- `src-tauri/gen/apple/type-widget/RecordWidget.swift` — Widget SwiftUI code
-- `src-tauri/gen/apple/type-widget/Info.plist` — Widget extension plist
-- `src-tauri/gen/apple/project.yml` — `type_RecordWidget` target + `CFBundleURLTypes` on `type_iOS`
-- `src-tauri/Cargo.toml` + `src-tauri/src/lib.rs` — `tauri-plugin-deep-link` registration
-- `src/mobile/navigation.ts` — `autoStart` field on recording route
-- `src/mobile/mobile-shell.tsx` — Deep link listener + passes autoStart through
-- `src/mobile/views/recording-view.tsx` — Auto-start behavior
 
 ## Mobile app (apps/mobile) + FFI bridge
 
@@ -483,7 +433,7 @@ The React Native app (Expo) reuses the Rust core through
 - **Lock guard is backend-enforced**: most app commands return a locked error while encrypted mode is locked; only security commands remain callable.
 - **Security UI is optional**: the frontend shell hides the lock screen and security settings unless the extension registry enables them.
 - **Encryption scope is note body only**: recordings/attachments are currently stored unencrypted.
-- **Annotation cleanup is shared**: `shared/lib/annotation-metadata.ts` owns the lens/inline annotation stripping used by previews, slugging, and the editor.
+- **Annotation cleanup is shared**: `@typenotes/shared/annotation-metadata` owns the lens/inline annotation stripping used by previews, slugging, and the editor.
 - **Sync history UX**: settings now show commit history from real git log. This cannot reliably encode which device performed push/pull for every commit.
 - **Note previews are persisted per profile** in localStorage (`notes-viewer-note-previews-v1:<profileId>`) and hydrated on launch for an instant first paint, then revalidated via the bulk `list_note_previews` command (stale-while-revalidate). Persistence is disabled while encryption is on, and enabling encryption purges the snapshots (`clearPersistedNotePreviews` in `shared/lib/storage`). `get_tree` never reads note bodies — Feed is name-sorted (file names are time-prefixed) and the UI re-sorts by front-matter timestamps from previews. The full cache/invalidation design (and the deferred TanStack Query decision) is documented in `docs/architecture/07-frontend-caching.md`.
 - **Editor saves are debounced** (400ms). `flushSave()` must be called before navigation away, profile switching, or app backgrounding.

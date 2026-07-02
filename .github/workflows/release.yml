@@ -1,13 +1,10 @@
 name: Release
 
-# Tag-driven releases. The tag encodes both the version and which platform(s) to
-# ship:
-#   v1.2.3           -> desktop (.dmg + updater) AND iOS (App Store)
-#   v1.2.3-desktop   -> desktop only
-#   v1.2.3-ios       -> iOS only
+# Tag-driven desktop releases: pushing v1.2.3 builds the .dmg + updater
+# artifacts and publishes them as a GitHub Release.
 #
-# You can also trigger manually from the Actions tab (workflow_dispatch) and pick
-# the version + platforms there — handy for re-running a build without a new tag.
+# You can also trigger manually from the Actions tab (workflow_dispatch) and
+# pick the version there — handy for re-running a build without a new tag.
 on:
   push:
     tags:
@@ -18,57 +15,33 @@ on:
         description: "Version to release, e.g. 1.2.3"
         required: true
         type: string
-      platforms:
-        description: "Which platforms to build"
-        required: true
-        default: "both"
-        type: choice
-        options: [both, desktop, ios]
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Parse the tag (or manual inputs) into a version + per-platform booleans.
+  # Parse the tag (or manual inputs) into a version.
   # ---------------------------------------------------------------------------
   setup:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.parse.outputs.version }}
       tag: ${{ steps.parse.outputs.tag }}
-      desktop: ${{ steps.parse.outputs.desktop }}
-      ios: ${{ steps.parse.outputs.ios }}
     steps:
       - id: parse
         run: |
           set -e
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ inputs.version }}"
-            SEL="${{ inputs.platforms }}"
             TAG="v$VERSION"
           else
-            TAG="${{ github.ref_name }}"          # e.g. v1.2.3-ios
-            BASE="${TAG#v}"                        # strip leading v
-            case "$BASE" in
-              *-ios)     VERSION="${BASE%-ios}";     SEL="ios" ;;
-              *-desktop) VERSION="${BASE%-desktop}"; SEL="desktop" ;;
-              *)         VERSION="$BASE";            SEL="both" ;;
-            esac
+            TAG="${{ github.ref_name }}"          # e.g. v1.2.3
+            VERSION="${TAG#v}"                     # strip leading v
           fi
-
-          DESKTOP=false; IOS=false
-          case "$SEL" in
-            both)    DESKTOP=true; IOS=true ;;
-            desktop) DESKTOP=true ;;
-            ios)     IOS=true ;;
-            *) echo "Unknown platform selection: $SEL" >&2; exit 1 ;;
-          esac
 
           {
             echo "version=$VERSION"
             echo "tag=$TAG"
-            echo "desktop=$DESKTOP"
-            echo "ios=$IOS"
           } >> "$GITHUB_OUTPUT"
-          echo "Release -> version=$VERSION tag=$TAG desktop=$DESKTOP ios=$IOS"
+          echo "Release -> version=$VERSION tag=$TAG"
 
   # ---------------------------------------------------------------------------
   # Desktop (macOS): .dmg + updater artifacts, published as a GitHub Release.
@@ -77,7 +50,6 @@ jobs:
   # ---------------------------------------------------------------------------
   desktop:
     needs: setup
-    if: needs.setup.outputs.desktop == 'true'
     runs-on: macos-latest
     permissions:
       contents: write
@@ -126,81 +98,8 @@ jobs:
           args: --bundles app,dmg
 
       # The desktop updater endpoint reads .../releases/latest/download/latest.json,
-      # so the desktop release must be GitHub's "latest". A `-desktop` tag is
-      # semver-prerelease syntax, so force the flag to be safe. (iOS-only releases
-      # are NOT marked latest, so they never hijack the desktop update channel.)
+      # so the desktop release must be GitHub's "latest".
       - name: Mark release as latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${{ needs.setup.outputs.tag }}" --latest --prerelease=false
-
-  # ---------------------------------------------------------------------------
-  # iOS: native App Store build. Requires Apple signing assets as repo secrets
-  # (see docs/RELEASING.md → "iOS CI setup"). This is the native binary path;
-  # JS-only changes ship faster via the OTA bundle (deploy-pages.yml on main).
-  # ---------------------------------------------------------------------------
-  ios:
-    needs: setup
-    if: needs.setup.outputs.ios == 'true'
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-ios
-      - uses: swatinem/rust-cache@v2
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Set app version from tag
-        working-directory: apps/desktop
-        run: bash scripts/set-app-version.sh "${{ needs.setup.outputs.version }}"
-
-      # Give every App Store upload a unique build number (CFBundleVersion).
-      - name: Set build number
-        run: echo "TAURI_IOS_BUILD_NUMBER=${{ github.run_number }}" >> "$GITHUB_ENV"
-
-      - name: Import signing certificate
-        uses: apple-actions/import-codesign-certs@v3
-        with:
-          p12-file-base64: ${{ secrets.APPLE_IOS_CERTIFICATE_P12 }}
-          p12-password: ${{ secrets.APPLE_IOS_CERTIFICATE_PASSWORD }}
-
-      - name: Install provisioning profile
-        env:
-          PROFILE_BASE64: ${{ secrets.APPLE_IOS_PROVISIONING_PROFILE }}
-        run: |
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          echo "$PROFILE_BASE64" | base64 --decode \
-            > "$HOME/Library/MobileDevice/Provisioning Profiles/build.mobileprovision"
-
-      - name: Write App Store Connect API key
-        env:
-          ASC_KEY_BASE64: ${{ secrets.APPLE_ASC_API_KEY_P8 }}
-          ASC_KEY_ID: ${{ secrets.APPLE_ASC_API_KEY_ID }}
-        run: |
-          mkdir -p private_keys
-          echo "$ASC_KEY_BASE64" | base64 --decode > "private_keys/AuthKey_${ASC_KEY_ID}.p8"
-
-      - name: Initialize iOS project
-        run: npm run --workspace type tauri ios init
-
-      - name: Build iOS app (App Store export)
-        run: npm run --workspace type ios:build
-
-      - name: Upload to App Store Connect
-        env:
-          ASC_KEY_ID: ${{ secrets.APPLE_ASC_API_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.APPLE_ASC_API_ISSUER_ID }}
-        run: |
-          IPA=$(find apps/desktop/src-tauri/gen/apple/build -name "*.ipa" | head -1)
-          echo "Uploading $IPA"
-          xcrun altool --upload-app --type ios --file "$IPA" \
-            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"

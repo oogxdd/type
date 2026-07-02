@@ -185,7 +185,7 @@ export function DesktopAppShell({
     desktopContextMenuState,
     openDesktopContextMenu,
     closeDesktopContextMenu,
-  } = useTreeInteractions({ foldersPanelRef, useNativeContextMenus: false });
+  } = useTreeInteractions({ foldersPanelRef });
   const {
     activeNavigationTab,
     deleteSelectedNotesByShortcut,

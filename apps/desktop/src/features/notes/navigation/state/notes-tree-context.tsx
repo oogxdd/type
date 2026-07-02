@@ -59,7 +59,6 @@ type NotesTreeContextValue = {
   ) => Promise<void>;
   flattenIntoFeed: (folderPaths: string[], notePaths: string[]) => Promise<void>;
   showNoteInfo: (path: string) => Promise<void>;
-  renameFolderFromMobile: (path: string, nextName: string) => Promise<void>;
   shouldNestNotesInNavigation: boolean;
   setTree: Dispatch<SetStateAction<FolderNode | null>>;
 };
@@ -124,7 +123,7 @@ export function NotesTreeProvider({ children }: { children: ReactNode }) {
     setRenameValue,
     refreshTree,
     shouldNestNotesInNavigation,
-  } = useNotesTreeState({ activeFolder, activeNote });
+  } = useNotesTreeState({ activeFolder });
 
   const {
     createNewNote,
@@ -135,7 +134,6 @@ export function NotesTreeProvider({ children }: { children: ReactNode }) {
     updateNoteMarkers,
     flattenIntoFeed,
     showNoteInfo,
-    renameFolderFromMobile,
     startRenameFolder,
     submitRenameFolder,
     cancelRenameFolder,
@@ -203,7 +201,6 @@ export function NotesTreeProvider({ children }: { children: ReactNode }) {
         updateNoteMarkers,
         flattenIntoFeed,
         showNoteInfo,
-        renameFolderFromMobile,
         shouldNestNotesInNavigation,
         setTree,
       }}

@@ -10,7 +10,6 @@ import { ProfilesProvider } from "@/features/profiles/hooks/profiles-context";
 import { RecordingsProvider } from "@/features/recording/hooks/recordings-context";
 import { SecurityProvider } from "@/features/security/hooks/security-context";
 import { GitSyncProvider } from "@/features/sync/hooks/git-sync-context";
-import { useLayoutMode } from "@/mobile/use-layout-mode";
 import { useBackgroundSave } from "./lifecycle/use-background-save";
 import { AppReadinessGate, AppSecurityGate } from "./readiness";
 
@@ -44,7 +43,6 @@ function CaptureFeatureProviders({ children }: { children: ReactNode }) {
     }))
   );
   const editor = useEditor();
-  const layoutMode = useLayoutMode();
 
   const handleCapturedNoteComplete = async (result: {
     folder_path: string;
@@ -63,12 +61,10 @@ function CaptureFeatureProviders({ children }: { children: ReactNode }) {
   return (
     <RecordingsProvider
       activeFolder={selection.activeFolder}
-      layoutMode={layoutMode}
       onRecordingComplete={handleCapturedNoteComplete}
     >
       <HandwritingProvider
         activeFolder={selection.activeFolder}
-        layoutMode={layoutMode}
         onHandwritingComplete={handleCapturedNoteComplete}
       >
         {children}

@@ -1,6 +1,5 @@
 import { FEED_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@typenotes/shared/types";
-import type { LayoutMode } from "@/mobile/navigation";
 import type { TreeItem } from "@/features/notes/navigation/model/types";
 import type { FlattenedItem } from "@/features/notes/navigation/model/types";
 import { collectAllNotes } from "@typenotes/shared/notes";
@@ -10,9 +9,7 @@ import type { NotePreview } from "@typenotes/shared/format";
 // Pure helpers for the notes navigation view. Keep the render rules here so
 // components stay dumb and the state hook can stay mostly orchestration.
 type PreviewSourceInput = {
-  layoutMode: LayoutMode;
   activeFolder: string;
-  activeNote: string | null;
   notes: NoteEntry[];
   feedNotes: NoteEntry[];
   allNotes: NoteEntry[];
@@ -20,9 +17,7 @@ type PreviewSourceInput = {
 };
 
 export function selectPreviewSourceNotes({
-  layoutMode,
   activeFolder,
-  activeNote,
   notes,
   feedNotes,
   allNotes,
@@ -31,20 +26,10 @@ export function selectPreviewSourceNotes({
   if (activeFolder === FEED_FOLDER_PATH) {
     return feedNotes;
   }
-  if (layoutMode !== "phone" && !shouldNestNotesInNavigation) {
+  if (!shouldNestNotesInNavigation) {
     return notes;
   }
-
-  // On phone, warming the whole vault when the editor opens is wasted work.
-  // The active note is enough for the recording/handwriting header preview.
-  if (layoutMode === "phone" && !activeFolder) {
-    if (!activeNote) {
-      return [];
-    }
-    const active = allNotes.find((note) => note.path === activeNote);
-    return active ? [active] : [];
-  }
-
+  // Nested navigation shows every folder's notes inline, so warm the vault.
   return allNotes;
 }
 
@@ -89,14 +74,6 @@ export function buildVisibleNavigationItems(
 
   walk(treeData, null);
   return items;
-}
-
-export function getFirstSelectableFolderPath(tree: FolderNode | null): string {
-  if (!tree) {
-    return "";
-  }
-  const feed = findNode(tree, FEED_FOLDER_PATH);
-  return feed?.path || tree.children[0]?.path || "";
 }
 
 type RenamedSelection = {

@@ -17,7 +17,6 @@ import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useAutoQueueLoop } from "@/features/processing/hooks/use-auto-queue-loop";
 import { useProcessingQueue } from "@/features/processing/hooks/use-processing-queue";
 import { jobListSignature } from "@typenotes/shared/jobs";
-import type { LayoutMode } from "@/mobile/navigation";
 import { getErrorMessage } from "@typenotes/shared/errors";
 
 type HandwritingContextValue = {
@@ -34,7 +33,6 @@ type HandwritingContextValue = {
   ) => Promise<void>;
   refreshHandwritingJobs: () => Promise<void>;
   queueHandwritingOcr: (trigger?: "manual" | "auto") => Promise<void>;
-  shouldAutoQueueHandwriting: boolean;
 };
 
 const HandwritingContext = createContext<HandwritingContextValue | null>(null);
@@ -42,12 +40,10 @@ const HandwritingContext = createContext<HandwritingContextValue | null>(null);
 export function HandwritingProvider({
   children,
   activeFolder,
-  layoutMode,
   onHandwritingComplete,
 }: {
   children: ReactNode;
   activeFolder: string;
-  layoutMode: LayoutMode;
   onHandwritingComplete: (result: {
     folder_path: string;
     note_path: string;
@@ -59,9 +55,6 @@ export function HandwritingProvider({
   const [handwritingStatusMessage, setHandwritingStatusMessage] = useState<string | null>(null);
   const [handwritingQueueBusy, setHandwritingQueueBusy] = useState(false);
   const queueBusyRef = useRef(false);
-
-  const shouldAutoQueueHandwriting =
-    layoutMode === "desktop" || syncSettings.mobileAutoHandwritingOcrEnabled;
 
   const resolveTargetFolder = useCallback(
     (preferredFolderPath?: string | null) => {
@@ -114,7 +107,7 @@ export function HandwritingProvider({
     loadSnapshot: loadHandwritingSnapshot,
     getSignature: jobListSignature,
     invalidateEventName: "note-previews-invalidated",
-    refreshOnMount: layoutMode !== "phone",
+    refreshOnMount: true,
   });
 
   const queueHandwritingOcr = useCallback(
@@ -176,9 +169,7 @@ export function HandwritingProvider({
         await onHandwritingComplete(result);
         setHandwritingStatusMessage(`Saved ${result.note_path}.`);
         void refreshHandwritingJobs();
-        if (shouldAutoQueueHandwriting) {
-          await queueHandwritingOcr("auto");
-        }
+        await queueHandwritingOcr("auto");
       } catch (error) {
         const message = getErrorMessage(error);
         setHandwritingStatusMessage(message);
@@ -193,7 +184,6 @@ export function HandwritingProvider({
       refreshHandwritingJobs,
       resolveTargetFolder,
       syncSettings.noteFileNameFormat,
-      shouldAutoQueueHandwriting,
     ]
   );
 
@@ -203,11 +193,8 @@ export function HandwritingProvider({
     [queueHandwritingOcr]
   );
   useAutoQueueLoop({
-    enabled:
-      shouldAutoQueueHandwriting &&
-      autoQueueConfig.apiKey.length > 0 &&
-      autoQueueConfig.model.length > 0,
-    delayMs: layoutMode === "phone" ? 3000 : 0,
+    enabled: autoQueueConfig.apiKey.length > 0 && autoQueueConfig.model.length > 0,
+    delayMs: 0,
     onTick: autoQueueHandwriting,
   });
 
@@ -224,7 +211,6 @@ export function HandwritingProvider({
         importHandwritingFile,
         refreshHandwritingJobs,
         queueHandwritingOcr,
-        shouldAutoQueueHandwriting,
       }}
     >
       {children}

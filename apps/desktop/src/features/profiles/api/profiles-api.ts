@@ -5,7 +5,6 @@ import type {
   NotesProfileSnapshot,
   ProfileSettings,
   ProfilesBackupArchive,
-  ProfilesDocumentsExport,
 } from "@typenotes/shared/types";
 
 type NotesProfilesSnapshotPayload = {
@@ -92,8 +91,3 @@ export const updateAppConfig = (
 export const createProfilesBackupZip = (): Promise<ProfilesBackupArchive> =>
   invokeLogged<ProfilesBackupArchive>("create_profiles_backup_zip");
 
-export const presentFileExportSheet = (path: string): Promise<void> =>
-  invokeLogged("present_file_export_sheet", { path });
-
-export const exportProfilesToDocuments = (): Promise<ProfilesDocumentsExport> =>
-  invokeLogged<ProfilesDocumentsExport>("export_profiles_to_documents");

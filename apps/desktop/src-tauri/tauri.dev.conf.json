@@ -7,12 +7,5 @@
         "title": "Type Dev"
       }
     ]
-  },
-  "plugins": {
-    "deep-link": {
-      "desktop": {
-        "schemes": ["type2-dev"]
-      }
-    }
   }
 }

@@ -7,7 +7,7 @@ a phone can sync over Wi-Fi or a hotspot with **no external host**.
 
 Two apps share **one Rust core**:
 
-- **Desktop** — Tauri v2 + React 19/TypeScript (macOS, Windows, Linux; also the legacy Tauri-iOS build)
+- **Desktop** — Tauri v2 + React 19/TypeScript (macOS, Windows, Linux)
 - **Mobile** — React Native (Expo), talking to the same core through UniFFI. Opens on a
   blank page you can type on immediately; swipe up files it away and gives you a fresh page.
 
@@ -33,7 +33,7 @@ packages/mobile-core/  @typenotes/mobile-core — typed TS bridge to type-ffi
 - **One-button local sync** — host a `git daemon` on the desktop; the phone finds it by mDNS or QR code, no typing.
 - **SSH key auth** — generate an Ed25519 keypair in-app for passwordless SSH.
 - **Never-blocked merges** — conflicts keep your version and drop the remote copy beside it as `.conflict.md`.
-- **Audio recording + transcription** — zero-install local Whisper on desktop, AssemblyAI on iOS.
+- **Audio recording + transcription** — zero-install local Whisper on desktop; per-folder modes on mobile (AssemblyAI, defer-to-desktop, native provider).
 - **Handwriting OCR** — import an image, get text back (OpenAI / Hugging Face).
 - **Processing queues** — voice transcription and handwriting OCR run as separate queues with shared status plumbing.
 - **Multi-profile** — independent notes roots and sync settings.
@@ -95,18 +95,10 @@ To build an isolated dev DMG:
 npm run tauri:build:dev -w type
 ```
 
-### iOS (Tauri build)
-
-```bash
-npm run tauri:ios:init -w type    # one-time
-npm run tauri:ios:dev -w type     # simulator/device
-npm run tauri:ios:build -w type   # release
-```
-
 ### Build & checks
 
 ```bash
-npm run desktop:build    # tsc + web build + OTA fallback assets
+npm run desktop:build    # tsc + vite build
 cargo check --workspace
 
 npm run typecheck        # tsc --noEmit in every workspace
@@ -120,8 +112,7 @@ pull request and on pushes to `main`.
 Manual smoke checks:
 
 - **Desktop** — folder tree, note editing, DnD reorder, context menus, settings, keyboard shortcuts
-- **Phone** — folders → notes → editor flow, back navigation, swipe actions, action sheets, sync
-- **Tablet** — split view in portrait/landscape, rotation stability
+- **Mobile (React Native)** — blank-page capture + swipe-up filing, folder browsing, record, sync
 
 ## Notes storage
 
@@ -217,7 +208,7 @@ Full guide incl. hardening: [docs/ssh-sync-setup.md](docs/ssh-sync-setup.md).
   compare, edit the original, and delete the `.conflict.md` when done.
 - **Push** auto-commits local changes with your message, then pushes.
 
-Typical loop: **Pull → edit → Push**. Across devices: Desktop edit → Push; iOS Pull → edit →
+Typical loop: **Pull → edit → Push**. Across devices: Desktop edit → Push; phone Pull → edit →
 Push; Desktop Pull.
 
 ### Security notes
@@ -259,40 +250,6 @@ Each working folder's `.type/settings.json` carries a `transcription_mode`
   core's `TranscriptionProvider` FFI trait.
 - **off** — never transcribe automatically.
 
-## OTA updates (iOS WebView assets)
-
-iOS web assets can be updated over-the-air via `@inkibra/tauri-plugin-ota`.
-
-```bash
-cp .env.example .env     # then set VITE_OTA_MANIFEST_URL
-```
-
-`npm run build` emits both the regular `index.html` assets and deterministic OTA fallback
-assets (`dist/app.js`, `dist/app.css`). To prepare publishable artifacts + manifest:
-
-```bash
-OTA_CDN_BASE_URL=https://your-cdn.example.com/type/ota npm run ota:prepare
-```
-
-(`ota:prepare` also works without `OTA_CDN_BASE_URL` when `VITE_OTA_MANIFEST_URL` is set — the
-base URL is inferred from `…/manifest.json`.) It writes `dist/ota/app-<version>.js`,
-`dist/ota/app-<version>.css`, and `dist/ota/manifest.json` (with a SHA-256 hash). Point
-`VITE_OTA_MANIFEST_URL` at that manifest.
-
-Flow: the splash bootstrap (`src/ota-bootstrap.ts`) calls `prepare(manifestUrl)` then
-`start()`, which loads OTA content when available and otherwise the bundled `app.js` fallback;
-startup is registered via `register()` in `src/main.tsx`. Users can disable startup OTA checks
-in **Settings → Sync** (the app then skips the manifest fetch and starts bundled assets directly).
-
-## Mobile UX
-
-- **Phone** — stack navigation (Folders → Notes → Editor → Settings), back button + edge-swipe,
-  long-press action sheets, swipe-left Archive/Delete, pull-to-refresh (refreshes tree + git status).
-- **Tablet** — split view (folders/settings | notes/editor); portrait uses an adaptive split with stable content.
-- **Editor** — save status line (Saving… / Saved / Save failed + Retry), 400 ms debounced
-  autosave, guaranteed `flushSave()` on back navigation and app background/unload, and
-  VisualViewport keyboard-inset handling.
-
 ## Roadmap
 
 > Rough, early ideas — not yet designed or scheduled.
@@ -328,5 +285,4 @@ Architecture, module map, and codebase patterns live in **[AGENTS.md](./AGENTS.m
 (Tauri shell). The shared Rust core (`crates/type-core`) is organized as
 **domain / application / ports / adapters** across the `notes`, `profiles`, `security`,
 `recordings`, `handwriting`, `import`, `git_sync`, and `local_sync` domains; the Tauri
-shell adds `commands/` + the `platform` domain, and `crates/type-ffi` exposes the same
-use cases to React Native.
+shell adds `commands/`, and `crates/type-ffi` exposes the same use cases to React Native.

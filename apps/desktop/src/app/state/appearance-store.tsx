@@ -14,7 +14,6 @@ import {
   getInitialTheme,
 } from "@/shared/lib/storage";
 import type { NotesListMode, ThemeMode } from "@typenotes/shared/types";
-import { setNativeTheme } from "./appearance-api";
 
 type AppearanceState = {
   theme: ThemeMode;
@@ -62,7 +61,6 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
       if (!previous || state.theme !== previous.theme) {
         window.localStorage.setItem("notes-viewer-theme", state.theme);
         applyThemeToDocument(state.theme);
-        void setNativeTheme(state.theme).catch(() => {});
       }
       if (!previous || state.notesListMode !== previous.notesListMode) {
         window.localStorage.setItem(

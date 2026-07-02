@@ -1,6 +1,5 @@
 import { invokeLogged } from "@/shared/api/invoke";
 import type {
-  NativeRecorderCapabilities,
   NoteFileNameFormat,
   RecordingAudioPayload,
   RecordingsListResult,
@@ -21,15 +20,6 @@ export const saveAudioRecording = (
       mime_type: mimeType,
       folder_path: folderPath,
       file_name_format: fileNameFormat,
-    },
-  });
-
-export const queueRecordingTranscriptions = (
-  assemblyApiKey: string
-): Promise<RecordingTranscriptionQueueResult> =>
-  invokeLogged<RecordingTranscriptionQueueResult>("queue_recording_transcriptions", {
-    args: {
-      assembly_api_key: assemblyApiKey,
     },
   });
 
@@ -70,15 +60,3 @@ export const readRecordingAudio = (
   invokeLogged<RecordingAudioPayload>("read_recording_audio", {
     args: { path },
   });
-
-export const nativeRecorderCapabilities =
-  (): Promise<NativeRecorderCapabilities> =>
-    invokeLogged<NativeRecorderCapabilities>(
-      "native_audio_recorder_capabilities"
-    );
-
-export const startNativeAudioRecording = (): Promise<void> =>
-  invokeLogged<void>("start_native_audio_recording");
-
-export const stopNativeAudioRecording = (): Promise<RecordingAudioPayload> =>
-  invokeLogged<RecordingAudioPayload>("stop_native_audio_recording");

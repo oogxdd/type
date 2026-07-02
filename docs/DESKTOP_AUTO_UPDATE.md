@@ -174,18 +174,18 @@ with a progress readout, install, and relaunch into the new version.
 
 ---
 
-## Optional: automate with GitHub Actions
+## Automated with GitHub Actions
 
-You already have `.github/workflows/deploy-pages.yml`. A release workflow using
-[`tauri-apps/tauri-action`](https://github.com/tauri-apps/tauri-action) can build,
+`.github/workflows/release.yml` uses
+[`tauri-apps/tauri-action`](https://github.com/tauri-apps/tauri-action) to build,
 sign, generate `latest.json`, and create the GitHub Release on tag push. It needs
 two repo secrets:
 
 - `TAURI_SIGNING_PRIVATE_KEY` — contents of `~/.tauri/type-updater.key`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — its password
 
-(Plus the macOS runner and, if you want notarization, the Apple signing secrets.)
-Ask and I can write this workflow.
+(Plus, if you want notarization, the Apple signing secrets — see
+[RELEASING.md](./RELEASING.md).)
 
 ---
 
@@ -198,8 +198,3 @@ Ask and I can write this workflow.
 - The **updater signature** (`TAURI_SIGNING_*`) and **Apple code-signing /
   notarization** are two independent things. The updater refuses unsigned-by-*you*
   payloads regardless of Apple status.
-- iOS keeps using the existing **OTA JS-bundle** updater (`@inkibra/tauri-plugin-ota`,
-  the second section in Settings → Updates). It is unrelated to this desktop binary
-  updater.
-- The updater plugin is desktop-only; it is compiled out of mobile builds via
-  `#[cfg(desktop)]`, so it won't affect your iOS build.

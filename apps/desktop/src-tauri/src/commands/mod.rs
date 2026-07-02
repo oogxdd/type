@@ -3,7 +3,6 @@ mod handwriting;
 mod import;
 mod local_sync;
 mod notes;
-mod platform;
 mod profiles;
 mod recordings;
 mod security;
@@ -22,23 +21,12 @@ where
 }
 
 pub(super) fn run() {
-    let mut builder = tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_ota::init());
-
-    // Native desktop auto-updater (replaces the whole app binary). Not available
-    // on mobile, so it is only registered for desktop targets. iOS keeps using
-    // the OTA JS-bundle plugin above.
-    #[cfg(desktop)]
-    {
-        builder = builder
-            .plugin(tauri_plugin_updater::Builder::new().build())
-            .plugin(tauri_plugin_process::init());
-    }
-
-    let app = builder
+        // Native desktop auto-updater (replaces the whole app binary).
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|_app| {
             let app_handle = _app.handle();
             type_core::ensure_security_runtime_initialized_for_setup(&crate::app_env(app_handle)?)?;
@@ -54,8 +42,6 @@ pub(super) fn run() {
             security::lock_security,
             security::unlock_security,
             security::set_security_preferences,
-            platform::set_native_theme,
-            platform::present_file_export_sheet,
             profiles::get_profiles,
             profiles::create_profile,
             profiles::set_active_profile,
@@ -78,9 +64,6 @@ pub(super) fn run() {
             notes::delete_items,
             notes::rename_item,
             notes::set_order,
-            recordings::native_audio_recorder_capabilities,
-            recordings::start_native_audio_recording,
-            recordings::stop_native_audio_recording,
             recordings::save_audio_recording,
             recordings::queue_recording_transcriptions,
             recordings::queue_local_transcriptions,
@@ -110,29 +93,11 @@ pub(super) fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|app_handle, event| {
-        #[cfg(target_os = "ios")]
-        match event {
-            tauri::RunEvent::Ready | tauri::RunEvent::Resumed => {
-                crate::install_ios_webview_termination_recovery(app_handle);
-            }
-            tauri::RunEvent::Exit => {
-                crate::release_ios_webview_termination_proxies();
-            }
-            _ => {}
-        }
-
+    app.run(|_app_handle, event| {
         // Tear down the local sync git daemon when the app exits so we never
         // leave an orphaned process holding port 9418.
-        #[cfg(desktop)]
-        {
-            if matches!(event, tauri::RunEvent::Exit) {
-                type_core::shutdown_local_sync_server();
-            }
-            let _ = app_handle;
+        if matches!(event, tauri::RunEvent::Exit) {
+            type_core::shutdown_local_sync_server();
         }
-
-        #[cfg(not(any(target_os = "ios", desktop)))]
-        let _ = (app_handle, event);
     });
 }

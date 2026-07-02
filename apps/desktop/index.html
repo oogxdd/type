@@ -43,7 +43,7 @@
         background: #f5f6fb;
       }
 
-      #ota-splash {
+      #launch-splash {
         position: fixed;
         inset: 0;
         display: flex;
@@ -55,23 +55,23 @@
         z-index: 9999;
       }
 
-      html[data-launch-theme="light"] #ota-splash {
+      html[data-launch-theme="light"] #launch-splash {
         background: #f5f6fb;
       }
 
-      #ota-splash.launch-splash-hidden {
+      #launch-splash.launch-splash-hidden {
         opacity: 0;
         visibility: hidden;
         pointer-events: none;
       }
 
-      #ota-logo {
+      #launch-logo {
         width: 120px;
         height: 120px;
         object-fit: contain;
       }
 
-      #ota-status {
+      #launch-status {
         position: absolute;
         width: 1px;
         height: 1px;
@@ -86,11 +86,11 @@
   </head>
 
   <body>
-    <div id="ota-splash">
-      <img id="ota-logo" src="/type-splash-logo.png" alt="Type logo" />
-      <div id="ota-status">Loading...</div>
+    <div id="launch-splash">
+      <img id="launch-logo" src="/type-splash-logo.png" alt="Type logo" />
+      <div id="launch-status">Loading...</div>
     </div>
     <div id="root"></div>
-    <script type="module" src="/src/ota-bootstrap.ts"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -37,7 +37,7 @@ export const hideLaunchSplash = () => {
     return;
   }
 
-  const splash = document.getElementById("ota-splash");
+  const splash = document.getElementById("launch-splash");
   if (!splash || splash.dataset.state === "hiding") {
     return;
   }
