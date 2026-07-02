@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { formatRecordingStatus, formatUpdatedAt } from "@/shared/lib/format";
+import { formatRecordingStatus, formatUpdatedAt } from "@typenotes/shared/format";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { Button } from "@/shared/ui/button";
-import type { RecordingListItem } from "@/shared/types";
+import type { RecordingListItem } from "@typenotes/shared/types";
 import { WhisperEngineCard } from "./whisper-engine-card";
 
 /** Normalised, display-ready status for a recording (queued/processing take

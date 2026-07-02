@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getErrorMessage } from "@/shared/lib/errors";
+import { getErrorMessage } from "@typenotes/shared/errors";
 
 type ProcessingSnapshot<TQueue, TItem> = {
   queue: TQueue;

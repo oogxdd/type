@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { FEED_FOLDER_PATH } from "@/shared/constants";
-import type { NoteEntry } from "@/shared/types";
+import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import type { NoteEntry } from "@typenotes/shared/types";
 import { selectPreviewSourceNotes } from "./notes-tree-model";
 
 const note = (path: string): NoteEntry => ({

@@ -7,7 +7,7 @@ import {
   getProfileSyncSettings,
   readProfileSyncStore,
 } from "@/shared/lib/storage";
-import type { NotesProfileSnapshot } from "@/shared/types";
+import type { NotesProfileSnapshot } from "@typenotes/shared/types";
 
 type UseLegacyProfileSyncMigrationArgs = {
   profilesSnapshot: NotesProfileSnapshot | null;

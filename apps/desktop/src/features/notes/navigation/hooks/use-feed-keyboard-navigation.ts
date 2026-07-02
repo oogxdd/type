@@ -7,9 +7,9 @@ import {
 } from "react";
 
 import type { FeedTreeNode } from "@/features/notes/navigation/model/feed-tree-model";
-import { FEED_FOLDER_PATH } from "@/shared/constants";
+import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import { escapeSelectorValue, focusNoScroll, scrollIntoViewIfNeeded } from "@/shared/lib/dom";
-import type { VisibleNavigationItem } from "@/shared/types";
+import type { VisibleNavigationItem } from "@typenotes/shared/types";
 
 type UseFeedKeyboardNavigationArgs = {
   shouldNestNotesInNavigation: boolean;

@@ -2,7 +2,7 @@ import type {
   AppConfig,
   ProfileSettings,
   ProfileSyncSettings,
-} from "@/shared/types";
+} from "@typenotes/shared/types";
 import { DEFAULT_PROFILE_SYNC_SETTINGS } from "@/shared/lib/storage";
 
 export const LEGACY_PROFILE_SYNC_STORAGE_KEYS = [

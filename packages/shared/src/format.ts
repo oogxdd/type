@@ -2,7 +2,7 @@ import type {
   HandwritingOcrListItem,
   NoteMeta,
   RecordingListItem,
-} from "../types";
+} from "./types";
 import { stripFrontmatter } from "./frontmatter";
 import { stripInlineAnnotationMetadata } from "./annotation-metadata";
 

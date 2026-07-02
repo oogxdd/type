@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import * as gitApi from "@/features/sync/api/git-api";
-import { getErrorMessage } from "@/shared/lib/errors";
+import { getErrorMessage } from "@typenotes/shared/errors";
 import { confirmAction } from "@/shared/lib/dom";
 
 const DELETE_CONFIRM_MESSAGE =

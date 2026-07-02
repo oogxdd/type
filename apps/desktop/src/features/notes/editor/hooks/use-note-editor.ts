@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteItems, readNote, renameItem, writeNote } from "@/features/notes/api/notes-api";
 import { getAutoRenameTarget } from "@/features/notes/editor/lib/note-autoname";
-import type { NoteFileNameFormat } from "@/shared/types";
-import { getErrorMessage } from "@/shared/lib/errors";
+import type { NoteFileNameFormat } from "@typenotes/shared/types";
+import { getErrorMessage } from "@typenotes/shared/errors";
 
 const emitTreeInvalidated = () => {
   window.dispatchEvent(new CustomEvent("notes-tree-invalidated"));

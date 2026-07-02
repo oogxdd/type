@@ -13,7 +13,7 @@ import {
   getInitialNotesListMode,
   getInitialTheme,
 } from "@/shared/lib/storage";
-import type { NotesListMode, ThemeMode } from "@/shared/types";
+import type { NotesListMode, ThemeMode } from "@typenotes/shared/types";
 import { setNativeTheme } from "./appearance-api";
 
 type AppearanceState = {

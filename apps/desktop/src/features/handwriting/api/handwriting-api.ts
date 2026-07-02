@@ -4,7 +4,7 @@ import type {
   HandwritingOcrListResult,
   HandwritingOcrQueueResult,
   NoteFileNameFormat,
-} from "@/shared/types";
+} from "@typenotes/shared/types";
 
 export const saveHandwritingAttachment = (
   imageBase64: string,

@@ -1,5 +1,5 @@
 import { useCallback, useRef } from "react";
-import type { AppMode, VisibleNavigationItem } from "@/shared/types";
+import type { AppMode, VisibleNavigationItem } from "@typenotes/shared/types";
 import type { FlattenedItem } from "../model/types";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { focusNoScroll, scrollIntoViewIfNeeded, escapeSelectorValue } from "@/shared/lib/dom";

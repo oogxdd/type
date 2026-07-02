@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { create } from "zustand";
 
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
-import { getNoteParentPath } from "@/shared/lib/notes";
+import { getNoteParentPath } from "@typenotes/shared/notes";
 
 type SetValue<T> = T | ((current: T) => T);
 

@@ -7,9 +7,9 @@ import type {
 } from "@dnd-kit/core";
 import { moveItems, setOrder } from "@/features/notes/api/notes-api";
 import { logGroup } from "@/shared/api/invoke";
-import type { DragData, FolderNode } from "@/shared/types";
-import { isSystemFolder } from "@/shared/constants";
-import { getNoteParentPath } from "@/shared/lib/notes";
+import type { DragData, FolderNode } from "@typenotes/shared/types";
+import { isSystemFolder } from "@typenotes/shared/constants";
+import { getNoteParentPath } from "@typenotes/shared/notes";
 import { DROP_PREFIX } from "../model/tree-dnd";
 import {
   findNode,

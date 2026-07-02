@@ -28,6 +28,7 @@
     "release:major": "npm version major && npm run version:sync && npm run ios:build && npm run ota:prepare && npm run ios:push"
   },
   "dependencies": {
+    "@typenotes/shared": "*",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",

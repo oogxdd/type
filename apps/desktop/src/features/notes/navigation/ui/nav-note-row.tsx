@@ -3,8 +3,8 @@ import { useCallback } from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { Mic, PenLine } from "lucide-react";
-import type { DragData, NoteEntry } from "@/shared/types";
-import type { NotePreview } from "@/shared/lib/format";
+import type { DragData, NoteEntry } from "@typenotes/shared/types";
+import type { NotePreview } from "@typenotes/shared/format";
 
 export type NavNoteRowProps = {
   note: NoteEntry;

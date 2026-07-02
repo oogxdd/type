@@ -7,7 +7,7 @@ import type {
   RecordingTranscriptionQueueResult,
   RecordingWriteResult,
   WhisperStatusResult,
-} from "@/shared/types";
+} from "@typenotes/shared/types";
 
 export const saveAudioRecording = (
   audioBase64: string,

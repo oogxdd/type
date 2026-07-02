@@ -1,6 +1,6 @@
-import type { NoteFileNameFormat } from "@/shared/types";
-import { stripInlineAnnotationMetadata } from "@/shared/lib/annotation-metadata";
-import { stripFrontmatter } from "@/shared/lib/frontmatter";
+import type { NoteFileNameFormat } from "@typenotes/shared/types";
+import { stripInlineAnnotationMetadata } from "@typenotes/shared/annotation-metadata";
+import { stripFrontmatter } from "@typenotes/shared/frontmatter";
 
 const UUID_V7_FILE_NAME_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}\.md$/i;

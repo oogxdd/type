@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { NotesProfileSnapshot } from "@/shared/types";
+import type { NotesProfileSnapshot } from "@typenotes/shared/types";
 import { confirmAction } from "@/shared/lib/dom";
 import { Button } from "@/shared/ui/button";
 import {

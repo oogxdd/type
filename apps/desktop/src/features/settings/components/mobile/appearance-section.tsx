@@ -1,7 +1,7 @@
 import { useShallow } from "zustand/react/shallow";
 
 import { useAppearance } from "@/app/state/appearance-store";
-import type { NotesListMode, ThemeMode } from "@/shared/types";
+import type { NotesListMode, ThemeMode } from "@typenotes/shared/types";
 
 export function MobileAppearanceSection() {
   const { theme, setTheme, notesListMode, setNotesListMode } = useAppearance(

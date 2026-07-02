@@ -10,10 +10,10 @@ import {
 } from "react";
 
 import type { DesktopContextMenuState } from "@/app/hooks/use-tree-interactions";
-import { FEED_FOLDER_PATH } from "@/shared/constants";
+import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import { computeRangeSelection } from "@/shared/lib/selection";
-import type { NotePreview } from "@/shared/lib/format";
-import type { AppMode, NoteEntry } from "@/shared/types";
+import type { NotePreview } from "@typenotes/shared/format";
+import type { AppMode, NoteEntry } from "@typenotes/shared/types";
 import type { FeedTreeNode } from "@/features/notes/navigation/model/feed-tree-model";
 
 type FolderSummary = {

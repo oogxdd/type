@@ -1,7 +1,7 @@
 import type { MutableRefObject, MouseEvent as ReactMouseEvent } from "react";
 import type { MobileAction, MobileRoute } from "../navigation";
-import type { NoteEntry } from "@/shared/types";
-import type { NotePreview } from "@/shared/lib/format";
+import type { NoteEntry } from "@typenotes/shared/types";
+import type { NotePreview } from "@typenotes/shared/format";
 import type { FlattenedItem } from "@/features/notes/navigation/model/types";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import type { RecentBucket } from "@/mobile/hooks/use-recent-buckets";

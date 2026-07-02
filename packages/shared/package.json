@@ -1,0 +1,19 @@
+{
+  "name": "@typenotes/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Platform-free TypeScript shared by the desktop (Tauri) and mobile (React Native) apps: domain types, frontmatter and note-preview parsing, annotation metadata, job-queue helpers.",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "~5.8.3",
+    "vitest": "^4.1.8"
+  }
+}

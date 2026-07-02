@@ -8,8 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import * as api from "../api/security-api";
-import type { SecurityState, SecurityUnlockResult } from "@/shared/types";
-import { getErrorMessage } from "@/shared/lib/errors";
+import type { SecurityState, SecurityUnlockResult } from "@typenotes/shared/types";
+import { getErrorMessage } from "@typenotes/shared/errors";
 import { clearPersistedNotePreviews } from "@/shared/lib/storage";
 
 type SecurityContextValue = {

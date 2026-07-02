@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { AppMode, PaneId } from "@/shared/types";
+import type { AppMode, PaneId } from "@typenotes/shared/types";
 import { focusNoScroll } from "@/shared/lib/dom";
 
 type UsePaneShortcutsArgs = {

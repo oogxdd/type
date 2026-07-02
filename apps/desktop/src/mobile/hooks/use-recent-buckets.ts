@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { NoteEntry } from "@/shared/types";
+import type { NoteEntry } from "@typenotes/shared/types";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { DAY_MS } from "../types";
 

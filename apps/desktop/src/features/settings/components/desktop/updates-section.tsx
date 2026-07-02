@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { OTA_APPLY_PENDING_KEY } from "@/shared/constants";
-import { getErrorMessage } from "@/shared/lib/errors";
+import { getErrorMessage } from "@typenotes/shared/errors";
 
 type DesktopUpdateState =
   | { status: "idle" }

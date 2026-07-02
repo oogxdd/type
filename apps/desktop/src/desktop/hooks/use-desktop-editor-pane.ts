@@ -8,8 +8,8 @@ import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import type { LensNote } from "@/features/lens/hooks/use-lens-annotations";
 import { getLatestFeedTargetTimestamp } from "@/features/notes/navigation/model/feed-tree-model";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
-import { FEED_FOLDER_PATH } from "@/shared/constants";
-import { sanitizeRecordingEditorContent } from "@/shared/lib/format";
+import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { sanitizeRecordingEditorContent } from "@typenotes/shared/format";
 
 export function useDesktopEditorPane() {
   const { activeFolder, activeNote, selectedNotes } = useSelection(

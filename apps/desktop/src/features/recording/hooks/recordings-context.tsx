@@ -8,16 +8,16 @@ import {
   type ReactNode,
 } from "react";
 import * as api from "../api/recordings-api";
-import type { RecordingListItem, RecordingQueueSnapshot } from "@/shared/types";
-import { FEED_FOLDER_PATH } from "@/shared/constants";
+import type { RecordingListItem, RecordingQueueSnapshot } from "@typenotes/shared/types";
+import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import { toBase64, fromBase64 } from "@/shared/lib/notes";
 import { useAudioRecorder } from "./use-audio-recorder";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useAutoQueueLoop } from "@/features/processing/hooks/use-auto-queue-loop";
 import { useProcessingQueue } from "@/features/processing/hooks/use-processing-queue";
-import { jobListSignature } from "@/shared/lib/jobs";
+import { jobListSignature } from "@typenotes/shared/jobs";
 import type { LayoutMode } from "@/mobile/navigation";
-import { getErrorMessage } from "@/shared/lib/errors";
+import { getErrorMessage } from "@typenotes/shared/errors";
 
 type RecordingsContextValue = {
   recordingSupported: boolean;

@@ -4,7 +4,7 @@ import type {
   GitCommitHistoryEntry,
   GitSyncStatus,
   LocalSyncServerStatus,
-} from "@/shared/types";
+} from "@typenotes/shared/types";
 
 export const generateSshKey = (): Promise<string> =>
   invokeLogged<string>("generate_ssh_key");

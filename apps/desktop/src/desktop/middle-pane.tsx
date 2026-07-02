@@ -6,7 +6,7 @@ import { SettingsMiddlePane } from "@/features/settings/components/desktop/setti
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 
 import { focusNoScroll } from "@/shared/lib/dom";
-import type { AppMode } from "@/shared/types";
+import type { AppMode } from "@typenotes/shared/types";
 
 type DesktopMiddlePaneProps = {
   appMode: AppMode;
@@ -17,7 +17,7 @@ type DesktopMiddlePaneProps = {
   lastLeftPaneFocusRef: RefObject<string>;
   notesTitle: string;
   notes: Array<{ path: string; name: string }>;
-  notePreviews: Record<string, import("@/shared/lib/format").NotePreview>;
+  notePreviews: Record<string, import("@typenotes/shared/format").NotePreview>;
   selectedNotes: Set<string>;
   onNotesKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   onNoteClick: (notePath: string, event: ReactMouseEvent, parentPath?: string) => void;

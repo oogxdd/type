@@ -6,7 +6,7 @@ import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { CalendarDays } from "lucide-react";
 import type { NavigationNode } from "../model/types";
-import type { DragData } from "@/shared/types";
+import type { DragData } from "@typenotes/shared/types";
 import { dropId } from "../model/tree-dnd";
 
 export type TreeRowProps = {

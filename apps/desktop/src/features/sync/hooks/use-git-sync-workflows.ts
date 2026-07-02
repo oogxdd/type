@@ -2,13 +2,13 @@ import { useCallback } from "react";
 
 import * as api from "@/features/sync/api/git-api";
 import { yieldToUi } from "@/shared/lib/notes";
-import { getErrorMessage } from "@/shared/lib/errors";
+import { getErrorMessage } from "@typenotes/shared/errors";
 import type {
   GitCommitHistoryEntry,
   GitSyncAction,
   GitSyncStatus,
   ProfileSyncSettings,
-} from "@/shared/types";
+} from "@typenotes/shared/types";
 
 type UseGitSyncWorkflowsArgs = {
   gitStatus: GitSyncStatus | null;

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { NotePreview } from "@/shared/lib/format";
-import type { NoteEntry } from "@/shared/types";
+import type { NotePreview } from "@typenotes/shared/format";
+import type { NoteEntry } from "@typenotes/shared/types";
 import {
   buildFeedTree,
   findFeedNode,

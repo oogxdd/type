@@ -14,7 +14,7 @@ import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { findNode } from "@/features/notes/navigation/model/tree-ops";
 import { focusNoScroll } from "@/shared/lib/dom";
-import { getNoteParentPath } from "@/shared/lib/notes";
+import { getNoteParentPath } from "@typenotes/shared/notes";
 import { computeRangeSelection, resolveTargetPaths } from "@/shared/lib/selection";
 
 type UseTreeInteractionsArgs = {

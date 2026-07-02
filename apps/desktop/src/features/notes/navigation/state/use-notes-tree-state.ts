@@ -7,12 +7,12 @@ import { useSecurity } from "@/features/security/hooks/security-context";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 import * as api from "@/features/notes/api/notes-api";
 import { useNotePreviews } from "@/features/notes/list/hooks/use-note-previews";
-import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/shared/types";
-import { FEED_FOLDER_PATH } from "@/shared/constants";
-import { collectAllNotes, getNoteParentPath } from "@/shared/lib/notes";
+import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@typenotes/shared/types";
+import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { collectAllNotes, getNoteParentPath } from "@typenotes/shared/notes";
 import { buildTreeItems, findNode, flattenTree } from "@/features/notes/navigation/model/tree-ops";
 import { removeChildrenOf } from "@/features/notes/navigation/model/dnd-tree";
-import type { NotePreview } from "@/shared/lib/format";
+import type { NotePreview } from "@typenotes/shared/format";
 import type { TreeItem } from "@/features/notes/navigation/model/types";
 import type { FlattenedItem } from "@/features/notes/navigation/model/types";
 import {

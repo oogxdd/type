@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import { joinFrontmatter, splitFrontmatter } from "@/shared/lib/frontmatter";
-import { stripInlineAnnotationMetadata } from "@/shared/lib/annotation-metadata";
+import { joinFrontmatter, splitFrontmatter } from "@typenotes/shared/frontmatter";
+import { stripInlineAnnotationMetadata } from "@typenotes/shared/annotation-metadata";
 import {
   appendRawLensBackmatterBlock,
   splitLensBackmatterBlock,
-} from "@/shared/lib/lens-backmatter";
+} from "@typenotes/shared/lens-backmatter";
 import { htmlToMarkdown, markdownToHtml } from "../lib/markdown-editor";
 
 type NoteEditorProps = {

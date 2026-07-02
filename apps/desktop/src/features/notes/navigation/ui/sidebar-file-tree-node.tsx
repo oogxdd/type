@@ -10,7 +10,7 @@ import {
   SidebarMenuSubButton,
 } from "@/shared/ui/sidebar";
 import type { NavigationNode } from "../model/types";
-import type { NotePreview } from "@/shared/lib/format";
+import type { NotePreview } from "@typenotes/shared/format";
 
 type SidebarFileTreeNodeProps = {
   node: NavigationNode;

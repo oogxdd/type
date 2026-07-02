@@ -7,7 +7,7 @@ import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { type DesktopContextMenuState } from "@/app/hooks/use-tree-interactions";
 import { useSelection } from "@/app/state/selection-store";
-import { FEED_FOLDER_PATH } from "@/shared/constants";
+import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import { focusNoScroll } from "@/shared/lib/dom";
 import { computeRangeSelection } from "@/shared/lib/selection";
 import { TreeNode } from "./tree-node";

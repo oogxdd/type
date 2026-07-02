@@ -5,7 +5,7 @@ import type { TreeItem } from "../model/types";
 import { SidebarMenu } from "@/shared/ui/sidebar";
 import { TreeNode } from "./tree-node";
 import { SidebarFileTreeNode } from "./sidebar-file-tree-node";
-import type { NotePreview } from "@/shared/lib/format";
+import type { NotePreview } from "@typenotes/shared/format";
 import { ROOT_ID, dropId, type EdgeSnap } from "../model/tree-dnd";
 
 const EMPTY_STRING_SET = new Set<string>();

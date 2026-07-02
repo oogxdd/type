@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
-import { isSystemFolder } from "@/shared/constants";
+import { isSystemFolder } from "@typenotes/shared/constants";
 import { Button } from "@/shared/ui/button";
 import {
   Dialog,

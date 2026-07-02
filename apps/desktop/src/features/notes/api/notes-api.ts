@@ -7,7 +7,7 @@ import type {
   NotePreviewEntry,
   SetNoteMarkersArgs,
   SetOrderArgs,
-} from "@/shared/types";
+} from "@typenotes/shared/types";
 
 export const getTree = (): Promise<FolderNode> =>
   invokeLogged<FolderNode>("get_tree");

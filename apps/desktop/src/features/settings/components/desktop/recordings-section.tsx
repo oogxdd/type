@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import {
   formatHandwritingStatus,
   formatUpdatedAt,
-} from "@/shared/lib/format";
+} from "@typenotes/shared/format";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
 import { Input } from "@/shared/ui/input";

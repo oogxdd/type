@@ -9,8 +9,15 @@ Delete this file when the branch is ready for review.
 - [ ] Full `cargo check --workspace` + `cargo test --workspace --lib` after M4
       (type-ffi crate added). Killed locally to save time — desktop crate does
       not depend on type-ffi, so risk is low. **CI on push covers this.**
-- [ ] Confirm CI is green on the branch after each push (typescript + rust jobs).
-- [ ] `npm run build` (desktop vite + OTA) after the M5 shared-package refactor.
+- [ ] Confirm CI is green on the branch (typescript + rust jobs). Note: CI
+      triggers on PRs and main pushes only — open a (draft) PR for the branch
+      to get per-push CI.
+- [ ] `npm run build` (desktop vite + OTA) after the M5 shared-package
+      refactor. Branch CI does NOT cover this (deploy-pages builds only on
+      main); typecheck + vitest are green locally, but rollup's resolution of
+      the `@typenotes/shared/*` exports map is unverified until a build runs.
+- [ ] Local quirk: vitest's default parallel pool segfaults on this dev VM.
+      Run `vitest run --no-file-parallelism` locally; CI is unaffected.
 - [ ] On a Mac: iOS/Android native builds of the RN app (this VM has no
       Xcode/Android SDK). Steps will be documented in `apps/mobile/README.md`:
       rustup iOS/Android targets, `ubrn` codegen, `pod install`, Expo prebuild.
@@ -25,10 +32,14 @@ Delete this file when the branch is ready for review.
       pluggable `TranscriptionProvider` port + shared queue helper
 - [x] M4 — `crates/type-ffi`: UniFFI (0.31, matches ubrn 0.31.0-3) JSON-facade
       bindings + foreign TranscriptionProvider trait + host e2e test
-- [ ] M5 — `packages/shared`: extract platform-free TS from
-      `apps/desktop/src/shared/lib` (frontmatter, format/NotePreview,
-      annotation-metadata, jobs, domain types); desktop consumes it;
-      tsc + vitest green
+- [x] M5 — `packages/shared` (`@typenotes/shared`): platform-free TS shared by
+      both apps — domain `types`, `frontmatter`, `format` (NotePreview),
+      `annotation-metadata` + `lens-backmatter`, `jobs`, `errors`, pure tree
+      walkers (`notes`), system-folder `constants`. TS source is exported
+      directly (`"./*": "./src/*.ts"` — internal-package pattern; Vite, tsc,
+      and Metro all consume it, no build step). Desktop imports via
+      `@typenotes/shared/<module>`; browser-only helpers (yieldToUi, base64,
+      DOM/storage/selection) stayed in `apps/desktop/src/shared`.
 - [ ] M6 — `apps/mobile` (Expo CNG) + `packages/mobile-core` (ubrn library):
       blank-page capture stack (open → type immediately; swipe up → previous
       note slides away, fresh blank page), feed/folders navigation, plain-text

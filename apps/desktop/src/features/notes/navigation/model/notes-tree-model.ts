@@ -1,11 +1,11 @@
-import { FEED_FOLDER_PATH, isSystemFolder } from "@/shared/constants";
-import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@/shared/types";
+import { FEED_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
+import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@typenotes/shared/types";
 import type { LayoutMode } from "@/mobile/navigation";
 import type { TreeItem } from "@/features/notes/navigation/model/types";
 import type { FlattenedItem } from "@/features/notes/navigation/model/types";
-import { collectAllNotes } from "@/shared/lib/notes";
+import { collectAllNotes } from "@typenotes/shared/notes";
 import { findNode } from "@/features/notes/navigation/model/tree-ops";
-import type { NotePreview } from "@/shared/lib/format";
+import type { NotePreview } from "@typenotes/shared/format";
 
 // Pure helpers for the notes navigation view. Keep the render rules here so
 // components stay dumb and the state hook can stay mostly orchestration.

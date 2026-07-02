@@ -9,7 +9,7 @@ import type {
   GitCommitHistoryEntry,
   GitSyncAction,
   GitSyncStatus,
-} from "@/shared/types";
+} from "@typenotes/shared/types";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 import { useGitSyncWorkflows } from "./use-git-sync-workflows";

@@ -6,13 +6,13 @@ import {
   ARCHIEVE_FOLDER_PATH,
   FEED_FOLDER_PATH,
   isSystemFolder,
-} from "@/shared/constants";
+} from "@typenotes/shared/constants";
 import { confirmAction, focusNoScroll } from "@/shared/lib/dom";
-import { getNoteParentPath } from "@/shared/lib/notes";
-import type { ProfileSyncSettings } from "@/shared/types";
+import { getNoteParentPath } from "@typenotes/shared/notes";
+import type { ProfileSyncSettings } from "@typenotes/shared/types";
 import { applyFolderRenameToSelection, collectNotesForFlattening } from "../model/notes-tree-model";
 import { findNode } from "@/features/notes/navigation/model/tree-ops";
-import type { FolderNode } from "@/shared/types";
+import type { FolderNode } from "@typenotes/shared/types";
 
 type UseNotesTreeActionsArgs = {
   tree: FolderNode | null;

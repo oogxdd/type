@@ -2,13 +2,13 @@ import { useCallback, type RefObject } from "react";
 
 import * as api from "@/features/profiles/api/profiles-api";
 import { splitProfileSyncSettingsPatch } from "@/features/profiles/lib/profile-sync-settings";
-import { getErrorMessage } from "@/shared/lib/errors";
+import { getErrorMessage } from "@typenotes/shared/errors";
 import type {
   AppConfig,
   NotesProfileSnapshot,
   ProfileSettings,
   ProfileSyncSettings,
-} from "@/shared/types";
+} from "@typenotes/shared/types";
 
 type UseProfileActionsArgs = {
   appConfig: AppConfig | null;

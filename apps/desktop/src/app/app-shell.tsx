@@ -10,8 +10,8 @@ import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import { MobileShell } from "@/mobile/mobile-shell";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
-import { ARCHIEVE_FOLDER_PATH, FEED_FOLDER_PATH } from "@/shared/constants";
-import type { AppMode } from "@/shared/types";
+import { ARCHIEVE_FOLDER_PATH, FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import type { AppMode } from "@typenotes/shared/types";
 
 export function AppShell() {
   const layoutMode = useLayoutMode();

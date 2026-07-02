@@ -3,7 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import type { EdgeSnap } from "../model/tree-dnd";
 import { TreeRow } from "./tree-row";
 import { NavNoteRow } from "./nav-note-row";
-import type { NotePreview } from "@/shared/lib/format";
+import type { NotePreview } from "@typenotes/shared/format";
 import type { NavigationNode } from "../model/types";
 
 export type TreeNodeProps = {

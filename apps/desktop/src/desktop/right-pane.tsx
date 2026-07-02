@@ -8,7 +8,7 @@ import { SettingsDetailPane } from "@/features/settings/components/desktop/setti
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 
 import { focusNoScroll } from "@/shared/lib/dom";
-import type { AppMode } from "@/shared/types";
+import type { AppMode } from "@typenotes/shared/types";
 import {
   DropdownMenu,
   DropdownMenuContent,

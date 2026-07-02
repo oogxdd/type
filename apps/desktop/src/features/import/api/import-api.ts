@@ -1,6 +1,6 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { invokeLogged } from "@/shared/api/invoke";
-import type { NoteFileNameFormat } from "@/shared/types";
+import type { NoteFileNameFormat } from "@typenotes/shared/types";
 
 export type AppleImportMode = "preserve" | "flatten";
 

@@ -1,4 +1,4 @@
-import type { FolderNode } from "@/shared/types";
+import type { FolderNode } from "@typenotes/shared/types";
 import type { TreeItem } from "./types";
 import { flattenTree } from "./dnd-tree";
 import { DROP_PREFIX, ROOT_ID } from "./tree-dnd";

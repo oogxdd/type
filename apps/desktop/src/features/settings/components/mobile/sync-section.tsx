@@ -4,15 +4,15 @@ import {
   formatGitCommitStateLabel,
   formatGitCommitTime,
   getSyncHint,
-} from "@/shared/lib/format";
+} from "@typenotes/shared/format";
 import * as gitApi from "@/features/sync/api/git-api";
-import type { DiscoveredServer } from "@/shared/types";
+import type { DiscoveredServer } from "@typenotes/shared/types";
 import { useSettingsData } from "@/features/settings/hooks/use-settings-data";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useGitSync } from "@/features/sync/hooks/git-sync-context";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { ChoiceRow, Group, StatRow } from "./helpers";
-import { getErrorMessage } from "@/shared/lib/errors";
+import { getErrorMessage } from "@typenotes/shared/errors";
 
 export function MobileSyncSection() {
   const { syncSettings } = useProfiles();

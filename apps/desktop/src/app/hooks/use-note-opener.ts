@@ -8,8 +8,8 @@ import { useShallow } from "zustand/react/shallow";
 
 import { useSelection } from "@/app/state/selection-store";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
-import { getNoteParentPath } from "@/shared/lib/notes";
-import type { AppMode } from "@/shared/types";
+import { getNoteParentPath } from "@typenotes/shared/notes";
+import type { AppMode } from "@typenotes/shared/types";
 
 type UseNoteOpenerArgs = {
   setAppMode: Dispatch<SetStateAction<AppMode>>;

@@ -36,13 +36,10 @@ import { FoldersPanel } from "@/features/notes/navigation/ui/folders-panel";
 import { FeedPanel } from "@/features/notes/navigation/ui/feed-panel";
 import { useDragDrop } from "@/features/notes/navigation/hooks/use-drag-drop";
 import { useKeyboardNavigation } from "@/features/notes/navigation/hooks/use-keyboard-navigation";
-import {
-  ARCHIEVE_FOLDER_PATH,
-  indentationWidth,
-  isSystemFolder,
-} from "@/shared/constants";
+import { ARCHIEVE_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
+import { indentationWidth } from "@/shared/constants";
 import { focusNoScroll } from "@/shared/lib/dom";
-import type { AppMode } from "@/shared/types";
+import type { AppMode } from "@typenotes/shared/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { AppSidebar } from "./app-sidebar";
 import { DesktopMiddlePane } from "./middle-pane";

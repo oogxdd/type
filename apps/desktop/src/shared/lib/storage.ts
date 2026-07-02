@@ -1,5 +1,8 @@
-import type { ThemeMode, NotesListMode } from "@/shared/types";
-import type { ProfileSyncSettings } from "../types";
+import type {
+  NotesListMode,
+  ProfileSyncSettings,
+  ThemeMode,
+} from "@typenotes/shared/types";
 import {
   PROFILE_SYNC_STORAGE_KEY,
   DEFAULT_EDITOR_FONT_SIZE,

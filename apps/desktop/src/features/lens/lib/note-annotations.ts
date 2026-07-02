@@ -4,13 +4,13 @@ import {
   readFrontmatterScalar,
   removeFrontmatterScalar,
   splitFrontmatter,
-} from "@/shared/lib/frontmatter";
+} from "@typenotes/shared/frontmatter";
 import {
   appendLensBackmatterBlock,
   extractLensBackmatter,
   stripLensBackmatterBlock,
-} from "@/shared/lib/lens-backmatter";
-import { stripInlineAnnotationMetadata } from "@/shared/lib/annotation-metadata";
+} from "@typenotes/shared/lens-backmatter";
+import { stripInlineAnnotationMetadata } from "@typenotes/shared/annotation-metadata";
 
 const NOTE_ANNOTATIONS_KEY = "type_annotations_b64";
 const COORD_SCALE = 4095;

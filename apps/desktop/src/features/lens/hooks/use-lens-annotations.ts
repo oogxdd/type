@@ -8,9 +8,9 @@ import {
 } from "react";
 import { readNote, writeNote } from "@/features/notes/api/notes-api";
 import { confirmAction } from "@/shared/lib/dom";
-import { sanitizeRecordingEditorContent } from "@/shared/lib/format";
-import { stripFrontmatter } from "@/shared/lib/frontmatter";
-import { stripInlineAnnotationMetadata } from "@/shared/lib/annotation-metadata";
+import { sanitizeRecordingEditorContent } from "@typenotes/shared/format";
+import { stripFrontmatter } from "@typenotes/shared/frontmatter";
+import { stripInlineAnnotationMetadata } from "@typenotes/shared/annotation-metadata";
 import {
   parseNoteAnnotations,
   withNoteAnnotations,
@@ -31,7 +31,7 @@ import {
   TEXT_TOOL,
   type LensTool,
 } from "../lib/lens-geometry";
-import { getErrorMessage } from "@/shared/lib/errors";
+import { getErrorMessage } from "@typenotes/shared/errors";
 
 export type LensNote = {
   path: string;

@@ -6,7 +6,7 @@ import type {
   ProfileSettings,
   ProfilesBackupArchive,
   ProfilesDocumentsExport,
-} from "@/shared/types";
+} from "@typenotes/shared/types";
 
 type NotesProfilesSnapshotPayload = {
   active_profile_id: string;

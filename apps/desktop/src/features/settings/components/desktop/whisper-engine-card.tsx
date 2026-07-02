@@ -3,8 +3,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import * as api from "@/features/recording/api/recordings-api";
-import type { WhisperStatusResult } from "@/shared/types";
-import { getErrorMessage } from "@/shared/lib/errors";
+import type { WhisperStatusResult } from "@typenotes/shared/types";
+import { getErrorMessage } from "@typenotes/shared/errors";
 
 type WhisperEngineCardProps = {
   whisperModel: string;

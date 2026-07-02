@@ -1,4 +1,4 @@
-import type { ThemeMode } from "@/shared/types";
+import type { ThemeMode } from "@typenotes/shared/types";
 import { invokeLogged } from "@/shared/api/invoke";
 
 const hasTauriRuntime = () =>

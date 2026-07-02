@@ -1,5 +1,5 @@
 import { invokeLogged } from "@/shared/api/invoke";
-import type { SecurityState, SecurityUnlockResult } from "@/shared/types";
+import type { SecurityState, SecurityUnlockResult } from "@typenotes/shared/types";
 
 export const getSecurityState = (): Promise<SecurityState> =>
   invokeLogged<SecurityState>("get_security_state");

@@ -1,5 +1,5 @@
-import type { NoteEntry, VisibleNavigationItem } from "@/shared/types";
-import type { NotePreview } from "@/shared/lib/format";
+import type { NoteEntry, VisibleNavigationItem } from "@typenotes/shared/types";
+import type { NotePreview } from "@typenotes/shared/format";
 
 // Feed is not the folder tree. It is a synthetic hierarchy built from note
 // timestamps so the navigation UI can browse recent work by time bucket.

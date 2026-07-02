@@ -4,9 +4,9 @@ import {
   formatNoteDateLabel,
   parseNotePreview,
   type NotePreview,
-} from "@/shared/lib/format";
+} from "@typenotes/shared/format";
 import { NOTE_PREVIEW_CACHE_PREFIX } from "@/shared/lib/storage";
-import type { NoteEntry } from "@/shared/types";
+import type { NoteEntry } from "@typenotes/shared/types";
 
 type CachedPreview = { updatedMs: number | null; preview: NotePreview };
 

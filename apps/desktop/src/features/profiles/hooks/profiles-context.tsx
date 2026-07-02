@@ -11,9 +11,9 @@ import type {
   NotesProfileSnapshot,
   ProfileSettings,
   ProfileSyncSettings,
-} from "@/shared/types";
+} from "@typenotes/shared/types";
 import { profileSyncSettingsFromState } from "@/features/profiles/lib/profile-sync-settings";
-import { getErrorMessage } from "@/shared/lib/errors";
+import { getErrorMessage } from "@typenotes/shared/errors";
 import { useLegacyProfileSyncMigration } from "./use-legacy-profile-sync-migration";
 import { useProfileActions } from "./use-profile-actions";
 

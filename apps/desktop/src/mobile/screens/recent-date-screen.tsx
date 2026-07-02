@@ -1,8 +1,8 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { MobileNotesScreen } from "@/mobile/views/notes-view";
-import type { NotePreview } from "@/shared/lib/format";
+import type { NotePreview } from "@typenotes/shared/format";
 import type { RecentBucket } from "@/mobile/hooks/use-recent-buckets";
-import { getErrorMessage } from "@/shared/lib/errors";
+import { getErrorMessage } from "@typenotes/shared/errors";
 
 type PhoneRecentDateScreenProps = {
   bucketId: string;

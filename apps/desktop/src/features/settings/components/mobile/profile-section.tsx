@@ -3,7 +3,7 @@ import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useSshKey } from "@/features/sync/hooks/use-ssh-key";
 import { exportProfilesToDocuments } from "@/features/profiles/api/profiles-api";
 import { Group, ChoiceRow, InputRow } from "./helpers";
-import { getErrorMessage } from "@/shared/lib/errors";
+import { getErrorMessage } from "@typenotes/shared/errors";
 import { confirmAction } from "@/shared/lib/dom";
 
 type GitDraftSettings = {

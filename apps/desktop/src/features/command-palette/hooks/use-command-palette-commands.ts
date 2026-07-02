@@ -18,8 +18,8 @@ import {
 import { useSelection } from "@/app/state/selection-store";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { useAppearance } from "@/app/state/appearance-store";
-import { FEED_FOLDER_PATH, isSystemFolder } from "@/shared/constants";
-import { collectFolderPaths, getNoteParentPath } from "@/shared/lib/notes";
+import { FEED_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
+import { collectFolderPaths, getNoteParentPath } from "@typenotes/shared/notes";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import {
   buildFolderSuggestions,
