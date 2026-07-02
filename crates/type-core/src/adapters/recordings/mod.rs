@@ -1,4 +1,5 @@
-//! Audio recording: save, transcription queue (local Whisper + AssemblyAI fallback), listing.
+//! Audio recording: save, transcription queue (local Whisper, AssemblyAI, or a
+//! shell-registered provider), listing.
 
 use crate::AppEnv;
 use serde::{Deserialize, Serialize};
@@ -6,12 +7,12 @@ use std::{
     collections::{HashSet, VecDeque},
     fs,
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
     thread,
 };
 use uuid::Uuid;
 
-use crate::ports::recordings::RecordingsGateway;
+use crate::ports::recordings::{RecordingsGateway, TranscriptionProvider};
 use crate::{
     allocate_note_file_name, collect_markdown_note_files, decode_audio_base64, generate_note_id,
     is_storage_folder_path, note_parent_folder_path, notes_root, now_ms, parse_note_front_matter,
@@ -160,10 +161,15 @@ pub enum TranscriptionMethod {
         api_key: String,
     },
     /// Local faster-whisper running in the app-managed Python environment.
-    /// Carries an `AppHandle` so the worker can provision the env lazily.
+    /// Carries an `AppEnv` so the worker can provision the env lazily.
     LocalWhisper {
         model: String,
         app: AppEnv,
+    },
+    /// A shell-registered [`TranscriptionProvider`] — e.g. native on-device
+    /// speech recognition plugged in through the mobile FFI.
+    Provider {
+        provider: Arc<dyn TranscriptionProvider>,
     },
 }
 
@@ -185,6 +191,17 @@ pub struct RecordingsAdapter {
 impl RecordingsAdapter {
     pub fn new(app: AppEnv) -> Self {
         Self { app }
+    }
+
+    /// Queue pending recordings for a shell-registered transcription provider.
+    /// Not part of [`RecordingsGateway`] — only shells that register a provider
+    /// (the mobile FFI) call this.
+    pub fn queue_with_provider(
+        &self,
+        provider: Arc<dyn TranscriptionProvider>,
+    ) -> Result<RecordingTranscriptionQueueResult, String> {
+        let root = crate::ensured_notes_root(&self.app)?;
+        queue_recordings_for_provider_transcription(&root, provider)
     }
 }
 
@@ -278,82 +295,12 @@ impl RecordingsGateway for RecordingsAdapter {
         }
 
         let root = crate::ensured_notes_root(&self.app)?;
-        let recordings = collect_recording_notes(&root)?;
-        let active_recordings = active_transcription_note_paths();
-        let mut scanned = 0usize;
-        let mut skipped = 0usize;
-        let mut candidates = Vec::new();
-
-        for recording in recordings {
-            scanned += 1;
-            if !recording.audio_path.exists() {
-                let _ = update_recording_note_status(
-                    &recording.note_path,
-                    RECORDING_STATUS_FAILED,
-                    Some("Audio file is missing.".to_string()),
-                    None,
-                    None,
-                );
-                skipped += 1;
-                continue;
-            }
-
-            let status = recording.status.as_str();
-            let is_active_recording = active_recordings.contains(&recording.note_rel);
-            if status == RECORDING_STATUS_COMPLETED {
-                skipped += 1;
-                continue;
-            }
-            if matches!(
-                status,
-                crate::RECORDING_STATUS_QUEUED | RECORDING_STATUS_PROCESSING
-            ) && is_active_recording
-            {
-                skipped += 1;
-                continue;
-            }
-
-            update_recording_note_status(
-                &recording.note_path,
-                crate::RECORDING_STATUS_QUEUED,
-                None,
-                None,
-                None,
-            )?;
-            candidates.push(QueuedTranscriptionJob {
-                note_rel: recording.note_rel,
-                note_path: recording.note_path,
-                audio_path: recording.audio_path,
-                method: TranscriptionMethod::AssemblyAi {
-                    api_key: api_key.to_string(),
-                },
-            });
-        }
-
-        let queued = {
-            let queue = transcription_queue_state();
-            let mut state = queue.lock().expect("transcription queue poisoned");
-            let mut added = 0usize;
-            for job in candidates {
-                if state.known_recordings.contains(&job.note_rel) {
-                    continue;
-                }
-                state.known_recordings.insert(job.note_rel.clone());
-                state.pending.push_back(job);
-                added += 1;
-            }
-            added
-        };
-
-        spawn_transcription_worker_if_needed();
-        let in_flight = recording_queue_snapshot().in_flight;
-
-        Ok(RecordingTranscriptionQueueResult {
-            scanned,
-            queued,
-            skipped,
-            in_flight,
-        })
+        queue_recordings_with_method(
+            &root,
+            &TranscriptionMethod::AssemblyAi {
+                api_key: api_key.to_string(),
+            },
+        )
     }
 
     fn queue_local(&self, args: Self::LocalQueueArgs) -> Result<Self::QueueResult, String> {
@@ -704,6 +651,10 @@ fn process_transcription_job(job: QueuedTranscriptionJob) {
             };
             transcribe_audio_bytes_with_assembly(audio_bytes, api_key)
         }
+        TranscriptionMethod::Provider { provider } => provider
+            .transcribe(&job.audio_path)
+            .map(|transcript| (transcript, String::new()))
+            .map_err(|error| format!("{} transcription failed: {}", provider.id(), error)),
     };
 
     match result {
@@ -721,7 +672,9 @@ fn process_transcription_job(job: QueuedTranscriptionJob) {
 
             let transcript_id = match &job.method {
                 TranscriptionMethod::AssemblyAi { .. } => Some(id_or_json),
-                TranscriptionMethod::LocalWhisper { .. } => None,
+                TranscriptionMethod::LocalWhisper { .. } | TranscriptionMethod::Provider { .. } => {
+                    None
+                }
             };
 
             if let Err(error) = update_recording_note_status(
@@ -797,13 +750,37 @@ pub fn spawn_transcription_worker_if_needed() {
     });
 }
 
-// ── Queue helpers for local transcription ──────────────────────────────────────
+// ── Queue helpers ──────────────────────────────────────────────────────────────
 
 /// Queue all pending recordings for local whisper transcription (desktop only).
 pub fn queue_recordings_for_local_transcription(
     app: &AppEnv,
     root: &Path,
     model: &str,
+) -> Result<RecordingTranscriptionQueueResult, String> {
+    queue_recordings_with_method(
+        root,
+        &TranscriptionMethod::LocalWhisper {
+            model: model.to_string(),
+            app: app.clone(),
+        },
+    )
+}
+
+/// Queue all pending recordings for a shell-supplied [`TranscriptionProvider`]
+/// (e.g. a native on-device recognizer registered through the mobile FFI).
+pub fn queue_recordings_for_provider_transcription(
+    root: &Path,
+    provider: Arc<dyn TranscriptionProvider>,
+) -> Result<RecordingTranscriptionQueueResult, String> {
+    queue_recordings_with_method(root, &TranscriptionMethod::Provider { provider })
+}
+
+/// Scan the recording notes under `root` and enqueue every transcribable one
+/// with a clone of `method`; the shared sequential worker picks them up.
+fn queue_recordings_with_method(
+    root: &Path,
+    method: &TranscriptionMethod,
 ) -> Result<RecordingTranscriptionQueueResult, String> {
     let recordings = collect_recording_notes(root)?;
     let active_recordings = active_transcription_note_paths();
@@ -853,10 +830,7 @@ pub fn queue_recordings_for_local_transcription(
             note_rel: recording.note_rel,
             note_path: recording.note_path,
             audio_path: recording.audio_path,
-            method: TranscriptionMethod::LocalWhisper {
-                model: model.to_string(),
-                app: app.clone(),
-            },
+            method: method.clone(),
         });
     }
 
@@ -876,12 +850,7 @@ pub fn queue_recordings_for_local_transcription(
     };
 
     spawn_transcription_worker_if_needed();
-
-    let in_flight = {
-        let queue = transcription_queue_state();
-        let state = queue.lock().expect("transcription queue poisoned");
-        state.pending.len() + usize::from(state.running)
-    };
+    let in_flight = recording_queue_snapshot().in_flight;
 
     Ok(RecordingTranscriptionQueueResult {
         scanned,

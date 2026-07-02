@@ -85,7 +85,14 @@ impl ProfilesGateway for ProfilesAdapter {
         let state = ensure_profiles_state(&self.app)?;
         let profile = find_profile(&state, &args.profile_id)
             .ok_or_else(|| format!("Profile not found: {}", args.profile_id))?;
-        save_profile_settings(Path::new(&profile.notes_root), &args.settings.into())?;
+        let notes_root = Path::new(&profile.notes_root);
+        let mut settings: ProfileSettings = args.settings.into();
+        // Writers that predate transcription_mode (or simply didn't set it)
+        // must not clear a mode another device already persisted.
+        if settings.transcription_mode.is_none() {
+            settings.transcription_mode = load_profile_settings(notes_root).transcription_mode;
+        }
+        save_profile_settings(notes_root, &settings)?;
         Ok(profiles_snapshot(&self.app, &state))
     }
 
@@ -214,6 +221,7 @@ impl From<crate::ports::profiles::ProfileSettings> for ProfileSettings {
             git_commit_message: s.git_commit_message,
             mobile_auto_transcription_enabled: s.mobile_auto_transcription_enabled,
             mobile_auto_handwriting_ocr_enabled: s.mobile_auto_handwriting_ocr_enabled,
+            transcription_mode: s.transcription_mode,
         }
     }
 }
@@ -228,6 +236,7 @@ impl From<ProfileSettings> for crate::ports::profiles::ProfileSettings {
             git_commit_message: s.git_commit_message,
             mobile_auto_transcription_enabled: s.mobile_auto_transcription_enabled,
             mobile_auto_handwriting_ocr_enabled: s.mobile_auto_handwriting_ocr_enabled,
+            transcription_mode: s.transcription_mode,
         }
     }
 }

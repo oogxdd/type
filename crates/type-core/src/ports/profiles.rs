@@ -30,6 +30,29 @@ pub struct AppConfig {
     pub note_file_name_format: String,
 }
 
+/// Where recordings made in a working folder get transcribed.
+///
+/// Stored in the folder's own config (`.type/settings.json` inside the notes
+/// root), so it syncs across devices with the notes themselves.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TranscriptionMode {
+    /// Never transcribe automatically. Recordings stay `pending` until a user
+    /// triggers transcription by hand.
+    Off,
+    /// Do not transcribe on this device class' capture path: phones leave
+    /// recordings `pending` and a desktop picks them up after sync (its
+    /// auto-queue loop scans for pending recordings and runs local Whisper).
+    Desktop,
+    /// Transcribe right away via the AssemblyAI cloud API (requires the
+    /// device-local API key from the app config).
+    #[serde(rename = "assemblyai")]
+    AssemblyAi,
+    /// Transcribe via a shell-registered `TranscriptionProvider` (e.g. a
+    /// native on-device recognizer plugged in through the mobile FFI).
+    Native,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ProfileSettings {
     pub git_remote_url: String,
@@ -39,6 +62,11 @@ pub struct ProfileSettings {
     pub git_commit_message: String,
     pub mobile_auto_transcription_enabled: bool,
     pub mobile_auto_handwriting_ocr_enabled: bool,
+    /// `None` = not chosen yet; effective mode falls back to the legacy
+    /// `mobile_auto_transcription_enabled` flag (true → AssemblyAi, false →
+    /// Desktop).
+    #[serde(default)]
+    pub transcription_mode: Option<TranscriptionMode>,
 }
 
 #[derive(Serialize)]

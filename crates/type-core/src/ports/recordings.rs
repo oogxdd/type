@@ -67,6 +67,21 @@ pub struct WhisperStatus {
 
 // ── Trait ──────────────────────────────────────────────────────────────────────
 
+/// A pluggable transcription backend supplied by a shell.
+///
+/// The built-in backends (local Whisper, AssemblyAI) are hardwired into the
+/// queue worker, but shells can register their own — the mobile FFI exposes
+/// this trait as a foreign interface so React Native / Swift / Kotlin can plug
+/// in e.g. Apple's on-device speech recognizer without touching core. Jobs
+/// queued with a provider run on the same sequential worker and share the
+/// pending → queued → processing → completed | failed note lifecycle.
+pub trait TranscriptionProvider: Send + Sync {
+    /// Stable identifier for diagnostics, e.g. "assemblyai", "apple-speech".
+    fn id(&self) -> String;
+    /// Transcribe the audio file at `audio_path` and return the transcript.
+    fn transcribe(&self, audio_path: &std::path::Path) -> Result<String, String>;
+}
+
 pub trait RecordingService {
     fn save_recording(
         &self,

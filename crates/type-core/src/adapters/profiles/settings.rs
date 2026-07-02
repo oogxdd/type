@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub use crate::ports::profiles::TranscriptionMode;
+
 /// Global application configuration (shared across all profiles).
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AppConfig {
@@ -71,6 +73,11 @@ pub struct ProfileSettings {
     pub mobile_auto_transcription_enabled: bool,
     #[serde(default = "default_true")]
     pub mobile_auto_handwriting_ocr_enabled: bool,
+    /// Where recordings from this folder get transcribed. `None` (absent in
+    /// older settings files) falls back to the legacy flag above — see
+    /// [`ProfileSettings::effective_transcription_mode`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcription_mode: Option<TranscriptionMode>,
 }
 
 impl Default for ProfileSettings {
@@ -83,7 +90,21 @@ impl Default for ProfileSettings {
             git_commit_message: default_git_commit_message(),
             mobile_auto_transcription_enabled: true,
             mobile_auto_handwriting_ocr_enabled: true,
+            transcription_mode: None,
         }
+    }
+}
+
+impl ProfileSettings {
+    /// Resolve the transcription mode, mapping legacy settings files (which
+    /// only had the mobile auto-transcription toggle) onto the new enum.
+    pub fn effective_transcription_mode(&self) -> TranscriptionMode {
+        self.transcription_mode
+            .unwrap_or(if self.mobile_auto_transcription_enabled {
+                TranscriptionMode::AssemblyAi
+            } else {
+                TranscriptionMode::Desktop
+            })
     }
 }
 
