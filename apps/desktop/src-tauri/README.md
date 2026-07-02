@@ -1,115 +1,73 @@
-# src-tauri — Rust Backend
+# src-tauri — the desktop (Tauri) shell
 
-This is the Rust backend for the app, built on Tauri v2. The code is organised
-using a pragmatic **clean / hexagonal architecture** so that core use cases can
-move to a different shell later (e.g. UniFFI bindings for a React Native mobile
-app) without rewriting domain logic.
+This crate is the **Tauri v2 shell** around the shared Rust core. Almost all
+business logic — the **domain / application / ports / adapters** layers — lives
+in [`crates/type-core`](../../../crates/type-core), which is framework-free and
+also powers the mobile FFI ([`crates/type-ffi`](../../../crates/type-ffi),
+UniFFI bindings consumed by the React Native app). What remains here is the
+IPC transport and the platform pieces only a Tauri process can provide.
 
 ## Directory layout
 
 ```
 src/
-├── lib.rs              Crate root — module declarations, shared constants,
-│                       utility functions, and the public run() entry point.
+├── lib.rs              Crate root: app_env() (tauri::AppHandle → type_core::AppEnv),
+│                       macOS window-alpha helpers, and the public run() entry point.
 ├── main.rs             Binary entry point (calls lib::run).
 │
-├── domain/             Framework-free core DTOs and domain state.
-│   └── notes.rs        Note tree, metadata, frontmatter, create/order args.
+├── adapters/
+│   ├── platform.rs     Native theme + file-export sheet (Tauri/objc APIs).
+│   ├── recordings.rs   TauriRecordingsAdapter: wraps the core RecordingsAdapter
+│   │                   and overrides the three native-capture methods on iOS.
+│   └── ios.rs          (iOS only) AVAudioRecorder/AVAudioSession recording and
+│                       WKWebView termination recovery via ObjC interop.
 │
-├── application/        Use-case services. Owns workflows and depends on ports,
-│                       never on Tauri command handlers.
-│   ├── notes.rs        Real note CRUD/tree/order workflows.
-│   ├── profiles.rs     Profile use-case facade.
-│   ├── security.rs     Lock/encryption use-case facade.
-│   ├── recordings.rs   Recording/native capture/transcription facade.
-│   ├── handwriting.rs  Attachment/OCR facade.
-│   ├── import.rs       Import scan/start/status facade.
-│   ├── git_sync.rs     Git sync facade.
-│   ├── local_sync.rs   Local sync server facade.
-│   └── platform.rs     Native platform facade.
+├── application/platform.rs   Platform use-case facade (the one domain that
+├── ports/platform.rs         stays shell-side: theme + export sheet).
 │
-├── ports/              Port interfaces and gateway traits.
-│   ├── mod.rs          Module index.
-│   ├── notes.rs        Note CRUD, tree, ordering.
-│   ├── profiles.rs     Multi-profile management.
-│   ├── security.rs     Encryption, locking, key derivation.
-│   ├── recordings.rs   Audio recording & transcription.
-│   ├── handwriting.rs  Handwriting OCR pipeline.
-│   ├── git_sync.rs     Git sync (SSH/HTTPS, merge, history).
-│   └── platform.rs     Platform-specific capabilities (theme, export).
-│
-├── adapters/           Adapter implementations (Rust/Tauri/filesystem-specific).
-│   ├── mod.rs          Module index + crate-level re-exports.
-│   ├── notes/          Filesystem-backed note storage + document codec.
-│   ├── profiles.rs     JSON-file profile state management.
-│   ├── security.rs     XChaCha20-Poly1305 encryption, Argon2 KDF.
-│   ├── recordings.rs   Audio file handling, Whisper/AssemblyAI transcription.
-│   ├── handwriting.rs  Image attachment handling, LLM-based OCR.
-│   ├── git.rs          git2-based sync (fetch, merge, push, history).
-│   └── ios.rs          iOS native integration (AVFoundation, ObjC interop).
-│
-└── commands/           Tauri command layer (thin wrappers, one file per domain).
+└── commands/           Thin #[tauri::command] wrappers, one file per domain.
     ├── mod.rs          App bootstrap (Tauri Builder, plugins, generate_handler!)
     │                   and the shared run_blocking_command helper.
-    ├── security.rs     5 commands  — lock, unlock, enable, preferences, state.
-    ├── platform.rs     2 commands  — native theme, file export sheet.
-    ├── profiles.rs     8 commands  — CRUD, backup, export.
-    ├── notes.rs        10 commands — tree, read, create, write, move, delete, rename, order.
-    ├── recordings.rs   10 commands — native recorder, save, transcription queue, list.
-    ├── handwriting.rs  3 commands  — save attachment, OCR queue, list jobs.
-    └── git_sync.rs     8 commands  — SSH keys, status, history, connect, pull, push.
+    ├── security.rs     lock, unlock, enable, preferences, state.
+    ├── platform.rs     native theme, file export sheet.
+    ├── profiles.rs     profile CRUD, backup zip, Documents export, app config.
+    ├── notes.rs        tree, read/create/write, meta, previews, move/delete/
+    │                   rename, order, timestamps, markers.
+    ├── recordings.rs   native recorder, save, transcription queues, list.
+    ├── handwriting.rs  save attachment, OCR queue, list jobs.
+    ├── import.rs       Apple Notes scan / start / status.
+    ├── git_sync.rs     SSH keys, status, history, connect, pull, push.
+    └── local_sync.rs   local git-daemon server, mDNS discovery.
 ```
 
-## Architecture rationale
+## How a command flows
 
-### Why these layers?
+```
+frontend invoke("read_note")
+  → commands/notes.rs        (lock gate, arg structs — from type_core)
+  → type_core::application   (use-case service, depends on port traits)
+  → type_core::adapters      (filesystem, git2, crypto, HTTP, workers)
+```
 
-| Layer | Role | Depends on |
-|-------|------|------------|
-| **domain** | Framework-free DTOs and domain state. | Nothing app-specific. |
-| **application** | Use-case orchestration and policy. | `ports` + `domain`. |
-| **ports** | Traits for outbound dependencies and gateway contracts. | `domain` types. |
-| **adapters** | Concrete filesystem, git2, crypto, HTTP, native APIs. | `ports`, external crates, Tauri where needed. |
-| **commands** | IPC transport, security gate, blocking-thread dispatch. | `application`, concrete adapters, Tauri. |
+Commands do not own business workflows. Each command file builds the relevant
+`type_core` application service with the concrete core adapter, passing
+`crate::app_env(&app)?` — the `AppEnv { app_data_dir, documents_dir }` seam
+that replaced direct `tauri::AppHandle` usage when the core was extracted.
+`ensure_security_unlocked_for_app` gates content commands while locked.
 
-The key rule: **commands do not own business workflows**. They unlock-gate the
-request, construct the relevant application service, and dispatch blocking work
-when needed. Application services depend on traits, while adapters own Tauri
-handles, filesystem paths, git2, HTTP, crypto, native APIs, and worker queues.
+The `generate_handler![]` macro in `commands/mod.rs` uses qualified paths
+(`notes::read_note`, `git_sync::git_pull`, …) to disambiguate command modules.
 
-The notes domain is the strictest implementation: note DTOs live in `domain/`,
-note use cases live in `application/notes.rs`, and filesystem/frontmatter/git
-history/time/id/encryption dependencies are accessed through ports. Other
-domains now follow the same command -> application -> port -> adapter direction
-through gateway traits while their deeper persistence logic remains in adapters.
+## What stays in the shell, and why
 
-### Why split commands by domain?
+| Piece | Reason |
+|-------|--------|
+| `commands/` | Tauri IPC is the transport; the FFI crate is the other transport over the same services. |
+| `platform` domain | Native theming and the file-export sheet need the Tauri window / ObjC. |
+| iOS native capture | AVAudioRecorder + WKWebView recovery need the app's ObjC runtime. |
+| `app_env()` | Path resolution (`app_data_dir`, `documents_dir`) is the only thing the core needs from Tauri. |
 
-Previously `commands.rs` was a single 1354-line file containing every Tauri
-command handler. Splitting into domain modules:
-
-1. **Readability** — each file covers one concern and fits on screen.
-2. **Migration surface** — when swapping Tauri for UniFFI, you can migrate one
-   domain at a time (e.g. swap `commands/notes.rs` while keeping the rest on
-   Tauri).
-3. **Parallel work** — contributors can work on different domains without merge
-   conflicts in a single monolithic file.
-
-### How commands reference use cases
-
-Each command submodule imports its application service and concrete Tauri
-adapter explicitly. The `generate_handler![]` macro in `commands/mod.rs` uses
-qualified paths (`security::get_security_state`, `notes::read_note`, etc.) to
-avoid ambiguity with identically-named adapter modules.
-
-### Future: UniFFI migration path
-
-The planned migration to React Native with `uniffi-bindgen-react-native`:
-
-1. Keep `domain/`, `application/`, `ports/`, and most `adapters/` as-is.
-2. Replace `commands/` with UniFFI `#[uniffi::export]` functions that construct
-   the same application services.
-3. The frontend moves from Tauri's IPC to UniFFI-generated TypeScript bindings.
-
-Because the command layer is intentionally thin, this swap is mechanical rather
-than architectural.
+The "future UniFFI migration path" this README used to describe has happened:
+`crates/type-ffi` exports the same use cases with `#[uniffi::export]` for the
+React Native app. When adding a feature, put the logic in `type-core`, then
+expose it twice — a thin command here, a thin export there.

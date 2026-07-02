@@ -5,8 +5,25 @@ your own disk — no account, no lock-in, readable and editable by any other too
 Git sync keeps them in step across devices, including a one-button local-network server so
 a phone can sync over Wi-Fi or a hotspot with **no external host**.
 
-Built with **Tauri v2** (Rust backend) and **React 19 / TypeScript** (frontend). Runs on
-macOS, Windows, Linux, and iOS.
+Two apps share **one Rust core**:
+
+- **Desktop** — Tauri v2 + React 19/TypeScript (macOS, Windows, Linux; also the legacy Tauri-iOS build)
+- **Mobile** — React Native (Expo), talking to the same core through UniFFI. Opens on a
+  blank page you can type on immediately; swipe up files it away and gives you a fresh page.
+
+## Repository layout
+
+npm workspaces + one Cargo workspace:
+
+```
+apps/desktop/          Tauri app (React frontend + src-tauri shell)
+apps/mobile/           React Native app (Expo) — see apps/mobile/README.md
+crates/type-core/      Framework-free Rust core (notes, git sync, recordings,
+                       transcription queues, security, working folders)
+crates/type-ffi/       UniFFI bindings over type-core for the mobile app
+packages/shared/       @typenotes/shared — platform-free TS used by both apps
+packages/mobile-core/  @typenotes/mobile-core — typed TS bridge to type-ffi
+```
 
 ## Highlights
 
@@ -36,8 +53,10 @@ macOS, Windows, Linux, and iOS.
 - **Backend** — Tauri v2 (Rust) in a pragmatic **domain / application / ports / adapters / commands**
   layout, so use cases can move to another shell (e.g. UniFFI for React Native) without a rewrite.
 
-For the full module map and conventions see **[AGENTS.md](./AGENTS.md)**; for the backend,
-**[src-tauri/README.md](src-tauri/README.md)**.
+For the full module map and conventions see **[AGENTS.md](./AGENTS.md)**; for the Tauri
+shell, **[apps/desktop/src-tauri/README.md](apps/desktop/src-tauri/README.md)**; for the
+mobile app and its FFI bridge, **[apps/mobile/README.md](apps/mobile/README.md)** and
+**[packages/mobile-core/README.md](packages/mobile-core/README.md)**.
 
 If you want a gentler architecture introduction in Russian, read
 **[docs/architecture](docs/architecture/README.md)**.
@@ -45,17 +64,24 @@ If you want a gentler architecture introduction in Russian, read
 ## Quick start
 
 ```bash
-npm install
-npm run dev          # desktop dev
+npm install                  # once, at the repo root (npm workspaces)
+npm run desktop:dev          # desktop web dev server
+npm run desktop:tauri dev    # desktop app
+npm run mobile:start         # mobile (Expo; runs in demo mode without a native build)
 ```
+
+The mobile app runs against an in-memory mock core until the native module is
+generated on a Mac (Rust cross-build + `uniffi-bindgen-react-native` codegen) —
+see [apps/mobile/README.md](apps/mobile/README.md).
 
 ### Isolated desktop dev
 
 If the production macOS app is installed on the same machine, use the isolated
-dev flavor so development does not touch production app data:
+dev flavor so development does not touch production app data (run inside
+`apps/desktop/`):
 
 ```bash
-npm run tauri:dev:isolated
+npm run tauri:dev:isolated -w type
 ```
 
 Production uses `com.digital.type2` and stores app data under
@@ -66,25 +92,26 @@ Production uses `com.digital.type2` and stores app data under
 To build an isolated dev DMG:
 
 ```bash
-npm run tauri:build:dev
+npm run tauri:build:dev -w type
 ```
 
-### iOS
+### iOS (Tauri build)
 
 ```bash
-npm run tauri ios init   # one-time
-npm run tauri ios dev    # simulator/device
-npm run tauri ios build  # release
+npm run tauri:ios:init -w type    # one-time
+npm run tauri:ios:dev -w type     # simulator/device
+npm run tauri:ios:build -w type   # release
 ```
 
 ### Build & checks
 
 ```bash
-npm run build                                   # tsc + web build + OTA fallback assets
-cargo check --manifest-path src-tauri/Cargo.toml
+npm run desktop:build    # tsc + web build + OTA fallback assets
+cargo check --workspace
 
-npm test                                        # Vitest (frontend pure logic)
-cargo test --manifest-path src-tauri/Cargo.toml --lib   # Rust unit tests
+npm run typecheck        # tsc --noEmit in every workspace
+npm test                 # Vitest in every workspace (pure logic)
+cargo test --workspace --lib   # Rust unit tests
 ```
 
 CI (`.github/workflows/ci.yml`) runs the typecheck and both test suites on every
@@ -218,10 +245,19 @@ minutes).
 - A background worker writes plain transcript text into the note body and word-level timestamps to `<audio-name>.transcription.json` beside the audio.
 - Check status, provision, or **Retranscribe** in **Settings → Recordings**.
 
-### Mobile — cloud (AssemblyAI)
+### Mobile — per-folder transcription mode
 
-- Add your AssemblyAI key in **Settings → Recordings**.
-- Enable auto-queue for automatic transcription on mobile.
+Each working folder's `.type/settings.json` carries a `transcription_mode`
+(set it in the mobile app's Settings → Transcription; it syncs with the notes):
+
+- **assemblyai** — transcribe right away on the phone via AssemblyAI (add your
+  key in Settings; the key itself stays on the device).
+- **desktop** — leave recordings pending; after a git sync your desktop's
+  auto-queue transcribes them with local Whisper. Record on the phone,
+  transcribe on the desktop, no cloud key needed.
+- **native** — hook for an on-device speech recognizer, plugged in through the
+  core's `TranscriptionProvider` FFI trait.
+- **off** — never transcribe automatically.
 
 ## OTA updates (iOS WebView assets)
 
@@ -287,7 +323,10 @@ in **Settings → Sync** (the app then skips the manifest fetch and starts bundl
 
 ## Contributing
 
-Architecture, module map, and codebase patterns live in **[AGENTS.md](./AGENTS.md)** (frontend
-+ overview) and **[src-tauri/README.md](src-tauri/README.md)** (backend). The Rust backend is
-organized as **ports / adapters / commands** across the `notes`, `profiles`, `security`,
-`recordings`, `handwriting`, `git_sync`, `local_sync`, and `platform` domains.
+Architecture, module map, and codebase patterns live in **[AGENTS.md](./AGENTS.md)**
+(overview + both apps) and **[apps/desktop/src-tauri/README.md](apps/desktop/src-tauri/README.md)**
+(Tauri shell). The shared Rust core (`crates/type-core`) is organized as
+**domain / application / ports / adapters** across the `notes`, `profiles`, `security`,
+`recordings`, `handwriting`, `import`, `git_sync`, and `local_sync` domains; the Tauri
+shell adds `commands/` + the `platform` domain, and `crates/type-ffi` exposes the same
+use cases to React Native.

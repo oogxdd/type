@@ -4,57 +4,94 @@ This document is for AI agents and developers who need to understand and modify 
 
 ## What this app is
 
-A local-first markdown notes app built with Tauri v2 (Rust backend) + React (TypeScript frontend). It runs on desktop (macOS/Windows/Linux) and iOS. Notes are stored as `.md` files in a local folder tree. Optional Git sync pushes/pulls notes across devices — including a one-button local-network server (`git daemon`) for syncing to a phone with no external host. Audio recording is supported, with transcription via a self-provisioning local Whisper on desktop (no manual install) and AssemblyAI on iOS. Handwriting OCR and voice transcription use independent queues with shared frontend queue plumbing. At-rest note-body encryption, the lock screen, panic-password local wipe, and the multi-note lens are optional frontend extension surfaces.
+A local-first markdown notes app. Notes are stored as `.md` files in a local folder tree ("working folders"), with optional Git sync across devices — including a one-button local-network server (`git daemon`) for syncing to a phone with no external host. Audio recording is supported, with per-folder transcription routing (local Whisper on desktop — self-provisioning, no manual install; AssemblyAI cloud; a pluggable native provider; or "leave pending for the desktop to transcribe after sync"). Handwriting OCR and voice transcription use independent queues with shared frontend queue plumbing. At-rest note-body encryption, the lock screen, panic-password local wipe, and the multi-note lens are optional frontend extension surfaces.
+
+There are **two apps over one Rust core**: the desktop app is Tauri v2 + React (also runs the legacy Tauri-iOS build), and the mobile app is React Native (Expo), talking to the same core through UniFFI bindings.
+
+## Monorepo layout
+
+npm workspaces (`apps/*`, `packages/*`) + one Cargo workspace at the repo root
+(single `Cargo.lock` and `target/`).
+
+```
+apps/desktop/          The Tauri app: React frontend (src/) + Tauri shell (src-tauri/)
+apps/mobile/           The React Native app (Expo). See apps/mobile/README.md
+crates/type-core/      Framework-free Rust core: domain/application/ports/adapters
+crates/type-ffi/       UniFFI bindings over type-core for non-Tauri shells
+packages/shared/       @typenotes/shared — platform-free TS (domain types,
+                       frontmatter, note previews, sync hints) used by both apps
+packages/mobile-core/  @typenotes/mobile-core — typed TS bridge to type-ffi
+                       (RawCore seam + in-memory mock; native module generated
+                       on a Mac with uniffi-bindgen-react-native)
+```
 
 ## Tech stack
 
-- **Frontend**: React 19, TypeScript, Vite, Tiptap (editor), DnD Kit (drag-and-drop), Tailwind + Shadcn/ui
-- **Backend**: Tauri v2 (Rust), organized as **domain / application / ports / adapters / commands** (clean/hexagonal) across domains: notes, profiles, security, recordings (+ whisper_env), handwriting, import, git_sync, local_sync, platform, plus iOS native
-- **Build**: `npm run build` runs `tsc && vite build` (plus an OTA asset build). Rust: `cargo check --manifest-path src-tauri/Cargo.toml`
-- **Tests**: `npm test` (Vitest — frontend pure logic; co-located `*.test.ts`) and `cargo test --manifest-path src-tauri/Cargo.toml --lib` (Rust unit tests in `#[cfg(test)]` modules). CI (`.github/workflows/ci.yml`) runs both, plus `tsc --noEmit`, on PRs and pushes to main.
+- **Desktop frontend**: React 19, TypeScript, Vite, Tiptap (editor), DnD Kit (drag-and-drop), Tailwind + Shadcn/ui
+- **Mobile app**: React Native (Expo), react-navigation, reanimated + gesture-handler, expo-audio, zustand
+- **Rust core**: `crates/type-core`, organized as **domain / application / ports / adapters** (clean/hexagonal) across domains: notes, profiles, security, recordings (+ whisper_env), handwriting, import, git_sync, local_sync. The Tauri shell adds the `commands/` layer + platform/iOS adapters; `crates/type-ffi` adds the UniFFI layer.
+- **Build**: root `npm run desktop:build` (tsc + vite + OTA assets). Rust: `cargo check --workspace`
+- **Tests**: `npm test` (Vitest per workspace — pure logic; co-located `*.test.ts`) and `cargo test --workspace --lib` (Rust unit tests in `#[cfg(test)]` modules). CI (`.github/workflows/ci.yml`) runs both, plus workspace typechecks, on PRs and pushes to main.
 
-## Backend structure (src-tauri/src/)
+## Rust core structure (crates/type-core/src/ + the Tauri shell)
 
-The Rust backend uses a pragmatic **domain / application / ports / adapters /
-commands** layout so use cases can move to another shell (e.g. UniFFI for React
-Native) without a rewrite. `src-tauri/README.md` covers the rationale; this is
-the navigation map.
+The Rust core uses a pragmatic **domain / application / ports / adapters**
+layout, framework-free so both shells (Tauri commands, UniFFI exports) drive
+the same use cases. The shell-facing seam is `AppEnv { app_data_dir,
+documents_dir }` — the only thing a shell must provide.
+`apps/desktop/src-tauri/README.md` covers the shell; this is the navigation map
+(paths below are inside `crates/type-core/src/`, except `commands/` which lives
+in `apps/desktop/src-tauri/src/`).
 
 ```
-src/
-  main.rs              Binary entry point → lib::run().
-  lib.rs               Crate root: declares the backend layers, re-exports domain
-                       note DTOs + adapter symbols, and holds shared utilities.
+crates/type-core/src/
+  lib.rs               Crate root: declares the core layers, re-exports domain
+                       note DTOs + adapter symbols, holds shared utilities, and
+                       defines AppEnv (the shell seam).
   domain/<domain>.rs   Framework-free core DTOs/state. Notes has been moved here.
   application/<domain>.rs
-                       Use-case services. Commands call these instead of owning
+                       Use-case services. Shells call these instead of owning
                        workflows directly.
   ports/<domain>.rs    Platform-agnostic contracts and gateway traits.
   adapters/<domain>.rs The real Rust implementation (filesystem, git2, crypto, …).
                        A large domain may instead be a folder module
                        (adapters/<domain>/mod.rs + submodules) — see recordings/,
-                       notes/, profiles/, and handwriting/.
+                       notes/, profiles/, handwriting/, and git/.
+  build.rs             Replicates Tauri's desktop/mobile cfg aliases from
+                       CARGO_CFG_TARGET_OS so #[cfg(desktop)] works core-side.
+
+apps/desktop/src-tauri/src/
+  main.rs, lib.rs      Binary entry + app_env() (tauri::AppHandle → AppEnv),
+                       macOS window alpha, pub fn run().
   commands/<domain>.rs Thin #[tauri::command] wrappers that lock-gate requests,
-                       construct application services, and dispatch blocking work.
+                       construct core application services, and dispatch
+                       blocking work.
+  adapters/, ports/platform.rs, application/platform.rs
+                       Shell-only: native theme/export sheet, iOS AVAudioRecorder
+                       capture (TauriRecordingsAdapter), WKWebView recovery.
+
+crates/type-ffi/src/   #[uniffi::export] functions per domain over the same
+                       services (JSON-string args/results matching the Tauri
+                       IPC shapes), CoreError, init_core(), and the foreign
+                       TranscriptionProvider trait for host-side transcription.
 ```
 
-**Layer wiring.** Commands import application services plus concrete Tauri
-adapters explicitly. Application services depend on port traits/gateways.
-Adapters own Tauri handles, filesystem roots, git2, crypto, HTTP/native APIs,
-and process-global workers. The `generate_handler![]` macro in `commands/mod.rs`
-uses qualified paths (`notes::read_note`, `git_sync::git_pull`, …) to
-disambiguate command modules.
+**Layer wiring.** Shells (commands / FFI exports) import application services
+plus concrete core adapters explicitly. Application services depend on port
+traits/gateways. Adapters own filesystem roots, git2, crypto, HTTP/native APIs,
+and process-global workers; they receive `AppEnv` instead of a Tauri handle.
+The `generate_handler![]` macro in `commands/mod.rs` uses qualified paths
+(`notes::read_note`, `git_sync::git_pull`, …) to disambiguate command modules.
 
-### lib.rs — shared hub
+### type-core lib.rs — shared hub
 
-- Layer declarations: `pub mod domain;`, `pub mod ports;`, `mod application;`, `mod adapters;`, `mod commands;`
-- Shared crate re-exports: note domain DTOs, adapter symbols, `BASE64`, `fs`, `HashMap`, `HashSet`, `PathBuf`, `Manager`, objc types (iOS)
+- Layer declarations: `pub mod domain;`, `pub mod ports;`, `pub mod application;`, `pub mod adapters;`
+- `AppEnv { app_data_dir, documents_dir }` — what a shell provides instead of a `tauri::AppHandle`
+- Shared crate re-exports: note domain DTOs, adapter symbols, `BASE64`, `fs`, `HashMap`, `HashSet`, `PathBuf`
 - Shared constants: `RECORDING_STATUS_PENDING/QUEUED/PROCESSING/COMPLETED/FAILED`
 - Shared utilities: `app_data_dir`, `now_ms`, `time_to_ms`, `note_parent_folder_path`, `decode_base64_payload` (+ audio/image variants), `response_error`
-- macOS: `MACOS_WINDOW_ALPHA`, `apply_macos_window_alpha`
-- Entry point: `pub fn run()` → `commands::run()`
 
-### commands/ — Tauri IPC layer
+### commands/ — Tauri IPC layer (apps/desktop/src-tauri)
 
 `commands/mod.rs` holds `run()` (builds the Tauri app, registers plugins, calls
 `generate_handler![]`) and the shared `run_blocking_command` helper. One file per
@@ -85,15 +122,15 @@ longer own workflows; their deeper persistence/worker logic remains in adapters.
 Key symbols live in `adapters/<domain>.rs`:
 
 - **notes** — a folder module (`notes/mod.rs` + `front_matter.rs` + `naming.rs` + `tree.rs`) for filesystem notes, front-matter, tree, ordering. `mod.rs` is the hub: shared constants (`ORDER_FILE`, `FEED_FOLDER`, `ARCHIEVE_FOLDER`, `RECORDINGS_STORAGE_FOLDER`, `ATTACHMENTS_STORAGE_FOLDER`, `PROTECTED_SYSTEM_FOLDERS`) + root/path resolution (`ensured_notes_root` resolves the active profile's root, `resolve_path`, `strip_root`) + concrete port adapters (`FilesystemNotesRepository`, `FrontMatterNoteDocumentCodec`, `RuntimeNoteBodyCrypto`, `UuidNoteIdGenerator`, `SystemNoteClock`). Note DTOs live in `domain/notes.rs`. `front_matter.rs`: `parse/render/write_note_with_front_matter`. `naming.rs`: `allocate_note_file_name` (UTC-slug / uuid_v7 / uuid_v7_prefix_slug) + Unicode-aware `slug_from_content`. `tree.rs`: `build_folder_node`, `ensure_system_folders`, `migrate_legacy_system_folders`, order helpers, `collect_markdown_note_files`.
-- **profiles** — a folder module (`profiles/mod.rs` + `state.rs` + `backup.rs`) for multi-profile support. `mod.rs`: `.notes-profiles.json` constants + DTO types + `profiles_file_path`/`profile_root_for_id`. `state.rs`: filesystem discovery, normalization, persistence, legacy `.notes-sessions.json` migration, and the `ensure_profiles_state`/`find_profile`/`*_state` CRUD (+ `normalize_notes_root_path`, dir copy/move helpers). `backup.rs`: profile backup zip + Documents export.
+- **profiles** — a folder module (`profiles/mod.rs` + `state.rs` + `settings.rs` + `backup.rs`) for multi-profile ("working folder") support. `settings.rs`: per-folder `.type/settings.json` (`ProfileSettings` — git remote/branch/credentials/commit message, legacy mobile auto flags, and the optional `transcription_mode` with `effective_transcription_mode()` fallback) plus the device-local `config.json` (`AppConfig` — API keys etc., never synced). `update_settings` preserves a persisted `transcription_mode` when an older writer omits it. `mod.rs`: `.notes-profiles.json` constants + DTO types + `profiles_file_path`/`profile_root_for_id`. `state.rs`: filesystem discovery, normalization, persistence, legacy `.notes-sessions.json` migration, and the `ensure_profiles_state`/`find_profile`/`*_state` CRUD (+ `normalize_notes_root_path`, dir copy/move helpers). `backup.rs`: profile backup zip + Documents export.
 - **security** — XChaCha20-Poly1305 at-rest body encryption with an Argon2id-derived key. `SECURITY_RUNTIME` (OnceLock<Mutex>) holds the in-memory key after unlock. `.notes-security.json` config. `encrypt_note_body_for_write`, `decrypt_note_body_for_read`, `ensure_security_unlocked_for_app` (the lock gate most commands call), panic flow `panic_reset_local_data`.
-- **recordings** — a folder module (`recordings/mod.rs` + `whisper.rs` + `assembly.rs`): save audio → note with metadata. `mod.rs` owns the `TRANSCRIPTION_QUEUE` worker (which dispatches to a backend), types, queue state, note scanning, and file naming. The two transcription backends live in their own submodules — `whisper.rs` (desktop, managed-Python `faster-whisper` via `whisper_env`; `check_whisper_availability`, `transcribe_audio_local_whisper`) and `assembly.rs` (AssemblyAI cloud, used on iOS). `collect_recording_notes`, queue snapshot for the UI.
+- **recordings** — a folder module (`recordings/mod.rs` + `whisper.rs` + `assembly.rs`): save audio → note with metadata. `mod.rs` owns the transcription queue worker (which dispatches on `TranscriptionMethod`), types, queue state, note scanning, and file naming. Backends: `whisper.rs` (desktop, managed-Python `faster-whisper` via `whisper_env`; `check_whisper_availability`, `transcribe_audio_local_whisper`), `assembly.rs` (AssemblyAI cloud, used on mobile), and `TranscriptionMethod::Provider` — a shell-registered `ports::recordings::TranscriptionProvider` (how the mobile FFI plugs native speech recognition into the same queue). `queue_recordings_with_method` is the shared scan-and-enqueue; `collect_recording_notes`, queue snapshot for the UI. Native iOS capture lives in the Tauri shell's `TauriRecordingsAdapter`, not here.
 - **whisper_env** — desktop only. Provisions and owns an isolated CPython + faster-whisper under app-data using [`uv`](https://docs.astral.sh/uv/) (downloading `uv` itself on first use if absent), so the user installs nothing. `whisper_env_ready`, `managed_python`, `ensure_whisper_env`.
 - **handwriting** — a folder module (`handwriting/mod.rs` + `openai.rs` + `huggingface.rs`): save image attachment → note; `HANDWRITING_OCR_QUEUE` worker. `mod.rs` owns attachment saving, the queue + worker, note scanning, and provider dispatch; each provider's HTTP transcription lives in its own submodule — `openai.rs` (`HandwritingOcrProvider::OpenAi`, GPT-4o) and `huggingface.rs` (`::HuggingFace`, 503 retry). `collect_handwriting_notes`.
 - **import** — Apple Notes folder importer. Walks an *exported* Apple Notes tree (Markdown/HTML/plain-text — Apple Notes has no native bulk export), creating notes in the active root. Auto-detects note files, converts HTML→Markdown best-effort, strips foreign front-matter, and preserves the original creation date (front-matter `created`/`created_ms`/… → epoch ms / RFC 3339 / date-only, else filesystem time). `preserve` mirrors the source hierarchy under one target folder; `flatten` drops everything into `Feed`. Runs on a worker thread writing to a process-global progress snapshot the UI polls (no Tauri events); `scan_apple_import_source`, `run_apple_notes_import`, `apple_import_snapshot`. Notes are written via `write_note_with_front_matter`, so encryption is transparent (import requires unlock).
 - **git** (the `git_sync` domain) — libgit2 sync. `ensure_git_repo`/`open_repo`, `perform_fetch`/`fast_forward_to`/`merge_fetched_commit`/`commit_all_changes`, `resolve_target_branch`/`switch_or_prepare_branch`. Conflicts keep "ours" and write "theirs" as `.conflict.md` siblings — merge never blocks. `build_git_status`, `build_git_history`. `build_callbacks` auth order: app SSH key file → SSH agent → username/password. Ed25519 keypair under `<app_data_dir>/ssh/`. Bootstrap-artifact detection for first sync.
 - **local_sync** — desktop hosts a `git daemon` over plain `git://` so a phone on the same Wi-Fi / hotspot can push/pull with no external host. Supervises the child in a process-global `Mutex<Option<RunningDaemon>>` (idempotent start, reaps dead handles, killed on app exit). `receive.denyCurrentBranch=updateInstead` lets phone pushes update the live working tree. Detects the outbound LAN IP via a connected UDP socket; advertises/browses the `_typenotes-sync._tcp` mDNS service for tap-to-discover. See `docs/LOCAL_SYNC.md`.
-- **ios** (`#[cfg(target_os = "ios")]`) — native AVAudioRecorder/AVAudioSession recording and WKWebView termination recovery via Objective-C interop. State in `IOS_NATIVE_RECORDER`, `IOS_WEBVIEW_TERMINATION_PROXIES`.
+- **ios** (`#[cfg(target_os = "ios")]`, in the Tauri shell at `apps/desktop/src-tauri/src/adapters/ios.rs`) — native AVAudioRecorder/AVAudioSession recording and WKWebView termination recovery via Objective-C interop. State in `IOS_NATIVE_RECORDER`, `IOS_WEBVIEW_TERMINATION_PROXIES`.
 
 ### ports/ — contracts
 
@@ -147,7 +184,16 @@ module-internal helpers stay private.
   - backend seeds 3 dummy notes in `Feed`
   - frontend clears localStorage and reloads
 
-## How the frontend is structured
+## How the desktop frontend is structured
+
+All paths in this section are inside **`apps/desktop/`**. Platform-free
+helpers that used to live in `src/shared` (domain types, frontmatter,
+note-preview parsing/format, annotation metadata, jobs, pure tree walkers,
+system-folder constants) have moved to **`packages/shared`**
+(`@typenotes/shared/<module>`) so the mobile app shares them; `src/shared`
+keeps only browser-bound pieces (dom, storage/localStorage, base64 +
+yieldToUi, selection modifiers, shadcn `ui/`, the `invoke` wrapper, and
+desktop-only constants).
 
 The frontend is **feature-sliced**. There are four kinds of place code can live:
 
@@ -388,6 +434,35 @@ A WidgetKit extension that lets users start a recording from the iOS home screen
 - `src/mobile/mobile-shell.tsx` — Deep link listener + passes autoStart through
 - `src/mobile/views/recording-view.tsx` — Auto-start behavior
 
+## Mobile app (apps/mobile) + FFI bridge
+
+The React Native app (Expo) reuses the Rust core through
+`crates/type-ffi` → `packages/mobile-core` → screens/stores:
+
+- **`crates/type-ffi`** — `#[uniffi::export(async_runtime = "tokio")]`
+  functions per domain, JSON-string args/results matching the Tauri IPC
+  shapes, so one set of TS wire types (`@typenotes/shared/types`) fits both
+  shells. `init_core(app_data_dir, documents_dir)` must run first.
+  `TranscriptionProvider` is a foreign trait (`with_foreign`): Swift/Kotlin/JS
+  implementations run inside the core's queue worker.
+- **`packages/mobile-core`** — `raw-core.ts` (the `RawCore` interface + a
+  `setRawCore()` seam), `core-api.ts` (typed facade the app imports), and
+  `mock-core.ts` (in-memory RawCore for vitest and "demo mode"). The real
+  turbo module is generated on a Mac with `uniffi-bindgen-react-native`
+  (ubrn 0.31.x = uniffi 0.31); output dirs are gitignored. Regenerate after
+  any `type-ffi` change and keep `raw-core.ts` in sync.
+- **`apps/mobile`** — the signature interaction: the app opens on a blank
+  page (type immediately); swipe up files the page into Feed and a fresh
+  blank page appears. `src/lib/capture.ts` (pure, tested) owns that note
+  lifecycle with the same rules as the desktop editor (lazy create,
+  debounced writes, flush on leave, empty-note cleanup). Screens: feed,
+  folder browser, plain-text editor, record (expo-audio → `save_audio_recording`
+  → queue per `transcription_mode`), sync (status/connect/pull/push/SSH
+  key/history), settings (working folders, notes-root move, transcription
+  mode, AssemblyAI key). Zustand stores in `src/state/`. Without the native
+  module the app boots the mock core in demo mode (bottom banner) — that is
+  what CI and Expo Go exercise.
+
 ## Gotchas
 
 - **"Archieve" typo**: The archive folder is spelled "Archieve" in the codebase and in persisted data. Do not "fix" this — it would break existing user data.
@@ -399,6 +474,8 @@ A WidgetKit extension that lets users start a recording from the iOS home screen
   - `uuid_v7_prefix_slug`: `<uuidv7-prefix>-<slug>.md`
   New notes may start with placeholder suffixes (`-note-...`, `-recording-...`, etc.) and then auto-rename to content slug when enough text is available in slug-capable modes. Slug extraction is Unicode-aware (keeps Cyrillic/Latin letters and digits) and ignores `NV_EMPTY_LINE_TOKEN_*` noise.
 - **Empty note cleanup**: if a dirty note is emptied and then focus/selection moves away, it is auto-deleted.
+- **Per-folder transcription mode**: `.type/settings.json` inside a notes root carries `transcription_mode` (`off` / `desktop` / `assemblyai` / `native`). Absent = fall back to the legacy `mobile_auto_transcription_enabled` flag (true → assemblyai, false → desktop) — use `effective_transcription_mode()` / `effectiveTranscriptionMode()` instead of reading the field. Settings writers that omit the field must not clear a persisted mode (the core's `update_settings` merge handles this).
+- **Two shells, one core**: new backend features go in `crates/type-core`, then get exposed twice — a `#[tauri::command]` in `apps/desktop/src-tauri/src/commands/` and a `#[uniffi::export]` in `crates/type-ffi`. After changing `type-ffi`, regenerate the mobile native module (Mac, ubrn) and keep `packages/mobile-core/src/raw-core.ts` in sync.
 - **Git sync uses libgit2**, not shell git. The Rust backend handles all git operations.
 - **Git server support is generic**: `git://`, `ssh://`, and `https://` remotes are all supported. See `docs/ssh-sync-setup.md` for SSH sync setup with key-based auth.
 - **SSH key auth**: The app can generate and store an Ed25519 keypair in `<app_data_dir>/ssh/`. When an SSH key exists, all git operations (connect/push/pull) use it automatically before falling back to SSH agent or username/password.
