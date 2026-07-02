@@ -257,6 +257,12 @@ export type VisibleNavigationItem =
       parentId: string;
     };
 
+// Where recordings made in a working folder get transcribed. Stored in the
+// folder's own .type/settings.json, so it syncs across devices. Absent means
+// "not chosen yet": the effective mode falls back to the legacy
+// mobile_auto_transcription_enabled flag (true → assemblyai, false → desktop).
+export type TranscriptionMode = "off" | "desktop" | "assemblyai" | "native";
+
 export type ProfileSettings = {
   git_remote_url: string;
   git_branch: string;
@@ -265,7 +271,17 @@ export type ProfileSettings = {
   git_commit_message: string;
   mobile_auto_transcription_enabled: boolean;
   mobile_auto_handwriting_ocr_enabled: boolean;
+  transcription_mode?: TranscriptionMode | null;
 };
+
+export const effectiveTranscriptionMode = (
+  settings: Pick<
+    ProfileSettings,
+    "transcription_mode" | "mobile_auto_transcription_enabled"
+  >
+): TranscriptionMode =>
+  settings.transcription_mode ??
+  (settings.mobile_auto_transcription_enabled ? "assemblyai" : "desktop");
 
 export type ProfileSyncSettings = {
   gitRemoteUrl: string;
@@ -297,4 +313,95 @@ export type SecurityUnlockResult = {
   panic_triggered: boolean;
   reset_required: boolean;
   message?: string | null;
+};
+
+// ── FFI / IPC argument shapes ──────────────────────────────────────────────────
+// These mirror the serde arg structs in crates/type-core. The desktop Tauri
+// commands and the mobile FFI (crates/type-ffi) both deserialize exactly these.
+
+export type CreateNoteArgs = {
+  folder_path?: string | null;
+  content?: string | null;
+  timestamp_ms?: number | null;
+  file_name_format?: NoteFileNameFormat;
+};
+
+export type SetNoteTimestampArgs = {
+  path: string;
+  timestamp_ms: number;
+};
+
+export type SaveRecordingArgs = {
+  audio_base64: string;
+  mime_type?: string | null;
+  folder_path?: string | null;
+  file_name_format?: NoteFileNameFormat;
+};
+
+export type QueueRecordingsArgs = {
+  assembly_api_key?: string | null;
+};
+
+export type ConnectGitArgs = {
+  remote_url?: string | null;
+  branch?: string | null;
+  username?: string | null;
+  password?: string | null;
+};
+
+export type GitSyncArgs = {
+  branch?: string | null;
+  username?: string | null;
+  password?: string | null;
+};
+
+export type GitPushArgs = {
+  message?: string | null;
+  branch?: string | null;
+  username?: string | null;
+  password?: string | null;
+};
+
+export type GitHistoryArgs = {
+  limit?: number | null;
+};
+
+export type CreateProfileArgs = {
+  name: string;
+  description?: string | null;
+};
+
+export type UpdateProfileArgs = {
+  profile_id: string;
+  name?: string | null;
+  description?: string | null;
+};
+
+export type UpdateProfileSettingsArgs = {
+  profile_id: string;
+  settings: ProfileSettings;
+};
+
+export type UpdateAppConfigArgs = {
+  config: AppConfig;
+};
+
+export type EnableSecurityArgs = {
+  unlock_password: string;
+  panic_password: string;
+};
+
+export type UnlockSecurityArgs = {
+  password: string;
+};
+
+export type SetSecurityPreferencesArgs = {
+  auto_lock_on_background: boolean;
+};
+
+// Wire shape of the Rust NotesProfilesSnapshot (snake_case, as serialized).
+export type ProfilesSnapshot = {
+  active_profile_id: string;
+  profiles: NotesProfile[];
+  app_config: AppConfig;
 };

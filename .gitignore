@@ -33,3 +33,9 @@ dist-ssr
 # a leading slash so it never swallows source folders named "notes" (e.g.
 # src-tauri/src/adapters/notes/).
 /notes/
+
+# uniffi-bindgen-react-native codegen output (regenerated on a Mac)
+packages/mobile-core/src/generated/
+packages/mobile-core/cpp/
+packages/mobile-core/ios/
+packages/mobile-core/android/

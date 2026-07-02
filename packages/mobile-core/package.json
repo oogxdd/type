@@ -1,0 +1,22 @@
+{
+  "name": "@typenotes/mobile-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Typed TypeScript bridge to the shared Rust core (crates/type-ffi) for the React Native app. Ships a RawCore seam so typecheck, tests, and Expo Go work without native builds; the real UniFFI turbo module is generated on a Mac with uniffi-bindgen-react-native.",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@typenotes/shared": "*"
+  },
+  "devDependencies": {
+    "typescript": "~5.8.3",
+    "vitest": "^4.1.8"
+  }
+}

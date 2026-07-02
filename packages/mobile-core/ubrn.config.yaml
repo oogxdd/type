@@ -1,0 +1,16 @@
+# uniffi-bindgen-react-native configuration.
+# Generates the JSI turbo module + TS bindings from crates/type-ffi.
+# Run on a Mac — see README.md. Version pin: ubrn 0.31.x matches uniffi 0.31
+# (crates/type-ffi/Cargo.toml).
+name: TypeCore
+rust:
+  directory: ../../crates/type-ffi
+  manifestPath: ../../crates/type-ffi/Cargo.toml
+bindings:
+  cpp: cpp/generated
+  ts: src/generated
+ios:
+  directory: ios
+android:
+  directory: android
+  packageName: com.typenotes.core

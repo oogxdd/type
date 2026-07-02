@@ -1,0 +1,78 @@
+# @typenotes/mobile-core
+
+The React Native app's bridge to the shared Rust core (`crates/type-ffi`,
+UniFFI bindings over `crates/type-core`).
+
+## How it fits together
+
+```
+apps/mobile  ──imports──▶  core-api.ts   (typed facade, JSON marshalling)
+                              │
+                              ▼
+                          raw-core.ts    (RawCore interface + setRawCore seam)
+                              ▲
+              ┌───────────────┴────────────────┐
+   src/generated/* (ubrn codegen,       mock-core.ts (in-memory,
+   real Rust core — Mac build only)     demo mode / tests / Expo Go)
+```
+
+- **`src/core-api.ts`** — what the app imports. Typed functions
+  (`getTree(): Promise<FolderNode>`, `gitPush(args)`, …) that serialize to the
+  same serde JSON the desktop Tauri commands use (types from
+  `@typenotes/shared/types`).
+- **`src/raw-core.ts`** — the `RawCore` interface mirroring the UniFFI exports
+  one-to-one, plus `setRawCore()`. The app wires an implementation at startup.
+- **`src/mock-core.ts`** — in-memory `RawCore` used by tests and as demo mode
+  when the native module isn't linked. Nothing persists.
+
+This layout keeps `tsc`, `vitest`, and Expo Go working with **no native
+builds** — the generated turbo module is only required for a real device build.
+
+## Generating the native module (Mac only)
+
+Prerequisites: Xcode (+ `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`),
+and/or Android Studio + NDK (+ `rustup target add aarch64-linux-android armv7-linux-androideabi`).
+
+```sh
+npm install -D uniffi-bindgen-react-native@0.31.0-3   # in this package
+npx ubrn checkout --config ubrn.config.yaml            # no-op, crate is local
+npx ubrn build ios     --config ubrn.config.yaml --and-generate
+npx ubrn build android --config ubrn.config.yaml --and-generate
+```
+
+This produces `src/generated/` (TS bindings), `cpp/generated/` (JSI glue), and
+the `ios/` / `android/` library projects. Then wire the generated module in
+the app instead of the mock (`apps/mobile/src/core/boot.ts`):
+
+```ts
+import { setRawCore } from "@typenotes/mobile-core/raw-core";
+import * as generated from "@typenotes/mobile-core/generated";
+setRawCore(generated);
+```
+
+The generated function names match `RawCore` (uniffi camelCases the Rust
+snake_case exports). If a signature drifts after changing `crates/type-ffi`,
+update `raw-core.ts` and `core-api.ts` to match — the desktop commands and
+`crates/type-ffi/src/tests.rs` are the source of truth for the JSON shapes.
+
+Generated output is gitignored; regenerate after every `crates/type-ffi`
+change. Finally run `npx pod-install` in `apps/mobile/ios` after an Expo
+prebuild (see `apps/mobile/README.md`).
+
+## Transcription providers
+
+`queueProviderTranscriptions(provider)` passes a host-side implementation of
+the FFI foreign trait to the Rust queue worker — this is how native on-device
+speech recognition plugs in without touching core:
+
+```ts
+await queueProviderTranscriptions({
+  id: () => "apple-speech",
+  transcribe: (audioPath) => recognizeWithSFSpeech(audioPath),
+});
+```
+
+Use it when the active working folder's `transcription_mode` is `"native"`.
+`"assemblyai"` uses `queueRecordingTranscriptions()` (cloud); `"desktop"`
+leaves recordings `pending` so a synced desktop transcribes them with local
+Whisper; `"off"` never queues automatically.
