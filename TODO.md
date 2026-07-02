@@ -19,8 +19,12 @@ Delete this file when the branch is ready for review.
 - [ ] Local quirk: vitest's default parallel pool segfaults on this dev VM.
       Run `vitest run --no-file-parallelism` locally; CI is unaffected.
 - [ ] On a Mac: iOS/Android native builds of the RN app (this VM has no
-      Xcode/Android SDK). Steps will be documented in `apps/mobile/README.md`:
-      rustup iOS/Android targets, `ubrn` codegen, `pod install`, Expo prebuild.
+      Xcode/Android SDK). Steps documented in `apps/mobile/README.md` and
+      `packages/mobile-core/README.md`: rustup iOS/Android targets, `ubrn`
+      codegen (0.31.0-3), wire the generated module in
+      `apps/mobile/src/core/boot.ts`, Expo prebuild, pod install. Also verify
+      the exact generated TS surface matches `raw-core.ts` (names are the
+      uniffi camelCase convention; adjust the seam if anything drifts).
 - [ ] On a Mac: verify the Tauri iOS app still builds from `apps/desktop`
       (Xcode project geometry was preserved in M1, unverified since).
 
@@ -40,12 +44,17 @@ Delete this file when the branch is ready for review.
       and Metro all consume it, no build step). Desktop imports via
       `@typenotes/shared/<module>`; browser-only helpers (yieldToUi, base64,
       DOM/storage/selection) stayed in `apps/desktop/src/shared`.
-- [ ] M6 — `apps/mobile` (Expo CNG) + `packages/mobile-core` (ubrn library):
-      blank-page capture stack (open → type immediately; swipe up → previous
-      note slides away, fresh blank page), feed/folders navigation, plain-text
-      editor, git sync screen, expo-audio recording → `save_audio_recording`,
-      settings (working folders, transcription mode). Typed CoreApi facade so
-      tsc/jest pass without native builds.
+- [x] M6 — `apps/mobile` (Expo SDK 57, RN 0.86) + `packages/mobile-core`:
+      blank-page capture stack (open → type immediately; swipe up → page files
+      itself, fresh blank page), feed/folders navigation, plain-text editor
+      with debounced saves + flush-on-leave, git sync screen (status, connect,
+      pull/push, SSH key, history), expo-audio recording →
+      `save_audio_recording` + mode-dependent queueing, settings (working
+      folders incl. notes-root move, transcription mode, AssemblyAI key).
+      mobile-core ships the RawCore seam + typed core-api + in-memory mock
+      (demo mode), so tsc/vitest/Expo Go need no native build. Native module
+      generation (ubrn) is a documented Mac step; wiring the generated module
+      + a native TranscriptionProvider registration remain Mac-side work.
 - [ ] M7 — docs (AGENTS.md, CLAUDE.md, READMEs) + CI final pass
 - [ ] M8 (stretch) — security/PIN surfaces on mobile via FFI lock-screen
 

@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Type",
+    "slug": "typenotes",
+    "version": "0.1.0",
+    "scheme": "typenotes",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "com.typenotes.mobile",
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true
+      }
+    },
+    "android": {
+      "package": "com.typenotes.mobile"
+    },
+    "plugins": [
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Type uses the microphone to record voice notes."
+        }
+      ]
+    ]
+  }
+}
