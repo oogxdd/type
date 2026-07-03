@@ -34,11 +34,19 @@ Prerequisites: Xcode (+ `rustup target add aarch64-apple-ios aarch64-apple-ios-s
 and/or Android Studio + NDK (+ `rustup target add aarch64-linux-android armv7-linux-androideabi`).
 
 ```sh
-npm install -D uniffi-bindgen-react-native@0.31.0-3   # in this package
-npx ubrn checkout --config ubrn.config.yaml            # no-op, crate is local
-npx ubrn build ios     --config ubrn.config.yaml --and-generate
-npx ubrn build android --config ubrn.config.yaml --and-generate
+# One-time, in this package. --no-save on purpose: the tool is Mac-only,
+# declaring it would make every Linux/CI npm install pull it in.
+npm install --no-save uniffi-bindgen-react-native@0.31.0-3
+
+npm run codegen:ios          # simulator slices only — the fast default
+npm run codegen:ios:device   # device + simulator (needed for `expo run:ios --device`)
+npm run codegen:android
 ```
+
+`codegen:ios` builds `--sim-only`, so the resulting xcframework has no device
+slice — rerun `codegen:ios:device` before installing on a physical phone.
+From the repo root, `npm run mobile:ios` chains `codegen:ios` + `expo run:ios`
+(the full "Rust changed, rebuild the dev client" one-liner).
 
 This produces `src/generated/` (TS bindings), `cpp/generated/` (JSI glue), and
 the `ios/` / `android/` library projects. Then wire the generated module in

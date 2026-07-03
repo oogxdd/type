@@ -73,10 +73,9 @@ jobs:
         working-directory: packages/mobile-core
         run: |
           npx ubrn checkout --config ubrn.config.yaml
-          # DRAFT: if full device builds are too slow/fragile in CI, try
-          # limiting to the sim target, e.g.:
-          #   npx ubrn build ios --config ubrn.config.yaml --and-generate --targets aarch64-apple-ios-sim
-          npx ubrn build ios --config ubrn.config.yaml --and-generate
+          # --sim-only: enough for binding generation and the cheapest cargo
+          # build (matches the aarch64-apple-ios-sim toolchain target above).
+          npx ubrn build ios --config ubrn.config.yaml --and-generate --sim-only
 
       - name: Verify RawCore matches the generated bindings
         run: node scripts/check-ffi-surface.mjs --generated packages/mobile-core/src/generated
