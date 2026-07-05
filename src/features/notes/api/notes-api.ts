@@ -4,6 +4,8 @@ import type {
   FolderNode,
   NoteFileNameFormat,
   NoteMeta,
+  NotePreviewEntry,
+  SetNoteMarkersArgs,
   SetOrderArgs,
 } from "@/shared/types";
 
@@ -39,8 +41,14 @@ export const setNoteTimestamp = (path: string, timestampMs: number): Promise<voi
     },
   });
 
+export const updateNoteMarkers = (args: SetNoteMarkersArgs): Promise<void> =>
+  invokeLogged("update_note_markers", { args });
+
 export const getNoteMeta = (path: string): Promise<NoteMeta> =>
   invokeLogged<NoteMeta>("get_note_meta", { path });
+
+export const listNotePreviews = (paths: string[]): Promise<NotePreviewEntry[]> =>
+  invokeLogged<NotePreviewEntry[]>("list_note_previews", { paths });
 
 export const deleteItems = (items: string[]): Promise<void> =>
   invokeLogged("delete_items", { items });

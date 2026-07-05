@@ -13,6 +13,8 @@ import { FEED_FOLDER_PATH } from "@/shared/constants";
 import { toBase64, fromBase64 } from "@/shared/lib/notes";
 import { useAudioRecorder } from "./use-audio-recorder";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import { useAutoQueueLoop } from "@/features/processing/hooks/use-auto-queue-loop";
+import { useProcessingQueue } from "@/features/processing/hooks/use-processing-queue";
 import { jobListSignature } from "@/shared/lib/jobs";
 import type { LayoutMode } from "@/mobile/navigation";
 import { getErrorMessage } from "@/shared/lib/errors";
@@ -62,55 +64,60 @@ export function RecordingsProvider({
   const { syncSettings } = useProfiles();
   const [recordingStatusMessage, setRecordingStatusMessage] = useState<string | null>(null);
   const [transcriptionQueueBusy, setTranscriptionQueueBusy] = useState(false);
-  const [recordingsQueue, setRecordingsQueue] = useState<RecordingQueueSnapshot | null>(null);
-  const [recordingsList, setRecordingsList] = useState<RecordingListItem[]>([]);
-  const [recordingsBusy, setRecordingsBusy] = useState(false);
-  const [recordingsError, setRecordingsError] = useState<string | null>(null);
   const [activeAudioPath, setActiveAudioPath] = useState<string | null>(null);
   const [activeAudioSrc, setActiveAudioSrc] = useState<string | null>(null);
 
   const transcriptionQueueBusyRef = useRef(false);
   const recordingTargetFolderRef = useRef<string>(FEED_FOLDER_PATH);
   const activeAudioObjectUrlRef = useRef<string | null>(null);
-  const recordingsSignatureRef = useRef<string>("");
 
   const isDesktop = layoutMode === "desktop";
 
   const shouldAutoQueueTranscriptions =
     isDesktop || syncSettings.mobileAutoTranscriptionEnabled;
 
-  const refreshRecordings = useCallback(async () => {
-    setRecordingsBusy(true);
-    try {
-      const snapshot = await api.listRecordings();
-      setRecordingsQueue(snapshot.queue);
-      setRecordingsList(snapshot.recordings);
-      const nextSignature = jobListSignature(snapshot.recordings);
-      if (recordingsSignatureRef.current !== nextSignature) {
-        recordingsSignatureRef.current = nextSignature;
-        window.dispatchEvent(new CustomEvent("note-previews-invalidated"));
+  const cleanupMissingActiveAudio = useCallback(
+    (snapshot: { items: RecordingListItem[] }) => {
+      if (!activeAudioPath) {
+        return;
       }
-      if (activeAudioPath) {
-        const stillExists = snapshot.recordings.some(
-          (item) => item.audio_path === activeAudioPath
-        );
-        if (!stillExists) {
-          if (activeAudioObjectUrlRef.current) {
-            URL.revokeObjectURL(activeAudioObjectUrlRef.current);
-            activeAudioObjectUrlRef.current = null;
-          }
-          setActiveAudioPath(null);
-          setActiveAudioSrc(null);
-        }
+      const stillExists = snapshot.items.some(
+        (item) => item.audio_path === activeAudioPath
+      );
+      if (stillExists) {
+        return;
       }
-      setRecordingsError(null);
-    } catch (error) {
-      const message = getErrorMessage(error);
-      setRecordingsError(message);
-    } finally {
-      setRecordingsBusy(false);
-    }
-  }, [activeAudioPath]);
+      if (activeAudioObjectUrlRef.current) {
+        URL.revokeObjectURL(activeAudioObjectUrlRef.current);
+        activeAudioObjectUrlRef.current = null;
+      }
+      setActiveAudioPath(null);
+      setActiveAudioSrc(null);
+    },
+    [activeAudioPath]
+  );
+
+  const loadRecordingsSnapshot = useCallback(async () => {
+    const snapshot = await api.listRecordings();
+    return {
+      queue: snapshot.queue,
+      items: snapshot.recordings,
+    };
+  }, []);
+
+  const {
+    queue: recordingsQueue,
+    items: recordingsList,
+    busy: recordingsBusy,
+    error: recordingsError,
+    setError: setRecordingsError,
+    refresh: refreshRecordings,
+  } = useProcessingQueue<RecordingQueueSnapshot, RecordingListItem>({
+    loadSnapshot: loadRecordingsSnapshot,
+    getSignature: jobListSignature,
+    invalidateEventName: "note-previews-invalidated",
+    onSnapshotLoaded: cleanupMissingActiveAudio,
+  });
 
   const playRecording = useCallback(async (audioPath: string) => {
     try {
@@ -183,7 +190,12 @@ export function RecordingsProvider({
         void refreshRecordings();
       }
     },
-    [isDesktop, syncSettings.assemblyAiApiKey, refreshRecordings]
+    [
+      isDesktop,
+      refreshRecordings,
+      syncSettings.assemblyAiApiKey,
+      syncSettings.whisperModel,
+    ]
   );
 
   const retriggerTranscription = useCallback(
@@ -273,38 +285,18 @@ export function RecordingsProvider({
       ? `${nativeRecoveryNotice ? `${nativeRecoveryNotice} ` : "Recording in progress. "}Elapsed ${recordingElapsedLabel}.`
       : null;
 
-  // Auto queue transcriptions timer
-  useEffect(() => {
-    if (!shouldAutoQueueTranscriptions) {
-      return;
-    }
-    // On desktop, local whisper needs no API key.
-    // On mobile, require AssemblyAI key.
-    if (!isDesktop && !syncSettings.assemblyAiApiKey.trim()) {
-      return;
-    }
-    let intervalId: number | null = null;
-    const startAutoQueue = () => {
-      void queueRecordingTranscriptions("auto");
-      intervalId = window.setInterval(() => {
-        void queueRecordingTranscriptions("auto");
-      }, 15000);
-    };
-    const delayMs = layoutMode === "phone" ? 3000 : 0;
-    const startTimer = window.setTimeout(startAutoQueue, delayMs);
-    return () => {
-      window.clearTimeout(startTimer);
-      if (intervalId !== null) {
-        window.clearInterval(intervalId);
-      }
-    };
-  }, [
-    layoutMode,
-    isDesktop,
-    syncSettings.assemblyAiApiKey,
-    queueRecordingTranscriptions,
-    shouldAutoQueueTranscriptions,
-  ]);
+  const autoQueueTranscriptions = useCallback(
+    () => queueRecordingTranscriptions("auto"),
+    [queueRecordingTranscriptions]
+  );
+  useAutoQueueLoop({
+    enabled:
+      shouldAutoQueueTranscriptions &&
+      // Desktop local Whisper needs no key; mobile AssemblyAI does.
+      (isDesktop || syncSettings.assemblyAiApiKey.trim().length > 0),
+    delayMs: layoutMode === "phone" ? 3000 : 0,
+    onTick: autoQueueTranscriptions,
+  });
 
   return (
     <RecordingsContext.Provider

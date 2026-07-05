@@ -13,6 +13,8 @@ pub struct NoteMeta {
     pub created_ms: Option<i64>,
     pub updated_ms: Option<i64>,
     pub note_type: Option<String>,
+    pub archived_ms: Option<i64>,
+    pub reviewed_ms: Option<i64>,
     pub recording_audio_path: Option<String>,
     pub handwriting_attachment_path: Option<String>,
     pub transcription_status: Option<String>,
@@ -23,6 +25,14 @@ pub struct NoteMeta {
     pub ocr_updated_ms: Option<i64>,
 }
 
+/// One note's metadata plus decrypted body, returned in bulk for list previews.
+#[derive(Serialize)]
+pub struct NotePreviewEntry {
+    pub path: String,
+    pub content: String,
+    pub meta: NoteMeta,
+}
+
 /// YAML-ish front-matter fields stored at the top of each markdown note.
 #[derive(Default)]
 pub struct NoteFrontMatter {
@@ -30,6 +40,8 @@ pub struct NoteFrontMatter {
     pub created_ms: Option<i64>,
     pub updated_ms: Option<i64>,
     pub note_type: Option<String>,
+    pub archived_ms: Option<i64>,
+    pub reviewed_ms: Option<i64>,
     pub recording_audio_path: Option<String>,
     pub handwriting_attachment_path: Option<String>,
     pub transcription_status: Option<String>,
@@ -57,6 +69,14 @@ pub struct SetOrderArgs {
 pub struct SetNoteTimestampArgs {
     pub path: String,
     pub timestamp_ms: i64,
+}
+
+/// Arguments for updating feed-related note markers.
+#[derive(Deserialize)]
+pub struct SetNoteMarkersArgs {
+    pub path: String,
+    pub archived: Option<bool>,
+    pub reviewed: Option<bool>,
 }
 
 /// Recursive tree node representing a folder with child folders and notes.

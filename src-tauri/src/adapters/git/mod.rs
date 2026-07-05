@@ -7,10 +7,8 @@ use git2::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
     fs,
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
 };
 
 use crate::ports::git_sync::GitSyncGateway;
@@ -53,7 +51,7 @@ pub(crate) struct GitCommitHistoryEntry {
 /// Arguments for connecting to a remote git repository.
 #[derive(Deserialize)]
 pub(crate) struct ConnectGitArgs {
-    pub(crate) remote_url: String,
+    pub(crate) remote_url: Option<String>,
     pub(crate) branch: Option<String>,
     pub(crate) username: Option<String>,
     pub(crate) password: Option<String>,
@@ -82,11 +80,6 @@ pub(crate) struct GitHistoryArgs {
     pub(crate) limit: Option<usize>,
 }
 
-// ── Static ─────────────────────────────────────────────────────────────────────
-
-static GIT_NOTE_TIMESTAMPS_CACHE: OnceLock<Mutex<HashMap<String, (Option<i64>, Option<i64>)>>> =
-    OnceLock::new();
-
 /// Tauri-backed Git sync gateway. libgit2 operations, SSH key lookup, and notes
 /// root resolution remain in this outer adapter.
 pub(crate) struct TauriGitSyncAdapter {
@@ -96,6 +89,12 @@ pub(crate) struct TauriGitSyncAdapter {
 impl TauriGitSyncAdapter {
     pub(crate) fn new(app: tauri::AppHandle) -> Self {
         Self { app }
+    }
+
+    fn resolve_settings(&self) -> (PathBuf, crate::ProfileSettings) {
+        let root = crate::ensured_notes_root(&self.app).unwrap_or_default();
+        let settings = crate::load_profile_settings(&root);
+        (root, settings)
     }
 }
 
@@ -120,30 +119,70 @@ impl GitSyncGateway for TauriGitSyncAdapter {
     }
 
     fn status(&self) -> Result<Self::Status, String> {
-        let root = crate::ensured_notes_root(&self.app)?;
+        let (root, _) = self.resolve_settings();
         Ok(build_git_status(&root))
     }
 
     fn history(&self, args: Option<Self::HistoryArgs>) -> Result<Vec<Self::History>, String> {
-        let root = crate::ensured_notes_root(&self.app)?;
+        let (root, _) = self.resolve_settings();
         let limit = args.and_then(|value| value.limit).unwrap_or(40);
         build_git_history(&root, limit)
     }
 
     fn connect(&self, args: Self::ConnectArgs) -> Result<Self::Status, String> {
-        let root = crate::ensured_notes_root(&self.app)?;
+        let (root, settings) = self.resolve_settings();
+
+        let remote_url = args
+            .remote_url
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(settings.git_remote_url.as_str());
+        if remote_url.is_empty() {
+            return Err("Remote URL is required.".to_string());
+        }
+
+        let branch = args
+            .branch
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(settings.git_branch.as_str());
+
+        let username = args
+            .username
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                if !settings.git_username.is_empty() {
+                    Some(settings.git_username.as_str())
+                } else {
+                    None
+                }
+            });
+
+        let password = args
+            .password
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                if !settings.git_password.is_empty() {
+                    Some(settings.git_password.as_str())
+                } else {
+                    None
+                }
+            });
+
         let repo = ensure_git_repo(&root)?;
         prepare_bootstrap_worktree_for_sync(&root, &repo)?;
-        ensure_origin_remote(&repo, &args.remote_url)?;
-        let target_branch = resolve_target_branch(&repo, args.branch.clone());
+        ensure_origin_remote(&repo, remote_url)?;
+        let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
         switch_or_prepare_branch(&repo, &target_branch)?;
         let ssh_priv = ssh_private_key_if_exists(&self.app);
         let ssh_pub = ssh_public_key_if_exists(&self.app);
         let fetched = match perform_fetch(
             &repo,
             &target_branch,
-            args.username.as_deref(),
-            args.password.as_deref(),
+            username,
+            password,
             ssh_priv,
             ssh_pub,
         ) {
@@ -170,24 +209,55 @@ impl GitSyncGateway for TauriGitSyncAdapter {
     }
 
     fn pull(&self, args: Self::PullArgs) -> Result<Self::Status, String> {
-        let root = crate::ensured_notes_root(&self.app)?;
+        let (root, settings) = self.resolve_settings();
         if !git_repo_initialized(&root) {
             return Err("Repository is not initialized. Connect a remote first.".to_string());
         }
+
+        let branch = args
+            .branch
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(settings.git_branch.as_str());
+
+        let username = args
+            .username
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                if !settings.git_username.is_empty() {
+                    Some(settings.git_username.as_str())
+                } else {
+                    None
+                }
+            });
+
+        let password = args
+            .password
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                if !settings.git_password.is_empty() {
+                    Some(settings.git_password.as_str())
+                } else {
+                    None
+                }
+            });
+
         let repo = open_repo(&root)?;
         prepare_bootstrap_worktree_for_sync(&root, &repo)?;
         if git_has_changes(&repo) {
             return Err("Local changes detected. Push or commit before pulling.".to_string());
         }
-        let target_branch = resolve_target_branch(&repo, args.branch.clone());
+        let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
         switch_or_prepare_branch(&repo, &target_branch)?;
         let ssh_priv = ssh_private_key_if_exists(&self.app);
         let ssh_pub = ssh_public_key_if_exists(&self.app);
         let fetched = perform_fetch(
             &repo,
             &target_branch,
-            args.username.as_deref(),
-            args.password.as_deref(),
+            username,
+            password,
             ssh_priv,
             ssh_pub,
         )?;
@@ -207,31 +277,63 @@ impl GitSyncGateway for TauriGitSyncAdapter {
     }
 
     fn push(&self, args: Self::PushArgs) -> Result<Self::Status, String> {
-        let root = crate::ensured_notes_root(&self.app)?;
+        let (root, settings) = self.resolve_settings();
         if !git_repo_initialized(&root) {
             return Err("Repository is not initialized. Connect a remote first.".to_string());
         }
-        let repo = open_repo(&root)?;
-        let target_branch = resolve_target_branch(&repo, args.branch.clone());
-        switch_or_prepare_branch(&repo, &target_branch)?;
-        let message = args
+
+        let branch = args
+            .branch
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(settings.git_branch.as_str());
+
+        let username = args
+            .username
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                if !settings.git_username.is_empty() {
+                    Some(settings.git_username.as_str())
+                } else {
+                    None
+                }
+            });
+
+        let password = args
+            .password
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                if !settings.git_password.is_empty() {
+                    Some(settings.git_password.as_str())
+                } else {
+                    None
+                }
+            });
+
+        let commit_message = args
             .message
-            .as_ref()
-            .map(|value| value.trim())
-            .filter(|value| !value.is_empty())
-            .unwrap_or("Sync notes");
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(settings.git_commit_message.as_str());
+
+        let repo = open_repo(&root)?;
+        let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
+        switch_or_prepare_branch(&repo, &target_branch)?;
+
         let status_before_push = build_git_status(&root);
         if !status_before_push.push_required {
             return Ok(status_before_push);
         }
-        let _ = commit_all_changes(&repo, message, &target_branch)?;
+        let _ = commit_all_changes(&repo, commit_message, &target_branch)?;
         let ssh_priv = ssh_private_key_if_exists(&self.app);
         let ssh_pub = ssh_public_key_if_exists(&self.app);
         remote_push(
             &repo,
             &target_branch,
-            args.username.as_deref(),
-            args.password.as_deref(),
+            username,
+            password,
             ssh_priv,
             ssh_pub,
         )?;
@@ -328,75 +430,6 @@ pub(crate) fn git_has_changes(repo: &Repository) -> bool {
 }
 
 // ── Timestamp cache ────────────────────────────────────────────────────────────
-
-fn git_note_timestamps_cache() -> &'static Mutex<HashMap<String, (Option<i64>, Option<i64>)>> {
-    GIT_NOTE_TIMESTAMPS_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn git_commit_timestamp_ms(commit: &git2::Commit<'_>) -> Option<i64> {
-    commit.time().seconds().checked_mul(1_000)
-}
-
-fn git_tree_blob_oid(tree: &git2::Tree<'_>, path: &Path) -> Option<Oid> {
-    tree.get_path(path).ok().map(|entry| entry.id())
-}
-
-/// Walk git history to find the first and last commits that touched a note.
-pub(crate) fn git_note_timestamps_from_history(
-    root: &Path,
-    note_rel: &str,
-) -> Option<(Option<i64>, Option<i64>)> {
-    let repo = Repository::open(root).ok()?;
-    let head_oid = repo.head().ok()?.target()?;
-    let cache_key = format!("{}|{}|{}", root.to_string_lossy(), head_oid, note_rel);
-    {
-        let cache = git_note_timestamps_cache();
-        let guard = cache.lock().ok()?;
-        if let Some(cached) = guard.get(&cache_key) {
-            return Some(*cached);
-        }
-    }
-
-    let rel_path = Path::new(note_rel);
-    let mut revwalk = repo.revwalk().ok()?;
-    revwalk.push(head_oid).ok()?;
-
-    let mut created_ms: Option<i64> = None;
-    let mut updated_ms: Option<i64> = None;
-
-    for oid_result in revwalk {
-        let oid = oid_result.ok()?;
-        let commit = repo.find_commit(oid).ok()?;
-        let tree = commit.tree().ok()?;
-        let current_blob = git_tree_blob_oid(&tree, rel_path);
-        if current_blob.is_none() {
-            continue;
-        }
-
-        let parent_blob = if commit.parent_count() > 0 {
-            let parent = commit.parent(0).ok()?;
-            let parent_tree = parent.tree().ok()?;
-            git_tree_blob_oid(&parent_tree, rel_path)
-        } else {
-            None
-        };
-
-        if current_blob != parent_blob {
-            let timestamp = git_commit_timestamp_ms(&commit);
-            if updated_ms.is_none() {
-                updated_ms = timestamp;
-            }
-            created_ms = timestamp;
-        }
-    }
-
-    let result = (created_ms, updated_ms);
-    let cache = git_note_timestamps_cache();
-    if let Ok(mut guard) = cache.lock() {
-        guard.insert(cache_key, result);
-    }
-    Some(result)
-}
 
 // ── Bootstrap detection ────────────────────────────────────────────────────────
 

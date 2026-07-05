@@ -10,6 +10,12 @@ OTA JS bundles). You can release **both at once, or just one platform** at a tim
   before building. (The version committed in the repo is just the dev baseline.)
 - See also: [DESKTOP_AUTO_UPDATE.md](./DESKTOP_AUTO_UPDATE.md) for the desktop
   updater internals and one-time signing-key setup.
+- For future Mac App Store / TestFlight releases, see
+  [MACOS_APP_STORE_TESTFLIGHT.md](./MACOS_APP_STORE_TESTFLIGHT.md).
+- For the local iOS/TestFlight upload flow, see
+  [IOS_TESTFLIGHT_LOCAL.md](./IOS_TESTFLIGHT_LOCAL.md).
+- For Gatekeeper-compatible public DMGs, see
+  [MACOS_SIGNING_NOTARIZATION.md](./MACOS_SIGNING_NOTARIZATION.md).
 
 ---
 
@@ -128,13 +134,31 @@ warning on first open. With them, tauri-action notarizes automatically:
 | `APPLE_ASC_API_ISSUER_ID`         | Issuer ID (UUID)                                          |
 
 > ⚠️ Your current `package.json` `ios:push` script has the API key ID and issuer
-> baked in as plaintext and a hardcoded local `.ipa` path. For CI, move those to
-> the secrets above; the workflow's upload step uses them and finds the `.ipa`
-> dynamically. Consider scrubbing the plaintext values from `package.json`.
+> baked in as plaintext and a hardcoded local `.ipa` path. For local release, use
+> env vars plus dynamic `.ipa` discovery instead. The workflow's upload step
+> already does this.
 >
 > iOS code-signing in CI is fiddly — expect to iterate on the provisioning
 > profile / export options the first time. The macOS desktop job is the
 > low-risk one to validate first.
+
+For local iOS/TestFlight uploads, set a unique build number before each build:
+
+```bash
+export TAURI_IOS_BUILD_NUMBER="$(date +%s)"
+```
+
+The build number is what App Store Connect uses to distinguish uploads with the
+same version.
+
+Put the App Store Connect API key where `altool` can find it:
+
+```text
+~/.appstoreconnect/private_keys/AuthKey_<KEY_ID>.p8
+```
+
+`APPLE_ASC_API_KEY_ID` is the key ID, not the `.p8` contents. `altool` uses the
+key ID to locate the matching private key file.
 
 To base64-encode a file for a secret:
 `base64 -i Certificates.p12 | pbcopy`

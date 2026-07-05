@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useRef,
   useState,
   type ReactNode,
@@ -15,6 +14,8 @@ import type {
 import { FEED_FOLDER_PATH } from "@/shared/constants";
 import { toBase64 } from "@/shared/lib/notes";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import { useAutoQueueLoop } from "@/features/processing/hooks/use-auto-queue-loop";
+import { useProcessingQueue } from "@/features/processing/hooks/use-processing-queue";
 import { jobListSignature } from "@/shared/lib/jobs";
 import type { LayoutMode } from "@/mobile/navigation";
 import { getErrorMessage } from "@/shared/lib/errors";
@@ -57,14 +58,7 @@ export function HandwritingProvider({
   const [handwritingImportBusy, setHandwritingImportBusy] = useState(false);
   const [handwritingStatusMessage, setHandwritingStatusMessage] = useState<string | null>(null);
   const [handwritingQueueBusy, setHandwritingQueueBusy] = useState(false);
-  const [handwritingQueue, setHandwritingQueue] = useState<HandwritingOcrQueueSnapshot | null>(
-    null
-  );
-  const [handwritingJobs, setHandwritingJobs] = useState<HandwritingOcrListItem[]>([]);
-  const [handwritingBusy, setHandwritingBusy] = useState(false);
-  const [handwritingError, setHandwritingError] = useState<string | null>(null);
   const queueBusyRef = useRef(false);
-  const signatureRef = useRef("");
 
   const shouldAutoQueueHandwriting =
     layoutMode === "desktop" || syncSettings.mobileAutoHandwritingOcrEnabled;
@@ -102,25 +96,26 @@ export function HandwritingProvider({
     syncSettings.openAiModel,
   ]);
 
-  const refreshHandwritingJobs = useCallback(async () => {
-    setHandwritingBusy(true);
-    try {
-      const snapshot = await api.listHandwritingOcrJobs();
-      setHandwritingQueue(snapshot.queue);
-      setHandwritingJobs(snapshot.jobs);
-      const nextSignature = jobListSignature(snapshot.jobs);
-      if (signatureRef.current !== nextSignature) {
-        signatureRef.current = nextSignature;
-        window.dispatchEvent(new CustomEvent("note-previews-invalidated"));
-      }
-      setHandwritingError(null);
-    } catch (error) {
-      const message = getErrorMessage(error);
-      setHandwritingError(message);
-    } finally {
-      setHandwritingBusy(false);
-    }
+  const loadHandwritingSnapshot = useCallback(async () => {
+    const snapshot = await api.listHandwritingOcrJobs();
+    return {
+      queue: snapshot.queue,
+      items: snapshot.jobs,
+    };
   }, []);
+
+  const {
+    queue: handwritingQueue,
+    items: handwritingJobs,
+    busy: handwritingBusy,
+    error: handwritingError,
+    refresh: refreshHandwritingJobs,
+  } = useProcessingQueue<HandwritingOcrQueueSnapshot, HandwritingOcrListItem>({
+    loadSnapshot: loadHandwritingSnapshot,
+    getSignature: jobListSignature,
+    invalidateEventName: "note-previews-invalidated",
+    refreshOnMount: layoutMode !== "phone",
+  });
 
   const queueHandwritingOcr = useCallback(
     async (trigger: "manual" | "auto" = "manual") => {
@@ -202,34 +197,19 @@ export function HandwritingProvider({
     ]
   );
 
-  useEffect(() => {
-    if (layoutMode === "phone") {
-      return;
-    }
-    void refreshHandwritingJobs();
-  }, [layoutMode, refreshHandwritingJobs]);
-
-  useEffect(() => {
-    const config = getProviderConfig();
-    if (!shouldAutoQueueHandwriting || !config.apiKey || !config.model) {
-      return;
-    }
-    let intervalId: number | null = null;
-    const startAutoQueue = () => {
-      void queueHandwritingOcr("auto");
-      intervalId = window.setInterval(() => {
-        void queueHandwritingOcr("auto");
-      }, 15000);
-    };
-    const delayMs = layoutMode === "phone" ? 3000 : 0;
-    const startTimer = window.setTimeout(startAutoQueue, delayMs);
-    return () => {
-      window.clearTimeout(startTimer);
-      if (intervalId !== null) {
-        window.clearInterval(intervalId);
-      }
-    };
-  }, [getProviderConfig, layoutMode, queueHandwritingOcr, shouldAutoQueueHandwriting]);
+  const autoQueueConfig = getProviderConfig();
+  const autoQueueHandwriting = useCallback(
+    () => queueHandwritingOcr("auto"),
+    [queueHandwritingOcr]
+  );
+  useAutoQueueLoop({
+    enabled:
+      shouldAutoQueueHandwriting &&
+      autoQueueConfig.apiKey.length > 0 &&
+      autoQueueConfig.model.length > 0,
+    delayMs: layoutMode === "phone" ? 3000 : 0,
+    onTick: autoQueueHandwriting,
+  });
 
   return (
     <HandwritingContext.Provider

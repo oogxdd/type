@@ -1,7 +1,9 @@
 import { invokeLogged } from "@/shared/api/invoke";
 import type {
+  AppConfig,
   NotesProfile,
   NotesProfileSnapshot,
+  ProfileSettings,
   ProfilesBackupArchive,
   ProfilesDocumentsExport,
 } from "@/shared/types";
@@ -9,6 +11,7 @@ import type {
 type NotesProfilesSnapshotPayload = {
   active_profile_id: string;
   profiles: NotesProfile[];
+  app_config: AppConfig;
 };
 
 const normalizeProfilesSnapshot = (
@@ -16,6 +19,7 @@ const normalizeProfilesSnapshot = (
 ): NotesProfileSnapshot => ({
   activeProfileId: payload.active_profile_id,
   profiles: payload.profiles,
+  appConfig: payload.app_config,
 });
 
 export const getProfiles = async (): Promise<NotesProfileSnapshot> =>
@@ -65,6 +69,24 @@ export const updateProfile = (
 export const deleteProfile = (profileId: string): Promise<NotesProfileSnapshot> =>
   invokeLogged<NotesProfilesSnapshotPayload>("delete_profile", {
     args: { profile_id: profileId },
+  }).then(normalizeProfilesSnapshot);
+
+export const updateProfileSettings = (
+  profileId: string,
+  settings: ProfileSettings
+): Promise<NotesProfileSnapshot> =>
+  invokeLogged<NotesProfilesSnapshotPayload>("update_profile_settings", {
+    args: {
+      profile_id: profileId,
+      settings,
+    },
+  }).then(normalizeProfilesSnapshot);
+
+export const updateAppConfig = (
+  config: AppConfig
+): Promise<NotesProfileSnapshot> =>
+  invokeLogged<NotesProfilesSnapshotPayload>("update_app_config", {
+    args: { config },
   }).then(normalizeProfilesSnapshot);
 
 export const createProfilesBackupZip = (): Promise<ProfilesBackupArchive> =>

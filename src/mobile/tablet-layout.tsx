@@ -1,5 +1,6 @@
 import { Archive, Folder, Settings } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent } from "react";
+import { useShallow } from "zustand/react/shallow";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import { MobileEditorScreen } from "@/mobile/views/editor-view";
 import { MobileFoldersScreen } from "@/mobile/views/folders-view";
@@ -8,10 +9,10 @@ import { MobileSettingsScreen } from "@/features/settings/components/mobile/sett
 import { MobileNavBar } from "@/mobile/ui/nav-bar";
 import { MobileTabBar } from "@/mobile/ui/tab-bar";
 import { MOBILE_SETTINGS_SECTIONS } from "@/features/settings/lib/sections";
-import { useTheme } from "@/app/state/theme-context";
-import { useSelection } from "@/app/state/selection-context";
-import { useEditor } from "@/features/editor/hooks/editor-context";
-import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
+import { useAppearance } from "@/app/state/appearance-store";
+import { useSelection } from "@/app/state/selection-store";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { useKeyboardInsets } from "@/mobile/use-keyboard-insets";
 import { getDisplayRouteTitle, ARCHIVE_FOLDER_PATH } from "./types";
 import { getErrorMessage } from "@/shared/lib/errors";
@@ -32,7 +33,7 @@ type TabletLayoutProps = {
     notePath: string,
     parentPath?: string
   ) => Promise<void>;
-  navigationFolders: import("@/features/tree/lib/types").FlattenedItem[];
+  navigationFolders: import("@/features/notes/navigation/model/types").FlattenedItem[];
   onToggleFolder: (path: string) => void;
   openFolderActionSheet: (path: string) => void;
   onDeleteNote: (path: string) => Promise<boolean>;
@@ -56,9 +57,16 @@ export function TabletLayout({
   openNoteActionSheet,
   refreshNotesFeed,
 }: TabletLayoutProps) {
-  const { notesListMode } = useTheme();
+  const notesListMode = useAppearance((state) => state.notesListMode);
   const { activeFolder, activeNote, selectFolderForMobile, selectNoteForMobile } =
-    useSelection();
+    useSelection(
+      useShallow((state) => ({
+        activeFolder: state.activeFolder,
+        activeNote: state.activeNote,
+        selectFolderForMobile: state.selectFolderForMobile,
+        selectNoteForMobile: state.selectNoteForMobile,
+      }))
+    );
   const {
     noteContent,
     draftNoteContent,

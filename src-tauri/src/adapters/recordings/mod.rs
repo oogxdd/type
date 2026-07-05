@@ -63,18 +63,13 @@ pub(crate) struct RecordingWriteResult {
 /// Arguments for queuing transcription via AssemblyAI.
 #[derive(Deserialize)]
 pub(crate) struct QueueRecordingsArgs {
-    pub(crate) assembly_api_key: String,
+    pub(crate) assembly_api_key: Option<String>,
 }
 
 /// Arguments for queuing transcription via local Whisper.
 #[derive(Deserialize)]
 pub(crate) struct QueueLocalTranscriptionsArgs {
-    #[serde(default = "default_whisper_model")]
-    pub(crate) model: String,
-}
-
-fn default_whisper_model() -> String {
-    DEFAULT_WHISPER_MODEL.to_string()
+    pub(crate) model: Option<String>,
 }
 
 /// Arguments for re-triggering a single note's transcription.
@@ -350,7 +345,16 @@ impl RecordingsGateway for TauriRecordingsAdapter {
     }
 
     fn queue_cloud(&self, args: Self::CloudQueueArgs) -> Result<Self::QueueResult, String> {
-        let api_key = args.assembly_api_key.trim();
+        let app_data = crate::app_data_dir(&self.app)?;
+        let app_config = crate::load_app_config(&app_data);
+
+        let api_key = args
+            .assembly_api_key
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(app_config.assemblyai_api_key.as_str())
+            .trim();
+
         if api_key.is_empty() {
             return Err("AssemblyAI API key is required.".to_string());
         }
@@ -435,13 +439,22 @@ impl RecordingsGateway for TauriRecordingsAdapter {
     }
 
     fn queue_local(&self, args: Self::LocalQueueArgs) -> Result<Self::QueueResult, String> {
+        let app_data = crate::app_data_dir(&self.app)?;
+        let app_config = crate::load_app_config(&app_data);
+
+        let model = args
+            .model
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(app_config.whisper_model.as_str())
+            .trim();
+
+        if model.is_empty() {
+            return Err("Whisper model is required.".to_string());
+        }
+
         let root = crate::ensured_notes_root(&self.app)?;
-        let model = if args.model.trim().is_empty() {
-            DEFAULT_WHISPER_MODEL.to_string()
-        } else {
-            args.model.trim().to_string()
-        };
-        queue_recordings_for_local_transcription(&self.app, &root, &model)
+        queue_recordings_for_local_transcription(&self.app, &root, model)
     }
 
     fn retrigger(&self, args: Self::RetriggerArgs) -> Result<(), String> {

@@ -17,6 +17,8 @@ export type NoteMeta = {
   created_ms: number | null;
   updated_ms: number | null;
   note_type?: string | null;
+  archived_ms?: number | null;
+  reviewed_ms?: number | null;
   recording_audio_path?: string | null;
   handwriting_attachment_path?: string | null;
   transcription_status?: string | null;
@@ -25,6 +27,12 @@ export type NoteMeta = {
   ocr_status?: string | null;
   ocr_error?: string | null;
   ocr_updated_ms?: number | null;
+};
+
+export type NotePreviewEntry = {
+  path: string;
+  content: string;
+  meta: NoteMeta;
 };
 
 export type DragData = {
@@ -82,11 +90,24 @@ export type NotesProfile = {
   name: string;
   description: string;
   notes_root: string;
+  settings: ProfileSettings;
+};
+
+export type AppConfig = {
+  assemblyai_api_key: string;
+  whisper_model: string;
+  handwriting_ocr_provider: string;
+  openai_api_key: string;
+  openai_model: string;
+  huggingface_api_key: string;
+  huggingface_model: string;
+  note_file_name_format: string;
 };
 
 export type NotesProfileSnapshot = {
   activeProfileId: string;
   profiles: NotesProfile[];
+  appConfig: AppConfig;
 };
 
 export type ProfilesBackupArchive = {
@@ -204,6 +225,12 @@ export type SetOrderArgs = {
   noteOrder: string[];
 };
 
+export type SetNoteMarkersArgs = {
+  path: string;
+  archived?: boolean | null;
+  reviewed?: boolean | null;
+};
+
 export type AppMode = "notes" | "settings";
 export type PaneId = "folders" | "middle" | "right";
 export type GitSyncAction =
@@ -229,6 +256,16 @@ export type VisibleNavigationItem =
       id: string;
       parentId: string;
     };
+
+export type ProfileSettings = {
+  git_remote_url: string;
+  git_branch: string;
+  git_username: string;
+  git_password: string;
+  git_commit_message: string;
+  mobile_auto_transcription_enabled: boolean;
+  mobile_auto_handwriting_ocr_enabled: boolean;
+};
 
 export type ProfileSyncSettings = {
   gitRemoteUrl: string;

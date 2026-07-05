@@ -19,8 +19,8 @@
     "tauri:ios:dev": "npm run tauri:ios:sync-assets && tauri ios dev",
     "tauri:ios:build": "npm run tauri:ios:sync-assets && tauri ios build",
     "ota:prepare": "node ./scripts/prepare-ota.mjs",
-    "ios:build": "npm run tauri:ios:build -- --export-method app-store-connect",
-    "ios:push": "xcrun altool --upload-app --type ios --file /Users/digital/Projects/type/app/src-tauri/gen/apple/build/arm64/Type.ipa --apiKey W2Y52J5N33 --apiIssuer bd0c62da-fcbf-4770-a10d-2ee30da0963e",
+    "ios:build": "TAURI_IOS_BUILD_NUMBER=${TAURI_IOS_BUILD_NUMBER:-$(date +%s)} npm run tauri:ios:build -- --export-method app-store-connect",
+    "ios:push": "IPA=$(find src-tauri/gen/apple/build -name \"*.ipa\" | head -1) && KEY_PATH=\"$HOME/.appstoreconnect/private_keys/AuthKey_${APPLE_ASC_API_KEY_ID}.p8\" && : \"${APPLE_ASC_API_KEY_ID:?set APPLE_ASC_API_KEY_ID}\" && : \"${APPLE_ASC_API_ISSUER_ID:?set APPLE_ASC_API_ISSUER_ID}\" && test -f \"$IPA\" && test -f \"$KEY_PATH\" && xcrun altool --upload-app --type ios --file \"$IPA\" --apiKey \"$APPLE_ASC_API_KEY_ID\" --apiIssuer \"$APPLE_ASC_API_ISSUER_ID\"",
     "version:sync": "./scripts/sync-version.sh",
     "release:patch": "npm version patch && npm run version:sync && npm run ios:build && npm run ota:prepare && npm run ios:push",
     "release:minor": "npm version minor && npm run version:sync && npm run ios:build && npm run ota:prepare && npm run ios:push",
@@ -47,7 +47,6 @@
     "cmdk": "^1.1.1",
     "lucide-react": "^0.575.0",
     "marked": "^17.0.1",
-    "next-themes": "^0.4.6",
     "qrcode.react": "^4.2.0",
     "radix-ui": "^1.4.3",
     "react": "^19.1.0",
@@ -56,7 +55,8 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.18",
-    "turndown": "^7.2.2"
+    "turndown": "^7.2.2",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.10.0",

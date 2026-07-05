@@ -1,9 +1,14 @@
 import { useMemo, useState } from "react";
+import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { useSecurity } from "@/features/security/hooks/security-context";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 
 export function SettingsSecuritySection() {
+  if (!APP_EXTENSIONS.security) {
+    return null;
+  }
+
   const {
     securityState,
     securityBusy,

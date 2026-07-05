@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -8,16 +8,41 @@ pub struct ProfileEntry {
     pub name: String,
     pub description: String,
     pub notes_root: String,
+    pub settings: ProfileSettings,
 }
 
 #[derive(Serialize)]
 pub struct ProfilesSnapshot {
     pub active_profile_id: String,
     pub profiles: Vec<ProfileEntry>,
+    pub app_config: AppConfig,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AppConfig {
+    pub assemblyai_api_key: String,
+    pub whisper_model: String,
+    pub handwriting_ocr_provider: String,
+    pub openai_api_key: String,
+    pub openai_model: String,
+    pub huggingface_api_key: String,
+    pub huggingface_model: String,
+    pub note_file_name_format: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ProfileSettings {
+    pub git_remote_url: String,
+    pub git_branch: String,
+    pub git_username: String,
+    pub git_password: String,
+    pub git_commit_message: String,
+    pub mobile_auto_transcription_enabled: bool,
+    pub mobile_auto_handwriting_ocr_enabled: bool,
 }
 
 #[derive(Serialize)]
-pub struct BackupArchive {
+pub struct ProfilesBackupArchive {
     pub archive_path: String,
     pub archive_name: String,
     pub profile_count: usize,
@@ -26,7 +51,7 @@ pub struct BackupArchive {
 }
 
 #[derive(Serialize)]
-pub struct DocumentsExport {
+pub struct ProfilesDocumentsExport {
     pub export_path: String,
     pub export_name: String,
     pub profile_count: usize,
@@ -56,8 +81,14 @@ pub trait ProfileService {
         profile_id: &str,
         notes_root: &str,
     ) -> Result<ProfilesSnapshot, String>;
-    fn create_backup_zip(&self) -> Result<BackupArchive, String>;
-    fn export_to_documents(&self) -> Result<DocumentsExport, String>;
+    fn update_profile_settings(
+        &self,
+        profile_id: &str,
+        settings: ProfileSettings,
+    ) -> Result<ProfilesSnapshot, String>;
+    fn update_app_config(&self, config: AppConfig) -> Result<ProfilesSnapshot, String>;
+    fn create_backup_zip(&self) -> Result<ProfilesBackupArchive, String>;
+    fn export_to_documents(&self) -> Result<ProfilesDocumentsExport, String>;
 }
 
 /// Internal gateway used by profile application services. Persistence details
@@ -69,6 +100,8 @@ pub(crate) trait ProfilesGateway {
     type SetNotesRootArgs;
     type UpdateArgs;
     type DeleteArgs;
+    type UpdateSettingsArgs;
+    type UpdateAppConfigArgs;
     type Backup;
     type Export;
 
@@ -78,6 +111,8 @@ pub(crate) trait ProfilesGateway {
     fn set_notes_root(&self, args: Self::SetNotesRootArgs) -> Result<Self::Snapshot, String>;
     fn update(&self, args: Self::UpdateArgs) -> Result<Self::Snapshot, String>;
     fn delete(&self, args: Self::DeleteArgs) -> Result<Self::Snapshot, String>;
+    fn update_settings(&self, args: Self::UpdateSettingsArgs) -> Result<Self::Snapshot, String>;
+    fn update_app_config(&self, args: Self::UpdateAppConfigArgs) -> Result<Self::Snapshot, String>;
     fn create_backup(&self) -> Result<Self::Backup, String>;
     fn export_to_documents(&self) -> Result<Self::Export, String>;
 }

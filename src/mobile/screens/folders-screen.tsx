@@ -1,6 +1,6 @@
 import { MobileFoldersScreen } from "@/mobile/views/folders-view";
 import { MobileRecentScreen } from "@/mobile/views/recent-view";
-import type { FlattenedItem } from "@/features/tree/lib/types";
+import type { FlattenedItem } from "@/features/notes/navigation/model/types";
 import type { RecentBucket } from "@/mobile/hooks/use-recent-buckets";
 
 type PhoneFoldersScreenProps = {

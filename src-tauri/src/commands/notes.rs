@@ -1,8 +1,8 @@
 use crate::{
     application::notes::NotesService, ensure_security_unlocked_for_app, notes_root, CreateNoteArgs,
     CreateNoteResult, FilesystemNotesRepository, FolderNode, FrontMatterNoteDocumentCodec,
-    GitNoteHistoryAdapter, NoteMeta, RuntimeNoteBodyCrypto, SetNoteTimestampArgs, SetOrderArgs,
-    SystemNoteClock, UuidNoteIdGenerator,
+    NoteMeta, NotePreviewEntry, RuntimeNoteBodyCrypto, SetNoteMarkersArgs, SetNoteTimestampArgs,
+    SetOrderArgs, SystemNoteClock, UuidNoteIdGenerator,
 };
 
 fn notes_service(
@@ -12,7 +12,6 @@ fn notes_service(
         FilesystemNotesRepository,
         FrontMatterNoteDocumentCodec,
         RuntimeNoteBodyCrypto,
-        GitNoteHistoryAdapter,
         UuidNoteIdGenerator,
         SystemNoteClock,
     >,
@@ -20,19 +19,18 @@ fn notes_service(
 > {
     let root = notes_root(app)?;
     Ok(NotesService::new(
-        FilesystemNotesRepository::new(root.clone()),
+        FilesystemNotesRepository::new(root),
         FrontMatterNoteDocumentCodec,
         RuntimeNoteBodyCrypto,
-        GitNoteHistoryAdapter::new(root),
         UuidNoteIdGenerator,
         SystemNoteClock,
     ))
 }
 
 #[tauri::command]
-pub(super) fn get_tree(app: tauri::AppHandle) -> Result<FolderNode, String> {
+pub(super) async fn get_tree(app: tauri::AppHandle) -> Result<FolderNode, String> {
     ensure_security_unlocked_for_app(&app)?;
-    notes_service(&app)?.get_tree()
+    super::run_blocking_command(move || notes_service(&app)?.get_tree()).await
 }
 
 #[tauri::command]
@@ -70,9 +68,27 @@ pub(super) fn set_note_timestamp(
 }
 
 #[tauri::command]
+pub(super) fn update_note_markers(
+    app: tauri::AppHandle,
+    args: SetNoteMarkersArgs,
+) -> Result<(), String> {
+    ensure_security_unlocked_for_app(&app)?;
+    notes_service(&app)?.update_note_markers(&args.path, args.archived, args.reviewed)
+}
+
+#[tauri::command]
 pub(super) fn get_note_meta(app: tauri::AppHandle, path: String) -> Result<NoteMeta, String> {
     ensure_security_unlocked_for_app(&app)?;
     notes_service(&app)?.get_note_meta(&path)
+}
+
+#[tauri::command]
+pub(super) async fn list_note_previews(
+    app: tauri::AppHandle,
+    paths: Vec<String>,
+) -> Result<Vec<NotePreviewEntry>, String> {
+    ensure_security_unlocked_for_app(&app)?;
+    super::run_blocking_command(move || notes_service(&app)?.list_note_previews(paths)).await
 }
 
 #[tauri::command]

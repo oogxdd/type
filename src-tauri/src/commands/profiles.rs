@@ -1,7 +1,8 @@
 use crate::{
     application::profiles::ProfilesUseCases, ensure_security_unlocked_for_app, CreateProfileArgs,
     DeleteProfileArgs, NotesProfilesSnapshot, ProfilesBackupArchive, ProfilesDocumentsExport,
-    SetActiveProfileArgs, SetProfileNotesRootArgs, TauriProfilesAdapter, UpdateProfileArgs,
+    SetActiveProfileArgs, SetProfileNotesRootArgs, TauriProfilesAdapter, UpdateAppConfigArgs,
+    UpdateProfileArgs, UpdateProfileSettingsArgs,
 };
 
 fn profiles_use_cases(app: tauri::AppHandle) -> ProfilesUseCases<TauriProfilesAdapter> {
@@ -57,6 +58,24 @@ pub(super) fn delete_profile(
 ) -> Result<NotesProfilesSnapshot, String> {
     ensure_security_unlocked_for_app(&app)?;
     profiles_use_cases(app).delete(args)
+}
+
+#[tauri::command]
+pub(super) fn update_profile_settings(
+    app: tauri::AppHandle,
+    args: UpdateProfileSettingsArgs,
+) -> Result<NotesProfilesSnapshot, String> {
+    ensure_security_unlocked_for_app(&app)?;
+    profiles_use_cases(app).update_settings(args)
+}
+
+#[tauri::command]
+pub(super) fn update_app_config(
+    app: tauri::AppHandle,
+    args: UpdateAppConfigArgs,
+) -> Result<NotesProfilesSnapshot, String> {
+    ensure_security_unlocked_for_app(&app)?;
+    profiles_use_cases(app).update_app_config(args)
 }
 
 #[tauri::command]

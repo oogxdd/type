@@ -46,6 +46,20 @@ export const getInitialNotesListMode = (): NotesListMode => {
   return "separate";
 };
 
+export const getInitialHideArchivedFeedNotes = (): boolean => {
+  if (typeof window === "undefined") {
+    return true;
+  }
+  const stored = window.localStorage.getItem("notes-viewer-hide-archived-feed-notes");
+  if (stored === "true") {
+    return true;
+  }
+  if (stored === "false") {
+    return false;
+  }
+  return true;
+};
+
 export const getStoredSyncValue = (key: string, fallback: string) => {
   if (typeof window === "undefined") {
     return fallback;
@@ -237,3 +251,18 @@ export const getInitialEditorFontSize = (): number => {
   return DEFAULT_EDITOR_FONT_SIZE;
 };
 
+// Persisted note-preview snapshots (one localStorage key per profile). Shared so
+// the security feature can purge plaintext previews when encryption is enabled.
+export const NOTE_PREVIEW_CACHE_PREFIX = "notes-viewer-note-previews-v1:";
+
+export const clearPersistedNotePreviews = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+    const key = window.localStorage.key(index);
+    if (key?.startsWith(NOTE_PREVIEW_CACHE_PREFIX)) {
+      window.localStorage.removeItem(key);
+    }
+  }
+};

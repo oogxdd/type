@@ -1,5 +1,6 @@
 import { Button } from "@/shared/ui/button";
-import { useEditor } from "@/features/editor/hooks/editor-context";
+import { APP_EXTENSIONS } from "@/features/extensions/registry";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import {
   SETTINGS_SECTIONS,
   type SettingsSection,
@@ -48,8 +49,14 @@ function SettingsRow({
   );
 }
 
-function SettingsDetail({ sectionId }: { sectionId: SettingsSectionId }) {
-  if (sectionId === "general") return <SettingsGeneralSection />;
+function SettingsDetail({
+  sectionId,
+  onOpenTrash,
+}: {
+  sectionId: SettingsSectionId;
+  onOpenTrash: () => void;
+}) {
+  if (sectionId === "general") return <SettingsGeneralSection onOpenTrash={onOpenTrash} />;
   if (sectionId === "profile") return <SettingsProfileSection />;
   if (sectionId === "import") return <SettingsImportSection />;
   if (sectionId === "sync") return <SettingsSyncSection />;
@@ -57,7 +64,7 @@ function SettingsDetail({ sectionId }: { sectionId: SettingsSectionId }) {
   if (sectionId === "appearance") return <SettingsAppearanceSection />;
   if (sectionId === "transcription") return <SettingsTranscriptionSection />;
   if (sectionId === "recordings") return <SettingsRecordingsSection />;
-  if (sectionId === "security") return <SettingsSecuritySection />;
+  if (sectionId === "security" && APP_EXTENSIONS.security) return <SettingsSecuritySection />;
   return null;
 }
 
@@ -103,9 +110,11 @@ export function SettingsMiddlePane({
 
 export function SettingsDetailPane({
   activeSection,
+  onOpenTrash,
   onPaneClick,
 }: {
   activeSection: string;
+  onOpenTrash: () => void;
   onPaneClick: () => void;
 }) {
   const { rightPaneRef } = useEditor();
@@ -126,6 +135,7 @@ export function SettingsDetailPane({
         <div className="settings-detail-shell">
           <SettingsDetail
             sectionId={activeSection as SettingsSectionId}
+            onOpenTrash={onOpenTrash}
           />
         </div>
       </div>

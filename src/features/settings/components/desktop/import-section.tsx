@@ -1,4 +1,4 @@
-import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
+import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { useAppleImport } from "@/features/import/hooks/use-apple-import";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";

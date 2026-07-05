@@ -371,14 +371,6 @@ pub(crate) fn ensure_profiles_state(app: &tauri::AppHandle) -> Result<NotesProfi
     Ok(state)
 }
 
-/// Convert internal profiles state to the frontend-facing snapshot.
-pub(crate) fn profiles_snapshot(state: &NotesProfilesFile) -> NotesProfilesSnapshot {
-    NotesProfilesSnapshot {
-        active_profile_id: state.active_profile_id.clone(),
-        profiles: state.profiles.clone(),
-    }
-}
-
 /// Look up a profile by its id.
 pub(crate) fn find_profile<'a>(
     state: &'a NotesProfilesFile,

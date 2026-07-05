@@ -4,11 +4,7 @@ import type {
   RecordingListItem,
 } from "../types";
 import { stripFrontmatter } from "./frontmatter";
-// Intentional shared -> feature edge: building a note preview must strip the
-// editor's inline annotation/lens metadata so it doesn't leak into the summary.
-// This is a single pure function; the alternative (duplicating the editor's
-// metadata format here) would be worse. Keep this the ONLY feature import in shared/.
-import { stripInlineAnnotationMetadata } from "@/features/editor/lib/note-annotations";
+import { stripInlineAnnotationMetadata } from "./annotation-metadata";
 
 const RECORDING_NOTE_TYPE = "audio_recording";
 const HANDWRITING_NOTE_TYPE = "handwriting_attachment";
@@ -93,7 +89,12 @@ export type NotePreview = {
   title: string;
   dateLabel: string;
   secondLine: string;
+  createdMs: number | null;
   updatedMs: number | null;
+  archivedMs: number | null;
+  reviewedMs: number | null;
+  isArchived: boolean;
+  isReviewed: boolean;
   isRecording: boolean;
   isHandwriting: boolean;
   recordingAudioPath: string | null;
@@ -144,7 +145,10 @@ export const parseNotePreview = (
   updatedMs: number | null,
   noteMeta?: Pick<
     NoteMeta,
+    | "created_ms"
     | "note_type"
+    | "archived_ms"
+    | "reviewed_ms"
     | "recording_audio_path"
     | "handwriting_attachment_path"
     | "transcription_status"
@@ -166,6 +170,9 @@ export const parseNotePreview = (
   const contentWithoutFrontmatter = stripInlineAnnotationMetadata(
     stripFrontmatter(content)
   );
+  const createdMs = noteMeta?.created_ms ?? null;
+  const archivedMs = noteMeta?.archived_ms ?? null;
+  const reviewedMs = noteMeta?.reviewed_ms ?? null;
 
   const previewLines: string[] = [];
   const sourceContent =
@@ -198,7 +205,12 @@ export const parseNotePreview = (
     title,
     dateLabel: formatNoteDateLabel(updatedMs),
     secondLine,
+    createdMs,
     updatedMs,
+    archivedMs,
+    reviewedMs,
+    isArchived: Boolean(archivedMs),
+    isReviewed: Boolean(reviewedMs),
     isRecording,
     isHandwriting,
     recordingAudioPath: noteMeta?.recording_audio_path || null,

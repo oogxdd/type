@@ -1,10 +1,7 @@
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
-import { useNotesTree } from "@/features/notes/hooks/notes-tree-context";
-import { useSelection } from "@/app/state/selection-context";
-
-import { NoteRow } from "@/features/notes/components/note-row";
+import { NoteRow } from "@/features/notes/list/components/note-row";
 import { SettingsMiddlePane } from "@/features/settings/components/desktop/settings-panel";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 
@@ -18,6 +15,10 @@ type DesktopMiddlePaneProps = {
   notesPanelRef: RefObject<HTMLDivElement | null>;
   middlePaneRef: RefObject<HTMLDivElement | null>;
   lastLeftPaneFocusRef: RefObject<string>;
+  notesTitle: string;
+  notes: Array<{ path: string; name: string }>;
+  notePreviews: Record<string, import("@/shared/lib/format").NotePreview>;
+  selectedNotes: Set<string>;
   onNotesKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   onNoteClick: (notePath: string, event: ReactMouseEvent, parentPath?: string) => void;
   onNoteContextMenu: (event: ReactMouseEvent, path: string, parentPath?: string) => void;
@@ -30,13 +31,14 @@ export function DesktopMiddlePane({
   notesPanelRef,
   middlePaneRef,
   lastLeftPaneFocusRef,
+  notesTitle,
+  notes,
+  notePreviews,
+  selectedNotes,
   onNotesKeyDown,
   onNoteClick,
   onNoteContextMenu,
 }: DesktopMiddlePaneProps) {
-  const { notes, notePreviews } = useNotesTree();
-  const { selectedNotes } = useSelection();
-
   if (appMode === "notes") {
     return (
       <div className="pane notes-pane min-w-0">
@@ -54,7 +56,7 @@ export function DesktopMiddlePane({
             focusNoScroll(middlePaneRef.current);
           }}
         >
-          {notes.length === 0 && <div className="empty">No notes</div>}
+          {notes.length === 0 && <div className="empty">No notes in {notesTitle}</div>}
           <SortableContext
             items={notes.map((n) => n.path)}
             strategy={verticalListSortingStrategy}

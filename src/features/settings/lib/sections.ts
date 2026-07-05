@@ -1,3 +1,5 @@
+import { APP_EXTENSIONS } from "@/features/extensions/registry";
+
 export type SettingsSectionId =
   | "general"
   | "profile"
@@ -14,6 +16,13 @@ export type SettingsSection = {
   title: string;
 };
 
+const SECURITY_SETTINGS_SECTIONS: SettingsSection[] = APP_EXTENSIONS.security
+  ? [{ id: "security", title: "Security" }]
+  : [];
+
+const MOBILE_SECURITY_SETTINGS_SECTIONS: Array<{ id: SettingsSectionId; label: string }> =
+  APP_EXTENSIONS.security ? [{ id: "security", label: "Security" }] : [];
+
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "general", title: "General" },
   { id: "profile", title: "Profile" },
@@ -23,7 +32,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "appearance", title: "Appearance" },
   { id: "transcription", title: "Transcription" },
   { id: "recordings", title: "Recordings" },
-  { id: "security", title: "Security" },
+  ...SECURITY_SETTINGS_SECTIONS,
 ];
 
 // Sections shown in the mobile settings screen (no "transcription" tab on mobile).
@@ -34,5 +43,5 @@ export const MOBILE_SETTINGS_SECTIONS: Array<{ id: SettingsSectionId; label: str
   { id: "updates", label: "Updates" },
   { id: "appearance", label: "Appearance" },
   { id: "recordings", label: "Recordings" },
-  { id: "security", label: "Security" },
+  ...MOBILE_SECURITY_SETTINGS_SECTIONS,
 ];

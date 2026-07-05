@@ -6,8 +6,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::time_to_ms;
-
 use super::*;
 
 // ── File collection ────────────────────────────────────────────────────────────
@@ -80,29 +78,6 @@ pub(crate) fn is_hidden_root_folder_name(name: &str) -> bool {
 /// True if the path is the Feed folder.
 pub(crate) fn is_feed_folder_path(root: &Path, path: &Path) -> bool {
     path == root.join(FEED_FOLDER)
-}
-
-/// Extract created_ms for Feed sort order (front-matter → fs metadata → 0).
-fn note_created_ms_for_sort(path: &Path) -> i64 {
-    if let Ok(raw) = fs::read_to_string(path) {
-        let (meta, _) = parse_note_front_matter(&raw);
-        if let Some(created_ms) = meta.created_ms {
-            return created_ms;
-        }
-    }
-    if let Ok(metadata) = fs::metadata(path) {
-        if let Ok(created) = metadata.created() {
-            if let Some(created_ms) = time_to_ms(created) {
-                return created_ms;
-            }
-        }
-        if let Ok(modified) = metadata.modified() {
-            if let Some(modified_ms) = time_to_ms(modified) {
-                return modified_ms;
-            }
-        }
-    }
-    0
 }
 
 // ── Legacy migration ───────────────────────────────────────────────────────────
@@ -223,20 +198,13 @@ pub(crate) fn build_folder_node(dir: &Path, rel_path: &str) -> Result<FolderNode
 
     let folder_names = sort_by_order(folders, &order.folder_order);
     let note_names = if rel_path == FEED_FOLDER {
-        // Feed folder: sort by newest-first created timestamp.
-        let mut feed_notes = notes
-            .into_iter()
-            .map(|name| {
-                let created_ms = note_created_ms_for_sort(&dir.join(&name));
-                (name, created_ms)
-            })
-            .collect::<Vec<_>>();
-        feed_notes.sort_by(|(a_name, a_created), (b_name, b_created)| {
-            b_created
-                .cmp(a_created)
-                .then_with(|| a_name.to_lowercase().cmp(&b_name.to_lowercase()))
-        });
-        feed_notes.into_iter().map(|(name, _)| name).collect()
+        // Feed folder: newest-first by file name. Every naming mode prefixes a
+        // timestamp (UTC slug or UUIDv7), so descending name order approximates
+        // creation order without reading any note bodies; the feed UI re-sorts
+        // by real front-matter timestamps once previews load.
+        let mut feed_notes = notes;
+        feed_notes.sort_by(|a, b| b.to_lowercase().cmp(&a.to_lowercase()));
+        feed_notes
     } else {
         sort_by_order(notes, &order.note_order)
     };

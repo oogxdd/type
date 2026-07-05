@@ -4,8 +4,10 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
+import { useShallow } from "zustand/react/shallow";
 
-import { useSelection } from "@/app/state/selection-context";
+import { useSelection } from "@/app/state/selection-store";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { getNoteParentPath } from "@/shared/lib/notes";
 import type { AppMode } from "@/shared/types";
 
@@ -26,6 +28,7 @@ export type NoteOpener = {
  * selection update.
  */
 export const useNoteOpener = ({ setAppMode }: UseNoteOpenerArgs): NoteOpener => {
+  const { clearDraft, clearNote } = useEditor();
   const {
     setSelectedFolders,
     setLastSelectedFolder,
@@ -33,7 +36,16 @@ export const useNoteOpener = ({ setAppMode }: UseNoteOpenerArgs): NoteOpener => 
     setSelectedNotes,
     setLastSelectedNote,
     setActiveNote,
-  } = useSelection();
+  } = useSelection(
+    useShallow((state) => ({
+      setSelectedFolders: state.setSelectedFolders,
+      setLastSelectedFolder: state.setLastSelectedFolder,
+      setActiveFolder: state.setActiveFolder,
+      setSelectedNotes: state.setSelectedNotes,
+      setLastSelectedNote: state.setLastSelectedNote,
+      setActiveNote: state.setActiveNote,
+    }))
+  );
 
   const openPinnedFolder = useCallback(
     (folderPath: string) => {
@@ -44,8 +56,12 @@ export const useNoteOpener = ({ setAppMode }: UseNoteOpenerArgs): NoteOpener => 
       setSelectedNotes(new Set());
       setLastSelectedNote("");
       setActiveNote(null);
+      clearDraft();
+      clearNote();
     },
     [
+      clearDraft,
+      clearNote,
       setAppMode,
       setActiveFolder,
       setActiveNote,
