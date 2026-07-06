@@ -23,6 +23,15 @@ type UseGitSyncWorkflowsArgs = {
   updateSyncSettings: (patch: Partial<ProfileSyncSettings>) => Promise<void>;
 };
 
+const needsGitReconnect = (
+  status: GitSyncStatus | null,
+  remoteUrl: string,
+  branch?: string
+) =>
+  !status?.repo_initialized ||
+  status.remote_url !== remoteUrl ||
+  Boolean(branch && status.current_branch && status.current_branch !== branch);
+
 export function useGitSyncWorkflows({
   gitStatus,
   gitSyncAction,
@@ -101,12 +110,36 @@ export function useGitSyncWorkflows({
     syncSettings,
   ]);
 
+  const ensureConfiguredGitRemote = useCallback(
+    async (status: GitSyncStatus | null) => {
+      const remoteUrl = syncSettings.gitRemoteUrl.trim();
+      const branch = syncSettings.gitBranch.trim() || undefined;
+      const username = syncSettings.gitUsername.trim() || undefined;
+      const password = syncSettings.gitPassword || undefined;
+
+      if (!remoteUrl || !needsGitReconnect(status, remoteUrl, branch)) {
+        return status;
+      }
+
+      const connectedStatus = await api.connectGitRepo(
+        remoteUrl,
+        branch,
+        username,
+        password
+      );
+      setGitStatus(connectedStatus);
+      return connectedStatus;
+    },
+    [setGitStatus, syncSettings]
+  );
+
   const gitPull = useCallback(
     async (opts?: { onAfterPull?: () => Promise<void> }) => {
       const branch = syncSettings.gitBranch.trim();
       setGitSyncAction("pull");
       await yieldToUi();
       try {
+        await ensureConfiguredGitRemote(await api.getGitStatus());
         const status = await api.gitPull(
           branch || undefined,
           syncSettings.gitUsername.trim() || undefined,
@@ -127,6 +160,7 @@ export function useGitSyncWorkflows({
     },
     [
       refreshGitHistory,
+      ensureConfiguredGitRemote,
       setGitStatus,
       setGitSyncAction,
       setGitSyncError,
@@ -141,7 +175,13 @@ export function useGitSyncWorkflows({
     setGitSyncAction("push");
     await yieldToUi();
     try {
-      const statusBeforePush = await api.getGitStatus();
+      const statusBeforePush = await ensureConfiguredGitRemote(
+        await api.getGitStatus()
+      );
+      if (!statusBeforePush) {
+        setGitSyncError("Remote repository URL is required.");
+        return;
+      }
       setGitStatus(statusBeforePush);
       if (!statusBeforePush.push_required) {
         setGitSyncError(null);
@@ -165,6 +205,7 @@ export function useGitSyncWorkflows({
     }
   }, [
     refreshGitHistory,
+    ensureConfiguredGitRemote,
     setGitStatus,
     setGitSyncAction,
     setGitSyncError,
@@ -203,8 +244,8 @@ export function useGitSyncWorkflows({
       setGitSyncAction("sync");
       await yieldToUi();
       try {
-        let status = gitStatus;
-        if (!status?.repo_initialized) {
+        let status = await api.getGitStatus().catch(() => gitStatus);
+        if (needsGitReconnect(status, remoteUrl, branch)) {
           status = await api.connectGitRepo(remoteUrl, branch, username, password);
           setGitStatus(status);
         }

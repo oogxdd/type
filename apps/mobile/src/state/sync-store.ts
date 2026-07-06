@@ -10,6 +10,7 @@ import type {
 } from "@typenotes/shared/types";
 
 import { useNotesStore } from "./notes-store";
+import { activeProfile, useSettingsStore } from "./settings-store";
 
 type SyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
 
@@ -26,6 +27,45 @@ type SyncState = {
 };
 
 export const useSyncStore = create<SyncState>((set) => {
+  const savedGitConnection = (): ConnectGitArgs | null => {
+    const profile = activeProfile(useSettingsStore.getState().snapshot);
+    const settings = profile?.settings;
+    const remoteUrl = settings?.git_remote_url.trim();
+    if (!settings || !remoteUrl) {
+      return null;
+    }
+
+    return {
+      remote_url: remoteUrl,
+      branch: settings.git_branch.trim() || null,
+      username: settings.git_username.trim() || null,
+      password: settings.git_password || null,
+    };
+  };
+
+  const ensureSavedRemote = async (
+    currentStatus: GitSyncStatus | null,
+    connection = savedGitConnection()
+  ): Promise<GitSyncStatus | null> => {
+    if (!connection?.remote_url) {
+      return currentStatus;
+    }
+
+    const expectedBranch = connection.branch ?? "main";
+    const remoteChanged = currentStatus?.remote_url !== connection.remote_url;
+    const branchChanged =
+      currentStatus?.current_branch != null &&
+      currentStatus.current_branch !== expectedBranch;
+    const needsConnect =
+      !currentStatus?.repo_initialized || remoteChanged || branchChanged;
+
+    if (!needsConnect) {
+      return currentStatus;
+    }
+
+    return core.connectGitRepo(connection);
+  };
+
   const run = async (
     action: SyncAction,
     work: () => Promise<GitSyncStatus | null>
@@ -54,12 +94,41 @@ export const useSyncStore = create<SyncState>((set) => {
     connect: (args) => run("connect", () => core.connectGitRepo(args)),
 
     pull: async () => {
-      await run("pull", () => core.gitPull());
+      await run("pull", async () => {
+        const connection = savedGitConnection();
+        const status = await ensureSavedRemote(await core.getGitStatus(), connection);
+        return core.gitPull({
+          branch: connection?.branch,
+          username: connection?.username,
+          password: connection?.password,
+        }).catch((error) => {
+          if (status) {
+            set({ status });
+          }
+          throw error;
+        });
+      });
       // Remote edits may have changed the notes on disk.
       await useNotesStore.getState().refresh();
     },
 
     push: (message) =>
-      run("push", () => core.gitPush(message ? { message } : {})),
+      run("push", async () => {
+        const connection = savedGitConnection();
+        const status = await ensureSavedRemote(await core.getGitStatus(), connection);
+        return core
+          .gitPush({
+            ...(message ? { message } : {}),
+            branch: connection?.branch,
+            username: connection?.username,
+            password: connection?.password,
+          })
+          .catch((error) => {
+            if (status) {
+              set({ status });
+            }
+            throw error;
+          });
+      }),
   };
 });
