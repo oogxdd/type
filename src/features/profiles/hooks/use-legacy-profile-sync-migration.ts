@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import * as api from "@/features/profiles/api/profiles-api";
 import { LEGACY_PROFILE_SYNC_STORAGE_KEYS } from "@/features/profiles/lib/profile-sync-settings";
@@ -26,11 +26,22 @@ export function useLegacyProfileSyncMigration({
   refreshProfiles,
   setProfilesBusy,
 }: UseLegacyProfileSyncMigrationArgs) {
+  // The migration must run at most once per app session. Without this guard the
+  // effect re-runs whenever profilesBusy/profilesSnapshot change — which happens
+  // on every settings save — and silently overwrites freshly-saved git settings
+  // with the stale localStorage blob it just migrated from.
+  const migratedRef = useRef(false);
+
   useEffect(() => {
+    if (migratedRef.current) return;
     if (!profilesSnapshot || profilesBusy) return;
 
     const store = readProfileSyncStore();
     if (Object.keys(store).length === 0) return;
+
+    // Mark as started synchronously, before any await, so a re-render triggered
+    // by setProfilesBusy cannot launch a second concurrent migration.
+    migratedRef.current = true;
 
     const migrate = async () => {
       setProfilesBusy(true);
