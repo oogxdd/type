@@ -21,11 +21,9 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
     refreshRecordings,
     queueRecordingTranscriptions,
     retriggerTranscription,
-    playRecording,
-    activeAudioPath,
-    activeAudioSrc,
+    resolveAudioSrc,
   } = useRecordings();
-  const [playerBusy, setPlayerBusy] = useState(false);
+  const [audioSrc, setAudioSrc] = useState<string | null>(null);
   const [retriggerBusy, setRetriggerBusy] = useState(false);
 
   const recordingItem = useMemo(
@@ -51,18 +49,6 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
     Boolean(audioPath) && !isQueued && !isProcessing &&
     (effectiveStatus === "completed" || effectiveStatus === "failed");
 
-  const loadAudioPlayer = useCallback(async () => {
-    if (!audioPath) {
-      return;
-    }
-    setPlayerBusy(true);
-    try {
-      await playRecording(audioPath);
-    } finally {
-      setPlayerBusy(false);
-    }
-  }, [audioPath, playRecording]);
-
   const handleRetrigger = useCallback(async () => {
     if (!notePath) return;
     setRetriggerBusy(true);
@@ -87,13 +73,19 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
 
   useEffect(() => {
     if (!isRecording || !audioPath) {
+      setAudioSrc(null);
       return;
     }
-    if (activeAudioPath === audioPath && activeAudioSrc) {
-      return;
-    }
-    void loadAudioPlayer();
-  }, [activeAudioPath, activeAudioSrc, audioPath, isRecording, loadAudioPlayer]);
+    let cancelled = false;
+    void resolveAudioSrc(audioPath).then((src) => {
+      if (!cancelled) {
+        setAudioSrc(src);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [audioPath, isRecording, resolveAudioSrc]);
 
   if (!isRecording || !notePath) {
     return null;
@@ -121,6 +113,23 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
           <span className="label">Queue #</span>
           <span className="value">{queuePositionLabel}</span>
         </div>
+        {isProcessing && recordingsQueue?.current_recording === notePath && recordingsQueue?.progress ? (
+          <div className="recording-note-metric">
+            <span className="label">Progress</span>
+            <span className="value">
+              {recordingsQueue.progress.total_seconds > 0
+                ? `${Math.min(
+                    100,
+                    Math.round(
+                      (recordingsQueue.progress.processed_seconds /
+                        recordingsQueue.progress.total_seconds) *
+                        100
+                    )
+                  )}%`
+                : "-"}
+            </span>
+          </div>
+        ) : null}
       </div>
 
       <div className="recording-note-actions">
@@ -149,23 +158,11 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
             {retriggerBusy ? "Re-queueing..." : "Retranscribe"}
           </button>
         ) : null}
-        {audioPath && !(activeAudioPath === audioPath && activeAudioSrc) ? (
-          <button
-            type="button"
-            className="recording-note-btn ghost"
-            onClick={() => {
-              void loadAudioPlayer();
-            }}
-            disabled={playerBusy}
-          >
-            {playerBusy ? "Loading player..." : "Load player"}
-          </button>
-        ) : null}
       </div>
 
       {audioPath ? (
-        activeAudioPath === audioPath && activeAudioSrc ? (
-          <audio className="recording-note-player" controls preload="metadata" src={activeAudioSrc} />
+        audioSrc ? (
+          <audio className="recording-note-player" controls preload="metadata" src={audioSrc} />
         ) : null
       ) : (
         <p className="recording-note-message">Audio file is missing for this note.</p>

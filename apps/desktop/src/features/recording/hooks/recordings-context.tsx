@@ -2,15 +2,15 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import * as api from "../api/recordings-api";
 import type { RecordingListItem, RecordingQueueSnapshot } from "@typenotes/shared/types";
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
-import { toBase64, fromBase64 } from "@/shared/lib/notes";
+import { toBase64 } from "@/shared/lib/notes";
 import { useAudioRecorder } from "./use-audio-recorder";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useAutoQueueLoop } from "@/features/processing/hooks/use-auto-queue-loop";
@@ -30,12 +30,10 @@ type RecordingsContextValue = {
   recordingsList: RecordingListItem[];
   recordingsBusy: boolean;
   recordingsError: string | null;
-  activeAudioPath: string | null;
-  activeAudioSrc: string | null;
   startRecording: (preferredFolderPath?: string | null) => void;
   stopRecording: () => void;
   refreshRecordings: () => Promise<void>;
-  playRecording: (audioPath: string) => Promise<void>;
+  resolveAudioSrc: (audioPath: string) => Promise<string>;
   queueRecordingTranscriptions: (trigger?: "manual" | "auto") => Promise<void>;
   retriggerTranscription: (notePath: string) => Promise<void>;
 };
@@ -58,33 +56,9 @@ export function RecordingsProvider({
   const { syncSettings } = useProfiles();
   const [recordingStatusMessage, setRecordingStatusMessage] = useState<string | null>(null);
   const [transcriptionQueueBusy, setTranscriptionQueueBusy] = useState(false);
-  const [activeAudioPath, setActiveAudioPath] = useState<string | null>(null);
-  const [activeAudioSrc, setActiveAudioSrc] = useState<string | null>(null);
 
   const transcriptionQueueBusyRef = useRef(false);
   const recordingTargetFolderRef = useRef<string>(FEED_FOLDER_PATH);
-  const activeAudioObjectUrlRef = useRef<string | null>(null);
-
-  const cleanupMissingActiveAudio = useCallback(
-    (snapshot: { items: RecordingListItem[] }) => {
-      if (!activeAudioPath) {
-        return;
-      }
-      const stillExists = snapshot.items.some(
-        (item) => item.audio_path === activeAudioPath
-      );
-      if (stillExists) {
-        return;
-      }
-      if (activeAudioObjectUrlRef.current) {
-        URL.revokeObjectURL(activeAudioObjectUrlRef.current);
-        activeAudioObjectUrlRef.current = null;
-      }
-      setActiveAudioPath(null);
-      setActiveAudioSrc(null);
-    },
-    [activeAudioPath]
-  );
 
   const loadRecordingsSnapshot = useCallback(async () => {
     const snapshot = await api.listRecordings();
@@ -99,45 +73,21 @@ export function RecordingsProvider({
     items: recordingsList,
     busy: recordingsBusy,
     error: recordingsError,
-    setError: setRecordingsError,
     refresh: refreshRecordings,
   } = useProcessingQueue<RecordingQueueSnapshot, RecordingListItem>({
     loadSnapshot: loadRecordingsSnapshot,
     getSignature: jobListSignature,
     invalidateEventName: "note-previews-invalidated",
-    onSnapshotLoaded: cleanupMissingActiveAudio,
   });
 
-  const playRecording = useCallback(async (audioPath: string) => {
-    try {
-      const payload = await api.readRecordingAudio(audioPath);
-      const bytes = fromBase64(payload.audio_base64);
-      const blob = new Blob([bytes], {
-        type: payload.mime_type || "audio/mpeg",
-      });
-      const objectUrl = URL.createObjectURL(blob);
-      if (activeAudioObjectUrlRef.current) {
-        URL.revokeObjectURL(activeAudioObjectUrlRef.current);
-      }
-      activeAudioObjectUrlRef.current = objectUrl;
-      setActiveAudioPath(audioPath);
-      setActiveAudioSrc(objectUrl);
-      setRecordingsError(null);
-    } catch (error) {
-      const message = getErrorMessage(error);
-      setRecordingsError(message);
-    }
+  // Resolves to a native asset:// URL streamed directly from disk by the
+  // webview — no IPC blob, no Blob/object-URL lifecycle to manage. Cheap
+  // enough (a validated path-string round-trip, not a file read) that every
+  // consumer can just call this on its own note, independently.
+  const resolveAudioSrc = useCallback(async (audioPath: string) => {
+    const absolutePath = await api.resolveRecordingAudioPath(audioPath);
+    return convertFileSrc(absolutePath);
   }, []);
-
-  useEffect(
-    () => () => {
-      if (activeAudioObjectUrlRef.current) {
-        URL.revokeObjectURL(activeAudioObjectUrlRef.current);
-        activeAudioObjectUrlRef.current = null;
-      }
-    },
-    []
-  );
 
   const queueRecordingTranscriptions = useCallback(
     async (trigger: "manual" | "auto" = "manual") => {
@@ -271,12 +221,10 @@ export function RecordingsProvider({
         recordingsList,
         recordingsBusy,
         recordingsError,
-        activeAudioPath,
-        activeAudioSrc,
         startRecording,
         stopRecording,
         refreshRecordings,
-        playRecording,
+        resolveAudioSrc,
         queueRecordingTranscriptions,
         retriggerTranscription,
       }}

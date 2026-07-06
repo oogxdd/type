@@ -440,7 +440,13 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       completeTranscriptions((audioPath) => Promise.resolve(provider.transcribe(audioPath))),
     listRecordings: async () =>
       JSON.stringify({
-        queue: { running: false, current_recording: null, pending: [], in_flight: 0 },
+        queue: {
+          running: false,
+          current_recording: null,
+          pending: [],
+          in_flight: 0,
+          progress: null,
+        },
         recordings: [...notes.entries()]
           .filter(([, note]) => note.meta.recording_audio_path)
           .map(([path, note]) => ({

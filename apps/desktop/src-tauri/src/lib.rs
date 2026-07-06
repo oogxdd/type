@@ -8,6 +8,8 @@
 
 mod commands;
 
+use std::path::PathBuf;
+use std::sync::Mutex;
 use tauri::Manager;
 
 // ---------------------------------------------------------------------------
@@ -22,6 +24,40 @@ pub(crate) fn app_env(app: &tauri::AppHandle) -> Result<type_core::AppEnv, Strin
         env = env.with_documents_dir(documents);
     }
     Ok(env)
+}
+
+// ---------------------------------------------------------------------------
+// Asset protocol scope
+// ---------------------------------------------------------------------------
+
+/// The one directory the `asset://` protocol is ever allowed to serve:
+/// the active profile's `Recordings/` folder. Recordings are unencrypted on
+/// disk (encryption only covers note bodies), so this is exactly as exposed
+/// as the base64 IPC read it replaces — no more, no less. Re-synced whenever
+/// the active profile / notes_root can change (app start, profile switch,
+/// profile create/delete, notes_root move) so a stale profile's folder is
+/// revoked rather than left reachable forever.
+static LAST_GRANTED_RECORDINGS_SCOPE: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+pub(crate) fn sync_recordings_asset_scope(app: &tauri::AppHandle) -> Result<(), String> {
+    let env = app_env(app)?;
+    let root = type_core::notes_root(&env)?;
+    let recordings_dir = root.join(type_core::RECORDINGS_STORAGE_FOLDER);
+
+    let scope = app.asset_protocol_scope();
+    let mut last = LAST_GRANTED_RECORDINGS_SCOPE
+        .lock()
+        .map_err(|err| err.to_string())?;
+    if let Some(previous) = last.as_ref() {
+        if previous != &recordings_dir {
+            let _ = scope.forbid_directory(previous, true);
+        }
+    }
+    scope
+        .allow_directory(&recordings_dir, true)
+        .map_err(|err| err.to_string())?;
+    *last = Some(recordings_dir);
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

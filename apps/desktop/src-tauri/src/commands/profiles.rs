@@ -21,7 +21,9 @@ pub(super) fn create_profile(
     args: CreateProfileArgs,
 ) -> Result<NotesProfilesSnapshot, String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
-    profiles_use_cases(app)?.create(args)
+    let result = profiles_use_cases(app.clone())?.create(args)?;
+    sync_recordings_scope_after_profile_change(&app);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -30,7 +32,9 @@ pub(super) fn set_active_profile(
     args: SetActiveProfileArgs,
 ) -> Result<NotesProfilesSnapshot, String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
-    profiles_use_cases(app)?.set_active(args)
+    let result = profiles_use_cases(app.clone())?.set_active(args)?;
+    sync_recordings_scope_after_profile_change(&app);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -39,7 +43,9 @@ pub(super) fn set_profile_notes_root(
     args: SetProfileNotesRootArgs,
 ) -> Result<NotesProfilesSnapshot, String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
-    profiles_use_cases(app)?.set_notes_root(args)
+    let result = profiles_use_cases(app.clone())?.set_notes_root(args)?;
+    sync_recordings_scope_after_profile_change(&app);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -57,7 +63,21 @@ pub(super) fn delete_profile(
     args: DeleteProfileArgs,
 ) -> Result<NotesProfilesSnapshot, String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
-    profiles_use_cases(app)?.delete(args)
+    let result = profiles_use_cases(app.clone())?.delete(args)?;
+    sync_recordings_scope_after_profile_change(&app);
+    Ok(result)
+}
+
+/// The active profile (and therefore notes_root) may have changed — re-grant
+/// the asset:// protocol to only the new active profile's Recordings folder.
+/// Best-effort: a failure here shouldn't fail the profile operation itself.
+fn sync_recordings_scope_after_profile_change(app: &tauri::AppHandle) {
+    if let Err(error) = crate::sync_recordings_asset_scope(app) {
+        eprintln!(
+            "[recordings] failed to update asset-protocol scope after profile change: {}",
+            error
+        );
+    }
 }
 
 #[tauri::command]

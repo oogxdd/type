@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatRecordingStatus, formatUpdatedAt } from "@typenotes/shared/format";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
+import { useAudioImport } from "@/features/recording/hooks/use-audio-import";
 import { Button } from "@/shared/ui/button";
-import type { RecordingListItem } from "@typenotes/shared/types";
+import type { RecordingListItem, TranscriptionProgress } from "@typenotes/shared/types";
 import { WhisperEngineCard } from "./whisper-engine-card";
+
+const cardClass = "space-y-3 rounded-lg border border-border/70 bg-card/30 p-4";
 
 /** Normalised, display-ready status for a recording (queued/processing take
  *  precedence over the persisted note status). */
@@ -83,6 +86,16 @@ function recordingTitle(notePath: string): string {
   return file.replace(/\.md$/i, "");
 }
 
+function transcriptionPercent(progress: TranscriptionProgress): number {
+  if (progress.total_seconds <= 0) return 0;
+  return Math.min(100, Math.round((progress.processed_seconds / progress.total_seconds) * 100));
+}
+
+function audioImportPercent(status: { processed: number; total: number }): number {
+  if (status.total <= 0) return 0;
+  return Math.min(100, Math.round((status.processed / status.total) * 100));
+}
+
 export function SettingsTranscriptionSection() {
   const { syncSettings, updateSyncSettings } = useProfiles();
   const {
@@ -95,12 +108,29 @@ export function SettingsTranscriptionSection() {
     refreshRecordings,
     queueRecordingTranscriptions,
     retriggerTranscription,
-    playRecording,
-    activeAudioPath,
-    activeAudioSrc,
+    resolveAudioSrc,
   } = useRecordings();
 
+  const {
+    phase: audioImportPhase,
+    status: audioImportStatus,
+    error: audioImportError,
+    pickAndImport,
+    reset: resetAudioImport,
+  } = useAudioImport({ onImported: () => void refreshRecordings() });
+
   const [busyPaths, setBusyPaths] = useState<Set<string>>(new Set());
+  const [playingPath, setPlayingPath] = useState<string | null>(null);
+  const [playingSrc, setPlayingSrc] = useState<string | null>(null);
+
+  const handlePlay = useCallback(
+    async (audioPath: string) => {
+      setPlayingPath(audioPath);
+      const src = await resolveAudioSrc(audioPath);
+      setPlayingSrc(src);
+    },
+    [resolveAudioSrc]
+  );
 
   // Navigate to the note itself. AppShell listens for this and leaves Settings.
   const openNote = useCallback((notePath: string) => {
@@ -193,6 +223,73 @@ export function SettingsTranscriptionSection() {
         onWhisperModelChange={(value) => updateSyncSettings({ whisperModel: value })}
       />
 
+      {/* ── Import existing audio files ────────────────────────────────── */}
+      <section className={cardClass}>
+        <h3 className="text-sm font-semibold text-foreground">Import audio files</h3>
+        <p className="text-xs text-muted-foreground">
+          Bring in audio you already recorded elsewhere (e.g. iPhone Voice
+          Memos exported to disk). Each file becomes its own note, dated to
+          when the recording was actually made, and is queued for
+          transcription automatically.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void pickAndImport()}
+            disabled={audioImportPhase === "importing"}
+          >
+            {audioImportPhase === "importing" ? "Importing…" : "Choose audio file(s)…"}
+          </Button>
+          {audioImportPhase === "done" ? (
+            <Button type="button" size="sm" variant="secondary" onClick={resetAudioImport}>
+              Import more
+            </Button>
+          ) : null}
+        </div>
+
+        {audioImportStatus && (audioImportPhase === "importing" || audioImportPhase === "done") ? (
+          <>
+            <div className="h-2 w-full overflow-hidden rounded bg-muted">
+              <div
+                className="h-full rounded bg-primary transition-all"
+                style={{ width: `${audioImportPercent(audioImportStatus)}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>
+                {audioImportStatus.processed} / {audioImportStatus.total}
+              </span>
+              <span>{audioImportPercent(audioImportStatus)}%</span>
+            </div>
+            {audioImportPhase === "importing" && audioImportStatus.current ? (
+              <p className="truncate text-xs text-muted-foreground">
+                {audioImportStatus.current}
+              </p>
+            ) : null}
+            <p className="text-xs text-muted-foreground">
+              Imported {audioImportStatus.imported}
+              {audioImportStatus.failed > 0 ? ` · ${audioImportStatus.failed} failed` : ""}
+            </p>
+            {audioImportPhase === "done" && audioImportStatus.errors.length > 0 ? (
+              <details className="text-xs text-muted-foreground">
+                <summary className="cursor-pointer text-destructive">
+                  {audioImportStatus.failed} failed
+                </summary>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  {audioImportStatus.errors.map((message, index) => (
+                    <li key={index} className="break-all">
+                      {message}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </>
+        ) : null}
+        {audioImportError ? <p className="text-xs text-destructive">{audioImportError}</p> : null}
+      </section>
+
       {/* ── Overview + bulk actions ────────────────────────────────────── */}
       <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
@@ -205,12 +302,31 @@ export function SettingsTranscriptionSection() {
         </div>
 
         {recordingsQueue?.current_recording ? (
-          <p className="text-xs text-muted-foreground">
-            Now transcribing:{" "}
-            <code className="text-[11px]">
-              {recordingTitle(recordingsQueue.current_recording)}
-            </code>
-          </p>
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground">
+              Now transcribing:{" "}
+              <code className="text-[11px]">
+                {recordingTitle(recordingsQueue.current_recording)}
+              </code>
+            </p>
+            {recordingsQueue.progress ? (
+              <>
+                <div className="h-2 w-full overflow-hidden rounded bg-muted">
+                  <div
+                    className="h-full rounded bg-primary transition-all"
+                    style={{ width: `${transcriptionPercent(recordingsQueue.progress)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>
+                    {Math.round(recordingsQueue.progress.processed_seconds)}s /{" "}
+                    {Math.round(recordingsQueue.progress.total_seconds)}s
+                  </span>
+                  <span>{transcriptionPercent(recordingsQueue.progress)}%</span>
+                </div>
+              </>
+            ) : null}
+          </div>
         ) : null}
         {recordingStatusMessage ? (
           <p className="text-xs text-muted-foreground">{recordingStatusMessage}</p>
@@ -309,13 +425,9 @@ export function SettingsTranscriptionSection() {
                           size="sm"
                           type="button"
                           className="h-7 px-2 text-xs"
-                          onClick={() =>
-                            void playRecording(item.audio_path as string)
-                          }
+                          onClick={() => void handlePlay(item.audio_path as string)}
                         >
-                          {activeAudioPath === item.audio_path
-                            ? "▶ Playing"
-                            : "Play"}
+                          {playingPath === item.audio_path ? "▶ Playing" : "Play"}
                         </Button>
                       ) : null}
                       <Button
@@ -337,12 +449,12 @@ export function SettingsTranscriptionSection() {
         </div>
       </section>
 
-      {activeAudioSrc ? (
+      {playingSrc ? (
         <audio
           className="w-full"
           controls
           autoPlay
-          src={activeAudioSrc}
+          src={playingSrc}
           aria-label="Recording playback"
         />
       ) : null}

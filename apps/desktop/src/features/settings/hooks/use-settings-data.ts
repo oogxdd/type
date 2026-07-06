@@ -1,4 +1,3 @@
-import { useCallback } from "react";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useGitSync } from "@/features/sync/hooks/git-sync-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
@@ -11,7 +10,6 @@ export function useSettingsData() {
     isRecordingAudio,
     isRecordingFinalizing,
     transcriptionQueueBusy,
-    activeAudioPath,
   } = useRecordings();
 
   const isRecordingBusy = isRecordingFinalizing || transcriptionQueueBusy;
@@ -45,12 +43,6 @@ export function useSettingsData() {
         ? "Saving"
         : "Idle";
 
-  const playButtonText = useCallback(
-    (audioPath: string) =>
-      activeAudioPath && activeAudioPath === audioPath ? "Playing" : "Play",
-    [activeAudioPath]
-  );
-
   return {
     isRecordingBusy,
     canPull,
@@ -60,6 +52,5 @@ export function useSettingsData() {
     canQueue,
     syncActionLabel,
     recorderState,
-    playButtonText,
   };
 }

@@ -2,8 +2,10 @@
 
 use crate::AppEnv;
 use std::fs;
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::thread;
 
 use serde::Deserialize;
 
@@ -112,12 +114,25 @@ pub fn check_whisper_availability(
     }
 }
 
+/// One line of progress the embedded script emits per segment as it decodes
+/// (it also knows `total_seconds` up front, before any segment is consumed).
+#[derive(Deserialize)]
+struct WhisperProgressLine {
+    processed_seconds: f64,
+    total_seconds: f64,
+}
+
 /// Transcribe audio using local faster-whisper via the managed Python subprocess.
+/// Streams the script's stdout line-by-line as it runs (rather than waiting for
+/// the whole process to exit) so `on_progress` can report real-time progress —
+/// the script emits one NDJSON line per segment, tagged `"type": "progress"`,
+/// and a final `"type": "result"` line once transcription is complete.
 /// Returns (plain_text, full_json_string_with_words).
 pub fn transcribe_audio_local_whisper(
     audio_path: &Path,
     model: &str,
     python: &Path,
+    mut on_progress: impl FnMut(f64, f64),
 ) -> Result<(String, String), String> {
     // Write embedded script to a temp file for reliable execution
     let script_path = std::env::temp_dir().join("type_whisper_transcribe.py");
@@ -133,30 +148,76 @@ pub fn transcribe_audio_local_whisper(
         model, audio_path_str
     );
 
-    let output = Command::new(python)
+    let mut child = Command::new(python)
         .arg(&script_path)
         .arg(audio_path_str)
         .arg(model)
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .map_err(|e| format!("Failed to spawn whisper process: {}", e))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+    // Drain stderr on its own thread while we read stdout below — otherwise a
+    // chatty stderr (e.g. library warnings) could fill its pipe buffer and
+    // deadlock the process against our blocking stdout read.
+    let mut stderr_pipe = child.stderr.take().ok_or("Failed to capture stderr")?;
+    let stderr_handle = thread::spawn(move || {
+        let mut buf = String::new();
+        let _ = stderr_pipe.read_to_string(&mut buf);
+        buf
+    });
+
+    let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+    let mut result_line: Option<String> = None;
+    for line in BufReader::new(stdout).lines() {
+        let Ok(line) = line else { continue };
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) else {
+            continue;
+        };
+        match value.get("type").and_then(|v| v.as_str()) {
+            Some("progress") => {
+                if let Ok(progress) = serde_json::from_value::<WhisperProgressLine>(value) {
+                    on_progress(progress.processed_seconds, progress.total_seconds);
+                }
+            }
+            Some("result") => {
+                result_line = Some(trimmed.to_string());
+            }
+            _ => {}
+        }
+    }
+
+    let status = child
+        .wait()
+        .map_err(|e| format!("Failed to wait for whisper process: {}", e))?;
+    let stderr = stderr_handle.join().unwrap_or_default();
+
+    if !status.success() {
         return Err(format!("Whisper transcription failed: {}", stderr.trim()));
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let parsed: WhisperScriptOutput = serde_json::from_str(&stdout).map_err(|e| {
+    let Some(result_line) = result_line else {
+        return Err(format!(
+            "Whisper process exited without producing a result. Stderr: {}",
+            stderr.trim()
+        ));
+    };
+
+    let parsed: WhisperScriptOutput = serde_json::from_str(&result_line).map_err(|e| {
         format!(
             "Failed to parse whisper output: {}. Raw: {}",
             e,
-            &stdout[..stdout.len().min(500)]
+            &result_line[..result_line.len().min(500)]
         )
     })?;
 
     let text = parsed.text.clone();
     // Keep the full JSON (including words) as-is for saving
-    let full_json = stdout.trim().to_string();
+    let full_json = result_line;
 
     eprintln!(
         "[recordings] whisper transcription complete: {} chars, language={:?}",

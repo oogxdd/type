@@ -156,11 +156,17 @@ export type HandwritingOcrQueueResult = {
   in_flight: number;
 };
 
+export type TranscriptionProgress = {
+  processed_seconds: number;
+  total_seconds: number;
+};
+
 export type RecordingQueueSnapshot = {
   running: boolean;
   current_recording: string | null;
   pending: string[];
   in_flight: number;
+  progress: TranscriptionProgress | null;
 };
 
 export type HandwritingOcrQueueSnapshot = {

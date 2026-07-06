@@ -30,6 +30,12 @@ pub(super) fn run() {
         .setup(|_app| {
             let app_handle = _app.handle();
             type_core::ensure_security_runtime_initialized_for_setup(&crate::app_env(app_handle)?)?;
+            if let Err(error) = crate::sync_recordings_asset_scope(app_handle) {
+                eprintln!(
+                    "[recordings] failed to set initial asset-protocol scope: {}",
+                    error
+                );
+            }
             #[cfg(target_os = "macos")]
             if let Some(window) = _app.get_webview_window("main") {
                 let _ = crate::apply_macos_window_alpha(&window, crate::MACOS_WINDOW_ALPHA);
@@ -71,6 +77,9 @@ pub(super) fn run() {
             recordings::check_whisper_status,
             recordings::list_recordings,
             recordings::read_recording_audio,
+            recordings::resolve_recording_audio_path,
+            recordings::import_audio_files,
+            recordings::audio_import_status,
             handwriting::save_handwriting_attachment,
             handwriting::queue_handwriting_ocr,
             handwriting::list_handwriting_ocr_jobs,

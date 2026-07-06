@@ -96,6 +96,16 @@ pub struct RecordingTranscriptionQueueResult {
     pub in_flight: usize,
 }
 
+/// Live progress for whichever transcription job is currently running (local
+/// Whisper only — cloud/provider backends have no incremental signal).
+/// Raw seconds rather than a pre-computed fraction, so the frontend can
+/// render either "12s / 48s" or a percentage and divide defensively.
+#[derive(Clone, Serialize)]
+pub struct TranscriptionProgress {
+    pub processed_seconds: f64,
+    pub total_seconds: f64,
+}
+
 /// Current state of the transcription worker queue.
 #[derive(Serialize)]
 pub struct RecordingQueueSnapshot {
@@ -103,6 +113,7 @@ pub struct RecordingQueueSnapshot {
     pub current_recording: Option<String>,
     pub pending: Vec<String>,
     pub in_flight: usize,
+    pub progress: Option<TranscriptionProgress>,
 }
 
 /// Single recording entry for the frontend recordings list.
@@ -252,31 +263,14 @@ impl RecordingsGateway for RecordingsAdapter {
         fs::write(&audio_path, audio_bytes).map_err(|error| error.to_string())?;
 
         let now = now_ms().unwrap_or(0);
-        let note_id = generate_note_id();
-        let note_file_name =
-            recording_note_file_name(&target_folder_path, now, &note_id, args.file_name_format)?;
-        let note_path = target_folder_path.join(&note_file_name);
-        let mut meta = NoteFrontMatter::default();
-        meta.id = Some(note_id);
-        meta.created_ms = Some(now);
-        meta.updated_ms = Some(now);
-        meta.note_type = Some(RECORDING_FRONTMATTER_TYPE.to_string());
-        meta.recording_audio_path = Some(strip_root(&root, &audio_path));
-        meta.transcription_status = Some(RECORDING_STATUS_PENDING.to_string());
-        meta.transcription_error = None;
-        meta.transcription_updated_ms = Some(now);
-        meta.transcription_id = None;
-
-        write_note_with_front_matter(&note_path, &meta, &recording_initial_body())?;
-        if !crate::is_feed_folder_path(&root, &target_folder_path) {
-            crate::update_order_append(&target_folder_path, &[note_file_name], false)?;
-        }
-
-        Ok(RecordingWriteResult {
-            folder_path: target_folder_rel,
-            note_path: strip_root(&root, &note_path),
-            audio_path: strip_root(&root, &audio_path),
-        })
+        write_recording_note(
+            &root,
+            &audio_path,
+            target_folder_rel,
+            &target_folder_path,
+            now,
+            args.file_name_format,
+        )
     }
 
     fn queue_cloud(&self, args: Self::CloudQueueArgs) -> Result<Self::QueueResult, String> {
@@ -378,19 +372,41 @@ impl RecordingsGateway for RecordingsAdapter {
 
     fn read_audio(&self, args: Self::ReadArgs) -> Result<Self::AudioPayload, String> {
         let root = crate::ensured_notes_root(&self.app)?;
-        let path_rel = sanitize_relative(&args.path)?;
-        let audio_path = root.join(path_rel);
-        if !is_recording_audio_path_allowed(&root, &audio_path) {
-            return Err("Only files inside recordings storage are allowed.".to_string());
-        }
-        if !audio_path.exists() || !audio_path.is_file() {
-            return Err("Audio file not found.".to_string());
-        }
+        let audio_path = resolve_recording_audio_absolute_path(&root, &args.path)?;
         let bytes = fs::read(&audio_path).map_err(|error| error.to_string())?;
         Ok(RecordingAudioPayload {
             mime_type: audio_mime_from_path(&audio_path).to_string(),
             audio_base64: BASE64.encode(bytes),
         })
+    }
+}
+
+impl RecordingsAdapter {
+    /// Resolve + validate a root-relative recording audio path into an
+    /// absolute path, for shells that serve the file directly (e.g. the
+    /// desktop app's Tauri asset protocol) instead of reading it into an
+    /// IPC payload. Not part of [`RecordingsGateway`] — desktop-only.
+    pub fn resolve_audio_absolute_path(&self, path: &str) -> Result<String, String> {
+        let root = crate::ensured_notes_root(&self.app)?;
+        let audio_path = resolve_recording_audio_absolute_path(&root, path)?;
+        Ok(audio_path.to_string_lossy().into_owned())
+    }
+
+    /// Start a bulk import of existing audio files (e.g. Voice Memos already
+    /// on disk) as recording notes, one per file, in a background worker
+    /// thread. Progress is polled via [`Self::audio_import_status`]. Not part
+    /// of [`RecordingsGateway`] — desktop-only (needs a native file picker).
+    pub fn import_audio_files(&self, args: ImportAudioFilesArgs) -> Result<(), String> {
+        let root = crate::ensured_notes_root(&self.app)?;
+        let (target_folder_rel, target_folder_path) =
+            resolve_recording_target_folder(&self.app, args.target_folder.as_deref())?;
+        begin_audio_import(target_folder_rel)?;
+        thread::spawn(move || run_audio_import(root, target_folder_path, args));
+        Ok(())
+    }
+
+    pub fn audio_import_status(&self) -> AudioImportState {
+        audio_import_snapshot()
     }
 }
 
@@ -413,6 +429,7 @@ pub struct TranscriptionQueueState {
     pub current_recording: Option<String>,
     pub pending: VecDeque<QueuedTranscriptionJob>,
     pub known_recordings: HashSet<String>,
+    pub current_progress: Option<TranscriptionProgress>,
 }
 
 // ── Static ─────────────────────────────────────────────────────────────────────
@@ -452,6 +469,30 @@ pub fn recording_queue_snapshot() -> RecordingQueueSnapshot {
         current_recording: state.current_recording.clone(),
         in_flight: pending.len() + usize::from(state.running),
         pending,
+        progress: state.current_progress.clone(),
+    }
+}
+
+/// Record the current job's live progress (called from the local Whisper
+/// backend as it streams segments). Only one job is ever in flight — no
+/// per-job-id keying needed.
+fn set_transcription_progress(processed_seconds: f64, total_seconds: f64) {
+    let queue = transcription_queue_state();
+    if let Ok(mut state) = queue.lock() {
+        state.current_progress = Some(TranscriptionProgress {
+            processed_seconds,
+            total_seconds,
+        });
+    }
+}
+
+/// Clear progress — called at job start (so a previous job's percentage
+/// never leaks into the next one's initial render) and at job end (so a
+/// finished/failed job doesn't leave a stale percentage on screen).
+fn clear_transcription_progress() {
+    let queue = transcription_queue_state();
+    if let Ok(mut state) = queue.lock() {
+        state.current_progress = None;
     }
 }
 
@@ -522,6 +563,22 @@ fn recording_storage_root(root: &Path) -> PathBuf {
 pub fn is_recording_audio_path_allowed(root: &Path, audio_path: &Path) -> bool {
     audio_path.starts_with(recording_storage_root(root))
         || audio_path.starts_with(root.join(LEGACY_RECORDINGS_FOLDER))
+}
+
+/// Resolve a root-relative recording audio path to an absolute path, checking
+/// it lands inside the allowed recordings storage folders and actually exists.
+/// Shared by the base64 IPC read and the asset-protocol path resolver so both
+/// shells enforce the exact same boundary.
+pub fn resolve_recording_audio_absolute_path(root: &Path, path_rel: &str) -> Result<PathBuf, String> {
+    let rel = sanitize_relative(path_rel)?;
+    let audio_path = root.join(rel);
+    if !is_recording_audio_path_allowed(root, &audio_path) {
+        return Err("Only files inside recordings storage are allowed.".to_string());
+    }
+    if !audio_path.exists() || !audio_path.is_file() {
+        return Err("Audio file not found.".to_string());
+    }
+    Ok(audio_path)
 }
 
 // ── Note scanning ──────────────────────────────────────────────────────────────
@@ -609,6 +666,7 @@ pub fn update_recording_note_status(
 // ── Worker ─────────────────────────────────────────────────────────────────────
 
 fn process_transcription_job(job: QueuedTranscriptionJob) {
+    clear_transcription_progress();
     if let Err(error) = update_recording_note_status(
         &job.note_path,
         RECORDING_STATUS_PROCESSING,
@@ -627,7 +685,12 @@ fn process_transcription_job(job: QueuedTranscriptionJob) {
             // Provision the managed Python env on first use; subsequent jobs are
             // instant. Any setup failure surfaces as the note's transcription error.
             match crate::ensure_whisper_env(app) {
-                Ok(python) => transcribe_audio_local_whisper(&job.audio_path, model, &python),
+                Ok(python) => transcribe_audio_local_whisper(
+                    &job.audio_path,
+                    model,
+                    &python,
+                    |processed, total| set_transcription_progress(processed, total),
+                ),
                 Err(error) => Err(format!("Failed to set up local transcription: {error}")),
             }
         }
@@ -704,6 +767,7 @@ fn process_transcription_job(job: QueuedTranscriptionJob) {
             );
         }
     }
+    clear_transcription_progress();
 }
 
 /// Start a background worker thread if jobs are queued and none is running.
@@ -912,6 +976,46 @@ pub fn recording_initial_body() -> String {
     String::new()
 }
 
+/// Write the note for an audio file already placed at `audio_path`, using
+/// `timestamp_ms` for both the frontmatter created/updated timestamps and the
+/// filename's date prefix. Shared by the live-recording `save()` path
+/// (timestamp = now) and bulk audio import (timestamp = the source file's
+/// real creation time), so only the timestamp source differs between them.
+fn write_recording_note(
+    root: &Path,
+    audio_path: &Path,
+    target_folder_rel: String,
+    target_folder_path: &Path,
+    timestamp_ms: i64,
+    file_name_format: NoteFileNameFormat,
+) -> Result<RecordingWriteResult, String> {
+    let note_id = generate_note_id();
+    let note_file_name =
+        recording_note_file_name(target_folder_path, timestamp_ms, &note_id, file_name_format)?;
+    let note_path = target_folder_path.join(&note_file_name);
+    let mut meta = NoteFrontMatter::default();
+    meta.id = Some(note_id);
+    meta.created_ms = Some(timestamp_ms);
+    meta.updated_ms = Some(timestamp_ms);
+    meta.note_type = Some(RECORDING_FRONTMATTER_TYPE.to_string());
+    meta.recording_audio_path = Some(strip_root(root, audio_path));
+    meta.transcription_status = Some(RECORDING_STATUS_PENDING.to_string());
+    meta.transcription_error = None;
+    meta.transcription_updated_ms = Some(timestamp_ms);
+    meta.transcription_id = None;
+
+    write_note_with_front_matter(&note_path, &meta, &recording_initial_body())?;
+    if !crate::is_feed_folder_path(root, target_folder_path) {
+        crate::update_order_append(target_folder_path, &[note_file_name], false)?;
+    }
+
+    Ok(RecordingWriteResult {
+        folder_path: target_folder_rel,
+        note_path: strip_root(root, &note_path),
+        audio_path: strip_root(root, audio_path),
+    })
+}
+
 /// Generate a unique filename for a recording note.
 pub fn recording_note_file_name(
     folder: &Path,
@@ -963,4 +1067,169 @@ pub fn resolve_recording_target_folder(
     }
     let fallback = root.join(FEED_FOLDER);
     Ok((FEED_FOLDER.to_string(), fallback))
+}
+
+// ── Bulk audio import ────────────────────────────────────────────────────────
+//
+// Importing existing audio files (e.g. Voice Memos already exported to disk)
+// mirrors the Apple Notes importer's worker-thread + pollable-snapshot
+// pattern (adapters/import.rs): one note per source file, each preserving
+// the source file's real creation date instead of "now". Unlike the
+// live-recording save() path, the source bytes are already on disk, so this
+// copies the file directly rather than round-tripping it through base64.
+
+const MAX_AUDIO_IMPORT_ERRORS: usize = 25;
+
+/// Arguments for a bulk audio-file import run.
+#[derive(Deserialize)]
+pub struct ImportAudioFilesArgs {
+    /// Absolute paths chosen by the OS file picker.
+    pub source_paths: Vec<String>,
+    pub target_folder: Option<String>,
+    #[serde(default)]
+    pub file_name_format: NoteFileNameFormat,
+}
+
+/// Live, pollable progress for the current/last bulk audio import.
+#[derive(Clone, Default, Serialize)]
+pub struct AudioImportState {
+    pub running: bool,
+    pub done: bool,
+    pub total: u32,
+    pub processed: u32,
+    pub imported: u32,
+    pub failed: u32,
+    /// Name of the file currently being copied.
+    pub current: String,
+    /// Resolved destination folder (for the UI summary).
+    pub target_folder: String,
+    /// Fatal error that aborted the whole run, if any.
+    pub error: Option<String>,
+    /// Sample of per-file failures (capped at `MAX_AUDIO_IMPORT_ERRORS`).
+    pub errors: Vec<String>,
+}
+
+fn audio_import_state() -> &'static Mutex<AudioImportState> {
+    static STATE: OnceLock<Mutex<AudioImportState>> = OnceLock::new();
+    STATE.get_or_init(|| Mutex::new(AudioImportState::default()))
+}
+
+/// Snapshot the current progress for the polling UI.
+pub fn audio_import_snapshot() -> AudioImportState {
+    audio_import_state()
+        .lock()
+        .map(|state| state.clone())
+        .unwrap_or_default()
+}
+
+/// Claim the single audio-import slot, resetting progress. Errors if one is
+/// already running.
+fn begin_audio_import(target_folder: String) -> Result<(), String> {
+    let mut state = audio_import_state()
+        .lock()
+        .map_err(|_| "Audio import state is unavailable.".to_string())?;
+    if state.running {
+        return Err("An audio import is already running.".to_string());
+    }
+    *state = AudioImportState {
+        running: true,
+        target_folder,
+        ..Default::default()
+    };
+    Ok(())
+}
+
+fn with_audio_import_state(update: impl FnOnce(&mut AudioImportState)) {
+    if let Ok(mut state) = audio_import_state().lock() {
+        update(&mut state);
+    }
+}
+
+/// Run the import to completion, then mark the shared state finished.
+/// Spawned on a detached worker thread — only plain paths cross the boundary,
+/// the worker never touches `AppHandle` (mirrors `run_apple_notes_import`).
+fn run_audio_import(root: PathBuf, target_folder_path: PathBuf, args: ImportAudioFilesArgs) {
+    let result = audio_import_inner(&root, &target_folder_path, &args);
+    with_audio_import_state(|state| {
+        state.running = false;
+        state.done = true;
+        if let Err(err) = result {
+            state.error = Some(err);
+        }
+    });
+}
+
+fn audio_import_inner(
+    root: &Path,
+    target_folder_path: &Path,
+    args: &ImportAudioFilesArgs,
+) -> Result<(), String> {
+    with_audio_import_state(|state| state.total = args.source_paths.len() as u32);
+
+    for source_rel in &args.source_paths {
+        let source = PathBuf::from(source_rel);
+        with_audio_import_state(|state| state.current = audio_import_title(&source));
+        let outcome = import_one_audio_file(root, target_folder_path, &source, args.file_name_format);
+        with_audio_import_state(|state| {
+            state.processed += 1;
+            match outcome {
+                Ok(()) => state.imported += 1,
+                Err(ref err) => {
+                    state.failed += 1;
+                    if state.errors.len() < MAX_AUDIO_IMPORT_ERRORS {
+                        state
+                            .errors
+                            .push(format!("{}: {}", audio_import_title(&source), err));
+                    }
+                }
+            }
+        });
+    }
+    Ok(())
+}
+
+fn audio_import_title(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("audio file")
+        .to_string()
+}
+
+fn import_one_audio_file(
+    root: &Path,
+    target_folder_path: &Path,
+    source: &Path,
+    file_name_format: NoteFileNameFormat,
+) -> Result<(), String> {
+    let metadata = fs::metadata(source).map_err(|error| format!("Cannot read file: {error}"))?;
+    if !metadata.is_file() || metadata.len() == 0 {
+        return Err("File is empty or not a regular file.".to_string());
+    }
+    let timestamp_ms = metadata
+        .created()
+        .or_else(|_| metadata.modified())
+        .ok()
+        .and_then(crate::time_to_ms)
+        .unwrap_or_else(|| now_ms().unwrap_or(0));
+
+    // Real files already have a real extension — unlike save()'s in-browser
+    // blob, which only carries a MIME type.
+    let extension = source
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(str::to_lowercase)
+        .filter(|ext| !ext.is_empty())
+        .unwrap_or_else(|| "webm".to_string());
+    let audio_path = recording_audio_file_path(root, &extension)?;
+    fs::copy(source, &audio_path).map_err(|error| format!("Failed to copy audio file: {error}"))?;
+
+    write_recording_note(
+        root,
+        &audio_path,
+        strip_root(root, target_folder_path),
+        target_folder_path,
+        timestamp_ms,
+        file_name_format,
+    )?;
+    Ok(())
 }

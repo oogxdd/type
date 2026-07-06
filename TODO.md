@@ -6,6 +6,24 @@ Delete this file when the branch is ready for review.
 
 ## Deferred verification (do before merging)
 
+- [ ] Manual desktop verification of the recordings/transcription work
+      (Whisper streaming progress, asset-protocol audio playback, bulk audio
+      import — see `crates/type-core/src/adapters/recordings/`,
+      `apps/desktop/src-tauri/src/commands/recordings.rs` +
+      `apps/desktop/src/features/recording/`,
+      `apps/desktop/src/features/settings/components/desktop/transcription-section.tsx`).
+      This Sprite VM is headless — Rust compiles clean (`cargo check` on
+      type-core/desktop-tauri/type-ffi) and the frontend typechecks + existing
+      vitest suites pass, but nobody has actually run the Tauri app to watch:
+      (1) a live percentage during local Whisper transcription instead of the
+      old static spinner, (2) instant note switching between two audio notes
+      with working `<audio>` playback via `asset://` (and that playback is
+      still blocked while locked), (3) picking one-or-several existing audio
+      files in Settings → Transcription and getting one note per file, dated
+      to the source file's real mtime/birthtime, auto-queued for
+      transcription. Also sanity-check the new asset-protocol scope actually
+      narrows to `<notes_root>/Recordings` per profile (e.g. switch profiles
+      and confirm the old profile's folder is no longer asset-servable).
 - [ ] Full `cargo check --workspace` + `cargo test --workspace --lib` after M4
       (type-ffi crate added). Killed locally to save time — desktop crate does
       not depend on type-ffi, so risk is low. **CI on push covers this.**
