@@ -11,6 +11,11 @@ import {
   DialogTitle,
 } from "@/shared/ui/dialog";
 import { Input } from "@/shared/ui/input";
+import {
+  SettingsActionRow,
+  SettingsCard,
+  SettingsField,
+} from "../settings-ui";
 
 type ProfileManagerDialogProps = {
   open: boolean;
@@ -27,14 +32,6 @@ type ProfileManagerDialogProps = {
   deleteProfile: (profileId: string) => Promise<void>;
 };
 
-const cardClass = "space-y-3 rounded-lg border border-border/70 bg-card/30 p-4";
-const controlClass = "grid gap-2 text-sm";
-const labelClass = "text-sm font-medium text-foreground";
-const actionRowClass = "flex flex-wrap gap-2";
-
-/** Modal for creating, renaming, switching, and deleting profiles. Owns the
- *  create form + per-profile rename drafts; profile data and mutations are
- *  passed in from the profiles context. */
 export function ProfileManagerDialog({
   open,
   onOpenChange,
@@ -77,27 +74,24 @@ export function ProfileManagerDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <section className={cardClass}>
-            <h3 className="text-sm font-semibold text-foreground">Create profile</h3>
-            <label className={controlClass}>
-              <span className={labelClass}>Name</span>
+          <SettingsCard title="Create profile">
+            <SettingsField label="Name">
               <Input
                 type="text"
                 value={newProfileName}
                 onChange={(event) => setNewProfileName(event.target.value)}
                 placeholder="Work"
               />
-            </label>
-            <label className={controlClass}>
-              <span className={labelClass}>Description</span>
+            </SettingsField>
+            <SettingsField label="Description">
               <Input
                 type="text"
                 value={newProfileDescription}
                 onChange={(event) => setNewProfileDescription(event.target.value)}
                 placeholder="Short label for this profile"
               />
-            </label>
-            <div className={actionRowClass}>
+            </SettingsField>
+            <SettingsActionRow>
               <Button
                 type="button"
                 size="sm"
@@ -113,11 +107,10 @@ export function ProfileManagerDialog({
               >
                 {profilesBusy ? "Working..." : "Create profile"}
               </Button>
-            </div>
-          </section>
+            </SettingsActionRow>
+          </SettingsCard>
 
-          <section className={cardClass}>
-            <h3 className="text-sm font-semibold text-foreground">Existing profiles</h3>
+          <SettingsCard title="Existing profiles">
             {profiles.map((profile) => {
               const draft = profileDrafts[profile.id] ?? {
                 name: profile.name,
@@ -129,7 +122,7 @@ export function ProfileManagerDialog({
               return (
                 <div
                   key={profile.id}
-                  className="space-y-3 rounded-md border border-border/60 bg-background/50 p-3"
+                  className="space-y-3 rounded-md border border-border/50 bg-background/40 p-3"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -142,8 +135,7 @@ export function ProfileManagerDialog({
                       {activeProfileId === profile.id ? "Active" : "Switch"}
                     </Button>
                   </div>
-                  <label className={controlClass}>
-                    <span className={labelClass}>Name</span>
+                  <SettingsField label="Name">
                     <Input
                       type="text"
                       value={draft.name}
@@ -157,9 +149,8 @@ export function ProfileManagerDialog({
                         }))
                       }
                     />
-                  </label>
-                  <label className={controlClass}>
-                    <span className={labelClass}>Description</span>
+                  </SettingsField>
+                  <SettingsField label="Description">
                     <Input
                       type="text"
                       value={draft.description}
@@ -174,8 +165,8 @@ export function ProfileManagerDialog({
                       }
                       placeholder="Short label for this profile"
                     />
-                  </label>
-                  <div className={actionRowClass}>
+                  </SettingsField>
+                  <SettingsActionRow>
                     <Button
                       type="button"
                       variant="outline"
@@ -204,11 +195,11 @@ export function ProfileManagerDialog({
                     >
                       Delete
                     </Button>
-                  </div>
+                  </SettingsActionRow>
                 </div>
               );
             })}
-          </section>
+          </SettingsCard>
         </div>
         <DialogFooter showCloseButton />
       </DialogContent>

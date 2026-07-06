@@ -5,12 +5,13 @@ import { buildSyncDeepLink } from "@/features/sync/api/local-sync-link";
 import type { LocalSyncServerStatus } from "@typenotes/shared/types";
 import { Button } from "@/shared/ui/button";
 import { getErrorMessage } from "@typenotes/shared/errors";
+import {
+  SettingsActionRow,
+  SettingsCard,
+  SettingsErrorText,
+  SettingsHelpText,
+} from "@/features/settings/components/settings-ui";
 
-/**
- * Desktop-only "host" control: starts/stops a local `git daemon` so a phone on
- * the same Wi-Fi (or connected to the phone's hotspot) can sync over `git://`
- * with no external remote. Renders nothing on devices that cannot host (mobile).
- */
 export function LocalSyncServerCard() {
   const [status, setStatus] = useState<LocalSyncServerStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -50,7 +51,6 @@ export function LocalSyncServerCard() {
     window.setTimeout(() => setCopied((current) => (current === value ? null : current)), 1500);
   }, []);
 
-  // Hosting isn't possible on this device (e.g. iOS) — hide the card entirely.
   if (status && !status.supported) {
     return null;
   }
@@ -69,23 +69,18 @@ export function LocalSyncServerCard() {
   }, [status?.git_url, status?.branch, status?.host]);
 
   return (
-    <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
-      <div className="space-y-1">
-        <h3 className="text-sm font-semibold text-foreground">Local network server</h3>
-        <p className="text-xs text-muted-foreground">
-          Host this computer's notes over your local network so your phone can sync without an
-          internet remote — same Wi-Fi, or your phone's personal hotspot.
-        </p>
-      </div>
-
+    <SettingsCard
+      title="Local network server"
+      description="Host this computer's notes over your local network so your phone can sync without an internet remote — same Wi-Fi, or your phone's personal hotspot."
+    >
       {status && !status.git_available ? (
-        <p className="text-xs text-destructive">
+        <SettingsErrorText>
           Hosting needs the Git command-line tools. On macOS run <code>xcode-select --install</code>{" "}
           and try again.
-        </p>
+        </SettingsErrorText>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <SettingsActionRow>
         <Button
           size="sm"
           type="button"
@@ -104,21 +99,21 @@ export function LocalSyncServerCard() {
         <span className="text-xs text-muted-foreground">
           {running ? "Running — keep this app open while syncing." : "Stopped"}
         </span>
-      </div>
+      </SettingsActionRow>
 
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error ? <SettingsErrorText>{error}</SettingsErrorText> : null}
 
       {running ? (
         <div className="space-y-4">
           {status?.host ? null : (
-            <p className="text-xs text-destructive">
+            <SettingsErrorText>
               Couldn't auto-detect this computer's network address. Find it in System Settings →
               Network and use <code>git://&lt;your-ip&gt;/{status?.repo_path.split("/").pop()}</code>.
-            </p>
+            </SettingsErrorText>
           )}
 
           {deepLink ? (
-            <div className="flex flex-col items-center gap-2 rounded-md border border-border/70 bg-background/60 p-4">
+            <div className="flex flex-col items-center gap-2 rounded-md border border-border/50 bg-background/60 p-4">
               <div className="rounded-md bg-white p-3">
                 <QRCodeSVG value={deepLink} size={168} marginSize={0} />
               </div>
@@ -130,7 +125,7 @@ export function LocalSyncServerCard() {
           ) : null}
 
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">Or set it up by hand:</p>
+            <SettingsHelpText>Or set it up by hand:</SettingsHelpText>
             <UrlRow
               label="Remote URL"
               value={status?.git_url ?? ""}
@@ -145,7 +140,7 @@ export function LocalSyncServerCard() {
                 onCopy={copy}
               />
             ) : null}
-            <ol className="list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
+            <ol className="list-decimal space-y-1 pl-5 text-xs leading-relaxed text-muted-foreground">
               <li>On the phone: Settings → Sync → <strong>Find on local network</strong>, then tap this computer.</li>
               <li>
                 No luck? Settings → Profile → Git: paste the Remote URL, set Branch to{" "}
@@ -155,7 +150,7 @@ export function LocalSyncServerCard() {
           </div>
         </div>
       ) : null}
-    </section>
+    </SettingsCard>
   );
 }
 

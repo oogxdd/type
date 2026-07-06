@@ -11,6 +11,15 @@ import {
 } from "@typenotes/shared/format";
 import { Button } from "@/shared/ui/button";
 import { LocalSyncServerCard } from "@/features/sync/components/local-sync-server-card";
+import {
+  SettingsActionRow,
+  SettingsCard,
+  SettingsErrorText,
+  SettingsHelpText,
+  SettingsInfoGrid,
+  SettingsInfoRow,
+  SettingsSection,
+} from "../settings-ui";
 
 export function SettingsSyncSection() {
   const { syncSettings } = useProfiles();
@@ -44,128 +53,121 @@ export function SettingsSyncSection() {
   const visibleCommits = gitCommitHistory.slice(0, 8);
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground">Sync</h2>
-      </div>
-
-      <div className="space-y-4">
-        <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
-          <div className="overflow-hidden rounded-md border border-border/70">
-            <div className="flex items-center justify-between gap-4 border-b border-border/70 px-3 py-2 text-sm">
-              <span>Status</span>
-              <code className="text-xs">{gitStatus?.repo_initialized ? "Connected" : "Not connected"}</code>
-            </div>
-            <div className="flex items-center justify-between gap-4 border-b border-border/70 px-3 py-2 text-sm">
-              <span>Branch</span>
-              <code className="text-xs">{gitStatus?.current_branch || syncSettings.gitBranch || "-"}</code>
-            </div>
-            {gitStatus && (gitStatus.ahead > 0 || gitStatus.behind > 0) ? (
-              <div className="flex items-center justify-between gap-4 border-b border-border/70 px-3 py-2 text-sm">
-                <span>Ahead / behind</span>
-                <code className="text-xs">{gitStatus.ahead} / {gitStatus.behind}</code>
-              </div>
-            ) : null}
-            <div className="flex items-center justify-between gap-4 px-3 py-2 text-sm">
-              <span>Last sync</span>
-              <code className="text-xs">{lastSuccessfulSyncAt ?? "Never"}</code>
-            </div>
-          </div>
-
-          {gitSyncError ? (
-            <p className="text-xs text-destructive">{gitSyncError}</p>
+    <SettingsSection title="Sync">
+      <SettingsCard>
+        <SettingsInfoGrid>
+          <SettingsInfoRow label="Status">
+            <code className="text-xs">
+              {gitStatus?.repo_initialized ? "Connected" : "Not connected"}
+            </code>
+          </SettingsInfoRow>
+          <SettingsInfoRow label="Branch">
+            <code className="text-xs">
+              {gitStatus?.current_branch || syncSettings.gitBranch || "-"}
+            </code>
+          </SettingsInfoRow>
+          {gitStatus && (gitStatus.ahead > 0 || gitStatus.behind > 0) ? (
+            <SettingsInfoRow label="Ahead / behind">
+              <code className="text-xs">{gitStatus.ahead} / {gitStatus.behind}</code>
+            </SettingsInfoRow>
           ) : null}
-          {syncHint ? <p className="text-xs text-muted-foreground">{syncHint}</p> : null}
+          <SettingsInfoRow label="Last sync">
+            <code className="text-xs">{lastSuccessfulSyncAt ?? "Never"}</code>
+          </SettingsInfoRow>
+        </SettingsInfoGrid>
 
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              type="button"
-              onClick={() => void syncNow({ onAfterPull: () => refreshTree() })}
-              disabled={!canSync}
-            >
-              {gitSyncAction === "sync" ? "Syncing..." : "Sync now"}
-            </Button>
-            {!gitStatus?.repo_initialized ? (
-              <Button
-                variant="outline"
-                size="sm"
-                type="button"
-                onClick={() => void connectGitRepo()}
-                disabled={!canConnect}
-              >
-                {gitSyncAction === "connect" ? "Connecting..." : "Connect"}
-              </Button>
-            ) : null}
-            <Button
-              variant="secondary"
-              size="sm"
-              type="button"
-              onClick={() => void gitPull({ onAfterPull: () => refreshTree() })}
-              disabled={!canPull}
-            >
-              {gitSyncAction === "pull" ? "Pulling..." : "Pull"}
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              type="button"
-              onClick={() => void gitPush()}
-              disabled={!canPush}
-            >
-              {gitSyncAction === "push" ? "Pushing..." : "Push"}
-            </Button>
+        {gitSyncError ? (
+          <SettingsErrorText>{gitSyncError}</SettingsErrorText>
+        ) : null}
+        {syncHint ? <SettingsHelpText>{syncHint}</SettingsHelpText> : null}
+
+        <SettingsActionRow>
+          <Button
+            size="sm"
+            type="button"
+            onClick={() => void syncNow({ onAfterPull: () => refreshTree() })}
+            disabled={!canSync}
+          >
+            {gitSyncAction === "sync" ? "Syncing..." : "Sync now"}
+          </Button>
+          {!gitStatus?.repo_initialized ? (
             <Button
               variant="outline"
               size="sm"
               type="button"
-              onClick={() => {
-                void refreshGitStatus();
-                void refreshGitHistory();
-              }}
-              disabled={gitSyncBusy || gitHistoryBusy}
+              onClick={() => void connectGitRepo()}
+              disabled={!canConnect}
             >
-              {gitSyncAction === "refresh" || gitHistoryBusy ? "Refreshing..." : "Refresh"}
+              {gitSyncAction === "connect" ? "Connecting..." : "Connect"}
             </Button>
-          </div>
-        </section>
+          ) : null}
+          <Button
+            variant="secondary"
+            size="sm"
+            type="button"
+            onClick={() => void gitPull({ onAfterPull: () => refreshTree() })}
+            disabled={!canPull}
+          >
+            {gitSyncAction === "pull" ? "Pulling..." : "Pull"}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            type="button"
+            onClick={() => void gitPush()}
+            disabled={!canPush}
+          >
+            {gitSyncAction === "push" ? "Pushing..." : "Push"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            type="button"
+            onClick={() => {
+              void refreshGitStatus();
+              void refreshGitHistory();
+            }}
+            disabled={gitSyncBusy || gitHistoryBusy}
+          >
+            {gitSyncAction === "refresh" || gitHistoryBusy ? "Refreshing..." : "Refresh"}
+          </Button>
+        </SettingsActionRow>
+      </SettingsCard>
 
-        <LocalSyncServerCard />
+      <LocalSyncServerCard />
 
-        {visibleCommits.length > 0 || gitHistoryBusy ? (
-          <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
-            <h3 className="text-sm font-semibold text-foreground">Recent commits</h3>
-            {gitHistoryError ? (
-              <p className="text-xs text-destructive">{gitHistoryError}</p>
-            ) : null}
-            <div className="overflow-hidden rounded-md border border-border/70">
-              {visibleCommits.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-muted-foreground">Loading...</div>
-              ) : (
-                visibleCommits.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between gap-3 border-b border-border/70 px-3 py-2.5 last:border-b-0"
-                  >
-                    <span className="grid min-w-0 gap-1">
-                      <span className="text-sm font-medium text-foreground">
-                        {formatCommitSummaryForApp(item.summary)}
-                      </span>
-                      <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <code>{item.short_id}</code>
-                        <span>{formatGitCommitTime(item.authored_ms)}</span>
-                      </span>
+      {visibleCommits.length > 0 || gitHistoryBusy ? (
+        <SettingsCard title="Recent commits">
+          {gitHistoryError ? (
+            <SettingsErrorText>{gitHistoryError}</SettingsErrorText>
+          ) : null}
+          <SettingsInfoGrid>
+            {visibleCommits.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">Loading...</div>
+            ) : (
+              visibleCommits.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 border-b border-border/50 px-3 py-2.5 last:border-b-0"
+                >
+                  <span className="grid min-w-0 gap-1">
+                    <span className="text-sm font-medium text-foreground">
+                      {formatCommitSummaryForApp(item.summary)}
                     </span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatGitCommitStateLabel(item.sync_state)}
+                    <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <code>{item.short_id}</code>
+                      <span>{formatGitCommitTime(item.authored_ms)}</span>
                     </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-        ) : null}
-      </div>
-    </div>
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatGitCommitStateLabel(item.sync_state)}
+                  </span>
+                </div>
+              ))
+            )}
+          </SettingsInfoGrid>
+        </SettingsCard>
+      ) : null}
+    </SettingsSection>
   );
 }

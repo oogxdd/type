@@ -6,11 +6,15 @@ import { useAudioImport } from "@/features/recording/hooks/use-audio-import";
 import { Button } from "@/shared/ui/button";
 import type { RecordingListItem, TranscriptionProgress } from "@typenotes/shared/types";
 import { WhisperEngineCard } from "./whisper-engine-card";
+import {
+  SettingsActionRow,
+  SettingsCard,
+  SettingsErrorText,
+  SettingsHelpText,
+  SettingsInfoGrid,
+  SettingsSection,
+} from "../settings-ui";
 
-const cardClass = "space-y-3 rounded-lg border border-border/70 bg-card/30 p-4";
-
-/** Normalised, display-ready status for a recording (queued/processing take
- *  precedence over the persisted note status). */
 type DisplayStatus =
   | "completed"
   | "processing"
@@ -88,12 +92,40 @@ function recordingTitle(notePath: string): string {
 
 function transcriptionPercent(progress: TranscriptionProgress): number {
   if (progress.total_seconds <= 0) return 0;
-  return Math.min(100, Math.round((progress.processed_seconds / progress.total_seconds) * 100));
+  return Math.min(
+    100,
+    Math.round((progress.processed_seconds / progress.total_seconds) * 100)
+  );
 }
 
 function audioImportPercent(status: { processed: number; total: number }): number {
   if (status.total <= 0) return 0;
   return Math.min(100, Math.round((status.processed / status.total) * 100));
+}
+
+function StatBadge({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: "destructive";
+}) {
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <span
+        className={`text-base font-semibold tabular-nums ${
+          tone === "destructive" && value > 0
+            ? "text-destructive"
+            : "text-foreground"
+        }`}
+      >
+        {value}
+      </span>
+      <span className="text-xs text-muted-foreground">{label}</span>
+    </div>
+  );
 }
 
 export function SettingsTranscriptionSection() {
@@ -132,7 +164,6 @@ export function SettingsTranscriptionSection() {
     [resolveAudioSrc]
   );
 
-  // Navigate to the note itself. AppShell listens for this and leaves Settings.
   const openNote = useCallback((notePath: string) => {
     window.dispatchEvent(
       new CustomEvent("open-note", { detail: { notePath } })
@@ -152,7 +183,6 @@ export function SettingsTranscriptionSection() {
     void refreshRecordings();
   }, [refreshRecordings]);
 
-  // Live polling while any job is queued or processing.
   const hasActiveWork =
     (recordingsQueue?.in_flight ?? 0) > 0 ||
     recordingsList.some((item) => item.is_queued || item.is_processing);
@@ -207,48 +237,44 @@ export function SettingsTranscriptionSection() {
   }, [failedItems, retriggerTranscription, setPathBusy]);
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-          Transcription
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Transcribe your voice recordings locally with Whisper. Trigger one
-          recording or all pending at once, and watch their status live.
-        </p>
-      </div>
-
+    <SettingsSection
+      title="Transcription"
+      description="Transcribe your voice recordings locally with Whisper. Trigger one recording or all pending at once, and watch their status live."
+    >
       <WhisperEngineCard
         whisperModel={syncSettings.whisperModel}
         onWhisperModelChange={(value) => updateSyncSettings({ whisperModel: value })}
       />
 
-      {/* ── Import existing audio files ────────────────────────────────── */}
-      <section className={cardClass}>
-        <h3 className="text-sm font-semibold text-foreground">Import audio files</h3>
-        <p className="text-xs text-muted-foreground">
-          Bring in audio you already recorded elsewhere (e.g. iPhone Voice
-          Memos exported to disk). Each file becomes its own note, dated to
-          when the recording was actually made, and is queued for
-          transcription automatically.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
+      <SettingsCard
+        title="Import audio files"
+        description="Bring in audio you already recorded elsewhere. Each file becomes its own note, dated to when the recording was actually made, and is queued for transcription automatically."
+      >
+        <SettingsActionRow>
           <Button
             type="button"
             size="sm"
             onClick={() => void pickAndImport()}
             disabled={audioImportPhase === "importing"}
           >
-            {audioImportPhase === "importing" ? "Importing…" : "Choose audio file(s)…"}
+            {audioImportPhase === "importing"
+              ? "Importing…"
+              : "Choose audio file(s)…"}
           </Button>
           {audioImportPhase === "done" ? (
-            <Button type="button" size="sm" variant="secondary" onClick={resetAudioImport}>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={resetAudioImport}
+            >
               Import more
             </Button>
           ) : null}
-        </div>
+        </SettingsActionRow>
 
-        {audioImportStatus && (audioImportPhase === "importing" || audioImportPhase === "done") ? (
+        {audioImportStatus &&
+        (audioImportPhase === "importing" || audioImportPhase === "done") ? (
           <>
             <div className="h-2 w-full overflow-hidden rounded bg-muted">
               <div
@@ -263,14 +289,16 @@ export function SettingsTranscriptionSection() {
               <span>{audioImportPercent(audioImportStatus)}%</span>
             </div>
             {audioImportPhase === "importing" && audioImportStatus.current ? (
-              <p className="truncate text-xs text-muted-foreground">
+              <SettingsHelpText className="truncate text-xs text-muted-foreground">
                 {audioImportStatus.current}
-              </p>
+              </SettingsHelpText>
             ) : null}
-            <p className="text-xs text-muted-foreground">
+            <SettingsHelpText>
               Imported {audioImportStatus.imported}
-              {audioImportStatus.failed > 0 ? ` · ${audioImportStatus.failed} failed` : ""}
-            </p>
+              {audioImportStatus.failed > 0
+                ? ` · ${audioImportStatus.failed} failed`
+                : ""}
+            </SettingsHelpText>
             {audioImportPhase === "done" && audioImportStatus.errors.length > 0 ? (
               <details className="text-xs text-muted-foreground">
                 <summary className="cursor-pointer text-destructive">
@@ -287,11 +315,12 @@ export function SettingsTranscriptionSection() {
             ) : null}
           </>
         ) : null}
-        {audioImportError ? <p className="text-xs text-destructive">{audioImportError}</p> : null}
-      </section>
+        {audioImportError ? (
+          <SettingsErrorText>{audioImportError}</SettingsErrorText>
+        ) : null}
+      </SettingsCard>
 
-      {/* ── Overview + bulk actions ────────────────────────────────────── */}
-      <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
+      <SettingsCard>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
           <StatBadge label="Recordings" value={recordingsList.length} />
           <StatBadge label="Transcribing" value={counts.processing} />
@@ -303,18 +332,20 @@ export function SettingsTranscriptionSection() {
 
         {recordingsQueue?.current_recording ? (
           <div className="space-y-1.5">
-            <p className="text-xs text-muted-foreground">
+            <SettingsHelpText>
               Now transcribing:{" "}
               <code className="text-[11px]">
                 {recordingTitle(recordingsQueue.current_recording)}
               </code>
-            </p>
+            </SettingsHelpText>
             {recordingsQueue.progress ? (
               <>
                 <div className="h-2 w-full overflow-hidden rounded bg-muted">
                   <div
                     className="h-full rounded bg-primary transition-all"
-                    style={{ width: `${transcriptionPercent(recordingsQueue.progress)}%` }}
+                    style={{
+                      width: `${transcriptionPercent(recordingsQueue.progress)}%`,
+                    }}
                   />
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-muted-foreground">
@@ -329,10 +360,10 @@ export function SettingsTranscriptionSection() {
           </div>
         ) : null}
         {recordingStatusMessage ? (
-          <p className="text-xs text-muted-foreground">{recordingStatusMessage}</p>
+          <SettingsHelpText>{recordingStatusMessage}</SettingsHelpText>
         ) : null}
 
-        <div className="flex flex-wrap gap-2">
+        <SettingsActionRow>
           <Button
             size="sm"
             type="button"
@@ -360,16 +391,14 @@ export function SettingsTranscriptionSection() {
               Retry failed ({failedItems.length})
             </Button>
           ) : null}
-        </div>
+        </SettingsActionRow>
         {recordingsError ? (
-          <p className="text-xs text-destructive">{recordingsError}</p>
+          <SettingsErrorText>{recordingsError}</SettingsErrorText>
         ) : null}
-      </section>
+      </SettingsCard>
 
-      {/* ── Per-recording list ─────────────────────────────────────────── */}
-      <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
-        <h3 className="text-sm font-semibold text-foreground">Recordings</h3>
-        <div className="overflow-hidden rounded-md border border-border/70">
+      <SettingsCard title="Recordings">
+        <SettingsInfoGrid>
           {recordingsList.length === 0 ? (
             <div className="px-3 py-6 text-center text-xs text-muted-foreground">
               No recordings yet. Record some audio and it will show up here.
@@ -389,7 +418,7 @@ export function SettingsTranscriptionSection() {
               return (
                 <div
                   key={item.note_path}
-                  className="flex flex-col gap-2 border-b border-border/70 px-3 py-3 last:border-b-0"
+                  className="flex flex-col gap-2 border-b border-border/50 px-3 py-3 last:border-b-0"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <button
@@ -409,7 +438,7 @@ export function SettingsTranscriptionSection() {
                   </div>
 
                   {item.error ? (
-                    <p className="text-xs text-destructive break-words">
+                    <p className="break-words text-xs text-destructive">
                       {item.error}
                     </p>
                   ) : null}
@@ -446,8 +475,8 @@ export function SettingsTranscriptionSection() {
               );
             })
           )}
-        </div>
-      </section>
+        </SettingsInfoGrid>
+      </SettingsCard>
 
       {playingSrc ? (
         <audio
@@ -458,31 +487,6 @@ export function SettingsTranscriptionSection() {
           aria-label="Recording playback"
         />
       ) : null}
-    </div>
-  );
-}
-
-function StatBadge({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone?: "destructive";
-}) {
-  return (
-    <div className="flex items-baseline gap-1.5">
-      <span
-        className={`text-base font-semibold tabular-nums ${
-          tone === "destructive" && value > 0
-            ? "text-destructive"
-            : "text-foreground"
-        }`}
-      >
-        {value}
-      </span>
-      <span className="text-xs text-muted-foreground">{label}</span>
-    </div>
+    </SettingsSection>
   );
 }

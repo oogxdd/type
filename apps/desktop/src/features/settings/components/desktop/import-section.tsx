@@ -2,8 +2,14 @@ import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-conte
 import { useAppleImport } from "@/features/import/hooks/use-apple-import";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
-
-const cardClass = "space-y-3 rounded-lg border border-border/70 bg-card/30 p-4";
+import {
+  SettingsActionRow,
+  SettingsCard,
+  SettingsErrorText,
+  SettingsField,
+  SettingsHelpText,
+  SettingsSection,
+} from "../settings-ui";
 
 export function SettingsImportSection() {
   const { refreshTree } = useNotesTree();
@@ -29,56 +35,50 @@ export function SettingsImportSection() {
       : 0;
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground">Import</h2>
-        <p className="text-sm text-muted-foreground">
-          Bring in notes exported from Apple Notes, preserving their folders and
-          original dates.
-        </p>
-      </div>
-
-      <section className={cardClass}>
-        <h3 className="text-sm font-semibold text-foreground">Apple Notes folder</h3>
-        <p className="text-xs text-muted-foreground">
+    <SettingsSection
+      title="Import"
+      description="Bring in notes exported from Apple Notes, preserving their folders and original dates."
+    >
+      <SettingsCard title="Apple Notes folder">
+        <SettingsHelpText>
           Apple Notes has no bulk export. On a Mac, export your notes to a folder
           of files — for example with the free <strong>Exporter</strong> app — then
           choose that folder here. Markdown, plain-text, and HTML notes are all
           supported; attachments and images are skipped.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
+        </SettingsHelpText>
+        <SettingsActionRow>
           <Button type="button" size="sm" onClick={() => void pickFolder()} disabled={importing}>
             {sourcePath ? "Choose a different folder…" : "Choose folder…"}
           </Button>
           {sourcePath ? (
-            <code className="text-xs break-all text-muted-foreground">{sourcePath}</code>
+            <code className="break-all text-xs text-muted-foreground">{sourcePath}</code>
           ) : (
             <span className="text-xs text-muted-foreground">No folder selected</span>
           )}
-        </div>
+        </SettingsActionRow>
         {phase === "scanning" ? (
-          <p className="text-xs text-muted-foreground">Scanning folder…</p>
+          <SettingsHelpText>Scanning folder…</SettingsHelpText>
         ) : null}
-      </section>
+      </SettingsCard>
 
       {scan ? (
-        <section className={cardClass}>
-          <h3 className="text-sm font-semibold text-foreground">
-            Found {scan.note_count} {scan.note_count === 1 ? "note" : "notes"}
-            {scan.folder_count > 0
+        <SettingsCard
+          title={`Found ${scan.note_count} ${scan.note_count === 1 ? "note" : "notes"}${
+            scan.folder_count > 0
               ? ` across ${scan.folder_count} ${scan.folder_count === 1 ? "folder" : "folders"}`
-              : ""}
-          </h3>
+              : ""
+          }`}
+        >
           {scan.sample_titles.length > 0 ? (
-            <p className="text-xs text-muted-foreground break-all">
+            <SettingsHelpText>
               e.g. {scan.sample_titles.join(", ")}…
-            </p>
+            </SettingsHelpText>
           ) : null}
           {scan.skipped_files > 0 ? (
-            <p className="text-xs text-muted-foreground">
+            <SettingsHelpText>
               {scan.skipped_files} non-text {scan.skipped_files === 1 ? "file" : "files"}{" "}
               (attachments/images) will be skipped.
-            </p>
+            </SettingsHelpText>
           ) : null}
 
           <div className="grid gap-2 pt-1">
@@ -94,7 +94,7 @@ export function SettingsImportSection() {
               />
               <span>
                 <span className="font-medium">Preserve folder structure</span>
-                <span className="block text-xs text-muted-foreground">
+                <span className="block text-xs leading-relaxed text-muted-foreground">
                   Recreate the Apple Notes folders inside one folder in your notes.
                 </span>
               </span>
@@ -110,7 +110,7 @@ export function SettingsImportSection() {
               />
               <span>
                 <span className="font-medium">Flatten everything into Feed</span>
-                <span className="block text-xs text-muted-foreground">
+                <span className="block text-xs leading-relaxed text-muted-foreground">
                   Drop every note straight into Feed, discarding the folders.
                 </span>
               </span>
@@ -118,8 +118,7 @@ export function SettingsImportSection() {
           </div>
 
           {mode === "preserve" ? (
-            <label className="grid gap-2 text-sm">
-              <span className="text-sm font-medium text-foreground">Import into folder</span>
+            <SettingsField label="Import into folder">
               <Input
                 type="text"
                 value={targetFolder}
@@ -129,10 +128,10 @@ export function SettingsImportSection() {
                 autoCapitalize="off"
                 autoCorrect="off"
               />
-            </label>
+            </SettingsField>
           ) : null}
 
-          <div className="flex flex-wrap gap-2 pt-1">
+          <SettingsActionRow>
             <Button
               type="button"
               size="sm"
@@ -146,15 +145,12 @@ export function SettingsImportSection() {
                 Import another folder
               </Button>
             ) : null}
-          </div>
-        </section>
+          </SettingsActionRow>
+        </SettingsCard>
       ) : null}
 
       {status && (importing || phase === "done") ? (
-        <section className={cardClass}>
-          <h3 className="text-sm font-semibold text-foreground">
-            {phase === "done" ? "Import complete" : "Importing…"}
-          </h3>
+        <SettingsCard title={phase === "done" ? "Import complete" : "Importing…"}>
           <div className="h-2 w-full overflow-hidden rounded bg-muted">
             <div
               className="h-full rounded bg-primary transition-all"
@@ -170,12 +166,12 @@ export function SettingsImportSection() {
           {importing && status.current ? (
             <p className="truncate text-xs text-muted-foreground">{status.current}</p>
           ) : null}
-          <p className="text-xs text-muted-foreground">
+          <SettingsHelpText>
             Imported {status.imported}
             {status.failed > 0 ? ` · ${status.failed} failed` : ""}
             {status.folders_created > 0 ? ` · ${status.folders_created} folders` : ""}
             {status.target_folder ? ` → ${status.target_folder}` : ""}
-          </p>
+          </SettingsHelpText>
           {phase === "done" && status.errors.length > 0 ? (
             <details className="text-xs text-muted-foreground">
               <summary className="cursor-pointer text-destructive">
@@ -190,10 +186,10 @@ export function SettingsImportSection() {
               </ul>
             </details>
           ) : null}
-        </section>
+        </SettingsCard>
       ) : null}
 
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
-    </div>
+      {error ? <SettingsErrorText>{error}</SettingsErrorText> : null}
+    </SettingsSection>
   );
 }
