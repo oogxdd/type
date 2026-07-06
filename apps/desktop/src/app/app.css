@@ -211,9 +211,7 @@ body {
 
 .tree-pane,
 .notes-pane,
-.settings-sections-pane,
-.editor-pane,
-.settings-detail-pane {
+.editor-pane {
   height: 100%;
   min-height: 0;
 }
@@ -429,103 +427,6 @@ body {
   white-space: nowrap;
   min-width: 0;
 }
-
-.settings-sections-pane .pane-body {
-  padding: calc(8px + var(--left-panels-drag-height)) 10px 10px;
-  display: grid;
-  align-content: start;
-  gap: 8px;
-  background: var(--ui-pane);
-}
-
-.settings-nav-list {
-  display: grid;
-  gap: 2px;
-}
-
-.settings-row {
-  width: 100%;
-  border: 1px solid transparent;
-  background: transparent;
-  padding: 8px 9px;
-  text-align: left;
-  cursor: pointer;
-  justify-content: flex-start;
-  align-items: flex-start;
-  height: auto;
-  min-height: 0;
-  border-radius: 8px;
-  font-weight: 400;
-  gap: 0;
-  transition: border-color 140ms ease, background 140ms ease;
-}
-
-.settings-row:hover {
-  background: color-mix(in srgb, var(--ui-select) 62%, transparent);
-}
-
-.settings-row:focus-visible {
-  outline: none;
-  border-color: color-mix(in srgb, var(--ui-border-strong) 65%, transparent);
-  box-shadow: none;
-}
-
-.settings-row.selected {
-  background: var(--ui-select);
-  border-color: color-mix(in srgb, var(--ui-border) 80%, transparent);
-  box-shadow: none;
-}
-
-.settings-row-icon {
-  display: none;
-}
-
-.settings-row-main {
-  min-width: 0;
-  width: 100%;
-}
-
-.settings-row-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ui-text);
-}
-
-.settings-row-subline {
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--ui-muted);
-  line-height: 1.4;
-}
-
-.settings-row-arrow {
-  display: none;
-}
-
-.settings-detail-pane .pane-body {
-  padding: 16px 18px 22px;
-  background: var(--ui-pane);
-}
-
-.settings-detail-shell {
-  max-width: 860px;
-  margin: 0 auto;
-  display: grid;
-  gap: 0;
-  padding-bottom: 6px;
-}
-
-
-@media (max-width: 1320px) {
-  .settings-detail-pane .pane-body {
-    padding: 14px 14px 18px;
-  }
-
-  .settings-detail-shell {
-    max-width: 100%;
-  }
-}
-
 
 .nav-top-stack {
   display: grid;
@@ -1507,23 +1408,13 @@ body {
   background: rgba(33, 35, 40, 0.74);
 }
 
-.app.theme-dark .settings-detail-pane,
 .app.theme-dark .editor-pane {
-  background: rgba(26, 28, 33, 0.8);
-}
-
-.app.theme-dark .settings-sections-pane {
   background: rgba(26, 28, 33, 0.8);
 }
 
 .app.theme-dark .notes-pane .pane-body {
   background: rgba(34, 36, 41, 0.9);
   padding: calc(8px + var(--left-panels-drag-height)) 8px 10px;
-}
-
-.app.theme-dark .settings-sections-pane .pane-body {
-  padding: calc(8px + var(--left-panels-drag-height)) 10px 10px;
-  background: rgba(24, 26, 30, 0.92);
 }
 
 .app.theme-dark .note-row {
@@ -1555,70 +1446,6 @@ body {
 .app.theme-dark .note-row-snippet {
   color: #a9b2be;
 }
-
-.app.theme-dark .settings-nav-hero {
-  background: none;
-  border: none;
-  box-shadow: none;
-}
-
-.app.theme-dark .settings-nav-kicker {
-  color: #a9b2be;
-}
-
-.app.theme-dark .settings-nav-title {
-  color: #f1f4f8;
-}
-
-.app.theme-dark .settings-nav-caption {
-  color: #a9b2be;
-}
-
-.app.theme-dark .settings-row {
-  margin: 0;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: #dfe5ee;
-}
-
-.app.theme-dark .settings-row:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: transparent;
-}
-
-.app.theme-dark .settings-row:focus-visible {
-  border-color: #59667a;
-  box-shadow: none;
-}
-
-.app.theme-dark .settings-row.selected {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.14);
-  box-shadow: none;
-}
-
-.app.theme-dark .settings-row-icon {
-  display: none;
-}
-
-.app.theme-dark .settings-row-title {
-  color: #edf3fb;
-}
-
-.app.theme-dark .settings-row-subline {
-  color: #9fb0c2;
-}
-
-.app.theme-dark .settings-row-arrow {
-  display: none;
-}
-
-.app.theme-dark .settings-detail-pane .pane-body {
-  padding: 16px 18px 22px;
-  background: rgba(24, 26, 30, 0.92);
-}
-
 
 .app.theme-dark .editor-body {
   background: rgba(24, 26, 30, 0.92);
@@ -1745,8 +1572,7 @@ body {
   padding-top: calc(24px + var(--left-panels-drag-height));
 }
 
-.app.theme-dark .editor-pane,
-.app.theme-dark .settings-detail-pane {
+.app.theme-dark .editor-pane {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
