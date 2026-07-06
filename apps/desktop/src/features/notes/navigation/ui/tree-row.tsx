@@ -79,9 +79,7 @@ export function TreeRow({
     transform: isDragging ? undefined : CSS.Translate.toString(transform),
     paddingLeft: 12 + depth * indentationWidth,
   } as React.CSSProperties;
-  const guideBaseLeft = feedMode
-    ? 12 + indentationWidth / 2
-    : 12 + 20 + 6 + 8;
+  const guideBaseLeft = 12 + indentationWidth / 2;
 
   return (
     <div

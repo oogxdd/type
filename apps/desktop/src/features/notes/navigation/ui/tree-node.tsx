@@ -108,7 +108,6 @@ export function TreeNode({
               onSelect={onNoteSelect}
               onContextMenu={onNoteContextMenu}
               draggable={draggable}
-              showGuides={feedMode}
             />
           ))}
           {node.children.map((child) => (

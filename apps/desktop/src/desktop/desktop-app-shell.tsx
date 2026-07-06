@@ -398,7 +398,6 @@ export function DesktopAppShell({
               cancelRenameFolder={cancelRenameFolder}
               onContextMenu={handleFolderContextMenu}
               indentationWidth={indentationWidth}
-              embedded
             />
           </TabsContent>
         </Tabs>
