@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
+import {
+  SettingsActionRow,
+  SettingsCard,
+  SettingsField,
+  SettingsHelpText,
+} from "../settings-ui";
 
 export type GitDraftSettings = {
   gitRemoteUrl: string;
@@ -10,7 +16,6 @@ export type GitDraftSettings = {
   gitPassword: string;
 };
 
-// Pick just the git fields out of the (larger) profile sync settings.
 const getGitDraft = (settings: GitDraftSettings): GitDraftSettings => ({
   gitRemoteUrl: settings.gitRemoteUrl,
   gitBranch: settings.gitBranch,
@@ -26,21 +31,9 @@ type GitSettingsCardProps = {
   onApply: (next: GitDraftSettings) => void;
 };
 
-const cardClass = "space-y-3 rounded-lg border border-border/70 bg-card/30 p-4";
-const controlClass = "grid gap-2 text-sm";
-const labelClass = "text-sm font-medium text-foreground";
-const hintClass = "text-xs text-muted-foreground";
-
-/**
- * Git sync settings form. Edits are buffered in a local draft and only pushed
- * to the profile (via onApply) when the user clicks "Apply Git settings". The
- * draft resets on profile switch and stays synced to external changes while it
- * has no unsaved edits.
- */
 export function GitSettingsCard({ gitSettings, activeProfileId, busy, onApply }: GitSettingsCardProps) {
   const [gitDraft, setGitDraft] = useState<GitDraftSettings>(() => getGitDraft(gitSettings));
 
-  // Reset the draft when the active profile changes.
   useEffect(() => {
     setGitDraft(getGitDraft(gitSettings));
   }, [activeProfileId]);
@@ -52,7 +45,6 @@ export function GitSettingsCard({ gitSettings, activeProfileId, busy, onApply }:
     gitDraft.gitUsername !== gitSettings.gitUsername ||
     gitDraft.gitPassword !== gitSettings.gitPassword;
 
-  // Absorb external setting changes while the draft has no unsaved edits.
   useEffect(() => {
     if (hasUnsavedGitChanges) {
       return;
@@ -61,28 +53,24 @@ export function GitSettingsCard({ gitSettings, activeProfileId, busy, onApply }:
   }, [hasUnsavedGitChanges, gitSettings]);
 
   return (
-    <section className={cardClass}>
-      <h3 className="text-sm font-semibold text-foreground">Git</h3>
-      <label className={controlClass}>
-        <span className={labelClass}>Remote URL</span>
+    <SettingsCard title="Git">
+      <SettingsField label="Remote URL">
         <Input
           type="text"
           value={gitDraft.gitRemoteUrl}
           onChange={(event) => setGitDraft((prev) => ({ ...prev, gitRemoteUrl: event.target.value }))}
           placeholder="git://192.168.1.15/notes.git"
         />
-      </label>
-      <label className={controlClass}>
-        <span className={labelClass}>Branch</span>
+      </SettingsField>
+      <SettingsField label="Branch">
         <Input
           type="text"
           value={gitDraft.gitBranch}
           onChange={(event) => setGitDraft((prev) => ({ ...prev, gitBranch: event.target.value }))}
           placeholder="main"
         />
-      </label>
-      <label className={controlClass}>
-        <span className={labelClass}>Commit message</span>
+      </SettingsField>
+      <SettingsField label="Commit message">
         <Input
           type="text"
           value={gitDraft.gitCommitMessage}
@@ -91,9 +79,8 @@ export function GitSettingsCard({ gitSettings, activeProfileId, busy, onApply }:
           }
           placeholder="Sync notes"
         />
-      </label>
-      <label className={controlClass}>
-        <span className={labelClass}>Username</span>
+      </SettingsField>
+      <SettingsField label="Username">
         <Input
           type="text"
           value={gitDraft.gitUsername}
@@ -102,9 +89,8 @@ export function GitSettingsCard({ gitSettings, activeProfileId, busy, onApply }:
           autoCapitalize="off"
           autoCorrect="off"
         />
-      </label>
-      <label className={controlClass}>
-        <span className={labelClass}>Password / Token</span>
+      </SettingsField>
+      <SettingsField label="Password / Token">
         <Input
           type="password"
           value={gitDraft.gitPassword}
@@ -113,8 +99,8 @@ export function GitSettingsCard({ gitSettings, activeProfileId, busy, onApply }:
           autoCapitalize="off"
           autoCorrect="off"
         />
-      </label>
-      <div className="flex flex-wrap gap-2">
+      </SettingsField>
+      <SettingsActionRow>
         <Button
           type="button"
           variant="outline"
@@ -124,14 +110,14 @@ export function GitSettingsCard({ gitSettings, activeProfileId, busy, onApply }:
         >
           Apply Git settings
         </Button>
-      </div>
-      <p className={hintClass}>
+      </SettingsActionRow>
+      <SettingsHelpText>
         Changes only take effect after clicking Apply Git settings.
         {hasUnsavedGitChanges ? " You have unsaved changes." : ""}
-      </p>
-      <p className={hintClass}>
+      </SettingsHelpText>
+      <SettingsHelpText>
         Supported remote schemes: <code>git://</code>, <code>ssh://</code>, and <code>https://</code>.
-      </p>
-    </section>
+      </SettingsHelpText>
+    </SettingsCard>
   );
 }

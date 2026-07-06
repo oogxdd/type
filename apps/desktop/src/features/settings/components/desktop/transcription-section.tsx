@@ -5,9 +5,15 @@ import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { Button } from "@/shared/ui/button";
 import type { RecordingListItem } from "@typenotes/shared/types";
 import { WhisperEngineCard } from "./whisper-engine-card";
+import {
+  SettingsActionRow,
+  SettingsCard,
+  SettingsErrorText,
+  SettingsHelpText,
+  SettingsInfoGrid,
+  SettingsSection,
+} from "../settings-ui";
 
-/** Normalised, display-ready status for a recording (queued/processing take
- *  precedence over the persisted note status). */
 type DisplayStatus =
   | "completed"
   | "processing"
@@ -83,6 +89,31 @@ function recordingTitle(notePath: string): string {
   return file.replace(/\.md$/i, "");
 }
 
+function StatBadge({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: "destructive";
+}) {
+  return (
+    <div className="flex items-baseline gap-1.5">
+      <span
+        className={`text-base font-semibold tabular-nums ${
+          tone === "destructive" && value > 0
+            ? "text-destructive"
+            : "text-foreground"
+        }`}
+      >
+        {value}
+      </span>
+      <span className="text-xs text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
 export function SettingsTranscriptionSection() {
   const { syncSettings, updateSyncSettings } = useProfiles();
   const {
@@ -102,7 +133,6 @@ export function SettingsTranscriptionSection() {
 
   const [busyPaths, setBusyPaths] = useState<Set<string>>(new Set());
 
-  // Navigate to the note itself. AppShell listens for this and leaves Settings.
   const openNote = useCallback((notePath: string) => {
     window.dispatchEvent(
       new CustomEvent("open-note", { detail: { notePath } })
@@ -122,7 +152,6 @@ export function SettingsTranscriptionSection() {
     void refreshRecordings();
   }, [refreshRecordings]);
 
-  // Live polling while any job is queued or processing.
   const hasActiveWork =
     (recordingsQueue?.in_flight ?? 0) > 0 ||
     recordingsList.some((item) => item.is_queued || item.is_processing);
@@ -177,24 +206,16 @@ export function SettingsTranscriptionSection() {
   }, [failedItems, retriggerTranscription, setPathBusy]);
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-          Transcription
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Transcribe your voice recordings locally with Whisper. Trigger one
-          recording or all pending at once, and watch their status live.
-        </p>
-      </div>
-
+    <SettingsSection
+      title="Transcription"
+      description="Transcribe your voice recordings locally with Whisper. Trigger one recording or all pending at once, and watch their status live."
+    >
       <WhisperEngineCard
         whisperModel={syncSettings.whisperModel}
         onWhisperModelChange={(value) => updateSyncSettings({ whisperModel: value })}
       />
 
-      {/* ── Overview + bulk actions ────────────────────────────────────── */}
-      <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
+      <SettingsCard>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
           <StatBadge label="Recordings" value={recordingsList.length} />
           <StatBadge label="Transcribing" value={counts.processing} />
@@ -205,18 +226,18 @@ export function SettingsTranscriptionSection() {
         </div>
 
         {recordingsQueue?.current_recording ? (
-          <p className="text-xs text-muted-foreground">
+          <SettingsHelpText>
             Now transcribing:{" "}
             <code className="text-[11px]">
               {recordingTitle(recordingsQueue.current_recording)}
             </code>
-          </p>
+          </SettingsHelpText>
         ) : null}
         {recordingStatusMessage ? (
-          <p className="text-xs text-muted-foreground">{recordingStatusMessage}</p>
+          <SettingsHelpText>{recordingStatusMessage}</SettingsHelpText>
         ) : null}
 
-        <div className="flex flex-wrap gap-2">
+        <SettingsActionRow>
           <Button
             size="sm"
             type="button"
@@ -244,16 +265,14 @@ export function SettingsTranscriptionSection() {
               Retry failed ({failedItems.length})
             </Button>
           ) : null}
-        </div>
+        </SettingsActionRow>
         {recordingsError ? (
-          <p className="text-xs text-destructive">{recordingsError}</p>
+          <SettingsErrorText>{recordingsError}</SettingsErrorText>
         ) : null}
-      </section>
+      </SettingsCard>
 
-      {/* ── Per-recording list ─────────────────────────────────────────── */}
-      <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
-        <h3 className="text-sm font-semibold text-foreground">Recordings</h3>
-        <div className="overflow-hidden rounded-md border border-border/70">
+      <SettingsCard title="Recordings">
+        <SettingsInfoGrid>
           {recordingsList.length === 0 ? (
             <div className="px-3 py-6 text-center text-xs text-muted-foreground">
               No recordings yet. Record some audio and it will show up here.
@@ -273,7 +292,7 @@ export function SettingsTranscriptionSection() {
               return (
                 <div
                   key={item.note_path}
-                  className="flex flex-col gap-2 border-b border-border/70 px-3 py-3 last:border-b-0"
+                  className="flex flex-col gap-2 border-b border-border/50 px-3 py-3 last:border-b-0"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <button
@@ -293,7 +312,7 @@ export function SettingsTranscriptionSection() {
                   </div>
 
                   {item.error ? (
-                    <p className="text-xs text-destructive break-words">
+                    <p className="break-words text-xs text-destructive">
                       {item.error}
                     </p>
                   ) : null}
@@ -334,8 +353,8 @@ export function SettingsTranscriptionSection() {
               );
             })
           )}
-        </div>
-      </section>
+        </SettingsInfoGrid>
+      </SettingsCard>
 
       {activeAudioSrc ? (
         <audio
@@ -346,31 +365,6 @@ export function SettingsTranscriptionSection() {
           aria-label="Recording playback"
         />
       ) : null}
-    </div>
-  );
-}
-
-function StatBadge({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone?: "destructive";
-}) {
-  return (
-    <div className="flex items-baseline gap-1.5">
-      <span
-        className={`text-base font-semibold tabular-nums ${
-          tone === "destructive" && value > 0
-            ? "text-destructive"
-            : "text-foreground"
-        }`}
-      >
-        {value}
-      </span>
-      <span className="text-xs text-muted-foreground">{label}</span>
-    </div>
+    </SettingsSection>
   );
 }

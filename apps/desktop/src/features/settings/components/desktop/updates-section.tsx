@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { getErrorMessage } from "@typenotes/shared/errors";
+import { Button } from "@/shared/ui/button";
+import { SettingsCard, SettingsSection } from "../settings-ui";
 
 type DesktopUpdateState =
   | { status: "idle" }
@@ -24,12 +26,6 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(1)} ${units[unit]}`;
 }
 
-/**
- * Native desktop auto-updater. Talks to the Tauri updater plugin, which compares
- * the installed app version against the `latest.json` manifest hosted at the
- * endpoint configured in tauri.conf.json, then downloads and swaps the whole app
- * binary — no .dmg reinstall needed.
- */
 function DesktopAppUpdates() {
   const [state, setState] = useState<DesktopUpdateState>({ status: "idle" });
   const updateRef = useRef<Update | null>(null);
@@ -89,9 +85,7 @@ function DesktopAppUpdates() {
   const busy = state.status === "checking" || state.status === "downloading";
 
   return (
-    <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
-      <h3 className="text-sm font-semibold text-foreground">Desktop app</h3>
-
+    <SettingsCard title="Desktop app">
       <div className="grid gap-3 text-sm">
         <div className="text-xs text-muted-foreground">Current version: {__APP_VERSION__}</div>
 
@@ -100,7 +94,7 @@ function DesktopAppUpdates() {
         )}
 
         {state.status === "up-to-date" && (
-          <div className="text-sm text-green-600 dark:text-green-400">
+          <div className="text-sm text-emerald-600 dark:text-emerald-400">
             You're on the latest version.
           </div>
         )}
@@ -111,13 +105,9 @@ function DesktopAppUpdates() {
               Version <strong>{state.version}</strong> is available.
             </div>
             {state.notes && <div className="text-xs text-muted-foreground">{state.notes}</div>}
-            <button
-              type="button"
-              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-              onClick={downloadAndInstall}
-            >
-              Download & install
-            </button>
+            <Button type="button" size="sm" onClick={() => void downloadAndInstall()}>
+              Download &amp; install
+            </Button>
           </div>
         )}
 
@@ -137,33 +127,29 @@ function DesktopAppUpdates() {
         )}
 
         {state.status === "error" && (
-          <div className="text-sm text-red-600 dark:text-red-400">{state.message}</div>
+          <div className="text-sm text-destructive">{state.message}</div>
         )}
 
         {!busy && state.status !== "available" && state.status !== "ready" && (
-          <button
+          <Button
             type="button"
-            className="w-fit rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-accent"
-            onClick={checkForUpdates}
+            variant="outline"
+            size="sm"
+            className="w-fit"
+            onClick={() => void checkForUpdates()}
           >
             Check for updates
-          </button>
+          </Button>
         )}
       </div>
-    </section>
+    </SettingsCard>
   );
 }
 
 export function SettingsUpdatesSection() {
   return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground">Updates</h2>
-      </div>
-
-      <div className="space-y-4">
-        <DesktopAppUpdates />
-      </div>
-    </div>
+    <SettingsSection title="Updates">
+      <DesktopAppUpdates />
+    </SettingsSection>
   );
 }

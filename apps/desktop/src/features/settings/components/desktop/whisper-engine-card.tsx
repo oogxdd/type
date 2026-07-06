@@ -5,23 +5,22 @@ import { Input } from "@/shared/ui/input";
 import * as api from "@/features/recording/api/recordings-api";
 import type { WhisperStatusResult } from "@typenotes/shared/types";
 import { getErrorMessage } from "@typenotes/shared/errors";
+import {
+  SettingsActionRow,
+  SettingsCard,
+  SettingsErrorText,
+  SettingsHelpText,
+} from "../settings-ui";
 
 type WhisperEngineCardProps = {
   whisperModel: string;
   onWhisperModelChange: (value: string) => void;
 };
 
-/**
- * Local Whisper engine status + setup. Owns its own readiness state: a cheap,
- * side-effect-free probe on mount, and an explicit "Set up / Download model"
- * action that provisions the managed Python env. The only shared state is the
- * model name, which lives in profile sync settings.
- */
 export function WhisperEngineCard({ whisperModel, onWhisperModelChange }: WhisperEngineCardProps) {
   const [whisperStatus, setWhisperStatus] = useState<WhisperStatusResult | null>(null);
   const [whisperSettingUp, setWhisperSettingUp] = useState(false);
 
-  // Lightweight readiness probe (does NOT provision — safe on mount).
   const probeWhisper = useCallback(async () => {
     try {
       setWhisperStatus(await api.checkWhisperStatus());
@@ -34,7 +33,6 @@ export function WhisperEngineCard({ whisperModel, onWhisperModelChange }: Whispe
     }
   }, []);
 
-  // Explicit provisioning: installs the env and downloads the chosen model.
   const setUpWhisper = useCallback(async () => {
     setWhisperSettingUp(true);
     try {
@@ -58,7 +56,7 @@ export function WhisperEngineCard({ whisperModel, onWhisperModelChange }: Whispe
   const envReady = whisperStatus?.available ?? false;
 
   return (
-    <section className="space-y-3 rounded-lg border border-border/70 bg-card/30 p-4">
+    <SettingsCard>
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold text-foreground">Local engine (Whisper)</h3>
         <span
@@ -76,10 +74,10 @@ export function WhisperEngineCard({ whisperModel, onWhisperModelChange }: Whispe
           {whisperStatus === null ? "Checking…" : envReady ? "Ready" : "Not set up"}
         </span>
       </div>
-      <p className="text-xs text-muted-foreground">
+      <SettingsHelpText>
         No API key needed — the app manages its own Python environment. The first setup
         downloads the engine and model and can take a few minutes.
-      </p>
+      </SettingsHelpText>
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-4">
@@ -118,17 +116,17 @@ export function WhisperEngineCard({ whisperModel, onWhisperModelChange }: Whispe
             </Button>
           </div>
         </div>
-        <p className="text-[10px] text-muted-foreground leading-relaxed">
+        <p className="text-[10px] leading-relaxed text-muted-foreground">
           Model name (e.g. <code>large-v3</code>, <code>medium</code>, <code>small</code>) or
           an absolute path to a local model directory.
         </p>
       </div>
 
       {whisperStatus?.error ? (
-        <p className="text-xs text-destructive break-words">{whisperStatus.error}</p>
+        <SettingsErrorText>{whisperStatus.error}</SettingsErrorText>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
+      <SettingsActionRow>
         <Button
           variant="secondary"
           size="sm"
@@ -142,7 +140,7 @@ export function WhisperEngineCard({ whisperModel, onWhisperModelChange }: Whispe
               ? "Re-check / Download model"
               : "Set up / Download model"}
         </Button>
-      </div>
-    </section>
+      </SettingsActionRow>
+    </SettingsCard>
   );
 }
