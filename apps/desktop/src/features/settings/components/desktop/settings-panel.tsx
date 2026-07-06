@@ -1,6 +1,6 @@
-import { Button } from "@/shared/ui/button";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { cn } from "@/shared/lib/utils";
 import {
   SETTINGS_SECTIONS,
   type SettingsSection,
@@ -35,17 +35,22 @@ function SettingsRow({
   onSelect: () => void;
 }) {
   return (
-    <Button
+    <button
       type="button"
-      className={`item-row settings-row${isSelected ? " selected" : ""}`}
-      variant="ghost"
-      size="sm"
+      className={cn(
+        "w-full border border-transparent rounded-lg px-2.5 py-2",
+        "text-left text-[13px] font-semibold cursor-pointer",
+        "transition-colors duration-150 ease-out",
+        "text-foreground dark:text-[#dfe5ee]",
+        "focus-visible:outline-none focus-visible:border-input/65 dark:focus-visible:border-[#59667a]",
+        isSelected
+          ? "bg-muted border-border/80 dark:bg-white/[0.1] dark:border-white/[0.14]"
+          : "hover:bg-muted/60 dark:hover:bg-white/[0.06]",
+      )}
       onClick={onSelect}
     >
-      <div className="settings-row-main">
-        <div className="settings-row-title">{section.title}</div>
-      </div>
-    </Button>
+      {section.title}
+    </button>
   );
 }
 
@@ -80,10 +85,10 @@ export function SettingsMiddlePane({
   onPaneClick: () => void;
 }) {
   return (
-    <div className="pane settings-sections-pane min-w-0">
+    <div className="pane h-full min-h-0 min-w-0">
       <div className="pane-drag-region" data-tauri-drag-region aria-hidden />
       <div
-        className="pane-body settings-sections-body"
+        className="pane-body grid content-start gap-2 bg-[var(--ui-pane)] pt-[calc(8px+var(--left-panels-drag-height))] pb-2.5 px-2.5"
         ref={middlePaneRef}
         tabIndex={0}
         onClick={(event) => {
@@ -93,7 +98,7 @@ export function SettingsMiddlePane({
           onPaneClick();
         }}
       >
-        <nav className="settings-nav-list" aria-label="Settings sections">
+        <nav className="grid gap-0.5" aria-label="Settings sections">
           {SETTINGS_SECTIONS.map((section) => (
             <SettingsRow
               key={section.id}
@@ -120,9 +125,9 @@ export function SettingsDetailPane({
   const { rightPaneRef } = useEditor();
 
   return (
-    <div className="pane settings-detail-pane min-w-0">
+    <div className="pane h-full min-h-0 min-w-0 dark:backdrop-blur-none">
       <div
-        className="pane-body settings-detail-body"
+        className="pane-body bg-[var(--ui-pane)] pt-4 px-[18px] pb-[22px] max-[1320px]:pt-3.5 max-[1320px]:px-3.5 max-[1320px]:pb-[18px]"
         ref={rightPaneRef}
         tabIndex={0}
         onClick={(event) => {
@@ -132,7 +137,7 @@ export function SettingsDetailPane({
           onPaneClick();
         }}
       >
-        <div className="settings-detail-shell">
+        <div className="mx-auto grid pb-1.5 max-w-[860px] max-[1320px]:max-w-full">
           <SettingsDetail
             sectionId={activeSection as SettingsSectionId}
             onOpenTrash={onOpenTrash}
