@@ -1,0 +1,510 @@
+/* Styling for the notes navigation tree — the Feed and Folders tabs share one
+   visual and component base (TreeNode/TreeRow/NavNoteRow), so this file is the
+   single source of truth for both. Scoped under `.tree-pane`, the class the
+   left-sidebar shell (app-sidebar.tsx) applies around both tabs. */
+
+.tree-pane {
+  background: var(--ui-pane);
+  border-right: 1px solid var(--ui-border);
+  font-family: inherit;
+}
+
+.tree-pane .pane-header {
+  color: var(--ui-muted);
+  background: rgba(255, 255, 255, 0.42);
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.tree-pane .pane-body {
+  padding: 0 0 10px;
+  background: transparent;
+}
+
+.sidebar-folders-section {
+  min-height: 0;
+}
+
+.sidebar-folders-section .nav-scroll-area {
+  padding: 0 8px 10px;
+}
+
+.sidebar-folders-section .pane-body {
+  padding: 0;
+  background: transparent;
+}
+
+.nav-scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.nav-scroll-area .pane-body {
+  overflow: visible;
+  min-height: 100%;
+}
+
+/* Feed/Folders tab switcher (desktop-app-shell.tsx) */
+
+.folders-tabs {
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+}
+
+.pane-tabs-wrap {
+  padding: 8px 12px 6px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.folders-tabs-list {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  height: auto;
+  gap: 14px;
+}
+
+.folders-tab-trigger {
+  height: auto;
+  min-height: 0;
+  border: none;
+  background: transparent;
+  color: var(--ui-muted);
+  opacity: 0.66;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.1;
+  padding: 2px 0;
+  border-radius: 0;
+}
+
+.folders-tab-trigger:hover {
+  opacity: 0.84;
+}
+
+.folders-tab-trigger[data-state="active"] {
+  color: var(--ui-text);
+  opacity: 1;
+  background: transparent;
+  box-shadow: none;
+}
+
+.folders-tab-content {
+  margin-top: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Row primitives (folder-row is the TreeRow container; nav-note-row is
+   NavNoteRow). The shared `.item-row`/`.item-row.selected` base and its drag
+   ghost live in app.css since note-row.tsx and settings-panel.tsx reuse them
+   too — everything below only ever applies to tree rows. */
+
+.folder-row {
+  cursor: default;
+}
+
+.item-row.drop-before::before,
+.item-row.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  background: #8aa0b5;
+}
+
+.item-row.drop-before::before {
+  top: 0;
+}
+
+.item-row.drop-after::after {
+  bottom: 0;
+}
+
+.item-row.drop-inside {
+  background: #f4f7fa;
+  outline: 1px dashed #9cb1c5;
+}
+
+.tree-root {
+  min-height: 100%;
+}
+
+.tree-root.drop-inside {
+  outline: 1px dashed #9aaec1;
+  outline-offset: -6px;
+}
+
+.tree-children {
+  margin-left: 0;
+}
+
+.folder-row.is-dragging {
+  opacity: 0.4;
+}
+
+.drag-ghost {
+  max-width: 180px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid var(--ui-border);
+  border-radius: 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ui-text);
+  box-shadow: none;
+  transform: scale(1);
+  transform-origin: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.item-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon-btn {
+  border: none;
+  background: none;
+  padding: 2px 6px;
+  font-size: 12px;
+  color: var(--ui-muted);
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.icon-btn:hover {
+  color: var(--ui-text);
+  background: #f3f5f7;
+}
+
+.rename-input {
+  flex: 1;
+  border: 1px solid var(--ui-border-strong);
+  background: rgba(255, 255, 255, 0.74);
+  border-radius: 0;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ui-text);
+}
+
+.rename-input:focus {
+  outline: none;
+  border-color: #95a9bb;
+  box-shadow: none;
+}
+
+/* .tree-pane-scoped row chrome: hover/selected state, fonts, indentation
+   guides, icons. This is the single shared implementation both Feed and
+   Folders render through. */
+
+.tree-pane .item-row {
+  border-radius: 0;
+  margin: 0;
+  min-height: 30px;
+  padding: 6px 10px;
+  padding-right: 12px;
+  transition: background 0.1s ease;
+  border: none;
+}
+
+.tree-pane .item-row:hover {
+  background: #f7f9fb;
+}
+
+.tree-pane .item-row.selected {
+  background: #f4f8ff;
+  box-shadow: inset 2px 0 0 var(--ui-accent);
+}
+
+.tree-pane .item-row.selected .item-label {
+  font-weight: 600;
+}
+
+.tree-pane .folder-row {
+  position: relative;
+}
+
+.tree-pane .nav-note-row {
+  min-height: 28px;
+}
+
+.tree-pane .nav-note-row .item-label {
+  font-size: 13px;
+}
+
+.tree-pane .nav-note-recording-icon {
+  width: 14px;
+  height: 14px;
+  color: #7f90a2;
+  margin-left: 6px;
+  flex: 0 0 auto;
+}
+
+.tree-pane .nav-note-row.is-dragging {
+  opacity: 0.5;
+}
+
+.tree-pane .nav-note-glyph {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #8092a4;
+}
+
+.tree-pane .nav-note-glyph svg {
+  width: 13px;
+  height: 13px;
+}
+
+.tree-pane .tree-guides {
+  position: absolute;
+  inset: 2px 0;
+  pointer-events: none;
+}
+
+.tree-pane .tree-guide-vert {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #e2e9f0;
+}
+
+.tree-pane .item-row:hover,
+.tree-pane .item-row:focus-within {
+  z-index: 1;
+}
+
+.tree-pane .item-row.drop-inside {
+  background: #f5f8fb;
+  outline: 1px dashed #9aaec1;
+}
+
+.tree-pane .item-row.drop-before::before,
+.tree-pane .item-row.drop-after::after {
+  background: #9aaec1;
+  left: 16px;
+  right: 16px;
+}
+
+.tree-pane .tree-root.drop-inside {
+  outline: 1px dashed #9aaec1;
+  outline-offset: -8px;
+  border-radius: 4px;
+}
+
+.tree-pane .tree-children {
+  margin-left: 0;
+  border-left: none;
+  padding-left: 0;
+}
+
+.tree-pane .item-label {
+  color: var(--ui-text);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.tree-pane .note-count {
+  font-size: 12px;
+  color: var(--ui-muted);
+  opacity: 0.78;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin-left: 6px;
+  line-height: 1.3;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.tree-pane .icon-btn {
+  color: var(--ui-muted);
+  border-radius: 0;
+  padding: 2px 6px;
+}
+
+.tree-pane .icon-btn:hover {
+  color: var(--ui-text);
+  background: #eff3f6;
+}
+
+.tree-pane .tree-toggle {
+  width: 20px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.tree-pane .tree-toggle svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.15s ease;
+}
+
+.tree-pane .tree-toggle.is-collapsed svg {
+  transform: rotate(0deg);
+}
+
+.tree-pane .tree-toggle:not(.is-collapsed) svg {
+  transform: rotate(90deg);
+}
+
+.tree-pane .folder-glyph {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #708295;
+}
+
+.tree-pane .folder-glyph svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tree-pane .drag-handle {
+  width: 22px;
+  height: 24px;
+  font-size: 12px;
+  letter-spacing: -1px;
+  opacity: 0.6;
+  cursor: grab;
+}
+
+.tree-pane .drag-handle:hover {
+  opacity: 1;
+}
+
+.tree-pane .icon-spacer {
+  width: 20px;
+  height: 22px;
+  display: inline-block;
+}
+
+/* Feed-only calendar-bucket row sizing (still gated by the feedMode prop —
+   this is the one legitimate visual difference between Feed and Folders). */
+
+.tree-pane .feed-navigation-tree .feed-bucket-row {
+  min-height: 32px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.tree-pane .feed-navigation-tree .feed-bucket-row .tree-toggle,
+.tree-pane .feed-navigation-tree .feed-bucket-row .icon-spacer {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+
+.tree-pane .feed-navigation-tree .feed-bucket-row .tree-toggle {
+  padding: 0;
+  opacity: 0.72;
+}
+
+.tree-pane .feed-navigation-tree .feed-bucket-row .tree-toggle:hover {
+  background: transparent;
+  opacity: 1;
+}
+
+.tree-pane .feed-navigation-tree .feed-bucket-row .tree-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tree-pane .feed-navigation-tree .feed-bucket-row .folder-glyph {
+  color: currentColor;
+  opacity: 0.74;
+}
+
+.tree-pane .feed-navigation-tree .feed-bucket-row.selected .folder-glyph,
+.tree-pane .feed-navigation-tree .feed-bucket-row:hover .folder-glyph {
+  opacity: 0.9;
+}
+
+/* Dark theme */
+
+.app.theme-dark .folders-tabs-list {
+  border: none;
+  background: transparent;
+}
+
+.app.theme-dark .folders-tab-trigger {
+  color: #a6afba;
+  opacity: 0.62;
+}
+
+.app.theme-dark .folders-tab-trigger[data-state="active"] {
+  color: #dbe1ea;
+  opacity: 1;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.app.theme-dark .tree-pane .item-row {
+  color: #dce2ea;
+}
+
+.app.theme-dark .tree-pane .item-row:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.app.theme-dark .tree-pane .item-row.selected {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 2px 0 0 rgba(210, 210, 216, 0.58);
+}
+
+.app.theme-dark .tree-pane .item-row.selected .item-label {
+  font-weight: 600;
+}
+
+.app.theme-dark .tree-pane .item-label {
+  color: #e6ebf2;
+  font-weight: 400;
+}
+
+.app.theme-dark .tree-pane .nav-note-row .item-label {
+  color: #d3dbe5;
+}
+
+.app.theme-dark .tree-pane .nav-note-recording-icon {
+  color: #9eabb9;
+}
+
+.app.theme-dark .tree-pane .note-count {
+  color: #a2acb8;
+  opacity: 0.72;
+}
+
+.app.theme-dark .tree-pane .icon-btn,
+.app.theme-dark .tree-pane .folder-glyph,
+.app.theme-dark .tree-pane .tree-guide-vert,
+.app.theme-dark .tree-pane .nav-note-glyph {
+  color: #bcc5cf;
+}
+
+.app.theme-dark .tree-pane .tree-guide-vert {
+  background: rgba(213, 213, 218, 0.12);
+}

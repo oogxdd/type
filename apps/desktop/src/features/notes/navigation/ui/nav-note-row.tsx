@@ -14,7 +14,6 @@ export type NavNoteRowProps = {
   indentationWidth: number;
   isSelected: boolean;
   draggable?: boolean;
-  showGuides?: boolean;
   onSelect: (notePath: string, event: ReactMouseEvent, parentPath: string) => void;
   onContextMenu: (
     event: ReactMouseEvent,
@@ -31,7 +30,6 @@ export function NavNoteRow({
   indentationWidth,
   isSelected,
   draggable = true,
-  showGuides = false,
   onSelect,
   onContextMenu,
 }: NavNoteRowProps) {
@@ -72,7 +70,7 @@ export function NavNoteRow({
       {...listeners}
       {...attributes}
     >
-      {showGuides && depth > 0 ? (
+      {depth > 0 ? (
         <span className="tree-guides" aria-hidden>
           {Array.from({ length: depth }, (_, index) => (
             <span
