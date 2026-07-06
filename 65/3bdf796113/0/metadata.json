@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "653bdf796113",
+  "session_id": "05e29236-5769-4399-9f30-661efc858af4",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-06T20:46:56.19206Z",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "src/features/sync/hooks/use-git-sync-workflows.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "2ac18e3f2c39",
+  "token_usage": {
+    "input_tokens": 3917,
+    "cache_creation_tokens": 47170,
+    "cache_read_tokens": 732953,
+    "output_tokens": 13437,
+    "api_call_count": 18
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-06T20:46:56.097033Z",
+    "agent_lines": 0,
+    "human_added": 39,
+    "human_modified": 5,
+    "human_removed": 0,
+    "total_committed": 39,
+    "agent_percentage": 0
+  }
+}
