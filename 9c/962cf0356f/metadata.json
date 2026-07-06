@@ -1,0 +1,28 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "9c962cf0356f",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "src-tauri/gen/apple/project.yml",
+    "src-tauri/src/adapters/platform.rs",
+    "src-tauri/src/adapters/recordings/mod.rs"
+  ],
+  "sessions": [
+    {
+      "metadata": "/9c/962cf0356f/0/metadata.json",
+      "transcript": "/9c/962cf0356f/0/full.jsonl",
+      "context": "/9c/962cf0356f/0/context.md",
+      "content_hash": "/9c/962cf0356f/0/content_hash.txt",
+      "prompt": "/9c/962cf0356f/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 4565,
+    "cache_creation_tokens": 107126,
+    "cache_read_tokens": 8069967,
+    "output_tokens": 69262,
+    "api_call_count": 76
+  }
+}
