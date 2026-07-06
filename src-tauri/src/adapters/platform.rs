@@ -31,7 +31,10 @@ impl PlatformGateway for TauriPlatformAdapter {
         }
         #[cfg(target_os = "ios")]
         {
-            return crate::present_ios_file_export_sheet(&self.app, trimmed);
+            return crate::present_ios_file_export_sheet(
+                &self.app,
+                std::path::Path::new(trimmed),
+            );
         }
         #[cfg(not(target_os = "ios"))]
         {

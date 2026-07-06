@@ -22,7 +22,7 @@ use crate::{
 use base64::Engine as _;
 
 #[cfg(target_os = "ios")]
-use crate::{msg_send, Object};
+use crate::{msg_send, sel, sel_impl, Object};
 
 // Transcription backends — the worker below dispatches to whichever the job
 // selects (local Whisper on desktop, AssemblyAI on iOS).
