@@ -14,6 +14,7 @@ import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-conte
 import { ChoiceRow, Group, StatRow } from "./helpers";
 import { getErrorMessage } from "@/shared/lib/errors";
 
+
 export function MobileSyncSection() {
   const { syncSettings } = useProfiles();
   const {
@@ -99,6 +100,10 @@ export function MobileSyncSection() {
           {syncHint ? <p className="hint">{syncHint}</p> : null}
         </section>
       ) : null}
+
+      <Group title="Remote URL (direct)">
+        <ForcePush />
+      </Group>
 
       <Group title="Actions">
         <div className="mobile-native-actions single">
@@ -205,6 +210,80 @@ export function MobileSyncSection() {
           )}
         </Group>
       ) : null}
+    </>
+  );
+}
+
+function ForcePush() {
+  const [url, setUrl] = useState("");
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const doPush = async () => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    setStatus("Connecting…");
+    try {
+      await gitApi.connectGitRepo(trimmed);
+      setStatus("Connected. Pushing…");
+      await gitApi.gitPush();
+      setStatus("Done. Push sent.");
+    } catch (error) {
+      setStatus(getErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doPull = async () => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    setStatus("Connecting…");
+    try {
+      await gitApi.connectGitRepo(trimmed);
+      setStatus("Connected. Pulling…");
+      await gitApi.gitPull();
+      setStatus("Done. Pull complete.");
+    } catch (error) {
+      setStatus(getErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <input
+        type="text"
+        className="mobile-native-input"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        placeholder="git://192.168.1.15/notes.git"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+      />
+      <div className="mobile-native-actions">
+        <button
+          type="button"
+          className="mobile-primary-btn"
+          disabled={!url.trim() || busy}
+          onClick={() => void doPush()}
+        >
+          {busy ? "Working…" : "Force Push"}
+        </button>
+        <button
+          type="button"
+          className="mobile-secondary-btn"
+          disabled={!url.trim() || busy}
+          onClick={() => void doPull()}
+        >
+          {busy ? "Working…" : "Force Pull"}
+        </button>
+      </div>
+      {status ? <p className="mobile-native-note">{status}</p> : null}
     </>
   );
 }

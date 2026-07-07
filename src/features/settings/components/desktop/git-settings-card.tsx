@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 export type GitDraftSettings = {
   gitRemoteUrl: string;
@@ -23,7 +25,7 @@ type GitSettingsCardProps = {
   gitSettings: GitDraftSettings;
   activeProfileId: string | null;
   busy: boolean;
-  onApply: (next: GitDraftSettings) => void;
+  onApply: (next: GitDraftSettings) => Promise<void>;
 };
 
 const cardClass = "space-y-3 rounded-lg border border-border/70 bg-card/30 p-4";
@@ -120,9 +122,16 @@ export function GitSettingsCard({ gitSettings, activeProfileId, busy, onApply }:
           variant="outline"
           size="sm"
           disabled={!activeProfileId || busy || !hasUnsavedGitChanges}
-          onClick={() => onApply(gitDraft)}
+          onClick={async () => {
+            try {
+              await onApply(gitDraft);
+              toast.success("Git settings saved");
+            } catch (error) {
+              toast.error("Failed to save", { description: getErrorMessage(error) });
+            }
+          }}
         >
-          Apply Git settings
+          {busy ? "Saving…" : "Apply Git settings"}
         </Button>
       </div>
       <p className={hintClass}>

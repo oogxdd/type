@@ -5,6 +5,7 @@ import { exportProfilesToDocuments } from "@/features/profiles/api/profiles-api"
 import { Group, ChoiceRow, InputRow } from "./helpers";
 import { getErrorMessage } from "@/shared/lib/errors";
 import { confirmAction } from "@/shared/lib/dom";
+import { toast } from "sonner";
 
 type GitDraftSettings = {
   gitRemoteUrl: string;
@@ -289,17 +290,22 @@ export function MobileProfileSection() {
             type="button"
             className="mobile-secondary-btn"
             disabled={!activeProfileId || profilesBusy || !hasUnsavedGitChanges}
-            onClick={() =>
-              updateSyncSettings({
-                gitRemoteUrl: gitDraft.gitRemoteUrl,
-                gitBranch: gitDraft.gitBranch,
-                gitCommitMessage: gitDraft.gitCommitMessage,
-                gitUsername: gitDraft.gitUsername,
-                gitPassword: gitDraft.gitPassword,
-              })
-            }
+            onClick={async () => {
+              try {
+                await updateSyncSettings({
+                  gitRemoteUrl: gitDraft.gitRemoteUrl,
+                  gitBranch: gitDraft.gitBranch,
+                  gitCommitMessage: gitDraft.gitCommitMessage,
+                  gitUsername: gitDraft.gitUsername,
+                  gitPassword: gitDraft.gitPassword,
+                });
+                toast.success("Git settings saved");
+              } catch (error) {
+                toast.error("Failed to save", { description: getErrorMessage(error) });
+              }
+            }}
           >
-            Apply Git settings
+            {profilesBusy ? "Saving…" : "Apply Git settings"}
           </button>
         </div>
         <p className="mobile-native-note">

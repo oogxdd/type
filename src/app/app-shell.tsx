@@ -11,6 +11,7 @@ import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import { MobileShell } from "@/mobile/mobile-shell";
 import { useLayoutMode } from "@/mobile/use-layout-mode";
 import { ARCHIEVE_FOLDER_PATH, FEED_FOLDER_PATH } from "@/shared/constants";
+import { Toaster } from "@/shared/ui/sonner";
 import type { AppMode } from "@/shared/types";
 
 export function AppShell() {
@@ -42,6 +43,7 @@ export function AppShell() {
 
   return (
     <>
+      <Toaster />
       <input
         ref={handwritingInputRef}
         type="file"
