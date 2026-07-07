@@ -1,5 +1,6 @@
 // Pure helpers for turning the core's tree + previews into list rows.
 
+import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import { parseNotePreview, type NotePreview } from "@typenotes/shared/format";
 import type { FolderNode, NotePreviewEntry } from "@typenotes/shared/types";
 
@@ -26,6 +27,16 @@ export const findFolder = (
   }
   return null;
 };
+
+/**
+ * Subfolders the user can browse into. Feed is not listed (it has its own
+ * tab / screen), and dot-folders (`.type` settings, `.git`, …) are hidden
+ * service directories.
+ */
+export const browsableFolders = (folder: FolderNode | null): FolderNode[] =>
+  (folder?.children ?? []).filter(
+    (child) => child.path !== FEED_FOLDER_PATH && !child.name.startsWith(".")
+  );
 
 export const previewsByPath = (
   entries: NotePreviewEntry[]

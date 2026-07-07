@@ -1,11 +1,11 @@
-// The app menu — the root of the stack: Feed / Folders tabs on top (inline
-// note + folder lists), Sync and Settings pinned at the bottom. The capture
-// page sits pushed above it, so its hamburger or a left-edge swipe-back pops
-// here; a leftward swipe anywhere on the menu (or "New note") pushes a fresh
-// capture page back in. Everything else is pushed from here, so swipe-back
-// from Sync/Settings/Folder/Editor lands back on the menu.
+// The app menu — the root of the stack: close button + Feed / Folders tabs
+// on top (inline note + folder lists), Sync and Settings pinned at the
+// bottom. The capture page sits pushed above it, so its hamburger or a
+// left-edge swipe-back pops here; the close button or a leftward swipe
+// anywhere on the menu pushes a fresh capture page back in. Everything else
+// is pushed from here, so swipe-back from Sync/Settings/Folder/Editor lands
+// back on the menu.
 
-import { Ionicons } from "@expo/vector-icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useEffect, useState } from "react";
@@ -24,12 +24,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 
-import { findFolder, folderNoteRows, groupNoteRowsByDate } from "../lib/feed";
+import {
+  browsableFolders,
+  findFolder,
+  folderNoteRows,
+  groupNoteRowsByDate,
+} from "../lib/feed";
 import { formatRelativeTime } from "../lib/relative-time";
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
+import { ToolbarButton } from "../ui/toolbar-button";
 import { NoteListRow } from "./feed-screen";
 
 type MenuTab = "feed" | "folders";
@@ -80,7 +86,7 @@ export const MenuScreen = () => {
 
   const feedRows = folderNoteRows(findFolder(tree, FEED_FOLDER_PATH), previews);
   const feedSections = groupNoteRowsByDate(feedRows);
-  const folders = findFolder(tree, "")?.children ?? [];
+  const folders = browsableFolders(findFolder(tree, ""));
 
   return (
     <GestureDetector gesture={swipeToCapture}>
@@ -94,16 +100,10 @@ export const MenuScreen = () => {
           },
         ]}
       >
-        <Pressable
-          onPress={() => openScreen("Capture")}
-          style={({ pressed }) => [
-            styles.newNote,
-            { borderColor: theme.colors.border, opacity: pressed ? 0.6 : 1 },
-          ]}
-        >
-          <Ionicons name="add-circle-outline" size={20} color={theme.colors.accent} />
-          <Text style={[styles.newNoteLabel, { color: theme.colors.accent }]}>New note</Text>
-        </Pressable>
+        {/* Mirrors the capture page's hamburger: same spot, same size. */}
+        <View style={styles.topBar}>
+          <ToolbarButton icon="close-outline" onPress={openCapture} />
+        </View>
 
         <View style={[styles.tabs, { backgroundColor: theme.colors.surface }]}>
           <TabButton label="Feed" active={tab === "feed"} onPress={() => setTab("feed")} />
@@ -250,18 +250,11 @@ const BottomItem = ({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  newNote: {
+  topBar: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginHorizontal: 12,
+    paddingHorizontal: 16,
     marginBottom: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
   },
-  newNoteLabel: { fontSize: 15, fontWeight: "600" },
   tabs: {
     flexDirection: "row",
     marginHorizontal: 12,

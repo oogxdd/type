@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import type { FolderNode, NotePreviewEntry } from "@typenotes/shared/types";
 
-import { collectNotePaths, findFolder, folderNoteRows, previewsByPath } from "./feed";
+import {
+  browsableFolders,
+  collectNotePaths,
+  findFolder,
+  folderNoteRows,
+  previewsByPath,
+} from "./feed";
 
 const tree: FolderNode = {
   name: "",
@@ -26,6 +32,7 @@ const tree: FolderNode = {
       ],
       notes: [{ name: "plan.md", path: "Projects/plan.md" }],
     },
+    { name: ".type", path: ".type", children: [], notes: [] },
   ],
   notes: [],
 };
@@ -52,6 +59,13 @@ describe("feed model", () => {
   it("finds folders by path", () => {
     expect(findFolder(tree, "Projects/Home")?.name).toBe("Home");
     expect(findFolder(tree, "Nope")).toBeNull();
+  });
+
+  it("hides Feed and dot-folders from browsable folders", () => {
+    expect(browsableFolders(tree).map((folder) => folder.name)).toEqual([
+      "Projects",
+    ]);
+    expect(browsableFolders(null)).toEqual([]);
   });
 
   it("collects every note path", () => {

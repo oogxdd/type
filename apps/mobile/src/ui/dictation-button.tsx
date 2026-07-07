@@ -225,26 +225,27 @@ export const DictationButton = ({
           </Text>
         </View>
       ) : null}
+      {/* Same neutral circle as the toolbar buttons; only the icon signals
+          the recording state. */}
       <Pressable
         onPressIn={onPressIn}
         onPressOut={onPressOut}
         disabled={busy}
-        hitSlop={8}
+        hitSlop={10}
         style={({ pressed }) => [
           styles.fab,
           {
-            backgroundColor: recorderState.isRecording
-              ? theme.colors.danger
-              : theme.colors.accent,
-            opacity: busy ? 0.5 : pressed ? 0.85 : 1,
+            backgroundColor: theme.colors.surface,
+            borderColor: theme.colors.border,
+            opacity: busy ? 0.5 : pressed ? 0.6 : 1,
             transform: [{ scale: pressed ? 0.94 : 1 }],
           },
         ]}
       >
         <Ionicons
-          name={recorderState.isRecording ? "stop" : "mic"}
-          size={26}
-          color="#ffffff"
+          name={recorderState.isRecording ? "stop" : "mic-outline"}
+          size={20}
+          color={recorderState.isRecording ? theme.colors.danger : theme.colors.text}
         />
       </Pressable>
     </View>
@@ -266,15 +267,11 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 13, fontVariant: ["tabular-nums"] },
   recordingDot: { width: 8, height: 8, borderRadius: 4 },
   fab: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000000",
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
   },
 });

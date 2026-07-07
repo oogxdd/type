@@ -3,13 +3,11 @@
 // top) and a fresh blank page is ready underneath — same gesture as the
 // original app. Notes land in Feed via the desktop-compatible core.
 
-import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Keyboard,
-  Pressable,
   StyleSheet,
   TextInput,
   useWindowDimensions,
@@ -32,6 +30,7 @@ import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useTheme } from "../theme";
 import { DictationButton } from "../ui/dictation-button";
+import { ToolbarButton } from "../ui/toolbar-button";
 
 const SWIPE_DISTANCE = 90;
 const SWIPE_VELOCITY = -900;
@@ -186,9 +185,10 @@ export const CaptureScreen = () => {
       >
         <ToolbarButton
           icon="menu-outline"
-          // The menu is the stack root below this screen, so this pops —
-          // same slide as the left-edge swipe-back gesture.
-          onPress={() => navigation.navigate("Menu")}
+          // popTo, not navigate: the menu is the stack root below this
+          // screen, and v7 navigate would push a second Menu on top (sliding
+          // in from the right) instead of popping back to it.
+          onPress={() => navigation.popTo("Menu")}
         />
       </Animated.View>
       <Animated.View
@@ -198,33 +198,6 @@ export const CaptureScreen = () => {
         <DictationButton onRecordingChange={setRecordingActive} />
       </Animated.View>
     </View>
-  );
-};
-
-const ToolbarButton = ({
-  icon,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  onPress: () => void;
-}) => {
-  const theme = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      hitSlop={10}
-      style={({ pressed }) => [
-        styles.toolbarButton,
-        {
-          backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.border,
-          opacity: pressed ? 0.6 : 1,
-          transform: [{ scale: pressed ? 0.94 : 1 }],
-        },
-      ]}
-    >
-      <Ionicons name={icon} size={20} color={theme.colors.text} />
-    </Pressable>
   );
 };
 
@@ -239,20 +212,12 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    right: 20,
+    right: 16,
     alignItems: "flex-end",
   },
   toolbarLeft: {
     position: "absolute",
     left: 16,
     flexDirection: "row",
-  },
-  toolbarButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

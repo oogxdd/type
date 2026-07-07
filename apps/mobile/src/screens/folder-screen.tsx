@@ -2,7 +2,7 @@ import { useNavigation, useRoute, type RouteProp } from "@react-navigation/nativ
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text } from "react-native";
 
-import { findFolder, folderNoteRows } from "../lib/feed";
+import { browsableFolders, findFolder, folderNoteRows } from "../lib/feed";
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useTheme } from "../theme";
@@ -19,6 +19,7 @@ export const FolderScreen = () => {
   const refresh = useNotesStore((s) => s.refresh);
 
   const folder = findFolder(tree, route.params.path);
+  const subfolders = browsableFolders(folder);
   const rows = folderNoteRows(folder, previews);
 
   return (
@@ -28,7 +29,7 @@ export const FolderScreen = () => {
         <RefreshControl refreshing={loading} onRefresh={() => void refresh()} />
       }
     >
-      {folder?.children.map((child) => (
+      {subfolders.map((child) => (
         <Pressable
           key={child.path}
           onPress={() =>
@@ -60,7 +61,7 @@ export const FolderScreen = () => {
           }
         />
       ))}
-      {!folder || (folder.children.length === 0 && rows.length === 0) ? (
+      {!folder || (subfolders.length === 0 && rows.length === 0) ? (
         <Text style={[styles.empty, { color: theme.colors.secondaryText }]}>
           Empty folder.
         </Text>
