@@ -23,13 +23,20 @@ fn recordings_use_cases() -> Result<RecordingsUseCases<RecordingsAdapter>, Strin
 /// A transcription backend implemented by the host (Swift/Kotlin/JS) — e.g.
 /// native on-device speech recognition. Methods are called from the queue's
 /// Rust worker thread, one job at a time.
+///
+/// `transcribe` is `async` because host recognizers are inherently
+/// event-driven (a JS `Promise`, iOS `SFSpeechRecognizer` callbacks). The
+/// core's transcription port is synchronous and its worker is a plain thread,
+/// so [`ForeignTranscriptionProvider`] blocks on this future — the worker
+/// already runs one job at a time, so blocking it is the intended behavior.
 #[uniffi::export(with_foreign)]
+#[async_trait::async_trait]
 pub trait TranscriptionProvider: Send + Sync {
     /// Stable identifier used in error messages, e.g. "apple-speech".
     fn id(&self) -> String;
     /// Transcribe the audio file at `audio_path` (absolute) and return the
     /// transcript text.
-    fn transcribe(&self, audio_path: String) -> Result<String, CoreError>;
+    async fn transcribe(&self, audio_path: String) -> Result<String, CoreError>;
 }
 
 /// Bridges the FFI trait onto the core port so queued jobs can call back into
@@ -42,8 +49,18 @@ impl type_core::ports::recordings::TranscriptionProvider for ForeignTranscriptio
     }
 
     fn transcribe(&self, audio_path: &std::path::Path) -> Result<String, String> {
-        self.0
-            .transcribe(audio_path.to_string_lossy().into_owned())
+        let provider = Arc::clone(&self.0);
+        let audio_path = audio_path.to_string_lossy().into_owned();
+        // The core worker thread is synchronous and not inside a Tokio
+        // runtime, so spin up a current-thread runtime to drive the host's
+        // async recognizer to completion. The queue processes one job at a
+        // time, so parking this thread here is fine.
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|error| format!("failed to start transcription runtime: {error}"))?;
+        runtime
+            .block_on(provider.transcribe(audio_path))
             .map_err(|error| error.to_string())
     }
 }

@@ -64,6 +64,11 @@ export const CaptureScreen = () => {
 
   const translateY = useSharedValue(0);
 
+  // Wrap Keyboard.dismiss so the worklet captures this plain closure rather
+  // than the bare method — passing Keyboard.dismiss straight to runOnJS makes
+  // worklets try to copy its owner (KeyboardImpl), which it can't serialize.
+  const dismissKeyboard = () => Keyboard.dismiss();
+
   const commitPage = () => {
     void session.commit().then((path) => {
       if (path) {
@@ -83,7 +88,7 @@ export const CaptureScreen = () => {
     .activeOffsetY(24)
     .failOffsetY(-12)
     .onStart(() => {
-      runOnJS(Keyboard.dismiss)();
+      runOnJS(dismissKeyboard)();
     });
 
   const pan = Gesture.Pan()
