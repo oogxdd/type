@@ -12,10 +12,14 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.typenotes.mobile",
+      "buildNumber": "2026070703",
       "supportsTablet": true,
       "infoPlist": {
         "UIFileSharingEnabled": true,
-        "LSSupportsOpeningDocumentsInPlace": true
+        "LSSupportsOpeningDocumentsInPlace": true,
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "Type does not access your photo library; this permission is required by a bundled camera component.",
+        "NSPhotoLibraryAddUsageDescription": "Type does not save to your photo library; this permission is required by a bundled camera component."
       }
     },
     "android": {

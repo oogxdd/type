@@ -48,9 +48,14 @@ Delete this file when the branch is ready for review.
       `apps/mobile/src/core/boot.ts`, Expo prebuild, pod install. Also verify
       the exact generated TS surface matches `raw-core.ts` (names are the
       uniffi camelCase convention; adjust the seam if anything drifts).
-- [ ] Mobile UX round (2026-07-07) — device verification on iOS after the
-      next Mac build (`npx expo prebuild` must re-run: new plugins/permissions
-      for expo-camera + expo-speech-recognition, and the `type2` URL scheme):
+- [ ] Mobile UX round (2026-07-07) — **on-device** verification on iOS.
+      Build + TestFlight upload is done (build `2026070702` v0.1.0, Xcode 26.6,
+      uploaded 2026-07-07): `expo install --fix` (aligned expo to 57.0.4;
+      expo-speech-recognition@56.0.1 builds fine against SDK 57 / RN 0.86),
+      `expo prebuild --clean` (camera + speech-recognition permissions + `type2`
+      URL scheme + pods regenerated), archive/export/upload all green. The code
+      wiring for the items below is confirmed present; what remains is running
+      the TestFlight build on a real phone:
       - SSH key generation now happens in-process (`ssh-key` crate) instead of
         shelling out to `ssh-keygen` — regenerate a key on the phone and
         verify it still authenticates against a real ssh:// remote.
@@ -58,9 +63,6 @@ Delete this file when the branch is ready for review.
         (file-based SFSpeechRecognizer) through the FFI TranscriptionProvider;
         verify a recording transcribes on-device, and that the JS provider's
         async `transcribe` resolves correctly through the ubrn foreign trait.
-        Note: expo-speech-recognition@56.0.1 targets Expo SDK 56 — confirm it
-        builds against SDK 57 / RN 0.86 (run `npx expo install` to let Expo
-        align versions).
       - Sync QR flow end-to-end: desktop Settings → Sync → Start server →
         phone menu → Sync → Scan QR code → Sync now; plus the system-camera
         path (`type2://sync` deep link must open the app on the Sync screen).

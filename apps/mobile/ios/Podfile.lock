@@ -1,7 +1,7 @@
 PODS:
-  - EXConstants (57.0.2):
+  - EXConstants (57.0.3):
     - ExpoModulesCore
-  - Expo (57.0.1):
+  - Expo (57.0.4):
     - ExpoModulesCore
     - ExpoModulesJSI
     - hermes-engine
@@ -27,10 +27,14 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - ExpoAsset (57.0.2):
+  - ExpoAsset (57.0.3):
     - ExpoModulesCore
   - ExpoAudio (57.0.0):
     - ExpoModulesCore
+  - ExpoCamera (57.0.1):
+    - ExpoModulesCore
+  - ExpoCameraBarcodeScanning (57.0.1):
+    - ExpoCamera
   - ExpoDomWebView (57.0.0):
     - ExpoModulesCore
   - ExpoFileSystem (57.0.0):
@@ -41,7 +45,7 @@ PODS:
     - ExpoModulesCore
   - ExpoLogBox (57.0.0):
     - React-Core
-  - ExpoModulesCore (57.0.1):
+  - ExpoModulesCore (57.0.3):
     - ExpoModulesJSI
     - hermes-engine
     - RCTRequired
@@ -65,17 +69,19 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - ExpoModulesJSI (57.0.0):
+  - ExpoModulesJSI (57.0.1):
     - React-Core
     - ReactCommon
-  - ExpoModulesWorklets (57.0.1):
+  - ExpoModulesWorklets (57.0.3):
     - ExpoModulesCore
     - ExpoModulesJSI
-  - ExpoModulesWorkletsAdapter (57.0.1):
+  - ExpoModulesWorkletsAdapter (57.0.3):
     - ExpoModulesCore
     - ExpoModulesJSI
     - ExpoModulesWorklets
     - RNWorklets
+  - ExpoSpeechRecognition (56.0.1):
+    - ExpoModulesCore
   - FBLazyVector (0.86.0)
   - hermes-engine (250829098.0.14):
     - hermes-engine/Pre-built (= 250829098.0.14)
@@ -2240,6 +2246,8 @@ DEPENDENCIES:
   - Expo (from `../../../node_modules/expo`)
   - ExpoAsset (from `../../../node_modules/expo-asset/ios`)
   - ExpoAudio (from `../../../node_modules/expo-audio/ios`)
+  - ExpoCamera (from `../../../node_modules/expo-camera/ios/ExpoCamera.podspec`)
+  - ExpoCameraBarcodeScanning (from `../../../node_modules/expo-camera/ios/ExpoCameraBarcodeScanning.podspec`)
   - "ExpoDomWebView (from `../../../node_modules/@expo/dom-webview/ios`)"
   - ExpoFileSystem (from `../../../node_modules/expo-file-system/ios/ExpoFileSystem.podspec`)
   - ExpoFont (from `../../../node_modules/expo-font/ios/ExpoFont.podspec`)
@@ -2249,6 +2257,7 @@ DEPENDENCIES:
   - ExpoModulesJSI (from `../../../node_modules/expo-modules-jsi/apple`)
   - ExpoModulesWorklets (from `../../../node_modules/expo-modules-core/ExpoModulesWorklets.podspec`)
   - ExpoModulesWorkletsAdapter (from `../../../node_modules/expo-modules-core`)
+  - ExpoSpeechRecognition (from `../../../node_modules/expo-speech-recognition/ios`)
   - FBLazyVector (from `../../../node_modules/react-native/Libraries/FBLazyVector`)
   - hermes-engine (from `../../../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
   - RCTDeprecation (from `../../../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
@@ -2342,6 +2351,10 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/expo-asset/ios"
   ExpoAudio:
     :path: "../../../node_modules/expo-audio/ios"
+  ExpoCamera:
+    :podspec: "../../../node_modules/expo-camera/ios/ExpoCamera.podspec"
+  ExpoCameraBarcodeScanning:
+    :podspec: "../../../node_modules/expo-camera/ios/ExpoCameraBarcodeScanning.podspec"
   ExpoDomWebView:
     :path: "../../../node_modules/@expo/dom-webview/ios"
   ExpoFileSystem:
@@ -2360,6 +2373,8 @@ EXTERNAL SOURCES:
     :podspec: "../../../node_modules/expo-modules-core/ExpoModulesWorklets.podspec"
   ExpoModulesWorkletsAdapter:
     :path: "../../../node_modules/expo-modules-core"
+  ExpoSpeechRecognition:
+    :path: "../../../node_modules/expo-speech-recognition/ios"
   FBLazyVector:
     :path: "../../../node_modules/react-native/Libraries/FBLazyVector"
   hermes-engine:
@@ -2527,19 +2542,22 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
-  EXConstants: ac0976f6962735f39a25730074869614cb1a5d85
-  Expo: 15f5a16e9369278c1781ad3aa17d364245703635
-  ExpoAsset: f9f1fc226653b9f7ab995873d9b4f929d2a916c7
+  EXConstants: d069b4a2dd469d5a3a4d3d7b09757e708fda8f64
+  Expo: cfb5f1189dfb9bd5ccc7701ceb2879d326c253e9
+  ExpoAsset: 586e89aeaab2e23bfa90b9dce4d7d5e36815c039
   ExpoAudio: 4f27c2bc1cc08f003c2af070cedf25fefd9da5bb
+  ExpoCamera: d30fb3af6f5e97d1567c3b2d84413707a78d9005
+  ExpoCameraBarcodeScanning: 0cd97b138b31f7534201816611dd164543429b37
   ExpoDomWebView: 73ba90107a5acc0017a09b06e66d8eb238e089b8
   ExpoFileSystem: ffcd56066188802f263254b6b2e60f74b6a0bdae
   ExpoFont: 35fd7ad72f697d3a9656545909972d8b9f60d5da
   ExpoKeepAwake: 8a96e2075b75641001f55393d7e6600a5b808f09
   ExpoLogBox: b39a76aab749833d58111c3be1264bb90f3b92d4
-  ExpoModulesCore: ad0e315a658d0f78848bbe7ef845ff45bc0e6055
-  ExpoModulesJSI: ef7f197a8e7eeb245557f560ade794bfc1abdc79
-  ExpoModulesWorklets: 10c1c68a4abbae5e279f8ed5f6c6fc5078bbba1e
-  ExpoModulesWorkletsAdapter: ac280212c97e74243455777f72f0cb1871d1bdef
+  ExpoModulesCore: e0b100f95360fa46c08134992c52b8dc07b02ce4
+  ExpoModulesJSI: 0fad44a0464a4469b83a06e34e529c13043f2f69
+  ExpoModulesWorklets: f6b71b8ddeb8dceb2ce3504544ecfbd708ba79a2
+  ExpoModulesWorkletsAdapter: 639de30e8de038293a0ca7ce95d1d29146a85a3f
+  ExpoSpeechRecognition: 119acf84448579e53f841d040aad76982f945e2d
   FBLazyVector: b3e7ad108f0d882e30445c5527d774e3fd432f3d
   hermes-engine: 29149732020eeac870b01ab2da4c3c83724a8c2d
   RCTDeprecation: 2a74a2c57675e64419bd89078efde81f7c1de90b
