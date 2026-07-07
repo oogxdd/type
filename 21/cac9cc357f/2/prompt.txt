@@ -1,0 +1,21 @@
+what here i should add to the gitignore?
+
+---
+
+[Request interrupted by user]
+
+---
+
+yes please doo
+
+---
+
+[Request interrupted by user]
+
+---
+
+yes please do
+
+---
+
+commit and push
