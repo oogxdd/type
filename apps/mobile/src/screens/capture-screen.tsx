@@ -183,7 +183,7 @@ const ToolbarButton = ({
         styles.toolbarButton,
         {
           backgroundColor: theme.colors.surface,
-          shadowColor: theme.dark ? "transparent" : "#000000",
+          borderColor: theme.colors.border,
           opacity: pressed ? 0.6 : 1,
           transform: [{ scale: pressed ? 0.94 : 1 }],
         },
@@ -218,11 +218,8 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     justifyContent: "center",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 3,
-    elevation: 2,
   },
 });
