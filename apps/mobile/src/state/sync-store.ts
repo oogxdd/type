@@ -3,6 +3,7 @@ import { create } from "zustand";
 import * as core from "@typenotes/mobile-core/core-api";
 import { getErrorMessage } from "@typenotes/shared/errors";
 import { getSyncHint } from "@typenotes/shared/format";
+import type { SyncDeepLinkParams } from "@typenotes/shared/sync-link";
 import type {
   ConnectGitArgs,
   GitCommitHistoryEntry,
@@ -20,13 +21,20 @@ type SyncState = {
   action: SyncAction;
   error: string | null;
   hint: string | null;
+  /** A scanned/deep-linked type2://sync remote waiting to be applied. */
+  pendingLink: SyncDeepLinkParams | null;
+  setPendingLink: (link: SyncDeepLinkParams | null) => void;
   refresh: () => Promise<void>;
   connect: (args: ConnectGitArgs) => Promise<void>;
+  /** Persist a scanned sync link to the working folder's settings + connect. */
+  connectFromLink: (link: SyncDeepLinkParams) => Promise<void>;
   pull: () => Promise<void>;
   push: (message?: string) => Promise<void>;
+  /** The one-button flow: pull, then push. */
+  syncNow: () => Promise<void>;
 };
 
-export const useSyncStore = create<SyncState>((set) => {
+export const useSyncStore = create<SyncState>((set, get) => {
   const savedGitConnection = (): ConnectGitArgs | null => {
     const profile = activeProfile(useSettingsStore.getState().snapshot);
     const settings = profile?.settings;
@@ -88,10 +96,33 @@ export const useSyncStore = create<SyncState>((set) => {
     action: "idle",
     error: null,
     hint: null,
+    pendingLink: null,
+
+    setPendingLink: (link) => set({ pendingLink: link }),
 
     refresh: () => run("refresh", () => core.getGitStatus()),
 
     connect: (args) => run("connect", () => core.connectGitRepo(args)),
+
+    connectFromLink: async (link) => {
+      const settingsStore = useSettingsStore.getState();
+      const profile = activeProfile(settingsStore.snapshot);
+      await settingsStore.saveGitSettings({
+        remoteUrl: link.remote,
+        branch: link.branch ?? "main",
+        username: profile?.settings.git_username ?? "",
+        password: profile?.settings.git_password ?? "",
+        commitMessage: profile?.settings.git_commit_message || "Sync notes",
+      });
+      await run("connect", () =>
+        core.connectGitRepo({
+          remote_url: link.remote,
+          branch: link.branch ?? "main",
+          username: null,
+          password: null,
+        })
+      );
+    },
 
     pull: async () => {
       await run("pull", async () => {
@@ -110,6 +141,11 @@ export const useSyncStore = create<SyncState>((set) => {
       });
       // Remote edits may have changed the notes on disk.
       await useNotesStore.getState().refresh();
+    },
+
+    syncNow: async () => {
+      await get().pull();
+      await get().push();
     },
 
     push: (message) =>

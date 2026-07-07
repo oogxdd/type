@@ -1,0 +1,48 @@
+import { describe, expect, it } from "vitest";
+
+import { buildSyncDeepLink, parseSyncDeepLink } from "./sync-link";
+
+describe("sync deep link", () => {
+  it("round-trips remote, branch, and name", () => {
+    const link = buildSyncDeepLink({
+      remote: "git://192.168.1.10/notes",
+      branch: "main",
+      name: "Computer (mac.local)",
+    });
+    expect(parseSyncDeepLink(link)).toEqual({
+      remote: "git://192.168.1.10/notes",
+      branch: "main",
+      name: "Computer (mac.local)",
+    });
+  });
+
+  it("round-trips with only a remote", () => {
+    const link = buildSyncDeepLink({ remote: "ssh://user@host/repo.git" });
+    expect(parseSyncDeepLink(link)).toEqual({
+      remote: "ssh://user@host/repo.git",
+      branch: undefined,
+      name: undefined,
+    });
+  });
+
+  it("accepts URLSearchParams-style + for spaces (old desktop builds)", () => {
+    const parsed = parseSyncDeepLink(
+      "type2://sync?remote=git%3A%2F%2F10.0.0.2%2Fnotes&name=Computer+%28mac%29"
+    );
+    expect(parsed).toEqual({
+      remote: "git://10.0.0.2/notes",
+      branch: undefined,
+      name: "Computer (mac)",
+    });
+  });
+
+  it("rejects other schemes, hosts, and missing remotes", () => {
+    expect(parseSyncDeepLink("https://example.com?remote=x")).toBeNull();
+    expect(parseSyncDeepLink("type2://other?remote=x")).toBeNull();
+    expect(parseSyncDeepLink("type2://sync?branch=main")).toBeNull();
+  });
+
+  it("tolerates malformed percent-encoding without throwing", () => {
+    expect(parseSyncDeepLink("type2://sync?remote=%E0%A4%A")).toBeNull();
+  });
+});

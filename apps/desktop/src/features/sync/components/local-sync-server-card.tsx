@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import * as gitApi from "@/features/sync/api/git-api";
-import { buildSyncDeepLink } from "@/features/sync/api/local-sync-link";
+import { buildSyncDeepLink } from "@typenotes/shared/sync-link";
 import type { LocalSyncServerStatus } from "@typenotes/shared/types";
 import { Button } from "@/shared/ui/button";
 import { getErrorMessage } from "@typenotes/shared/errors";
@@ -141,10 +141,14 @@ export function LocalSyncServerCard() {
               />
             ) : null}
             <ol className="list-decimal space-y-1 pl-5 text-xs leading-relaxed text-muted-foreground">
-              <li>On the phone: Settings → Sync → <strong>Find on local network</strong>, then tap this computer.</li>
               <li>
-                No luck? Settings → Profile → Git: paste the Remote URL, set Branch to{" "}
-                <code>{status?.branch ?? "main"}</code>, Apply, then <strong>Sync now</strong>.
+                On the phone: menu → <strong>Sync</strong> → <strong>Scan QR code</strong>, point at
+                the code above, then tap <strong>Sync now</strong>.
+              </li>
+              <li>
+                No camera? Sync → Advanced: paste the Remote URL, set Branch to{" "}
+                <code>{status?.branch ?? "main"}</code>, <strong>Save &amp; connect</strong>, then{" "}
+                <strong>Sync now</strong>.
               </li>
             </ol>
           </div>

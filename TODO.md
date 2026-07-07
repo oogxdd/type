@@ -48,6 +48,31 @@ Delete this file when the branch is ready for review.
       `apps/mobile/src/core/boot.ts`, Expo prebuild, pod install. Also verify
       the exact generated TS surface matches `raw-core.ts` (names are the
       uniffi camelCase convention; adjust the seam if anything drifts).
+- [ ] Mobile UX round (2026-07-07) — device verification on iOS after the
+      next Mac build (`npx expo prebuild` must re-run: new plugins/permissions
+      for expo-camera + expo-speech-recognition, and the `type2` URL scheme):
+      - SSH key generation now happens in-process (`ssh-key` crate) instead of
+        shelling out to `ssh-keygen` — regenerate a key on the phone and
+        verify it still authenticates against a real ssh:// remote.
+      - `transcription_mode: "native"` now runs expo-speech-recognition
+        (file-based SFSpeechRecognizer) through the FFI TranscriptionProvider;
+        verify a recording transcribes on-device, and that the JS provider's
+        async `transcribe` resolves correctly through the ubrn foreign trait.
+        Note: expo-speech-recognition@56.0.1 targets Expo SDK 56 — confirm it
+        builds against SDK 57 / RN 0.86 (run `npx expo install` to let Expo
+        align versions).
+      - Sync QR flow end-to-end: desktop Settings → Sync → Start server →
+        phone menu → Sync → Scan QR code → Sync now; plus the system-camera
+        path (`type2://sync` deep link must open the app on the Sync screen).
+      - Drawer navigation (hamburger + left-edge swipe), capture screen
+        keyboard (no auto-focus, swipe-down dismiss, swipe-up still files the
+        page).
+- [ ] `packages/mobile-core/src/index.tsx` is gitignored ubrn output, but
+      `apps/mobile/src/core/boot.ts` imports it statically — on machines
+      without codegen, `tsc --noEmit` for @typenotes/mobile fails unless a
+      local stub exists (this VM keeps an uncommitted typed stub there).
+      Consider restoring a committed fallback entry so typecheck works from a
+      clean clone.
 
 ## Milestones
 

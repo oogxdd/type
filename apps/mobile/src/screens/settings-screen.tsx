@@ -23,8 +23,9 @@ const MODES: { mode: TranscriptionMode; label: string; description: string }[] =
   },
   {
     mode: "native",
-    label: "Native (on-device)",
-    description: "Use a device speech recognizer plugged in through the native provider API.",
+    label: "On this phone (on-device)",
+    description:
+      "Transcribe right after recording with the system speech recognizer — private, works offline.",
   },
   {
     mode: "off",

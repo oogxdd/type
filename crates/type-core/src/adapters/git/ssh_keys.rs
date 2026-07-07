@@ -5,9 +5,10 @@
 //! key paths via `ssh_private_key_if_exists` / `ssh_public_key_if_exists`.
 
 use crate::AppEnv;
+use rand_core::OsRng;
+use ssh_key::{Algorithm, LineEnding, PrivateKey};
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
 
 use crate::app_data_dir;
 
@@ -27,7 +28,8 @@ fn ssh_public_key_path(app: &AppEnv) -> Result<PathBuf, String> {
     Ok(ssh_dir(app)?.join(SSH_PUBLIC_KEY_NAME))
 }
 
-/// Generate an Ed25519 SSH keypair using ssh-keygen.
+/// Generate an Ed25519 SSH keypair in-process (no ssh-keygen binary needed,
+/// so it works on iOS/Android too). Files are written in OpenSSH format.
 pub fn generate_ssh_keypair(app: &AppEnv) -> Result<String, String> {
     let dir = ssh_dir(app)?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -35,23 +37,22 @@ pub fn generate_ssh_keypair(app: &AppEnv) -> Result<String, String> {
     if private_path.exists() {
         return Err("SSH key already exists. Delete it first to regenerate.".to_string());
     }
-    let output = Command::new("ssh-keygen")
-        .args([
-            "-t",
-            "ed25519",
-            "-f",
-            &private_path.to_string_lossy(),
-            "-N",
-            "",
-            "-C",
-            "type-notes-sync",
-        ])
-        .output()
-        .map_err(|e| format!("Failed to run ssh-keygen: {e}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("ssh-keygen failed: {stderr}"));
-    }
+    let mut key = PrivateKey::random(&mut OsRng, Algorithm::Ed25519)
+        .map_err(|e| format!("Failed to generate Ed25519 key: {e}"))?;
+    key.set_comment("type-notes-sync");
+    let private_openssh = key
+        .to_openssh(LineEnding::LF)
+        .map_err(|e| format!("Failed to encode private key: {e}"))?;
+    let public_openssh = key
+        .public_key()
+        .to_openssh()
+        .map_err(|e| format!("Failed to encode public key: {e}"))?;
+    fs::write(&private_path, private_openssh.as_bytes()).map_err(|e| e.to_string())?;
+    fs::write(
+        dir.join(SSH_PUBLIC_KEY_NAME),
+        format!("{public_openssh}\n"),
+    )
+    .map_err(|e| e.to_string())?;
     // Set restrictive permissions on the private key.
     #[cfg(unix)]
     {
@@ -59,8 +60,7 @@ pub fn generate_ssh_keypair(app: &AppEnv) -> Result<String, String> {
         let perms = std::fs::Permissions::from_mode(0o600);
         fs::set_permissions(&private_path, perms).map_err(|e| e.to_string())?;
     }
-    let public = fs::read_to_string(dir.join(SSH_PUBLIC_KEY_NAME)).map_err(|e| e.to_string())?;
-    Ok(public.trim().to_string())
+    Ok(public_openssh.trim().to_string())
 }
 
 /// Read the public key, if it exists.

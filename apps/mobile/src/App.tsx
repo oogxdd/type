@@ -4,15 +4,16 @@ import {
   NavigationContainer,
 } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useState } from "react";
-import { AppState, StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { AppState, Linking, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { getErrorMessage } from "@typenotes/shared/errors";
+import { parseSyncDeepLink } from "@typenotes/shared/sync-link";
 
 import { bootCore } from "./core/boot";
-import { Stack } from "./navigation";
+import { Drawer, navigateToScreen, navigationRef, Stack } from "./navigation";
 import { CaptureScreen } from "./screens/capture-screen";
 import { EditorScreen } from "./screens/editor-screen";
 import { FeedScreen } from "./screens/feed-screen";
@@ -24,14 +25,66 @@ import { SyncScreen } from "./screens/sync-screen";
 import { useNotesStore } from "./state/notes-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
 import { useSettingsStore } from "./state/settings-store";
+import { useSyncStore } from "./state/sync-store";
 import { useTheme } from "./theme";
+import { AppDrawerContent } from "./ui/drawer-content";
 
 type BootPhase = { state: "booting" } | { state: "ready" } | { state: "failed"; error: string };
+
+const HomeStack = () => {
+  const theme = useTheme();
+  return (
+    <Stack.Navigator
+      initialRouteName="Capture"
+      screenOptions={{
+        headerStyle: { backgroundColor: theme.colors.background },
+        headerTintColor: theme.colors.text,
+        headerShadowVisible: false,
+        contentStyle: { backgroundColor: theme.colors.background },
+      }}
+    >
+      <Stack.Screen
+        name="Capture"
+        component={CaptureScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen name="Feed" component={FeedScreen} />
+      <Stack.Screen
+        name="Folder"
+        component={FolderScreen}
+        options={({ route }) => ({ title: route.params.title })}
+      />
+      <Stack.Screen
+        name="Editor"
+        component={EditorScreen}
+        options={({ route }) => ({ title: route.params.title ?? "Note" })}
+      />
+      <Stack.Screen name="Record" component={RecordScreen} />
+      <Stack.Screen name="Sync" component={SyncScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
+    </Stack.Navigator>
+  );
+};
+
+/**
+ * A `type2://sync?...` link (from the desktop's QR code, scanned with the
+ * system camera) drops the remote into the sync store and jumps to the Sync
+ * screen, which applies it.
+ */
+const handleSyncUrl = (url: string | null) => {
+  const params = url ? parseSyncDeepLink(url) : null;
+  if (!params) {
+    return;
+  }
+  useSyncStore.getState().setPendingLink(params);
+  navigateToScreen("Sync");
+};
 
 export default function App() {
   const theme = useTheme();
   const [phase, setPhase] = useState<BootPhase>({ state: "booting" });
   const demoMode = useSettingsStore((s) => s.demoMode);
+  const initialUrlHandled = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +111,15 @@ export default function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Deep links while the app is running; the initial (cold-start) URL is
+  // picked up in the container's onReady below.
+  useEffect(() => {
+    const subscription = Linking.addEventListener("url", ({ url }) =>
+      handleSyncUrl(url)
+    );
+    return () => subscription.remove();
   }, []);
 
   // Auto-lock when the app goes to background (if enabled in security prefs).
@@ -103,36 +165,27 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <NavigationContainer theme={theme.dark ? DarkTheme : DefaultTheme}>
-          <Stack.Navigator
-            initialRouteName="Capture"
+        <NavigationContainer
+          ref={navigationRef}
+          theme={theme.dark ? DarkTheme : DefaultTheme}
+          onReady={() => {
+            if (!initialUrlHandled.current) {
+              initialUrlHandled.current = true;
+              void Linking.getInitialURL().then(handleSyncUrl);
+            }
+          }}
+        >
+          <Drawer.Navigator
+            drawerContent={(props) => <AppDrawerContent {...props} />}
             screenOptions={{
-              headerStyle: { backgroundColor: theme.colors.background },
-              headerTintColor: theme.colors.text,
-              headerShadowVisible: false,
-              contentStyle: { backgroundColor: theme.colors.background },
+              headerShown: false,
+              drawerType: "front",
+              swipeEdgeWidth: 80,
+              drawerStyle: { width: 300 },
             }}
           >
-            <Stack.Screen
-              name="Capture"
-              component={CaptureScreen}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen name="Feed" component={FeedScreen} />
-            <Stack.Screen
-              name="Folder"
-              component={FolderScreen}
-              options={({ route }) => ({ title: route.params.title })}
-            />
-            <Stack.Screen
-              name="Editor"
-              component={EditorScreen}
-              options={({ route }) => ({ title: route.params.title ?? "Note" })}
-            />
-            <Stack.Screen name="Record" component={RecordScreen} />
-            <Stack.Screen name="Sync" component={SyncScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} />
-          </Stack.Navigator>
+            <Drawer.Screen name="Home" component={HomeStack} />
+          </Drawer.Navigator>
         </NavigationContainer>
         {demoMode ? (
           <View style={[styles.demoBanner, { backgroundColor: theme.colors.accent }]}>

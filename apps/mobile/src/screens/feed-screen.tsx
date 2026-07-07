@@ -1,4 +1,4 @@
-import { useNavigation } from "@react-navigation/native";
+import { DrawerActions, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useLayoutEffect } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
@@ -69,11 +69,9 @@ export const FeedScreen = () => {
       headerRight: () => (
         <View style={styles.headerButtons}>
           <HeaderLink
-            label="Folders"
-            onPress={() => navigation.navigate("Folder", { path: "", title: "Folders" })}
+            label="☰"
+            onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
           />
-          <HeaderLink label="Sync" onPress={() => navigation.navigate("Sync")} />
-          <HeaderLink label="Settings" onPress={() => navigation.navigate("Settings")} />
         </View>
       ),
     });

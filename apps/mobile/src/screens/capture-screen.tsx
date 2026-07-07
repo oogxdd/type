@@ -3,10 +3,11 @@
 // top) and a fresh blank page is ready underneath — same gesture as the
 // original app. Notes land in Feed via the desktop-compatible core.
 
-import { useNavigation } from "@react-navigation/native";
+import { DrawerActions, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Keyboard,
   Pressable,
   StyleSheet,
   Text,
@@ -75,6 +76,16 @@ export const CaptureScreen = () => {
     translateY.value = 0;
   };
 
+  // A clear downward drag tucks the keyboard away (the input regains it on
+  // the next tap). Runs alongside the swipe-up gesture, which claims only
+  // upward drags.
+  const dismissKeyboardPan = Gesture.Pan()
+    .activeOffsetY(24)
+    .failOffsetY(-12)
+    .onStart(() => {
+      runOnJS(Keyboard.dismiss)();
+    });
+
   const pan = Gesture.Pan()
     // Only claim clearly-upward drags; leave taps, horizontal moves, and
     // downward scrolling to the text input.
@@ -112,7 +123,7 @@ export const CaptureScreen = () => {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      <GestureDetector gesture={pan}>
+      <GestureDetector gesture={Gesture.Race(pan, dismissKeyboardPan)}>
         <Animated.View
           style={[
             styles.page,
@@ -129,7 +140,6 @@ export const CaptureScreen = () => {
             placeholder="Start typing…"
             placeholderTextColor={theme.colors.secondaryText}
             multiline
-            autoFocus
             scrollEnabled
             textAlignVertical="top"
             keyboardAppearance={theme.dark ? "dark" : "light"}
@@ -145,9 +155,14 @@ export const CaptureScreen = () => {
         </Animated.View>
       </GestureDetector>
 
+      <View style={[styles.toolbarLeft, { top: insets.top + 8 }]}>
+        <ToolbarButton
+          label="☰"
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+        />
+      </View>
       <View style={[styles.toolbar, { top: insets.top + 8 }]}>
         <ToolbarButton label="Mic" onPress={() => navigation.navigate("Record")} />
-        <ToolbarButton label="Feed" onPress={() => navigation.navigate("Feed")} />
       </View>
     </View>
   );
@@ -190,6 +205,11 @@ const styles = StyleSheet.create({
     right: 16,
     flexDirection: "row",
     gap: 8,
+  },
+  toolbarLeft: {
+    position: "absolute",
+    left: 16,
+    flexDirection: "row",
   },
   toolbarButton: {
     borderRadius: 14,

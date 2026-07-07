@@ -332,8 +332,9 @@ Each feature's context provider lives in `hooks/` alongside its hooks.
   `api/profiles-api`. Heavily depended upon.
 - **sync** — `components/local-sync-server-card`; `hooks/{git-sync-context,
   use-git-sync-workflows, use-ssh-key (app-managed Ed25519 keypair lifecycle:
-  load/generate/delete)}`; `api/{git-api (libgit2 IPC + SSH key lifecycle),
-  local-sync-link (the `type2://sync` QR-code link format the phone parses)}`.
+  load/generate/delete)}`; `api/git-api` (libgit2 IPC + SSH key lifecycle).
+  The `type2://sync` QR-code link format lives in `@typenotes/shared/sync-link`
+  (desktop builds it, the phone scans/parses it).
 - **security** — `components/lock-screen`; `hooks/security-context` (unlock/lock/enable,
   panic reset, auto-lock on background); `api/security-api`. The shell now treats this as an
   extension surface, so the UI should be hidden unless the extension registry opts it back in.

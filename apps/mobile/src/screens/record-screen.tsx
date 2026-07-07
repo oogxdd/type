@@ -3,8 +3,8 @@
 // transcription according to the working folder's transcription_mode:
 //
 //   assemblyai → cloud queue now, on this device
-//   native     → a host TranscriptionProvider (none registered yet — the note
-//                stays pending and we say so)
+//   native     → on-device speech recognition via the expo-speech-recognition
+//                provider (lib/native-transcription), run by the core's queue
 //   desktop    → stays pending; a synced desktop picks it up (local Whisper)
 //   off        → stays pending until triggered manually
 
@@ -28,6 +28,7 @@ import {
   type TranscriptionMode,
 } from "@typenotes/shared/types";
 
+import { nativeTranscriptionProvider } from "../lib/native-transcription";
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
@@ -36,7 +37,7 @@ import { Button, InlineNote } from "../ui/controls";
 
 const MODE_EXPLANATION: Record<TranscriptionMode, string> = {
   assemblyai: "Will transcribe now via AssemblyAI.",
-  native: "Native transcription provider is not registered yet — the recording stays pending.",
+  native: "Will transcribe on this device with the system speech recognizer.",
   desktop: "Will stay pending until your desktop syncs and transcribes it.",
   off: "Automatic transcription is off — the recording stays pending.",
 };
@@ -106,6 +107,15 @@ export const RecordScreen = () => {
         try {
           const queued = await core.queueRecordingTranscriptions();
           detail = `Queued for AssemblyAI (${queued.queued} queued, ${queued.in_flight} in flight).`;
+        } catch (queueError) {
+          detail = `Saved, but queueing failed: ${getErrorMessage(queueError)}`;
+        }
+      } else if (mode === "native") {
+        try {
+          const queued = await core.queueProviderTranscriptions(
+            nativeTranscriptionProvider
+          );
+          detail = `Transcribing on this device (${queued.queued} queued, ${queued.in_flight} in flight).`;
         } catch (queueError) {
           detail = `Saved, but queueing failed: ${getErrorMessage(queueError)}`;
         }

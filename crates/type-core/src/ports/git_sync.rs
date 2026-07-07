@@ -127,7 +127,8 @@ pub trait GitSyncGateway {
 // generate_ssh_key()
 //   in:  nothing
 //   out: String — the public key text
-//   - Generates an Ed25519 keypair using ssh-keygen
+//   - Generates an Ed25519 keypair in-process (ssh-key crate, OpenSSH format —
+//     no ssh-keygen binary, so it also works on iOS/Android)
 //   - Stored in app_data/ssh/{id_ed25519, id_ed25519.pub}
 //   - Private key has restricted permissions (0o600 on Unix)
 //   - Fails if a key already exists (delete first)
