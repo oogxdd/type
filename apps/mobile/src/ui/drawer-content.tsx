@@ -4,14 +4,16 @@
 
 import type { DrawerContentComponentProps } from "@react-navigation/drawer";
 import { useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, SectionList, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 
-import { findFolder, folderNoteRows } from "../lib/feed";
+import { findFolder, folderNoteRows, groupNoteRowsByDate } from "../lib/feed";
+import { formatRelativeTime } from "../lib/relative-time";
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
+import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
 import { NoteListRow } from "../screens/feed-screen";
 
@@ -34,7 +36,10 @@ export const AppDrawerContent = ({ navigation }: DrawerContentComponentProps) =>
   };
 
   const feedRows = folderNoteRows(findFolder(tree, FEED_FOLDER_PATH), previews);
+  const feedSections = groupNoteRowsByDate(feedRows);
   const folders = findFolder(tree, "")?.children ?? [];
+
+  const lastSyncedMs = useSyncStore((s) => s.history[0]?.authored_ms ?? null);
 
   return (
     <View
@@ -57,10 +62,18 @@ export const AppDrawerContent = ({ navigation }: DrawerContentComponentProps) =>
       </View>
 
       {tab === "feed" ? (
-        <FlatList
+        <SectionList
           style={styles.list}
-          data={feedRows}
+          sections={feedSections}
           keyExtractor={(row) => row.path}
+          stickySectionHeadersEnabled
+          renderSectionHeader={({ section }) => (
+            <View style={[styles.sectionHeader, { backgroundColor: theme.colors.background }]}>
+              <Text style={[styles.sectionHeaderText, { color: theme.colors.secondaryText }]}>
+                {section.title}
+              </Text>
+            </View>
+          )}
           renderItem={({ item }) => (
             <NoteListRow
               row={item}
@@ -109,7 +122,11 @@ export const AppDrawerContent = ({ navigation }: DrawerContentComponentProps) =>
       )}
 
       <View style={[styles.bottom, { borderTopColor: theme.colors.border }]}>
-        <BottomItem label="Sync" onPress={() => openScreen("Sync")} />
+        <BottomItem
+          label="Sync"
+          subtitle={`Last synced ${formatRelativeTime(lastSyncedMs)}`}
+          onPress={() => openScreen("Sync")}
+        />
         <BottomItem label="Settings" onPress={() => openScreen("Settings")} />
       </View>
     </View>
@@ -149,14 +166,29 @@ const TabButton = ({
   );
 };
 
-const BottomItem = ({ label, onPress }: { label: string; onPress: () => void }) => {
+const BottomItem = ({
+  label,
+  subtitle,
+  onPress,
+}: {
+  label: string;
+  subtitle?: string;
+  onPress: () => void;
+}) => {
   const theme = useTheme();
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.bottomItem, { opacity: pressed ? 0.6 : 1 }]}
     >
-      <Text style={[styles.bottomLabel, { color: theme.colors.text }]}>{label}</Text>
+      <View style={styles.bottomItemText}>
+        <Text style={[styles.bottomLabel, { color: theme.colors.text }]}>{label}</Text>
+        {subtitle ? (
+          <Text style={[styles.bottomSubtitle, { color: theme.colors.secondaryText }]}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
       <Text style={{ color: theme.colors.secondaryText }}>›</Text>
     </Pressable>
   );
@@ -180,6 +212,8 @@ const styles = StyleSheet.create({
   },
   tabLabel: { fontSize: 14, fontWeight: "600" },
   list: { flex: 1 },
+  sectionHeader: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+  sectionHeaderText: { fontSize: 12, fontWeight: "700" },
   empty: { textAlign: "center", marginTop: 32, fontSize: 13, paddingHorizontal: 16 },
   folderRow: {
     flexDirection: "row",
@@ -202,5 +236,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
+  bottomItemText: { gap: 2 },
   bottomLabel: { fontSize: 15, fontWeight: "500" },
+  bottomSubtitle: { fontSize: 12 },
 });

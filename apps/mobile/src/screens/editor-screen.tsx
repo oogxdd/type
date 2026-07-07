@@ -8,10 +8,13 @@ import { StyleSheet, Text, TextInput, View } from "react-native";
 
 import * as core from "@typenotes/mobile-core/core-api";
 import { getErrorMessage } from "@typenotes/shared/errors";
+import { isRecordingNoteType } from "@typenotes/shared/format";
+import type { NoteMeta } from "@typenotes/shared/types";
 
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useTheme } from "../theme";
+import { RecordingAudioPlayer } from "../ui/audio-player";
 
 const SAVE_DEBOUNCE_MS = 400;
 
@@ -23,12 +26,14 @@ export const EditorScreen = () => {
 
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [meta, setMeta] = useState<NoteMeta | null>(null);
 
   const latest = useRef({ text: "", dirty: false });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    setMeta(null);
     core
       .readNote(path)
       .then((body) => {
@@ -38,6 +43,12 @@ export const EditorScreen = () => {
         }
       })
       .catch((err) => !cancelled && setError(getErrorMessage(err)));
+    core
+      .getNoteMeta(path)
+      .then((noteMeta) => !cancelled && setMeta(noteMeta))
+      .catch(() => {
+        // Non-fatal — the note still opens for editing without the audio header.
+      });
     return () => {
       cancelled = true;
     };
@@ -86,23 +97,30 @@ export const EditorScreen = () => {
     );
   }
 
+  const audioPath = meta?.recording_audio_path || null;
+  const isRecording = isRecordingNoteType(meta?.note_type, audioPath);
+
   return (
-    <TextInput
-      style={[
-        styles.input,
-        { backgroundColor: theme.colors.background, color: theme.colors.text },
-      ]}
-      value={text ?? ""}
-      editable={text !== null}
-      onChangeText={onChange}
-      multiline
-      textAlignVertical="top"
-      keyboardAppearance={theme.dark ? "dark" : "light"}
-    />
+    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
+      {isRecording && audioPath ? <RecordingAudioPlayer audioPath={audioPath} /> : null}
+      <TextInput
+        style={[
+          styles.input,
+          { backgroundColor: theme.colors.background, color: theme.colors.text },
+        ]}
+        value={text ?? ""}
+        editable={text !== null}
+        onChangeText={onChange}
+        multiline
+        textAlignVertical="top"
+        keyboardAppearance={theme.dark ? "dark" : "light"}
+      />
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   input: {
     flex: 1,

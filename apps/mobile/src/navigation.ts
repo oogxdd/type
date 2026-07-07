@@ -13,6 +13,8 @@ export type RootStackParamList = {
   Record: undefined;
   Sync: undefined;
   Settings: undefined;
+  SettingsWorkingFolders: undefined;
+  SettingsTranscription: undefined;
 };
 
 // The drawer wraps the whole stack: its content is the app menu (Feed/Folders

@@ -1,3 +1,10 @@
+// Settings is a two-level menu: this file's default export lands on a list
+// of sections, each of which pushes into its own dedicated screen (also
+// exported from here) rather than showing everything in one long scroll.
+
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
@@ -6,6 +13,7 @@ import {
   type TranscriptionMode,
 } from "@typenotes/shared/types";
 
+import type { RootStackParamList } from "../navigation";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useTheme } from "../theme";
 import { Button, Field, InlineNote, Section } from "../ui/controls";
@@ -34,7 +42,86 @@ const MODES: { mode: TranscriptionMode; label: string; description: string }[] =
   },
 ];
 
+const MODE_LABEL: Record<TranscriptionMode, string> = Object.fromEntries(
+  MODES.map(({ mode, label }) => [mode, label])
+) as Record<TranscriptionMode, string>;
+
 export const SettingsScreen = () => {
+  const theme = useTheme();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const snapshot = useSettingsStore((s) => s.snapshot);
+  const demoMode = useSettingsStore((s) => s.demoMode);
+  const profile = activeProfile(snapshot);
+  const currentMode = profile ? effectiveTranscriptionMode(profile.settings) : null;
+
+  return (
+    <ScrollView
+      style={{ backgroundColor: theme.colors.background }}
+      contentContainerStyle={styles.content}
+    >
+      <MenuRow
+        icon="folder-outline"
+        title="Working Folders"
+        subtitle={profile?.name ?? "No working folder yet"}
+        onPress={() => navigation.navigate("SettingsWorkingFolders")}
+      />
+      <MenuRow
+        icon="mic-outline"
+        title="Transcription"
+        subtitle={currentMode ? MODE_LABEL[currentMode] : "Not set"}
+        onPress={() => navigation.navigate("SettingsTranscription")}
+      />
+      {demoMode ? (
+        <InlineNote>
+          Demo mode: the native Rust core is not linked in this build, so
+          everything above operates on in-memory data.
+        </InlineNote>
+      ) : null}
+    </ScrollView>
+  );
+};
+
+const MenuRow = ({
+  icon,
+  title,
+  subtitle,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle: string;
+  onPress: () => void;
+}) => {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.menuRow,
+        { borderColor: theme.colors.border, opacity: pressed ? 0.6 : 1 },
+      ]}
+    >
+      <View style={[styles.menuRowIcon, { backgroundColor: theme.colors.surface }]}>
+        <Ionicons name={icon} size={18} color={theme.colors.text} />
+      </View>
+      <View style={styles.menuRowText}>
+        <Text style={{ color: theme.colors.text, fontWeight: "600", fontSize: 16 }}>
+          {title}
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={{ color: theme.colors.secondaryText, fontSize: 13 }}
+        >
+          {subtitle}
+        </Text>
+      </View>
+      <Text style={{ color: theme.colors.secondaryText }}>›</Text>
+    </Pressable>
+  );
+};
+
+export const SettingsWorkingFoldersScreen = () => {
   const theme = useTheme();
   const store = useSettingsStore();
   const snapshot = store.snapshot;
@@ -42,14 +129,6 @@ export const SettingsScreen = () => {
 
   const [newFolderName, setNewFolderName] = useState("");
   const [notesRoot, setNotesRoot] = useState(profile?.notes_root ?? "");
-  const [assemblyKey, setAssemblyKey] = useState(
-    snapshot?.app_config.assemblyai_api_key ?? ""
-  );
-
-  const currentMode = profile ? effectiveTranscriptionMode(profile.settings) : null;
-  const modeIsLegacyDerived = profile
-    ? profile.settings.transcription_mode == null
-    : false;
 
   return (
     <ScrollView
@@ -133,6 +212,33 @@ export const SettingsScreen = () => {
         </Section>
       ) : null}
 
+      {store.error ? (
+        <Text style={{ color: theme.colors.danger }}>{store.error}</Text>
+      ) : null}
+    </ScrollView>
+  );
+};
+
+export const SettingsTranscriptionScreen = () => {
+  const theme = useTheme();
+  const store = useSettingsStore();
+  const snapshot = store.snapshot;
+  const profile = activeProfile(snapshot);
+
+  const [assemblyKey, setAssemblyKey] = useState(
+    snapshot?.app_config.assemblyai_api_key ?? ""
+  );
+
+  const currentMode = profile ? effectiveTranscriptionMode(profile.settings) : null;
+  const modeIsLegacyDerived = profile
+    ? profile.settings.transcription_mode == null
+    : false;
+
+  return (
+    <ScrollView
+      style={{ backgroundColor: theme.colors.background }}
+      contentContainerStyle={styles.content}
+    >
       <Section title="Transcription">
         {MODES.map(({ mode, label, description }) => {
           const selected = currentMode === mode;
@@ -180,18 +286,29 @@ export const SettingsScreen = () => {
       {store.error ? (
         <Text style={{ color: theme.colors.danger }}>{store.error}</Text>
       ) : null}
-      {store.demoMode ? (
-        <InlineNote>
-          Demo mode: the native Rust core is not linked in this build, so
-          everything above operates on in-memory data.
-        </InlineNote>
-      ) : null}
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 48 },
+  menuRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+  menuRowIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuRowText: { flex: 1, gap: 2 },
   profileRow: {
     borderWidth: 1,
     borderRadius: 10,

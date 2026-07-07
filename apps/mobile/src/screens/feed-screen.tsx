@@ -1,12 +1,19 @@
 import { DrawerActions, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useLayoutEffect } from "react";
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  RefreshControl,
+  SectionList,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import { formatRecordingStatusLabel } from "@typenotes/shared/format";
 
-import { findFolder, folderNoteRows, type NoteRow } from "../lib/feed";
+import { findFolder, folderNoteRows, groupNoteRowsByDate, type NoteRow } from "../lib/feed";
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useTheme, type Theme } from "../theme";
@@ -78,15 +85,26 @@ export const FeedScreen = () => {
   }, [navigation]);
 
   const rows = folderNoteRows(findFolder(tree, FEED_FOLDER_PATH), previews);
+  const sections = groupNoteRowsByDate(rows);
 
   return (
-    <FlatList
+    <SectionList
       style={{ backgroundColor: theme.colors.background }}
-      data={rows}
+      sections={sections}
       keyExtractor={(row) => row.path}
+      stickySectionHeadersEnabled
       refreshControl={
         <RefreshControl refreshing={loading} onRefresh={() => void refresh()} />
       }
+      renderSectionHeader={({ section }) => (
+        <View
+          style={[styles.sectionHeader, { backgroundColor: theme.colors.background }]}
+        >
+          <Text style={[styles.sectionHeaderText, { color: theme.colors.secondaryText }]}>
+            {section.title}
+          </Text>
+        </View>
+      )}
       renderItem={({ item }) => (
         <NoteListRow
           row={item}
@@ -129,6 +147,8 @@ const HeaderLink = ({ label, onPress }: { label: string; onPress: () => void }) 
 const styles = StyleSheet.create({
   headerButtons: { flexDirection: "row", gap: 16 },
   headerLink: { fontSize: 15, fontWeight: "500" },
+  sectionHeader: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 },
+  sectionHeaderText: { fontSize: 13, fontWeight: "700" },
   row: {
     flexDirection: "row",
     alignItems: "center",

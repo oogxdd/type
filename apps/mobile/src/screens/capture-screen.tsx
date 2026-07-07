@@ -3,6 +3,7 @@
 // top) and a fresh blank page is ready underneath — same gesture as the
 // original app. Notes land in Feed via the desktop-compatible core.
 
+import { Ionicons } from "@expo/vector-icons";
 import { DrawerActions, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -10,7 +11,6 @@ import {
   Keyboard,
   Pressable,
   StyleSheet,
-  Text,
   TextInput,
   useWindowDimensions,
   View,
@@ -149,48 +149,47 @@ export const CaptureScreen = () => {
             textAlignVertical="top"
             keyboardAppearance={theme.dark ? "dark" : "light"}
           />
-          <Text
-            style={[
-              styles.hint,
-              { color: theme.colors.secondaryText, marginBottom: insets.bottom + 8 },
-            ]}
-          >
-            swipe up for a new page
-          </Text>
+          {/* "swipe up for a new page" hint hidden per feedback — the gesture
+              still works, we just don't want to show the label. */}
         </Animated.View>
       </GestureDetector>
 
       <View style={[styles.toolbarLeft, { top: insets.top + 8 }]}>
         <ToolbarButton
-          label="☰"
+          icon="menu-outline"
           onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
         />
       </View>
       <View style={[styles.toolbar, { top: insets.top + 8 }]}>
-        <ToolbarButton label="Mic" onPress={() => navigation.navigate("Record")} />
+        <ToolbarButton icon="mic-outline" onPress={() => navigation.navigate("Record")} />
       </View>
     </View>
   );
 };
 
-const ToolbarButton = ({ label, onPress }: { label: string; onPress: () => void }) => {
+const ToolbarButton = ({
+  icon,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  onPress: () => void;
+}) => {
   const theme = useTheme();
   return (
     <Pressable
       onPress={onPress}
-      hitSlop={8}
+      hitSlop={10}
       style={({ pressed }) => [
         styles.toolbarButton,
         {
           backgroundColor: theme.colors.surface,
-          borderColor: theme.colors.border,
+          shadowColor: theme.dark ? "transparent" : "#000000",
           opacity: pressed ? 0.6 : 1,
+          transform: [{ scale: pressed ? 0.94 : 1 }],
         },
       ]}
     >
-      <Text style={[styles.toolbarButtonText, { color: theme.colors.secondaryText }]}>
-        {label}
-      </Text>
+      <Ionicons name={icon} size={20} color={theme.colors.text} />
     </Pressable>
   );
 };
@@ -204,12 +203,11 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     paddingTop: 44,
   },
-  hint: { textAlign: "center", fontSize: 12, paddingVertical: 6 },
   toolbar: {
     position: "absolute",
     right: 16,
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
   },
   toolbarLeft: {
     position: "absolute",
@@ -217,10 +215,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   toolbarButton: {
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  toolbarButtonText: { fontSize: 13, fontWeight: "500" },
 });

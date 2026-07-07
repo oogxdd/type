@@ -70,6 +70,53 @@ export const folderNoteRows = (
   return rows;
 };
 
+export type NoteRowSection = {
+  title: string;
+  data: NoteRow[];
+};
+
+/** Same day/week bucketing the desktop feed tree uses, flattened into section headers. */
+const dateGroupLabel = (timestampMs: number, now: Date): string => {
+  const value = new Date(timestampMs);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const itemStart = new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  const diffDays = Math.round((todayStart.getTime() - itemStart.getTime()) / 86_400_000);
+  if (diffDays <= 0) {
+    return "Today";
+  }
+  if (diffDays === 1) {
+    return "Yesterday";
+  }
+  if (diffDays < 7) {
+    return value.toLocaleDateString([], { weekday: "long" });
+  }
+  if (value.getFullYear() === now.getFullYear()) {
+    return value.toLocaleDateString([], { month: "long" });
+  }
+  return value.toLocaleDateString([], { month: "long", year: "numeric" });
+};
+
+/**
+ * Groups already-sorted (newest first) note rows into date sections —
+ * Today / Yesterday / weekday name / month — mirroring the desktop feed's
+ * calendar grouping in a flat list shape for the mobile feed.
+ */
+export const groupNoteRowsByDate = (rows: NoteRow[]): NoteRowSection[] => {
+  const now = new Date();
+  const sections: NoteRowSection[] = [];
+  let currentTitle: string | null = null;
+  for (const row of rows) {
+    const timestamp = rowTimestamp(row);
+    const title = timestamp > 0 ? dateGroupLabel(timestamp, now) : "Undated";
+    if (title !== currentTitle) {
+      sections.push({ title, data: [] });
+      currentTitle = title;
+    }
+    sections[sections.length - 1].data.push(row);
+  }
+  return sections;
+};
+
 /** Every note path in the tree (for bulk preview fetches). */
 export const collectNotePaths = (root: FolderNode | null): string[] => {
   if (!root) {

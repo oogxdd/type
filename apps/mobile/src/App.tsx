@@ -1,11 +1,13 @@
+import { Ionicons } from "@expo/vector-icons";
 import {
   DarkTheme,
   DefaultTheme,
+  DrawerActions,
   NavigationContainer,
 } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef, useState } from "react";
-import { AppState, Linking, StyleSheet, Text, View } from "react-native";
+import { AppState, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -20,7 +22,11 @@ import { FeedScreen } from "./screens/feed-screen";
 import { FolderScreen } from "./screens/folder-screen";
 import { LockScreen } from "./screens/lock-screen";
 import { RecordScreen } from "./screens/record-screen";
-import { SettingsScreen } from "./screens/settings-screen";
+import {
+  SettingsScreen,
+  SettingsTranscriptionScreen,
+  SettingsWorkingFoldersScreen,
+} from "./screens/settings-screen";
 import { SyncScreen } from "./screens/sync-screen";
 import { useNotesStore } from "./state/notes-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
@@ -30,6 +36,25 @@ import { useTheme } from "./theme";
 import { AppDrawerContent } from "./ui/drawer-content";
 
 type BootPhase = { state: "booting" } | { state: "ready" } | { state: "failed"; error: string };
+
+// Settings/Sync are dead-end destinations reached only from the drawer (no
+// real stack parent to pop back to), so their back button reopens the
+// drawer instead of popping to Capture, and the native swipe-back gesture is
+// disabled so an edge swipe there always reopens the drawer too — see the
+// nav feedback in the "swipe from left edge" gotcha this fixes.
+const MenuBackButton = ({ onPress }: { onPress: () => void }) => {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={10}
+      style={({ pressed }) => [styles.menuButton, { opacity: pressed ? 0.6 : 1 }]}
+    >
+      <Ionicons name="chevron-back" size={22} color={theme.colors.accent} />
+      <Text style={[styles.menuButtonText, { color: theme.colors.accent }]}>Menu</Text>
+    </Pressable>
+  );
+};
 
 const HomeStack = () => {
   const theme = useTheme();
@@ -60,8 +85,36 @@ const HomeStack = () => {
         options={({ route }) => ({ title: route.params.title ?? "Note" })}
       />
       <Stack.Screen name="Record" component={RecordScreen} />
-      <Stack.Screen name="Sync" component={SyncScreen} />
-      <Stack.Screen name="Settings" component={SettingsScreen} />
+      <Stack.Screen
+        name="Sync"
+        component={SyncScreen}
+        options={({ navigation }) => ({
+          gestureEnabled: false,
+          headerLeft: () => (
+            <MenuBackButton onPress={() => navigation.dispatch(DrawerActions.openDrawer())} />
+          ),
+        })}
+      />
+      <Stack.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={({ navigation }) => ({
+          gestureEnabled: false,
+          headerLeft: () => (
+            <MenuBackButton onPress={() => navigation.dispatch(DrawerActions.openDrawer())} />
+          ),
+        })}
+      />
+      <Stack.Screen
+        name="SettingsWorkingFolders"
+        component={SettingsWorkingFoldersScreen}
+        options={{ title: "Working Folders" }}
+      />
+      <Stack.Screen
+        name="SettingsTranscription"
+        component={SettingsTranscriptionScreen}
+        options={{ title: "Transcription" }}
+      />
     </Stack.Navigator>
   );
 };
@@ -98,6 +151,9 @@ export default function App() {
         if (!isLocked(useSecurityStore.getState().state)) {
           await useSettingsStore.getState().load();
           await useNotesStore.getState().refresh();
+          // Best-effort — populates the drawer's "last synced" label without
+          // forcing the user through the Sync screen first.
+          void useSyncStore.getState().refresh().catch(() => {});
         }
         if (!cancelled) {
           setPhase({ state: "ready" });
@@ -181,7 +237,7 @@ export default function App() {
               headerShown: false,
               drawerType: "front",
               swipeEdgeWidth: 80,
-              drawerStyle: { width: 300 },
+              drawerStyle: { width: "100%" },
             }}
           >
             <Drawer.Screen name="Home" component={HomeStack} />
@@ -213,4 +269,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   demoBannerText: { color: "#ffffff", fontSize: 12, fontWeight: "600" },
+  menuButton: { flexDirection: "row", alignItems: "center", paddingRight: 8 },
+  menuButtonText: { fontSize: 17, marginLeft: -2 },
 });
