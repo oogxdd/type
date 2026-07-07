@@ -1,0 +1,44 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "8ddcb0e4bf66",
+  "strategy": "manual-commit",
+  "branch": "feat/react-native-monorepo",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app.json",
+    "apps/mobile/app.json",
+    "apps/mobile/ios/Podfile",
+    "apps/mobile/ios/Podfile.lock",
+    "apps/mobile/ios/Type/Info.plist",
+    "ios/.gitignore",
+    "ios/.xcode.env",
+    "ios/Podfile",
+    "ios/Podfile.properties.json",
+    "ios/typemonorepo.xcodeproj/project.pbxproj",
+    "ios/typemonorepo.xcodeproj/xcshareddata/xcschemes/typemonorepo.xcscheme",
+    "ios/typemonorepo/AppDelegate.swift",
+    "ios/typemonorepo/Images.xcassets/AppIcon.appiconset/Contents.json",
+    "ios/typemonorepo/Images.xcassets/Contents.json",
+    "ios/typemonorepo/Info.plist",
+    "ios/typemonorepo/SplashScreen.storyboard",
+    "ios/typemonorepo/Supporting/Expo.plist",
+    "ios/typemonorepo/typemonorepo-Bridging-Header.h",
+    "package.json"
+  ],
+  "sessions": [
+    {
+      "metadata": "/8d/dcb0e4bf66/0/metadata.json",
+      "transcript": "/8d/dcb0e4bf66/0/full.jsonl",
+      "context": "",
+      "content_hash": "/8d/dcb0e4bf66/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
