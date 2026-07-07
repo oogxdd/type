@@ -3,7 +3,7 @@
   "checkpoint_id": "8ddcb0e4bf66",
   "strategy": "manual-commit",
   "branch": "feat/react-native-monorepo",
-  "checkpoints_count": 0,
+  "checkpoints_count": 2,
   "files_touched": [
     "app.json",
     "apps/mobile/app.json",
@@ -38,6 +38,13 @@
       "transcript": "/8d/dcb0e4bf66/1/full.jsonl",
       "context": "",
       "content_hash": "/8d/dcb0e4bf66/1/content_hash.txt",
+      "prompt": ""
+    },
+    {
+      "metadata": "/8d/dcb0e4bf66/2/metadata.json",
+      "transcript": "/8d/dcb0e4bf66/2/full.jsonl",
+      "context": "",
+      "content_hash": "/8d/dcb0e4bf66/2/content_hash.txt",
       "prompt": ""
     }
   ],
