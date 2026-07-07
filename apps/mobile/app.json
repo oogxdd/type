@@ -12,7 +12,7 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.typenotes.mobile",
-      "buildNumber": "2026070703",
+      "buildNumber": "2026070704",
       "supportsTablet": true,
       "infoPlist": {
         "UIFileSharingEnabled": true,

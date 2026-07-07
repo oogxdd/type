@@ -24,7 +24,7 @@ platform :ios, podfile_properties['ios.deploymentTarget'] || '16.4'
 
 prepare_react_native_project!
 
-target 'Type' do
+target 'typemonorepo' do
   use_expo_modules!
 
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
@@ -63,21 +63,5 @@ target 'Type' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
-
-    # The Rust core (TypeCore's vendored libtype_ffi.a) statically bundles
-    # libgit2, which references zlib (crc32/deflate*/inflate*) and libiconv
-    # (iconv*). Those live in the iOS system dylibs libz/libiconv but the
-    # ubrn-generated TypeCore.podspec (gitignored, regenerated each codegen)
-    # does not declare them, so the app fails to link with undefined symbols.
-    # Append them to the Pods-Type aggregate xcconfigs (which the app target
-    # inherits its OTHER_LDFLAGS from). post_install runs after CocoaPods
-    # regenerates these files, so this stays applied across `pod install`.
-    Dir.glob(File.join(__dir__, 'Pods', 'Target Support Files', 'Pods-Type', 'Pods-Type.*.xcconfig')).each do |xcconfig_path|
-      contents = File.read(xcconfig_path)
-      additions = ['-lz', '-liconv'].reject { |flag| contents.include?(flag) }
-      next if additions.empty?
-      contents = contents.gsub(/^(OTHER_LDFLAGS = .*)$/) { "#{$1} #{additions.join(' ')}" }
-      File.write(xcconfig_path, contents)
-    end
   end
 end
