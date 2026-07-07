@@ -3,7 +3,7 @@
   "checkpoint_id": "21cac9cc357f",
   "strategy": "manual-commit",
   "branch": "feat/react-native-monorepo",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     ".gitignore",
     "apps/mobile/ios/Podfile.lock",
@@ -23,6 +23,13 @@
       "transcript": "/21/cac9cc357f/0/full.jsonl",
       "context": "",
       "content_hash": "/21/cac9cc357f/0/content_hash.txt",
+      "prompt": ""
+    },
+    {
+      "metadata": "/21/cac9cc357f/1/metadata.json",
+      "transcript": "/21/cac9cc357f/1/full.jsonl",
+      "context": "",
+      "content_hash": "/21/cac9cc357f/1/content_hash.txt",
       "prompt": ""
     }
   ],
