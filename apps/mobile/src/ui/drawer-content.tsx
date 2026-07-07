@@ -2,8 +2,9 @@
 // Sync and Settings pinned at the bottom. Opened with the hamburger on the
 // capture page or a swipe from the left edge.
 
-import type { DrawerContentComponentProps } from "@react-navigation/drawer";
-import { useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useDrawerStatus, type DrawerContentComponentProps } from "@react-navigation/drawer";
+import { useEffect, useState } from "react";
 import { FlatList, Pressable, SectionList, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -35,6 +36,18 @@ export const AppDrawerContent = ({ navigation }: DrawerContentComponentProps) =>
     navigation.closeDrawer();
   };
 
+  // Whatever screen was behind the drawer, reset the stack under it to
+  // Capture the moment it opens — so dismissing the drawer any way (swipe
+  // closed, tap outside, Android back) always lands on the home screen,
+  // not wherever you happened to open the drawer from. Picking an item in
+  // the drawer still navigates forward from here as normal.
+  const drawerStatus = useDrawerStatus();
+  useEffect(() => {
+    if (drawerStatus === "open") {
+      navigation.navigate("Home", { screen: "Capture" } as never);
+    }
+  }, [drawerStatus, navigation]);
+
   const feedRows = folderNoteRows(findFolder(tree, FEED_FOLDER_PATH), previews);
   const feedSections = groupNoteRowsByDate(feedRows);
   const folders = findFolder(tree, "")?.children ?? [];
@@ -52,6 +65,17 @@ export const AppDrawerContent = ({ navigation }: DrawerContentComponentProps) =>
         },
       ]}
     >
+      <Pressable
+        onPress={() => openScreen("Capture")}
+        style={({ pressed }) => [
+          styles.newNote,
+          { borderColor: theme.colors.border, opacity: pressed ? 0.6 : 1 },
+        ]}
+      >
+        <Ionicons name="add-circle-outline" size={20} color={theme.colors.accent} />
+        <Text style={[styles.newNoteLabel, { color: theme.colors.accent }]}>New note</Text>
+      </Pressable>
+
       <View style={[styles.tabs, { backgroundColor: theme.colors.surface }]}>
         <TabButton label="Feed" active={tab === "feed"} onPress={() => setTab("feed")} />
         <TabButton
@@ -196,6 +220,18 @@ const BottomItem = ({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  newNote: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  newNoteLabel: { fontSize: 15, fontWeight: "600" },
   tabs: {
     flexDirection: "row",
     marginHorizontal: 12,
