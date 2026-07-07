@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "21cac9cc357f",
+  "strategy": "manual-commit",
+  "branch": "feat/react-native-monorepo",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".gitignore",
+    "apps/mobile/ios/Podfile.lock",
+    "apps/mobile/ios/Pods",
+    "apps/mobile/ios/Type.xcodeproj/project.pbxproj",
+    "apps/mobile/ios/Type/Info.plist",
+    "apps/mobile/ios/build",
+    "apps/mobile/src/core/boot.ts",
+    "package-lock.json",
+    "packages/mobile-core/package.json",
+    "src-tauri",
+    "target"
+  ],
+  "sessions": [
+    {
+      "metadata": "/21/cac9cc357f/0/metadata.json",
+      "transcript": "/21/cac9cc357f/0/full.jsonl",
+      "context": "",
+      "content_hash": "/21/cac9cc357f/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
