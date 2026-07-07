@@ -1,0 +1,62 @@
+Дальше на Mac: npx expo install → npx expo prebuild → сборка, и пройтись по чек-листу верификации в TODO.md
+  (QR-флоу, on-device транскрипция, ssh-ключ).
+
+
+
+
+ Что важно знать:
+  - Нужен ребилд на Mac: npx expo install (выровнять версии под SDK 57 — expo-speech-recognition@56.0.1 собран под
+  SDK 56, надо проверить сборку) и npx expo prebuild заново — добавились нативные модули, permissions (камера,
+  распознавание речи) и URL-схема type2.
+  - Проверено здесь: typecheck всех workspace, 93 vitest-теста, cargo check/cargo test для type-core. Реальную
+  работу на устройстве (QR-флоу, транскрипция, ssh-ключ против живого remote) я внёс в TODO.md как чек-лист для
+  проверки после сборки.
+  - Попутная находка: packages/mobile-core/src/index.tsx — gitignored-вывод ubrn, но boot.ts импортирует его
+  статически, так что typecheck мобильного приложения на чистом клоне падает. Я оставил на этой VM локальную
+  заглушку и записал в TODO.md предложение вернуть коммитируемый fallback.
+
+pls do
+
+then i want to build a new version and push to testflight
+
+---
+
+<task-notification>
+<task-id>by8219jb5</task-id>
+<tool-use-id>toolu_01QQauN71HpaWprqqcUPPNJE</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-digital-Projects-type-app/8f5a9c03-4d71-4ce1-9f82-34fc24ae3c7c/tasks/by8219jb5.output</output-file>
+<status>completed</status>
+<summary>Background command "Archive iOS app for App Store" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+Errors
+90683: Missing purpose string in Info.plist. Your app’s code references one or more APIs that access sensitive user data, or the app has one or more entitlements that permit such access. The Info.plist file for the “Type.app” bundle should contain a NSPhotoLibraryUsageDescription key with a user-facing purpose string explaining clearly and completely why your app needs the data. If you’re using external libraries or SDKs, they may reference APIs that require a purpose string. While your app might not use these APIs, a purpose string is still required. For details, visit: https://developer.apple.com/documentation/uikit/protecting_the_user_s_privacy/requesting_access_to_protected_resources.
+
+Build Uploads
+View build uploads progress including warnings, errors and upload logs. Learn More
+
+
+All Statuses
+Version & Build
+Status
+
+Date Created
+Version0.1.0, Build (2026070702)
+
+Failed
+Jul 7, 2026 5:56 PM
+Version0.1.0, Build (2026070701)
+Complete
+Jul 7, 2026 1:28 PM
+
+Version 0.1.0
+
+---
+
+на всякий случай этот вопрос про шифрование тоже создай док
+
+---
+
+закоимить и запушь

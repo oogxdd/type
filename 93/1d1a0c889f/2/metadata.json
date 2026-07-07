@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "931d1a0c889f",
+  "session_id": "8f5a9c03-4d71-4ce1-9f82-34fc24ae3c7c",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-07T14:15:17.09413Z",
+  "branch": "feat/react-native-monorepo",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "TODO.md",
+    "apps/mobile/EXPORT_COMPLIANCE.md",
+    "apps/mobile/TESTFLIGHT_HANDOFF.md",
+    "apps/mobile/app.json",
+    "apps/mobile/ios/Podfile.lock",
+    "apps/mobile/ios/Type.xcodeproj/project.pbxproj",
+    "apps/mobile/ios/Type/Info.plist",
+    "apps/mobile/package.json",
+    "package-lock.json"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "166cf643e7bc",
+  "token_usage": {
+    "input_tokens": 5770,
+    "cache_creation_tokens": 146538,
+    "cache_read_tokens": 3682089,
+    "output_tokens": 41238,
+    "api_call_count": 57
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-07T14:15:16.974983Z",
+    "agent_lines": 347,
+    "human_added": 3,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 350,
+    "agent_percentage": 99.14285714285714
+  }
+}
