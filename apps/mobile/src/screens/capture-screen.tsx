@@ -4,7 +4,7 @@
 // original app. Notes land in Feed via the desktop-compatible core.
 
 import { Ionicons } from "@expo/vector-icons";
-import { DrawerActions, useNavigation } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -31,6 +31,7 @@ import { CaptureSession } from "../lib/capture";
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useTheme } from "../theme";
+import { DictationButton } from "../ui/dictation-button";
 
 const SWIPE_DISTANCE = 90;
 const SWIPE_VELOCITY = -900;
@@ -45,6 +46,7 @@ export const CaptureScreen = () => {
   const [text, setText] = useState("");
   const [pageKey, setPageKey] = useState(0);
   const [iconsVisible, setIconsVisible] = useState(true);
+  const [recordingActive, setRecordingActive] = useState(false);
   const iconsOpacity = useSharedValue(1);
   const inputRef = useRef<TextInput>(null);
 
@@ -142,8 +144,9 @@ export const CaptureScreen = () => {
     setText(value);
     session.onChange(value);
     // Keep the page uncluttered while writing; tapping back into the text
-    // brings the hamburger/mic buttons back.
-    if (iconsVisible) {
+    // brings the hamburger/mic buttons back. While a dictation is running the
+    // stop button must stay reachable, so nothing fades.
+    if (iconsVisible && !recordingActive) {
       hideIcons();
     }
   };
@@ -183,14 +186,16 @@ export const CaptureScreen = () => {
       >
         <ToolbarButton
           icon="menu-outline"
-          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+          // The menu is the stack root below this screen, so this pops —
+          // same slide as the left-edge swipe-back gesture.
+          onPress={() => navigation.navigate("Menu")}
         />
       </Animated.View>
       <Animated.View
         pointerEvents={iconsVisible ? "auto" : "none"}
-        style={[styles.toolbar, { top: insets.top + 8 }, toolbarStyle]}
+        style={[styles.fab, { bottom: insets.bottom + 24 }, toolbarStyle]}
       >
-        <ToolbarButton icon="mic-outline" onPress={() => navigation.navigate("Record")} />
+        <DictationButton onRecordingChange={setRecordingActive} />
       </Animated.View>
     </View>
   );
@@ -232,11 +237,10 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     paddingTop: 44,
   },
-  toolbar: {
+  fab: {
     position: "absolute",
-    right: 16,
-    flexDirection: "row",
-    gap: 10,
+    right: 20,
+    alignItems: "flex-end",
   },
   toolbarLeft: {
     position: "absolute",

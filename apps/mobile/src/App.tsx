@@ -1,13 +1,11 @@
-import { Ionicons } from "@expo/vector-icons";
 import {
   DarkTheme,
   DefaultTheme,
-  DrawerActions,
   NavigationContainer,
 } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef, useState } from "react";
-import { AppState, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { AppState, Linking, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -15,13 +13,13 @@ import { getErrorMessage } from "@typenotes/shared/errors";
 import { parseSyncDeepLink } from "@typenotes/shared/sync-link";
 
 import { bootCore } from "./core/boot";
-import { Drawer, navigateToScreen, navigationRef, Stack } from "./navigation";
+import { navigateToScreen, navigationRef, Stack } from "./navigation";
 import { CaptureScreen } from "./screens/capture-screen";
 import { EditorScreen } from "./screens/editor-screen";
 import { FeedScreen } from "./screens/feed-screen";
 import { FolderScreen } from "./screens/folder-screen";
 import { LockScreen } from "./screens/lock-screen";
-import { RecordScreen } from "./screens/record-screen";
+import { MenuScreen } from "./screens/menu-screen";
 import {
   SettingsScreen,
   SettingsTranscriptionScreen,
@@ -33,30 +31,17 @@ import { isLocked, useSecurityStore } from "./state/security-store";
 import { useSettingsStore } from "./state/settings-store";
 import { useSyncStore } from "./state/sync-store";
 import { useTheme } from "./theme";
-import { AppDrawerContent } from "./ui/drawer-content";
 
 type BootPhase = { state: "booting" } | { state: "ready" } | { state: "failed"; error: string };
 
-// Settings/Sync are dead-end destinations reached only from the drawer (no
-// real stack parent to pop back to), so their back button reopens the
-// drawer instead of popping to Capture, and the native swipe-back gesture is
-// disabled so an edge swipe there always reopens the drawer too — see the
-// nav feedback in the "swipe from left edge" gotcha this fixes.
-const MenuBackButton = ({ onPress }: { onPress: () => void }) => {
-  const theme = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      hitSlop={10}
-      style={({ pressed }) => [styles.menuButton, { opacity: pressed ? 0.6 : 1 }]}
-    >
-      <Ionicons name="chevron-back" size={22} color={theme.colors.accent} />
-      <Text style={[styles.menuButtonText, { color: theme.colors.accent }]}>Menu</Text>
-    </Pressable>
-  );
+// Boot with Capture pushed on top of Menu so the blank page is what you see
+// first, while the menu is already "behind" it — the native left-edge
+// swipe-back on Capture slides the menu in. See navigation.ts for the model.
+const BOOT_NAVIGATION_STATE = {
+  routes: [{ name: "Menu" as const }, { name: "Capture" as const }],
 };
 
-const HomeStack = () => {
+const RootStack = () => {
   const theme = useTheme();
   return (
     <Stack.Navigator
@@ -68,6 +53,11 @@ const HomeStack = () => {
         contentStyle: { backgroundColor: theme.colors.background },
       }}
     >
+      <Stack.Screen
+        name="Menu"
+        component={MenuScreen}
+        options={{ headerShown: false, title: "Menu" }}
+      />
       <Stack.Screen
         name="Capture"
         component={CaptureScreen}
@@ -84,27 +74,8 @@ const HomeStack = () => {
         component={EditorScreen}
         options={({ route }) => ({ title: route.params.title ?? "Note" })}
       />
-      <Stack.Screen name="Record" component={RecordScreen} />
-      <Stack.Screen
-        name="Sync"
-        component={SyncScreen}
-        options={({ navigation }) => ({
-          gestureEnabled: false,
-          headerLeft: () => (
-            <MenuBackButton onPress={() => navigation.dispatch(DrawerActions.openDrawer())} />
-          ),
-        })}
-      />
-      <Stack.Screen
-        name="Settings"
-        component={SettingsScreen}
-        options={({ navigation }) => ({
-          gestureEnabled: false,
-          headerLeft: () => (
-            <MenuBackButton onPress={() => navigation.dispatch(DrawerActions.openDrawer())} />
-          ),
-        })}
-      />
+      <Stack.Screen name="Sync" component={SyncScreen} />
+      <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen
         name="SettingsWorkingFolders"
         component={SettingsWorkingFoldersScreen}
@@ -151,7 +122,7 @@ export default function App() {
         if (!isLocked(useSecurityStore.getState().state)) {
           await useSettingsStore.getState().load();
           await useNotesStore.getState().refresh();
-          // Best-effort — populates the drawer's "last synced" label without
+          // Best-effort — populates the menu's "last synced" label without
           // forcing the user through the Sync screen first.
           void useSyncStore.getState().refresh().catch(() => {});
         }
@@ -224,6 +195,7 @@ export default function App() {
         <NavigationContainer
           ref={navigationRef}
           theme={theme.dark ? DarkTheme : DefaultTheme}
+          initialState={BOOT_NAVIGATION_STATE}
           onReady={() => {
             if (!initialUrlHandled.current) {
               initialUrlHandled.current = true;
@@ -231,17 +203,7 @@ export default function App() {
             }
           }}
         >
-          <Drawer.Navigator
-            drawerContent={(props) => <AppDrawerContent {...props} />}
-            screenOptions={{
-              headerShown: false,
-              drawerType: "front",
-              swipeEdgeWidth: 80,
-              drawerStyle: { width: "100%" },
-            }}
-          >
-            <Drawer.Screen name="Home" component={HomeStack} />
-          </Drawer.Navigator>
+          <RootStack />
         </NavigationContainer>
         {demoMode ? (
           <View style={[styles.demoBanner, { backgroundColor: theme.colors.accent }]}>
@@ -269,6 +231,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   demoBannerText: { color: "#ffffff", fontSize: 12, fontWeight: "600" },
-  menuButton: { flexDirection: "row", alignItems: "center", paddingRight: 8 },
-  menuButtonText: { fontSize: 17, marginLeft: -2 },
 });

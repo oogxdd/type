@@ -1,4 +1,4 @@
-// Short relative-time labels for compact UI (e.g. "last synced" in the drawer).
+// Short relative-time labels for compact UI (e.g. "last synced" in the menu).
 
 export const formatRelativeTime = (ms: number | null): string => {
   if (!ms) {

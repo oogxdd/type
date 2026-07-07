@@ -1,8 +1,8 @@
 // Inline audio player for a voice-recording note — the mobile counterpart to
 // the desktop editor's <audio controls> element in RecordingNoteHeader.
 // The core only exposes audio as a base64 payload, so we write it to a cache
-// file once and hand expo-audio a file:// URI (same pattern record-screen.tsx
-// uses in reverse when it saves a fresh recording).
+// file once and hand expo-audio a file:// URI (same pattern the dictation
+// button uses in reverse when it saves a fresh recording).
 
 import { Ionicons } from "@expo/vector-icons";
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from "expo-audio";

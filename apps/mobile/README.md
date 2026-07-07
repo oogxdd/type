@@ -9,8 +9,11 @@ system folders, and per-folder `.type/settings.json`.
 
 The app opens on a **blank page** — start typing immediately. **Swipe up**
 and the page files itself into Feed while a fresh blank page slides in
-underneath. Everything else (feed, folders, sync, recording, settings) is
-secondary chrome reachable from the corner buttons.
+underneath. **Swipe from the left edge** (or tap the hamburger) and the menu
+slides in — feed and folders on top, sync and settings at the bottom; a
+leftward swipe on the menu brings a fresh blank page back. The floating mic
+button in the bottom-right dictates a voice note: tap to start and tap again
+to stop, or hold it to record only while pressed.
 
 ## Running it
 
@@ -49,14 +52,16 @@ later step.
 ```
 src/
   App.tsx                 boot + navigation container + demo banner
-  navigation.ts           typed native-stack route table
+  navigation.ts           typed native-stack route table (menu is the root,
+                          capture boots pushed on top of it)
   theme.ts                light/dark palette
   core/boot.ts            wires RawCore (generated native module or mock) + initCore
   lib/capture.ts          capture-page note lifecycle (pure, tested)
   lib/feed.ts             tree+previews → list rows (pure, tested)
   state/                  zustand stores: notes, settings (working folders), sync
-  screens/                capture, feed, folder, editor, record, sync, settings
-  ui/controls.tsx         small shared primitives for the utility screens
+  screens/                capture, menu, feed, folder, editor, sync, settings
+  ui/                     dictation button (voice capture), audio player, shared
+                          primitives for the utility screens
 ```
 
 State flows one way: screens → `@typenotes/mobile-core/core-api` (typed

@@ -1,39 +1,37 @@
-import { createDrawerNavigator } from "@react-navigation/drawer";
 import {
+  CommonActions,
   createNavigationContainerRef,
-  type NavigatorScreenParams,
 } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
+// One native stack, with the menu as its root — conceptually the menu sits to
+// the LEFT of the capture page. The app boots with Capture pushed on top of
+// Menu (see initialState in App.tsx), so the native left-edge swipe-back on
+// the capture page reveals the menu, and every other screen is pushed from the
+// menu so swipe-back walks naturally back to it. A leftward swipe on the menu
+// pushes a fresh capture page back in.
 export type RootStackParamList = {
+  Menu: undefined;
   Capture: undefined;
   Feed: undefined;
   Folder: { path: string; title: string };
   Editor: { path: string; title?: string };
-  Record: undefined;
   Sync: undefined;
   Settings: undefined;
   SettingsWorkingFolders: undefined;
   SettingsTranscription: undefined;
 };
 
-// The drawer wraps the whole stack: its content is the app menu (Feed/Folders
-// tabs + Sync/Settings), opened with the hamburger or an edge swipe.
-export type DrawerParamList = {
-  Home: NavigatorScreenParams<RootStackParamList> | undefined;
-};
-
 export const Stack = createNativeStackNavigator<RootStackParamList>();
-export const Drawer = createDrawerNavigator<DrawerParamList>();
 
 /** Container ref so deep-link handling can navigate from outside React. */
-export const navigationRef = createNavigationContainerRef<DrawerParamList>();
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 export const navigateToScreen = <Screen extends keyof RootStackParamList>(
   screen: Screen,
   params?: RootStackParamList[Screen]
 ) => {
   if (navigationRef.isReady()) {
-    navigationRef.navigate("Home", { screen, params } as never);
+    navigationRef.dispatch(CommonActions.navigate({ name: screen, params }));
   }
 };

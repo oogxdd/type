@@ -1,6 +1,5 @@
-import { DrawerActions, useNavigation } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useLayoutEffect } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -71,19 +70,6 @@ export const FeedScreen = () => {
   const loading = useNotesStore((s) => s.loading);
   const refresh = useNotesStore((s) => s.refresh);
 
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <View style={styles.headerButtons}>
-          <HeaderLink
-            label="☰"
-            onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
-          />
-        </View>
-      ),
-    });
-  }, [navigation]);
-
   const rows = folderNoteRows(findFolder(tree, FEED_FOLDER_PATH), previews);
   const sections = groupNoteRowsByDate(rows);
 
@@ -126,27 +112,7 @@ export const FeedScreen = () => {
   );
 };
 
-const HeaderLink = ({ label, onPress }: { label: string; onPress: () => void }) => {
-  const theme = useTheme();
-  return (
-    <Pressable onPress={onPress} hitSlop={6}>
-      {({ pressed }) => (
-        <Text
-          style={[
-            styles.headerLink,
-            { color: theme.colors.accent, opacity: pressed ? 0.6 : 1 },
-          ]}
-        >
-          {label}
-        </Text>
-      )}
-    </Pressable>
-  );
-};
-
 const styles = StyleSheet.create({
-  headerButtons: { flexDirection: "row", gap: 16 },
-  headerLink: { fontSize: 15, fontWeight: "500" },
   sectionHeader: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 },
   sectionHeaderText: { fontSize: 13, fontWeight: "700" },
   row: {
