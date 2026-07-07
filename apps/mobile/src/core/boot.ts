@@ -13,8 +13,8 @@
 
 import * as FileSystem from "expo-file-system/legacy";
 
+import * as generated from "@typenotes/mobile-core";
 import { initCore } from "@typenotes/mobile-core/core-api";
-import { createMockCore } from "@typenotes/mobile-core/mock-core";
 import { isRawCoreSet, setRawCore } from "@typenotes/mobile-core/raw-core";
 
 /** expo-file-system returns file:// URIs; the Rust core wants plain paths. */
@@ -27,8 +27,7 @@ export type BootResult = {
 export const bootCore = async (): Promise<BootResult> => {
   let demoMode = false;
   if (!isRawCoreSet()) {
-    setRawCore(createMockCore({ seed: true }));
-    demoMode = true;
+    setRawCore(generated);
   }
 
   // The app's Documents directory is user-visible in the Files app

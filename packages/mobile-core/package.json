@@ -4,7 +4,17 @@
   "private": true,
   "type": "module",
   "description": "Typed TypeScript bridge to the shared Rust core (crates/type-ffi) for the React Native app. Ships a RawCore seam so typecheck, tests, and Expo Go work without native builds; the real UniFFI turbo module is generated on a Mac with uniffi-bindgen-react-native.",
+  "homepage": "https://github.com/typenotes/type",
+  "license": "MIT",
+  "author": "Type Notes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/typenotes/type.git",
+    "directory": "packages/mobile-core"
+  },
+  "main": "./src/index.tsx",
   "exports": {
+    ".": "./src/index.tsx",
     "./*": "./src/*.ts"
   },
   "scripts": {
@@ -15,8 +25,18 @@
     "codegen:ios:device": "ubrn build ios --config ubrn.config.yaml --and-generate",
     "codegen:android": "ubrn build android --config ubrn.config.yaml --and-generate"
   },
+  "codegenConfig": {
+    "name": "RNNativeModuleSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.typenotes.core"
+    }
+  },
   "dependencies": {
-    "@typenotes/shared": "*"
+    "@typenotes/shared": "*",
+    "@ubjs/core": "0.31.0-3",
+    "uniffi-bindgen-react-native": "0.31.0-3"
   },
   "devDependencies": {
     "typescript": "~5.8.3",

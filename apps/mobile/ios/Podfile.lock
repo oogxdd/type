@@ -2208,6 +2208,31 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - TypeCore (0.1.0):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - uniffi-bindgen-react-native (= 0.31.0-3)
+    - Yoga
+  - uniffi-bindgen-react-native (0.31.0-3):
+    - React-Core
   - Yoga (0.0.0)
 
 DEPENDENCIES:
@@ -2304,6 +2329,8 @@ DEPENDENCIES:
   - RNReanimated (from `../../../node_modules/react-native-reanimated`)
   - RNScreens (from `../../../node_modules/react-native-screens`)
   - RNWorklets (from `../../../node_modules/react-native-worklets`)
+  - TypeCore (from `../../../packages/mobile-core`)
+  - uniffi-bindgen-react-native (from `../../../node_modules/uniffi-bindgen-react-native`)
   - Yoga (from `../../../node_modules/react-native/ReactCommon/yoga`)
 
 EXTERNAL SOURCES:
@@ -2492,6 +2519,10 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/react-native-screens"
   RNWorklets:
     :path: "../../../node_modules/react-native-worklets"
+  TypeCore:
+    :path: "../../../packages/mobile-core"
+  uniffi-bindgen-react-native:
+    :path: "../../../node_modules/uniffi-bindgen-react-native"
   Yoga:
     :path: "../../../node_modules/react-native/ReactCommon/yoga"
 
@@ -2588,8 +2619,10 @@ SPEC CHECKSUMS:
   RNReanimated: c66c5c9b1200bb4c0ca7b597064328b16bb1d667
   RNScreens: 991cc417cd396602a6cf59a42139e5a9d91462a9
   RNWorklets: e539c59f0fe8cee9a77989b7fb20d0cd7fb0e7d8
+  TypeCore: 8703c7e981fdd34b79f59e11d95dba45fa24ec66
+  uniffi-bindgen-react-native: 5a59022841548d4c890e8f259016bdb8a797208a
   Yoga: fe50ab299e578f397fef753cf309c6703a4db29b
 
-PODFILE CHECKSUM: 83d9a2151d5c97f81b70319944b76ee6124dbe4c
+PODFILE CHECKSUM: 7e3d648a2c38ff4c3b2b9693fb0062e7de06c389
 
 COCOAPODS: 1.16.2
