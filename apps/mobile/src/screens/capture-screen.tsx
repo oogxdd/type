@@ -44,6 +44,8 @@ export const CaptureScreen = () => {
 
   const [text, setText] = useState("");
   const [pageKey, setPageKey] = useState(0);
+  const [iconsVisible, setIconsVisible] = useState(true);
+  const iconsOpacity = useSharedValue(1);
   const inputRef = useRef<TextInput>(null);
 
   const session = useMemo(
@@ -79,6 +81,17 @@ export const CaptureScreen = () => {
     setText("");
     setPageKey((key) => key + 1);
     translateY.value = 0;
+    showIcons();
+  };
+
+  const showIcons = () => {
+    setIconsVisible(true);
+    iconsOpacity.value = withTiming(1, { duration: 180 });
+  };
+
+  const hideIcons = () => {
+    setIconsVisible(false);
+    iconsOpacity.value = withTiming(0, { duration: 180 });
   };
 
   // A clear downward drag tucks the keyboard away (the input regains it on
@@ -121,9 +134,18 @@ export const CaptureScreen = () => {
     transform: [{ translateY: translateY.value }],
   }));
 
+  const toolbarStyle = useAnimatedStyle(() => ({
+    opacity: iconsOpacity.value,
+  }));
+
   const onChange = (value: string) => {
     setText(value);
     session.onChange(value);
+    // Keep the page uncluttered while writing; tapping back into the text
+    // brings the hamburger/mic buttons back.
+    if (iconsVisible) {
+      hideIcons();
+    }
   };
 
   return (
@@ -142,6 +164,7 @@ export const CaptureScreen = () => {
             style={[styles.input, { color: theme.colors.text }]}
             value={text}
             onChangeText={onChange}
+            onPressIn={showIcons}
             placeholder="Start typing…"
             placeholderTextColor={theme.colors.secondaryText}
             multiline
@@ -154,15 +177,21 @@ export const CaptureScreen = () => {
         </Animated.View>
       </GestureDetector>
 
-      <View style={[styles.toolbarLeft, { top: insets.top + 8 }]}>
+      <Animated.View
+        pointerEvents={iconsVisible ? "auto" : "none"}
+        style={[styles.toolbarLeft, { top: insets.top + 8 }, toolbarStyle]}
+      >
         <ToolbarButton
           icon="menu-outline"
           onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
         />
-      </View>
-      <View style={[styles.toolbar, { top: insets.top + 8 }]}>
+      </Animated.View>
+      <Animated.View
+        pointerEvents={iconsVisible ? "auto" : "none"}
+        style={[styles.toolbar, { top: insets.top + 8 }, toolbarStyle]}
+      >
         <ToolbarButton icon="mic-outline" onPress={() => navigation.navigate("Record")} />
-      </View>
+      </Animated.View>
     </View>
   );
 };
