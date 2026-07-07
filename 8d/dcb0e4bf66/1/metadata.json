@@ -1,0 +1,50 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "8ddcb0e4bf66",
+  "session_id": "019f39ed-4cc1-7232-a0c5-5dca98f1fef1",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-07T18:22:36.594981Z",
+  "branch": "feat/react-native-monorepo",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "app.json",
+    "apps/mobile/ios/Podfile.lock",
+    "apps/mobile/ios/Type/Info.plist",
+    "ios/.xcode.env",
+    "ios/Podfile.properties.json",
+    "ios/typemonorepo.xcodeproj/project.pbxproj",
+    "ios/typemonorepo/AppDelegate.swift",
+    "apps/mobile/app.json",
+    "apps/mobile/ios/Podfile",
+    "ios/Podfile",
+    "ios/typemonorepo/Images.xcassets/Contents.json",
+    "ios/typemonorepo/Info.plist",
+    "ios/typemonorepo/Supporting/Expo.plist",
+    "package.json",
+    "ios/.gitignore",
+    "ios/typemonorepo.xcodeproj/xcshareddata/xcschemes/typemonorepo.xcscheme",
+    "ios/typemonorepo/Images.xcassets/AppIcon.appiconset/Contents.json",
+    "ios/typemonorepo/SplashScreen.storyboard",
+    "ios/typemonorepo/typemonorepo-Bridging-Header.h"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "9db847d55796",
+  "checkpoint_transcript_start": 461,
+  "transcript_lines_at_start": 461,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-07T18:22:36.31715Z",
+    "agent_lines": 862,
+    "human_added": 630,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1492,
+    "agent_percentage": 57.77479892761394
+  }
+}
