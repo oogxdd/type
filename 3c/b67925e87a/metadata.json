@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "3cb67925e87a",
+  "strategy": "manual-commit",
+  "branch": "capture-swipe",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/mobile/src/App.tsx",
+    "apps/mobile/src/navigation.ts",
+    "apps/mobile/src/screens/capture-screen.tsx",
+    "apps/mobile/src/screens/menu-screen.tsx"
+  ],
+  "sessions": [
+    {
+      "metadata": "/3c/b67925e87a/0/metadata.json",
+      "transcript": "/3c/b67925e87a/0/full.jsonl",
+      "context": "",
+      "content_hash": "/3c/b67925e87a/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
