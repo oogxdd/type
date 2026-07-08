@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    right: 16,
+    right: 20,
     alignItems: "flex-end",
   },
   toolbarTop: {
