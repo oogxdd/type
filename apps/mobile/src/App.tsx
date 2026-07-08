@@ -88,7 +88,13 @@ const RootStack = () => {
       <Stack.Screen
         name="Editor"
         component={EditorScreen}
-        options={({ route }) => ({ title: route.params.title ?? "Note" })}
+        options={({ route }) => ({
+          title: route.params.title ?? "Note",
+          // Same as Capture: swipe back from anywhere on the note, not just
+          // the left edge; taps still focus the text input (a pan needs
+          // horizontal movement before it claims the touch).
+          fullScreenGestureEnabled: true,
+        })}
       />
       <Stack.Screen name="Sync" component={SyncScreen} options={{ title: "Sync" }} />
       <Stack.Screen
