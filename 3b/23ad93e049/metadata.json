@@ -3,7 +3,7 @@
   "checkpoint_id": "3b23ad93e049",
   "strategy": "manual-commit",
   "branch": "test",
-  "checkpoints_count": 0,
+  "checkpoints_count": 3,
   "files_touched": [
     "apps/mobile/README.md",
     "apps/mobile/src/App.tsx",
@@ -24,6 +24,13 @@
       "transcript": "/3b/23ad93e049/1/full.jsonl",
       "context": "",
       "content_hash": "/3b/23ad93e049/1/content_hash.txt",
+      "prompt": ""
+    },
+    {
+      "metadata": "/3b/23ad93e049/2/metadata.json",
+      "transcript": "/3b/23ad93e049/2/full.jsonl",
+      "context": "",
+      "content_hash": "/3b/23ad93e049/2/content_hash.txt",
       "prompt": ""
     }
   ],
