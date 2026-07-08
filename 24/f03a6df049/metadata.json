@@ -3,7 +3,7 @@
   "checkpoint_id": "24f03a6df049",
   "strategy": "manual-commit",
   "branch": "test",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     "apps/mobile/README.md",
     "apps/mobile/src/screens/capture-screen.tsx"
@@ -21,6 +21,13 @@
       "transcript": "/24/f03a6df049/1/full.jsonl",
       "context": "",
       "content_hash": "/24/f03a6df049/1/content_hash.txt",
+      "prompt": ""
+    },
+    {
+      "metadata": "/24/f03a6df049/2/metadata.json",
+      "transcript": "/24/f03a6df049/2/full.jsonl",
+      "context": "",
+      "content_hash": "/24/f03a6df049/2/content_hash.txt",
       "prompt": ""
     }
   ],
