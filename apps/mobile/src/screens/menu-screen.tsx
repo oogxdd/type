@@ -3,6 +3,7 @@
 // edge gesture rather than a custom JS pan that triggers stack navigation.
 
 import {
+  CommonActions,
   DrawerActions,
   useNavigation,
   type NavigatorScreenParams,
@@ -45,10 +46,28 @@ export const MenuScreen = () => {
     screen: Screen,
     params?: MainStackParamList[Screen]
   ) => {
-    navigation.navigate("Main", {
-      screen,
-      params,
-    } as NavigatorScreenParams<MainStackParamList>);
+    const stackKey = navigation
+      .getState()
+      .routes.find((route) => route.name === "Main")?.state?.key;
+
+    if (stackKey) {
+      navigation.dispatch({
+        ...CommonActions.reset({
+          index: screen === "Capture" ? 0 : 1,
+          routes:
+            screen === "Capture"
+              ? [{ name: "Capture" }]
+              : [{ name: "Capture" }, { name: screen, params }],
+        }),
+        target: stackKey,
+      });
+    } else {
+      navigation.navigate("Main", {
+        screen,
+        params,
+      } as NavigatorScreenParams<MainStackParamList>);
+    }
+
     navigation.dispatch(DrawerActions.closeDrawer());
   };
 
