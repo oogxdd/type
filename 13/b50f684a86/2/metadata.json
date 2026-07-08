@@ -1,7 +1,9 @@
 {
   "cli_version": "0.4.9",
   "checkpoint_id": "13b50f684a86",
+  "session_id": "019f4395-1961-79f0-b690-b313fd2bf530",
   "strategy": "manual-commit",
+  "created_at": "2026-07-08T22:25:20.446595Z",
   "branch": "capture-swipe",
   "checkpoints_count": 4,
   "files_touched": [
@@ -18,34 +20,22 @@
     "packages/shared/src/sync-link.test.ts",
     "packages/shared/src/sync-link.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/13/b50f684a86/0/metadata.json",
-      "transcript": "/13/b50f684a86/0/full.jsonl",
-      "context": "",
-      "content_hash": "/13/b50f684a86/0/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/13/b50f684a86/1/metadata.json",
-      "transcript": "/13/b50f684a86/1/full.jsonl",
-      "context": "",
-      "content_hash": "/13/b50f684a86/1/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/13/b50f684a86/2/metadata.json",
-      "transcript": "/13/b50f684a86/2/full.jsonl",
-      "context": "",
-      "content_hash": "/13/b50f684a86/2/content_hash.txt",
-      "prompt": ""
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "3628b6110bd4",
   "token_usage": {
     "input_tokens": 0,
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
     "output_tokens": 0,
     "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-08T22:25:19.823681Z",
+    "agent_lines": 5,
+    "human_added": 443,
+    "human_modified": 67,
+    "human_removed": 0,
+    "total_committed": 515,
+    "agent_percentage": 0.9708737864077669
   }
 }
