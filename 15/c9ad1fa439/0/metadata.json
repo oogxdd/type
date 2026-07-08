@@ -1,0 +1,41 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "15c9ad1fa439",
+  "session_id": "019f3901-65f2-7a31-9ef7-318bef8f8d70",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-08T14:55:24.040184Z",
+  "branch": "capture-swipe",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "Cargo.lock",
+    "apps/mobile/app.json",
+    "apps/mobile/ios/Type.xcodeproj/project.pbxproj",
+    "apps/mobile/ios/Type/Info.plist",
+    "apps/mobile/src/screens/capture-screen.tsx",
+    "crates/type-core/src/adapters/local_sync/ssh_server.rs",
+    "apps/mobile/src/ui/dictation-button.tsx",
+    "crates/type-core/Cargo.toml",
+    "crates/type-core/src/adapters/local_sync/mod.rs",
+    "crates/type-core/src/adapters/local_sync/devices.rs"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "0e74cdb04e6e",
+  "checkpoint_transcript_start": 381,
+  "transcript_lines_at_start": 381,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-08T14:55:23.667353Z",
+    "agent_lines": 0,
+    "human_added": 2219,
+    "human_modified": 150,
+    "human_removed": 0,
+    "total_committed": 2237,
+    "agent_percentage": 0
+  }
+}

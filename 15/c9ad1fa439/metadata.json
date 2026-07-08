@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "15c9ad1fa439",
+  "strategy": "manual-commit",
+  "branch": "capture-swipe",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "Cargo.lock",
+    "apps/mobile/app.json",
+    "apps/mobile/ios/Type.xcodeproj/project.pbxproj",
+    "apps/mobile/ios/Type/Info.plist",
+    "apps/mobile/src/screens/capture-screen.tsx",
+    "apps/mobile/src/ui/dictation-button.tsx",
+    "crates/type-core/Cargo.toml",
+    "crates/type-core/src/adapters/local_sync/devices.rs",
+    "crates/type-core/src/adapters/local_sync/mod.rs",
+    "crates/type-core/src/adapters/local_sync/ssh_server.rs"
+  ],
+  "sessions": [
+    {
+      "metadata": "/15/c9ad1fa439/0/metadata.json",
+      "transcript": "/15/c9ad1fa439/0/full.jsonl",
+      "context": "",
+      "content_hash": "/15/c9ad1fa439/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
