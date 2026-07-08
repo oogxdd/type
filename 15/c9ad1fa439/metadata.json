@@ -3,7 +3,7 @@
   "checkpoint_id": "15c9ad1fa439",
   "strategy": "manual-commit",
   "branch": "capture-swipe",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     "Cargo.lock",
     "apps/mobile/app.json",
@@ -29,6 +29,13 @@
       "transcript": "/15/c9ad1fa439/1/full.jsonl",
       "context": "",
       "content_hash": "/15/c9ad1fa439/1/content_hash.txt",
+      "prompt": ""
+    },
+    {
+      "metadata": "/15/c9ad1fa439/2/metadata.json",
+      "transcript": "/15/c9ad1fa439/2/full.jsonl",
+      "context": "",
+      "content_hash": "/15/c9ad1fa439/2/content_hash.txt",
       "prompt": ""
     }
   ],
