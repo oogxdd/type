@@ -106,9 +106,13 @@ export const CaptureScreen = () => {
     });
 
   const pan = Gesture.Pan()
-    // Only claim clearly-upward drags; leave taps, horizontal moves, and
-    // downward scrolling to the text input.
+    // Only claim clearly-upward drags; leave taps and downward scrolling to
+    // the text input, and mostly-horizontal drags to the navigator's
+    // full-screen back swipe (Capture screen options in App.tsx). The ±48
+    // fail zone is deliberately wider than the -24 activation so a fast
+    // diagonal swipe-up still files the page.
     .activeOffsetY([-24, Number.MAX_SAFE_INTEGER])
+    .failOffsetX([-48, 48])
     .failOffsetY(12)
     .onUpdate((event) => {
       translateY.value = Math.min(0, event.translationY);

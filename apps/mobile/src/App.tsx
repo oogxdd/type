@@ -61,7 +61,17 @@ const RootStack = () => {
       <Stack.Screen
         name="Capture"
         component={CaptureScreen}
-        options={{ headerShown: false }}
+        options={{
+          // Swipe-back from anywhere on the page, not just the left edge.
+          // This is still the native UIKit pop transition, driven natively by
+          // react-native-screens' pan recognizer, so the menu slides in with
+          // the platform feel. It does not steal taps from the full-screen
+          // text input: a pan only claims the touch after clear horizontal
+          // movement, and the capture screen's own gestures only activate on
+          // clearly-vertical drags (see capture-screen.tsx).
+          fullScreenGestureEnabled: true,
+          headerShown: false,
+        }}
       />
       <Stack.Screen name="Feed" component={FeedScreen} />
       <Stack.Screen
