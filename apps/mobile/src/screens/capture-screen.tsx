@@ -223,7 +223,7 @@ export const CaptureScreen = () => {
       </Animated.View>
       <Animated.View
         pointerEvents={iconsVisible ? "auto" : "none"}
-        style={[styles.fab, { bottom: insets.bottom + 32 }, toolbarStyle]}
+        style={[styles.fab, { bottom: insets.bottom + 36 }, toolbarStyle]}
       >
         <DictationButton onRecordingChange={setRecordingActive} />
       </Animated.View>
@@ -242,12 +242,12 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    right: 20,
+    right: 32,
     alignItems: "flex-end",
   },
   toolbarLeft: {
     position: "absolute",
-    left: 16,
+    left: 20,
     flexDirection: "row",
   },
 });

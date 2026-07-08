@@ -244,8 +244,9 @@ export const DictationButton = ({
       >
         <Ionicons
           name={recorderState.isRecording ? "stop" : "mic-outline"}
-          size={22}
+          size={25}
           color={recorderState.isRecording ? theme.colors.danger : theme.colors.text}
+          style={{ opacity: recorderState.isRecording ? 1 : 0.8 }}
         />
       </Pressable>
     </View>
@@ -270,9 +271,9 @@ const styles = StyleSheet.create({
   // on the capture page. Keep in sync with the menu's preview replica
   // (menu-screen.tsx previewMic).
   fab: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 64,
+    height: 64,
+    borderRadius: 100,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     justifyContent: "center",

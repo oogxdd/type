@@ -12,14 +12,18 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.typenotes.mobile",
-      "buildNumber": "2026070704",
+      "buildNumber": "2026070801",
       "supportsTablet": true,
       "infoPlist": {
         "UIFileSharingEnabled": true,
         "LSSupportsOpeningDocumentsInPlace": true,
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Type does not access your photo library; this permission is required by a bundled camera component.",
-        "NSPhotoLibraryAddUsageDescription": "Type does not save to your photo library; this permission is required by a bundled camera component."
+        "NSPhotoLibraryAddUsageDescription": "Type does not save to your photo library; this permission is required by a bundled camera component.",
+        "NSLocalNetworkUsageDescription": "Type connects to your computer over the local network to sync your notes.",
+        "NSBonjourServices": [
+          "_typenotes-sync._tcp"
+        ]
       }
     },
     "android": {

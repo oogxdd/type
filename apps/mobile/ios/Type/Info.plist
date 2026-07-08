@@ -34,7 +34,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>2026070704</string>
+	<string>2026070801</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSMinimumSystemVersion</key>
@@ -50,8 +50,14 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_typenotes-sync._tcp</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Type uses the camera to scan the sync QR code shown by the desktop app.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Type connects to your computer over the local network to sync your notes.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Type uses the microphone to record voice notes.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
