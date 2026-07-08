@@ -265,7 +265,7 @@ export const MenuScreen = () => {
           <BottomItem
             icon="sync-outline"
             label="Sync"
-            detail={formatRelativeTime(lastSyncedMs)}
+            subtitle={`Last synced ${formatRelativeTime(lastSyncedMs)}`}
             onPress={() => openScreen("Sync")}
           />
           <View style={[styles.bottomSeparator, { backgroundColor: theme.colors.border }]} />
@@ -365,17 +365,15 @@ const TabButton = ({
   );
 };
 
-// One line per row — any secondary info goes right-aligned next to the
-// chevron (iOS Settings style) so both rows keep the same height.
 const BottomItem = ({
   icon,
   label,
-  detail,
+  subtitle,
   onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  detail?: string;
+  subtitle?: string;
   onPress: () => void;
 }) => {
   const theme = useTheme();
@@ -385,15 +383,14 @@ const BottomItem = ({
       style={({ pressed }) => [styles.bottomItem, { opacity: pressed ? 0.6 : 1 }]}
     >
       <Ionicons name={icon} size={18} color={theme.colors.secondaryText} />
-      <Text style={[styles.bottomLabel, { color: theme.colors.text }]}>{label}</Text>
-      {detail ? (
-        <Text
-          style={[styles.bottomDetail, { color: theme.colors.secondaryText }]}
-          numberOfLines={1}
-        >
-          {detail}
-        </Text>
-      ) : null}
+      <View style={styles.bottomItemText}>
+        <Text style={[styles.bottomLabel, { color: theme.colors.text }]}>{label}</Text>
+        {subtitle ? (
+          <Text style={[styles.bottomSubtitle, { color: theme.colors.secondaryText }]}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
       <Text style={{ color: theme.colors.secondaryText }}>›</Text>
     </Pressable>
   );
@@ -478,8 +475,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     paddingHorizontal: 16,
-    paddingVertical: 13,
+    paddingVertical: 12,
+    // Keeps the one-line Settings row as tall as the two-line Sync row.
+    minHeight: 60,
   },
-  bottomLabel: { flex: 1, fontSize: 15, fontWeight: "500" },
-  bottomDetail: { fontSize: 13, flexShrink: 1 },
+  bottomItemText: { flex: 1, gap: 2 },
+  bottomLabel: { fontSize: 15, fontWeight: "500" },
+  bottomSubtitle: { fontSize: 12 },
 });

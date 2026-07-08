@@ -51,6 +51,13 @@ const RootStack = () => {
         headerTintColor: theme.colors.text,
         headerShadowVisible: false,
         contentStyle: { backgroundColor: theme.colors.background },
+        // Swipe back from anywhere on the screen, not just the left edge —
+        // still the native UIKit pop transition, driven natively by
+        // react-native-screens' pan recognizer. It doesn't steal taps (a pan
+        // needs clear horizontal movement before it claims the touch), and
+        // screens with their own gestures (capture, menu) only claim
+        // clearly-vertical or leftward drags.
+        fullScreenGestureEnabled: true,
       }}
     >
       <Stack.Screen
@@ -62,20 +69,12 @@ const RootStack = () => {
         name="Capture"
         component={CaptureScreen}
         options={({ route }) => ({
-          // Swipe-back from anywhere on the page, not just the left edge.
-          // This is still the native UIKit pop transition, driven natively by
-          // react-native-screens' pan recognizer, so the menu slides in with
-          // the platform feel. It does not steal taps from the full-screen
-          // text input: a pan only claims the touch after clear horizontal
-          // movement, and the capture screen's own gestures only activate on
-          // clearly-vertical drags (see capture-screen.tsx).
-          fullScreenGestureEnabled: true,
           headerShown: false,
           // `instant` = the menu's swipe-to-capture already played the push
           // transition with its preview overlay (menu-screen.tsx), so the
           // real screen must appear under it without animating again. The
-          // screen clears the param on mount so the later pop/back-swipe
-          // animates natively.
+          // screen clears the param once the push settles so the later
+          // pop/back-swipe animates natively.
           animation: route.params?.instant ? "none" : "default",
         })}
       />
@@ -88,13 +87,12 @@ const RootStack = () => {
       <Stack.Screen
         name="Editor"
         component={EditorScreen}
-        options={({ route }) => ({
-          title: route.params.title ?? "Note",
-          // Same as Capture: swipe back from anywhere on the note, not just
-          // the left edge; taps still focus the text input (a pan needs
-          // horizontal movement before it claims the touch).
-          fullScreenGestureEnabled: true,
-        })}
+        options={{
+          // Bare chrome: chevron-only back (no "Menu" label) and no title —
+          // the note text speaks for itself.
+          headerBackButtonDisplayMode: "minimal",
+          title: "",
+        }}
       />
       <Stack.Screen name="Sync" component={SyncScreen} options={{ title: "Sync" }} />
       <Stack.Screen
