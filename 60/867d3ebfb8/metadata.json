@@ -3,7 +3,7 @@
   "checkpoint_id": "60867d3ebfb8",
   "strategy": "manual-commit",
   "branch": "left-burger",
-  "checkpoints_count": 0,
+  "checkpoints_count": 5,
   "files_touched": [
     "apps/mobile/src/App.tsx",
     "apps/mobile/src/screens/menu-screen.tsx"
@@ -21,6 +21,13 @@
       "transcript": "/60/867d3ebfb8/1/full.jsonl",
       "context": "",
       "content_hash": "/60/867d3ebfb8/1/content_hash.txt",
+      "prompt": ""
+    },
+    {
+      "metadata": "/60/867d3ebfb8/2/metadata.json",
+      "transcript": "/60/867d3ebfb8/2/full.jsonl",
+      "context": "",
+      "content_hash": "/60/867d3ebfb8/2/content_hash.txt",
       "prompt": ""
     }
   ],
