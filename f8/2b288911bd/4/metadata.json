@@ -1,9 +1,11 @@
 {
   "cli_version": "0.4.9",
   "checkpoint_id": "f82b288911bd",
+  "session_id": "019f4327-9ddf-7ac0-a5a0-174e552ac2c9",
   "strategy": "manual-commit",
+  "created_at": "2026-07-08T19:43:48.972596Z",
   "branch": "capture-swipe",
-  "checkpoints_count": 10,
+  "checkpoints_count": 6,
   "files_touched": [
     "AGENTS.md",
     "README.md",
@@ -30,48 +32,22 @@
     "packages/shared/src/sync-link.ts",
     "packages/shared/src/types.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/f8/2b288911bd/0/metadata.json",
-      "transcript": "/f8/2b288911bd/0/full.jsonl",
-      "context": "",
-      "content_hash": "/f8/2b288911bd/0/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/f8/2b288911bd/1/metadata.json",
-      "transcript": "/f8/2b288911bd/1/full.jsonl",
-      "context": "",
-      "content_hash": "/f8/2b288911bd/1/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/f8/2b288911bd/2/metadata.json",
-      "transcript": "/f8/2b288911bd/2/full.jsonl",
-      "context": "",
-      "content_hash": "/f8/2b288911bd/2/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/f8/2b288911bd/3/metadata.json",
-      "transcript": "/f8/2b288911bd/3/full.jsonl",
-      "context": "",
-      "content_hash": "/f8/2b288911bd/3/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/f8/2b288911bd/4/metadata.json",
-      "transcript": "/f8/2b288911bd/4/full.jsonl",
-      "context": "",
-      "content_hash": "/f8/2b288911bd/4/content_hash.txt",
-      "prompt": ""
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "3b0e155298b0",
   "token_usage": {
     "input_tokens": 0,
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
     "output_tokens": 0,
     "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-08T19:43:48.2885Z",
+    "agent_lines": 992,
+    "human_added": 13,
+    "human_modified": 50,
+    "human_removed": 0,
+    "total_committed": 1055,
+    "agent_percentage": 94.02843601895735
   }
 }
