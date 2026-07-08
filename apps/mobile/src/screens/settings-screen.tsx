@@ -1,12 +1,12 @@
 // Settings is a two-level menu: this file's default export lands on a list
 // of sections, each of which pushes into its own dedicated screen (also
 // exported from here) rather than showing everything in one long scroll.
+// All three screens use the iOS inset-grouped list kit in ui/settings-list.
 
-import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -17,7 +17,12 @@ import {
 import type { RootStackParamList } from "../navigation";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useTheme } from "../theme";
-import { Button, Field, InlineNote, Section } from "../ui/controls";
+import {
+  SettingsActionRow,
+  SettingsFieldRow,
+  SettingsGroup,
+  SettingsRow,
+} from "../ui/settings-list";
 
 const MODES: { mode: TranscriptionMode; label: string; description: string }[] = [
   {
@@ -43,9 +48,17 @@ const MODES: { mode: TranscriptionMode; label: string; description: string }[] =
   },
 ];
 
-const MODE_LABEL: Record<TranscriptionMode, string> = Object.fromEntries(
-  MODES.map(({ mode, label }) => [mode, label])
-) as Record<TranscriptionMode, string>;
+// Short names for the value slot on the settings menu row.
+const MODE_VALUE: Record<TranscriptionMode, string> = {
+  assemblyai: "AssemblyAI",
+  desktop: "Desktop",
+  native: "On-device",
+  off: "Off",
+};
+
+// iOS Settings-style icon tile colors (fixed, theme-independent).
+const TILE_BLUE = "#007aff";
+const TILE_ORANGE = "#ff9500";
 
 export const SettingsScreen = () => {
   const theme = useTheme();
@@ -58,78 +71,42 @@ export const SettingsScreen = () => {
   const currentMode = profile ? effectiveTranscriptionMode(profile.settings) : null;
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: insets.bottom + 48 },
-        ]}
+    <ScrollView
+      style={{ backgroundColor: theme.colors.background }}
+      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 48 }]}
+    >
+      <SettingsGroup
+        separatorInset={57}
+        footer={
+          demoMode
+            ? "Demo mode: the native Rust core is not linked in this build, so everything above operates on in-memory data."
+            : undefined
+        }
       >
-        <MenuRow
+        <SettingsRow
           icon="folder-outline"
+          iconColor={TILE_BLUE}
           title="Working Folders"
-          subtitle={profile?.name ?? "No working folder yet"}
+          value={profile?.name ?? "None"}
+          chevron
           onPress={() => navigation.navigate("SettingsWorkingFolders")}
         />
-        <MenuRow
+        <SettingsRow
           icon="mic-outline"
+          iconColor={TILE_ORANGE}
           title="Transcription"
-          subtitle={currentMode ? MODE_LABEL[currentMode] : "Not set"}
+          value={currentMode ? MODE_VALUE[currentMode] : "Not set"}
+          chevron
           onPress={() => navigation.navigate("SettingsTranscription")}
         />
-        {demoMode ? (
-          <InlineNote>
-            Demo mode: the native Rust core is not linked in this build, so
-            everything above operates on in-memory data.
-          </InlineNote>
-        ) : null}
-      </ScrollView>
-    </View>
-  );
-};
-
-const MenuRow = ({
-  icon,
-  title,
-  subtitle,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  title: string;
-  subtitle: string;
-  onPress: () => void;
-}) => {
-  const theme = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.menuRow,
-        { borderColor: theme.colors.border, opacity: pressed ? 0.6 : 1 },
-      ]}
-    >
-      <View style={[styles.menuRowIcon, { backgroundColor: theme.colors.surface }]}>
-        <Ionicons name={icon} size={18} color={theme.colors.text} />
-      </View>
-      <View style={styles.menuRowText}>
-        <Text style={{ color: theme.colors.text, fontWeight: "600", fontSize: 16 }}>
-          {title}
-        </Text>
-        <Text
-          numberOfLines={1}
-          style={{ color: theme.colors.secondaryText, fontSize: 13 }}
-        >
-          {subtitle}
-        </Text>
-      </View>
-      <Text style={{ color: theme.colors.secondaryText }}>›</Text>
-    </Pressable>
+      </SettingsGroup>
+    </ScrollView>
   );
 };
 
 export const SettingsWorkingFoldersScreen = () => {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const store = useSettingsStore();
   const snapshot = store.snapshot;
   const profile = activeProfile(snapshot);
@@ -140,48 +117,35 @@ export const SettingsWorkingFoldersScreen = () => {
   return (
     <ScrollView
       style={{ backgroundColor: theme.colors.background }}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 48 }]}
     >
-      <Section title="Working folders">
+      <SettingsGroup
+        header="Working folders"
+        footer="Each working folder is a directory of markdown files with its own settings (git remote, transcription mode). The app's Documents directory is visible in the Files app, so your notes are always reachable outside the app."
+      >
         {snapshot?.profiles.map((p) => {
           const active = p.id === snapshot.active_profile_id;
           return (
-            <Pressable
+            <SettingsRow
               key={p.id}
+              title={p.name}
+              subtitle={p.notes_root}
+              checked={active}
               disabled={active}
               onPress={() => void store.switchWorkingFolder(p.id).catch(() => {})}
-              style={({ pressed }) => [
-                styles.profileRow,
-                {
-                  borderColor: active ? theme.colors.accent : theme.colors.border,
-                  opacity: pressed ? 0.6 : 1,
-                },
-              ]}
-            >
-              <View style={styles.profileText}>
-                <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
-                  {p.name}
-                  {active ? "  ✓" : ""}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  style={{ color: theme.colors.secondaryText, fontSize: 12 }}
-                >
-                  {p.notes_root}
-                </Text>
-              </View>
-            </Pressable>
+            />
           );
         })}
-        <Field
-          label="New working folder"
+      </SettingsGroup>
+
+      <SettingsGroup header="New working folder">
+        <SettingsFieldRow
           value={newFolderName}
           onChangeText={setNewFolderName}
-          placeholder="e.g. Journal"
+          placeholder="Name, e.g. Journal"
         />
-        <Button
+        <SettingsActionRow
           title="Create"
-          kind="secondary"
           disabled={!newFolderName.trim()}
           onPress={() =>
             void store
@@ -190,37 +154,30 @@ export const SettingsWorkingFoldersScreen = () => {
               .catch(() => {})
           }
         />
-        <InlineNote>
-          Each working folder is just a directory of markdown files with its own
-          .type/settings.json (git remote, transcription mode). The app's
-          Documents directory is visible in the Files app, so your notes are
-          always reachable outside the app.
-        </InlineNote>
-      </Section>
+      </SettingsGroup>
 
       {profile ? (
-        <Section title="Folder location">
-          <Field
-            label={`Notes root for “${profile.name}” (absolute path)`}
+        <SettingsGroup
+          header={`Folder location — ${profile.name}`}
+          footer="Existing content is moved to the new location."
+        >
+          <SettingsFieldRow
             value={notesRoot}
             onChangeText={setNotesRoot}
+            placeholder="Absolute path"
           />
-          <Button
-            title="Move folder"
-            kind="secondary"
+          <SettingsActionRow
+            title="Move Folder"
             disabled={!notesRoot.trim() || notesRoot === profile.notes_root}
             onPress={() =>
               void store.setNotesRoot(profile.id, notesRoot.trim()).catch(() => {})
             }
           />
-          <InlineNote>
-            Existing content is moved to the new location.
-          </InlineNote>
-        </Section>
+        </SettingsGroup>
       ) : null}
 
       {store.error ? (
-        <Text style={{ color: theme.colors.danger }}>{store.error}</Text>
+        <Text style={[styles.error, { color: theme.colors.danger }]}>{store.error}</Text>
       ) : null}
     </ScrollView>
   );
@@ -228,6 +185,7 @@ export const SettingsWorkingFoldersScreen = () => {
 
 export const SettingsTranscriptionScreen = () => {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const store = useSettingsStore();
   const snapshot = store.snapshot;
   const profile = activeProfile(snapshot);
@@ -244,90 +202,51 @@ export const SettingsTranscriptionScreen = () => {
   return (
     <ScrollView
       style={{ backgroundColor: theme.colors.background }}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 48 }]}
     >
-      <Section title="Transcription">
-        {MODES.map(({ mode, label, description }) => {
-          const selected = currentMode === mode;
-          return (
-            <Pressable
-              key={mode}
-              onPress={() => void store.setTranscriptionMode(mode).catch(() => {})}
-              style={({ pressed }) => [
-                styles.modeRow,
-                {
-                  borderColor: selected ? theme.colors.accent : theme.colors.border,
-                  opacity: pressed ? 0.6 : 1,
-                },
-              ]}
-            >
-              <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
-                {label}
-                {selected ? "  ✓" : ""}
-              </Text>
-              <Text style={{ color: theme.colors.secondaryText, fontSize: 12 }}>
-                {description}
-              </Text>
-            </Pressable>
-          );
-        })}
-        {modeIsLegacyDerived ? (
-          <InlineNote>
-            Mode derived from this folder's legacy auto-transcription setting —
-            pick one to persist it explicitly.
-          </InlineNote>
-        ) : null}
-        <Field
-          label="AssemblyAI API key (stored on this device only)"
+      <SettingsGroup
+        header="Transcribe voice notes"
+        footer={
+          modeIsLegacyDerived
+            ? "Mode derived from this folder's legacy auto-transcription setting — pick one to persist it explicitly."
+            : undefined
+        }
+      >
+        {MODES.map(({ mode, label, description }) => (
+          <SettingsRow
+            key={mode}
+            title={label}
+            subtitle={description}
+            checked={currentMode === mode}
+            onPress={() => void store.setTranscriptionMode(mode).catch(() => {})}
+          />
+        ))}
+      </SettingsGroup>
+
+      <SettingsGroup
+        header="AssemblyAI API key"
+        footer="Stored on this device only — never synced."
+      >
+        <SettingsFieldRow
           value={assemblyKey}
           onChangeText={setAssemblyKey}
+          placeholder="API key"
           secureTextEntry
         />
-        <Button
-          title="Save key"
-          kind="secondary"
+        <SettingsActionRow
+          title="Save Key"
           onPress={() => void store.saveAssemblyAiKey(assemblyKey).catch(() => {})}
         />
-      </Section>
+      </SettingsGroup>
 
       {store.error ? (
-        <Text style={{ color: theme.colors.danger }}>{store.error}</Text>
+        <Text style={[styles.error, { color: theme.colors.danger }]}>{store.error}</Text>
       ) : null}
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  scroll: { flex: 1 },
-  content: { padding: 16, paddingBottom: 48 },
-  menuRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-  },
-  menuRowIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuRowText: { flex: 1, gap: 2 },
-  profileRow: {
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-  },
-  profileText: { gap: 2 },
-  modeRow: {
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-    gap: 2,
-  },
+  content: { padding: 16, paddingTop: 20 },
+  error: { fontSize: 13, marginHorizontal: 16 },
 });
