@@ -30,19 +30,14 @@ import { useNotesStore } from "./state/notes-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
 import { useSettingsStore } from "./state/settings-store";
 import { useSyncStore } from "./state/sync-store";
+import { useUiPrefsStore } from "./state/ui-prefs-store";
 import { useTheme } from "./theme";
 
 type BootPhase = { state: "booting" } | { state: "ready" } | { state: "failed"; error: string };
 
-// Boot with Capture pushed on top of Menu so the blank page is what you see
-// first, while the menu is already "behind" it — the native left-edge
-// swipe-back on Capture slides the menu in. See navigation.ts for the model.
-const BOOT_NAVIGATION_STATE = {
-  routes: [{ name: "Menu" as const }, { name: "Capture" as const }],
-};
-
 const RootStack = () => {
   const theme = useTheme();
+  const menuSide = useUiPrefsStore((s) => s.menuSide);
   return (
     <Stack.Navigator
       initialRouteName="Capture"
@@ -54,14 +49,28 @@ const RootStack = () => {
       }}
     >
       <Stack.Screen
-        name="Menu"
-        component={MenuScreen}
-        options={{ headerShown: false, title: "Menu" }}
-      />
-      <Stack.Screen
         name="Capture"
         component={CaptureScreen}
         options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="Menu"
+        component={MenuScreen}
+        options={
+          // The menu is pushed OVER the capture page and slides in from the
+          // configured side. Closing it is native: with slide_from_left,
+          // react-native-screens moves the dismiss gesture to the right
+          // edge (animationMatchesGesture); with the default slide-from-
+          // right it's the standard left-edge swipe-back.
+          menuSide === "left"
+            ? {
+                headerShown: false,
+                title: "Menu",
+                animation: "slide_from_left",
+                animationMatchesGesture: true,
+              }
+            : { headerShown: false, title: "Menu" }
+        }
       />
       <Stack.Screen name="Feed" component={FeedScreen} />
       <Stack.Screen
@@ -116,6 +125,9 @@ export default function App() {
       try {
         const { demoMode: demo } = await bootCore();
         useSettingsStore.getState().setDemoMode(demo);
+        // Device-local UI prefs (menu side) — loaded before first render so
+        // the navigator mounts with the right gesture direction.
+        await useUiPrefsStore.getState().load();
         await useSecurityStore.getState().load();
         // While encrypted + locked, content calls are rejected by the core —
         // the lock screen's unlock reloads these stores instead.
@@ -195,7 +207,6 @@ export default function App() {
         <NavigationContainer
           ref={navigationRef}
           theme={theme.dark ? DarkTheme : DefaultTheme}
-          initialState={BOOT_NAVIGATION_STATE}
           onReady={() => {
             if (!initialUrlHandled.current) {
               initialUrlHandled.current = true;

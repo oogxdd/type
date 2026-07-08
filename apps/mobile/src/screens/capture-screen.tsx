@@ -28,6 +28,7 @@ import * as core from "@typenotes/mobile-core/core-api";
 import { CaptureSession } from "../lib/capture";
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
+import { useUiPrefsStore } from "../state/ui-prefs-store";
 import { useTheme } from "../theme";
 import { DictationButton } from "../ui/dictation-button";
 import { ToolbarButton } from "../ui/toolbar-button";
@@ -46,6 +47,7 @@ export const CaptureScreen = () => {
   const [pageKey, setPageKey] = useState(0);
   const [iconsVisible, setIconsVisible] = useState(true);
   const [recordingActive, setRecordingActive] = useState(false);
+  const menuSide = useUiPrefsStore((s) => s.menuSide);
   const iconsOpacity = useSharedValue(1);
   const inputRef = useRef<TextInput>(null);
 
@@ -131,6 +133,19 @@ export const CaptureScreen = () => {
       }
     });
 
+  // Opening the menu is a push, so there's no native gesture for it — this
+  // narrow strip over the screen edge claims the swipe before the text
+  // input can. It sits over the page's horizontal padding, so it barely
+  // covers any tappable text.
+  const openMenu = () => navigation.navigate("Menu");
+  const menuEdgePan = Gesture.Pan()
+    .activeOffsetX(menuSide === "right" ? -20 : 20)
+    .failOffsetX(menuSide === "right" ? 20 : -20)
+    .failOffsetY([-24, 24])
+    .onStart(() => {
+      runOnJS(openMenu)();
+    });
+
   const pageStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
   }));
@@ -179,17 +194,25 @@ export const CaptureScreen = () => {
         </Animated.View>
       </GestureDetector>
 
+      <GestureDetector gesture={menuEdgePan}>
+        <View
+          style={[
+            styles.menuEdge,
+            menuSide === "right" ? styles.menuEdgeRight : styles.menuEdgeLeft,
+          ]}
+        />
+      </GestureDetector>
+
       <Animated.View
         pointerEvents={iconsVisible ? "auto" : "none"}
-        style={[styles.toolbarLeft, { top: insets.top + 8 }, toolbarStyle]}
+        style={[
+          styles.toolbarTop,
+          menuSide === "right" ? styles.toolbarTopRight : styles.toolbarTopLeft,
+          { top: insets.top + 8 },
+          toolbarStyle,
+        ]}
       >
-        <ToolbarButton
-          icon="menu-outline"
-          // popTo, not navigate: the menu is the stack root below this
-          // screen, and v7 navigate would push a second Menu on top (sliding
-          // in from the right) instead of popping back to it.
-          onPress={() => navigation.popTo("Menu")}
-        />
+        <ToolbarButton icon="menu-outline" onPress={openMenu} />
       </Animated.View>
       <Animated.View
         pointerEvents={iconsVisible ? "auto" : "none"}
@@ -215,9 +238,18 @@ const styles = StyleSheet.create({
     right: 16,
     alignItems: "flex-end",
   },
-  toolbarLeft: {
+  toolbarTop: {
     position: "absolute",
-    left: 16,
     flexDirection: "row",
   },
+  toolbarTopLeft: { left: 16 },
+  toolbarTopRight: { right: 16 },
+  menuEdge: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: 24,
+  },
+  menuEdgeLeft: { left: 0 },
+  menuEdgeRight: { right: 0 },
 });

@@ -407,10 +407,12 @@ The React Native app (Expo) reuses the Rust core through
   blank page appears. `src/lib/capture.ts` (pure, tested) owns that note
   lifecycle with the same rules as the desktop editor (lazy create,
   debounced writes, flush on leave, empty-note cleanup). Navigation is one
-  native stack whose root is the menu screen (feed/folders tabs + sync/
-  settings); Capture boots pushed on top of it, so the left-edge swipe-back
-  reveals the menu and a leftward swipe on the menu pushes a fresh capture
-  page. Voice capture is a floating dictation button on the capture page —
+  native stack rooted at Capture; the menu screen (feed/folders tabs +
+  sync/settings) is pushed OVER it — opened by the hamburger or a custom
+  edge-swipe strip, closed natively by swiping from the opposite edge —
+  so the capture draft stays alive underneath. The menu side (left/right)
+  is a device-local ui-prefs toggle in Settings.
+  Voice capture is a floating dictation button on the capture page —
   tap to start/stop or hold to record while pressed (expo-audio →
   `save_audio_recording` → queue per `transcription_mode`). Other screens:
   feed, folder browser, plain-text editor, sync (status/connect/pull/push/SSH

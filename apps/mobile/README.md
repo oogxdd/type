@@ -9,9 +9,11 @@ system folders, and per-folder `.type/settings.json`.
 
 The app opens on a **blank page** — start typing immediately. **Swipe up**
 and the page files itself into Feed while a fresh blank page slides in
-underneath. **Swipe from the left edge** (or tap the hamburger) and the menu
-slides in — feed and folders on top, sync and settings at the bottom; a
-leftward swipe on the menu brings a fresh blank page back. The floating mic
+underneath. **Swipe from the edge** (or tap the hamburger) and the menu
+slides in over the page — feed and folders on top, sync and settings at the
+bottom — while your draft stays put underneath; close it with the native
+swipe from the opposite edge or the close button. Which side the menu opens
+from (left or right) is a device-local Settings toggle. The floating mic
 button in the bottom-right dictates a voice note: tap to start and tap again
 to stop, or hold it to record only while pressed.
 
@@ -52,13 +54,14 @@ later step.
 ```
 src/
   App.tsx                 boot + navigation container + demo banner
-  navigation.ts           typed native-stack route table (menu is the root,
-                          capture boots pushed on top of it)
+  navigation.ts           typed native-stack route table (capture is the
+                          root, the menu is pushed over it)
   theme.ts                light/dark palette
   core/boot.ts            wires RawCore (generated native module or mock) + initCore
   lib/capture.ts          capture-page note lifecycle (pure, tested)
   lib/feed.ts             tree+previews → list rows (pure, tested)
-  state/                  zustand stores: notes, settings (working folders), sync
+  state/                  zustand stores: notes, settings (working folders),
+                          sync, ui-prefs (device-local, e.g. menu side)
   screens/                capture, menu, feed, folder, editor, sync, settings
   ui/                     dictation button (voice capture), audio player, shared
                           primitives for the utility screens

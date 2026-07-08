@@ -15,6 +15,7 @@ import {
 
 import type { RootStackParamList } from "../navigation";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
+import { useUiPrefsStore, type MenuSide } from "../state/ui-prefs-store";
 import { useTheme } from "../theme";
 import { Button, Field, InlineNote, Section } from "../ui/controls";
 
@@ -46,12 +47,30 @@ const MODE_LABEL: Record<TranscriptionMode, string> = Object.fromEntries(
   MODES.map(({ mode, label }) => [mode, label])
 ) as Record<TranscriptionMode, string>;
 
+// Experiment: which side the menu opens from on the home page (device-local).
+const MENU_SIDES: { side: MenuSide; label: string; description: string }[] = [
+  {
+    side: "left",
+    label: "Left",
+    description:
+      "Hamburger top-left; swipe from the left edge to open, from the right edge to close.",
+  },
+  {
+    side: "right",
+    label: "Right",
+    description:
+      "Hamburger top-right; swipe from the right edge to open, from the left edge to close.",
+  },
+];
+
 export const SettingsScreen = () => {
   const theme = useTheme();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const snapshot = useSettingsStore((s) => s.snapshot);
   const demoMode = useSettingsStore((s) => s.demoMode);
+  const menuSide = useUiPrefsStore((s) => s.menuSide);
+  const setMenuSide = useUiPrefsStore((s) => s.setMenuSide);
   const profile = activeProfile(snapshot);
   const currentMode = profile ? effectiveTranscriptionMode(profile.settings) : null;
 
@@ -72,6 +91,34 @@ export const SettingsScreen = () => {
         subtitle={currentMode ? MODE_LABEL[currentMode] : "Not set"}
         onPress={() => navigation.navigate("SettingsTranscription")}
       />
+
+      <Section title="Menu side">
+        {MENU_SIDES.map(({ side, label, description }) => {
+          const selected = menuSide === side;
+          return (
+            <Pressable
+              key={side}
+              onPress={() => setMenuSide(side)}
+              style={({ pressed }) => [
+                styles.modeRow,
+                {
+                  borderColor: selected ? theme.colors.accent : theme.colors.border,
+                  opacity: pressed ? 0.6 : 1,
+                },
+              ]}
+            >
+              <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
+                {label}
+                {selected ? "  ✓" : ""}
+              </Text>
+              <Text style={{ color: theme.colors.secondaryText, fontSize: 12 }}>
+                {description}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </Section>
+
       {demoMode ? (
         <InlineNote>
           Demo mode: the native Rust core is not linked in this build, so

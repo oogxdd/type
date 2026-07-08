@@ -1,25 +1,15 @@
-// The app menu — the root of the stack: close button + Feed / Folders tabs
-// on top (inline note + folder lists), Sync and Settings pinned at the
-// bottom. The capture page sits pushed above it, so its hamburger or a
-// left-edge swipe-back pops here; the close button or a leftward swipe
-// anywhere on the menu pushes a fresh capture page back in. Everything else
-// is pushed from here, so swipe-back from Sync/Settings/Folder/Editor lands
-// back on the menu.
+// The app menu — pushed OVER the capture page (which keeps its draft alive
+// underneath): close button + Feed / Folders tabs on top (inline note +
+// folder lists), Sync and Settings pinned at the bottom. Closing is native:
+// the swipe from the edge opposite the configured menu side (react-native-
+// screens flips the dismiss edge for slide_from_left), or the close button.
+// Everything else is pushed from here, so swipe-back from Sync/Settings/
+// Folder/Editor lands back on the menu.
 
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useEffect, useState } from "react";
-import {
-  FlatList,
-  InteractionManager,
-  Pressable,
-  SectionList,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { runOnJS } from "react-native-reanimated";
+import { useState } from "react";
+import { FlatList, Pressable, SectionList, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
@@ -34,6 +24,7 @@ import { formatRelativeTime } from "../lib/relative-time";
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useSyncStore } from "../state/sync-store";
+import { useUiPrefsStore } from "../state/ui-prefs-store";
 import { useTheme } from "../theme";
 import { ToolbarButton } from "../ui/toolbar-button";
 import { NoteListRow } from "./feed-screen";
@@ -57,133 +48,112 @@ export const MenuScreen = () => {
     navigation.dispatch(CommonActions.navigate({ name: screen, params }));
   };
 
-  // The inverse of the left-edge swipe that revealed the menu: dragging
-  // leftward anywhere on the menu slides a fresh capture page back in.
-  // Vertical movement fails the pan quickly so the note/folder lists scroll.
-  const openCapture = () => navigation.navigate("Capture");
-  const swipeToCapture = Gesture.Pan()
-    .activeOffsetX(-24)
-    .failOffsetX(24)
-    .failOffsetY([-24, 24])
-    .onStart(() => {
-      runOnJS(openCapture)();
-    });
+  const menuSide = useUiPrefsStore((s) => s.menuSide);
+  // The capture page (with its draft) is right below in the stack.
+  const closeMenu = () => navigation.goBack();
 
   const lastSyncedMs = useSyncStore((s) => s.history[0]?.authored_ms ?? null);
-
-  // Boot pushes Capture on top of the menu in the same first React commit,
-  // so building the note/folder lists here would sit on the app's
-  // first-paint path. Render an empty page for the first tick and fill in
-  // right after — done long before a swipe can reveal the menu.
-  const [contentReady, setContentReady] = useState(false);
-  useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => setContentReady(true));
-    return () => task.cancel();
-  }, []);
-  if (!contentReady) {
-    return <View style={[styles.root, { backgroundColor: theme.colors.background }]} />;
-  }
 
   const feedRows = folderNoteRows(findFolder(tree, FEED_FOLDER_PATH), previews);
   const feedSections = groupNoteRowsByDate(feedRows);
   const folders = browsableFolders(findFolder(tree, ""));
 
   return (
-    <GestureDetector gesture={swipeToCapture}>
+    <View
+      style={[
+        styles.root,
+        {
+          backgroundColor: theme.colors.background,
+          paddingTop: insets.top + 8,
+          paddingBottom: insets.bottom + 8,
+        },
+      ]}
+    >
+      {/* Mirrors the capture page's hamburger: same spot, same size. */}
       <View
-        style={[
-          styles.root,
-          {
-            backgroundColor: theme.colors.background,
-            paddingTop: insets.top + 8,
-            paddingBottom: insets.bottom + 8,
-          },
-        ]}
+        style={[styles.topBar, menuSide === "right" ? styles.topBarRight : null]}
       >
-        {/* Mirrors the capture page's hamburger: same spot, same size. */}
-        <View style={styles.topBar}>
-          <ToolbarButton icon="close-outline" onPress={openCapture} />
-        </View>
-
-        <View style={[styles.tabs, { backgroundColor: theme.colors.surface }]}>
-          <TabButton label="Feed" active={tab === "feed"} onPress={() => setTab("feed")} />
-          <TabButton
-            label="Folders"
-            active={tab === "folders"}
-            onPress={() => setTab("folders")}
-          />
-        </View>
-
-        {tab === "feed" ? (
-          <SectionList
-            style={styles.list}
-            sections={feedSections}
-            keyExtractor={(row) => row.path}
-            stickySectionHeadersEnabled
-            renderSectionHeader={({ section }) => (
-              <View style={[styles.sectionHeader, { backgroundColor: theme.colors.background }]}>
-                <Text style={[styles.sectionHeaderText, { color: theme.colors.secondaryText }]}>
-                  {section.title}
-                </Text>
-              </View>
-            )}
-            renderItem={({ item }) => (
-              <NoteListRow
-                row={item}
-                theme={theme}
-                onPress={() =>
-                  openScreen("Editor", {
-                    path: item.path,
-                    title: item.preview.title || "Note",
-                  })
-                }
-              />
-            )}
-            ListEmptyComponent={
-              <Text style={[styles.empty, { color: theme.colors.secondaryText }]}>
-                No notes yet — swipe left and start typing.
-              </Text>
-            }
-          />
-        ) : (
-          <FlatList
-            style={styles.list}
-            data={folders}
-            keyExtractor={(folder) => folder.path}
-            renderItem={({ item }) => (
-              <Pressable
-                onPress={() => openScreen("Folder", { path: item.path, title: item.name })}
-                style={({ pressed }) => [
-                  styles.folderRow,
-                  { borderBottomColor: theme.colors.border, opacity: pressed ? 0.6 : 1 },
-                ]}
-              >
-                <Text style={[styles.folderName, { color: theme.colors.text }]}>
-                  {item.name}
-                </Text>
-                <Text style={[styles.folderMeta, { color: theme.colors.secondaryText }]}>
-                  {item.notes.length > 0 ? `${item.notes.length}` : ""} ›
-                </Text>
-              </Pressable>
-            )}
-            ListEmptyComponent={
-              <Text style={[styles.empty, { color: theme.colors.secondaryText }]}>
-                No folders yet.
-              </Text>
-            }
-          />
-        )}
-
-        <View style={[styles.bottom, { borderTopColor: theme.colors.border }]}>
-          <BottomItem
-            label="Sync"
-            subtitle={`Last synced ${formatRelativeTime(lastSyncedMs)}`}
-            onPress={() => openScreen("Sync")}
-          />
-          <BottomItem label="Settings" onPress={() => openScreen("Settings")} />
-        </View>
+        <ToolbarButton icon="close-outline" onPress={closeMenu} />
       </View>
-    </GestureDetector>
+
+      <View style={[styles.tabs, { backgroundColor: theme.colors.surface }]}>
+        <TabButton label="Feed" active={tab === "feed"} onPress={() => setTab("feed")} />
+        <TabButton
+          label="Folders"
+          active={tab === "folders"}
+          onPress={() => setTab("folders")}
+        />
+      </View>
+
+      {tab === "feed" ? (
+        <SectionList
+          style={styles.list}
+          sections={feedSections}
+          keyExtractor={(row) => row.path}
+          stickySectionHeadersEnabled
+          renderSectionHeader={({ section }) => (
+            <View style={[styles.sectionHeader, { backgroundColor: theme.colors.background }]}>
+              <Text style={[styles.sectionHeaderText, { color: theme.colors.secondaryText }]}>
+                {section.title}
+              </Text>
+            </View>
+          )}
+          renderItem={({ item }) => (
+            <NoteListRow
+              row={item}
+              theme={theme}
+              onPress={() =>
+                openScreen("Editor", {
+                  path: item.path,
+                  title: item.preview.title || "Note",
+                })
+              }
+            />
+          )}
+          ListEmptyComponent={
+            <Text style={[styles.empty, { color: theme.colors.secondaryText }]}>
+              No notes yet — close the menu and start typing.
+            </Text>
+          }
+        />
+      ) : (
+        <FlatList
+          style={styles.list}
+          data={folders}
+          keyExtractor={(folder) => folder.path}
+          renderItem={({ item }) => (
+            <Pressable
+              onPress={() => openScreen("Folder", { path: item.path, title: item.name })}
+              style={({ pressed }) => [
+                styles.folderRow,
+                { borderBottomColor: theme.colors.border, opacity: pressed ? 0.6 : 1 },
+              ]}
+            >
+              <Text style={[styles.folderName, { color: theme.colors.text }]}>
+                {item.name}
+              </Text>
+              <Text style={[styles.folderMeta, { color: theme.colors.secondaryText }]}>
+                {item.notes.length > 0 ? `${item.notes.length}` : ""} ›
+              </Text>
+            </Pressable>
+          )}
+          ListEmptyComponent={
+            <Text style={[styles.empty, { color: theme.colors.secondaryText }]}>
+              No folders yet.
+            </Text>
+          }
+        />
+      )}
+
+      <View style={[styles.bottom, { borderTopColor: theme.colors.border }]}>
+        <BottomItem
+          label="Sync"
+          subtitle={`Last synced ${formatRelativeTime(lastSyncedMs)}`}
+          onPress={() => openScreen("Sync")}
+        />
+        <BottomItem label="Settings" onPress={() => openScreen("Settings")} />
+      </View>
+    </View>
   );
 };
 
@@ -255,6 +225,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 12,
   },
+  topBarRight: { justifyContent: "flex-end" },
   tabs: {
     flexDirection: "row",
     marginHorizontal: 12,

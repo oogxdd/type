@@ -4,15 +4,16 @@ import {
 } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-// One native stack, with the menu as its root — conceptually the menu sits to
-// the LEFT of the capture page. The app boots with Capture pushed on top of
-// Menu (see initialState in App.tsx), so the native left-edge swipe-back on
-// the capture page reveals the menu, and every other screen is pushed from the
-// menu so swipe-back walks naturally back to it. A leftward swipe on the menu
-// pushes a fresh capture page back in.
+// One native stack with the capture page as its root. The menu is PUSHED
+// over it (sliding in from the side configured in ui-prefs), so the draft on
+// the capture page stays alive underneath while the menu is open. Opening
+// the menu is the hamburger or a custom edge-swipe strip on the capture
+// page; closing it is native (swipe from the opposite edge, or the close
+// button). Every other screen is pushed from the menu, so swipe-back walks
+// Editor/Folder/Sync/Settings → Menu → Capture entirely natively.
 export type RootStackParamList = {
-  Menu: undefined;
   Capture: undefined;
+  Menu: undefined;
   Feed: undefined;
   Folder: { path: string; title: string };
   Editor: { path: string; title?: string };
