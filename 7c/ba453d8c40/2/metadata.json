@@ -1,0 +1,30 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "7cba453d8c40",
+  "session_id": "019f3dbc-8e6a-7ae1-8c32-2655165a523a",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-08T01:29:34.135453Z",
+  "branch": "test",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/mobile/LOCAL_TESTFLIGHT.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f3aac595da24",
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-08T01:29:33.715992Z",
+    "agent_lines": 71,
+    "human_added": 2022,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 2093,
+    "agent_percentage": 3.3922599139990446
+  }
+}
