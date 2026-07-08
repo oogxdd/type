@@ -76,3 +76,8 @@ export function parseSyncDeepLink(url: string): SyncDeepLinkParams | null {
     hostKeySha256: query.get("hostKeySha256")?.trim() || undefined,
   };
 }
+
+/** Pairing usernames are only for first auth; paired keys work under any user. */
+export function stripPairingUsernameFromSshRemote(remote: string): string {
+  return remote.replace(/^ssh:\/\/pair-[^@/?#]+@/i, "ssh://");
+}

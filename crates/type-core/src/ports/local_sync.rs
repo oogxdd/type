@@ -58,8 +58,9 @@ pub trait LocalSyncGateway {
 // LocalSyncServer lets a desktop machine host its own notes repository over an
 // embedded SSH server so a phone on the same network — or connected to the
 // phone's personal hotspot — can clone/pull/push without any external remote.
-// The QR username carries a one-run pairing token; the phone authenticates with
-// its app-managed SSH key, which the desktop stores as an authorized device.
+// The QR username carries a pairing token; the phone authenticates with its
+// app-managed SSH key, which the desktop stores as an authorized device. A used
+// token may remain valid briefly so one scan survives multi-step setup.
 //
 // This covers the user-facing sync scenarios together with GitSyncService:
 //   1. Remote repo            — GitSyncService against an internet remote.

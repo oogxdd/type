@@ -12,6 +12,25 @@ import {
   SettingsHelpText,
 } from "@/features/settings/components/settings-ui";
 
+const redactRemoteForLog = (remote: string | null | undefined): string => {
+  if (!remote) return "<none>";
+  const match = remote.match(/^([a-z][a-z0-9+.-]*:\/\/)([^@/?#]+)@(.+)$/i);
+  if (!match) return remote;
+  const [, scheme, userinfo, rest] = match;
+  if (scheme.toLowerCase() === "ssh://" && userinfo.toLowerCase().startsWith("pair-")) {
+    const token = userinfo.slice("pair-".length);
+    return `${scheme}pair-<token:${token.slice(-6)}>@${rest}`;
+  }
+  return `${scheme}${userinfo.includes(":") ? "<credentials>" : userinfo}@${rest}`;
+};
+
+const statusForLog = (status: LocalSyncServerStatus): string =>
+  `running=${status.running} supported=${status.supported} git=${status.git_available} host=${
+    status.host ?? "<none>"
+  } branch=${status.branch ?? "<none>"} ssh=${redactRemoteForLog(status.ssh_url)} paired=${
+    status.paired_devices.length
+  } error=${status.error ?? "<none>"}`;
+
 export function LocalSyncServerCard() {
   const [status, setStatus] = useState<LocalSyncServerStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -23,12 +42,17 @@ export function LocalSyncServerCard() {
     setError(null);
     try {
       const current = await gitApi.getLocalSyncServerStatus();
+      console.log(`[local-sync:ui] status: ${statusForLog(current)}`);
       if (!current.supported || !current.git_available || current.running) {
         setStatus(current);
         return;
       }
-      setStatus(await gitApi.startLocalSyncServer());
+      console.log("[local-sync:ui] auto-starting local sync server");
+      const started = await gitApi.startLocalSyncServer();
+      console.log(`[local-sync:ui] auto-started: ${statusForLog(started)}`);
+      setStatus(started);
     } catch (err) {
+      console.log(`[local-sync:ui] status/start failed: ${getErrorMessage(err)}`);
       setError(getErrorMessage(err));
     } finally {
       setBusy(false);
@@ -63,8 +87,10 @@ export function LocalSyncServerCard() {
       const next = status?.running
         ? await gitApi.stopLocalSyncServer()
         : await gitApi.startLocalSyncServer();
+      console.log(`[local-sync:ui] toggled server: ${statusForLog(next)}`);
       setStatus(next);
     } catch (err) {
+      console.log(`[local-sync:ui] toggle failed: ${getErrorMessage(err)}`);
       setError(getErrorMessage(err));
     } finally {
       setBusy(false);

@@ -69,12 +69,15 @@ export const SyncScreen = () => {
   }, []);
 
   const applyLink = async (link: SyncDeepLinkParams) => {
+    console.log("[sync:qr] applying parsed sync link");
     setRemoteUrl(link.remote);
     setBranch(link.branch ?? "main");
     try {
       await sync.connectFromLink(link);
+      console.log("[sync:qr] sync link applied successfully");
       setConnectedVia(link.name ?? link.remote);
-    } catch {
+    } catch (error) {
+      console.log(`[sync:qr] failed to apply sync link: ${getErrorMessage(error)}`);
       // surfaced via store error state
     } finally {
       void core.getSshPublicKey().then(setSshKey).catch(() => {});
@@ -85,6 +88,7 @@ export const SyncScreen = () => {
   const pendingLink = useSyncStore((s) => s.pendingLink);
   useEffect(() => {
     if (pendingLink) {
+      console.log("[sync:qr] pending deep link received");
       sync.setPendingLink(null);
       void applyLink(pendingLink);
     }
@@ -94,8 +98,10 @@ export const SyncScreen = () => {
   const openScanner = async () => {
     setScanNotice(null);
     if (!permission?.granted) {
+      console.log("[sync:qr] requesting camera permission");
       const result = await requestPermission();
       if (!result.granted) {
+        console.log("[sync:qr] camera permission denied");
         useSyncStore.setState({
           error: "Camera permission is needed to scan the QR code. Enable it in system settings.",
         });
@@ -103,6 +109,7 @@ export const SyncScreen = () => {
       }
     }
     handledScanRef.current = false;
+    console.log("[sync:qr] scanner opened");
     setScannerOpen(true);
   };
 
@@ -112,9 +119,11 @@ export const SyncScreen = () => {
     }
     const link = parseSyncDeepLink(data);
     if (!link) {
+      console.log("[sync:qr] scanned QR was not a Type sync link");
       setScanNotice("That QR code is not a Type sync code — look for the one in desktop Settings → Sync.");
       return;
     }
+    console.log("[sync:qr] valid Type sync QR scanned");
     handledScanRef.current = true;
     setScannerOpen(false);
     void applyLink(link);

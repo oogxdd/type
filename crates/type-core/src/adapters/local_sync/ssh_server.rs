@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use russh::keys::PublicKey;
 use russh::server::{Auth, ChannelOpenHandle, Config, Handler, Msg, Server, Session};
@@ -22,6 +23,11 @@ use tokio::process::{Child, ChildStdin, Command};
 
 use super::devices;
 
+/// After one key pairs, libgit2/mobile flows may open another SSH auth session
+/// before the UI has switched to the token-less durable remote. Keep the just
+/// consumed QR token valid briefly so one scan cannot expire mid-setup.
+const CONSUMED_PAIRING_TOKEN_GRACE: Duration = Duration::from_secs(5 * 60);
+
 /// State shared by every client connection of one server run.
 pub(super) struct ServerShared {
     pub git_path: PathBuf,
@@ -30,8 +36,9 @@ pub(super) struct ServerShared {
     pub branch: String,
     /// Current pairing token; rotated in place after each successful pairing,
     /// so the QR (rebuilt from this on every status poll) always shows a live
-    /// token while used ones die.
+    /// token while consumed ones only survive a short setup grace window.
     pub pairing_token: Arc<Mutex<String>>,
+    pub consumed_pairing_tokens: Arc<Mutex<Vec<(String, Instant)>>>,
     pub pairing_token_path: PathBuf,
     pub devices_path: PathBuf,
 }
@@ -109,6 +116,87 @@ fn reject() -> Auth {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum PairingTokenMatch {
+    Current(String),
+    RecentlyConsumed,
+    None,
+}
+
+fn pairing_username(token: &str) -> String {
+    format!("pair-{token}")
+}
+
+fn pairing_token_suffix(token: &str) -> String {
+    let reversed: String = token.chars().rev().take(6).collect();
+    reversed.chars().rev().collect()
+}
+
+fn pairing_user_for_log(user: &str) -> String {
+    if let Some(token) = user.strip_prefix("pair-") {
+        format!("pair-<token:{}>", pairing_token_suffix(token))
+    } else {
+        user.to_string()
+    }
+}
+
+fn recent_pairing_token_count(consumed_tokens: &Arc<Mutex<Vec<(String, Instant)>>>) -> usize {
+    let now = Instant::now();
+    let Ok(mut consumed) = consumed_tokens.lock() else {
+        return 0;
+    };
+    consumed.retain(|(_, expires_at)| *expires_at > now);
+    consumed.len()
+}
+
+fn pairing_token_match(
+    user: &str,
+    current_token: &Arc<Mutex<String>>,
+    consumed_tokens: &Arc<Mutex<Vec<(String, Instant)>>>,
+) -> PairingTokenMatch {
+    let current = current_token
+        .lock()
+        .map(|token| token.clone())
+        .unwrap_or_default();
+    if !current.is_empty() && user == pairing_username(&current) {
+        return PairingTokenMatch::Current(current);
+    }
+
+    let now = Instant::now();
+    let Ok(mut consumed) = consumed_tokens.lock() else {
+        return PairingTokenMatch::None;
+    };
+    consumed.retain(|(_, expires_at)| *expires_at > now);
+    if consumed
+        .iter()
+        .any(|(token, _)| user == pairing_username(token))
+    {
+        PairingTokenMatch::RecentlyConsumed
+    } else {
+        PairingTokenMatch::None
+    }
+}
+
+fn remember_consumed_pairing_token(
+    consumed_tokens: &Arc<Mutex<Vec<(String, Instant)>>>,
+    token: String,
+) {
+    let Ok(mut consumed) = consumed_tokens.lock() else {
+        return;
+    };
+    let now = Instant::now();
+    consumed.retain(|(_, expires_at)| *expires_at > now);
+    let expires_at = now + CONSUMED_PAIRING_TOKEN_GRACE;
+    if let Some((_, existing_expiry)) = consumed
+        .iter_mut()
+        .find(|(existing_token, _)| existing_token == &token)
+    {
+        *existing_expiry = expires_at;
+    } else {
+        consumed.push((token, expires_at));
+    }
+}
+
 impl Handler for ClientHandler {
     type Error = russh::Error;
 
@@ -119,28 +207,69 @@ impl Handler for ClientHandler {
         };
         let key_preview = &key_line[key_line.len().saturating_sub(12)..];
         if devices::is_authorized(&self.shared.devices_path, &key_line) {
-            eprintln!("[local-sync] auth ok: paired device key (…{key_preview})");
+            eprintln!(
+                "[local-sync] auth ok: paired device key (…{key_preview}) as '{}'",
+                pairing_user_for_log(user)
+            );
             return Ok(Auth::Accept);
         }
-        let expected = {
-            let token = self.shared.pairing_token.lock().unwrap();
-            format!("pair-{}", *token)
-        };
-        if user == expected {
-            let name = devices::device_name_from_key(key);
-            if devices::register_device(&self.shared.devices_path, &key_line, &name).is_ok() {
-                // The token is single-use: rotate it so the scanned QR cannot
-                // pair a second, unknown device later.
-                let fresh = devices::rotate_pairing_token(&self.shared.pairing_token_path);
-                *self.shared.pairing_token.lock().unwrap() = fresh;
-                eprintln!("[local-sync] paired new device '{name}' (…{key_preview}); pairing token rotated");
-                return Ok(Auth::Accept);
+        match pairing_token_match(
+            user,
+            &self.shared.pairing_token,
+            &self.shared.consumed_pairing_tokens,
+        ) {
+            PairingTokenMatch::Current(matched_token) => {
+                let name = devices::device_name_from_key(key);
+                match devices::register_device(&self.shared.devices_path, &key_line, &name) {
+                    Ok(()) => {
+                        // Rotate for the desktop QR, but leave the consumed token
+                        // usable for a short grace period. The mobile setup path can
+                        // otherwise expire its own QR between connect and first pull.
+                        let consumed_suffix = pairing_token_suffix(&matched_token);
+                        remember_consumed_pairing_token(
+                            &self.shared.consumed_pairing_tokens,
+                            matched_token,
+                        );
+                        let fresh = devices::rotate_pairing_token(&self.shared.pairing_token_path);
+                        let fresh_suffix = pairing_token_suffix(&fresh);
+                        *self.shared.pairing_token.lock().unwrap() = fresh;
+                        eprintln!(
+                            "[local-sync] paired new device '{name}' (…{key_preview}) with current QR token pair-<token:{consumed_suffix}>; rotated to pair-<token:{fresh_suffix}>"
+                        );
+                        return Ok(Auth::Accept);
+                    }
+                    Err(error) => {
+                        eprintln!(
+                            "[local-sync] pairing failed: could not store the device key: {error}"
+                        );
+                        return Ok(reject());
+                    }
+                }
             }
-            eprintln!("[local-sync] pairing failed: could not store the device key");
-            return Ok(reject());
+            PairingTokenMatch::RecentlyConsumed => {
+                let name = devices::device_name_from_key(key);
+                match devices::register_device(&self.shared.devices_path, &key_line, &name) {
+                    Ok(()) => {
+                        eprintln!(
+                            "[local-sync] paired new device '{name}' (…{key_preview}) with recently consumed QR token '{}'",
+                            pairing_user_for_log(user)
+                        );
+                        return Ok(Auth::Accept);
+                    }
+                    Err(error) => {
+                        eprintln!(
+                            "[local-sync] pairing failed: could not store the device key: {error}"
+                        );
+                        return Ok(reject());
+                    }
+                }
+            }
+            PairingTokenMatch::None => {}
         }
         eprintln!(
-            "[local-sync] auth rejected: unknown key (…{key_preview}), username '{user}' does not match the current pairing token — re-scan the QR code"
+            "[local-sync] auth rejected: unknown key (…{key_preview}), username '{}' does not match current/recent pairing token (recent_grace_tokens={}) — re-scan the QR code",
+            pairing_user_for_log(user),
+            recent_pairing_token_count(&self.shared.consumed_pairing_tokens)
         );
         Ok(reject())
     }
@@ -449,7 +578,11 @@ mod tests {
         ));
         let repo_path = base.join("notes");
         fs::create_dir_all(repo_path.join("Feed")).unwrap();
-        fs::write(repo_path.join("Feed").join("note.md"), "hello from desktop\n").unwrap();
+        fs::write(
+            repo_path.join("Feed").join("note.md"),
+            "hello from desktop\n",
+        )
+        .unwrap();
         fs::create_dir_all(repo_path.join(".type")).unwrap();
         fs::write(repo_path.join(".type").join("settings.json"), "{}\n").unwrap();
 
@@ -496,6 +629,7 @@ mod tests {
                 served_name: "notes".to_string(),
                 branch: branch.clone(),
                 pairing_token: live_token.clone(),
+                consumed_pairing_tokens: Arc::new(Mutex::new(Vec::new())),
                 pairing_token_path: token_path.clone(),
                 devices_path: devices_path.clone(),
             }),
@@ -543,9 +677,59 @@ mod tests {
         assert_ne!(rotated, token, "pairing should rotate the token");
         assert_eq!(fs::read_to_string(&token_path).unwrap().trim(), rotated);
 
+        // Mobile setup can perform more than one SSH auth session from the
+        // scanned URL before it persists the durable token-less remote. The
+        // just-consumed token should keep pairing briefly instead of expiring
+        // between connect and first pull.
+        let mut retry_key = PrivateKey::random(&mut OsRng, Algorithm::Ed25519).unwrap();
+        retry_key.set_comment("retry-phone");
+        let retry_priv = base.join("retry_key");
+        fs::write(
+            &retry_priv,
+            retry_key.to_openssh(LineEnding::LF).unwrap().as_bytes(),
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&retry_priv, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        let retry_pub = base.join("retry_key.pub");
+        fs::write(
+            &retry_pub,
+            format!("{}\n", retry_key.public_key().to_openssh().unwrap()),
+        )
+        .unwrap();
+        let retry_root = base.join("retry");
+        fs::create_dir_all(&retry_root).unwrap();
+        let retry_repo = crate::ensure_git_repo(&retry_root).unwrap();
+        crate::ensure_origin_remote(&retry_repo, &remote).unwrap();
+        crate::perform_fetch(
+            &retry_repo,
+            &branch,
+            None,
+            None,
+            Some(retry_priv),
+            Some(retry_pub),
+            None,
+        )
+        .unwrap();
+        assert!(
+            devices::is_authorized(
+                &devices_path,
+                &devices::normalize_key_line(&retry_key.public_key().to_openssh().unwrap())
+                    .unwrap()
+            ),
+            "recently consumed QR token should still register setup retries"
+        );
+
         // Uncommitted desktop edits are committed at serve time, so a pull
         // picks them up without anyone pressing a button on the desktop.
-        fs::write(repo_path.join("Feed").join("fresh.md"), "typed after clone\n").unwrap();
+        fs::write(
+            repo_path.join("Feed").join("fresh.md"),
+            "typed after clone\n",
+        )
+        .unwrap();
         run_git(&["pull", "origin", &branch], &clone_path);
         assert!(
             clone_path.join("Feed").join("fresh.md").exists(),
@@ -553,7 +737,11 @@ mod tests {
         );
 
         // Push from the clone updates the served working tree (updateInstead).
-        fs::write(clone_path.join("Feed").join("phone.md"), "hello from phone\n").unwrap();
+        fs::write(
+            clone_path.join("Feed").join("phone.md"),
+            "hello from phone\n",
+        )
+        .unwrap();
         run_git(&["add", "-A"], &clone_path);
         run_git(
             &[

@@ -176,6 +176,7 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
     {
         let root = ensured_notes_root(app)?;
         let git = locate_git().ok_or_else(|| GIT_MISSING_MSG.to_string())?;
+        eprintln!("[local-sync] start requested: repo='{}'", root.display());
 
         let mut guard = DAEMON
             .lock()
@@ -183,6 +184,11 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
 
         // Already running? Return current status (idempotent).
         if let Some(daemon) = guard.as_ref() {
+            eprintln!(
+                "[local-sync] start skipped: server already running for repo='{}' branch='{}'",
+                daemon.repo_path.display(),
+                daemon.branch
+            );
             return Ok(running_status(daemon));
         }
 
@@ -208,6 +214,7 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
         let (host_key, host_key_sha256) = devices::ensure_host_key(app)?;
         let (token_path, token) = devices::load_or_create_pairing_token(app)?;
         let pairing_token = Arc::new(Mutex::new(token));
+        let consumed_pairing_tokens = Arc::new(Mutex::new(Vec::new()));
         let devices_path = devices::devices_path(app)?;
         let shared = Arc::new(ssh_server::ServerShared {
             git_path: git,
@@ -215,6 +222,7 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
             served_name: served_name.clone(),
             branch: branch.clone(),
             pairing_token: pairing_token.clone(),
+            consumed_pairing_tokens,
             pairing_token_path: token_path,
             devices_path: devices_path.clone(),
         });
@@ -243,6 +251,13 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
             mdns,
         };
         let status = running_status(&daemon);
+        eprintln!(
+            "[local-sync] server running: listen=0.0.0.0:{LOCAL_SYNC_PORT} advertised_host={} branch='{}' repo='{}' paired_devices={}",
+            daemon.host.as_deref().unwrap_or("<unknown>"),
+            daemon.branch,
+            daemon.repo_path.display(),
+            status.paired_devices.len()
+        );
         *guard = Some(daemon);
         Ok(status)
     }
@@ -259,6 +274,11 @@ pub fn stop_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatus
     {
         if let Ok(mut guard) = DAEMON.lock() {
             if let Some(daemon) = guard.take() {
+                eprintln!(
+                    "[local-sync] stop requested: repo='{}' branch='{}'",
+                    daemon.repo_path.display(),
+                    daemon.branch
+                );
                 teardown_daemon(daemon);
             }
         }
@@ -324,7 +344,11 @@ fn idle_status(git_available: bool, repo_path: String) -> LocalSyncServerStatus 
 
 #[cfg(desktop)]
 fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
-    let token = daemon.pairing_token.lock().map(|t| t.clone()).unwrap_or_default();
+    let token = daemon
+        .pairing_token
+        .lock()
+        .map(|t| t.clone())
+        .unwrap_or_default();
     let ssh_url = daemon
         .host
         .as_ref()

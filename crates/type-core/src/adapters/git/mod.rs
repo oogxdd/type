@@ -396,7 +396,7 @@ fn remote_push(
     let mut remote = repo.find_remote("origin").map_err(map_git_error)?;
     eprintln!(
         "[git] pushing '{branch}' to {}",
-        remote.url().unwrap_or("<invalid url>")
+        redact_remote_url_for_log(remote.url().unwrap_or("<invalid url>"))
     );
     remote
         .connect_auth(
@@ -436,6 +436,37 @@ fn remote_push(
 /// Convert a git2 error into a user-facing string.
 pub fn map_git_error(error: git2::Error) -> String {
     error.message().to_string()
+}
+
+fn redact_remote_url_for_log(remote: &str) -> String {
+    let Some(scheme_end) = remote.find("://") else {
+        return remote.to_string();
+    };
+    let scheme = &remote[..scheme_end + 3];
+    let rest = &remote[scheme_end + 3..];
+    let Some(at) = rest.find('@') else {
+        return remote.to_string();
+    };
+    let userinfo = &rest[..at];
+    let host_and_path = &rest[at + 1..];
+    let redacted = if scheme.eq_ignore_ascii_case("ssh://")
+        && userinfo.to_ascii_lowercase().starts_with("pair-")
+    {
+        "pair-<token>"
+    } else if userinfo.contains(':') {
+        "<credentials>"
+    } else {
+        userinfo
+    };
+    format!("{scheme}{redacted}@{host_and_path}")
+}
+
+fn redact_username_for_log(username: &str) -> String {
+    if username.to_ascii_lowercase().starts_with("pair-") {
+        "pair-<token>".to_string()
+    } else {
+        username.to_string()
+    }
 }
 
 /// Open an existing git repository at the given path.
@@ -814,21 +845,41 @@ pub fn build_callbacks(
         let n = attempt.get();
         attempt.set(n + 1);
         let mut next = 0u32;
+        if allowed.contains(CredentialType::USERNAME) {
+            if next == n {
+                let ssh_user = username_from_url.or(user.as_deref()).unwrap_or("git");
+                eprintln!(
+                    "[git] auth attempt {n}: username hint as '{}'",
+                    redact_username_for_log(ssh_user)
+                );
+                return Cred::username(ssh_user);
+            }
+            next += 1;
+        }
         if allowed.contains(CredentialType::SSH_KEY) {
             if let Some(private_key) = &ssh_private_key {
                 if next == n {
                     let ssh_user = username_from_url.or(user.as_deref()).unwrap_or("git");
-                    eprintln!("[git] auth attempt {n}: ssh key file as '{ssh_user}'");
+                    eprintln!(
+                        "[git] auth attempt {n}: ssh key file as '{}'",
+                        redact_username_for_log(ssh_user)
+                    );
                     let pub_key = ssh_public_key.as_deref();
-                    if let Ok(cred) = Cred::ssh_key(ssh_user, pub_key, private_key, None) {
-                        return Ok(cred);
+                    match Cred::ssh_key(ssh_user, pub_key, private_key, None) {
+                        Ok(cred) => return Ok(cred),
+                        Err(error) => {
+                            eprintln!("[git] auth attempt {n}: could not load ssh key file: {error}");
+                        }
                     }
                 }
                 next += 1;
             }
             if let Some(name) = username_from_url.or(user.as_deref()) {
                 if next == n {
-                    eprintln!("[git] auth attempt {n}: ssh agent as '{name}'");
+                    eprintln!(
+                        "[git] auth attempt {n}: ssh agent as '{}'",
+                        redact_username_for_log(name)
+                    );
                     if let Ok(cred) = Cred::ssh_key_from_agent(name) {
                         return Ok(cred);
                     }
@@ -839,7 +890,10 @@ pub fn build_callbacks(
         if allowed.contains(CredentialType::USER_PASS_PLAINTEXT) {
             if let (Some(user), Some(pass)) = (user.as_deref(), pass.as_deref()) {
                 if next == n {
-                    eprintln!("[git] auth attempt {n}: username/password as '{user}'");
+                    eprintln!(
+                        "[git] auth attempt {n}: username/password as '{}'",
+                        redact_username_for_log(user)
+                    );
                     return Cred::userpass_plaintext(user, pass);
                 }
                 next += 1;
@@ -1013,7 +1067,10 @@ fn probe_remote_url(remote_url: &str) -> Result<(), String> {
         }
     }
     let message = network_probe_error(&target.host, target.port, last_error);
-    eprintln!("[git] probe {}:{} failed: {message}", target.host, target.port);
+    eprintln!(
+        "[git] probe {}:{} failed: {message}",
+        target.host, target.port
+    );
     Err(message)
 }
 
@@ -1172,7 +1229,7 @@ pub fn perform_fetch<'a>(
     let mut remote = repo.find_remote("origin").map_err(map_git_error)?;
     eprintln!(
         "[git] fetching '{branch}' from {}",
-        remote.url().unwrap_or("<invalid url>")
+        redact_remote_url_for_log(remote.url().unwrap_or("<invalid url>"))
     );
     let callbacks = build_callbacks(
         username,
@@ -1453,6 +1510,23 @@ mod tests {
         assert!(!is_local_hostname("8.8.8.8"));
     }
 
+    #[test]
+    fn redacts_pairing_tokens_and_credentials_in_git_logs() {
+        assert_eq!(
+            redact_remote_url_for_log("ssh://pair-deadbeef@192.168.1.10:9418/Notes"),
+            "ssh://pair-<token>@192.168.1.10:9418/Notes"
+        );
+        assert_eq!(
+            redact_remote_url_for_log("https://user:secret@example.com/notes.git"),
+            "https://<credentials>@example.com/notes.git"
+        );
+        assert_eq!(
+            redact_remote_url_for_log("ssh://git@github.com/acme/notes.git"),
+            "ssh://git@github.com/acme/notes.git"
+        );
+        assert_eq!(redact_username_for_log("pair-deadbeef"), "pair-<token>");
+    }
+
     /// The first-pairing scenario: the phone already holds captured notes
     /// (unborn HEAD + real files) and the desktop repo has its own history.
     /// Connect must commit the phone notes instead of refusing, and the first
@@ -1483,7 +1557,10 @@ mod tests {
         switch_or_prepare_branch(&phone_repo, "main").unwrap();
         let fetched = perform_fetch(&phone_repo, "main", None, None, None, None, None).unwrap();
         let analysis = phone_repo.merge_analysis(&[&fetched]).unwrap().0;
-        assert!(analysis.is_normal(), "unrelated histories should need a merge");
+        assert!(
+            analysis.is_normal(),
+            "unrelated histories should need a merge"
+        );
         merge_fetched_commit(&phone_repo, "main", &fetched).unwrap();
 
         assert!(phone.join("Feed").join("phone-note.md").exists());

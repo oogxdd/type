@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildSyncDeepLink, parseSyncDeepLink } from "./sync-link";
+import {
+  buildSyncDeepLink,
+  parseSyncDeepLink,
+  stripPairingUsernameFromSshRemote,
+} from "./sync-link";
 
 describe("sync deep link", () => {
   it("round-trips remote, branch, and name", () => {
@@ -48,5 +52,17 @@ describe("sync deep link", () => {
 
   it("tolerates malformed percent-encoding without throwing", () => {
     expect(parseSyncDeepLink("type2://sync?remote=%E0%A4%A")).toBeNull();
+  });
+
+  it("strips only local-sync pairing usernames from ssh remotes", () => {
+    expect(
+      stripPairingUsernameFromSshRemote("ssh://pair-abc123@192.168.1.10:9418/My%20Notes")
+    ).toBe("ssh://192.168.1.10:9418/My%20Notes");
+    expect(stripPairingUsernameFromSshRemote("ssh://git@github.com/acme/notes.git")).toBe(
+      "ssh://git@github.com/acme/notes.git"
+    );
+    expect(stripPairingUsernameFromSshRemote("https://example.com/notes.git")).toBe(
+      "https://example.com/notes.git"
+    );
   });
 });

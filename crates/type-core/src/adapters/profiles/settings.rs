@@ -191,7 +191,12 @@ pub fn load_profile_settings(notes_root: &Path) -> ProfileSettings {
 pub fn save_profile_settings(notes_root: &Path, settings: &ProfileSettings) -> Result<(), String> {
     let folder = notes_root.join(SETTINGS_FOLDER);
     if !folder.exists() {
-        fs::create_dir_all(&folder).map_err(|err| err.to_string())?;
+        fs::create_dir_all(&folder).map_err(|err| {
+            format!(
+                "Failed to create settings folder '{}': {err}",
+                folder.display()
+            )
+        })?;
     }
 
     // Git connection → device-local file.
@@ -205,7 +210,13 @@ pub fn save_profile_settings(notes_root: &Path, settings: &ProfileSettings) -> R
         git_trusted_ssh_host_key_sha256: settings.git_trusted_ssh_host_key_sha256.clone(),
     };
     let device_content = serde_json::to_string_pretty(&device).map_err(|err| err.to_string())?;
-    fs::write(device_settings_path(notes_root), device_content).map_err(|err| err.to_string())?;
+    let device_path = device_settings_path(notes_root);
+    fs::write(&device_path, device_content).map_err(|err| {
+        format!(
+            "Failed to write device git settings '{}': {err}",
+            device_path.display()
+        )
+    })?;
 
     // Everything else → the synced settings.json, with git fields blanked so
     // credentials and per-device remotes stop traveling through the repo.
@@ -219,7 +230,12 @@ pub fn save_profile_settings(notes_root: &Path, settings: &ProfileSettings) -> R
     shared.git_trusted_ssh_host_key_sha256 = String::new();
     let path = folder.join(SETTINGS_FILE);
     let content = serde_json::to_string_pretty(&shared).map_err(|err| err.to_string())?;
-    fs::write(path, content).map_err(|err| err.to_string())
+    fs::write(&path, content).map_err(|err| {
+        format!(
+            "Failed to write shared profile settings '{}': {err}",
+            path.display()
+        )
+    })
 }
 
 const APP_CONFIG_FILE: &str = "config.json";

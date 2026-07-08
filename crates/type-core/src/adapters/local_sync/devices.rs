@@ -77,7 +77,9 @@ const PAIRING_TOKEN_FILE: &str = "pairing_token";
 /// The pairing token persists across server/app restarts so a scanned QR stays
 /// valid until it is actually used — a phone often saves the QR's remote URL
 /// first and only completes pairing on a later sync. It is rotated after each
-/// successful pairing (see [`rotate_pairing_token`]), so a used QR dies.
+/// successful pairing (see [`rotate_pairing_token`]); the SSH server may keep a
+/// consumed token alive in memory briefly so a single mobile setup cannot
+/// expire between connect and first pull.
 pub(super) fn load_or_create_pairing_token(app: &AppEnv) -> Result<(PathBuf, String), String> {
     let path = local_sync_dir(app)?.join(PAIRING_TOKEN_FILE);
     if let Ok(existing) = fs::read_to_string(&path) {

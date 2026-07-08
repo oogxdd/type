@@ -30,6 +30,18 @@ type SettingsState = {
   saveAssemblyAiKey: (key: string) => Promise<void>;
 };
 
+const redactRemoteForLog = (remote: string | null | undefined): string => {
+  if (!remote) return "<none>";
+  const match = remote.match(/^([a-z][a-z0-9+.-]*:\/\/)([^@/?#]+)@(.+)$/i);
+  if (!match) return remote;
+  const [, scheme, userinfo, rest] = match;
+  if (scheme.toLowerCase() === "ssh://" && userinfo.toLowerCase().startsWith("pair-")) {
+    const token = userinfo.slice("pair-".length);
+    return `${scheme}pair-<token:${token.slice(-6)}>@${rest}`;
+  }
+  return `${scheme}${userinfo.includes(":") ? "<credentials>" : userinfo}@${rest}`;
+};
+
 export const activeProfile = (
   snapshot: ProfilesSnapshot | null
 ): NotesProfile | null =>
@@ -113,8 +125,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       trustedSshHost,
       trustedSshHostKeySha256,
     }) =>
-      guarded(() =>
-        withActiveSettings((settings) => ({
+      guarded(async () => {
+        console.log(
+          `[settings] saving git settings remote=${redactRemoteForLog(remoteUrl)} branch=${branch}`
+        );
+        await withActiveSettings((settings) => ({
           ...settings,
           git_remote_url: remoteUrl,
           git_branch: branch,
@@ -127,8 +142,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
             trustedSshHostKeySha256 === undefined
               ? settings.git_trusted_ssh_host_key_sha256
               : trustedSshHostKeySha256 ?? "",
-        }))
-      ),
+        }));
+        const saved = activeProfile(get().snapshot)?.settings.git_remote_url;
+        console.log(`[settings] saved git settings remote=${redactRemoteForLog(saved)}`);
+      }),
 
     saveAssemblyAiKey: (key) =>
       guarded(async () => {
