@@ -3,7 +3,7 @@
   "checkpoint_id": "7cba453d8c40",
   "strategy": "manual-commit",
   "branch": "test",
-  "checkpoints_count": 2,
+  "checkpoints_count": 3,
   "files_touched": [
     "apps/mobile/LOCAL_TESTFLIGHT.md",
     "apps/mobile/README.md",
@@ -31,6 +31,13 @@
       "transcript": "/7c/ba453d8c40/2/full.jsonl",
       "context": "",
       "content_hash": "/7c/ba453d8c40/2/content_hash.txt",
+      "prompt": ""
+    },
+    {
+      "metadata": "/7c/ba453d8c40/3/metadata.json",
+      "transcript": "/7c/ba453d8c40/3/full.jsonl",
+      "context": "",
+      "content_hash": "/7c/ba453d8c40/3/content_hash.txt",
       "prompt": ""
     }
   ],
