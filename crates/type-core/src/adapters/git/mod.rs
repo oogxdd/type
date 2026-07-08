@@ -837,78 +837,86 @@ pub fn build_callbacks(
         }
     });
     // libgit2 calls the credentials callback again every time the server
-    // rejects the offered credential. Each invocation must therefore offer the
-    // *next* candidate — returning the same key forever turns a rejected
-    // pairing into an infinite auth loop with a permanently spinning UI.
-    let attempt = std::cell::Cell::new(0u32);
+    // rejects the offered credential, so each invocation must offer the *next*
+    // candidate — returning the same key forever turns a rejected pairing into
+    // an infinite auth loop with a permanently spinning UI.
+    //
+    // The candidates already offered are tracked by identity (bitmask), not by
+    // a positional attempt counter: `allowed` changes between invocations (the
+    // URL-has-no-username flow starts with a USERNAME-only round), and counting
+    // positions against a shifting set skipped the key file entirely, breaking
+    // every ssh:// remote written without a username.
+    const TRIED_KEY_FILE: u8 = 1 << 0;
+    const TRIED_AGENT: u8 = 1 << 1;
+    const TRIED_USERPASS: u8 = 1 << 2;
+    const TRIED_DEFAULT: u8 = 1 << 3;
+    let tried = std::cell::Cell::new(0u8);
     callbacks.credentials(move |_url, username_from_url, allowed| {
-        let n = attempt.get();
-        attempt.set(n + 1);
-        let mut next = 0u32;
+        let ssh_user = username_from_url.or(user.as_deref()).unwrap_or("git");
+        // A plain username query (URL without a username) is a session hint,
+        // not an authentication attempt — answer it without consuming one.
         if allowed.contains(CredentialType::USERNAME) {
-            if next == n {
-                let ssh_user = username_from_url.or(user.as_deref()).unwrap_or("git");
+            eprintln!(
+                "[git] auth: answering username query with '{}'",
+                redact_username_for_log(ssh_user)
+            );
+            return Cred::username(ssh_user);
+        }
+        let mark = |bit: u8| -> bool {
+            let already = tried.get();
+            if already & bit != 0 {
+                return false;
+            }
+            tried.set(already | bit);
+            true
+        };
+        if allowed.contains(CredentialType::SSH_KEY) {
+            if ssh_private_key.is_some() && mark(TRIED_KEY_FILE) {
+                let private_key = ssh_private_key.as_ref().unwrap();
                 eprintln!(
-                    "[git] auth attempt {n}: username hint as '{}'",
+                    "[git] auth: offering ssh key file as '{}'",
                     redact_username_for_log(ssh_user)
                 );
-                return Cred::username(ssh_user);
-            }
-            next += 1;
-        }
-        if allowed.contains(CredentialType::SSH_KEY) {
-            if let Some(private_key) = &ssh_private_key {
-                if next == n {
-                    let ssh_user = username_from_url.or(user.as_deref()).unwrap_or("git");
-                    eprintln!(
-                        "[git] auth attempt {n}: ssh key file as '{}'",
-                        redact_username_for_log(ssh_user)
-                    );
-                    let pub_key = ssh_public_key.as_deref();
-                    match Cred::ssh_key(ssh_user, pub_key, private_key, None) {
-                        Ok(cred) => return Ok(cred),
-                        Err(error) => {
-                            eprintln!("[git] auth attempt {n}: could not load ssh key file: {error}");
-                        }
+                match Cred::ssh_key(ssh_user, ssh_public_key.as_deref(), private_key, None) {
+                    Ok(cred) => return Ok(cred),
+                    Err(error) => {
+                        // Unreadable key file: fall through to the next candidate.
+                        eprintln!("[git] auth: could not load ssh key file: {error}");
                     }
                 }
-                next += 1;
             }
-            if let Some(name) = username_from_url.or(user.as_deref()) {
-                if next == n {
-                    eprintln!(
-                        "[git] auth attempt {n}: ssh agent as '{}'",
-                        redact_username_for_log(name)
-                    );
-                    if let Ok(cred) = Cred::ssh_key_from_agent(name) {
-                        return Ok(cred);
-                    }
+            if mark(TRIED_AGENT) {
+                eprintln!(
+                    "[git] auth: offering ssh agent as '{}'",
+                    redact_username_for_log(ssh_user)
+                );
+                if let Ok(cred) = Cred::ssh_key_from_agent(ssh_user) {
+                    return Ok(cred);
                 }
-                next += 1;
             }
         }
         if allowed.contains(CredentialType::USER_PASS_PLAINTEXT) {
             if let (Some(user), Some(pass)) = (user.as_deref(), pass.as_deref()) {
-                if next == n {
+                if mark(TRIED_USERPASS) {
                     eprintln!(
-                        "[git] auth attempt {n}: username/password as '{}'",
+                        "[git] auth: offering username/password as '{}'",
                         redact_username_for_log(user)
                     );
                     return Cred::userpass_plaintext(user, pass);
                 }
-                next += 1;
             }
         }
-        if allowed.contains(CredentialType::DEFAULT) && next == n {
-            eprintln!("[git] auth attempt {n}: default credentials");
+        if allowed.contains(CredentialType::DEFAULT) && mark(TRIED_DEFAULT) {
+            eprintln!("[git] auth: offering default credentials");
             return Cred::default();
         }
-        eprintln!("[git] auth failed: server rejected all {n} credential attempt(s)");
-        if n == 0 {
+        if tried.get() == 0 {
+            eprintln!("[git] auth failed: no usable credentials for this remote");
             return Err(git2::Error::from_str(
                 "No matching Git credentials available for this remote.",
             ));
         }
+        eprintln!("[git] auth failed: server rejected every offered credential");
         Err(git2::Error::from_str(
             "The server rejected this device's key. For local sync this means the phone is not paired (or the pairing code expired) — scan the QR code in desktop Settings → Sync again.",
         ))

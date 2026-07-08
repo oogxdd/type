@@ -761,6 +761,33 @@ mod tests {
             "push should update the desktop working tree in place"
         );
 
+        // Regression: a libgit2 client fetching over the *durable* remote —
+        // an ssh:// URL without a username — must authenticate with the paired
+        // key file. The positional attempt counter used to skip the key file
+        // after libgit2's username-query round, so exactly this fetch failed
+        // with "server rejected this device's key" on devices with no
+        // ssh-agent (every phone).
+        let durable_root = base.join("durable");
+        fs::create_dir_all(&durable_root).unwrap();
+        let durable_repo = crate::ensure_git_repo(&durable_root).unwrap();
+        crate::ensure_origin_remote(
+            &durable_repo,
+            &format!("ssh://127.0.0.1:{port}/notes"),
+        )
+        .unwrap();
+        crate::perform_fetch(
+            &durable_repo,
+            &branch,
+            None,
+            None,
+            Some(client_key_path.clone()),
+            None,
+            None,
+        )
+        .unwrap_or_else(|error| {
+            panic!("usernameless durable remote should fetch with the paired key: {error}")
+        });
+
         // Regression: a libgit2 client with an unpaired key and a stale token
         // must fail fast with pairing guidance — before the credentials
         // callback was attempt-bounded this looped forever ("Pulling…" hang).
