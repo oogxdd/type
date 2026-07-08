@@ -1,0 +1,71 @@
+привет. чето не работает нормально синк (между desktop app (macos) and mobile (ios))
+
+вот я вроде стартую сервер на компе, сканю QR с телефона но ничего потом не происходит
+
+если я мануально делаю paste remote url (ssh) и жму "connect" - тоже ничего не происходит
+
+
+и просто чтобы ты понимал. я сейчас не понимаю QR этот эстаблишит коннекшн по git или по ssh протоколу. я бы предпочел дефолт чтобы был ssh. потому что его секьюрно юзать даже если вы на public wifi
+
+ну и в целом если есть какая-то ошибка - я должен понимать что именно не так
+
+
+ну и возможно можно по ux сделать это чтобы было более simple в целом. подумай вопщем
+
+---
+
+сделай все что ты привел (3 самое важное)
+
+---
+
+Continue from where you left off.
+
+---
+
+слушай. так как на claude у ееня кончились лимиты я передал этот таск другому агенту. он сделал checkpoint commit там где ты остановился а потом закончил. заревью его имплементацию - сделал ли бы ты так же? есть то что думаешь стоит исправить?
+
+---
+
+давай. и 4 тоже думаю
+
+---
+
+Continue from where you left off.
+
+---
+
+continue. and fix this error:
+
+)
+error[E0560]: struct `ServerShared` has no field named `branch`
+   --> crates/type-core/src/adapters/local_sync/mod.rs:203:13
+    |
+203 |             branch: branch.clone(),
+    |             ^^^^^^ `ServerShared` does not have this field
+    |
+    = note: all struct fields are already assigned
+
+For more information about this error, try `rustc --explain E0560`.
+error: could not compile `type-core` (lib) due to 1 previous error
+
+---
+
+[Request interrupted by user for tool use]
+
+---
+
+error[E0560]: struct `DiscoveredServer` has no field named `git_url`
+   --> crates/type-core/src/adapters/local_sync/mod.rs:556:9
+    |
+556 |         git_url,
+    |         ^^^^^^^ `DiscoveredServer` does not have this field
+    |
+    = note: available fields are: `url`
+
+---
+
+слушай. а думаешь хорошая мысль что я сделал ssh only а поддержку по git протоколу убрал (по git же тоже норм просто на вайфае которому доверяешь)
+
+---
+
+did you commit those your changes?

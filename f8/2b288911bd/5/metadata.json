@@ -1,9 +1,11 @@
 {
   "cli_version": "0.4.9",
   "checkpoint_id": "f82b288911bd",
+  "session_id": "57669173-073b-4ec0-b88b-d3ff2a6d245d",
   "strategy": "manual-commit",
+  "created_at": "2026-07-08T19:43:52.773728Z",
   "branch": "capture-swipe",
-  "checkpoints_count": 13,
+  "checkpoints_count": 3,
   "files_touched": [
     "AGENTS.md",
     "README.md",
@@ -30,55 +32,24 @@
     "packages/shared/src/sync-link.ts",
     "packages/shared/src/types.ts"
   ],
-  "sessions": [
-    {
-      "metadata": "/f8/2b288911bd/0/metadata.json",
-      "transcript": "/f8/2b288911bd/0/full.jsonl",
-      "context": "",
-      "content_hash": "/f8/2b288911bd/0/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/f8/2b288911bd/1/metadata.json",
-      "transcript": "/f8/2b288911bd/1/full.jsonl",
-      "context": "",
-      "content_hash": "/f8/2b288911bd/1/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/f8/2b288911bd/2/metadata.json",
-      "transcript": "/f8/2b288911bd/2/full.jsonl",
-      "context": "",
-      "content_hash": "/f8/2b288911bd/2/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/f8/2b288911bd/3/metadata.json",
-      "transcript": "/f8/2b288911bd/3/full.jsonl",
-      "context": "",
-      "content_hash": "/f8/2b288911bd/3/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/f8/2b288911bd/4/metadata.json",
-      "transcript": "/f8/2b288911bd/4/full.jsonl",
-      "context": "",
-      "content_hash": "/f8/2b288911bd/4/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/f8/2b288911bd/5/metadata.json",
-      "transcript": "/f8/2b288911bd/5/full.jsonl",
-      "context": "/f8/2b288911bd/5/context.md",
-      "content_hash": "/f8/2b288911bd/5/content_hash.txt",
-      "prompt": "/f8/2b288911bd/5/prompt.txt"
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "9a389e9f1a49",
+  "checkpoint_transcript_start": 198,
+  "transcript_lines_at_start": 198,
   "token_usage": {
     "input_tokens": 7794,
     "cache_creation_tokens": 652104,
     "cache_read_tokens": 17020813,
     "output_tokens": 75613,
     "api_call_count": 81
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-08T19:43:52.126147Z",
+    "agent_lines": 1035,
+    "human_added": 12,
+    "human_modified": 29,
+    "human_removed": 0,
+    "total_committed": 1076,
+    "agent_percentage": 96.18959107806691
   }
 }
