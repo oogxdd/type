@@ -2,7 +2,11 @@
 // mounted underneath, and opening/closing is driven by the drawer's interactive
 // edge gesture rather than a custom JS pan that triggers stack navigation.
 
-import { useNavigation, type NavigatorScreenParams } from "@react-navigation/native";
+import {
+  DrawerActions,
+  useNavigation,
+  type NavigatorScreenParams,
+} from "@react-navigation/native";
 import type { DrawerNavigationProp } from "@react-navigation/drawer";
 import { useState } from "react";
 import { FlatList, Pressable, SectionList, StyleSheet, Text, View } from "react-native";
@@ -45,11 +49,11 @@ export const MenuScreen = () => {
       screen,
       params,
     } as NavigatorScreenParams<MainStackParamList>);
-    navigation.closeDrawer();
+    navigation.dispatch(DrawerActions.closeDrawer());
   };
 
   const menuSide = useUiPrefsStore((s) => s.menuSide);
-  const closeMenu = () => navigation.closeDrawer();
+  const closeMenu = () => navigation.dispatch(DrawerActions.closeDrawer());
 
   const lastSyncedMs = useSyncStore((s) => s.history[0]?.authored_ms ?? null);
 
