@@ -59,8 +59,17 @@ pub struct LocalSyncServerStatus {
     pub branch: Option<String>,
     pub ssh_url: Option<String>,
     pub host_key_sha256: Option<String>,
+    pub paired_devices: Vec<PairedDeviceInfo>,
     pub repo_path: String,
     pub error: Option<String>,
+}
+
+/// A phone whose key the sync server accepts (shown on the desktop card so
+/// pairing success is visible).
+#[derive(Serialize, Clone)]
+pub struct PairedDeviceInfo {
+    pub name: String,
+    pub added_ms: i64,
 }
 
 /// A server found on the local network via mDNS.
@@ -82,7 +91,10 @@ struct RunningDaemon {
     served_name: String,
     branch: String,
     repo_path: PathBuf,
-    pairing_token: String,
+    /// Shared with the SSH server, which rotates it after each pairing —
+    /// status polls read the live value so the QR always shows a valid token.
+    pairing_token: std::sync::Arc<Mutex<String>>,
+    devices_path: PathBuf,
     host_key_sha256: String,
     /// mDNS advertisement handle, present when discovery is active.
     mdns: Option<MdnsAdvert>,
@@ -194,14 +206,17 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
             .to_string();
 
         let (host_key, host_key_sha256) = devices::ensure_host_key(app)?;
-        let pairing_token = devices::generate_pairing_token();
+        let (token_path, token) = devices::load_or_create_pairing_token(app)?;
+        let pairing_token = Arc::new(Mutex::new(token));
+        let devices_path = devices::devices_path(app)?;
         let shared = Arc::new(ssh_server::ServerShared {
             git_path: git,
             repo_path: root.clone(),
             served_name: served_name.clone(),
             branch: branch.clone(),
             pairing_token: pairing_token.clone(),
-            devices_path: devices::devices_path(app)?,
+            pairing_token_path: token_path,
+            devices_path: devices_path.clone(),
         });
         let server = ssh_server::start_ssh_server(shared, &host_key, LOCAL_SYNC_PORT)?;
 
@@ -223,6 +238,7 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
             branch,
             repo_path: root,
             pairing_token,
+            devices_path,
             host_key_sha256,
             mdns,
         };
@@ -283,6 +299,7 @@ fn unsupported_status(repo_path: String) -> LocalSyncServerStatus {
         branch: None,
         ssh_url: None,
         host_key_sha256: None,
+        paired_devices: Vec::new(),
         repo_path,
         error: None,
     }
@@ -299,6 +316,7 @@ fn idle_status(git_available: bool, repo_path: String) -> LocalSyncServerStatus 
         branch: None,
         ssh_url: None,
         host_key_sha256: None,
+        paired_devices: Vec::new(),
         repo_path,
         error: None,
     }
@@ -306,10 +324,18 @@ fn idle_status(git_available: bool, repo_path: String) -> LocalSyncServerStatus 
 
 #[cfg(desktop)]
 fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
+    let token = daemon.pairing_token.lock().map(|t| t.clone()).unwrap_or_default();
     let ssh_url = daemon
         .host
         .as_ref()
-        .map(|host| ssh_pairing_url(host, &daemon.served_name, &daemon.pairing_token));
+        .map(|host| ssh_pairing_url(host, &daemon.served_name, &token));
+    let paired_devices = devices::list_devices(&daemon.devices_path)
+        .into_iter()
+        .map(|device| PairedDeviceInfo {
+            name: device.name,
+            added_ms: device.added_ms,
+        })
+        .collect();
     LocalSyncServerStatus {
         supported: true,
         git_available: true,
@@ -319,6 +345,7 @@ fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
         branch: Some(daemon.branch.clone()),
         ssh_url,
         host_key_sha256: Some(daemon.host_key_sha256.clone()),
+        paired_devices,
         repo_path: daemon.repo_path.to_string_lossy().to_string(),
         error: None,
     }

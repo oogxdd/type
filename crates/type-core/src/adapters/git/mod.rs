@@ -394,6 +394,10 @@ fn remote_push(
     let mut push_options = PushOptions::new();
     push_options.remote_callbacks(callbacks);
     let mut remote = repo.find_remote("origin").map_err(map_git_error)?;
+    eprintln!(
+        "[git] pushing '{branch}' to {}",
+        remote.url().unwrap_or("<invalid url>")
+    );
     remote
         .connect_auth(
             Direction::Push,
@@ -412,7 +416,12 @@ fn remote_push(
             &[&format!("refs/heads/{0}:refs/heads/{0}", branch)],
             Some(&mut push_options),
         )
-        .map_err(map_git_error)?;
+        .map_err(|error| {
+            let message = map_git_error(error);
+            eprintln!("[git] push failed: {message}");
+            message
+        })?;
+    eprintln!("[git] push complete");
     let mut local = repo
         .find_branch(branch, git2::BranchType::Local)
         .map_err(map_git_error)?;
@@ -796,38 +805,58 @@ pub fn build_callbacks(
             ))
         }
     });
+    // libgit2 calls the credentials callback again every time the server
+    // rejects the offered credential. Each invocation must therefore offer the
+    // *next* candidate — returning the same key forever turns a rejected
+    // pairing into an infinite auth loop with a permanently spinning UI.
+    let attempt = std::cell::Cell::new(0u32);
     callbacks.credentials(move |_url, username_from_url, allowed| {
+        let n = attempt.get();
+        attempt.set(n + 1);
+        let mut next = 0u32;
+        if allowed.contains(CredentialType::SSH_KEY) {
+            if let Some(private_key) = &ssh_private_key {
+                if next == n {
+                    let ssh_user = username_from_url.or(user.as_deref()).unwrap_or("git");
+                    eprintln!("[git] auth attempt {n}: ssh key file as '{ssh_user}'");
+                    let pub_key = ssh_public_key.as_deref();
+                    if let Ok(cred) = Cred::ssh_key(ssh_user, pub_key, private_key, None) {
+                        return Ok(cred);
+                    }
+                }
+                next += 1;
+            }
+            if let Some(name) = username_from_url.or(user.as_deref()) {
+                if next == n {
+                    eprintln!("[git] auth attempt {n}: ssh agent as '{name}'");
+                    if let Ok(cred) = Cred::ssh_key_from_agent(name) {
+                        return Ok(cred);
+                    }
+                }
+                next += 1;
+            }
+        }
         if allowed.contains(CredentialType::USER_PASS_PLAINTEXT) {
             if let (Some(user), Some(pass)) = (user.as_deref(), pass.as_deref()) {
-                return Cred::userpass_plaintext(user, pass);
+                if next == n {
+                    eprintln!("[git] auth attempt {n}: username/password as '{user}'");
+                    return Cred::userpass_plaintext(user, pass);
+                }
+                next += 1;
             }
         }
-        if allowed.contains(CredentialType::SSH_KEY) {
-            // Try key file first.
-            if let Some(private_key) = &ssh_private_key {
-                let ssh_user = username_from_url.or(user.as_deref()).unwrap_or("git");
-                let pub_key = ssh_public_key.as_deref();
-                if let Ok(cred) = Cred::ssh_key(ssh_user, pub_key, private_key, None) {
-                    return Ok(cred);
-                }
-            }
-            // Fall back to SSH agent.
-            if let Some(name) = username_from_url {
-                if let Ok(cred) = Cred::ssh_key_from_agent(name) {
-                    return Ok(cred);
-                }
-            }
-            if let Some(user) = user.as_deref() {
-                if let Ok(cred) = Cred::ssh_key_from_agent(user) {
-                    return Ok(cred);
-                }
-            }
-        }
-        if allowed.contains(CredentialType::DEFAULT) {
+        if allowed.contains(CredentialType::DEFAULT) && next == n {
+            eprintln!("[git] auth attempt {n}: default credentials");
             return Cred::default();
         }
+        eprintln!("[git] auth failed: server rejected all {n} credential attempt(s)");
+        if n == 0 {
+            return Err(git2::Error::from_str(
+                "No matching Git credentials available for this remote.",
+            ));
+        }
         Err(git2::Error::from_str(
-            "No matching Git credentials available for this remote.",
+            "The server rejected this device's key. For local sync this means the phone is not paired (or the pairing code expired) — scan the QR code in desktop Settings → Sync again.",
         ))
     });
     callbacks
@@ -976,11 +1005,16 @@ fn probe_remote_url(remote_url: &str) -> Result<(), String> {
     let mut last_error = None;
     for addr in addrs {
         match TcpStream::connect_timeout(&addr, timeout) {
-            Ok(_) => return Ok(()),
+            Ok(_) => {
+                eprintln!("[git] probe {}:{} ok", target.host, target.port);
+                return Ok(());
+            }
             Err(error) => last_error = Some(error),
         }
     }
-    Err(network_probe_error(&target.host, target.port, last_error))
+    let message = network_probe_error(&target.host, target.port, last_error);
+    eprintln!("[git] probe {}:{} failed: {message}", target.host, target.port);
+    Err(message)
 }
 
 struct TcpTarget {
@@ -1136,6 +1170,10 @@ pub fn perform_fetch<'a>(
     trusted_host_key: Option<TrustedSshHostKey>,
 ) -> Result<AnnotatedCommit<'a>, String> {
     let mut remote = repo.find_remote("origin").map_err(map_git_error)?;
+    eprintln!(
+        "[git] fetching '{branch}' from {}",
+        remote.url().unwrap_or("<invalid url>")
+    );
     let callbacks = build_callbacks(
         username,
         password,
@@ -1147,7 +1185,12 @@ pub fn perform_fetch<'a>(
     fetch_options.remote_callbacks(callbacks);
     remote
         .fetch(&[branch], Some(&mut fetch_options), None)
-        .map_err(map_git_error)?;
+        .map_err(|error| {
+            let message = map_git_error(error);
+            eprintln!("[git] fetch failed: {message}");
+            message
+        })?;
+    eprintln!("[git] fetch complete");
     let fetch_head = repo.find_reference("FETCH_HEAD").map_err(map_git_error)?;
     repo.reference_to_annotated_commit(&fetch_head)
         .map_err(map_git_error)

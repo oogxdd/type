@@ -65,11 +65,37 @@ pub(super) fn ensure_host_key(app: &AppEnv) -> Result<(String, String), String> 
     Ok((content, fingerprint))
 }
 
-/// Random pairing token for one server run (hex, QR-safe).
+/// Random pairing token (hex, QR-safe).
 pub(super) fn generate_pairing_token() -> String {
     let mut bytes = [0u8; 16];
     OsRng.fill_bytes(&mut bytes);
     bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+const PAIRING_TOKEN_FILE: &str = "pairing_token";
+
+/// The pairing token persists across server/app restarts so a scanned QR stays
+/// valid until it is actually used — a phone often saves the QR's remote URL
+/// first and only completes pairing on a later sync. It is rotated after each
+/// successful pairing (see [`rotate_pairing_token`]), so a used QR dies.
+pub(super) fn load_or_create_pairing_token(app: &AppEnv) -> Result<(PathBuf, String), String> {
+    let path = local_sync_dir(app)?.join(PAIRING_TOKEN_FILE);
+    if let Ok(existing) = fs::read_to_string(&path) {
+        let token = existing.trim().to_string();
+        if !token.is_empty() && token.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Ok((path, token));
+        }
+    }
+    let token = generate_pairing_token();
+    fs::write(&path, &token).map_err(|e| e.to_string())?;
+    Ok((path, token))
+}
+
+/// Mint and persist a fresh pairing token (called after a successful pairing).
+pub(super) fn rotate_pairing_token(path: &Path) -> String {
+    let token = generate_pairing_token();
+    let _ = fs::write(path, &token);
+    token
 }
 
 pub(super) fn list_devices(path: &Path) -> Vec<PairedDevice> {

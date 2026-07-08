@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use russh::keys::PublicKey;
 use russh::server::{Auth, ChannelOpenHandle, Config, Handler, Msg, Server, Session};
@@ -28,7 +28,11 @@ pub(super) struct ServerShared {
     pub repo_path: PathBuf,
     pub served_name: String,
     pub branch: String,
-    pub pairing_token: String,
+    /// Current pairing token; rotated in place after each successful pairing,
+    /// so the QR (rebuilt from this on every status poll) always shows a live
+    /// token while used ones die.
+    pub pairing_token: Arc<Mutex<String>>,
+    pub pairing_token_path: PathBuf,
     pub devices_path: PathBuf,
 }
 
@@ -110,18 +114,34 @@ impl Handler for ClientHandler {
 
     async fn auth_publickey(&mut self, user: &str, key: &PublicKey) -> Result<Auth, Self::Error> {
         let Some(key_line) = devices::public_key_line(key) else {
+            eprintln!("[local-sync] auth rejected: unreadable public key");
             return Ok(reject());
         };
+        let key_preview = &key_line[key_line.len().saturating_sub(12)..];
         if devices::is_authorized(&self.shared.devices_path, &key_line) {
+            eprintln!("[local-sync] auth ok: paired device key (…{key_preview})");
             return Ok(Auth::Accept);
         }
-        let expected = format!("pair-{}", self.shared.pairing_token);
-        if !self.shared.pairing_token.is_empty() && user == expected {
+        let expected = {
+            let token = self.shared.pairing_token.lock().unwrap();
+            format!("pair-{}", *token)
+        };
+        if user == expected {
             let name = devices::device_name_from_key(key);
             if devices::register_device(&self.shared.devices_path, &key_line, &name).is_ok() {
+                // The token is single-use: rotate it so the scanned QR cannot
+                // pair a second, unknown device later.
+                let fresh = devices::rotate_pairing_token(&self.shared.pairing_token_path);
+                *self.shared.pairing_token.lock().unwrap() = fresh;
+                eprintln!("[local-sync] paired new device '{name}' (…{key_preview}); pairing token rotated");
                 return Ok(Auth::Accept);
             }
+            eprintln!("[local-sync] pairing failed: could not store the device key");
+            return Ok(reject());
         }
+        eprintln!(
+            "[local-sync] auth rejected: unknown key (…{key_preview}), username '{user}' does not match the current pairing token — re-scan the QR code"
+        );
         Ok(reject())
     }
 
@@ -156,6 +176,7 @@ impl Handler for ClientHandler {
             return Ok(());
         }
 
+        eprintln!("[local-sync] serving {service} for '{requested_path}'");
         // Serve the latest notes: the desktop edits its working tree without
         // committing, so pending changes are committed here — right before a
         // fetch reads history, and before a push so updateInstead never meets
@@ -281,6 +302,7 @@ fn pump_child_io(session: &mut Session, channel: ChannelId, mut child: Child) {
             .ok()
             .and_then(|status| status.code())
             .unwrap_or(1) as u32;
+        eprintln!("[local-sync] git process finished with exit code {code}");
         let _ = handle.exit_status_request(channel, code).await;
         let _ = handle.eof(channel).await;
         let _ = handle.close(channel).await;
@@ -463,6 +485,9 @@ mod tests {
             probe.local_addr().unwrap().port()
         };
         let token = devices::generate_pairing_token();
+        let token_path = base.join("pairing_token");
+        fs::write(&token_path, &token).unwrap();
+        let live_token = Arc::new(Mutex::new(token.clone()));
         let devices_path = base.join("devices.json");
         let server = start_ssh_server(
             Arc::new(ServerShared {
@@ -470,7 +495,8 @@ mod tests {
                 repo_path: repo_path.clone(),
                 served_name: "notes".to_string(),
                 branch: branch.clone(),
-                pairing_token: token.clone(),
+                pairing_token: live_token.clone(),
+                pairing_token_path: token_path.clone(),
                 devices_path: devices_path.clone(),
             }),
             &host_key_text,
@@ -512,6 +538,10 @@ mod tests {
             ),
             "pairing should register the client key"
         );
+        // A successful pairing consumes the token: rotated in memory + on disk.
+        let rotated = live_token.lock().unwrap().clone();
+        assert_ne!(rotated, token, "pairing should rotate the token");
+        assert_eq!(fs::read_to_string(&token_path).unwrap().trim(), rotated);
 
         // Uncommitted desktop edits are committed at serve time, so a pull
         // picks them up without anyone pressing a button on the desktop.
@@ -541,6 +571,53 @@ mod tests {
         assert!(
             repo_path.join("Feed").join("phone.md").exists(),
             "push should update the desktop working tree in place"
+        );
+
+        // Regression: a libgit2 client with an unpaired key and a stale token
+        // must fail fast with pairing guidance — before the credentials
+        // callback was attempt-bounded this looped forever ("Pulling…" hang).
+        let mut stranger = PrivateKey::random(&mut OsRng, Algorithm::Ed25519).unwrap();
+        stranger.set_comment("stranger");
+        let stranger_priv = base.join("stranger_key");
+        fs::write(
+            &stranger_priv,
+            stranger.to_openssh(LineEnding::LF).unwrap().as_bytes(),
+        )
+        .unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&stranger_priv, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        let stranger_pub = base.join("stranger_key.pub");
+        fs::write(
+            &stranger_pub,
+            format!("{}\n", stranger.public_key().to_openssh().unwrap()),
+        )
+        .unwrap();
+        let stranger_root = base.join("stranger");
+        fs::create_dir_all(&stranger_root).unwrap();
+        let stranger_repo = crate::ensure_git_repo(&stranger_root).unwrap();
+        crate::ensure_origin_remote(
+            &stranger_repo,
+            &format!("ssh://pair-{}@127.0.0.1:{port}/notes", "deadbeef"),
+        )
+        .unwrap();
+        let error = match crate::perform_fetch(
+            &stranger_repo,
+            &branch,
+            None,
+            None,
+            Some(stranger_priv),
+            Some(stranger_pub),
+            None,
+        ) {
+            Ok(_) => panic!("fetch with an unpaired key should fail"),
+            Err(error) => error,
+        };
+        assert!(
+            error.contains("not paired"),
+            "unpaired key should fail with pairing guidance, got: {error}"
         );
 
         server.stop();

@@ -339,6 +339,9 @@ export const getSyncHint = (error: string | null): string | null => {
   if (lower.includes("old git:// local sync")) {
     return "This connection is from an older app version. Scan the new QR code in desktop Settings → Sync.";
   }
+  if (lower.includes("rejected this device's key")) {
+    return "Pairing needed. Scan the QR code in desktop Settings → Sync.";
+  }
   if (lower.includes("not initialized")) {
     return "Repository is not connected yet.";
   }

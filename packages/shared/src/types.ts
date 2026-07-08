@@ -61,8 +61,14 @@ export type LocalSyncServerStatus = {
   branch: string | null;
   ssh_url: string | null;
   host_key_sha256: string | null;
+  paired_devices: PairedDeviceInfo[];
   repo_path: string;
   error: string | null;
+};
+
+export type PairedDeviceInfo = {
+  name: string;
+  added_ms: number;
 };
 
 export type DiscoveredServer = {

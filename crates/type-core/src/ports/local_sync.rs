@@ -18,10 +18,20 @@ pub struct LocalSyncServerStatus {
     pub ssh_url: Option<String>,
     /// `SHA256:...` fingerprint of the embedded SSH server host key.
     pub host_key_sha256: Option<String>,
+    /// Devices whose keys the server accepts (name + when they paired), so the
+    /// desktop UI can show that pairing actually happened.
+    pub paired_devices: Vec<PairedDeviceInfo>,
     /// Absolute path of the served notes repository.
     pub repo_path: String,
     /// Last non-fatal error (e.g. previous start failure), if any.
     pub error: Option<String>,
+}
+
+/// A paired device entry surfaced in [`LocalSyncServerStatus`].
+#[derive(Serialize)]
+pub struct PairedDeviceInfo {
+    pub name: String,
+    pub added_ms: i64,
 }
 
 // ── Trait ──────────────────────────────────────────────────────────────────────

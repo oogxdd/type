@@ -39,6 +39,23 @@ export function LocalSyncServerCard() {
     void ensureStarted();
   }, [ensureStarted]);
 
+  // While the server runs, poll the status: pairing rotates the token (the QR
+  // must re-render with the live one) and newly paired devices should show up
+  // without a manual refresh.
+  const running = Boolean(status?.running);
+  useEffect(() => {
+    if (!running) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void gitApi
+        .getLocalSyncServerStatus()
+        .then(setStatus)
+        .catch(() => {});
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [running]);
+
   const toggleServer = useCallback(async () => {
     setBusy(true);
     setError(null);
@@ -63,8 +80,6 @@ export function LocalSyncServerCard() {
   if (status && !status.supported) {
     return null;
   }
-
-  const running = Boolean(status?.running);
 
   const deepLink = useMemo(() => {
     if (!status?.ssh_url) {
@@ -139,6 +154,19 @@ export function LocalSyncServerCard() {
               </p>
             </div>
           ) : null}
+
+          <div className="space-y-1">
+            <SettingsHelpText>
+              {status?.paired_devices.length
+                ? "Paired devices:"
+                : "No phone paired yet — scan the QR code from the phone's Sync screen."}
+            </SettingsHelpText>
+            {status?.paired_devices.map((device) => (
+              <p key={`${device.name}-${device.added_ms}`} className="text-xs text-foreground">
+                ✓ {device.name} · paired {new Date(device.added_ms).toLocaleString()}
+              </p>
+            ))}
+          </div>
 
           <div className="space-y-2">
             <SettingsHelpText>Or set it up by hand:</SettingsHelpText>

@@ -83,13 +83,20 @@ export const useSyncStore = create<SyncState>((set, get) => {
     action: SyncAction,
     work: () => Promise<GitSyncStatus | null>
   ) => {
+    const startedAt = Date.now();
+    console.log(`[sync] ${action}: started`);
     set({ action, error: null, hint: null });
     try {
       const status = await work();
       const history = await core.getGitHistory({ limit: 30 }).catch(() => []);
+      console.log(
+        `[sync] ${action}: done in ${Date.now() - startedAt}ms` +
+          (status ? ` (ahead ${status.ahead} / behind ${status.behind})` : "")
+      );
       set({ ...(status ? { status } : {}), history, action: "idle" });
     } catch (error) {
       const message = getErrorMessage(error);
+      console.log(`[sync] ${action}: failed after ${Date.now() - startedAt}ms — ${message}`);
       set({ action: "idle", error: message, hint: getSyncHint(message) });
       throw error;
     }
