@@ -182,10 +182,10 @@ impl GitSyncGateway for GitSyncAdapter {
             });
 
         let repo = ensure_git_repo(&root)?;
-        prepare_bootstrap_worktree_for_sync(&root, &repo)?;
+        let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
+        prepare_bootstrap_worktree_for_sync(&root, &repo, &target_branch)?;
         ensure_origin_remote(&repo, remote_url)?;
         probe_remote_url(remote_url)?;
-        let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
         switch_or_prepare_branch(&repo, &target_branch)?;
         let ssh_priv = ssh_private_key_if_exists(&self.app);
         let ssh_pub = ssh_public_key_if_exists(&self.app);
@@ -258,14 +258,22 @@ impl GitSyncGateway for GitSyncAdapter {
             });
 
         let repo = open_repo(&root)?;
-        prepare_bootstrap_worktree_for_sync(&root, &repo)?;
+        let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
+        prepare_bootstrap_worktree_for_sync(&root, &repo, &target_branch)?;
+        // Files are the source of truth and merges never block: pending local
+        // edits are committed (exactly like push does) instead of failing the
+        // pull, so the one-button pull-then-push sync just works.
         if git_has_changes(&repo) {
-            return Err("Local changes detected. Push or commit before pulling.".to_string());
+            let message = if settings.git_commit_message.trim().is_empty() {
+                "Sync notes"
+            } else {
+                settings.git_commit_message.as_str()
+            };
+            commit_all_changes(&repo, message, &target_branch)?;
         }
         if let Some(remote_url) = git_remote_url(&repo) {
             probe_remote_url(&remote_url)?;
         }
-        let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
         switch_or_prepare_branch(&repo, &target_branch)?;
         let ssh_priv = ssh_private_key_if_exists(&self.app);
         let ssh_pub = ssh_public_key_if_exists(&self.app);
@@ -512,8 +520,17 @@ fn clear_bootstrap_artifacts(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Remove bootstrap artifacts before the first sync so the remote content wins.
-pub fn prepare_bootstrap_worktree_for_sync(root: &Path, repo: &Repository) -> Result<(), String> {
+/// Prepare a never-synced worktree (unborn HEAD) for its first sync: freshly
+/// bootstrapped empty system folders are removed so the remote content wins;
+/// real local notes (e.g. captured on the phone before the first pairing) are
+/// committed so the first pull merges the two sets instead of refusing to
+/// connect — there is nothing a user could "push first" on a device that has
+/// never synced.
+pub fn prepare_bootstrap_worktree_for_sync(
+    root: &Path,
+    repo: &Repository,
+    branch: &str,
+) -> Result<(), String> {
     if git_head_has_commit(repo) || !git_has_changes(repo) {
         return Ok(());
     }
@@ -521,7 +538,8 @@ pub fn prepare_bootstrap_worktree_for_sync(root: &Path, repo: &Repository) -> Re
         clear_bootstrap_artifacts(root)?;
         return Ok(());
     }
-    Err("Local changes detected. Push or commit before syncing.".to_string())
+    commit_all_changes(repo, "Notes from this device", branch)?;
+    Ok(())
 }
 
 // ── Ahead / behind ─────────────────────────────────────────────────────────────
@@ -1387,6 +1405,48 @@ mod tests {
         assert!(is_local_hostname("mac-mini.local"));
         assert!(!is_local_hostname("github.com"));
         assert!(!is_local_hostname("8.8.8.8"));
+    }
+
+    /// The first-pairing scenario: the phone already holds captured notes
+    /// (unborn HEAD + real files) and the desktop repo has its own history.
+    /// Connect must commit the phone notes instead of refusing, and the first
+    /// pull must merge the two unrelated histories into a union of notes.
+    #[test]
+    fn first_sync_merges_phone_notes_with_desktop_notes() {
+        let base = std::env::temp_dir().join(format!("type-first-sync-{}", uuid::Uuid::now_v7()));
+
+        let desktop = base.join("desktop");
+        fs::create_dir_all(desktop.join("Feed")).unwrap();
+        fs::write(desktop.join("Feed").join("desktop-note.md"), "desktop\n").unwrap();
+        let desktop_repo = ensure_git_repo(&desktop).unwrap();
+        commit_all_changes(&desktop_repo, "init", "main").unwrap();
+
+        let phone = base.join("phone");
+        fs::create_dir_all(phone.join("Feed")).unwrap();
+        fs::create_dir_all(phone.join("Archieve")).unwrap();
+        fs::write(phone.join("Feed").join("phone-note.md"), "phone\n").unwrap();
+        let phone_repo = ensure_git_repo(&phone).unwrap();
+
+        prepare_bootstrap_worktree_for_sync(&phone, &phone_repo, "main").unwrap();
+        assert!(
+            git_head_has_commit(&phone_repo),
+            "existing notes should be committed, not rejected"
+        );
+
+        ensure_origin_remote(&phone_repo, desktop.to_str().unwrap()).unwrap();
+        switch_or_prepare_branch(&phone_repo, "main").unwrap();
+        let fetched = perform_fetch(&phone_repo, "main", None, None, None, None, None).unwrap();
+        let analysis = phone_repo.merge_analysis(&[&fetched]).unwrap().0;
+        assert!(analysis.is_normal(), "unrelated histories should need a merge");
+        merge_fetched_commit(&phone_repo, "main", &fetched).unwrap();
+
+        assert!(phone.join("Feed").join("phone-note.md").exists());
+        assert!(
+            phone.join("Feed").join("desktop-note.md").exists(),
+            "first pull should bring the desktop notes in"
+        );
+
+        fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]

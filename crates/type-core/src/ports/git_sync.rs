@@ -102,14 +102,17 @@ pub trait GitSyncGateway {
 //   - Initializes a git repo if none exists
 //   - Sets or updates the "origin" remote URL
 //   - Fetches from the remote and fast-forwards if possible
-//   - On first sync with an empty local repo, clears bootstrap artifacts so remote content wins
+//   - On first sync with an empty local repo, clears bootstrap artifacts so remote content wins;
+//     if the device already holds real notes (unborn HEAD), they are committed as
+//     "Notes from this device" so the first pull merges both note sets
 //   - Uses the app's SSH keypair if available (for SSH URLs)
 //
 // pull(branch, username, password)
 //   in:  branch — target branch, defaults to current
 //        username, password — optional HTTPS credentials
 //   out: GitSyncStatus — status after pulling
-//   - Fails if there are uncommitted local changes
+//   - Commits pending local changes first (files are the source of truth;
+//     sync never blocks on a dirty tree)
 //   - Fetches and performs fast-forward, or three-way merge if needed
 //   - On merge conflicts: keeps "ours", saves "theirs" as .conflict files (e.g. note.conflict.md)
 //   - Never loses data — conflict files preserve the remote version

@@ -272,7 +272,6 @@ Each working folder's `.type/settings.json` carries a `transcription_mode`
 
 - **"Repository is not initialized. Connect a remote first."** — run **Connect repo** in Profiles settings.
 - **"No matching Git credentials available…"** — check username/token for HTTPS, or generate an SSH key for SSH remotes.
-- **Pull blocked by local changes** — push first, then pull.
 - **SSH "Permission denied"** — for internet/manual SSH remotes, ensure the public key is authorized on the host.
 - **Local sync unreachable** — keep Type open on desktop, stay on the same Wi-Fi/hotspot, and allow Local Network access on iOS.
 
