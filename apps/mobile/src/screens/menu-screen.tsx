@@ -82,6 +82,12 @@ export const MenuScreen = () => {
   }));
   const capturePreviewStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: width * (1 - captureProgress.value) }],
+    // At rest the preview sits exactly one screen-width to the right — but
+    // during a native pop the whole menu view (preview included) slides in
+    // from -30% parallax, which would poke the preview's left edge (its
+    // hamburger replica) into the top-right of the frame. Hide it whenever
+    // the menu's own gesture isn't driving it.
+    opacity: captureProgress.value > 0 ? 1 : 0,
   }));
 
   // RNGH's pan activating does not reliably cancel React Native's own
