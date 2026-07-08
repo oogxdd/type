@@ -1,10 +1,12 @@
 // The app menu — the root of the stack: close button + Feed / Folders tabs
 // on top (inline note + folder lists), Sync and Settings pinned at the
 // bottom. The capture page sits pushed above it, so its hamburger or a
-// left-edge swipe-back pops here; the close button or a right-edge leftward
-// swipe pushes a fresh capture page back in. Everything else is pushed from
-// here, so swipe-back from Sync/Settings/Folder/Editor lands back on the menu.
+// swipe-back pops here; the close button pushes a fresh capture page back
+// in, and a leftward swipe anywhere drags a preview of it in with the finger
+// (see swipeToCapture below). Everything else is pushed from here, so
+// swipe-back from Sync/Settings/Folder/Editor lands back on the menu.
 
+import { Ionicons } from "@expo/vector-icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useEffect, useState } from "react";
@@ -15,10 +17,17 @@ import {
   SectionList,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { runOnJS } from "react-native-reanimated";
+import Animated, {
+  Easing,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
@@ -39,17 +48,41 @@ import { NoteListRow } from "./feed-screen";
 
 type MenuTab = "feed" | "folders";
 
-const RIGHT_EDGE_SWIPE_WIDTH = 56;
+// Releasing the drag past this fraction of the screen (or flicking faster
+// than this, px/s leftward) commits to the capture page.
+const OPEN_CAPTURE_PROGRESS = 0.3;
+const OPEN_CAPTURE_VELOCITY = -500;
+// How far the menu slides left behind the incoming page — the depth effect
+// of a native iOS push.
+const MENU_PARALLAX = 0.3;
 
 export const MenuScreen = () => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { width } = useWindowDimensions();
   const [tab, setTab] = useState<MenuTab>("feed");
 
   const tree = useNotesStore((s) => s.tree);
   const previews = useNotesStore((s) => s.previews);
+
+  // 0..1 — how far the capture-page preview has slid in over the menu.
+  // Driven on the UI thread by the pan below; at 1 the real Capture screen
+  // is pushed underneath it with animation:none (there is no native
+  // interactive *push* gesture, so this hand-rolls one — the preview is a
+  // pixel replica of the blank capture page, and the swap is invisible).
+  const captureProgress = useSharedValue(0);
+
+  const menuDepthStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: -width * MENU_PARALLAX * captureProgress.value }],
+  }));
+  const dimStyle = useAnimatedStyle(() => ({
+    opacity: 0.08 * captureProgress.value,
+  }));
+  const capturePreviewStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: width * (1 - captureProgress.value) }],
+  }));
 
   const openScreen = <Screen extends keyof RootStackParamList>(
     screen: Screen,
@@ -59,13 +92,50 @@ export const MenuScreen = () => {
   };
 
   const openCapture = () => navigation.navigate("Capture");
+  const openCaptureBehindPreview = () => {
+    navigation.navigate("Capture", { instant: true });
+    // Drop the preview once the pushed screen is attached on top of the
+    // menu. There is no native "attached" signal with animation:none; the
+    // delay just has to outlive the mount, and only a back swipe started
+    // within it could glimpse the reset.
+    setTimeout(() => {
+      captureProgress.value = 0;
+    }, 400);
+  };
+
+  // The whole menu is the gesture surface: a clearly-leftward drag anywhere
+  // pulls the capture-page preview in with the finger. Activation (16px of
+  // horizontal travel) cancels the touch for whatever it started on, so a
+  // swipe that begins on a note row never opens that note, while a plain tap
+  // never activates the pan. Vertical drags fail fast and stay with the
+  // note/folder lists.
   const swipeToCapture = Gesture.Pan()
-    .hitSlop({ right: 0, width: RIGHT_EDGE_SWIPE_WIDTH })
-    .activeOffsetX(-24)
+    .activeOffsetX(-16)
     .failOffsetX(24)
-    .failOffsetY([-24, 24])
-    .onStart(() => {
-      runOnJS(openCapture)();
+    .failOffsetY([-20, 20])
+    .onUpdate((event) => {
+      captureProgress.value = Math.min(
+        1,
+        Math.max(0, -event.translationX / width)
+      );
+    })
+    .onEnd((event) => {
+      const shouldOpen =
+        captureProgress.value > OPEN_CAPTURE_PROGRESS ||
+        event.velocityX < OPEN_CAPTURE_VELOCITY;
+      if (shouldOpen) {
+        captureProgress.value = withTiming(
+          1,
+          { duration: 160, easing: Easing.out(Easing.cubic) },
+          (finished) => {
+            if (finished) {
+              runOnJS(openCaptureBehindPreview)();
+            }
+          }
+        );
+      } else {
+        captureProgress.value = withTiming(0, { duration: 180 });
+      }
     });
 
   const lastSyncedMs = useSyncStore((s) => s.history[0]?.authored_ms ?? null);
@@ -89,16 +159,14 @@ export const MenuScreen = () => {
 
   return (
     <GestureDetector gesture={swipeToCapture}>
-      <View
-        style={[
-          styles.root,
-          {
-            backgroundColor: theme.colors.background,
-            paddingTop: insets.top + 8,
-            paddingBottom: insets.bottom + 8,
-          },
-        ]}
-      >
+      <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
+        <Animated.View
+          style={[
+            styles.menuContent,
+            { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 },
+            menuDepthStyle,
+          ]}
+        >
         {/* Mirrors the capture page's hamburger: same spot, same size. */}
         <View style={styles.topBar}>
           <ToolbarButton icon="close-outline" onPress={openCapture} />
@@ -181,6 +249,57 @@ export const MenuScreen = () => {
           />
           <BottomItem label="Settings" onPress={() => openScreen("Settings")} />
         </View>
+        </Animated.View>
+
+        {/* Native-push depth cues: the menu dims while the preview page
+            rides in above it, casting a shadow over the seam. */}
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, styles.dim, dimStyle]}
+        />
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.capturePreview,
+            { backgroundColor: theme.colors.background },
+            capturePreviewStyle,
+          ]}
+        >
+          <Text
+            style={[
+              styles.previewPlaceholder,
+              { color: theme.colors.secondaryText, marginTop: insets.top + 56 },
+            ]}
+          >
+            Start typing…
+          </Text>
+          <View
+            style={[
+              styles.previewButton,
+              {
+                left: 16,
+                top: insets.top + 8,
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <Ionicons name="menu-outline" size={20} color={theme.colors.text} />
+          </View>
+          <View
+            style={[
+              styles.previewButton,
+              {
+                right: 16,
+                bottom: insets.bottom + 24,
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <Ionicons name="mic-outline" size={20} color={theme.colors.text} />
+          </View>
+        </Animated.View>
       </View>
     </GestureDetector>
   );
@@ -249,6 +368,32 @@ const BottomItem = ({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  menuContent: { flex: 1 },
+  dim: { backgroundColor: "#000" },
+  capturePreview: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    shadowColor: "#000",
+    shadowOffset: { width: -4, height: 0 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+  },
+  // The preview mirrors the blank capture page (capture-screen.tsx): page
+  // padding top +12 / horizontal 20, input paddingTop 44, 17pt text, and the
+  // toolbar circle geometry from ToolbarButton / DictationButton.
+  previewPlaceholder: { paddingHorizontal: 20, fontSize: 17, lineHeight: 26 },
+  previewButton: {
+    position: "absolute",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   topBar: {
     flexDirection: "row",
     paddingHorizontal: 16,

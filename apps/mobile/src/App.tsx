@@ -61,7 +61,7 @@ const RootStack = () => {
       <Stack.Screen
         name="Capture"
         component={CaptureScreen}
-        options={{
+        options={({ route }) => ({
           // Swipe-back from anywhere on the page, not just the left edge.
           // This is still the native UIKit pop transition, driven natively by
           // react-native-screens' pan recognizer, so the menu slides in with
@@ -71,7 +71,13 @@ const RootStack = () => {
           // clearly-vertical drags (see capture-screen.tsx).
           fullScreenGestureEnabled: true,
           headerShown: false,
-        }}
+          // `instant` = the menu's swipe-to-capture already played the push
+          // transition with its preview overlay (menu-screen.tsx), so the
+          // real screen must appear under it without animating again. The
+          // screen clears the param on mount so the later pop/back-swipe
+          // animates natively.
+          animation: route.params?.instant ? "none" : "default",
+        })}
       />
       <Stack.Screen name="Feed" component={FeedScreen} />
       <Stack.Screen

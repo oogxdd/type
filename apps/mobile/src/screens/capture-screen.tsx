@@ -3,7 +3,8 @@
 // top) and a fresh blank page is ready underneath — same gesture as the
 // original app. Notes land in Feed via the desktop-compatible core.
 
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -64,6 +65,16 @@ export const CaptureScreen = () => {
     () => navigation.addListener("blur", () => void session.flush()),
     [navigation, session]
   );
+
+  // When the menu's swipe pushed this page with animation:none (its preview
+  // overlay already played the transition), clear the flag so the next
+  // transition — the pop / full-screen back swipe — animates natively again.
+  const route = useRoute<RouteProp<RootStackParamList, "Capture">>();
+  useEffect(() => {
+    if (route.params?.instant) {
+      navigation.setParams({ instant: undefined });
+    }
+  }, [navigation, route.params?.instant]);
 
   const translateY = useSharedValue(0);
 

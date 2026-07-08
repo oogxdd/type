@@ -12,7 +12,10 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 // leftward swipe or the close button pushes a fresh capture page back in.
 export type RootStackParamList = {
   Menu: undefined;
-  Capture: undefined;
+  // `instant` skips the push animation: the menu's swipe-to-capture gesture
+  // has already animated a preview of the page in, so the real screen must
+  // appear underneath it without animating a second time.
+  Capture: { instant?: boolean } | undefined;
   Feed: undefined;
   Folder: { path: string; title: string };
   Editor: { path: string; title?: string };
