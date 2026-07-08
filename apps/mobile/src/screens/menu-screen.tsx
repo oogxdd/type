@@ -1,10 +1,9 @@
 // The app menu — the root of the stack: close button + Feed / Folders tabs
 // on top (inline note + folder lists), Sync and Settings pinned at the
 // bottom. The capture page sits pushed above it, so its hamburger or a
-// left-edge swipe-back pops here; the close button or a leftward swipe
-// anywhere on the menu pushes a fresh capture page back in. Everything else
-// is pushed from here, so swipe-back from Sync/Settings/Folder/Editor lands
-// back on the menu.
+// left-edge swipe-back pops here; the close button or a right-edge leftward
+// swipe pushes a fresh capture page back in. Everything else is pushed from
+// here, so swipe-back from Sync/Settings/Folder/Editor lands back on the menu.
 
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -40,6 +39,8 @@ import { NoteListRow } from "./feed-screen";
 
 type MenuTab = "feed" | "folders";
 
+const RIGHT_EDGE_SWIPE_WIDTH = 56;
+
 export const MenuScreen = () => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -57,11 +58,9 @@ export const MenuScreen = () => {
     navigation.dispatch(CommonActions.navigate({ name: screen, params }));
   };
 
-  // The inverse of the left-edge swipe that revealed the menu: dragging
-  // leftward anywhere on the menu slides a fresh capture page back in.
-  // Vertical movement fails the pan quickly so the note/folder lists scroll.
   const openCapture = () => navigation.navigate("Capture");
   const swipeToCapture = Gesture.Pan()
+    .hitSlop({ right: 0, width: RIGHT_EDGE_SWIPE_WIDTH })
     .activeOffsetX(-24)
     .failOffsetX(24)
     .failOffsetY([-24, 24])

@@ -56,7 +56,7 @@ const RootStack = () => {
       <Stack.Screen
         name="Menu"
         component={MenuScreen}
-        options={{ headerShown: false, title: "Menu" }}
+        options={{ gestureEnabled: false, headerShown: false, title: "Menu" }}
       />
       <Stack.Screen
         name="Capture"

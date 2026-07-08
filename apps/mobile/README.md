@@ -10,8 +10,8 @@ system folders, and per-folder `.type/settings.json`.
 The app opens on a **blank page** — start typing immediately. **Swipe up**
 and the page files itself into Feed while a fresh blank page slides in
 underneath. **Swipe from the left edge** (or tap the hamburger) and the menu
-slides in — feed and folders on top, sync and settings at the bottom; a
-leftward swipe on the menu brings a fresh blank page back. The floating mic
+slides in — feed and folders on top, sync and settings at the bottom; swipe
+left from the menu's right edge or tap close to return to a fresh blank page. The floating mic
 button in the bottom-right dictates a voice note: tap to start and tap again
 to stop, or hold it to record only while pressed.
 

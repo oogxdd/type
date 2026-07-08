@@ -8,8 +8,8 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 // the LEFT of the capture page. The app boots with Capture pushed on top of
 // Menu (see initialState in App.tsx), so the native left-edge swipe-back on
 // the capture page reveals the menu, and every other screen is pushed from the
-// menu so swipe-back walks naturally back to it. A leftward swipe on the menu
-// pushes a fresh capture page back in.
+// menu so swipe-back walks naturally back to it. From the menu, a right-edge
+// leftward swipe or the close button pushes a fresh capture page back in.
 export type RootStackParamList = {
   Menu: undefined;
   Capture: undefined;
