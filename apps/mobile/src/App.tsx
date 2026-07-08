@@ -86,7 +86,7 @@ const RootNavigator = () => {
     <Drawer.Navigator
       screenOptions={{
         headerShown: false,
-        drawerType: "front",
+        drawerType: "slide",
         drawerPosition: menuSide,
         drawerStyle: {
           width: "100%",
