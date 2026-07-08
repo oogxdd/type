@@ -1,189 +1,129 @@
-# Local network sync — design & architecture
+# Local network sync
 
-How the app syncs notes between a computer and a phone **without any external
-Git host**, over a shared Wi-Fi or the phone's personal hotspot. This document
-explains the model, the moving parts, and the trade-offs so the feature is easy
-to reason about and extend.
+How Type syncs notes between desktop and phone without an external Git host.
 
-> User-facing setup lives in [LOCAL_GIT_SERVER_LAN_HOTSPOT.md](./LOCAL_GIT_SERVER_LAN_HOTSPOT.md)
-> and the README "Git sync setup" section. This file is for contributors.
+## Model
 
----
+The desktop hosts the active notes root as a normal non-bare Git repository. The
+phone is a Git client. Pulls and pushes go directly against the desktop's live
+working tree, so there is no separate server copy of the notes.
 
-## 1. The mental model
+There are two supported sync shapes:
 
-There is exactly one idea to hold onto:
+| Setup | Remote URL | Server |
+| --- | --- | --- |
+| Internet remote | `https://...` / `ssh://...` | GitHub, Gitea, another Git host |
+| Local network | `ssh://pair-<token>@<desktop-ip>:9418/<repo>` | Type's embedded SSH Git server |
 
-> **The desktop hosts the repository; the phone is a client. All sync setups
-> differ only in the URL the phone connects to.**
+The old local `git://` daemon flow has been replaced by embedded SSH. The local
+flow no longer requires macOS Remote Login, `sshd`, or editing
+`~/.ssh/authorized_keys`.
 
-The desktop's notes folder is a normal (non-bare) Git working repo. The phone
-clones/pulls/pushes against it. We never introduce a separate "server copy" of
-the notes — the thing you edit on the desktop *is* the remote the phone talks to.
+## Desktop Server
 
-### The three setups
+Opening **Settings -> Sync** starts the local server automatically when Git is
+available. The server:
 
-| # | Setup | Phone's remote URL | Server process | Where it runs |
-|---|-------|--------------------|----------------|---------------|
-| 1 | Remote repo | `https://…` / `ssh://…` (internet host) | the remote host | off-device |
-| 2 | Local SSH (same Wi-Fi) | `ssh://user@<computer-ip>/<path>` | the computer's built-in `sshd` (Remote Login) | OS-level |
-| 3 | Local `git://` (Wi-Fi or hotspot) | `git://<computer-ip>/<folder>` | `git daemon`, spawned by the app | in-app button |
+1. Ensures the active notes root is a Git repo.
+2. Sets `receive.denyCurrentBranch=updateInstead`, so phone pushes update the
+   checked-out desktop working tree when it is clean.
+3. Creates or reuses an Ed25519 host key under app data.
+4. Starts an embedded SSH server on `0.0.0.0:9418`.
+5. Executes the desktop `git` binary as `git-upload-pack` or
+   `git-receive-pack` for each SSH exec request.
 
-Setup 3 is the one this feature adds end-to-end: a single **Start server**
-button. Setup 2 is supported by surfacing the ready-to-use `ssh://` URL (the app
-can't toggle the OS `sshd`, so the user enables Remote Login once). Setup 1 is
-the pre-existing path.
+Starting the server never commits anything (so the settings page's auto-start
+has no side effects). Instead, pending desktop edits are committed right before
+each serve — a phone pull always sees the desktop's latest notes, and a phone
+push never meets a dirty working tree.
 
-All three are driven by the same client code (`connect` / `pull` / `push` /
-`syncNow`) — only the URL changes.
+The server also advertises itself over mDNS (`_typenotes-sync._tcp`) for future
+discovery UI. The advertised URL deliberately **omits the pairing token** —
+mDNS is plaintext broadcast; the token travels only inside the QR code.
 
----
+Port `9418` is intentionally retained from the previous local-sync design so
+existing firewall prompts/rules still make sense, but the protocol on that port
+is now SSH, not `git://`.
 
-## 2. How the local `git://` server works
+## Pairing
 
-`Start server` (desktop) supervises a `git daemon` child process. The mechanism,
-validated end-to-end:
-
-1. **Ensure a repo with a commit.** `ensure_git_repo` inits the notes folder if
-   needed; a best-effort initial commit gives the phone something to clone. An
-   empty repo is also fine — the phone can push to create the branch.
-2. **Allow pushes into the live working tree.** We set
-   `receive.denyCurrentBranch=updateInstead` on the repo. Normally Git refuses a
-   push to the branch that is currently checked out; `updateInstead` makes Git
-   **also update the working tree** when it is clean. So a push from the phone
-   makes the desktop's notes files change on disk immediately. If the desktop has
-   uncommitted edits, the push is rejected (push from the desktop first).
-3. **Spawn the daemon:**
-   ```
-   git daemon --reuseaddr --export-all
-              --enable=upload-pack --enable=receive-pack
-              --base-path=<parent-of-notes> --listen=0.0.0.0 --port=9418
-              <parent-of-notes>
-   ```
-   `--base-path` is the notes folder's **parent**; the served repo name is the
-   notes folder's basename, so the URL is `git://<ip>/<basename>`.
-4. **Find the address.** `detect_lan_ip()` opens a UDP socket and `connect()`s to
-   a few well-known targets (incl. `172.20.10.1`, the iPhone-hotspot gateway).
-   `connect` does a route lookup and exposes the source IP for that route without
-   sending packets — that source IP is exactly what the phone must dial. Works on
-   shared Wi-Fi and on hotspot.
-5. **Lifecycle.** The `Child` handle lives in a process-global `Mutex<Option<…>>`.
-   Start is idempotent (returns the running status if already up); a dead handle
-   is reaped. Stop kills the child; the app also kills it on `RunEvent::Exit`.
-
-### Why `git daemon` and not a pure-Rust server
-
-`git daemon` is battle-tested and ships with Git. The client side intentionally
-uses `libgit2` (no shell Git needed), but the **server** role is desktop-only and
-relies on the `git` binary. If it's missing the app says so
-(`xcode-select --install` on macOS). Re-implementing the smart-HTTP/`git://`
-protocol in Rust would buy nothing here.
-
----
-
-## 3. Discovery & handoff (so the phone doesn't have to type a URL)
-
-First-time setup needs the phone to learn the desktop's URL. Three ways, in order
-of convenience:
-
-- **mDNS auto-discovery (tap-only).** When the server starts, the desktop
-  advertises a Bonjour service `_typenotes-sync._tcp.local.` on port 9418 with
-  TXT records (the repo name, branch, and full `git://` URL). The phone browses
-  for that service and lists what it finds; tapping an entry fills the remote URL
-  and syncs. No typing, no scanning.
-- **QR code (tap-only, survives multicast-blocked networks).** The desktop card
-  renders a QR encoding a `type2://sync?...` deep link. The user points the
-  **native iOS Camera** at it; iOS opens the app via the existing deep-link
-  handler, which applies the settings and syncs. Native camera scanning is
-  reliable and needs no in-webview camera access.
-- **Manual.** Copy the URL from the desktop card and paste it into the phone's
-  Remote URL field once.
-
-mDNS and QR carry the same payload (a `git://` URL + branch + name); they are
-just two transports for it. See §6 for the deep-link format.
-
----
-
-## 4. The `syncNow` orchestration
-
-One tap should "just sync", regardless of which side changed. `syncNow`
-(`GitSyncContext`) composes the existing primitives:
-
-1. **Connect** if the repo isn't wired up yet.
-2. **Push** local work first. This commits local edits, so the working tree is
-   clean afterward — *even if the network push is rejected* (the commit happens
-   before the push). A non-fast-forward rejection here is expected when the other
-   device pushed since last time, so it's swallowed.
-3. **Pull / merge** the remote. Safe now because the tree is clean. Conflicts on
-   the same file never block: the local version is kept and the remote version is
-   written as a `.conflict.md` sibling.
-4. **Push** the merged result.
-
-This ordering is what lets a single button reconcile bidirectional edits with the
-app's pull-refuses-dirty-tree / push-commits-then-pushes primitives.
-
----
-
-## 5. Code map
+The desktop card builds a `type2://sync` QR deep link containing:
 
 ```
-src-tauri/src/
-  ports/local_sync.rs      contract: LocalSyncServerStatus + LocalSyncServer trait + docs
-  adapters/local_sync.rs   git daemon supervisor, IP detection, mDNS advertise/browse
-  commands/local_sync.rs   #[tauri::command] wrappers (start/stop/status/discover)
-
-src/
-  data/gitApi.ts                              invoke wrappers + types
-  contexts/GitSyncContext.tsx                 syncNow orchestration
-  components/settings/LocalSyncServerCard.tsx desktop host card (Start/Stop, URLs, QR)
-  mobile/components/settings/MobileSyncSection.tsx  Sync now + discovery list
-  mobile/MobileShell.tsx                      type2://sync deep-link handler
+remote=ssh://pair-<token>@<desktop-ip>:9418/<repo>
+branch=<branch>
+name=<desktop label>
+hostKeySha256=SHA256:<fingerprint>
 ```
 
-The `ports/` layer is a platform-agnostic contract (documented in the same house
-style as `git_sync`); `adapters/` holds the real Tauri/Rust implementation.
+When the phone scans the QR:
 
----
+1. It generates the app-managed SSH key if one does not exist.
+2. It stores the remote URL and the desktop host-key fingerprint in the active
+   profile settings.
+3. It connects with username `pair-<token>` and its public key.
+4. The desktop accepts an unknown key only when the username matches the current
+   pairing token, then stores the phone key in app data as an authorized device.
 
-## 6. Deep-link format
+After pairing, the saved remote URL can keep the old token username. Known keys
+are accepted regardless of username, so server restarts do not break paired
+devices.
+
+## Host-Key Verification
+
+The QR carries the desktop host-key fingerprint. The mobile/core Git callbacks
+only auto-accept an SSH host key when:
+
+- the remote hostname matches the saved trusted host, and
+- the presented SHA-256 host-key fingerprint matches the saved QR fingerprint.
+
+When no pin applies and the host is on the local network (private IP or
+`.local`), the key is trusted on first use — manual setup has no fingerprint to
+pin, and phones carry no `known_hosts`, so strict checking would reject every
+LAN server. Internet SSH remotes keep normal libgit2/SSH host-key behavior.
+
+## Failure Behavior
+
+Before libgit2 fetches or pushes, the core does a short TCP probe of network
+remotes. LAN failures return quickly with messages such as:
+
+- connection timed out,
+- connection refused,
+- host/network unreachable.
+
+The mobile UI maps those errors to local-sync guidance: keep Type open on the
+desktop, stay on the same Wi-Fi or hotspot, and allow Local Network access in
+iOS Settings. A leftover `git://<lan-ip>/...` remote from the pre-SSH design is
+rejected up front with a prompt to re-scan the QR code.
+
+## Device-Local Settings
+
+`.type/settings.json` is a tracked file that syncs with the notes (that is
+intentional — `transcription_mode` is a per-folder setting shared by devices).
+The git connection, however, is per device: remote URL, branch, credentials,
+and the pinned host-key fingerprint live in `.type/device.json`, which is kept
+out of sync via `.git/info/exclude` (written by `ensure_git_repo`). Legacy
+settings files that still carry git fields keep working until the first save
+migrates them.
+
+## Code Map
 
 ```
-type2://sync?remote=<url-encoded git:// or ssh:// URL>&branch=<branch>&name=<label>
+crates/type-core/src/adapters/local_sync/
+  mod.rs          server lifecycle, LAN IP detection, mDNS advertisement
+  ssh_server.rs   russh server, public-key pairing, git upload/receive exec
+  devices.rs      desktop host key + paired phone key store
+
+crates/type-core/src/adapters/git/mod.rs
+  libgit2 sync, SSH credentials, host-key pinning, fast TCP probe
+
+packages/shared/src/sync-link.ts
+  type2://sync deep-link builder/parser
+
+apps/desktop/src/features/sync/components/local-sync-server-card.tsx
+  desktop QR and local server controls
+
+apps/mobile/src/state/sync-store.ts
+apps/mobile/src/screens/sync-screen.tsx
+  QR apply flow, key generation, visible connect/pull/push states
 ```
-
-- `remote` (required) — the remote URL to store as `gitRemoteUrl`.
-- `branch` (optional, default `main`) — stored as `gitBranch`.
-- `name` (optional) — human label for confirmation UI.
-
-The handler in `MobileShell` parses this, applies the settings to the active
-profile, and triggers `syncNow`.
-
----
-
-## 7. Security model
-
-- `git://` is **plaintext and unauthenticated**. It is intended for trusted local
-  networks (your home Wi-Fi, your own phone's hotspot) only — never the open
-  internet. The daemon binds `0.0.0.0`, so anything on the same network segment
-  that can reach port 9418 can read/write the notes while it runs. Stop the
-  server when you're done.
-- For untrusted networks use **setup 2 (`ssh://`)**: enable Remote Login, add the
-  app's generated SSH key to `~/.ssh/authorized_keys`, and use the `ssh://` URL.
-- macOS will show a firewall prompt the first time the daemon binds; allow it.
-
----
-
-## 8. Known limitations / future work
-
-- **Hosting needs the `git` CLI** on the desktop (client still uses libgit2).
-- **iOS local-network permission.** Browsing mDNS and connecting to a LAN peer
-  triggers iOS's Local Network permission prompt (and requires the
-  `NSLocalNetworkUsageDescription` / `NSBonjourServices` Info.plist keys, which
-  this feature adds). Raw multicast on iOS can additionally require the
-  `com.apple.developer.networking.multicast` entitlement (Apple-gated); if mDNS
-  discovery is blocked, QR and manual entry still work.
-- **Folder names with spaces** don't make clean `git://` paths; use the `ssh://`
-  route for those.
-- **No zero-config security.** Pairing is trust-on-first-use; there's no
-  device-to-device key exchange. A future step could pin the desktop's SSH host
-  key via the QR/mDNS payload and default to `ssh://`.

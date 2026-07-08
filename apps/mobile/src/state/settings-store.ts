@@ -24,6 +24,8 @@ type SettingsState = {
     username: string;
     password: string;
     commitMessage: string;
+    trustedSshHost?: string | null;
+    trustedSshHostKeySha256?: string | null;
   }) => Promise<void>;
   saveAssemblyAiKey: (key: string) => Promise<void>;
 };
@@ -102,7 +104,15 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
         }))
       ),
 
-    saveGitSettings: ({ remoteUrl, branch, username, password, commitMessage }) =>
+    saveGitSettings: ({
+      remoteUrl,
+      branch,
+      username,
+      password,
+      commitMessage,
+      trustedSshHost,
+      trustedSshHostKeySha256,
+    }) =>
       guarded(() =>
         withActiveSettings((settings) => ({
           ...settings,
@@ -111,6 +121,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
           git_username: username,
           git_password: password,
           git_commit_message: commitMessage,
+          git_trusted_ssh_host:
+            trustedSshHost === undefined ? settings.git_trusted_ssh_host : trustedSshHost ?? "",
+          git_trusted_ssh_host_key_sha256:
+            trustedSshHostKeySha256 === undefined
+              ? settings.git_trusted_ssh_host_key_sha256
+              : trustedSshHostKeySha256 ?? "",
         }))
       ),
 

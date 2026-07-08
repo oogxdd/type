@@ -11,12 +11,13 @@ const FAKE_AUDIO_BASE64: &str = "dGVzdC1hdWRpbw==";
 
 struct FixedTranscript;
 
+#[async_trait::async_trait]
 impl crate::TranscriptionProvider for FixedTranscript {
     fn id(&self) -> String {
         "test-provider".to_string()
     }
 
-    fn transcribe(&self, audio_path: String) -> Result<String, crate::CoreError> {
+    async fn transcribe(&self, audio_path: String) -> Result<String, crate::CoreError> {
         assert!(
             PathBuf::from(&audio_path).is_file(),
             "worker should hand the provider an existing audio file"
@@ -100,6 +101,8 @@ async fn ffi_end_to_end() {
             "git_username": "",
             "git_password": "",
             "git_commit_message": "Sync notes",
+            "git_trusted_ssh_host": "",
+            "git_trusted_ssh_host_key_sha256": "",
             "mobile_auto_transcription_enabled": true,
             "mobile_auto_handwriting_ocr_enabled": true,
             "transcription_mode": "native"

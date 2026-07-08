@@ -105,7 +105,7 @@ pub(super) fn register_device(path: &Path, key_line: &str, name: &str) -> Result
     devices.push(PairedDevice {
         name: name.to_string(),
         public_key: key_line.to_string(),
-        added_ms: now_ms(),
+        added_ms: now_ms().unwrap_or(0),
     });
     let content = serde_json::to_string_pretty(&devices).map_err(|e| e.to_string())?;
     fs::write(path, content).map_err(|e| e.to_string())

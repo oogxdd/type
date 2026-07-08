@@ -29,8 +29,8 @@ packages/mobile-core/  @typenotes/mobile-core — typed TS bridge to type-ffi
 
 - **Plain-file storage** — notes are `.md` files in a folder tree you can point anywhere; order persists per folder.
 - **Rich markdown editor** (Tiptap) with debounced autosave and content-based auto-naming.
-- **Git sync** over `https://`, `ssh://`, or `git://` — push/pull across devices via libgit2 (no shell `git` needed).
-- **One-button local sync** — host a `git daemon` on the desktop; the phone finds it by mDNS or QR code, no typing.
+- **Git sync** over `https://` or `ssh://` — push/pull across devices via libgit2 (no shell `git` needed on the client).
+- **One-button local sync** — host an embedded SSH Git server on the desktop; the phone pairs by QR code, no Remote Login or external host.
 - **SSH key auth** — generate an Ed25519 keypair in-app for passwordless SSH.
 - **Never-blocked merges** — conflicts keep your version and drop the remote copy beside it as `.conflict.md`.
 - **Audio recording + transcription** — zero-install local Whisper on desktop; per-folder modes on mobile (AssemblyAI, defer-to-desktop, native provider).
@@ -167,7 +167,7 @@ The app uses embedded **libgit2** from Tauri commands — you do not need shell 
 
 In **Settings → Profiles**, fill in:
 
-- **Remote URL** — `ssh://user@mac.local/path/to/repo.git`, `git://…`, or `https://…`
+- **Remote URL** — `ssh://user@mac.local/path/to/repo.git` or `https://…`
 - **Branch** — usually `main`
 - **Commit message** — the default auto-commit message for push
 - **Username** / **Token/Password** — for HTTPS auth
@@ -179,15 +179,13 @@ and merges remote changes, then pushes the result, in one step.
 ### Three ways to sync
 
 1. **Remote repo** — point the Remote URL at any internet Git host (`https://…` or `ssh://…`) and **Sync now**.
-2. **Local repo over SSH** — same Wi-Fi, more secure. Enable Remote Login on the computer, use
-   the `ssh://` URL from the server card and the app's SSH key.
-3. **Local repo over `git://`** — same Wi-Fi *or* your phone's hotspot. On desktop,
-   **Settings → Sync → Local network server → Start server** spawns a `git daemon`. The phone
-   connects with no typing: **Find on local network** (mDNS/Bonjour) or scan the desktop's
-   **QR code**. Manual URL entry is the fallback. No internet and no external host required.
+2. **Local network SSH** — same Wi-Fi *or* your phone's hotspot. On desktop,
+   open **Settings → Sync**; Type starts its embedded SSH Git server and shows a
+   pairing QR code. The phone scans it, generates an app SSH key if needed, pins
+   the desktop host key, and saves the remote. No internet, Remote Login, or
+   `authorized_keys` setup required.
 
-See [docs/LOCAL_GIT_SERVER_LAN_HOTSPOT.md](docs/LOCAL_GIT_SERVER_LAN_HOTSPOT.md) for the
-local-network flow.
+See [docs/LOCAL_SYNC.md](docs/LOCAL_SYNC.md) for the local-network flow.
 
 ### SSH key auth (recommended)
 
@@ -275,8 +273,8 @@ Each working folder's `.type/settings.json` carries a `transcription_mode`
 - **"Repository is not initialized. Connect a remote first."** — run **Connect repo** in Profiles settings.
 - **"No matching Git credentials available…"** — check username/token for HTTPS, or generate an SSH key for SSH remotes.
 - **Pull blocked by local changes** — push first, then pull.
-- **SSH "Permission denied"** — ensure the public key is in `~/.ssh/authorized_keys` and the file is `chmod 600`.
-- **SSH "Connection refused"** — enable Remote Login on the Mac (System Settings → General → Sharing).
+- **SSH "Permission denied"** — for internet/manual SSH remotes, ensure the public key is authorized on the host.
+- **Local sync unreachable** — keep Type open on desktop, stay on the same Wi-Fi/hotspot, and allow Local Network access on iOS.
 
 ## Contributing
 

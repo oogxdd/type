@@ -15,6 +15,11 @@ import { activeProfile, useSettingsStore } from "./settings-store";
 
 type SyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
 
+const sshHostFromRemote = (remote: string): string => {
+  const match = remote.match(/^ssh:\/\/(?:[^@/]+@)?(\[[^\]]+\]|[^/:]+)(?::\d+)?(?:\/|$)/i);
+  return match?.[1]?.replace(/^\[|\]$/g, "") ?? "";
+};
+
 type SyncState = {
   status: GitSyncStatus | null;
   history: GitCommitHistoryEntry[];
@@ -107,12 +112,21 @@ export const useSyncStore = create<SyncState>((set, get) => {
     connectFromLink: async (link) => {
       const settingsStore = useSettingsStore.getState();
       const profile = activeProfile(settingsStore.snapshot);
+      const trustedSshHost = link.hostKeySha256 ? sshHostFromRemote(link.remote) : "";
+      if (link.remote.toLowerCase().startsWith("ssh://")) {
+        const existingKey = await core.getSshPublicKey();
+        if (!existingKey) {
+          await core.generateSshKey();
+        }
+      }
       await settingsStore.saveGitSettings({
         remoteUrl: link.remote,
         branch: link.branch ?? "main",
         username: profile?.settings.git_username ?? "",
         password: profile?.settings.git_password ?? "",
         commitMessage: profile?.settings.git_commit_message || "Sync notes",
+        trustedSshHost,
+        trustedSshHostKeySha256: trustedSshHost ? link.hostKeySha256 ?? "" : "",
       });
       await run("connect", () =>
         core.connectGitRepo({

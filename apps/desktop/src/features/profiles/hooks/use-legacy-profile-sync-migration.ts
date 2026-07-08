@@ -61,6 +61,8 @@ export function useLegacyProfileSyncMigration({
               git_username: settings.gitUsername ?? "",
               git_password: settings.gitPassword ?? "",
               git_commit_message: settings.gitCommitMessage ?? "Sync notes",
+              git_trusted_ssh_host: "",
+              git_trusted_ssh_host_key_sha256: "",
               mobile_auto_transcription_enabled:
                 settings.mobileAutoTranscriptionEnabled ?? true,
               mobile_auto_handwriting_ocr_enabled:

@@ -36,7 +36,7 @@ import { Button, Field, InlineNote, Section } from "../ui/controls";
 
 const SETUP_STEPS = [
   "Open the Type app on your computer.",
-  "In desktop Settings → Sync, press “Start server” (phone and computer on the same Wi-Fi or hotspot).",
+  "Open desktop Settings → Sync (phone and computer on the same Wi-Fi or hotspot).",
   "Tap “Scan QR code” below and point the camera at the code on the computer's screen.",
   "Tap “Sync now”. That's it — repeat “Sync now” whenever you want to sync.",
 ];
@@ -76,6 +76,8 @@ export const SyncScreen = () => {
       setConnectedVia(link.name ?? link.remote);
     } catch {
       // surfaced via store error state
+    } finally {
+      void core.getSshPublicKey().then(setSshKey).catch(() => {});
     }
   };
 
@@ -119,6 +121,16 @@ export const SyncScreen = () => {
   };
 
   const busy = sync.action !== "idle";
+  const primarySyncTitle =
+    sync.action === "connect"
+      ? "Connecting..."
+      : sync.action === "pull"
+        ? "Pulling..."
+        : sync.action === "push"
+          ? "Pushing..."
+          : busy
+            ? "Syncing..."
+            : "Sync now";
   const status = sync.status;
   const connected = Boolean(status?.repo_initialized && status?.remote_url);
 
@@ -130,6 +142,8 @@ export const SyncScreen = () => {
         username,
         password,
         commitMessage: profile?.settings.git_commit_message ?? "Sync notes",
+        trustedSshHost: null,
+        trustedSshHostKeySha256: null,
       });
       await sync.connect({
         remote_url: remoteUrl,
@@ -196,7 +210,7 @@ export const SyncScreen = () => {
           <InlineNote>Pull to refresh status.</InlineNote>
         )}
         <Button
-          title={busy ? "Syncing…" : "Sync now"}
+          title={primarySyncTitle}
           onPress={() => void sync.syncNow().catch(() => {})}
           disabled={busy || !connected}
         />
@@ -235,7 +249,7 @@ export const SyncScreen = () => {
             <Button title="Save & connect" onPress={() => void connectManually()} disabled={busy || !remoteUrl} />
             <InlineNote>
               git://, ssh:// and https:// remotes are supported. SSH remotes use the
-              app key below automatically.
+              app key below automatically. QR local sync also pins the desktop host key.
             </InlineNote>
           </>
         ) : null}
@@ -272,8 +286,8 @@ export const SyncScreen = () => {
               })}
             />
             <InlineNote>
-              Only needed for ssh:// remotes (e.g. GitHub). The local-network QR
-              flow above doesn't need a key.
+              The QR local-sync flow creates this automatically when needed.
+              Generate it manually for other ssh:// remotes such as GitHub.
             </InlineNote>
           </>
         )}

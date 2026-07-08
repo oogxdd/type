@@ -26,7 +26,7 @@ src/
     ├── handwriting.rs  save attachment, OCR queue, list jobs.
     ├── import.rs       Apple Notes scan / start / status.
     ├── git_sync.rs     SSH keys, status, history, connect, pull, push.
-    └── local_sync.rs   local git-daemon server, mDNS discovery.
+    └── local_sync.rs   embedded local SSH Git server, mDNS discovery.
 ```
 
 ## How a command flows

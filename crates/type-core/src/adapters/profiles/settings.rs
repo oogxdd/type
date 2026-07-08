@@ -69,6 +69,10 @@ pub struct ProfileSettings {
     pub git_password: String,
     #[serde(default = "default_git_commit_message")]
     pub git_commit_message: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub git_trusted_ssh_host: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub git_trusted_ssh_host_key_sha256: String,
     #[serde(default = "default_true")]
     pub mobile_auto_transcription_enabled: bool,
     #[serde(default = "default_true")]
@@ -88,6 +92,8 @@ impl Default for ProfileSettings {
             git_username: String::new(),
             git_password: String::new(),
             git_commit_message: default_git_commit_message(),
+            git_trusted_ssh_host: String::new(),
+            git_trusted_ssh_host_key_sha256: String::new(),
             mobile_auto_transcription_enabled: true,
             mobile_auto_handwriting_ocr_enabled: true,
             transcription_mode: None,
@@ -120,16 +126,66 @@ fn default_true() -> bool {
 
 const SETTINGS_FOLDER: &str = ".type";
 const SETTINGS_FILE: &str = "settings.json";
+/// Device-local git connection settings. `settings.json` syncs with the repo
+/// (transcription_mode is meant to be shared), but the git connection —
+/// remote URL, credentials, pinned host key — describes how *this device*
+/// connects and must not travel between devices. `device.json` is excluded
+/// from sync via `.git/info/exclude` (see `ensure_git_repo`).
+pub const DEVICE_SETTINGS_FILE: &str = "device.json";
+/// The repo-relative path git should exclude from sync.
+pub const DEVICE_SETTINGS_EXCLUDE_PATTERN: &str = "/.type/device.json";
+
+/// The git connection fields of [`ProfileSettings`], as persisted per device.
+#[derive(Deserialize, Serialize)]
+struct DeviceGitSettings {
+    #[serde(default)]
+    git_remote_url: String,
+    #[serde(default = "default_git_branch")]
+    git_branch: String,
+    #[serde(default)]
+    git_username: String,
+    #[serde(default)]
+    git_password: String,
+    #[serde(default = "default_git_commit_message")]
+    git_commit_message: String,
+    #[serde(default)]
+    git_trusted_ssh_host: String,
+    #[serde(default)]
+    git_trusted_ssh_host_key_sha256: String,
+}
+
+fn device_settings_path(notes_root: &Path) -> PathBuf {
+    notes_root.join(SETTINGS_FOLDER).join(DEVICE_SETTINGS_FILE)
+}
 
 pub fn load_profile_settings(notes_root: &Path) -> ProfileSettings {
     let path = notes_root.join(SETTINGS_FOLDER).join(SETTINGS_FILE);
-    if !path.exists() {
-        return ProfileSettings::default();
+    let mut settings: ProfileSettings = if path.exists() {
+        fs::read_to_string(&path)
+            .ok()
+            .and_then(|content| serde_json::from_str(&content).ok())
+            .unwrap_or_else(ProfileSettings::default)
+    } else {
+        ProfileSettings::default()
+    };
+    // The device file wins for git fields once it exists. Until then the
+    // legacy values inside settings.json keep working (pre-split installs).
+    let device_path = device_settings_path(notes_root);
+    if device_path.exists() {
+        if let Some(device) = fs::read_to_string(&device_path)
+            .ok()
+            .and_then(|content| serde_json::from_str::<DeviceGitSettings>(&content).ok())
+        {
+            settings.git_remote_url = device.git_remote_url;
+            settings.git_branch = device.git_branch;
+            settings.git_username = device.git_username;
+            settings.git_password = device.git_password;
+            settings.git_commit_message = device.git_commit_message;
+            settings.git_trusted_ssh_host = device.git_trusted_ssh_host;
+            settings.git_trusted_ssh_host_key_sha256 = device.git_trusted_ssh_host_key_sha256;
+        }
     }
-    fs::read_to_string(&path)
-        .ok()
-        .and_then(|content| serde_json::from_str(&content).ok())
-        .unwrap_or_else(ProfileSettings::default)
+    settings
 }
 
 pub fn save_profile_settings(notes_root: &Path, settings: &ProfileSettings) -> Result<(), String> {
@@ -137,8 +193,32 @@ pub fn save_profile_settings(notes_root: &Path, settings: &ProfileSettings) -> R
     if !folder.exists() {
         fs::create_dir_all(&folder).map_err(|err| err.to_string())?;
     }
+
+    // Git connection → device-local file.
+    let device = DeviceGitSettings {
+        git_remote_url: settings.git_remote_url.clone(),
+        git_branch: settings.git_branch.clone(),
+        git_username: settings.git_username.clone(),
+        git_password: settings.git_password.clone(),
+        git_commit_message: settings.git_commit_message.clone(),
+        git_trusted_ssh_host: settings.git_trusted_ssh_host.clone(),
+        git_trusted_ssh_host_key_sha256: settings.git_trusted_ssh_host_key_sha256.clone(),
+    };
+    let device_content = serde_json::to_string_pretty(&device).map_err(|err| err.to_string())?;
+    fs::write(device_settings_path(notes_root), device_content).map_err(|err| err.to_string())?;
+
+    // Everything else → the synced settings.json, with git fields blanked so
+    // credentials and per-device remotes stop traveling through the repo.
+    let mut shared = settings.clone();
+    shared.git_remote_url = String::new();
+    shared.git_branch = default_git_branch();
+    shared.git_username = String::new();
+    shared.git_password = String::new();
+    shared.git_commit_message = default_git_commit_message();
+    shared.git_trusted_ssh_host = String::new();
+    shared.git_trusted_ssh_host_key_sha256 = String::new();
     let path = folder.join(SETTINGS_FILE);
-    let content = serde_json::to_string_pretty(settings).map_err(|err| err.to_string())?;
+    let content = serde_json::to_string_pretty(&shared).map_err(|err| err.to_string())?;
     fs::write(path, content).map_err(|err| err.to_string())
 }
 
@@ -163,4 +243,65 @@ pub fn save_app_config(app_data: &Path, config: &AppConfig) -> Result<(), String
     let path = app_config_path(app_data);
     let content = serde_json::to_string_pretty(config).map_err(|err| err.to_string())?;
     fs::write(path, content).map_err(|err| err.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_root(tag: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("type-settings-{tag}-{}", uuid::Uuid::now_v7()));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn git_connection_splits_into_device_file() {
+        let root = temp_root("split");
+
+        let settings = ProfileSettings {
+            git_remote_url: "ssh://pair-t@192.168.1.5:9418/notes".to_string(),
+            git_password: "secret-token".to_string(),
+            git_trusted_ssh_host: "192.168.1.5".to_string(),
+            git_trusted_ssh_host_key_sha256: "SHA256:abc".to_string(),
+            transcription_mode: Some(TranscriptionMode::Desktop),
+            ..ProfileSettings::default()
+        };
+        save_profile_settings(&root, &settings).unwrap();
+
+        // The synced settings.json carries no git connection or secrets…
+        let shared = fs::read_to_string(root.join(".type").join("settings.json")).unwrap();
+        assert!(!shared.contains("secret-token"));
+        assert!(!shared.contains("192.168.1.5"));
+        assert!(root.join(".type").join(DEVICE_SETTINGS_FILE).exists());
+
+        // …while the loader still returns the merged per-device view.
+        let loaded = load_profile_settings(&root);
+        assert_eq!(loaded.git_remote_url, settings.git_remote_url);
+        assert_eq!(loaded.git_password, "secret-token");
+        assert_eq!(loaded.git_trusted_ssh_host_key_sha256, "SHA256:abc");
+        assert!(matches!(
+            loaded.transcription_mode,
+            Some(TranscriptionMode::Desktop)
+        ));
+
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn legacy_settings_without_device_file_keep_git_fields() {
+        let root = temp_root("legacy");
+        fs::create_dir_all(root.join(".type")).unwrap();
+        fs::write(
+            root.join(".type").join("settings.json"),
+            r#"{"git_remote_url":"https://example.com/notes.git","git_password":"tok"}"#,
+        )
+        .unwrap();
+
+        let loaded = load_profile_settings(&root);
+        assert_eq!(loaded.git_remote_url, "https://example.com/notes.git");
+        assert_eq!(loaded.git_password, "tok");
+
+        fs::remove_dir_all(&root).unwrap();
+    }
 }

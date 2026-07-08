@@ -88,9 +88,21 @@ impl ProfilesGateway for ProfilesAdapter {
         let notes_root = Path::new(&profile.notes_root);
         let mut settings: ProfileSettings = args.settings.into();
         // Writers that predate transcription_mode (or simply didn't set it)
-        // must not clear a mode another device already persisted.
-        if settings.transcription_mode.is_none() {
-            settings.transcription_mode = load_profile_settings(notes_root).transcription_mode;
+        // must not clear a mode another device already persisted. Same for the
+        // pinned sync host key: only QR pairing sets it, every other writer
+        // sends it empty and must not un-pin the server.
+        if settings.transcription_mode.is_none()
+            || settings.git_trusted_ssh_host_key_sha256.trim().is_empty()
+        {
+            let persisted = load_profile_settings(notes_root);
+            if settings.transcription_mode.is_none() {
+                settings.transcription_mode = persisted.transcription_mode;
+            }
+            if settings.git_trusted_ssh_host_key_sha256.trim().is_empty() {
+                settings.git_trusted_ssh_host = persisted.git_trusted_ssh_host;
+                settings.git_trusted_ssh_host_key_sha256 =
+                    persisted.git_trusted_ssh_host_key_sha256;
+            }
         }
         save_profile_settings(notes_root, &settings)?;
         Ok(profiles_snapshot(&self.app, &state))
@@ -219,6 +231,8 @@ impl From<crate::ports::profiles::ProfileSettings> for ProfileSettings {
             git_username: s.git_username,
             git_password: s.git_password,
             git_commit_message: s.git_commit_message,
+            git_trusted_ssh_host: s.git_trusted_ssh_host,
+            git_trusted_ssh_host_key_sha256: s.git_trusted_ssh_host_key_sha256,
             mobile_auto_transcription_enabled: s.mobile_auto_transcription_enabled,
             mobile_auto_handwriting_ocr_enabled: s.mobile_auto_handwriting_ocr_enabled,
             transcription_mode: s.transcription_mode,
@@ -234,6 +248,8 @@ impl From<ProfileSettings> for crate::ports::profiles::ProfileSettings {
             git_username: s.git_username,
             git_password: s.git_password,
             git_commit_message: s.git_commit_message,
+            git_trusted_ssh_host: s.git_trusted_ssh_host,
+            git_trusted_ssh_host_key_sha256: s.git_trusted_ssh_host_key_sha256,
             mobile_auto_transcription_enabled: s.mobile_auto_transcription_enabled,
             mobile_auto_handwriting_ocr_enabled: s.mobile_auto_handwriting_ocr_enabled,
             transcription_mode: s.transcription_mode,
@@ -272,10 +288,7 @@ impl From<AppConfig> for crate::ports::profiles::AppConfig {
 }
 
 /// Convert internal profiles state to the frontend-facing snapshot.
-pub fn profiles_snapshot(
-    app: &AppEnv,
-    state: &NotesProfilesFile,
-) -> NotesProfilesSnapshot {
+pub fn profiles_snapshot(app: &AppEnv, state: &NotesProfilesFile) -> NotesProfilesSnapshot {
     let app_data = app_data_dir(app).unwrap_or_default();
     let app_config = load_app_config(&app_data);
 

@@ -1,13 +1,13 @@
-//! Local-network ("LAN" / iPhone-hotspot) Git server.
+//! Local-network ("LAN" / iPhone-hotspot) SSH Git server.
 //!
-//! Lets a desktop machine host its own notes repository over the plain `git://`
-//! protocol with a single button, so a phone on the same Wi-Fi — or connected to
-//! the phone's personal hotspot — can clone/pull/push without any external
-//! remote. Implemented by supervising a `git daemon` child process pointed at the
-//! active profile's notes folder.
+//! Lets a desktop machine host its notes repository over an embedded SSH server
+//! with QR-based key pairing, so a phone on the same Wi-Fi or hotspot can
+//! clone/pull/push without an external remote, macOS Remote Login, or
+//! plaintext `git://`.
 //!
-//! Hosting requires the `git` command-line binary and is desktop-only; on mobile
-//! the commands report `supported = false`.
+//! Hosting requires the `git` command-line binary for `git-upload-pack` /
+//! `git-receive-pack` and is desktop-only; on mobile the commands report
+//! `supported = false`.
 
 use crate::AppEnv;
 use serde::Serialize;
@@ -22,16 +22,22 @@ use crate::ensured_notes_root;
 use crate::ports::local_sync::LocalSyncGateway;
 
 #[cfg(desktop)]
-use crate::{commit_all_changes, ensure_git_repo, resolve_target_branch, switch_or_prepare_branch};
+mod devices;
+#[cfg(desktop)]
+mod ssh_server;
+
+#[cfg(desktop)]
+use crate::{ensure_git_repo, resolve_target_branch, switch_or_prepare_branch};
 #[cfg(desktop)]
 use std::{
-    net::{IpAddr, TcpListener, UdpSocket},
+    net::{IpAddr, UdpSocket},
     path::PathBuf,
-    process::{Child, Command, Stdio},
-    sync::Mutex,
+    process::Command,
+    sync::{Arc, Mutex},
 };
 
-/// Default git-daemon port (the well-known `git://` port).
+/// Default local-sync port. It intentionally reuses the old git-daemon port so
+/// existing firewall prompts/rules continue to apply, but the protocol is SSH.
 pub const LOCAL_SYNC_PORT: u16 = 9418;
 
 /// Bonjour/mDNS service type the desktop advertises and clients browse for.
@@ -51,8 +57,8 @@ pub struct LocalSyncServerStatus {
     pub host: Option<String>,
     pub port: u16,
     pub branch: Option<String>,
-    pub git_url: Option<String>,
     pub ssh_url: Option<String>,
+    pub host_key_sha256: Option<String>,
     pub repo_path: String,
     pub error: Option<String>,
 }
@@ -63,7 +69,7 @@ pub struct DiscoveredServer {
     pub name: String,
     pub host: String,
     pub port: u16,
-    pub git_url: String,
+    pub url: String,
     pub branch: String,
 }
 
@@ -71,11 +77,13 @@ pub struct DiscoveredServer {
 
 #[cfg(desktop)]
 struct RunningDaemon {
-    child: Child,
+    server: ssh_server::SshServerHandle,
     host: Option<String>,
     served_name: String,
     branch: String,
     repo_path: PathBuf,
+    pairing_token: String,
+    host_key_sha256: String,
     /// mDNS advertisement handle, present when discovery is active.
     mdns: Option<MdnsAdvert>,
 }
@@ -124,9 +132,7 @@ impl LocalSyncGateway for LocalSyncAdapter {
 
 // ── Public API (called by the command layer) ─────────────────────────────────
 
-pub fn local_sync_server_status(
-    app: &AppEnv,
-) -> Result<LocalSyncServerStatus, String> {
+pub fn local_sync_server_status(app: &AppEnv) -> Result<LocalSyncServerStatus, String> {
     let repo_path = ensured_notes_root(app)?.to_string_lossy().to_string();
 
     #[cfg(not(desktop))]
@@ -136,15 +142,9 @@ pub fn local_sync_server_status(
 
     #[cfg(desktop)]
     {
-        let mut guard = DAEMON
+        let guard = DAEMON
             .lock()
             .map_err(|_| "local sync server state is poisoned".to_string())?;
-        // Reap a daemon that exited on its own (crash, killed externally).
-        if let Some(daemon) = guard.as_mut() {
-            if matches!(daemon.child.try_wait(), Ok(Some(_))) {
-                *guard = None;
-            }
-        }
         let git_available = locate_git().is_some();
         Ok(match guard.as_ref() {
             Some(daemon) => running_status(daemon),
@@ -153,9 +153,7 @@ pub fn local_sync_server_status(
     }
 }
 
-pub fn start_local_sync_server_impl(
-    app: &AppEnv,
-) -> Result<LocalSyncServerStatus, String> {
+pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatus, String> {
     #[cfg(not(desktop))]
     {
         let _ = app;
@@ -172,85 +170,60 @@ pub fn start_local_sync_server_impl(
             .map_err(|_| "local sync server state is poisoned".to_string())?;
 
         // Already running? Return current status (idempotent).
-        if let Some(daemon) = guard.as_mut() {
-            if matches!(daemon.child.try_wait(), Ok(None)) {
-                return Ok(running_status(daemon));
-            }
-            // Dead handle — drop it and restart below.
-            *guard = None;
+        if let Some(daemon) = guard.as_ref() {
+            return Ok(running_status(daemon));
         }
 
-        // Make sure the notes folder is a repo, has a commit to clone, and will
-        // accept pushes to its checked-out branch by updating the working tree.
+        // Make sure the notes folder is a repo and will accept pushes to its
+        // checked-out branch by updating the working tree. Pending desktop
+        // edits are committed by the server just before it serves each fetch
+        // or push (see ssh_server), so starting — including the settings
+        // page's auto-start — never creates commits by itself.
         let repo = ensure_git_repo(&root)?;
         repo.config()
             .and_then(|mut cfg| cfg.set_str("receive.denyCurrentBranch", "updateInstead"))
             .map_err(|e| format!("Failed to configure repo for local sync: {e}"))?;
         let branch = resolve_target_branch(&repo, None);
         switch_or_prepare_branch(&repo, &branch)?;
-        // Best-effort initial commit so the phone can pull existing notes; a
-        // brand-new empty repo is fine too (the phone can push to create it).
-        let _ = commit_all_changes(&repo, "Initial local sync commit", &branch);
         drop(repo);
 
-        let parent = root
-            .parent()
-            .ok_or_else(|| "Notes folder has no parent directory.".to_string())?;
         let served_name = root
             .file_name()
             .and_then(|name| name.to_str())
             .ok_or_else(|| "Notes folder name is not valid UTF-8.".to_string())?
             .to_string();
 
-        // Pre-flight: give a clear error if the port is already taken.
-        match TcpListener::bind(("0.0.0.0", LOCAL_SYNC_PORT)) {
-            Ok(listener) => drop(listener),
-            Err(e) => {
-                return Err(format!(
-                    "Port {LOCAL_SYNC_PORT} is already in use ({e}). Stop any other git daemon and try again."
-                ))
-            }
-        }
-
-        let mut child = Command::new(&git)
-            .arg("daemon")
-            .arg("--reuseaddr")
-            .arg("--export-all")
-            .arg("--enable=upload-pack")
-            .arg("--enable=receive-pack")
-            .arg(format!("--base-path={}", parent.display()))
-            .arg("--listen=0.0.0.0")
-            .arg(format!("--port={LOCAL_SYNC_PORT}"))
-            .arg(parent)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|e| format!("Failed to start git daemon: {e}"))?;
-
-        // Catch an immediate exit (e.g. invalid args / bind race).
-        std::thread::sleep(Duration::from_millis(150));
-        if let Ok(Some(status)) = child.try_wait() {
-            return Err(format!(
-                "git daemon exited immediately (status {:?}). Port {LOCAL_SYNC_PORT} may be in use.",
-                status.code()
-            ));
-        }
+        let (host_key, host_key_sha256) = devices::ensure_host_key(app)?;
+        let pairing_token = devices::generate_pairing_token();
+        let shared = Arc::new(ssh_server::ServerShared {
+            git_path: git,
+            repo_path: root.clone(),
+            served_name: served_name.clone(),
+            branch: branch.clone(),
+            pairing_token: pairing_token.clone(),
+            devices_path: devices::devices_path(app)?,
+        });
+        let server = ssh_server::start_ssh_server(shared, &host_key, LOCAL_SYNC_PORT)?;
 
         // Advertise over mDNS so phones can auto-discover this server without
         // typing or scanning anything. Best-effort: failure never blocks hosting.
+        // The advertised URL deliberately omits the pairing token: mDNS is
+        // plaintext broadcast, and the token must stay QR-only (already-paired
+        // devices authenticate by key under any username).
         let host = detect_lan_ip();
         let mdns = host.as_ref().and_then(|ip| {
-            let git_url = format!("git://{ip}/{served_name}");
-            advertise_mdns(ip, &served_name, &branch, &git_url)
+            let ssh_url = ssh_public_url(ip, &served_name);
+            advertise_mdns(ip, &served_name, &branch, &ssh_url)
         });
 
         let daemon = RunningDaemon {
-            child,
+            server,
             host,
             served_name,
             branch,
             repo_path: root,
+            pairing_token,
+            host_key_sha256,
             mdns,
         };
         let status = running_status(&daemon);
@@ -259,9 +232,7 @@ pub fn start_local_sync_server_impl(
     }
 }
 
-pub fn stop_local_sync_server_impl(
-    app: &AppEnv,
-) -> Result<LocalSyncServerStatus, String> {
+pub fn stop_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatus, String> {
     #[cfg(not(desktop))]
     {
         let _ = app;
@@ -289,15 +260,14 @@ pub fn shutdown_local_sync_server() {
     }
 }
 
-/// Stop the mDNS advertisement (if any) and kill the git daemon child.
+/// Stop the mDNS advertisement (if any) and shut down the embedded SSH server.
 #[cfg(desktop)]
 fn teardown_daemon(mut daemon: RunningDaemon) {
     if let Some(advert) = daemon.mdns.take() {
         let _ = advert.daemon.unregister(&advert.fullname);
         let _ = advert.daemon.shutdown();
     }
-    let _ = daemon.child.kill();
-    let _ = daemon.child.wait();
+    daemon.server.stop();
 }
 
 // ── Status builders ──────────────────────────────────────────────────────────
@@ -311,8 +281,8 @@ fn unsupported_status(repo_path: String) -> LocalSyncServerStatus {
         host: None,
         port: LOCAL_SYNC_PORT,
         branch: None,
-        git_url: None,
         ssh_url: None,
+        host_key_sha256: None,
         repo_path,
         error: None,
     }
@@ -327,8 +297,8 @@ fn idle_status(git_available: bool, repo_path: String) -> LocalSyncServerStatus 
         host: None,
         port: LOCAL_SYNC_PORT,
         branch: None,
-        git_url: None,
         ssh_url: None,
+        host_key_sha256: None,
         repo_path,
         error: None,
     }
@@ -336,17 +306,10 @@ fn idle_status(git_available: bool, repo_path: String) -> LocalSyncServerStatus 
 
 #[cfg(desktop)]
 fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
-    let git_url = daemon
+    let ssh_url = daemon
         .host
         .as_ref()
-        .map(|host| format!("git://{host}/{}", daemon.served_name));
-    let ssh_url = daemon.host.as_ref().map(|host| {
-        format!(
-            "ssh://{}@{host}{}",
-            current_user(),
-            daemon.repo_path.display()
-        )
-    });
+        .map(|host| ssh_pairing_url(host, &daemon.served_name, &daemon.pairing_token));
     LocalSyncServerStatus {
         supported: true,
         git_available: true,
@@ -354,8 +317,8 @@ fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
         host: daemon.host.clone(),
         port: LOCAL_SYNC_PORT,
         branch: Some(daemon.branch.clone()),
-        git_url,
         ssh_url,
+        host_key_sha256: Some(daemon.host_key_sha256.clone()),
         repo_path: daemon.repo_path.to_string_lossy().to_string(),
         error: None,
     }
@@ -421,6 +384,37 @@ fn current_user() -> String {
         .unwrap_or_else(|_| "user".to_string())
 }
 
+#[cfg(desktop)]
+fn ssh_pairing_url(host: &str, served_name: &str, pairing_token: &str) -> String {
+    format!(
+        "ssh://pair-{pairing_token}@{host}:{LOCAL_SYNC_PORT}/{}",
+        encode_url_path_segment(served_name)
+    )
+}
+
+/// Token-less variant, safe for plaintext broadcast (mDNS). Only devices whose
+/// keys are already paired can use it.
+#[cfg(desktop)]
+fn ssh_public_url(host: &str, served_name: &str) -> String {
+    format!(
+        "ssh://{host}:{LOCAL_SYNC_PORT}/{}",
+        encode_url_path_segment(served_name)
+    )
+}
+
+#[cfg(desktop)]
+fn encode_url_path_segment(value: &str) -> String {
+    let mut output = String::new();
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            output.push(byte as char);
+        } else {
+            output.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    output
+}
+
 /// Human-friendly label for this computer, shown on the phone's discovery list.
 #[cfg(desktop)]
 fn computer_label() -> String {
@@ -473,7 +467,7 @@ fn advertise_mdns(
     host: &str,
     served_name: &str,
     branch: &str,
-    git_url: &str,
+    remote_url: &str,
 ) -> Option<MdnsAdvert> {
     use mdns_sd::ServiceInfo;
 
@@ -482,10 +476,11 @@ fn advertise_mdns(
     // host_name owns the A record we publish for `host`; it just has to be unique.
     let host_name = format!("{}.local.", sanitize_host_label(&label));
     let properties = [
-        ("url", git_url),
+        ("url", remote_url),
         ("branch", branch),
         ("path", served_name),
         ("name", label.as_str()),
+        ("transport", "ssh"),
     ];
     let info = ServiceInfo::new(
         MDNS_SERVICE_TYPE,
@@ -504,9 +499,7 @@ fn advertise_mdns(
 // ── Discovery (all platforms) ────────────────────────────────────────────────
 
 /// Browse the local network for advertised sync servers for up to `timeout_ms`.
-pub fn discover_local_sync_servers_impl(
-    timeout_ms: u64,
-) -> Result<Vec<DiscoveredServer>, String> {
+pub fn discover_local_sync_servers_impl(timeout_ms: u64) -> Result<Vec<DiscoveredServer>, String> {
     let timeout_ms = timeout_ms.clamp(500, 10_000);
     let mdns = ServiceDaemon::new().map_err(|e| format!("mDNS init failed: {e}"))?;
     let receiver = mdns
@@ -544,10 +537,10 @@ fn discovered_from_info(info: &mdns_sd::ResolvedService) -> Option<DiscoveredSer
         .next()
         .map(|v4| v4.to_string())?;
     let path = info.get_property_val_str("path").unwrap_or("notes");
-    let git_url = info
+    let url = info
         .get_property_val_str("url")
         .map(|value| value.to_string())
-        .unwrap_or_else(|| format!("git://{host}/{path}"));
+        .unwrap_or_else(|| format!("ssh://{host}:{}/{path}", info.port));
     let branch = info
         .get_property_val_str("branch")
         .unwrap_or("main")
@@ -560,7 +553,7 @@ fn discovered_from_info(info: &mdns_sd::ResolvedService) -> Option<DiscoveredSer
         name,
         host,
         port: info.port,
-        git_url,
+        url,
         branch,
     })
 }

@@ -18,17 +18,26 @@ export function LocalSyncServerCard() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const ensureStarted = useCallback(async () => {
+    setBusy(true);
+    setError(null);
     try {
-      setStatus(await gitApi.getLocalSyncServerStatus());
+      const current = await gitApi.getLocalSyncServerStatus();
+      if (!current.supported || !current.git_available || current.running) {
+        setStatus(current);
+        return;
+      }
+      setStatus(await gitApi.startLocalSyncServer());
     } catch (err) {
       setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
     }
   }, []);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    void ensureStarted();
+  }, [ensureStarted]);
 
   const toggleServer = useCallback(async () => {
     setBusy(true);
@@ -58,20 +67,21 @@ export function LocalSyncServerCard() {
   const running = Boolean(status?.running);
 
   const deepLink = useMemo(() => {
-    if (!status?.git_url) {
+    if (!status?.ssh_url) {
       return null;
     }
     return buildSyncDeepLink({
-      remote: status.git_url,
+      remote: status.ssh_url,
       branch: status.branch ?? undefined,
       name: status.host ? `Computer (${status.host})` : undefined,
+      hostKeySha256: status.host_key_sha256 ?? undefined,
     });
-  }, [status?.git_url, status?.branch, status?.host]);
+  }, [status?.ssh_url, status?.branch, status?.host, status?.host_key_sha256]);
 
   return (
     <SettingsCard
       title="Local network server"
-      description="Host this computer's notes over your local network so your phone can sync without an internet remote — same Wi-Fi, or your phone's personal hotspot."
+      description="Host this computer's notes over encrypted local SSH so your phone can sync without an internet remote — same Wi-Fi, or your phone's personal hotspot."
     >
       {status && !status.git_available ? (
         <SettingsErrorText>
@@ -97,7 +107,13 @@ export function LocalSyncServerCard() {
               : "Start server"}
         </Button>
         <span className="text-xs text-muted-foreground">
-          {running ? "Running — keep this app open while syncing." : "Stopped"}
+          {busy
+            ? running
+              ? "Stopping local SSH..."
+              : "Starting local SSH..."
+            : running
+              ? "Running — keep this app open while syncing."
+              : "Stopped"}
         </span>
       </SettingsActionRow>
 
@@ -108,7 +124,7 @@ export function LocalSyncServerCard() {
           {status?.host ? null : (
             <SettingsErrorText>
               Couldn't auto-detect this computer's network address. Find it in System Settings →
-              Network and use <code>git://&lt;your-ip&gt;/{status?.repo_path.split("/").pop()}</code>.
+              Network and use the SSH URL below with your computer's IP address.
             </SettingsErrorText>
           )}
 
@@ -126,15 +142,9 @@ export function LocalSyncServerCard() {
 
           <div className="space-y-2">
             <SettingsHelpText>Or set it up by hand:</SettingsHelpText>
-            <UrlRow
-              label="Remote URL"
-              value={status?.git_url ?? ""}
-              copied={copied}
-              onCopy={copy}
-            />
             {status?.ssh_url ? (
               <UrlRow
-                label="Or, with macOS Remote Login enabled (more secure)"
+                label="Pairing SSH URL"
                 value={status.ssh_url}
                 copied={copied}
                 onCopy={copy}
@@ -149,6 +159,10 @@ export function LocalSyncServerCard() {
                 No camera? Sync → Advanced: paste the Remote URL, set Branch to{" "}
                 <code>{status?.branch ?? "main"}</code>, <strong>Save &amp; connect</strong>, then{" "}
                 <strong>Sync now</strong>.
+              </li>
+              <li>
+                This URL is served by Type itself over SSH. macOS Remote Login and{" "}
+                <code>authorized_keys</code> are not required.
               </li>
             </ol>
           </div>

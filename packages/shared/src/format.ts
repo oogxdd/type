@@ -316,6 +316,29 @@ export const getSyncHint = (error: string | null): string | null => {
   if (lower.includes("credentials")) {
     return "Authentication failed. Verify username and token.";
   }
+  if (
+    lower.includes("timed out") ||
+    lower.includes("connection refused") ||
+    lower.includes("no route to host") ||
+    lower.includes("network is unreachable") ||
+    lower.includes("is unreachable")
+  ) {
+    if (lower.includes("local network") || lower.includes("same wi-fi") || lower.includes("hotspot")) {
+      return "The computer was not reachable. Keep Type open on the desktop, stay on the same Wi-Fi or hotspot, and allow Local Network access in iOS Settings.";
+    }
+    return "The remote was not reachable. Check the network connection and remote URL.";
+  }
+  if (
+    lower.includes("host key changed") ||
+    lower.includes("host key could not be verified") ||
+    // libgit2's wording when a host is neither pinned nor in known_hosts.
+    lower.includes("unknown remote ssh hostkey")
+  ) {
+    return "The desktop identity could not be verified. Restart the desktop sync server and scan the new QR code.";
+  }
+  if (lower.includes("old git:// local sync")) {
+    return "This connection is from an older app version. Scan the new QR code in desktop Settings → Sync.";
+  }
   if (lower.includes("not initialized")) {
     return "Repository is not connected yet.";
   }

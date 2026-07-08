@@ -1,15 +1,18 @@
 //! Git operations: repo init, fetch, push, merge, status, history.
 
 use crate::AppEnv;
+use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine as _};
 use git2::{
-    build::CheckoutBuilder, AnnotatedCommit, Cred, CredentialType, Direction, FetchOptions,
-    IndexAddOption, Oid, PushOptions, RemoteCallbacks, Repository, ResetType, Signature, Sort,
-    StatusOptions,
+    build::CheckoutBuilder, AnnotatedCommit, CertificateCheckStatus, Cred, CredentialType,
+    Direction, FetchOptions, IndexAddOption, Oid, PushOptions, RemoteCallbacks, Repository,
+    ResetType, Signature, Sort, StatusOptions,
 };
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
+    net::{IpAddr, TcpStream, ToSocketAddrs},
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use crate::ports::git_sync::GitSyncGateway;
@@ -73,6 +76,12 @@ pub struct GitPushArgs {
     pub branch: Option<String>,
     pub username: Option<String>,
     pub password: Option<String>,
+}
+
+#[derive(Clone)]
+pub struct TrustedSshHostKey {
+    host: String,
+    sha256: String,
 }
 
 /// Arguments for fetching commit history.
@@ -175,10 +184,12 @@ impl GitSyncGateway for GitSyncAdapter {
         let repo = ensure_git_repo(&root)?;
         prepare_bootstrap_worktree_for_sync(&root, &repo)?;
         ensure_origin_remote(&repo, remote_url)?;
+        probe_remote_url(remote_url)?;
         let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
         switch_or_prepare_branch(&repo, &target_branch)?;
         let ssh_priv = ssh_private_key_if_exists(&self.app);
         let ssh_pub = ssh_public_key_if_exists(&self.app);
+        let trusted_host_key = trusted_ssh_host_key_from_settings(&settings);
         let fetched = match perform_fetch(
             &repo,
             &target_branch,
@@ -186,6 +197,7 @@ impl GitSyncGateway for GitSyncAdapter {
             password,
             ssh_priv,
             ssh_pub,
+            trusted_host_key,
         ) {
             Ok(commit) => Some(commit),
             Err(error) => {
@@ -250,10 +262,14 @@ impl GitSyncGateway for GitSyncAdapter {
         if git_has_changes(&repo) {
             return Err("Local changes detected. Push or commit before pulling.".to_string());
         }
+        if let Some(remote_url) = git_remote_url(&repo) {
+            probe_remote_url(&remote_url)?;
+        }
         let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
         switch_or_prepare_branch(&repo, &target_branch)?;
         let ssh_priv = ssh_private_key_if_exists(&self.app);
         let ssh_pub = ssh_public_key_if_exists(&self.app);
+        let trusted_host_key = trusted_ssh_host_key_from_settings(&settings);
         let fetched = perform_fetch(
             &repo,
             &target_branch,
@@ -261,6 +277,7 @@ impl GitSyncGateway for GitSyncAdapter {
             password,
             ssh_priv,
             ssh_pub,
+            trusted_host_key,
         )?;
         let (analysis, _) = repo.merge_analysis(&[&fetched]).map_err(map_git_error)?;
         if analysis.is_up_to_date() {
@@ -327,9 +344,13 @@ impl GitSyncGateway for GitSyncAdapter {
         if !status_before_push.push_required {
             return Ok(status_before_push);
         }
+        if let Some(remote_url) = git_remote_url(&repo) {
+            probe_remote_url(&remote_url)?;
+        }
         let _ = commit_all_changes(&repo, commit_message, &target_branch)?;
         let ssh_priv = ssh_private_key_if_exists(&self.app);
         let ssh_pub = ssh_public_key_if_exists(&self.app);
+        let trusted_host_key = trusted_ssh_host_key_from_settings(&settings);
         remote_push(
             &repo,
             &target_branch,
@@ -337,6 +358,7 @@ impl GitSyncGateway for GitSyncAdapter {
             password,
             ssh_priv,
             ssh_pub,
+            trusted_host_key,
         )?;
         Ok(build_git_status(&root))
     }
@@ -349,12 +371,14 @@ fn remote_push(
     password: Option<&str>,
     ssh_private_key: Option<PathBuf>,
     ssh_public_key: Option<PathBuf>,
+    trusted_host_key: Option<TrustedSshHostKey>,
 ) -> Result<(), String> {
     let callbacks = build_callbacks(
         username,
         password,
         ssh_private_key.clone(),
         ssh_public_key.clone(),
+        trusted_host_key.clone(),
     );
     let mut push_options = PushOptions::new();
     push_options.remote_callbacks(callbacks);
@@ -367,6 +391,7 @@ fn remote_push(
                 password,
                 ssh_private_key,
                 ssh_public_key,
+                trusted_host_key,
             )),
             None,
         )
@@ -488,10 +513,7 @@ fn clear_bootstrap_artifacts(root: &Path) -> Result<(), String> {
 }
 
 /// Remove bootstrap artifacts before the first sync so the remote content wins.
-pub fn prepare_bootstrap_worktree_for_sync(
-    root: &Path,
-    repo: &Repository,
-) -> Result<(), String> {
+pub fn prepare_bootstrap_worktree_for_sync(root: &Path, repo: &Repository) -> Result<(), String> {
     if git_head_has_commit(repo) || !git_has_changes(repo) {
         return Ok(());
     }
@@ -596,10 +618,7 @@ fn git_upstream_oid(repo: &Repository, branch: Option<&str>) -> Option<Oid> {
 }
 
 /// Build the commit history list with sync state indicators.
-pub fn build_git_history(
-    root: &Path,
-    limit: usize,
-) -> Result<Vec<GitCommitHistoryEntry>, String> {
+pub fn build_git_history(root: &Path, limit: usize) -> Result<Vec<GitCommitHistoryEntry>, String> {
     if !git_repo_initialized(root) {
         return Ok(Vec::new());
     }
@@ -663,12 +682,36 @@ pub fn build_git_history(
 
 // ── Repo setup ─────────────────────────────────────────────────────────────────
 
-/// Open an existing repo or initialize a new one.
+/// Open an existing repo or initialize a new one. Also makes sure the
+/// device-local sync settings never enter the synced history.
 pub fn ensure_git_repo(root: &Path) -> Result<Repository, String> {
-    if let Ok(repo) = Repository::open(root) {
-        return Ok(repo);
+    let repo = match Repository::open(root) {
+        Ok(repo) => repo,
+        Err(_) => Repository::init(root).map_err(map_git_error)?,
+    };
+    ensure_device_settings_excluded(&repo);
+    Ok(repo)
+}
+
+/// Append `.type/device.json` to `.git/info/exclude` (repo-local, not synced)
+/// so per-device git credentials and pinned host keys stay off the remote.
+/// Best-effort: sync must not fail over an exclude file.
+fn ensure_device_settings_excluded(repo: &Repository) {
+    let pattern = crate::DEVICE_SETTINGS_EXCLUDE_PATTERN;
+    let exclude_path = repo.path().join("info").join("exclude");
+    let existing = fs::read_to_string(&exclude_path).unwrap_or_default();
+    if existing.lines().any(|line| line.trim() == pattern) {
+        return;
     }
-    Repository::init(root).map_err(map_git_error)
+    if let Some(parent) = exclude_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let newline = if existing.is_empty() || existing.ends_with('\n') {
+        ""
+    } else {
+        "\n"
+    };
+    let _ = fs::write(&exclude_path, format!("{existing}{newline}{pattern}\n"));
 }
 
 /// Resolve the target branch name: use provided value, current HEAD, or "main".
@@ -693,10 +736,45 @@ pub fn build_callbacks(
     password: Option<&str>,
     ssh_private_key: Option<PathBuf>,
     ssh_public_key: Option<PathBuf>,
+    trusted_host_key: Option<TrustedSshHostKey>,
 ) -> RemoteCallbacks<'static> {
     let user = username.map(str::to_string);
     let pass = password.map(str::to_string);
     let mut callbacks = RemoteCallbacks::new();
+    let trusted = trusted_host_key.clone();
+    callbacks.certificate_check(move |cert, hostname| {
+        // No pin that applies to this host: trust local-network hosts on first
+        // use (manual setup has no fingerprint to pin, and phones carry no
+        // known_hosts, so passthrough would reject every LAN server); anything
+        // else keeps libgit2's default known-hosts behavior.
+        let applicable = trusted
+            .as_ref()
+            .filter(|pinned| ssh_host_matches(hostname, &pinned.host));
+        let Some(trusted) = applicable else {
+            if is_local_hostname(hostname) {
+                return Ok(CertificateCheckStatus::CertificateOk);
+            }
+            return Ok(CertificateCheckStatus::CertificatePassthrough);
+        };
+        let Some(host_key) = cert.as_hostkey() else {
+            return Err(git2::Error::from_str(
+                "The local sync server did not present an SSH host key.",
+            ));
+        };
+        let Some(hash) = host_key.hash_sha256() else {
+            return Err(git2::Error::from_str(
+                "The local sync server host key could not be verified.",
+            ));
+        };
+        let actual = format!("SHA256:{}", STANDARD_NO_PAD.encode(hash));
+        if normalize_ssh_fingerprint(&actual) == normalize_ssh_fingerprint(&trusted.sha256) {
+            Ok(CertificateCheckStatus::CertificateOk)
+        } else {
+            Err(git2::Error::from_str(
+                "The local sync server host key changed. Stop the desktop server, restart it, and scan the new QR code before syncing.",
+            ))
+        }
+    });
     callbacks.credentials(move |_url, username_from_url, allowed| {
         if allowed.contains(CredentialType::USER_PASS_PLAINTEXT) {
             if let (Some(user), Some(pass)) = (user.as_deref(), pass.as_deref()) {
@@ -819,6 +897,211 @@ pub fn commit_all_changes(
     Ok(Some(oid))
 }
 
+fn trusted_ssh_host_key_from_settings(
+    settings: &crate::ProfileSettings,
+) -> Option<TrustedSshHostKey> {
+    let host = settings.git_trusted_ssh_host.trim();
+    let sha256 = settings.git_trusted_ssh_host_key_sha256.trim();
+    if host.is_empty() || sha256.is_empty() {
+        return None;
+    }
+    Some(TrustedSshHostKey {
+        host: host.to_string(),
+        sha256: sha256.to_string(),
+    })
+}
+
+fn normalize_ssh_fingerprint(value: &str) -> String {
+    value
+        .trim()
+        .strip_prefix("SHA256:")
+        .unwrap_or(value.trim())
+        .trim_end_matches('=')
+        .to_string()
+}
+
+fn ssh_host_matches(actual: &str, expected: &str) -> bool {
+    normalize_host_for_compare(actual) == normalize_host_for_compare(expected)
+}
+
+fn normalize_host_for_compare(value: &str) -> String {
+    let trimmed = value.trim().trim_start_matches('[').trim_end_matches(']');
+    if let Some((host, port)) = trimmed.rsplit_once(':') {
+        if port.chars().all(|c| c.is_ascii_digit()) && !host.contains(':') {
+            return host
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .to_ascii_lowercase();
+        }
+    }
+    trimmed.to_ascii_lowercase()
+}
+
+fn probe_remote_url(remote_url: &str) -> Result<(), String> {
+    let Some(target) = tcp_target_from_remote(remote_url) else {
+        return Ok(());
+    };
+    // A LAN git:// remote is a leftover from the pre-SSH local sync server;
+    // the port now answers SSH, so the git protocol would fail confusingly.
+    if remote_url.trim().to_ascii_lowercase().starts_with("git://") && is_lan_host(&target.host) {
+        return Err(
+            "This connection uses the old git:// local sync. The desktop now shares notes over SSH — scan the new QR code in desktop Settings → Sync.".to_string(),
+        );
+    }
+    let addrs = target
+        .to_socket_addrs()
+        .map_err(|error| network_probe_error(&target.host, target.port, Some(error)))?;
+    let timeout = Duration::from_secs(4);
+    let mut last_error = None;
+    for addr in addrs {
+        match TcpStream::connect_timeout(&addr, timeout) {
+            Ok(_) => return Ok(()),
+            Err(error) => last_error = Some(error),
+        }
+    }
+    Err(network_probe_error(&target.host, target.port, last_error))
+}
+
+struct TcpTarget {
+    host: String,
+    port: u16,
+}
+
+impl ToSocketAddrs for TcpTarget {
+    type Iter = std::vec::IntoIter<std::net::SocketAddr>;
+
+    fn to_socket_addrs(&self) -> std::io::Result<Self::Iter> {
+        (self.host.as_str(), self.port)
+            .to_socket_addrs()
+            .map(|iter| iter.collect::<Vec<_>>().into_iter())
+    }
+}
+
+fn tcp_target_from_remote(remote_url: &str) -> Option<TcpTarget> {
+    let value = remote_url.trim();
+    if value.is_empty() || value.starts_with('/') || value.starts_with("file://") {
+        return None;
+    }
+    let lower = value.to_ascii_lowercase();
+    for (scheme, default_port) in [
+        ("ssh://", 22),
+        ("git://", 9418),
+        ("https://", 443),
+        ("http://", 80),
+    ] {
+        if lower.starts_with(scheme) {
+            return tcp_target_from_url_authority(&value[scheme.len()..], default_port);
+        }
+    }
+    tcp_target_from_scp_like(value)
+}
+
+fn tcp_target_from_url_authority(rest: &str, default_port: u16) -> Option<TcpTarget> {
+    let authority = rest
+        .split('/')
+        .next()?
+        .split('?')
+        .next()?
+        .split('#')
+        .next()?;
+    let host_port = authority.rsplit('@').next().unwrap_or(authority);
+    parse_host_port(host_port, default_port)
+}
+
+fn tcp_target_from_scp_like(value: &str) -> Option<TcpTarget> {
+    if value.contains("://") {
+        return None;
+    }
+    let bytes = value.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        return None;
+    }
+    let before_colon = value.split(':').next()?;
+    if before_colon.contains('/') {
+        return None;
+    }
+    let host = before_colon
+        .rsplit('@')
+        .next()
+        .unwrap_or(before_colon)
+        .trim();
+    if host.is_empty() {
+        None
+    } else {
+        Some(TcpTarget {
+            host: host.to_string(),
+            port: 22,
+        })
+    }
+}
+
+fn parse_host_port(value: &str, default_port: u16) -> Option<TcpTarget> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some(end) = trimmed
+        .strip_prefix('[')
+        .and_then(|v| v.find(']').map(|idx| idx + 1))
+    {
+        let host = &trimmed[1..end];
+        let port = trimmed
+            .get(end + 1..)
+            .and_then(|suffix| suffix.strip_prefix(':'))
+            .and_then(|port| port.parse().ok())
+            .unwrap_or(default_port);
+        return Some(TcpTarget {
+            host: host.to_string(),
+            port,
+        });
+    }
+    if let Some((host, port)) = trimmed.rsplit_once(':') {
+        if !host.contains(':') {
+            return Some(TcpTarget {
+                host: host.to_string(),
+                port: port.parse().unwrap_or(default_port),
+            });
+        }
+    }
+    Some(TcpTarget {
+        host: trimmed.to_string(),
+        port: default_port,
+    })
+}
+
+fn network_probe_error(host: &str, port: u16, error: Option<std::io::Error>) -> String {
+    let local_hint = if is_lan_host(host) || host.ends_with(".local") {
+        " Check that the desktop sync server is running, both devices are on the same Wi-Fi or hotspot, and Local Network access is allowed in iOS Settings."
+    } else {
+        " Check the network connection, remote URL, and credentials."
+    };
+    match error {
+        Some(error) if error.kind() == std::io::ErrorKind::TimedOut => {
+            format!("Connection to {host}:{port} timed out after 4 seconds.{local_hint}")
+        }
+        Some(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => {
+            format!("No sync server answered at {host}:{port} (connection refused).{local_hint}")
+        }
+        Some(error) => format!("Remote {host}:{port} is unreachable: {error}.{local_hint}"),
+        None => format!("Remote {host}:{port} is unreachable.{local_hint}"),
+    }
+}
+
+fn is_lan_host(host: &str) -> bool {
+    match host.parse::<IpAddr>() {
+        Ok(IpAddr::V4(ip)) => ip.is_private() || ip.is_link_local() || ip.is_loopback(),
+        Ok(IpAddr::V6(ip)) => ip.is_loopback() || ip.is_unicast_link_local(),
+        Err(_) => false,
+    }
+}
+
+/// Like [`is_lan_host`] but tolerant of the `[host]:port` forms libgit2 hands
+/// to the certificate callback, and counting mDNS `.local` names as local.
+fn is_local_hostname(hostname: &str) -> bool {
+    let normalized = normalize_host_for_compare(hostname);
+    is_lan_host(&normalized) || normalized.ends_with(".local")
+}
+
 // ── Fetch / merge ──────────────────────────────────────────────────────────────
 
 /// Fetch from "origin" and return the annotated commit for the target branch.
@@ -829,9 +1112,16 @@ pub fn perform_fetch<'a>(
     password: Option<&str>,
     ssh_private_key: Option<PathBuf>,
     ssh_public_key: Option<PathBuf>,
+    trusted_host_key: Option<TrustedSshHostKey>,
 ) -> Result<AnnotatedCommit<'a>, String> {
     let mut remote = repo.find_remote("origin").map_err(map_git_error)?;
-    let callbacks = build_callbacks(username, password, ssh_private_key, ssh_public_key);
+    let callbacks = build_callbacks(
+        username,
+        password,
+        ssh_private_key,
+        ssh_public_key,
+        trusted_host_key,
+    );
     let mut fetch_options = FetchOptions::new();
     fetch_options.remote_callbacks(callbacks);
     remote
@@ -1046,5 +1336,73 @@ pub fn merge_fetched_commit(
                 extras.join("; ")
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn target(remote: &str) -> Option<(String, u16)> {
+        tcp_target_from_remote(remote).map(|value| (value.host, value.port))
+    }
+
+    #[test]
+    fn parses_network_remotes_for_probe() {
+        assert_eq!(
+            target("ssh://pair-token@192.168.1.10:9418/Notes"),
+            Some(("192.168.1.10".to_string(), 9418))
+        );
+        assert_eq!(
+            target("git://10.0.0.2/Notes"),
+            Some(("10.0.0.2".to_string(), 9418))
+        );
+        assert_eq!(
+            target("https://github.com/acme/notes.git"),
+            Some(("github.com".to_string(), 443))
+        );
+        assert_eq!(
+            target("git@github.com:acme/notes.git"),
+            Some(("github.com".to_string(), 22))
+        );
+    }
+
+    #[test]
+    fn skips_local_file_remotes_for_probe() {
+        assert_eq!(target("/Users/me/notes"), None);
+        assert_eq!(target("file:///Users/me/notes"), None);
+        assert_eq!(target(r"C:\Users\me\notes"), None);
+    }
+
+    #[test]
+    fn lan_git_remotes_are_rejected_with_guidance() {
+        let error = probe_remote_url("git://192.168.1.10/notes").unwrap_err();
+        assert!(error.contains("scan the new QR code"), "got: {error}");
+    }
+
+    #[test]
+    fn local_hostnames_are_detected() {
+        assert!(is_local_hostname("192.168.1.10"));
+        assert!(is_local_hostname("[10.0.0.2]:9418"));
+        assert!(is_local_hostname("mac-mini.local"));
+        assert!(!is_local_hostname("github.com"));
+        assert!(!is_local_hostname("8.8.8.8"));
+    }
+
+    #[test]
+    fn ensure_git_repo_excludes_device_settings_once() {
+        let root = std::env::temp_dir().join(format!("type-git-exclude-{}", uuid::Uuid::now_v7()));
+        fs::create_dir_all(&root).unwrap();
+
+        let _ = ensure_git_repo(&root).unwrap();
+        let _ = ensure_git_repo(&root).unwrap(); // idempotent
+        let exclude = fs::read_to_string(root.join(".git").join("info").join("exclude")).unwrap();
+        let hits = exclude
+            .lines()
+            .filter(|line| line.trim() == crate::DEVICE_SETTINGS_EXCLUDE_PATTERN)
+            .count();
+        assert_eq!(hits, 1);
+
+        fs::remove_dir_all(&root).unwrap();
     }
 }

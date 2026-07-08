@@ -60,6 +60,10 @@ pub struct ProfileSettings {
     pub git_username: String,
     pub git_password: String,
     pub git_commit_message: String,
+    #[serde(default)]
+    pub git_trusted_ssh_host: String,
+    #[serde(default)]
+    pub git_trusted_ssh_host_key_sha256: String,
     pub mobile_auto_transcription_enabled: bool,
     pub mobile_auto_handwriting_ocr_enabled: bool,
     /// `None` = not chosen yet; effective mode falls back to the legacy

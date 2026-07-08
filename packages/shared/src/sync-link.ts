@@ -3,7 +3,8 @@
 // the phone parses it — either from its in-app QR scanner or from the OS
 // deep-link handler after the native Camera opens the app.
 //
-// Format: type2://sync?remote=<url-encoded remote>&branch=<branch>&name=<label>
+// Format:
+// type2://sync?remote=<url-encoded remote>&branch=<branch>&name=<label>&hostKeySha256=<fingerprint>
 //
 // Query handling is hand-rolled: React Native's built-in URLSearchParams is
 // incomplete (get() throws), and this package carries no DOM lib.
@@ -14,12 +15,16 @@ export type SyncDeepLinkParams = {
   remote: string;
   branch?: string;
   name?: string;
+  hostKeySha256?: string;
 };
 
 export function buildSyncDeepLink(params: SyncDeepLinkParams): string {
   const pairs = [`remote=${encodeURIComponent(params.remote)}`];
   if (params.branch) pairs.push(`branch=${encodeURIComponent(params.branch)}`);
   if (params.name) pairs.push(`name=${encodeURIComponent(params.name)}`);
+  if (params.hostKeySha256) {
+    pairs.push(`hostKeySha256=${encodeURIComponent(params.hostKeySha256)}`);
+  }
   return `${SYNC_DEEP_LINK_SCHEME}://sync?${pairs.join("&")}`;
 }
 
@@ -68,5 +73,6 @@ export function parseSyncDeepLink(url: string): SyncDeepLinkParams | null {
     remote,
     branch: query.get("branch")?.trim() || undefined,
     name: query.get("name")?.trim() || undefined,
+    hostKeySha256: query.get("hostKeySha256")?.trim() || undefined,
   };
 }

@@ -29,6 +29,8 @@ const defaultProfileSettings = (): ProfileSettings => ({
   git_username: "",
   git_password: "",
   git_commit_message: "Sync notes",
+  git_trusted_ssh_host: "",
+  git_trusted_ssh_host_key_sha256: "",
   mobile_auto_transcription_enabled: true,
   mobile_auto_handwriting_ocr_enabled: true,
   transcription_mode: null,

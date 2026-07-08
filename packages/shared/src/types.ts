@@ -59,8 +59,8 @@ export type LocalSyncServerStatus = {
   host: string | null;
   port: number;
   branch: string | null;
-  git_url: string | null;
   ssh_url: string | null;
+  host_key_sha256: string | null;
   repo_path: string;
   error: string | null;
 };
@@ -69,7 +69,7 @@ export type DiscoveredServer = {
   name: string;
   host: string;
   port: number;
-  git_url: string;
+  url: string;
   branch: string;
 };
 
@@ -275,6 +275,8 @@ export type ProfileSettings = {
   git_username: string;
   git_password: string;
   git_commit_message: string;
+  git_trusted_ssh_host: string;
+  git_trusted_ssh_host_key_sha256: string;
   mobile_auto_transcription_enabled: boolean;
   mobile_auto_handwriting_ocr_enabled: boolean;
   transcription_mode?: TranscriptionMode | null;

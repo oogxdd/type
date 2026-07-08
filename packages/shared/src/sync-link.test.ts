@@ -5,14 +5,16 @@ import { buildSyncDeepLink, parseSyncDeepLink } from "./sync-link";
 describe("sync deep link", () => {
   it("round-trips remote, branch, and name", () => {
     const link = buildSyncDeepLink({
-      remote: "git://192.168.1.10/notes",
+      remote: "ssh://pair-token@192.168.1.10:9418/notes",
       branch: "main",
       name: "Computer (mac.local)",
+      hostKeySha256: "SHA256:abc123",
     });
     expect(parseSyncDeepLink(link)).toEqual({
-      remote: "git://192.168.1.10/notes",
+      remote: "ssh://pair-token@192.168.1.10:9418/notes",
       branch: "main",
       name: "Computer (mac.local)",
+      hostKeySha256: "SHA256:abc123",
     });
   });
 
@@ -22,6 +24,7 @@ describe("sync deep link", () => {
       remote: "ssh://user@host/repo.git",
       branch: undefined,
       name: undefined,
+      hostKeySha256: undefined,
     });
   });
 
@@ -33,6 +36,7 @@ describe("sync deep link", () => {
       remote: "git://10.0.0.2/notes",
       branch: undefined,
       name: "Computer (mac)",
+      hostKeySha256: undefined,
     });
   });
 
