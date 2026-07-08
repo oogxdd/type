@@ -7,6 +7,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   effectiveTranscriptionMode,
@@ -17,6 +18,7 @@ import type { RootStackParamList } from "../navigation";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useTheme } from "../theme";
 import { Button, Field, InlineNote, Section } from "../ui/controls";
+import { PresentationHeader } from "../ui/presentation-header";
 
 const MODES: { mode: TranscriptionMode; label: string; description: string }[] = [
   {
@@ -48,6 +50,7 @@ const MODE_LABEL: Record<TranscriptionMode, string> = Object.fromEntries(
 
 export const SettingsScreen = () => {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const snapshot = useSettingsStore((s) => s.snapshot);
@@ -56,29 +59,35 @@ export const SettingsScreen = () => {
   const currentMode = profile ? effectiveTranscriptionMode(profile.settings) : null;
 
   return (
-    <ScrollView
-      style={{ backgroundColor: theme.colors.background }}
-      contentContainerStyle={styles.content}
-    >
-      <MenuRow
-        icon="folder-outline"
-        title="Working Folders"
-        subtitle={profile?.name ?? "No working folder yet"}
-        onPress={() => navigation.navigate("SettingsWorkingFolders")}
-      />
-      <MenuRow
-        icon="mic-outline"
-        title="Transcription"
-        subtitle={currentMode ? MODE_LABEL[currentMode] : "Not set"}
-        onPress={() => navigation.navigate("SettingsTranscription")}
-      />
-      {demoMode ? (
-        <InlineNote>
-          Demo mode: the native Rust core is not linked in this build, so
-          everything above operates on in-memory data.
-        </InlineNote>
-      ) : null}
-    </ScrollView>
+    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
+      <PresentationHeader title="Settings" />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: insets.bottom + 48 },
+        ]}
+      >
+        <MenuRow
+          icon="folder-outline"
+          title="Working Folders"
+          subtitle={profile?.name ?? "No working folder yet"}
+          onPress={() => navigation.navigate("SettingsWorkingFolders")}
+        />
+        <MenuRow
+          icon="mic-outline"
+          title="Transcription"
+          subtitle={currentMode ? MODE_LABEL[currentMode] : "Not set"}
+          onPress={() => navigation.navigate("SettingsTranscription")}
+        />
+        {demoMode ? (
+          <InlineNote>
+            Demo mode: the native Rust core is not linked in this build, so
+            everything above operates on in-memory data.
+          </InlineNote>
+        ) : null}
+      </ScrollView>
+    </View>
   );
 };
 
@@ -291,6 +300,8 @@ export const SettingsTranscriptionScreen = () => {
 };
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
+  scroll: { flex: 1 },
   content: { padding: 16, paddingBottom: 48 },
   menuRow: {
     flexDirection: "row",

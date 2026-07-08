@@ -33,6 +33,7 @@ import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
 import { Button, Field, InlineNote, Section } from "../ui/controls";
+import { PresentationHeader } from "../ui/presentation-header";
 
 const SETUP_STEPS = [
   "Open the Type app on your computer.",
@@ -143,16 +144,21 @@ export const SyncScreen = () => {
   };
 
   return (
-    <ScrollView
-      style={{ backgroundColor: theme.colors.background }}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={sync.action === "refresh"}
-          onRefresh={() => void sync.refresh().catch(() => {})}
-        />
-      }
-    >
+    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
+      <PresentationHeader title="Sync" />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: insets.bottom + 48 },
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={sync.action === "refresh"}
+            onRefresh={() => void sync.refresh().catch(() => {})}
+          />
+        }
+      >
       {!connected ? (
         <Section title="Sync with your computer">
           {SETUP_STEPS.map((step, index) => (
@@ -293,6 +299,8 @@ export const SyncScreen = () => {
         )}
       </Section>
 
+      </ScrollView>
+
       <Modal
         visible={scannerOpen}
         animationType="slide"
@@ -318,7 +326,7 @@ export const SyncScreen = () => {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </View>
   );
 };
 
@@ -335,7 +343,9 @@ const StatusLine = ({ label, value }: { label: string; value: string }) => {
 };
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 48 },
+  root: { flex: 1 },
+  scroll: { flex: 1 },
+  content: { padding: 16 },
   stepRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
   stepNumber: { fontSize: 14, fontWeight: "700", width: 16, textAlign: "center" },
   stepText: { fontSize: 14, lineHeight: 20, flex: 1 },
