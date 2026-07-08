@@ -3,7 +3,7 @@
   "checkpoint_id": "15c9ad1fa439",
   "strategy": "manual-commit",
   "branch": "capture-swipe",
-  "checkpoints_count": 10,
+  "checkpoints_count": 11,
   "files_touched": [
     "Cargo.lock",
     "apps/mobile/app.json",
@@ -51,13 +51,20 @@
       "context": "/15/c9ad1fa439/4/context.md",
       "content_hash": "/15/c9ad1fa439/4/content_hash.txt",
       "prompt": "/15/c9ad1fa439/4/prompt.txt"
+    },
+    {
+      "metadata": "/15/c9ad1fa439/5/metadata.json",
+      "transcript": "/15/c9ad1fa439/5/full.jsonl",
+      "context": "/15/c9ad1fa439/5/context.md",
+      "content_hash": "/15/c9ad1fa439/5/content_hash.txt",
+      "prompt": "/15/c9ad1fa439/5/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 4976,
-    "cache_creation_tokens": 260181,
-    "cache_read_tokens": 11467750,
-    "output_tokens": 114765,
-    "api_call_count": 97
+    "input_tokens": 10066,
+    "cache_creation_tokens": 482793,
+    "cache_read_tokens": 13642410,
+    "output_tokens": 166594,
+    "api_call_count": 125
   }
 }
