@@ -1,0 +1,43 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "13b50f684a86",
+  "session_id": "019f3901-65f2-7a31-9ef7-318bef8f8d70",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-08T22:25:19.284502Z",
+  "branch": "capture-swipe",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "packages/shared/src/sync-link.ts",
+    "apps/desktop/src/features/sync/components/local-sync-server-card.tsx",
+    "apps/mobile/src/state/sync-store.ts",
+    "crates/type-core/src/adapters/local_sync/mod.rs",
+    "crates/type-core/src/adapters/local_sync/ssh_server.rs",
+    "crates/type-core/src/ports/local_sync.rs",
+    "packages/shared/src/sync-link.test.ts",
+    "apps/mobile/src/screens/sync-screen.tsx",
+    "apps/mobile/src/state/settings-store.ts",
+    "crates/type-core/src/adapters/git/mod.rs",
+    "crates/type-core/src/adapters/local_sync/devices.rs",
+    "crates/type-core/src/adapters/profiles/settings.rs"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "0e74cdb04e6e",
+  "checkpoint_transcript_start": 381,
+  "transcript_lines_at_start": 381,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-08T22:25:18.785741Z",
+    "agent_lines": 582,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 582,
+    "agent_percentage": 100
+  }
+}
