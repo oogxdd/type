@@ -18,7 +18,6 @@ import type { RootStackParamList } from "../navigation";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useTheme } from "../theme";
 import { Button, Field, InlineNote, Section } from "../ui/controls";
-import { PresentationHeader } from "../ui/presentation-header";
 
 const MODES: { mode: TranscriptionMode; label: string; description: string }[] = [
   {
@@ -60,7 +59,6 @@ export const SettingsScreen = () => {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      <PresentationHeader title="Settings" />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[

@@ -33,7 +33,6 @@ import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
 import { Button, Field, InlineNote, Section } from "../ui/controls";
-import { PresentationHeader } from "../ui/presentation-header";
 
 const SETUP_STEPS = [
   "Open the Type app on your computer.",
@@ -145,7 +144,6 @@ export const SyncScreen = () => {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      <PresentationHeader title="Sync" />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[

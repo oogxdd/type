@@ -186,7 +186,6 @@ export const MenuScreen = () => {
             menuDepthStyle,
           ]}
         >
-        {/* Mirrors the capture page's hamburger: same spot, same size. */}
         <View style={styles.topBar}>
           <ToolbarButton icon="close-outline" onPress={openCapture} />
         </View>
@@ -260,13 +259,21 @@ export const MenuScreen = () => {
           />
         )}
 
-        <View style={[styles.bottom, { borderTopColor: theme.colors.border }]}>
+        {/* App-level destinations, visually set apart from the note/folder
+            rows by the grouped card (same surface treatment as the tabs). */}
+        <View style={[styles.bottom, { backgroundColor: theme.colors.surface }]}>
           <BottomItem
+            icon="sync-outline"
             label="Sync"
             subtitle={`Last synced ${formatRelativeTime(lastSyncedMs)}`}
             onPress={() => openScreen("Sync")}
           />
-          <BottomItem label="Settings" onPress={() => openScreen("Settings")} />
+          <View style={[styles.bottomSeparator, { backgroundColor: theme.colors.border }]} />
+          <BottomItem
+            icon="settings-outline"
+            label="Settings"
+            onPress={() => openScreen("Settings")}
+          />
         </View>
         </Animated.View>
 
@@ -308,15 +315,16 @@ export const MenuScreen = () => {
           <View
             style={[
               styles.previewButton,
+              styles.previewMic,
               {
-                right: 16,
-                bottom: insets.bottom + 24,
+                right: 20,
+                bottom: insets.bottom + 32,
                 backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
               },
             ]}
           >
-            <Ionicons name="mic-outline" size={20} color={theme.colors.text} />
+            <Ionicons name="mic-outline" size={22} color={theme.colors.text} />
           </View>
         </Animated.View>
       </View>
@@ -358,10 +366,12 @@ const TabButton = ({
 };
 
 const BottomItem = ({
+  icon,
   label,
   subtitle,
   onPress,
 }: {
+  icon: keyof typeof Ionicons.glyphMap;
   label: string;
   subtitle?: string;
   onPress: () => void;
@@ -372,6 +382,7 @@ const BottomItem = ({
       onPress={onPress}
       style={({ pressed }) => [styles.bottomItem, { opacity: pressed ? 0.6 : 1 }]}
     >
+      <Ionicons name={icon} size={18} color={theme.colors.secondaryText} />
       <View style={styles.bottomItemText}>
         <Text style={[styles.bottomLabel, { color: theme.colors.text }]}>{label}</Text>
         {subtitle ? (
@@ -413,8 +424,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  previewMic: { width: 44, height: 44, borderRadius: 22 },
   topBar: {
     flexDirection: "row",
+    justifyContent: "flex-end",
     paddingHorizontal: 16,
     marginBottom: 12,
   },
@@ -448,17 +461,23 @@ const styles = StyleSheet.create({
   folderName: { fontSize: 15, fontWeight: "600" },
   folderMeta: { fontSize: 13 },
   bottom: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 4,
+    marginHorizontal: 12,
+    marginTop: 8,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  bottomSeparator: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 46,
   },
   bottomItem: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  bottomItemText: { gap: 2 },
+  bottomItemText: { flex: 1, gap: 2 },
   bottomLabel: { fontSize: 15, fontWeight: "500" },
   bottomSubtitle: { fontSize: 12 },
 });

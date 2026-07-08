@@ -80,8 +80,12 @@ export const EditorScreen = () => {
     timer.current = setTimeout(() => void flush(), SAVE_DEBOUNCE_MS);
   };
 
-  // Flush on navigation away and on unmount.
-  useEffect(() => navigation.addListener("beforeRemove", () => void flush()), [navigation]);
+  // Flush on navigation away and on unmount. This must be "blur", not
+  // "beforeRemove": merely adding a beforeRemove listener makes the native
+  // stack disable the interactive back swipe for the screen (the native
+  // transition can't be paused from JS, so react-navigation turns the
+  // gesture off wholesale).
+  useEffect(() => navigation.addListener("blur", () => void flush()), [navigation]);
   useEffect(
     () => () => {
       void flush();

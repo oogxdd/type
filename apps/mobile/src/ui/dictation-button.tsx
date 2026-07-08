@@ -244,7 +244,7 @@ export const DictationButton = ({
       >
         <Ionicons
           name={recorderState.isRecording ? "stop" : "mic-outline"}
-          size={20}
+          size={22}
           color={recorderState.isRecording ? theme.colors.danger : theme.colors.text}
         />
       </Pressable>
@@ -266,10 +266,13 @@ const styles = StyleSheet.create({
   },
   pillText: { fontSize: 13, fontVariant: ["tabular-nums"] },
   recordingDot: { width: 8, height: 8, borderRadius: 4 },
+  // Slightly larger than the 38px toolbar circles — it's the primary action
+  // on the capture page. Keep in sync with the menu's preview replica
+  // (menu-screen.tsx previewMic).
   fab: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     justifyContent: "center",

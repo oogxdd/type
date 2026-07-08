@@ -90,23 +90,11 @@ const RootStack = () => {
         component={EditorScreen}
         options={({ route }) => ({ title: route.params.title ?? "Note" })}
       />
-      <Stack.Screen
-        name="Sync"
-        component={SyncScreen}
-        options={{
-          animation: "slide_from_bottom",
-          gestureDirection: "vertical",
-          headerShown: false,
-        }}
-      />
+      <Stack.Screen name="Sync" component={SyncScreen} options={{ title: "Sync" }} />
       <Stack.Screen
         name="Settings"
         component={SettingsScreen}
-        options={{
-          animation: "slide_from_bottom",
-          gestureDirection: "vertical",
-          headerShown: false,
-        }}
+        options={{ title: "Settings" }}
       />
       <Stack.Screen
         name="SettingsWorkingFolders"
