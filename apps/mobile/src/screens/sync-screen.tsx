@@ -132,7 +132,12 @@ export const SyncScreen = () => {
             ? "Syncing..."
             : "Sync now";
   const status = sync.status;
-  const connected = Boolean(status?.repo_initialized && status?.remote_url);
+  // A saved remote counts as connected even when the repo's origin is missing
+  // (e.g. an earlier connect attempt failed halfway): pull/push re-apply the
+  // saved connection via ensureSavedRemote, so the buttons must stay usable —
+  // otherwise a half-connected state locks the user out of the recovery path.
+  const savedRemote = profile?.settings.git_remote_url.trim();
+  const connected = Boolean(status?.repo_initialized && (status?.remote_url || savedRemote));
 
   const connectManually = async () => {
     try {
@@ -197,18 +202,23 @@ export const SyncScreen = () => {
         ) : null}
         {status ? (
           <View style={styles.statusGrid}>
-            <StatusLine label="Repository" value={status.repo_initialized ? "connected" : "not connected"} />
-            <StatusLine label="Remote" value={status.remote_url ?? "—"} />
+            <StatusLine label="Connection" value={connected ? "connected" : "not paired"} />
+            <StatusLine label="Remote" value={status.remote_url ?? (savedRemote || "—")} />
             <StatusLine label="Branch" value={status.current_branch ?? "—"} />
             <StatusLine
               label="Changes"
-              value={status.has_uncommitted_changes ? "uncommitted changes" : "clean"}
+              value={status.has_uncommitted_changes ? "pending — will sync next" : "none"}
             />
             <StatusLine label="Ahead / behind" value={`${status.ahead} / ${status.behind}`} />
           </View>
         ) : (
           <InlineNote>Pull to refresh status.</InlineNote>
         )}
+        {status && !status.remote_url && savedRemote ? (
+          <InlineNote>
+            The saved connection will be re-applied on the next sync.
+          </InlineNote>
+        ) : null}
         <Button
           title={primarySyncTitle}
           onPress={() => void sync.syncNow().catch(() => {})}

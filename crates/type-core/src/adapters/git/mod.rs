@@ -182,9 +182,12 @@ impl GitSyncGateway for GitSyncAdapter {
             });
 
         let repo = ensure_git_repo(&root)?;
+        // Record the remote before anything that can fail, so a half-finished
+        // connect (network down, permission prompt pending, …) leaves a state
+        // the next pull/push can recover from instead of a repo with no origin.
+        ensure_origin_remote(&repo, remote_url)?;
         let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
         prepare_bootstrap_worktree_for_sync(&root, &repo, &target_branch)?;
-        ensure_origin_remote(&repo, remote_url)?;
         probe_remote_url(remote_url)?;
         switch_or_prepare_branch(&repo, &target_branch)?;
         let ssh_priv = ssh_private_key_if_exists(&self.app);
