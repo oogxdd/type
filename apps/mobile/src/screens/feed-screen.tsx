@@ -13,7 +13,7 @@ import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import { formatRecordingStatusLabel } from "@typenotes/shared/format";
 
 import { findFolder, folderNoteRows, groupNoteRowsByDate, type NoteRow } from "../lib/feed";
-import type { RootStackParamList } from "../navigation";
+import type { MainStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useTheme, type Theme } from "../theme";
 
@@ -64,7 +64,7 @@ export const NoteListRow = ({
 export const FeedScreen = () => {
   const theme = useTheme();
   const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const tree = useNotesStore((s) => s.tree);
   const previews = useNotesStore((s) => s.previews);
   const loading = useNotesStore((s) => s.loading);

@@ -13,7 +13,7 @@ import {
   type TranscriptionMode,
 } from "@typenotes/shared/types";
 
-import type { RootStackParamList } from "../navigation";
+import type { MainStackParamList } from "../navigation";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useUiPrefsStore, type MenuSide } from "../state/ui-prefs-store";
 import { useTheme } from "../theme";
@@ -53,20 +53,20 @@ const MENU_SIDES: { side: MenuSide; label: string; description: string }[] = [
     side: "left",
     label: "Left",
     description:
-      "Hamburger top-left; swipe from the left edge to open, from the right edge to close.",
+      "Hamburger top-left; swipe from the left edge to open, swipe left to close.",
   },
   {
     side: "right",
     label: "Right",
     description:
-      "Hamburger top-right; swipe from the right edge to open, from the left edge to close.",
+      "Hamburger top-right; swipe from the right edge to open, swipe right to close.",
   },
 ];
 
 export const SettingsScreen = () => {
   const theme = useTheme();
   const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const snapshot = useSettingsStore((s) => s.snapshot);
   const demoMode = useSettingsStore((s) => s.demoMode);
   const menuSide = useUiPrefsStore((s) => s.menuSide);

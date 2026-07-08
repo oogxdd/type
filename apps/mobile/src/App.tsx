@@ -13,7 +13,7 @@ import { getErrorMessage } from "@typenotes/shared/errors";
 import { parseSyncDeepLink } from "@typenotes/shared/sync-link";
 
 import { bootCore } from "./core/boot";
-import { navigateToScreen, navigationRef, Stack } from "./navigation";
+import { Drawer, navigateToScreen, navigationRef, Stack } from "./navigation";
 import { CaptureScreen } from "./screens/capture-screen";
 import { EditorScreen } from "./screens/editor-screen";
 import { FeedScreen } from "./screens/feed-screen";
@@ -35,9 +35,8 @@ import { useTheme } from "./theme";
 
 type BootPhase = { state: "booting" } | { state: "ready" } | { state: "failed"; error: string };
 
-const RootStack = () => {
+const MainStack = () => {
   const theme = useTheme();
-  const menuSide = useUiPrefsStore((s) => s.menuSide);
   return (
     <Stack.Navigator
       initialRouteName="Capture"
@@ -52,25 +51,6 @@ const RootStack = () => {
         name="Capture"
         component={CaptureScreen}
         options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="Menu"
-        component={MenuScreen}
-        options={
-          // The menu is pushed OVER the capture page and slides in from the
-          // configured side. Closing it is native: with slide_from_left,
-          // react-native-screens moves the dismiss gesture to the right
-          // edge (animationMatchesGesture); with the default slide-from-
-          // right it's the standard left-edge swipe-back.
-          menuSide === "left"
-            ? {
-                headerShown: false,
-                title: "Menu",
-                animation: "slide_from_left",
-                animationMatchesGesture: true,
-              }
-            : { headerShown: false, title: "Menu" }
-        }
       />
       <Stack.Screen name="Feed" component={FeedScreen} />
       <Stack.Screen
@@ -96,6 +76,31 @@ const RootStack = () => {
         options={{ title: "Transcription" }}
       />
     </Stack.Navigator>
+  );
+};
+
+const RootNavigator = () => {
+  const theme = useTheme();
+  const menuSide = useUiPrefsStore((s) => s.menuSide);
+  return (
+    <Drawer.Navigator
+      screenOptions={{
+        headerShown: false,
+        drawerType: "front",
+        drawerPosition: menuSide,
+        drawerStyle: {
+          width: "100%",
+          backgroundColor: theme.colors.background,
+        },
+        overlayColor: "transparent",
+        swipeEdgeWidth: 32,
+        swipeEnabled: true,
+        keyboardDismissMode: "on-drag",
+      }}
+      drawerContent={() => <MenuScreen />}
+    >
+      <Drawer.Screen name="Main" component={MainStack} />
+    </Drawer.Navigator>
   );
 };
 
@@ -214,7 +219,7 @@ export default function App() {
             }
           }}
         >
-          <RootStack />
+          <RootNavigator />
         </NavigationContainer>
         {demoMode ? (
           <View style={[styles.demoBanner, { backgroundColor: theme.colors.accent }]}>

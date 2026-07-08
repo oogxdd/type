@@ -1,19 +1,16 @@
 import {
   CommonActions,
   createNavigationContainerRef,
+  type NavigatorScreenParams,
 } from "@react-navigation/native";
+import { createDrawerNavigator } from "@react-navigation/drawer";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-// One native stack with the capture page as its root. The menu is PUSHED
-// over it (sliding in from the side configured in ui-prefs), so the draft on
-// the capture page stays alive underneath while the menu is open. Opening
-// the menu is the hamburger or a custom edge-swipe strip on the capture
-// page; closing it is native (swipe from the opposite edge, or the close
-// button). Every other screen is pushed from the menu, so swipe-back walks
-// Editor/Folder/Sync/Settings → Menu → Capture entirely natively.
-export type RootStackParamList = {
+// The app root is a full-width drawer whose only real screen is the native
+// stack below. The drawer gives the capture page an interactive edge-swipe
+// menu without turning the menu itself into a stack route.
+export type MainStackParamList = {
   Capture: undefined;
-  Menu: undefined;
   Feed: undefined;
   Folder: { path: string; title: string };
   Editor: { path: string; title?: string };
@@ -23,16 +20,23 @@ export type RootStackParamList = {
   SettingsTranscription: undefined;
 };
 
-export const Stack = createNativeStackNavigator<RootStackParamList>();
+export type RootDrawerParamList = {
+  Main: NavigatorScreenParams<MainStackParamList> | undefined;
+};
+
+export const Drawer = createDrawerNavigator<RootDrawerParamList>();
+export const Stack = createNativeStackNavigator<MainStackParamList>();
 
 /** Container ref so deep-link handling can navigate from outside React. */
-export const navigationRef = createNavigationContainerRef<RootStackParamList>();
+export const navigationRef = createNavigationContainerRef<RootDrawerParamList>();
 
-export const navigateToScreen = <Screen extends keyof RootStackParamList>(
+export const navigateToScreen = <Screen extends keyof MainStackParamList>(
   screen: Screen,
-  params?: RootStackParamList[Screen]
+  params?: MainStackParamList[Screen]
 ) => {
   if (navigationRef.isReady()) {
-    navigationRef.dispatch(CommonActions.navigate({ name: screen, params }));
+    navigationRef.dispatch(
+      CommonActions.navigate({ name: "Main", params: { screen, params } })
+    );
   }
 };

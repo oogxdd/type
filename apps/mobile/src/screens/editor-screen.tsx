@@ -11,7 +11,7 @@ import { getErrorMessage } from "@typenotes/shared/errors";
 import { isRecordingNoteType } from "@typenotes/shared/format";
 import type { NoteMeta } from "@typenotes/shared/types";
 
-import type { RootStackParamList } from "../navigation";
+import type { MainStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useTheme } from "../theme";
 import { RecordingAudioPlayer } from "../ui/audio-player";
@@ -21,7 +21,7 @@ const SAVE_DEBOUNCE_MS = 400;
 export const EditorScreen = () => {
   const theme = useTheme();
   const navigation = useNavigation();
-  const route = useRoute<RouteProp<RootStackParamList, "Editor">>();
+  const route = useRoute<RouteProp<MainStackParamList, "Editor">>();
   const { path } = route.params;
 
   const [text, setText] = useState<string | null>(null);

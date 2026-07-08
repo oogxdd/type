@@ -3,9 +3,9 @@
 // (<Documents>/typenotes/.ui-prefs.json); loaded once at boot.
 //
 // `menuSide` is an experiment toggle for which side the menu opens from on
-// the capture page (hamburger position + edge-swipe strip + the menu's push
-// animation). The menu always pushes OVER the capture page and closes with
-// the native swipe from the opposite edge.
+// the capture page (hamburger position + drawer edge). The menu is a
+// full-width drawer over the capture page and closes by swiping back toward
+// the same edge.
 
 import * as FileSystem from "expo-file-system/legacy";
 import { create } from "zustand";
@@ -33,7 +33,7 @@ const persist = async (prefs: { menuSide: MenuSide }) => {
 };
 
 export const useUiPrefsStore = create<UiPrefsState>((set, get) => ({
-  menuSide: "left",
+  menuSide: "right",
 
   load: async () => {
     try {

@@ -3,7 +3,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text } from "react-native";
 
 import { browsableFolders, findFolder, folderNoteRows } from "../lib/feed";
-import type { RootStackParamList } from "../navigation";
+import type { MainStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useTheme } from "../theme";
 import { NoteListRow } from "./feed-screen";
@@ -11,8 +11,8 @@ import { NoteListRow } from "./feed-screen";
 export const FolderScreen = () => {
   const theme = useTheme();
   const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const route = useRoute<RouteProp<RootStackParamList, "Folder">>();
+    useNavigation<NativeStackNavigationProp<MainStackParamList>>();
+  const route = useRoute<RouteProp<MainStackParamList, "Folder">>();
   const tree = useNotesStore((s) => s.tree);
   const previews = useNotesStore((s) => s.previews);
   const loading = useNotesStore((s) => s.loading);

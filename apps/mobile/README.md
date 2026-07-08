@@ -10,10 +10,11 @@ system folders, and per-folder `.type/settings.json`.
 The app opens on a **blank page** — start typing immediately. **Swipe up**
 and the page files itself into Feed while a fresh blank page slides in
 underneath. **Swipe from the edge** (or tap the hamburger) and the menu
-slides in over the page — feed and folders on top, sync and settings at the
-bottom — while your draft stays put underneath; close it with the native
-swipe from the opposite edge or the close button. Which side the menu opens
-from (left or right) is a device-local Settings toggle. The floating mic
+slides in over the page as a full-width drawer — feed and folders on top,
+sync and settings at the bottom — while your draft stays put underneath;
+close it by swiping it back toward the same edge or tapping the close button.
+Which side the menu opens from (right by default, or left) is a device-local
+Settings toggle. The floating mic
 button in the bottom-right dictates a voice note: tap to start and tap again
 to stop, or hold it to record only while pressed.
 
@@ -54,8 +55,8 @@ later step.
 ```
 src/
   App.tsx                 boot + navigation container + demo banner
-  navigation.ts           typed native-stack route table (capture is the
-                          root, the menu is pushed over it)
+  navigation.ts           typed root drawer + nested native-stack route table
+                          (capture is the first stack screen)
   theme.ts                light/dark palette
   core/boot.ts            wires RawCore (generated native module or mock) + initCore
   lib/capture.ts          capture-page note lifecycle (pure, tested)

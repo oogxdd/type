@@ -1,13 +1,9 @@
-// The app menu — pushed OVER the capture page (which keeps its draft alive
-// underneath): close button + Feed / Folders tabs on top (inline note +
-// folder lists), Sync and Settings pinned at the bottom. Closing is native:
-// the swipe from the edge opposite the configured menu side (react-native-
-// screens flips the dismiss edge for slide_from_left), or the close button.
-// Everything else is pushed from here, so swipe-back from Sync/Settings/
-// Folder/Editor lands back on the menu.
+// The app menu lives inside the root full-width drawer. The capture page stays
+// mounted underneath, and opening/closing is driven by the drawer's interactive
+// edge gesture rather than a custom JS pan that triggers stack navigation.
 
-import { CommonActions, useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useNavigation, type NavigatorScreenParams } from "@react-navigation/native";
+import type { DrawerNavigationProp } from "@react-navigation/drawer";
 import { useState } from "react";
 import { FlatList, Pressable, SectionList, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,7 +17,7 @@ import {
   groupNoteRowsByDate,
 } from "../lib/feed";
 import { formatRelativeTime } from "../lib/relative-time";
-import type { RootStackParamList } from "../navigation";
+import type { MainStackParamList, RootDrawerParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useSyncStore } from "../state/sync-store";
 import { useUiPrefsStore } from "../state/ui-prefs-store";
@@ -35,22 +31,25 @@ export const MenuScreen = () => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    useNavigation<DrawerNavigationProp<RootDrawerParamList>>();
   const [tab, setTab] = useState<MenuTab>("feed");
 
   const tree = useNotesStore((s) => s.tree);
   const previews = useNotesStore((s) => s.previews);
 
-  const openScreen = <Screen extends keyof RootStackParamList>(
+  const openScreen = <Screen extends keyof MainStackParamList>(
     screen: Screen,
-    params?: RootStackParamList[Screen]
+    params?: MainStackParamList[Screen]
   ) => {
-    navigation.dispatch(CommonActions.navigate({ name: screen, params }));
+    navigation.navigate("Main", {
+      screen,
+      params,
+    } as NavigatorScreenParams<MainStackParamList>);
+    navigation.closeDrawer();
   };
 
   const menuSide = useUiPrefsStore((s) => s.menuSide);
-  // The capture page (with its draft) is right below in the stack.
-  const closeMenu = () => navigation.goBack();
+  const closeMenu = () => navigation.closeDrawer();
 
   const lastSyncedMs = useSyncStore((s) => s.history[0]?.authored_ms ?? null);
 

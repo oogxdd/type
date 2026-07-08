@@ -3,7 +3,7 @@
 // top) and a fresh blank page is ready underneath — same gesture as the
 // original app. Notes land in Feed via the desktop-compatible core.
 
-import { useNavigation } from "@react-navigation/native";
+import { DrawerActions, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -26,7 +26,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as core from "@typenotes/mobile-core/core-api";
 
 import { CaptureSession } from "../lib/capture";
-import type { RootStackParamList } from "../navigation";
+import type { MainStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useUiPrefsStore } from "../state/ui-prefs-store";
 import { useTheme } from "../theme";
@@ -40,7 +40,7 @@ export const CaptureScreen = () => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const { height } = useWindowDimensions();
 
   const [text, setText] = useState("");
@@ -133,18 +133,7 @@ export const CaptureScreen = () => {
       }
     });
 
-  // Opening the menu is a push, so there's no native gesture for it — this
-  // narrow strip over the screen edge claims the swipe before the text
-  // input can. It sits over the page's horizontal padding, so it barely
-  // covers any tappable text.
-  const openMenu = () => navigation.navigate("Menu");
-  const menuEdgePan = Gesture.Pan()
-    .activeOffsetX(menuSide === "right" ? -20 : 20)
-    .failOffsetX(menuSide === "right" ? 20 : -20)
-    .failOffsetY([-24, 24])
-    .onStart(() => {
-      runOnJS(openMenu)();
-    });
+  const openMenu = () => navigation.dispatch(DrawerActions.openDrawer());
 
   const pageStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
@@ -194,15 +183,6 @@ export const CaptureScreen = () => {
         </Animated.View>
       </GestureDetector>
 
-      <GestureDetector gesture={menuEdgePan}>
-        <View
-          style={[
-            styles.menuEdge,
-            menuSide === "right" ? styles.menuEdgeRight : styles.menuEdgeLeft,
-          ]}
-        />
-      </GestureDetector>
-
       <Animated.View
         pointerEvents={iconsVisible ? "auto" : "none"}
         style={[
@@ -244,12 +224,4 @@ const styles = StyleSheet.create({
   },
   toolbarTopLeft: { left: 16 },
   toolbarTopRight: { right: 16 },
-  menuEdge: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    width: 24,
-  },
-  menuEdgeLeft: { left: 0 },
-  menuEdgeRight: { right: 0 },
 });
