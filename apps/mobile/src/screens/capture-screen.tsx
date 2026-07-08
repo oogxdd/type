@@ -67,13 +67,28 @@ export const CaptureScreen = () => {
   );
 
   // When the menu's swipe pushed this page with animation:none (its preview
-  // overlay already played the transition), clear the flag so the next
-  // transition — the pop / full-screen back swipe — animates natively again.
+  // overlay already played the transition), the flag must flip back so the
+  // later pop / back swipe animates natively. Clearing it on mount is too
+  // early: options re-evaluate to animation:"default" before the native push
+  // has run, and the push then visibly replays with a slide. Wait for the
+  // push transition to actually finish (plus a timeout fallback in case
+  // animation:none emits no transition events).
   const route = useRoute<RouteProp<RootStackParamList, "Capture">>();
   useEffect(() => {
-    if (route.params?.instant) {
-      navigation.setParams({ instant: undefined });
+    if (!route.params?.instant) {
+      return;
     }
+    const clear = () => navigation.setParams({ instant: undefined });
+    const unsubscribe = navigation.addListener("transitionEnd", (event) => {
+      if (!event.data.closing) {
+        clear();
+      }
+    });
+    const fallback = setTimeout(clear, 600);
+    return () => {
+      unsubscribe();
+      clearTimeout(fallback);
+    };
   }, [navigation, route.params?.instant]);
 
   const translateY = useSharedValue(0);

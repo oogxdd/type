@@ -84,14 +84,35 @@ export const MenuScreen = () => {
     transform: [{ translateX: width * (1 - captureProgress.value) }],
   }));
 
+  // RNGH's pan activating does not reliably cancel React Native's own
+  // responder (and by claiming the gesture it also keeps the lists' scroll
+  // from doing that cancelling), so a swipe that starts on a row/button can
+  // still fire its onPress on release. A genuine tap never moves the pan, so
+  // any preview progress at press time means the touch was a swipe: drop it.
+  const pressWasSwipe = () => captureProgress.value > 0.001;
+
   const openScreen = <Screen extends keyof RootStackParamList>(
     screen: Screen,
     params?: RootStackParamList[Screen]
   ) => {
+    if (pressWasSwipe()) {
+      return;
+    }
     navigation.dispatch(CommonActions.navigate({ name: screen, params }));
   };
 
-  const openCapture = () => navigation.navigate("Capture");
+  const selectTab = (next: MenuTab) => {
+    if (!pressWasSwipe()) {
+      setTab(next);
+    }
+  };
+
+  const openCapture = () => {
+    if (pressWasSwipe()) {
+      return;
+    }
+    navigation.navigate("Capture");
+  };
   const openCaptureBehindPreview = () => {
     navigation.navigate("Capture", { instant: true });
     // Drop the preview once the pushed screen is attached on top of the
@@ -104,11 +125,9 @@ export const MenuScreen = () => {
   };
 
   // The whole menu is the gesture surface: a clearly-leftward drag anywhere
-  // pulls the capture-page preview in with the finger. Activation (16px of
-  // horizontal travel) cancels the touch for whatever it started on, so a
-  // swipe that begins on a note row never opens that note, while a plain tap
-  // never activates the pan. Vertical drags fail fast and stay with the
-  // note/folder lists.
+  // (16px of horizontal travel) pulls the capture-page preview in with the
+  // finger. Presses under the swipe are filtered by pressWasSwipe above;
+  // vertical drags fail fast and stay with the note/folder lists.
   const swipeToCapture = Gesture.Pan()
     .activeOffsetX(-16)
     .failOffsetX(24)
@@ -173,11 +192,11 @@ export const MenuScreen = () => {
         </View>
 
         <View style={[styles.tabs, { backgroundColor: theme.colors.surface }]}>
-          <TabButton label="Feed" active={tab === "feed"} onPress={() => setTab("feed")} />
+          <TabButton label="Feed" active={tab === "feed"} onPress={() => selectTab("feed")} />
           <TabButton
             label="Folders"
             active={tab === "folders"}
-            onPress={() => setTab("folders")}
+            onPress={() => selectTab("folders")}
           />
         </View>
 
