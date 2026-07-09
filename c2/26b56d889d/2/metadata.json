@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "c226b56d889d",
+  "session_id": "019f4327-9ddf-7ac0-a5a0-174e552ac2c9",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-09T10:58:51.356168Z",
+  "branch": "capture-swipe",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "ios/typemonorepo.xcodeproj/project.pbxproj",
+    "ios/typemonorepo/Info.plist",
+    "package.json"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "3b0e155298b0",
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-09T10:58:51.049073Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 128,
+    "human_removed": 505,
+    "total_committed": 154,
+    "agent_percentage": 0
+  }
+}
