@@ -11,6 +11,7 @@ import type {
   ConnectGitArgs,
   GitCommitHistoryEntry,
   GitSyncStatus,
+  GitTransferProgress,
 } from "@typenotes/shared/types";
 
 import { useNotesStore } from "./notes-store";
@@ -52,6 +53,8 @@ type SyncState = {
   status: GitSyncStatus | null;
   history: GitCommitHistoryEntry[];
   action: SyncAction;
+  /** Live transfer progress of the running pull/push, null when idle. */
+  progress: GitTransferProgress | null;
   error: string | null;
   hint: string | null;
   /** A scanned/deep-linked type2://sync remote waiting to be applied. */
@@ -131,6 +134,15 @@ export const useSyncStore = create<SyncState>((set, get) => {
     const startedAt = Date.now();
     logSync(`${action}: started`);
     set({ action, error: null, hint: null });
+    // Surface libgit2's transfer progress (objects/bytes) while the network
+    // action runs; the core publishes a snapshot that is cheap to poll.
+    const progressTimer =
+      action === "refresh"
+        ? null
+        : setInterval(() => {
+            const progress = core.getGitSyncProgress();
+            set({ progress: progress.phase === "idle" ? null : progress });
+          }, 250);
     try {
       const status = await work();
       const history = await core.getGitHistory({ limit: 30 }).catch(() => []);
@@ -141,6 +153,11 @@ export const useSyncStore = create<SyncState>((set, get) => {
       logSync(`${action}: failed after ${Date.now() - startedAt}ms - ${message}`);
       set({ action: "idle", error: message, hint: getSyncHint(message) });
       throw error;
+    } finally {
+      if (progressTimer) {
+        clearInterval(progressTimer);
+      }
+      set({ progress: null });
     }
   };
 
@@ -168,6 +185,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
     status: null,
     history: [],
     action: "idle",
+    progress: null,
     error: null,
     hint: null,
     pendingLink: null,

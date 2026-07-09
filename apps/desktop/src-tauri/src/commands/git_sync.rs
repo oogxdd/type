@@ -29,6 +29,12 @@ pub(super) async fn get_git_status(app: tauri::AppHandle) -> Result<GitSyncStatu
     super::run_blocking_command(move || git_sync_use_cases(app)?.status()).await
 }
 
+/// Cheap snapshot of the in-flight pull/push transfer progress, for UI polling.
+#[tauri::command]
+pub(super) fn get_git_sync_progress() -> type_core::GitTransferProgress {
+    type_core::git_transfer_progress_snapshot()
+}
+
 #[tauri::command]
 pub(super) async fn get_git_history(
     app: tauri::AppHandle,

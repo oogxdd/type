@@ -71,6 +71,16 @@ export type PairedDeviceInfo = {
   added_ms: number;
 };
 
+export type GitTransferProgressPhase = "idle" | "receiving" | "indexing" | "pushing";
+
+export type GitTransferProgress = {
+  phase: GitTransferProgressPhase;
+  objects_done: number;
+  objects_total: number;
+  bytes: number;
+  remote_text: string;
+};
+
 export type DiscoveredServer = {
   name: string;
   host: string;

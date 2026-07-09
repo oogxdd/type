@@ -400,6 +400,14 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       return JSON.stringify(gitStatus());
     },
     gitPull: async () => JSON.stringify(gitStatus()),
+    getGitSyncProgress: () =>
+      JSON.stringify({
+        phase: "idle",
+        objects_done: 0,
+        objects_total: 0,
+        bytes: 0,
+        remote_text: "",
+      }),
     gitPush: async (argsJson) => {
       const args = JSON.parse(argsJson) as { message?: string | null };
       counter += 1;

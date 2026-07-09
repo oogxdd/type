@@ -26,6 +26,8 @@ import {
   formatCommitSummaryForApp,
   formatGitCommitStateLabel,
   formatGitCommitTime,
+  formatTransferProgress,
+  transferProgressFraction,
 } from "@typenotes/shared/format";
 import { parseSyncDeepLink, type SyncDeepLinkParams } from "@typenotes/shared/sync-link";
 
@@ -141,6 +143,8 @@ export const SyncScreen = () => {
             ? "Syncing..."
             : "Sync now";
   const status = sync.status;
+  const transferLabel = formatTransferProgress(sync.progress);
+  const transferFraction = transferProgressFraction(sync.progress);
   // A saved remote counts as connected even when the repo's origin is missing
   // (e.g. an earlier connect attempt failed halfway): pull/push re-apply the
   // saved connection via ensureSavedRemote, so the buttons must stay usable —
@@ -233,6 +237,25 @@ export const SyncScreen = () => {
           onPress={() => void sync.syncNow().catch(() => {})}
           disabled={busy || !connected}
         />
+        {busy && transferLabel ? (
+          <View style={styles.progressBlock}>
+            <View style={[styles.progressTrack, { backgroundColor: theme.colors.border }]}>
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    backgroundColor: theme.colors.accent,
+                    width: `${Math.round((transferFraction ?? 1) * 100)}%`,
+                    opacity: transferFraction === null ? 0.35 : 1,
+                  },
+                ]}
+              />
+            </View>
+            <Text style={[styles.progressLabel, { color: theme.colors.secondaryText }]}>
+              {transferLabel}
+            </Text>
+          </View>
+        ) : null}
         <View style={styles.buttonRow}>
           <View style={styles.buttonGrow}>
             <Button title="Pull only" kind="secondary" onPress={() => void sync.pull().catch(() => {})} disabled={busy || !connected} />
@@ -385,6 +408,10 @@ const styles = StyleSheet.create({
   statusLabel: { fontSize: 13 },
   statusValue: { fontSize: 13, fontWeight: "500", flexShrink: 1 },
   buttonRow: { flexDirection: "row", gap: 10 },
+  progressBlock: { gap: 4 },
+  progressTrack: { height: 4, borderRadius: 2, overflow: "hidden" },
+  progressFill: { height: 4, borderRadius: 2 },
+  progressLabel: { fontSize: 12 },
   buttonGrow: { flex: 1 },
   sshKey: { fontSize: 12, fontFamily: "Courier" },
   commit: { paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, gap: 2 },

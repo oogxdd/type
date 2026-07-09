@@ -404,6 +404,14 @@ fn remote_push(
         }
         Ok(())
     });
+    callbacks.push_transfer_progress(|current, total, bytes| {
+        update_transfer_progress(|progress| {
+            progress.phase = "pushing".to_string();
+            progress.objects_done = current as u32;
+            progress.objects_total = total as u32;
+            progress.bytes = bytes as u64;
+        });
+    });
     let mut push_options = PushOptions::new();
     push_options.remote_callbacks(callbacks);
     let mut remote = repo.find_remote("origin").map_err(map_git_error)?;
@@ -424,16 +432,22 @@ fn remote_push(
             None,
         )
         .map_err(map_git_error)?;
-    remote
-        .push(
-            &[&format!("refs/heads/{0}:refs/heads/{0}", branch)],
-            Some(&mut push_options),
-        )
-        .map_err(|error| {
-            let message = map_git_error(error);
-            eprintln!("[git] push failed: {message}");
-            message
-        })?;
+    update_transfer_progress(|progress| {
+        *progress = GitTransferProgress {
+            phase: "pushing".to_string(),
+            ..GitTransferProgress::default()
+        };
+    });
+    let push_result = remote.push(
+        &[&format!("refs/heads/{0}:refs/heads/{0}", branch)],
+        Some(&mut push_options),
+    );
+    reset_transfer_progress();
+    push_result.map_err(|error| {
+        let message = map_git_error(error);
+        eprintln!("[git] push failed: {message}");
+        message
+    })?;
     eprintln!("[git] push complete");
     let mut local = repo
         .find_branch(branch, git2::BranchType::Local)
@@ -1235,6 +1249,53 @@ fn is_local_hostname(hostname: &str) -> bool {
     is_lan_host(&normalized) || normalized.ends_with(".local")
 }
 
+// ── Transfer progress ──────────────────────────────────────────────────────────
+
+/// Live progress of the current fetch/push, published for UI polling (the
+/// same snapshot-poll pattern the Apple Notes importer uses — no events).
+#[derive(Serialize, Clone, Default)]
+pub struct GitTransferProgress {
+    /// "idle" | "receiving" | "indexing" | "pushing"
+    pub phase: String,
+    pub objects_done: u32,
+    pub objects_total: u32,
+    pub bytes: u64,
+    /// Latest textual progress line reported by the remote, if any.
+    pub remote_text: String,
+}
+
+static TRANSFER_PROGRESS: std::sync::Mutex<Option<GitTransferProgress>> =
+    std::sync::Mutex::new(None);
+
+/// Current transfer progress; `phase == "idle"` when nothing is in flight.
+pub fn git_transfer_progress_snapshot() -> GitTransferProgress {
+    TRANSFER_PROGRESS
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone())
+        .unwrap_or_else(|| GitTransferProgress {
+            phase: "idle".to_string(),
+            ..GitTransferProgress::default()
+        })
+}
+
+fn update_transfer_progress(update: impl FnOnce(&mut GitTransferProgress)) {
+    if let Ok(mut guard) = TRANSFER_PROGRESS.lock() {
+        let mut progress = guard.take().unwrap_or_default();
+        update(&mut progress);
+        *guard = Some(progress);
+    }
+}
+
+fn reset_transfer_progress() {
+    if let Ok(mut guard) = TRANSFER_PROGRESS.lock() {
+        *guard = Some(GitTransferProgress {
+            phase: "idle".to_string(),
+            ..GitTransferProgress::default()
+        });
+    }
+}
+
 // ── Fetch / merge ──────────────────────────────────────────────────────────────
 
 /// Fetch from "origin" and return the annotated commit for the target branch.
@@ -1252,22 +1313,49 @@ pub fn perform_fetch<'a>(
         "[git] fetching '{branch}' from {}",
         redact_remote_url_for_log(remote.url().unwrap_or("<invalid url>"))
     );
-    let callbacks = build_callbacks(
+    let mut callbacks = build_callbacks(
         username,
         password,
         ssh_private_key,
         ssh_public_key,
         trusted_host_key,
     );
+    callbacks.transfer_progress(|stats| {
+        let receiving = stats.received_objects() < stats.total_objects();
+        update_transfer_progress(|progress| {
+            progress.phase = if receiving { "receiving" } else { "indexing" }.to_string();
+            progress.objects_done = if receiving {
+                stats.received_objects()
+            } else {
+                stats.indexed_objects()
+            } as u32;
+            progress.objects_total = stats.total_objects() as u32;
+            progress.bytes = stats.received_bytes() as u64;
+        });
+        true
+    });
+    callbacks.sideband_progress(|line| {
+        let text = String::from_utf8_lossy(line).trim().to_string();
+        if !text.is_empty() {
+            update_transfer_progress(|progress| progress.remote_text = text);
+        }
+        true
+    });
     let mut fetch_options = FetchOptions::new();
     fetch_options.remote_callbacks(callbacks);
-    remote
-        .fetch(&[branch], Some(&mut fetch_options), None)
-        .map_err(|error| {
-            let message = map_git_error(error);
-            eprintln!("[git] fetch failed: {message}");
-            message
-        })?;
+    update_transfer_progress(|progress| {
+        *progress = GitTransferProgress {
+            phase: "receiving".to_string(),
+            ..GitTransferProgress::default()
+        };
+    });
+    let fetch_result = remote.fetch(&[branch], Some(&mut fetch_options), None);
+    reset_transfer_progress();
+    fetch_result.map_err(|error| {
+        let message = map_git_error(error);
+        eprintln!("[git] fetch failed: {message}");
+        message
+    })?;
     eprintln!("[git] fetch complete");
     let fetch_head = repo.find_reference("FETCH_HEAD").map_err(map_git_error)?;
     repo.reference_to_annotated_commit(&fetch_head)

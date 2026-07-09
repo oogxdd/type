@@ -100,6 +100,7 @@ pub(super) fn run() {
             git_sync::get_ssh_public_key,
             git_sync::delete_ssh_key,
             git_sync::get_git_status,
+            git_sync::get_git_sync_progress,
             git_sync::get_git_history,
             git_sync::connect_git_repo,
             git_sync::git_pull,

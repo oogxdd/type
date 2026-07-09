@@ -1,4 +1,5 @@
 import type {
+  GitTransferProgress,
   HandwritingOcrListItem,
   NoteMeta,
   RecordingListItem,
@@ -294,6 +295,49 @@ export const formatCommitSummaryForApp = (summary: string) => {
     return "Synced notes";
   }
   return normalized;
+};
+
+const formatTransferBytes = (bytes: number): string => {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  if (bytes >= 1024) {
+    return `${Math.round(bytes / 1024)} KB`;
+  }
+  return `${bytes} B`;
+};
+
+/** One-line human label for the in-flight git transfer, null when idle. */
+export const formatTransferProgress = (
+  progress: GitTransferProgress | null
+): string | null => {
+  if (!progress) {
+    return null;
+  }
+  const counts =
+    progress.objects_total > 0
+      ? ` ${progress.objects_done}/${progress.objects_total}`
+      : "";
+  switch (progress.phase) {
+    case "receiving":
+      return `Receiving${counts} · ${formatTransferBytes(progress.bytes)}`;
+    case "indexing":
+      return `Processing${counts}`;
+    case "pushing":
+      return `Sending${counts} · ${formatTransferBytes(progress.bytes)}`;
+    default:
+      return progress.remote_text || null;
+  }
+};
+
+/** 0..1 fraction for a determinate progress bar, null when unknown. */
+export const transferProgressFraction = (
+  progress: GitTransferProgress | null
+): number | null => {
+  if (!progress || progress.objects_total <= 0) {
+    return null;
+  }
+  return Math.min(1, progress.objects_done / progress.objects_total);
 };
 
 export const getSyncHint = (error: string | null): string | null => {

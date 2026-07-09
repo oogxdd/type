@@ -39,6 +39,14 @@ pub async fn get_git_status() -> Result<String, CoreError> {
     run_blocking(|| to_json(&git_sync_use_cases()?.status()?)).await
 }
 
+/// Live transfer progress of the current pull/push as JSON
+/// (`GitTransferProgress`; `phase == "idle"` when nothing is in flight).
+/// Cheap snapshot read — poll it while a sync action is running.
+#[uniffi::export]
+pub fn get_git_sync_progress() -> Result<String, CoreError> {
+    to_json(&type_core::git_transfer_progress_snapshot()).map_err(CoreError::from)
+}
+
 /// `args_json`: optional `GitHistoryArgs`. Returns JSON `Vec<GitCommitHistoryEntry>`.
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn get_git_history(args_json: Option<String>) -> Result<String, CoreError> {

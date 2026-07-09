@@ -37,31 +37,23 @@ export function LocalSyncServerCard() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const ensureStarted = useCallback(async () => {
-    setBusy(true);
-    setError(null);
+  // Opening the settings page only *reads* the server status. Starting is an
+  // explicit user action — auto-starting opened a network port (and mDNS
+  // broadcast) as a side effect of merely looking at the settings.
+  const refresh = useCallback(async () => {
     try {
       const current = await gitApi.getLocalSyncServerStatus();
       console.log(`[local-sync:ui] status: ${statusForLog(current)}`);
-      if (!current.supported || !current.git_available || current.running) {
-        setStatus(current);
-        return;
-      }
-      console.log("[local-sync:ui] auto-starting local sync server");
-      const started = await gitApi.startLocalSyncServer();
-      console.log(`[local-sync:ui] auto-started: ${statusForLog(started)}`);
-      setStatus(started);
+      setStatus(current);
     } catch (err) {
-      console.log(`[local-sync:ui] status/start failed: ${getErrorMessage(err)}`);
+      console.log(`[local-sync:ui] status failed: ${getErrorMessage(err)}`);
       setError(getErrorMessage(err));
-    } finally {
-      setBusy(false);
     }
   }, []);
 
   useEffect(() => {
-    void ensureStarted();
-  }, [ensureStarted]);
+    void refresh();
+  }, [refresh]);
 
   // While the server runs, poll the status: pairing rotates the token (the QR
   // must re-render with the live one) and newly paired devices should show up

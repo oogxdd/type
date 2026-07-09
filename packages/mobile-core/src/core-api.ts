@@ -16,6 +16,7 @@ import type {
   GitPushArgs,
   GitSyncArgs,
   GitSyncStatus,
+  GitTransferProgress,
   NoteMeta,
   NotePreviewEntry,
   ProfilesBackupArchive,
@@ -178,6 +179,28 @@ export const gitPull = async (args: GitSyncArgs = {}): Promise<GitSyncStatus> =>
 
 export const gitPush = async (args: GitPushArgs = {}): Promise<GitSyncStatus> =>
   parse(await getRawCore().gitPush(JSON.stringify(args)));
+
+const idleTransferProgress: GitTransferProgress = {
+  phase: "idle",
+  objects_done: 0,
+  objects_total: 0,
+  bytes: 0,
+  remote_text: "",
+};
+
+/** Poll while a pull/push runs. Feature-detected: a native module built
+ * before this function exists just reports idle instead of crashing. */
+export const getGitSyncProgress = (): GitTransferProgress => {
+  const raw = getRawCore();
+  if (typeof raw.getGitSyncProgress !== "function") {
+    return idleTransferProgress;
+  }
+  try {
+    return parse(raw.getGitSyncProgress());
+  } catch {
+    return idleTransferProgress;
+  }
+};
 
 // ── Recordings ─────────────────────────────────────────────────────────────────
 

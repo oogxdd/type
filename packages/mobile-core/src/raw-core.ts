@@ -58,6 +58,10 @@ export interface RawCore {
   connectGitRepo(argsJson: string): Promise<string>;
   gitPull(argsJson: string): Promise<string>;
   gitPush(argsJson: string): Promise<string>;
+  /** Snapshot of the in-flight pull/push transfer progress (sync read).
+   * Optional: absent in native modules generated before it existed —
+   * `core-api` feature-detects and reports idle instead. */
+  getGitSyncProgress?(): string;
 
   // ── Recordings ──
   saveAudioRecording(argsJson: string): Promise<string>;
