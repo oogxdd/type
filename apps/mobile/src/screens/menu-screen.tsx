@@ -21,6 +21,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import type { NotePreview } from "@typenotes/shared/format";
+import type { FolderNode } from "@typenotes/shared/types";
 
 import {
   browsableFolders,
@@ -38,15 +40,46 @@ import { NoteListRow } from "./feed-screen";
 
 type MenuTab = "feed" | "folders";
 
-export const MenuScreen = () => {
+type MenuData = {
+  tree: FolderNode | null;
+  previews: Map<string, NotePreview>;
+  lastSyncedMs: number | null;
+};
+
+const readMenuData = (): MenuData => ({
+  tree: useNotesStore.getState().tree,
+  previews: useNotesStore.getState().previews,
+  lastSyncedMs: useSyncStore.getState().history[0]?.authored_ms ?? null,
+});
+
+export const MenuScreen = ({ active = true }: { active?: boolean }) => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [tab, setTab] = useState<MenuTab>("feed");
 
-  const tree = useNotesStore((s) => s.tree);
-  const previews = useNotesStore((s) => s.previews);
+  // Frozen while off-screen: filing a page on capture refreshes the notes
+  // store, and direct store hooks would redraw these (hidden) lists on every
+  // one. Subscriptions live only while the page is at least partially
+  // visible; thawing does one catch-up read. The pager engages the menu the
+  // moment a drag starts revealing it (home-pager.tsx), so the catch-up
+  // happens during the swipe, not after it settles.
+  const [data, setData] = useState(readMenuData);
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+    const update = () => setData(readMenuData());
+    update();
+    const unsubscribeNotes = useNotesStore.subscribe(update);
+    const unsubscribeSync = useSyncStore.subscribe(update);
+    return () => {
+      unsubscribeNotes();
+      unsubscribeSync();
+    };
+  }, [active]);
+  const { tree, previews, lastSyncedMs } = data;
 
   const openScreen = <Screen extends keyof RootStackParamList>(
     screen: Screen,
@@ -54,8 +87,6 @@ export const MenuScreen = () => {
   ) => {
     navigation.dispatch(CommonActions.navigate({ name: screen, params }));
   };
-
-  const lastSyncedMs = useSyncStore((s) => s.history[0]?.authored_ms ?? null);
 
   // All three pager pages mount in the app's first React commit, so building
   // the note/folder lists here would sit on the first-paint path. Render an
