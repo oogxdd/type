@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "66cc6b8a173e",
+  "strategy": "manual-commit",
+  "branch": "capture-swipe",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/desktop/src-tauri/src/commands/git_sync.rs",
+    "apps/desktop/src-tauri/src/commands/mod.rs",
+    "apps/desktop/src/features/sync/components/local-sync-server-card.tsx",
+    "apps/mobile/src/screens/sync-screen.tsx",
+    "apps/mobile/src/state/sync-store.ts",
+    "crates/type-core/src/adapters/git/mod.rs",
+    "crates/type-ffi/src/git_sync.rs",
+    "packages/mobile-core/src/core-api.ts",
+    "packages/mobile-core/src/mock-core.ts",
+    "packages/mobile-core/src/raw-core.ts",
+    "packages/shared/src/format.ts",
+    "packages/shared/src/types.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/66/cc6b8a173e/0/metadata.json",
+      "transcript": "/66/cc6b8a173e/0/full.jsonl",
+      "context": "",
+      "content_hash": "/66/cc6b8a173e/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
