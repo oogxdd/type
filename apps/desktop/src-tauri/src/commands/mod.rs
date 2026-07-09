@@ -30,6 +30,16 @@ pub(super) fn run() {
         .setup(|_app| {
             let app_handle = _app.handle();
             type_core::ensure_security_runtime_initialized_for_setup(&crate::app_env(app_handle)?)?;
+            // A phone push lands in the notes working tree behind the
+            // frontend's back — bridge the core's notification into a Tauri
+            // event so the notes tree refreshes with the incoming notes.
+            {
+                use tauri::Emitter;
+                let push_handle = app_handle.clone();
+                type_core::set_local_sync_push_listener(Box::new(move || {
+                    let _ = push_handle.emit("local-sync-push-received", ());
+                }));
+            }
             if let Err(error) = crate::sync_recordings_asset_scope(app_handle) {
                 eprintln!(
                     "[recordings] failed to set initial asset-protocol scope: {}",

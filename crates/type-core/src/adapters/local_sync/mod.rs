@@ -109,6 +109,29 @@ struct MdnsAdvert {
 #[cfg(desktop)]
 static DAEMON: Mutex<Option<RunningDaemon>> = Mutex::new(None);
 
+/// Called after the embedded server accepts a push from a phone. A push lands
+/// files in the live working tree completely outside the frontend's view, so
+/// the shell registers a listener here (a Tauri event emitter) and refreshes
+/// the notes UI — otherwise incoming notes stay invisible until app restart.
+#[cfg(desktop)]
+static PUSH_LISTENER: Mutex<Option<Box<dyn Fn() + Send + Sync>>> = Mutex::new(None);
+
+#[cfg(desktop)]
+pub fn set_local_sync_push_listener(listener: Box<dyn Fn() + Send + Sync>) {
+    if let Ok(mut guard) = PUSH_LISTENER.lock() {
+        *guard = Some(listener);
+    }
+}
+
+#[cfg(desktop)]
+fn notify_local_sync_push_received() {
+    if let Ok(guard) = PUSH_LISTENER.lock() {
+        if let Some(listener) = guard.as_ref() {
+            listener();
+        }
+    }
+}
+
 /// Core local-sync gateway. Child-process and mDNS state stay in this
 /// outer adapter rather than leaking into commands or application services.
 pub struct LocalSyncAdapter {

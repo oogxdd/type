@@ -339,7 +339,7 @@ impl Handler for ClientHandler {
         if let Some(stdin) = child.stdin.take() {
             self.stdins.insert(channel, stdin);
         }
-        pump_child_io(session, channel, child);
+        pump_child_io(session, channel, child, service);
         Ok(())
     }
 
@@ -378,8 +378,9 @@ impl Handler for ClientHandler {
 }
 
 /// Forward the git child's stdout/stderr to the SSH channel, then report its
-/// exit status and close the channel.
-fn pump_child_io(session: &mut Session, channel: ChannelId, mut child: Child) {
+/// exit status and close the channel. A completed receive-pack changed the
+/// live working tree, so the desktop UI is notified to refresh.
+fn pump_child_io(session: &mut Session, channel: ChannelId, mut child: Child, service: &'static str) {
     let handle = session.handle();
     tokio::spawn(async move {
         let stdout = child.stdout.take();
@@ -435,6 +436,10 @@ fn pump_child_io(session: &mut Session, channel: ChannelId, mut child: Child) {
         let _ = handle.exit_status_request(channel, code).await;
         let _ = handle.eof(channel).await;
         let _ = handle.close(channel).await;
+        if service == "receive-pack" && code == 0 {
+            eprintln!("[local-sync] push received — notifying the app to refresh notes");
+            super::notify_local_sync_push_received();
+        }
     });
 }
 

@@ -164,7 +164,8 @@ fn push_normalized_profile(
 
     let root = PathBuf::from(profile.notes_root.trim());
     if !root.exists() {
-        fs::create_dir_all(&root).map_err(|err| err.to_string())?;
+        fs::create_dir_all(&root)
+            .map_err(|err| format!("Failed to create notes root '{}': {err}", root.display()))?;
     }
     ensure_system_folders(&root)?;
 

@@ -1,5 +1,13 @@
 // Provider hub for the notes navigation slice.
-import { createContext, useContext, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
+import { listen } from "@tauri-apps/api/event";
 import { useShallow } from "zustand/react/shallow";
 
 import { useSelection } from "@/app/state/selection-store";
@@ -158,6 +166,18 @@ export function NotesTreeProvider({ children }: { children: ReactNode }) {
     renameValue,
     setRenameValue,
   });
+
+  // A phone pushing over local sync changes the notes on disk behind the
+  // frontend's back; the backend emits this event after each accepted push.
+  useEffect(() => {
+    const unlisten = listen("local-sync-push-received", () => {
+      console.log("[notes] local sync push received — refreshing tree");
+      void refreshTree();
+    });
+    return () => {
+      void unlisten.then((dispose) => dispose());
+    };
+  }, [refreshTree]);
 
   return (
     <NotesTreeContext.Provider

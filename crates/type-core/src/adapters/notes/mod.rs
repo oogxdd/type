@@ -72,7 +72,8 @@ pub fn notes_root(app: &AppEnv) -> Result<PathBuf, String> {
         Err(_) => crate::legacy_notes_root(app)?,
     };
     if !root.exists() {
-        fs::create_dir_all(&root).map_err(|err| err.to_string())?;
+        fs::create_dir_all(&root)
+            .map_err(|err| format!("Failed to create notes root '{}': {err}", root.display()))?;
     }
     Ok(root)
 }

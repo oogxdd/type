@@ -384,13 +384,26 @@ fn remote_push(
     ssh_public_key: Option<PathBuf>,
     trusted_host_key: Option<TrustedSshHostKey>,
 ) -> Result<(), String> {
-    let callbacks = build_callbacks(
+    let mut callbacks = build_callbacks(
         username,
         password,
         ssh_private_key.clone(),
         ssh_public_key.clone(),
         trusted_host_key.clone(),
     );
+    // libgit2's push returns Ok even when the server refuses the ref update
+    // (e.g. receive.denyCurrentBranch with a dirty desktop tree) unless the
+    // per-ref status is checked here — without this a rejected push looks
+    // like a successful sync.
+    callbacks.push_update_reference(|refname, status| {
+        if let Some(message) = status {
+            eprintln!("[git] push rejected for {refname}: {message}");
+            return Err(git2::Error::from_str(&format!(
+                "The server refused the push ({message}). If the desktop notes changed at the same time, sync once from the desktop and try again."
+            )));
+        }
+        Ok(())
+    });
     let mut push_options = PushOptions::new();
     push_options.remote_callbacks(callbacks);
     let mut remote = repo.find_remote("origin").map_err(map_git_error)?;
