@@ -1,0 +1,52 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "c226b56d889d",
+  "session_id": "019f3901-65f2-7a31-9ef7-318bef8f8d70",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-09T10:58:50.679485Z",
+  "branch": "capture-swipe",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "ios/typemonorepo/Supporting/Expo.plist",
+    "app.json",
+    "apps/mobile/DEVICE_DEVELOPMENT.md",
+    "ios/.gitignore",
+    "ios/typemonorepo.xcworkspace/contents.xcworkspacedata",
+    "ios/typemonorepo/Images.xcassets/AppIcon.appiconset/Contents.json",
+    "ios/typemonorepo/Info.plist",
+    "ios/typemonorepo/typemonorepo-Bridging-Header.h",
+    "ios/typemonorepo.xcodeproj/xcshareddata/xcschemes/typemonorepo.xcscheme",
+    "ios/typemonorepo/SplashScreen.storyboard",
+    "package.json",
+    "ios/.xcode.env",
+    "ios/Podfile",
+    "ios/Podfile.lock",
+    "ios/typemonorepo.xcodeproj/project.pbxproj",
+    "ios/typemonorepo/Images.xcassets/Contents.json",
+    ".gitignore",
+    "apps/mobile/app.config.js",
+    "ios/Podfile.properties.json",
+    "ios/typemonorepo/AppDelegate.swift",
+    "ios/typemonorepo/PrivacyInfo.xcprivacy"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "0e74cdb04e6e",
+  "checkpoint_transcript_start": 381,
+  "transcript_lines_at_start": 381,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-09T10:58:50.301727Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 131,
+    "human_removed": 3150,
+    "total_committed": 154,
+    "agent_percentage": 0
+  }
+}
