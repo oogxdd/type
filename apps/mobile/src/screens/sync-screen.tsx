@@ -31,6 +31,7 @@ import {
 } from "@typenotes/shared/format";
 import { parseSyncDeepLink, type SyncDeepLinkParams } from "@typenotes/shared/sync-link";
 
+import { useClearInstantParam } from "../navigation";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
@@ -46,6 +47,10 @@ const SETUP_STEPS = [
 export const SyncScreen = () => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  // The capture page's swipe may have pushed this screen with animation:none
+  // (its preview already played the transition) — flip the flag back once
+  // the push settles so the later pop / back swipe animates natively.
+  useClearInstantParam();
   const sync = useSyncStore();
   const settingsStore = useSettingsStore();
   const profile = activeProfile(settingsStore.snapshot);

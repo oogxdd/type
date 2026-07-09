@@ -309,7 +309,7 @@ export const MenuScreen = () => {
             style={[
               styles.previewButton,
               {
-                left: 16,
+                left: 20,
                 top: insets.top + 8,
                 backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
@@ -323,8 +323,8 @@ export const MenuScreen = () => {
               styles.previewButton,
               styles.previewMic,
               {
-                right: 20,
-                bottom: insets.bottom + 32,
+                right: 32,
+                bottom: insets.bottom + 36,
                 backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
               },

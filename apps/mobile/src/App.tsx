@@ -96,7 +96,17 @@ const RootStack = () => {
           title: "",
         }}
       />
-      <Stack.Screen name="Sync" component={SyncScreen} options={{ title: "Sync" }} />
+      <Stack.Screen
+        name="Sync"
+        component={SyncScreen}
+        options={({ route }) => ({
+          title: "Sync",
+          // `instant` = the capture page's leftward swipe already played the
+          // push transition with its preview (capture-screen.tsx); same
+          // mechanism as the menu → capture push above.
+          animation: route.params?.instant ? "none" : "default",
+        })}
+      />
       <Stack.Screen
         name="Settings"
         component={SettingsScreen}
