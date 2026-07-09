@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "dbc52fbd5d1a",
+  "session_id": "019f39ed-4cc1-7232-a0c5-5dca98f1fef1",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-09T11:09:04.59463Z",
+  "branch": "capture-swipe",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/mobile/src/screens/menu-screen.tsx",
+    "apps/mobile/src/screens/sync-screen.tsx",
+    "apps/mobile/src/App.tsx",
+    "apps/mobile/src/navigation.ts",
+    "apps/mobile/src/screens/capture-screen.tsx"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "9db847d55796",
+  "checkpoint_transcript_start": 461,
+  "transcript_lines_at_start": 461,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-09T11:09:04.333913Z",
+    "agent_lines": 187,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 187,
+    "agent_percentage": 100
+  }
+}
