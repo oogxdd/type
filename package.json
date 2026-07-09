@@ -13,6 +13,8 @@
     "mobile:start": "npm run --workspace @typenotes/mobile start",
     "mobile:ios": "npm run --workspace @typenotes/mobile-core codegen:ios && npm run --workspace @typenotes/mobile ios",
     "mobile:ios:watch": "node scripts/watch-mobile-ios.mjs",
+    "mobile:ios:dev:prebuild": "APP_VARIANT=dev npm run --workspace @typenotes/mobile prebuild -- --platform ios --clean",
+    "mobile:ios:dev:device": "npm run --workspace @typenotes/mobile ios -- --device",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present"
   },

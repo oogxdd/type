@@ -46,3 +46,8 @@ packages/mobile-core/*.xcframework/
 
 # Expo CLI cache, prebuild artifacts, device logs
 .expo/
+
+# Root-level Expo prebuild output (stale experiment — dev builds use
+# apps/mobile with APP_VARIANT=dev instead). Anchored to root so it
+# never ignores apps/mobile/ios/.
+/ios/
