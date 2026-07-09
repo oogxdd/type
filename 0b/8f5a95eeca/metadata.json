@@ -3,7 +3,7 @@
   "checkpoint_id": "0b8f5a95eeca",
   "strategy": "manual-commit",
   "branch": "home-pager",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     "apps/mobile/package.json",
     "apps/mobile/src/App.tsx",
@@ -26,6 +26,13 @@
       "transcript": "/0b/8f5a95eeca/1/full.jsonl",
       "context": "",
       "content_hash": "/0b/8f5a95eeca/1/content_hash.txt",
+      "prompt": ""
+    },
+    {
+      "metadata": "/0b/8f5a95eeca/2/metadata.json",
+      "transcript": "/0b/8f5a95eeca/2/full.jsonl",
+      "context": "",
+      "content_hash": "/0b/8f5a95eeca/2/content_hash.txt",
       "prompt": ""
     }
   ],
