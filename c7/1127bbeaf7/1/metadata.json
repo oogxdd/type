@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "c71127bbeaf7",
+  "session_id": "019f39ed-4cc1-7232-a0c5-5dca98f1fef1",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-09T10:56:03.454237Z",
+  "branch": "capture-swipe",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "tsconfig.json",
+    ".gitignore",
+    "apps/mobile/IOS_DEVICE_DX.md",
+    "apps/mobile/ios/Type.xcodeproj/project.pbxproj",
+    "ios/Podfile.lock",
+    "ios/typemonorepo.xcworkspace/contents.xcworkspacedata",
+    "ios/typemonorepo/PrivacyInfo.xcprivacy"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "9db847d55796",
+  "checkpoint_transcript_start": 461,
+  "transcript_lines_at_start": 461,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-09T10:56:03.200658Z",
+    "agent_lines": 7,
+    "human_added": 2413,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 2420,
+    "agent_percentage": 0.2892561983471074
+  }
+}
