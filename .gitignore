@@ -43,3 +43,6 @@ packages/mobile-core/src/NativeTypeCore.ts
 packages/mobile-core/src/index.tsx
 packages/mobile-core/TypeCore.podspec
 packages/mobile-core/*.xcframework/
+
+# Expo CLI cache, prebuild artifacts, device logs
+.expo/
