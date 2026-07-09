@@ -131,6 +131,23 @@ export const CaptureScreen = () => {
       runOnJS(dismissKeyboard)();
     });
 
+  // Conceptually the sync screen sits to the RIGHT of the capture page (the
+  // menu is to the left): a clearly-leftward drag pushes it. Rightward drags
+  // stay with the native back swipe, vertical ones with the page gestures.
+  // The keyboard is dismissed first — the capture input stays mounted (and
+  // focused) beneath the pushed screen and would otherwise keep it up.
+  const openSync = () => {
+    Keyboard.dismiss();
+    navigation.navigate("Sync");
+  };
+  const swipeToSync = Gesture.Pan()
+    .activeOffsetX(-24)
+    .failOffsetX(24)
+    .failOffsetY([-24, 24])
+    .onStart(() => {
+      runOnJS(openSync)();
+    });
+
   const pan = Gesture.Pan()
     // Only claim clearly-upward drags; leave taps and downward scrolling to
     // the text input, and mostly-horizontal drags to the navigator's
@@ -182,7 +199,7 @@ export const CaptureScreen = () => {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      <GestureDetector gesture={Gesture.Race(pan, dismissKeyboardPan)}>
+      <GestureDetector gesture={Gesture.Race(pan, dismissKeyboardPan, swipeToSync)}>
         <Animated.View
           style={[
             styles.page,

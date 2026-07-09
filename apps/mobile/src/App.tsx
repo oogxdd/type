@@ -58,6 +58,10 @@ const RootStack = () => {
         // screens with their own gestures (capture, menu) only claim
         // clearly-vertical or leftward drags.
         fullScreenGestureEnabled: true,
+        // Chevron-only back everywhere: with several entry points per screen
+        // (Sync can be reached from the menu or a capture swipe) the label
+        // would name whatever screen you came from — noise.
+        headerBackButtonDisplayMode: "minimal",
       }}
     >
       <Stack.Screen
@@ -88,9 +92,7 @@ const RootStack = () => {
         name="Editor"
         component={EditorScreen}
         options={{
-          // Bare chrome: chevron-only back (no "Menu" label) and no title —
-          // the note text speaks for itself.
-          headerBackButtonDisplayMode: "minimal",
+          // No title — the note text speaks for itself.
           title: "",
         }}
       />
