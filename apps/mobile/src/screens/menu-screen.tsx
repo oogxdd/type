@@ -14,6 +14,7 @@ import {
   FlatList,
   InteractionManager,
   Pressable,
+  RefreshControl,
   SectionList,
   StyleSheet,
   Text,
@@ -66,6 +67,8 @@ export const MenuScreen = () => {
 
   const tree = useNotesStore((s) => s.tree);
   const previews = useNotesStore((s) => s.previews);
+  const loading = useNotesStore((s) => s.loading);
+  const refresh = useNotesStore((s) => s.refresh);
 
   // 0..1 — how far the capture-page preview has slid in over the menu.
   // Driven on the UI thread by the pan below; at 1 the real Capture screen
@@ -182,6 +185,16 @@ export const MenuScreen = () => {
   const feedSections = groupNoteRowsByDate(feedRows);
   const folders = browsableFolders(findFolder(tree, ""));
 
+  // Pull down on either tab to re-read the tree + previews. Only one list is
+  // mounted at a time, so sharing the control element is safe.
+  const refreshControl = (
+    <RefreshControl
+      refreshing={loading}
+      onRefresh={() => void refresh()}
+      tintColor={theme.colors.secondaryText}
+    />
+  );
+
   return (
     <GestureDetector gesture={swipeToCapture}>
       <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
@@ -211,6 +224,7 @@ export const MenuScreen = () => {
             sections={feedSections}
             keyExtractor={(row) => row.path}
             stickySectionHeadersEnabled
+            refreshControl={refreshControl}
             renderSectionHeader={({ section }) => (
               <View style={[styles.sectionHeader, { backgroundColor: theme.colors.background }]}>
                 <Text style={[styles.sectionHeaderText, { color: theme.colors.secondaryText }]}>
@@ -241,6 +255,7 @@ export const MenuScreen = () => {
             style={styles.list}
             data={folders}
             keyExtractor={(folder) => folder.path}
+            refreshControl={refreshControl}
             renderItem={({ item }) => (
               <Pressable
                 onPress={() => openScreen("Folder", { path: item.path, title: item.name })}

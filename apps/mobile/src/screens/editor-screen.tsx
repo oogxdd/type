@@ -5,6 +5,10 @@
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
+import Animated, {
+  useAnimatedKeyboard,
+  useAnimatedStyle,
+} from "react-native-reanimated";
 
 import * as core from "@typenotes/mobile-core/core-api";
 import { getErrorMessage } from "@typenotes/shared/errors";
@@ -27,6 +31,14 @@ export const EditorScreen = () => {
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<NoteMeta | null>(null);
+
+  // Shrink the editor above the keyboard so the caret is never covered
+  // (Apple Notes style) — the multiline input keeps the cursor in view within
+  // its own bounds once those bounds sit above the keyboard.
+  const keyboard = useAnimatedKeyboard();
+  const rootStyle = useAnimatedStyle(() => ({
+    paddingBottom: keyboard.height.value,
+  }));
 
   const latest = useRef({ text: "", dirty: false });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -105,7 +117,7 @@ export const EditorScreen = () => {
   const isRecording = isRecordingNoteType(meta?.note_type, audioPath);
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
+    <Animated.View style={[styles.root, { backgroundColor: theme.colors.background }, rootStyle]}>
       {isRecording && audioPath ? <RecordingAudioPlayer audioPath={audioPath} /> : null}
       <TextInput
         style={[
@@ -119,7 +131,7 @@ export const EditorScreen = () => {
         textAlignVertical="top"
         keyboardAppearance={theme.dark ? "dark" : "light"}
       />
-    </View>
+    </Animated.View>
   );
 };
 
