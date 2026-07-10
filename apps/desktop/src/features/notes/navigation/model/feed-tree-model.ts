@@ -1,4 +1,4 @@
-import type { NoteEntry, VisibleNavigationItem } from "@typenotes/shared/types";
+import type { NoteEntry } from "@typenotes/shared/types";
 import type { NotePreview } from "@typenotes/shared/format";
 
 // Feed is not the folder tree. It is a synthetic hierarchy built from note
@@ -653,43 +653,6 @@ export function buildFeedTree(
   };
   treeData.forEach(walk);
   return { treeData, nodeById };
-}
-
-export function buildVisibleFeedNavigationItems(
-  treeData: FeedTreeNode[],
-  expanded: Set<string>,
-  shouldNestNotesInNavigation: boolean
-): VisibleNavigationItem[] {
-  const items: VisibleNavigationItem[] = [];
-
-  const walk = (nodes: FeedTreeNode[], parentId: string | null) => {
-    nodes.forEach((node) => {
-      items.push({
-        type: "folder",
-        id: node.id,
-        parentId,
-      });
-
-      const noteRows = shouldNestNotesInNavigation ? node.notes : [];
-      const hasNestedItems = node.children.length > 0 || noteRows.length > 0;
-      if (!hasNestedItems || !expanded.has(node.id)) {
-        return;
-      }
-
-      noteRows.forEach((note) => {
-        items.push({
-          type: "note",
-          id: note.path,
-          parentId: node.id,
-        });
-      });
-
-      walk(node.children, node.id);
-    });
-  };
-
-  walk(treeData, null);
-  return items;
 }
 
 export function collectFeedNotes(
