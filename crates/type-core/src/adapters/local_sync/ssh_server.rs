@@ -1099,6 +1099,9 @@ mod tests {
         );
 
         server.stop();
+        let rebound = std::net::TcpListener::bind(("127.0.0.1", port))
+            .expect("Git server must release the request-daemon port synchronously");
+        drop(rebound);
         let _ = fs::remove_dir_all(&base);
     }
 }

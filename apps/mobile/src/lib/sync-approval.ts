@@ -34,6 +34,7 @@ export const runWithDesktopApproval = async <T>(
     ((milliseconds: number) =>
       new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
   const deadline = now() + (options.timeoutMs ?? 2 * 60 * 1000);
+  let waitingForDesktop = false;
 
   while (true) {
     try {
@@ -43,7 +44,9 @@ export const runWithDesktopApproval = async <T>(
       if (approval === "declined") {
         throw new Error("The sync request was declined on the desktop.");
       }
-      if (approval !== "required") {
+      if (approval === "required") {
+        waitingForDesktop = true;
+      } else if (!waitingForDesktop) {
         throw error;
       }
       if (now() >= deadline) {

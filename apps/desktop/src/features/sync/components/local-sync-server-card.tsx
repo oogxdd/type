@@ -29,7 +29,7 @@ const redactRemoteForLog = (remote: string | null | undefined): string => {
 };
 
 const statusForLog = (status: LocalSyncServerStatus): string =>
-  `running=${status.running} window=${status.sync_window_open} remaining=${status.sync_window_seconds_remaining}s supported=${status.supported} git=${status.git_available} host=${
+  `running=${status.running} request=${status.request_listener_running} window=${status.sync_window_open} remaining=${status.sync_window_seconds_remaining}s supported=${status.supported} git=${status.git_available} host=${
     status.host ?? "<none>"
   } branch=${status.branch ?? "<none>"} ssh=${redactRemoteForLog(status.ssh_url)} paired=${
     status.paired_devices.length
@@ -149,7 +149,7 @@ export function LocalSyncServerCard() {
   return (
     <SettingsCard
       title="Local network server"
-      description="Host this computer's notes over encrypted local SSH so your phone can sync without an internet remote — same Wi-Fi, or your phone's personal hotspot."
+      description="Let paired phones request a temporary encrypted sync window on the same Wi-Fi or personal hotspot."
     >
       {status && !status.git_available ? (
         <SettingsErrorText>
@@ -198,15 +198,17 @@ export function LocalSyncServerCard() {
           type="button"
           variant={running ? "destructive" : "default"}
           onClick={() => void toggleServer()}
-          disabled={busy || (status ? !status.git_available : true)}
+          disabled={busy || (!running && (status ? !status.git_available : true))}
         >
           {busy
             ? running
               ? "Stopping..."
               : "Starting..."
             : running
-              ? "Stop server"
-              : "Start server"}
+              ? status?.request_listener_running
+                ? "Stop listener"
+                : "Stop server"
+              : "Start pairing"}
         </Button>
         <span className="text-xs text-muted-foreground">
           {busy
@@ -219,7 +221,7 @@ export function LocalSyncServerCard() {
                     1,
                     Math.ceil((status.sync_window_seconds_remaining ?? 0) / 60)
                   )} min idle`
-                : "Listening for paired-device requests"
+                : "Request listener active · Git server stopped"
               : "Stopped"}
         </span>
       </SettingsActionRow>
@@ -231,14 +233,20 @@ export function LocalSyncServerCard() {
             type="button"
             variant="outline"
             onClick={() => void toggleWindow()}
-            disabled={busy}
+            disabled={busy || !status?.git_available}
           >
-            {status?.sync_window_open ? "Close sync now" : "Open sync window"}
+            {status?.sync_window_open
+              ? "Close sync now"
+              : status?.paired_devices.length
+                ? "Open sync window"
+                : "Pair a phone"}
           </Button>
           <span className="text-xs text-muted-foreground">
             {status?.sync_window_open
               ? "Fetch and push are allowed from paired phones."
-              : `Opens for ${status?.idle_timeout_minutes ?? 10} minutes.`}
+              : status?.paired_devices.length
+                ? `Starts Git for ${status?.idle_timeout_minutes ?? 10} minutes idle.`
+                : "Starts Git temporarily and shows the first-time QR code."}
           </span>
         </SettingsActionRow>
       ) : null}
@@ -300,32 +308,34 @@ export function LocalSyncServerCard() {
             ))}
           </div>
 
-          <div className="space-y-2">
-            <SettingsHelpText>Or set it up by hand:</SettingsHelpText>
-            {status?.ssh_url ? (
-              <UrlRow
-                label="Pairing SSH URL"
-                value={status.ssh_url}
-                copied={copied}
-                onCopy={copy}
-              />
-            ) : null}
-            <ol className="list-decimal space-y-1 pl-5 text-xs leading-relaxed text-muted-foreground">
-              <li>
-                On the phone: menu → <strong>Sync</strong> → <strong>Scan QR code</strong>, point at
-                the code above, then tap <strong>Sync now</strong>.
-              </li>
-              <li>
-                No camera? Sync → Advanced: paste the Remote URL, set Branch to{" "}
-                <code>{status?.branch ?? "main"}</code>, <strong>Save &amp; connect</strong>, then{" "}
-                <strong>Sync now</strong>.
-              </li>
-              <li>
-                This URL is served by Type itself over SSH. macOS Remote Login and{" "}
-                <code>authorized_keys</code> are not required.
-              </li>
-            </ol>
-          </div>
+          {deepLink ? (
+            <div className="space-y-2">
+              <SettingsHelpText>Or set it up by hand:</SettingsHelpText>
+              {status?.ssh_url ? (
+                <UrlRow
+                  label="Pairing SSH URL"
+                  value={status.ssh_url}
+                  copied={copied}
+                  onCopy={copy}
+                />
+              ) : null}
+              <ol className="list-decimal space-y-1 pl-5 text-xs leading-relaxed text-muted-foreground">
+                <li>
+                  On the phone: menu → <strong>Sync</strong> → <strong>Scan QR code</strong>, point
+                  at the code above, then tap <strong>Sync now</strong>.
+                </li>
+                <li>
+                  No camera? Sync → Advanced: paste the Remote URL, set Branch to{" "}
+                  <code>{status?.branch ?? "main"}</code>, <strong>Save &amp; connect</strong>, then{" "}
+                  <strong>Sync now</strong>.
+                </li>
+                <li>
+                  This URL is served by Type itself over SSH. macOS Remote Login and{" "}
+                  <code>authorized_keys</code> are not required.
+                </li>
+              </ol>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </SettingsCard>

@@ -28,15 +28,18 @@ describe("desktop sync approval", () => {
         if (attempts === 1) {
           throw new Error("TYPE_SYNC_APPROVAL_REQUIRED");
         }
+        if (attempts === 2) {
+          throw new Error("connection refused while desktop changes servers");
+        }
         return "synced";
       },
       { onWaiting: waiting, sleep }
     );
 
     expect(result).toBe("synced");
-    expect(attempts).toBe(2);
-    expect(waiting).toHaveBeenCalledOnce();
-    expect(sleep).toHaveBeenCalledWith(1500);
+    expect(attempts).toBe(3);
+    expect(waiting).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(2);
   });
 
   it("stops retrying when the desktop declines", async () => {

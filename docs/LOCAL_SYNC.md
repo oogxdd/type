@@ -19,12 +19,16 @@ The old local `git://` daemon flow has been replaced by embedded SSH. The local
 flow no longer requires macOS Remote Login, `sshd`, or editing
 `~/.ssh/authorized_keys`.
 
-## Desktop Server
+## Desktop daemons
 
-The server starts only after an explicit action. **Start server** opens a sync
-window immediately. Enabling **Ask before syncing** starts it automatically
-while the desktop app is open and unlocked, but in request-only mode. The
-server:
+Local sync uses two mutually exclusive processes on the same port:
+
+- The lightweight **request daemon** starts while the desktop app is open and
+  unlocked when **Ask before syncing** is enabled. It authenticates paired keys,
+  emits approval requests, and advertises mDNS. It has no Git binary or repo
+  handle and cannot serve notes.
+- The temporary **Git server** replaces the request daemon after desktop
+  approval, or when the user opens a pairing window. It:
 
 1. Ensures the active notes root is a Git repo.
 2. Sets `receive.denyCurrentBranch=updateInstead`, so phone pushes update the
@@ -34,10 +38,10 @@ server:
 5. Executes the desktop `git` binary as `git-upload-pack` or
    `git-receive-pack` for each SSH exec request.
 
-Starting the server never commits anything (so the settings page's auto-start
-has no side effects). Instead, pending desktop edits are committed right before
-each serve — a phone pull always sees the desktop's latest notes, and a phone
-push never meets a dirty working tree.
+Starting the request daemon does not initialize or inspect the repository.
+Starting the Git server never commits anything. Instead, pending desktop edits
+are committed right before each serve — a phone pull always sees the desktop's
+latest notes, and a phone push never meets a dirty working tree.
 
 The server also advertises itself over mDNS (`_typenotes-sync._tcp`) so paired
 phones can find it when its LAN address changes. The advertised URL deliberately
@@ -45,13 +49,16 @@ phones can find it when its LAN address changes. The advertised URL deliberately
 only inside the QR code. The host-key fingerprint is advertised so the phone
 can match a discovered listener to its existing pinned pairing.
 
-Port `9418` is intentionally retained from the previous local-sync design so
-existing firewall prompts/rules still make sense, but the protocol on that port
-is now SSH, not `git://`.
+Both daemons use the same Ed25519 host identity and take turns owning port
+`9418`. The request daemon releases the socket before the Git server binds it,
+so the phone keeps retrying its saved URL through the handoff. Port `9418` is
+intentionally retained from the previous local-sync design so existing firewall
+prompts/rules still make sense, but the protocol is SSH, not `git://`.
 
 ## Pairing
 
-The desktop card builds a `type2://sync` QR deep link containing:
+The user clicks **Pair a phone** to open a temporary Git/pairing window. The
+desktop card then builds a `type2://sync` QR deep link containing:
 
 ```
 remote=ssh://pair-<token>@<desktop-ip>:9418/<repo>
@@ -75,22 +82,22 @@ devices.
 
 ## Approval windows
 
-When **Ask before syncing** is enabled, the SSH listener and mDNS advertisement
-remain available, but Git commands are blocked while the sync window is closed.
-Only an already-paired SSH key can create a request. The desktop emits a global
-prompt with the paired device name:
+When **Ask before syncing** is enabled, only the request daemon and mDNS
+advertisement remain available between syncs. Only an already-paired SSH key can
+create a request. The desktop emits a global prompt with the paired device name:
 
 1. The phone starts its normal pull and receives
    `TYPE_SYNC_APPROVAL_REQUIRED` from the request-only listener.
 2. The phone waits and retries instead of showing a transport failure.
-3. Accepting on desktop opens the window; the next retry continues the pull and
-   push automatically. Declining returns `TYPE_SYNC_APPROVAL_DECLINED` and the
-   phone stops retrying.
+3. Accepting stops the request daemon and starts the Git server on the same
+   port; the next retry continues pull and push automatically. A brief connection
+   failure during this handoff is retried. Declining returns
+   `TYPE_SYNC_APPROVAL_DECLINED` and the phone stops retrying.
 
-The window closes after the configured 5, 10, or 15 minutes without a completed
-Git operation. Every successful fetch or push restarts the timer. Closing the
-window leaves only the authenticated request listener running; **Stop server**
-shuts down both SSH and mDNS completely.
+The Git server shuts down after the configured 5, 10, or 15 minutes without a
+completed Git operation. Every successful fetch or push restarts the timer. If
+approval mode is enabled, the request daemon takes the port back; otherwise
+local sync stops completely. **Stop listener** shuts down SSH and mDNS.
 
 ## Host-Key Verification
 
@@ -134,6 +141,7 @@ migrates them.
 ```
 crates/type-core/src/adapters/local_sync/
   mod.rs          server lifecycle, LAN IP detection, mDNS advertisement
+  request_server.rs paired-key approval requests; no Git/repo access
   ssh_server.rs   russh server, public-key pairing, git upload/receive exec
   devices.rs      desktop host key + paired phone key store
 
