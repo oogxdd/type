@@ -10,6 +10,7 @@ import { ProfilesProvider } from "@/features/profiles/hooks/profiles-context";
 import { RecordingsProvider } from "@/features/recording/hooks/recordings-context";
 import { SecurityProvider } from "@/features/security/hooks/security-context";
 import { GitSyncProvider } from "@/features/sync/hooks/git-sync-context";
+import { LocalSyncLifecycle } from "@/features/sync/components/local-sync-lifecycle";
 import { useBackgroundSave } from "./lifecycle/use-background-save";
 import { AppReadinessGate, AppSecurityGate } from "./readiness";
 
@@ -82,6 +83,7 @@ function UnlockedAppProviders({
 }) {
   return (
     <ProfilesProvider flushSaveRef={flushSaveRef}>
+      <LocalSyncLifecycle />
       <GitSyncProvider>
         <SelectionProvider>
           <EditorProvider>

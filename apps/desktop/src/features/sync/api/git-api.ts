@@ -74,6 +74,21 @@ export const getLocalSyncServerStatus = (): Promise<LocalSyncServerStatus> =>
 export const startLocalSyncServer = (): Promise<LocalSyncServerStatus> =>
   invokeLogged<LocalSyncServerStatus>("start_local_sync_server");
 
+export const startLocalSyncRequestListener = (): Promise<LocalSyncServerStatus> =>
+  invokeLogged<LocalSyncServerStatus>("start_local_sync_request_listener");
+
+export const openLocalSyncWindow = (): Promise<LocalSyncServerStatus> =>
+  invokeLogged<LocalSyncServerStatus>("open_local_sync_window");
+
+export const closeLocalSyncWindow = (): Promise<LocalSyncServerStatus> =>
+  invokeLogged<LocalSyncServerStatus>("close_local_sync_window");
+
+export const approveLocalSyncRequest = (): Promise<LocalSyncServerStatus> =>
+  invokeLogged<LocalSyncServerStatus>("approve_local_sync_request");
+
+export const declineLocalSyncRequest = (): Promise<LocalSyncServerStatus> =>
+  invokeLogged<LocalSyncServerStatus>("decline_local_sync_request");
+
 export const stopLocalSyncServer = (): Promise<LocalSyncServerStatus> =>
   invokeLogged<LocalSyncServerStatus>("stop_local_sync_server");
 

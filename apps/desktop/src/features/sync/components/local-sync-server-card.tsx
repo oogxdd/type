@@ -4,12 +4,16 @@ import * as gitApi from "@/features/sync/api/git-api";
 import { buildSyncDeepLink } from "@typenotes/shared/sync-link";
 import type { LocalSyncServerStatus } from "@typenotes/shared/types";
 import { Button } from "@/shared/ui/button";
+import { Checkbox } from "@/shared/ui/checkbox";
 import { getErrorMessage } from "@typenotes/shared/errors";
+import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import {
   SettingsActionRow,
   SettingsCard,
   SettingsErrorText,
+  SettingsField,
   SettingsHelpText,
+  SettingsSelect,
 } from "@/features/settings/components/settings-ui";
 
 const redactRemoteForLog = (remote: string | null | undefined): string => {
@@ -25,13 +29,14 @@ const redactRemoteForLog = (remote: string | null | undefined): string => {
 };
 
 const statusForLog = (status: LocalSyncServerStatus): string =>
-  `running=${status.running} supported=${status.supported} git=${status.git_available} host=${
+  `running=${status.running} window=${status.sync_window_open} remaining=${status.sync_window_seconds_remaining}s supported=${status.supported} git=${status.git_available} host=${
     status.host ?? "<none>"
   } branch=${status.branch ?? "<none>"} ssh=${redactRemoteForLog(status.ssh_url)} paired=${
     status.paired_devices.length
   } error=${status.error ?? "<none>"}`;
 
 export function LocalSyncServerCard() {
+  const { appConfig, updateAppConfig } = useProfiles();
   const [status, setStatus] = useState<LocalSyncServerStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +94,36 @@ export function LocalSyncServerCard() {
     }
   }, [status?.running]);
 
+  const toggleWindow = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = status?.sync_window_open
+        ? await gitApi.closeLocalSyncWindow()
+        : await gitApi.openLocalSyncWindow();
+      setStatus(next);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [status?.sync_window_open]);
+
+  const decideRequest = useCallback(async (approved: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = approved
+        ? await gitApi.approveLocalSyncRequest()
+        : await gitApi.declineLocalSyncRequest();
+      setStatus(next);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
   const copy = useCallback((value: string) => {
     void navigator.clipboard.writeText(value);
     setCopied(value);
@@ -123,6 +158,40 @@ export function LocalSyncServerCard() {
         </SettingsErrorText>
       ) : null}
 
+      <label className="flex items-start gap-3 rounded-md border border-border/50 bg-background/40 p-3 text-sm">
+        <Checkbox
+          checked={Boolean(appConfig?.local_sync_ask_before_sync)}
+          disabled={!appConfig || busy}
+          onCheckedChange={(checked) =>
+            void updateAppConfig({ local_sync_ask_before_sync: Boolean(checked) })
+          }
+          className="mt-0.5"
+        />
+        <span className="grid gap-1">
+          <span className="font-medium text-foreground">Ask before syncing</span>
+          <span className="text-xs leading-relaxed text-muted-foreground">
+            Paired phones can find this computer and request access. Notes stay unavailable until
+            you accept.
+          </span>
+        </span>
+      </label>
+
+      <SettingsField label="Close sync window after">
+        <SettingsSelect
+          value={String(appConfig?.local_sync_idle_timeout_minutes ?? 10)}
+          disabled={!appConfig || busy}
+          onChange={(event) =>
+            void updateAppConfig({
+              local_sync_idle_timeout_minutes: Number(event.target.value),
+            })
+          }
+        >
+          <option value="5">5 minutes idle</option>
+          <option value="10">10 minutes idle</option>
+          <option value="15">15 minutes idle</option>
+        </SettingsSelect>
+      </SettingsField>
+
       <SettingsActionRow>
         <Button
           size="sm"
@@ -145,10 +214,55 @@ export function LocalSyncServerCard() {
               ? "Stopping local SSH..."
               : "Starting local SSH..."
             : running
-              ? "Running — keep this app open while syncing."
+              ? status?.sync_window_open
+                ? `Sync open · closes in about ${Math.max(
+                    1,
+                    Math.ceil((status.sync_window_seconds_remaining ?? 0) / 60)
+                  )} min idle`
+                : "Listening for paired-device requests"
               : "Stopped"}
         </span>
       </SettingsActionRow>
+
+      {running ? (
+        <SettingsActionRow>
+          <Button
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={() => void toggleWindow()}
+            disabled={busy}
+          >
+            {status?.sync_window_open ? "Close sync now" : "Open sync window"}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {status?.sync_window_open
+              ? "Fetch and push are allowed from paired phones."
+              : `Opens for ${status?.idle_timeout_minutes ?? 10} minutes.`}
+          </span>
+        </SettingsActionRow>
+      ) : null}
+
+      {status?.pending_request ? (
+        <div className="space-y-2 rounded-md border border-border/60 bg-background/50 p-3">
+          <p className="text-sm font-medium text-foreground">
+            {status.pending_request.device_name} wants to sync
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => void decideRequest(true)} disabled={busy}>
+              Accept sync
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void decideRequest(false)}
+              disabled={busy}
+            >
+              Decline
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {error ? <SettingsErrorText>{error}</SettingsErrorText> : null}
 

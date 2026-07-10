@@ -42,6 +42,7 @@ export function useLegacyProfileSyncMigration({
         const firstSettings = getProfileSyncSettings(firstProfileId);
 
         await api.updateAppConfig({
+          ...profilesSnapshot.appConfig,
           assemblyai_api_key: firstSettings.assemblyAiApiKey,
           whisper_model: firstSettings.whisperModel,
           handwriting_ocr_provider: firstSettings.handwritingOcrProvider,

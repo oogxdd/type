@@ -271,14 +271,17 @@ fn start_local_sync_server_with_access(
     {
         let root = ensured_notes_root(app)?;
         let git = locate_git().ok_or_else(|| GIT_MISSING_MSG.to_string())?;
+        let idle_timeout = Duration::from_secs(configured_idle_timeout_minutes(app) * 60);
         eprintln!("[local-sync] start requested: repo='{}'", root.display());
 
         let mut guard = DAEMON
             .lock()
             .map_err(|_| "local sync server state is poisoned".to_string())?;
 
-        // Already running? Return current status (idempotent).
-        if let Some(daemon) = guard.as_ref() {
+        // Already serving this profile? Return current status (idempotent).
+        if let Some(daemon) = guard.as_ref().filter(|daemon| {
+            daemon.repo_path == root && daemon.access.idle_timeout == idle_timeout
+        }) {
             if open_immediately {
                 daemon.access.open_window();
             }
@@ -288,6 +291,16 @@ fn start_local_sync_server_with_access(
                 daemon.branch
             );
             return Ok(running_status(daemon));
+        }
+        // Profile switches replace the listener so mDNS and Git always point
+        // at the active working folder.
+        if let Some(previous) = guard.take() {
+            eprintln!(
+                "[local-sync] active repo changed: '{}' -> '{}'",
+                previous.repo_path.display(),
+                root.display()
+            );
+            teardown_daemon(previous);
         }
 
         // Make sure the notes folder is a repo and will accept pushes to its
@@ -314,7 +327,6 @@ fn start_local_sync_server_with_access(
         let pairing_token = Arc::new(Mutex::new(token));
         let consumed_pairing_tokens = Arc::new(Mutex::new(Vec::new()));
         let devices_path = devices::devices_path(app)?;
-        let idle_timeout = Duration::from_secs(configured_idle_timeout_minutes(app) * 60);
         let access = Arc::new(ssh_server::SyncAccessState::new(
             idle_timeout,
             open_immediately,
