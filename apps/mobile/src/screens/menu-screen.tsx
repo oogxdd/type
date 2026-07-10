@@ -1,12 +1,9 @@
-// The app menu lives inside the root full-width drawer. The capture page stays
-// mounted underneath, and opening/closing is driven by the drawer's interactive
-// edge gesture rather than a custom JS pan that triggers stack navigation.
+// Shared app menu content. On iOS this is hosted in a native edge-panel root;
+// on Android / native-module-less builds it remains drawer content.
 
 import {
-  CommonActions,
   DrawerActions,
   useNavigation,
-  type NavigatorScreenParams,
 } from "@react-navigation/native";
 import type { DrawerNavigationProp } from "@react-navigation/drawer";
 import { useState } from "react";
@@ -22,7 +19,12 @@ import {
   groupNoteRowsByDate,
 } from "../lib/feed";
 import { formatRelativeTime } from "../lib/relative-time";
-import type { MainStackParamList, RootDrawerParamList } from "../navigation";
+import {
+  resetMainStackToScreen,
+  type MainStackParamList,
+  type RootDrawerParamList,
+} from "../navigation";
+import { nativeEdgeMenuAvailable } from "../native/native-edge-menu";
 import { useNotesStore } from "../state/notes-store";
 import { useSyncStore } from "../state/sync-store";
 import { useUiPrefsStore } from "../state/ui-prefs-store";
@@ -31,48 +33,27 @@ import { ToolbarButton } from "../ui/toolbar-button";
 import { NoteListRow } from "./feed-screen";
 
 type MenuTab = "feed" | "folders";
+type OpenScreen = <Screen extends keyof MainStackParamList>(
+  screen: Screen,
+  params?: MainStackParamList[Screen]
+) => void;
 
-export const MenuScreen = () => {
+export const MenuContent = ({
+  onOpenScreen,
+  onClose,
+}: {
+  onOpenScreen: OpenScreen;
+  onClose: () => void;
+}) => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const navigation =
-    useNavigation<DrawerNavigationProp<RootDrawerParamList>>();
   const [tab, setTab] = useState<MenuTab>("feed");
 
   const tree = useNotesStore((s) => s.tree);
   const previews = useNotesStore((s) => s.previews);
 
-  const openScreen = <Screen extends keyof MainStackParamList>(
-    screen: Screen,
-    params?: MainStackParamList[Screen]
-  ) => {
-    const stackKey = navigation
-      .getState()
-      .routes.find((route) => route.name === "Main")?.state?.key;
-
-    if (stackKey) {
-      navigation.dispatch({
-        ...CommonActions.reset({
-          index: screen === "Capture" ? 0 : 1,
-          routes:
-            screen === "Capture"
-              ? [{ name: "Capture" }]
-              : [{ name: "Capture" }, { name: screen, params }],
-        }),
-        target: stackKey,
-      });
-    } else {
-      navigation.navigate("Main", {
-        screen,
-        params,
-      } as NavigatorScreenParams<MainStackParamList>);
-    }
-
-    navigation.dispatch(DrawerActions.closeDrawer());
-  };
-
-  const menuSide = useUiPrefsStore((s) => s.menuSide);
-  const closeMenu = () => navigation.dispatch(DrawerActions.closeDrawer());
+  const configuredMenuSide = useUiPrefsStore((s) => s.menuSide);
+  const menuSide = nativeEdgeMenuAvailable ? "right" : configuredMenuSide;
 
   const lastSyncedMs = useSyncStore((s) => s.history[0]?.authored_ms ?? null);
 
@@ -95,7 +76,7 @@ export const MenuScreen = () => {
       <View
         style={[styles.topBar, menuSide === "right" ? styles.topBarRight : null]}
       >
-        <ToolbarButton icon="close-outline" onPress={closeMenu} />
+        <ToolbarButton icon="close-outline" onPress={onClose} />
       </View>
 
       <View style={[styles.tabs, { backgroundColor: theme.colors.surface }]}>
@@ -125,7 +106,7 @@ export const MenuScreen = () => {
               row={item}
               theme={theme}
               onPress={() =>
-                openScreen("Editor", {
+                onOpenScreen("Editor", {
                   path: item.path,
                   title: item.preview.title || "Note",
                 })
@@ -145,7 +126,9 @@ export const MenuScreen = () => {
           keyExtractor={(folder) => folder.path}
           renderItem={({ item }) => (
             <Pressable
-              onPress={() => openScreen("Folder", { path: item.path, title: item.name })}
+              onPress={() =>
+                onOpenScreen("Folder", { path: item.path, title: item.name })
+              }
               style={({ pressed }) => [
                 styles.folderRow,
                 { borderBottomColor: theme.colors.border, opacity: pressed ? 0.6 : 1 },
@@ -171,11 +154,28 @@ export const MenuScreen = () => {
         <BottomItem
           label="Sync"
           subtitle={`Last synced ${formatRelativeTime(lastSyncedMs)}`}
-          onPress={() => openScreen("Sync")}
+          onPress={() => onOpenScreen("Sync")}
         />
-        <BottomItem label="Settings" onPress={() => openScreen("Settings")} />
+        <BottomItem label="Settings" onPress={() => onOpenScreen("Settings")} />
       </View>
     </View>
+  );
+};
+
+export const MenuScreen = () => {
+  const navigation =
+    useNavigation<DrawerNavigationProp<RootDrawerParamList>>();
+
+  const openScreen: OpenScreen = (screen, params) => {
+    resetMainStackToScreen(screen, params);
+    navigation.dispatch(DrawerActions.closeDrawer());
+  };
+
+  return (
+    <MenuContent
+      onOpenScreen={openScreen}
+      onClose={() => navigation.dispatch(DrawerActions.closeDrawer())}
+    />
   );
 };
 

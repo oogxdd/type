@@ -40,3 +40,32 @@ export const navigateToScreen = <Screen extends keyof MainStackParamList>(
     );
   }
 };
+
+export const resetMainStackToScreen = <Screen extends keyof MainStackParamList>(
+  screen: Screen,
+  params?: MainStackParamList[Screen]
+) => {
+  if (!navigationRef.isReady()) {
+    return;
+  }
+
+  const stackKey = navigationRef
+    .getState()
+    .routes.find((route) => route.name === "Main")?.state?.key;
+
+  if (!stackKey) {
+    navigateToScreen(screen, params);
+    return;
+  }
+
+  navigationRef.dispatch({
+    ...CommonActions.reset({
+      index: screen === "Capture" ? 0 : 1,
+      routes:
+        screen === "Capture"
+          ? [{ name: "Capture" }]
+          : [{ name: "Capture" }, { name: screen, params }],
+    }),
+    target: stackKey,
+  });
+};

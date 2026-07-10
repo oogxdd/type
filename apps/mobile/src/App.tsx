@@ -5,7 +5,7 @@ import {
 } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef, useState } from "react";
-import { AppState, Linking, StyleSheet, Text, View } from "react-native";
+import { AppState, Linking, Platform, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -14,6 +14,7 @@ import { parseSyncDeepLink } from "@typenotes/shared/sync-link";
 
 import { bootCore } from "./core/boot";
 import { Drawer, navigateToScreen, navigationRef, Stack } from "./navigation";
+import { nativeEdgeMenuAvailable } from "./native/native-edge-menu";
 import { CaptureScreen } from "./screens/capture-screen";
 import { EditorScreen } from "./screens/editor-screen";
 import { FeedScreen } from "./screens/feed-screen";
@@ -86,7 +87,7 @@ const RootNavigator = () => {
     <Drawer.Navigator
       screenOptions={{
         headerShown: false,
-        drawerType: "slide",
+        drawerType: "front",
         drawerPosition: menuSide,
         drawerStyle: {
           width: "100%",
@@ -94,7 +95,7 @@ const RootNavigator = () => {
         },
         overlayColor: "transparent",
         swipeEdgeWidth: 32,
-        swipeEnabled: true,
+        swipeEnabled: Platform.OS !== "ios" || !nativeEdgeMenuAvailable,
         keyboardDismissMode: "on-drag",
       }}
       drawerContent={() => <MenuScreen />}

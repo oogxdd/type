@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as core from "@typenotes/mobile-core/core-api";
 
 import { CaptureSession } from "../lib/capture";
+import { nativeEdgeMenuAvailable, openNativeEdgeMenu } from "../native/native-edge-menu";
 import type { MainStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useUiPrefsStore } from "../state/ui-prefs-store";
@@ -47,7 +48,8 @@ export const CaptureScreen = () => {
   const [pageKey, setPageKey] = useState(0);
   const [iconsVisible, setIconsVisible] = useState(true);
   const [recordingActive, setRecordingActive] = useState(false);
-  const menuSide = useUiPrefsStore((s) => s.menuSide);
+  const configuredMenuSide = useUiPrefsStore((s) => s.menuSide);
+  const menuSide = nativeEdgeMenuAvailable ? "right" : configuredMenuSide;
   const iconsOpacity = useSharedValue(1);
   const inputRef = useRef<TextInput>(null);
 
@@ -133,7 +135,13 @@ export const CaptureScreen = () => {
       }
     });
 
-  const openMenu = () => navigation.dispatch(DrawerActions.openDrawer());
+  const openMenu = () => {
+    if (nativeEdgeMenuAvailable) {
+      openNativeEdgeMenu();
+      return;
+    }
+    navigation.dispatch(DrawerActions.openDrawer());
+  };
 
   const pageStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
