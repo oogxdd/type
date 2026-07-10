@@ -13,6 +13,7 @@ import {
   FlatList,
   InteractionManager,
   Pressable,
+  RefreshControl,
   SectionList,
   StyleSheet,
   Text,
@@ -43,12 +44,14 @@ type MenuTab = "feed" | "folders";
 type MenuData = {
   tree: FolderNode | null;
   previews: Map<string, NotePreview>;
+  loading: boolean;
   lastSyncedMs: number | null;
 };
 
 const readMenuData = (): MenuData => ({
   tree: useNotesStore.getState().tree,
   previews: useNotesStore.getState().previews,
+  loading: useNotesStore.getState().loading,
   lastSyncedMs: useSyncStore.getState().history[0]?.authored_ms ?? null,
 });
 
@@ -79,7 +82,7 @@ export const MenuScreen = ({ active = true }: { active?: boolean }) => {
       unsubscribeSync();
     };
   }, [active]);
-  const { tree, previews, lastSyncedMs } = data;
+  const { tree, previews, loading, lastSyncedMs } = data;
 
   const openScreen = <Screen extends keyof RootStackParamList>(
     screen: Screen,
@@ -104,6 +107,16 @@ export const MenuScreen = ({ active = true }: { active?: boolean }) => {
   const feedRows = folderNoteRows(findFolder(tree, FEED_FOLDER_PATH), previews);
   const feedSections = groupNoteRowsByDate(feedRows);
   const folders = browsableFolders(findFolder(tree, ""));
+
+  // Pull down on either tab to re-read the tree + previews. Only one list is
+  // mounted at a time, so sharing the control element is safe.
+  const refreshControl = (
+    <RefreshControl
+      refreshing={loading}
+      onRefresh={() => void useNotesStore.getState().refresh()}
+      tintColor={theme.colors.secondaryText}
+    />
+  );
 
   return (
     <View
@@ -135,6 +148,7 @@ export const MenuScreen = ({ active = true }: { active?: boolean }) => {
           sections={feedSections}
           keyExtractor={(row) => row.path}
           stickySectionHeadersEnabled
+          refreshControl={refreshControl}
           renderSectionHeader={({ section }) => (
             <View style={[styles.sectionHeader, { backgroundColor: theme.colors.background }]}>
               <Text style={[styles.sectionHeaderText, { color: theme.colors.secondaryText }]}>
@@ -165,6 +179,7 @@ export const MenuScreen = ({ active = true }: { active?: boolean }) => {
           style={styles.list}
           data={folders}
           keyExtractor={(folder) => folder.path}
+          refreshControl={refreshControl}
           renderItem={({ item }) => (
             <Pressable
               onPress={() => openScreen("Folder", { path: item.path, title: item.name })}

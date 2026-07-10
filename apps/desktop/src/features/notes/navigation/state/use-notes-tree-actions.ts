@@ -1,7 +1,11 @@
 // Write side of the notes navigation slice.
-import { useCallback, type RefObject } from "react";
+import { useCallback } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import * as api from "@/features/notes/api/notes-api";
+import { useSelection } from "@/app/state/selection-store";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import {
   ARCHIEVE_FOLDER_PATH,
   FEED_FOLDER_PATH,
@@ -9,27 +13,13 @@ import {
 } from "@typenotes/shared/constants";
 import { confirmAction, focusNoScroll } from "@/shared/lib/dom";
 import { getNoteParentPath } from "@typenotes/shared/notes";
-import type { ProfileSyncSettings } from "@typenotes/shared/types";
 import { applyFolderRenameToSelection, collectNotesForFlattening } from "../model/notes-tree-model";
 import { findNode } from "@/features/notes/navigation/model/tree-ops";
 import type { FolderNode } from "@typenotes/shared/types";
 
 type UseNotesTreeActionsArgs = {
   tree: FolderNode | null;
-  syncSettings: ProfileSyncSettings;
   refreshTree: () => Promise<void>;
-  rightPaneRef: RefObject<HTMLDivElement | null>;
-  selectedFolders: Set<string>;
-  setSelectedFolders: React.Dispatch<React.SetStateAction<Set<string>>>;
-  setLastSelectedFolder: (path: string) => void;
-  activeFolder: string;
-  setActiveFolder: (path: string) => void;
-  setSelectedNotes: React.Dispatch<React.SetStateAction<Set<string>>>;
-  setLastSelectedNote: (path: string) => void;
-  activeNote: string | null;
-  setActiveNote: (path: string | null) => void;
-  clearDraft: () => void;
-  clearNote: () => void;
   renamingFolder: string | null;
   setRenamingFolder: (path: string | null) => void;
   renameValue: string;
@@ -38,25 +28,42 @@ type UseNotesTreeActionsArgs = {
 
 export function useNotesTreeActions({
   tree,
-  syncSettings,
   refreshTree,
-  rightPaneRef,
-  selectedFolders,
-  setSelectedFolders,
-  setLastSelectedFolder,
-  activeFolder,
-  setActiveFolder,
-  setSelectedNotes,
-  setLastSelectedNote,
-  activeNote,
-  setActiveNote,
-  clearDraft,
-  clearNote,
   renamingFolder,
   setRenamingFolder,
   renameValue,
   setRenameValue,
 }: UseNotesTreeActionsArgs) {
+  const { syncSettings } = useProfiles();
+  const { clearDraft, clearNote, rightPaneRef } = useEditor();
+  const {
+    selectedFolders,
+    setSelectedFolders,
+    setLastSelectedFolder,
+    activeFolder,
+    setActiveFolder,
+    setSelectedNotes,
+    setLastSelectedNote,
+    activeNote,
+    setActiveNote,
+    selectFolder,
+    selectNote,
+  } = useSelection(
+    useShallow((state) => ({
+      selectedFolders: state.selectedFolders,
+      setSelectedFolders: state.setSelectedFolders,
+      setLastSelectedFolder: state.setLastSelectedFolder,
+      activeFolder: state.activeFolder,
+      setActiveFolder: state.setActiveFolder,
+      setSelectedNotes: state.setSelectedNotes,
+      setLastSelectedNote: state.setLastSelectedNote,
+      activeNote: state.activeNote,
+      setActiveNote: state.setActiveNote,
+      selectFolder: state.selectFolder,
+      selectNote: state.selectNote,
+    }))
+  );
+
   const createNewNote = useCallback(
     async (
       preferredFolderPath?: string,
@@ -80,12 +87,7 @@ export function useNotesTreeActions({
 
       // New note creation is a workflow, not just a write: refresh the tree,
       // sync selection, and hand focus to the editor in one pass.
-      setSelectedFolders(new Set([folderPath]));
-      setLastSelectedFolder(folderPath);
-      setActiveFolder(folderPath);
-      setSelectedNotes(new Set([path]));
-      setLastSelectedNote(path);
-      setActiveNote(path);
+      selectNote(path, folderPath);
       clearDraft();
 
       requestAnimationFrame(() => {
@@ -102,12 +104,7 @@ export function useNotesTreeActions({
       clearDraft,
       refreshTree,
       rightPaneRef,
-      setActiveFolder,
-      setActiveNote,
-      setLastSelectedFolder,
-      setLastSelectedNote,
-      setSelectedFolders,
-      setSelectedNotes,
+      selectNote,
       syncSettings.noteFileNameFormat,
       tree,
     ]
@@ -200,25 +197,11 @@ export function useNotesTreeActions({
     async (paths: string[]) => {
       if (paths.length === 0) return;
       await api.moveItems(paths, ARCHIEVE_FOLDER_PATH);
-      setSelectedNotes(new Set());
-      setLastSelectedNote("");
-      setActiveNote(null);
+      selectFolder(ARCHIEVE_FOLDER_PATH);
       clearNote();
-      setSelectedFolders(new Set([ARCHIEVE_FOLDER_PATH]));
-      setLastSelectedFolder(ARCHIEVE_FOLDER_PATH);
-      setActiveFolder(ARCHIEVE_FOLDER_PATH);
       await refreshTree();
     },
-    [
-      clearNote,
-      refreshTree,
-      setActiveFolder,
-      setActiveNote,
-      setLastSelectedFolder,
-      setLastSelectedNote,
-      setSelectedFolders,
-      setSelectedNotes,
-    ]
+    [clearNote, refreshTree, selectFolder]
   );
 
   const moveNotesToFolder = useCallback(
@@ -228,25 +211,11 @@ export function useNotesTreeActions({
         return;
       }
       await api.moveItems(paths, normalizedDestination);
-      setSelectedNotes(new Set());
-      setLastSelectedNote("");
-      setActiveNote(null);
+      selectFolder(normalizedDestination);
       clearNote();
-      setSelectedFolders(new Set([normalizedDestination]));
-      setLastSelectedFolder(normalizedDestination);
-      setActiveFolder(normalizedDestination);
       await refreshTree();
     },
-    [
-      clearNote,
-      refreshTree,
-      setActiveFolder,
-      setActiveNote,
-      setLastSelectedFolder,
-      setLastSelectedNote,
-      setSelectedFolders,
-      setSelectedNotes,
-    ]
+    [clearNote, refreshTree, selectFolder]
   );
 
   const updateNoteMarkers = useCallback(
@@ -304,6 +273,8 @@ export function useNotesTreeActions({
         await api.deleteItems(foldersToRemove);
       }
 
+      // Deliberately keeps the active note open (it may have just moved into
+      // Feed), so this only redirects the folder selection.
       setSelectedFolders(new Set([FEED_FOLDER_PATH]));
       setLastSelectedFolder(FEED_FOLDER_PATH);
       setActiveFolder(FEED_FOLDER_PATH);

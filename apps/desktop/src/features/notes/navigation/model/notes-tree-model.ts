@@ -1,6 +1,5 @@
 import { FEED_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
-import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@typenotes/shared/types";
-import type { TreeItem } from "@/features/notes/navigation/model/types";
+import type { FolderNode, NoteEntry } from "@typenotes/shared/types";
 import type { FlattenedItem } from "@/features/notes/navigation/model/types";
 import { collectAllNotes } from "@typenotes/shared/notes";
 import { findNode } from "@/features/notes/navigation/model/tree-ops";
@@ -31,49 +30,6 @@ export function selectPreviewSourceNotes({
   }
   // Nested navigation shows every folder's notes inline, so warm the vault.
   return allNotes;
-}
-
-export function buildVisibleNavigationItems(
-  treeData: TreeItem[],
-  expanded: Set<string>,
-  shouldNestNotesInNavigation: boolean
-): VisibleNavigationItem[] {
-  if (!shouldNestNotesInNavigation) {
-    return [];
-  }
-
-  const items: VisibleNavigationItem[] = [];
-
-  // Nested navigation renders folders and notes in one flat list, but only for
-  // the expanded branches the current layout actually wants to show.
-  const walk = (nodes: TreeItem[], parentId: string | null) => {
-    nodes.forEach((node) => {
-      items.push({
-        type: "folder",
-        id: node.id,
-        parentId,
-      });
-
-      const notesInNode = node.notes || [];
-      const hasNestedItems = node.children.length > 0 || notesInNode.length > 0;
-      if (!hasNestedItems || !expanded.has(node.id)) {
-        return;
-      }
-
-      notesInNode.forEach((note) => {
-        items.push({
-          type: "note",
-          id: note.path,
-          parentId: node.id,
-        });
-      });
-
-      walk(node.children, node.id);
-    });
-  };
-
-  walk(treeData, null);
-  return items;
 }
 
 type RenamedSelection = {

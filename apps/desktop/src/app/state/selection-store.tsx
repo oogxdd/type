@@ -19,10 +19,21 @@ export type SelectionState = {
   setSelectedNotes: (value: SetValue<Set<string>>) => void;
   setLastSelectedNote: (path: string) => void;
   setActiveNote: (path: string | null) => void;
+  /**
+   * Make one folder the active selection and drop any note selection.
+   * `selectedFolders` overrides the single-folder set for range clicks.
+   */
+  selectFolder: (path: string, selectedFolders?: Set<string>) => void;
+  /**
+   * Make one note (inside its given or derived parent folder) the active
+   * selection. `selectedNotes` overrides the single-note set for range clicks.
+   */
+  selectNote: (
+    notePath: string,
+    parentPath?: string,
+    selectedNotes?: Set<string>
+  ) => void;
   resetSelection: () => void;
-  selectFolderForMobile: (path: string) => void;
-  selectNoteForMobile: (notePath: string) => void;
-  enterMobileHome: () => void;
 };
 
 const emptySelection = {
@@ -47,35 +58,27 @@ const useSelectionStore = create<SelectionState>((set) => ({
     set((state) => ({ selectedNotes: resolveValue(value, state.selectedNotes) })),
   setLastSelectedNote: (lastSelectedNote) => set({ lastSelectedNote }),
   setActiveNote: (activeNote) => set({ activeNote }),
-  resetSelection: () =>
+  selectFolder: (path, selectedFolders) =>
     set({
-      ...emptySelection,
-      selectedFolders: new Set(),
-      selectedNotes: new Set(),
-    }),
-  selectFolderForMobile: (path) => {
-    if (!path) return;
-    set({
-      selectedFolders: new Set([path]),
+      selectedFolders: selectedFolders ?? new Set(path ? [path] : []),
       lastSelectedFolder: path,
       activeFolder: path,
       selectedNotes: new Set(),
       lastSelectedNote: "",
       activeNote: null,
-    });
-  },
-  selectNoteForMobile: (notePath) => {
-    const parentPath = getNoteParentPath(notePath);
+    }),
+  selectNote: (notePath, parentPath, selectedNotes) => {
+    const parent = parentPath ?? getNoteParentPath(notePath);
     set({
-      selectedFolders: new Set(parentPath ? [parentPath] : []),
-      lastSelectedFolder: parentPath,
-      activeFolder: parentPath,
-      selectedNotes: new Set([notePath]),
+      selectedFolders: new Set(parent ? [parent] : []),
+      lastSelectedFolder: parent,
+      activeFolder: parent,
+      selectedNotes: selectedNotes ?? new Set([notePath]),
       lastSelectedNote: notePath,
       activeNote: notePath,
     });
   },
-  enterMobileHome: () =>
+  resetSelection: () =>
     set({
       ...emptySelection,
       selectedFolders: new Set(),

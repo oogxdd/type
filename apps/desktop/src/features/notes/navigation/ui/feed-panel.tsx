@@ -40,6 +40,8 @@ export function FeedPanel({
     shouldNestNotesInNavigation,
   } = useNotesTree();
   const {
+    selectFolder,
+    selectNote,
     setSelectedFolders,
     setLastSelectedFolder,
     setActiveFolder,
@@ -50,6 +52,8 @@ export function FeedPanel({
     setActiveNote,
   } = useSelection(
     useShallow((state) => ({
+      selectFolder: state.selectFolder,
+      selectNote: state.selectNote,
       setSelectedFolders: state.setSelectedFolders,
       setLastSelectedFolder: state.setLastSelectedFolder,
       setActiveFolder: state.setActiveFolder,
@@ -65,12 +69,7 @@ export function FeedPanel({
     (groupId: string) => {
       onNavigateToNotes?.();
       setActiveFeedGroup(groupId);
-      setSelectedFolders(new Set([FEED_FOLDER_PATH]));
-      setLastSelectedFolder(FEED_FOLDER_PATH);
-      setActiveFolder(FEED_FOLDER_PATH);
-      setSelectedNotes(new Set());
-      setLastSelectedNote("");
-      setActiveNote(null);
+      selectFolder(FEED_FOLDER_PATH);
       clearDraft();
       clearNote();
       focusNoScroll(paneBodyRef.current);
@@ -80,13 +79,8 @@ export function FeedPanel({
       clearNote,
       onNavigateToNotes,
       paneBodyRef,
+      selectFolder,
       setActiveFeedGroup,
-      setActiveFolder,
-      setActiveNote,
-      setLastSelectedFolder,
-      setLastSelectedNote,
-      setSelectedFolders,
-      setSelectedNotes,
     ]
   );
 
@@ -95,15 +89,12 @@ export function FeedPanel({
       onNavigateToNotes?.();
       const parentNode = feedNodeById.get(parentPath);
       const notePaths = parentNode?.notes.map((note) => note.path) || [];
-      setSelectedNotes(
+      selectNote(
+        notePath,
+        FEED_FOLDER_PATH,
         computeRangeSelection(event, selectedNotes, notePaths, lastSelectedNote, notePath)
       );
-      setLastSelectedNote(notePath);
-      setSelectedFolders(new Set([FEED_FOLDER_PATH]));
-      setLastSelectedFolder(FEED_FOLDER_PATH);
-      setActiveFolder(FEED_FOLDER_PATH);
       setActiveFeedGroup(parentPath);
-      setActiveNote(notePath);
       if (shouldNestNotesInNavigation) {
         focusNoScroll(paneBodyRef.current);
       }
@@ -113,14 +104,9 @@ export function FeedPanel({
       lastSelectedNote,
       onNavigateToNotes,
       paneBodyRef,
+      selectNote,
       selectedNotes,
       setActiveFeedGroup,
-      setActiveFolder,
-      setActiveNote,
-      setLastSelectedFolder,
-      setLastSelectedNote,
-      setSelectedFolders,
-      setSelectedNotes,
       shouldNestNotesInNavigation,
     ]
   );

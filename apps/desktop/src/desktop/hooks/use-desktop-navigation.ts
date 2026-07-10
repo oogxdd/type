@@ -8,37 +8,19 @@ import {
   type MouseEvent as ReactMouseEvent,
   type SetStateAction,
 } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import type { DesktopContextMenuState } from "@/app/hooks/use-tree-interactions";
-import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { useSelection } from "@/app/state/selection-store";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import { FEED_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
 import { computeRangeSelection } from "@/shared/lib/selection";
-import type { NotePreview } from "@typenotes/shared/format";
-import type { AppMode, NoteEntry } from "@typenotes/shared/types";
-import type { FeedTreeNode } from "@/features/notes/navigation/model/feed-tree-model";
-
-type FolderSummary = {
-  id: string;
-};
+import type { AppMode } from "@typenotes/shared/types";
 
 type UseDesktopNavigationArgs = {
   onAppModeChange: Dispatch<SetStateAction<AppMode>>;
   onOpenPinnedFolder: (path: string) => void;
-  customFoldersTreeData: FolderSummary[];
-  activeFolder: string;
-  activeNote: string | null;
-  activeFeedGroup: string;
-  activeFeedNode: FeedTreeNode | null;
-  feedNotes: Array<NoteEntry & { timestampMs: number }>;
-  selectedNotes: Set<string>;
-  lastSelectedNote: string;
-  setSelectedFolders: Dispatch<SetStateAction<Set<string>>>;
-  setLastSelectedFolder: (path: string) => void;
-  setActiveFolder: (path: string) => void;
-  setSelectedNotes: Dispatch<SetStateAction<Set<string>>>;
-  setLastSelectedNote: (path: string) => void;
-  setActiveNote: (path: string | null) => void;
-  setActiveFeedGroup: (path: string) => void;
-  clearNote: () => void;
   openDesktopContextMenu: (state: DesktopContextMenuState) => void;
   closeDesktopContextMenu: () => void;
   handleNoteClick: (
@@ -51,42 +33,64 @@ type UseDesktopNavigationArgs = {
     notePath: string,
     parentPath?: string
   ) => Promise<void>;
-  notes: NoteEntry[];
-  notePreviews: Record<string, NotePreview>;
-  activeNode: { name: string } | null;
-  feedNotePreviews: Record<string, NotePreview>;
-  deleteNotes: (paths: string[]) => Promise<boolean>;
 };
 
 export function useDesktopNavigation({
   onAppModeChange,
   onOpenPinnedFolder,
-  customFoldersTreeData,
-  activeFolder,
-  activeNote,
-  activeFeedGroup,
-  activeFeedNode,
-  feedNotes,
-  selectedNotes,
-  lastSelectedNote,
-  setSelectedFolders,
-  setLastSelectedFolder,
-  setActiveFolder,
-  setSelectedNotes,
-  setLastSelectedNote,
-  setActiveNote,
-  setActiveFeedGroup,
-  clearNote,
   openDesktopContextMenu,
   closeDesktopContextMenu,
   handleNoteClick,
   handleNoteContextMenu,
-  notes,
-  notePreviews,
-  activeNode,
-  feedNotePreviews,
-  deleteNotes,
 }: UseDesktopNavigationArgs) {
+  const { clearNote } = useEditor();
+  const {
+    treeData,
+    notes,
+    notePreviews,
+    activeNode,
+    activeFeedGroup,
+    setActiveFeedGroup,
+    activeFeedNode,
+    feedNotes,
+    feedNotePreviews,
+    deleteNotes,
+  } = useNotesTree();
+  const {
+    activeFolder,
+    activeNote,
+    selectedNotes,
+    lastSelectedNote,
+    selectNote,
+    resetSelection,
+    setSelectedFolders,
+    setLastSelectedFolder,
+    setActiveFolder,
+    setSelectedNotes,
+    setLastSelectedNote,
+    setActiveNote,
+  } = useSelection(
+    useShallow((state) => ({
+      activeFolder: state.activeFolder,
+      activeNote: state.activeNote,
+      selectedNotes: state.selectedNotes,
+      lastSelectedNote: state.lastSelectedNote,
+      selectNote: state.selectNote,
+      resetSelection: state.resetSelection,
+      setSelectedFolders: state.setSelectedFolders,
+      setLastSelectedFolder: state.setLastSelectedFolder,
+      setActiveFolder: state.setActiveFolder,
+      setSelectedNotes: state.setSelectedNotes,
+      setLastSelectedNote: state.setLastSelectedNote,
+      setActiveNote: state.setActiveNote,
+    }))
+  );
+
+  const customFoldersTreeData = useMemo(
+    () => treeData.filter((node) => !isSystemFolder(node.id)),
+    [treeData]
+  );
+
   const [activeNavigationTab, setActiveNavigationTab] = useState<"feed" | "folders">(
     "folders"
   );
@@ -147,12 +151,7 @@ export function useDesktopNavigation({
       onOpenPinnedFolder(fallbackFolder);
       return;
     }
-    setSelectedFolders(new Set());
-    setLastSelectedFolder("");
-    setSelectedNotes(new Set());
-    setLastSelectedNote("");
-    setActiveFolder("");
-    setActiveNote(null);
+    resetSelection();
     clearNote();
   }, [
     clearNote,
@@ -160,25 +159,17 @@ export function useDesktopNavigation({
     customFoldersTreeData,
     onAppModeChange,
     onOpenPinnedFolder,
-    setActiveFolder,
-    setActiveNote,
-    setLastSelectedFolder,
-    setLastSelectedNote,
-    setSelectedFolders,
-    setSelectedNotes,
+    resetSelection,
   ]);
 
   const handleFeedMiddleNoteClick = useCallback(
     (notePath: string, event: ReactMouseEvent) => {
       const notePaths = feedNotes.map((note) => note.path);
-      setSelectedNotes(
+      selectNote(
+        notePath,
+        FEED_FOLDER_PATH,
         computeRangeSelection(event, selectedNotes, notePaths, lastSelectedNote, notePath)
       );
-      setLastSelectedNote(notePath);
-      setSelectedFolders(new Set([FEED_FOLDER_PATH]));
-      setLastSelectedFolder(FEED_FOLDER_PATH);
-      setActiveFolder(FEED_FOLDER_PATH);
-      setActiveNote(notePath);
       setActiveFeedGroup(activeFeedGroup || activeFeedNode?.id || "");
       setActiveNavigationTab("feed");
     },
@@ -187,13 +178,8 @@ export function useDesktopNavigation({
       activeFeedNode?.id,
       feedNotes,
       lastSelectedNote,
+      selectNote,
       setActiveFeedGroup,
-      setActiveFolder,
-      setActiveNote,
-      setLastSelectedFolder,
-      setLastSelectedNote,
-      setSelectedFolders,
-      setSelectedNotes,
       selectedNotes,
     ]
   );
@@ -210,6 +196,8 @@ export function useDesktopNavigation({
       setSelectedFolders(new Set([FEED_FOLDER_PATH]));
       setLastSelectedFolder(FEED_FOLDER_PATH);
       setActiveFolder(FEED_FOLDER_PATH);
+      // Keeps the existing multi-selection (and its range anchor) when the
+      // target note is already part of it.
       if (!selectedNotes.has(notePath)) {
         setSelectedNotes(new Set([notePath]));
         setLastSelectedNote(notePath);
@@ -283,6 +271,7 @@ export function useDesktopNavigation({
 
   return {
     activeNavigationTab,
+    customFoldersTreeData,
     deleteSelectedNotesByShortcut,
     openFeedTab,
     openFoldersTab,

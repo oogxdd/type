@@ -24,7 +24,6 @@ import { useTreeInteractions } from "@/app/hooks/use-tree-interactions";
 import { useSelection } from "@/app/state/selection-store";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { useAppearance } from "@/app/state/appearance-store";
-import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
@@ -36,7 +35,7 @@ import { FoldersPanel } from "@/features/notes/navigation/ui/folders-panel";
 import { FeedPanel } from "@/features/notes/navigation/ui/feed-panel";
 import { useDragDrop } from "@/features/notes/navigation/hooks/use-drag-drop";
 import { useKeyboardNavigation } from "@/features/notes/navigation/hooks/use-keyboard-navigation";
-import { ARCHIEVE_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
+import { ARCHIEVE_FOLDER_PATH } from "@typenotes/shared/constants";
 import { indentationWidth } from "@/shared/constants";
 import { focusNoScroll } from "@/shared/lib/dom";
 import type { AppMode } from "@typenotes/shared/types";
@@ -63,21 +62,8 @@ export function DesktopAppShell({
   onImportHandwriting,
   onOpenPinnedFolder,
 }: DesktopAppShellProps) {
-  const {
-    theme,
-    editorFontSize,
-    increaseEditorFontSize,
-    decreaseEditorFontSize,
-    resetEditorFontSize,
-  } = useAppearance(
-    useShallow((state) => ({
-      theme: state.theme,
-      editorFontSize: state.editorFontSize,
-      increaseEditorFontSize: state.increaseEditorFontSize,
-      decreaseEditorFontSize: state.decreaseEditorFontSize,
-      resetEditorFontSize: state.resetEditorFontSize,
-    }))
-  );
+  const theme = useAppearance((state) => state.theme);
+  const editorFontSize = useAppearance((state) => state.editorFontSize);
   const {
     recordingSupported,
     isRecordingAudio,
@@ -95,71 +81,36 @@ export function DesktopAppShell({
   }, [lockSecurity]);
   const {
     selectedFolders,
-    setSelectedFolders,
-    lastSelectedFolder,
-    setLastSelectedFolder,
     activeFolder,
-    setActiveFolder,
     selectedNotes,
+    setSelectedFolders,
+    setLastSelectedFolder,
     setSelectedNotes,
-    lastSelectedNote,
     setLastSelectedNote,
-    activeNote,
     setActiveNote,
   } = useSelection(
     useShallow((state) => ({
       selectedFolders: state.selectedFolders,
-      setSelectedFolders: state.setSelectedFolders,
-      lastSelectedFolder: state.lastSelectedFolder,
-      setLastSelectedFolder: state.setLastSelectedFolder,
       activeFolder: state.activeFolder,
-      setActiveFolder: state.setActiveFolder,
       selectedNotes: state.selectedNotes,
+      setSelectedFolders: state.setSelectedFolders,
+      setLastSelectedFolder: state.setLastSelectedFolder,
       setSelectedNotes: state.setSelectedNotes,
-      lastSelectedNote: state.lastSelectedNote,
       setLastSelectedNote: state.setLastSelectedNote,
-      activeNote: state.activeNote,
       setActiveNote: state.setActiveNote,
     }))
   );
-  const { clearDraft, clearNote, rightPaneRef } = useEditor();
   const {
-    tree,
-    setTree,
-    treeData,
-    flatItems,
-    visibleItems,
-    orderedIds,
-    flatItemById,
     expanded,
-    setExpanded,
-    notes,
-    notePreviews,
     allNotePreviews,
-    feedNodeById,
-    activeFeedGroup,
-    setActiveFeedGroup,
-    activeFeedNode,
-    feedNotes,
-    feedNotePreviews,
-    feedVisibleNavigationItems,
-    activeNode,
-    visibleNavigationItems,
-    parentById,
     renamingFolder,
     renameValue,
     setRenameValue,
     submitRenameFolder,
     cancelRenameFolder,
-    refreshTree,
     createNewNote,
-    deleteNotes,
     shouldNestNotesInNavigation,
   } = useNotesTree();
-  const customFoldersTreeData = useMemo(
-    () => treeData.filter((node) => !isSystemFolder(node.id)),
-    [treeData]
-  );
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [threePaneLayout, setThreePaneLayout] = useState<Record<string, number>>({
@@ -188,6 +139,7 @@ export function DesktopAppShell({
   } = useTreeInteractions({ foldersPanelRef });
   const {
     activeNavigationTab,
+    customFoldersTreeData,
     deleteSelectedNotesByShortcut,
     openFeedTab,
     openFoldersTab,
@@ -199,31 +151,10 @@ export function DesktopAppShell({
   } = useDesktopNavigation({
     onAppModeChange,
     onOpenPinnedFolder,
-    customFoldersTreeData,
-    activeFolder,
-    activeNote,
-    activeFeedGroup,
-    activeFeedNode,
-    feedNotes,
-    selectedNotes,
-    lastSelectedNote,
-    setSelectedFolders,
-    setLastSelectedFolder,
-    setActiveFolder,
-    setSelectedNotes,
-    setLastSelectedNote,
-    setActiveNote,
-    setActiveFeedGroup,
-    clearNote,
     openDesktopContextMenu,
     closeDesktopContextMenu,
     handleNoteClick,
     handleNoteContextMenu,
-    notes,
-    notePreviews,
-    activeNode,
-    feedNotePreviews,
-    deleteNotes,
   });
   const {
     activeId,
@@ -233,67 +164,21 @@ export function DesktopAppShell({
     handleDragOver,
     handleDragEnd,
     handleDragCancel,
-  } = useDragDrop({
-    tree,
-    setTree,
-    treeData,
-    flatItems,
-    orderedIds,
-    expanded,
-    setExpanded,
-    selectedFolders,
-    setSelectedFolders,
-    setLastSelectedFolder,
-    selectedNotes,
-    setSelectedNotes,
-    setLastSelectedNote,
-    setActiveNote,
-    activeNote,
-    clearNote,
-    refreshTree,
-    parentById,
-  });
+  } = useDragDrop();
 
   const { handleNotesKeyDown, handleFoldersKeyDown, lastLeftPaneFocusRef } =
     useKeyboardNavigation({
-      layoutMode: "desktop",
       appMode,
-      shouldNestNotesInNavigation,
       sidebarCollapsed,
-      increaseEditorFontSize,
-      decreaseEditorFontSize,
-      resetEditorFontSize,
-      createNewNote: () => createNewNote(),
+      setSidebarCollapsed,
       deleteSelectedNotes: deleteSelectedNotesByShortcut,
       // The lock shortcut is optional. When security is disabled, keep the
       // command surface stable but make it a no-op.
       lockAppNow,
-      setSidebarCollapsed,
-      visibleItems,
-      orderedIds,
-      flatItemById,
-      expanded,
-      setExpanded,
-      visibleNavigationItems,
       activeNavigationTab,
-      feedVisibleNavigationItems,
-      feedNodeById,
-      activeFolder,
-      lastSelectedFolder,
-      setSelectedFolders,
-      setLastSelectedFolder,
-      setActiveFolder,
-      activeNote,
-      lastSelectedNote,
-      setSelectedNotes,
-      setLastSelectedNote,
-      setActiveNote,
       notes: middlePaneNotes,
-      activeFeedGroup,
-      setActiveFeedGroup,
       foldersPanelRef,
       middlePaneRef,
-      rightPaneRef,
       notesPanelRef,
     });
 
@@ -362,7 +247,6 @@ export function DesktopAppShell({
               selectedIds={selectedFolders}
               onSelect={(event, id) => {
                 onAppModeChange("notes");
-                clearDraft();
                 handleFolderClick(event, id);
               }}
               edgeSnap={edgeSnap}

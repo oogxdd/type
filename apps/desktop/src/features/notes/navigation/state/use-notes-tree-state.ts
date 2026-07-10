@@ -15,7 +15,6 @@ import type { TreeItem } from "@/features/notes/navigation/model/types";
 import type { FlattenedItem } from "@/features/notes/navigation/model/types";
 import {
   buildFeedTree,
-  buildVisibleFeedNavigationItems,
   collectFeedNotes,
   findFeedNode,
   getFirstFeedGroupId,
@@ -23,10 +22,10 @@ import {
 } from "@/features/notes/navigation/model/feed-tree-model";
 import {
   buildNotePreviews,
-  buildVisibleNavigationItems,
   mapParentById,
   selectPreviewSourceNotes,
 } from "@/features/notes/navigation/model/notes-tree-model";
+import { buildVisibleNavigationItems } from "@/features/notes/navigation/model/visible-navigation";
 
 type UseNotesTreeStateArgs = {
   activeFolder: string;
@@ -154,7 +153,7 @@ export function useNotesTreeState({
   const feedTreeData = feedTree.treeData;
   const feedNodeById = feedTree.nodeById;
   const feedVisibleNavigationItems = useMemo(
-    () => buildVisibleFeedNavigationItems(feedTreeData, expanded, shouldNestNotesInNavigation),
+    () => buildVisibleNavigationItems(feedTreeData, expanded, shouldNestNotesInNavigation),
     [expanded, feedTreeData, shouldNestNotesInNavigation]
   );
 

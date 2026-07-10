@@ -5,9 +5,13 @@ import type {
   DragOverEvent,
   DragStartEvent,
 } from "@dnd-kit/core";
+import { useShallow } from "zustand/react/shallow";
 import { moveItems, setOrder } from "@/features/notes/api/notes-api";
 import { logGroup } from "@/shared/api/invoke";
-import type { DragData, FolderNode } from "@typenotes/shared/types";
+import { useSelection } from "@/app/state/selection-store";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import type { DragData } from "@typenotes/shared/types";
 import { isSystemFolder } from "@typenotes/shared/constants";
 import { getNoteParentPath } from "@typenotes/shared/notes";
 import { DROP_PREFIX } from "../model/tree-dnd";
@@ -29,49 +33,41 @@ import {
   flattenTree,
 } from "../model/tree-ops";
 import type { TreeItem } from "../model/types";
-import type { FlattenedItem } from "../model/types";
 
-type UseDragDropArgs = {
-  tree: FolderNode | null;
-  setTree: React.Dispatch<React.SetStateAction<FolderNode | null>>;
-  treeData: TreeItem[];
-  flatItems: FlattenedItem[];
-  orderedIds: string[];
-  expanded: Set<string>;
-  setExpanded: React.Dispatch<React.SetStateAction<Set<string>>>;
-  selectedFolders: Set<string>;
-  setSelectedFolders: React.Dispatch<React.SetStateAction<Set<string>>>;
-  setLastSelectedFolder: (path: string) => void;
-  selectedNotes: Set<string>;
-  setSelectedNotes: React.Dispatch<React.SetStateAction<Set<string>>>;
-  setLastSelectedNote: (path: string) => void;
-  setActiveNote: (path: string | null) => void;
-  activeNote: string | null;
-  clearNote: () => void;
-  refreshTree: () => Promise<void>;
-  parentById: Record<string, string | null>;
-};
-
-export function useDragDrop({
-  tree,
-  setTree,
-  treeData,
-  flatItems,
-  orderedIds,
-  expanded,
-  setExpanded,
-  selectedFolders,
-  setSelectedFolders,
-  setLastSelectedFolder,
-  selectedNotes,
-  setSelectedNotes,
-  setLastSelectedNote,
-  setActiveNote,
-  activeNote,
-  clearNote,
-  refreshTree,
-  parentById,
-}: UseDragDropArgs) {
+export function useDragDrop() {
+  const {
+    tree,
+    setTree,
+    treeData,
+    flatItems,
+    orderedIds,
+    expanded,
+    setExpanded,
+    refreshTree,
+    parentById,
+  } = useNotesTree();
+  const { clearNote } = useEditor();
+  const {
+    selectedFolders,
+    setSelectedFolders,
+    setLastSelectedFolder,
+    selectedNotes,
+    setSelectedNotes,
+    setLastSelectedNote,
+    setActiveNote,
+    activeNote,
+  } = useSelection(
+    useShallow((state) => ({
+      selectedFolders: state.selectedFolders,
+      setSelectedFolders: state.setSelectedFolders,
+      setLastSelectedFolder: state.setLastSelectedFolder,
+      selectedNotes: state.selectedNotes,
+      setSelectedNotes: state.setSelectedNotes,
+      setLastSelectedNote: state.setLastSelectedNote,
+      setActiveNote: state.setActiveNote,
+      activeNote: state.activeNote,
+    }))
+  );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [edgeSnap, setEdgeSnap] = useState<{
     id: string;

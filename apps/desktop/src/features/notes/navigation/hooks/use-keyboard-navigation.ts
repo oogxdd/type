@@ -1,137 +1,95 @@
 import { useCallback, useRef } from "react";
-import type { AppMode, VisibleNavigationItem } from "@typenotes/shared/types";
-import type { FlattenedItem } from "../model/types";
+import { useShallow } from "zustand/react/shallow";
+
+import type { AppMode } from "@typenotes/shared/types";
+import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { useSelection } from "@/app/state/selection-store";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { focusNoScroll, scrollIntoViewIfNeeded, escapeSelectorValue } from "@/shared/lib/dom";
 import { usePaneShortcuts } from "./use-pane-shortcuts";
-import type { FeedTreeNode } from "@/features/notes/navigation/model/feed-tree-model";
-import { useFeedKeyboardNavigation } from "./use-feed-keyboard-navigation";
+import {
+  navigateVisibleItems,
+  type NavigationKey,
+} from "../model/visible-navigation";
 
 type UseKeyboardNavigationArgs = {
-  layoutMode: string;
   appMode: AppMode;
-  shouldNestNotesInNavigation: boolean;
   sidebarCollapsed: boolean;
-  increaseEditorFontSize: () => void;
-  decreaseEditorFontSize: () => void;
-  resetEditorFontSize: () => void;
-  createNewNote: () => Promise<string | null>;
+  setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   deleteSelectedNotes: () => void;
   lockAppNow: () => Promise<void>;
-  setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
-  // Tree data
-  visibleItems: FlattenedItem[];
-  orderedIds: string[];
-  flatItemById: Map<string, FlattenedItem>;
-  expanded: Set<string>;
-  setExpanded: React.Dispatch<React.SetStateAction<Set<string>>>;
-  visibleNavigationItems: VisibleNavigationItem[];
   activeNavigationTab: "feed" | "folders";
-  feedVisibleNavigationItems: VisibleNavigationItem[];
-  feedNodeById: Map<string, FeedTreeNode>;
-  // Selection state
-  activeFolder: string;
-  lastSelectedFolder: string;
-  setSelectedFolders: React.Dispatch<React.SetStateAction<Set<string>>>;
-  setLastSelectedFolder: (path: string) => void;
-  setActiveFolder: (path: string) => void;
-  activeNote: string | null;
-  lastSelectedNote: string;
-  setSelectedNotes: React.Dispatch<React.SetStateAction<Set<string>>>;
-  setLastSelectedNote: (path: string) => void;
-  setActiveNote: (path: string | null) => void;
+  /** The middle-pane note list the notes-pane arrow handler walks. */
   notes: Array<{ path: string }>;
-  activeFeedGroup: string;
-  setActiveFeedGroup: (path: string) => void;
-  // Refs
   foldersPanelRef: React.RefObject<HTMLDivElement | null>;
   middlePaneRef: React.RefObject<HTMLDivElement | null>;
-  rightPaneRef: React.RefObject<HTMLDivElement | null>;
   notesPanelRef: React.RefObject<HTMLDivElement | null>;
 };
 
 export function useKeyboardNavigation({
-  layoutMode,
   appMode,
-  shouldNestNotesInNavigation,
   sidebarCollapsed,
-  increaseEditorFontSize,
-  decreaseEditorFontSize,
-  resetEditorFontSize,
-  createNewNote,
+  setSidebarCollapsed,
   deleteSelectedNotes,
   lockAppNow,
-  setSidebarCollapsed,
-  visibleItems,
-  orderedIds,
-  flatItemById,
-  expanded,
-  setExpanded,
-  visibleNavigationItems,
   activeNavigationTab,
-  feedVisibleNavigationItems,
-  feedNodeById,
-  activeFolder,
-  lastSelectedFolder,
-  setSelectedFolders,
-  setLastSelectedFolder,
-  setActiveFolder,
-  activeNote,
-  lastSelectedNote,
-  setSelectedNotes,
-  setLastSelectedNote,
-  setActiveNote,
   notes,
-  activeFeedGroup,
-  setActiveFeedGroup,
   foldersPanelRef,
   middlePaneRef,
-  rightPaneRef,
   notesPanelRef,
 }: UseKeyboardNavigationArgs) {
-  const { clearDraft, clearNote } = useEditor();
-  const lastLeftPaneFocusRef = useRef<"folders" | "middle">("middle");
-
-  usePaneShortcuts({
-    layoutMode,
-    appMode,
-    shouldNestNotesInNavigation,
-    sidebarCollapsed,
-    increaseEditorFontSize,
-    decreaseEditorFontSize,
-    resetEditorFontSize,
-    createNewNote,
-    deleteSelectedNotes,
-    lockAppNow,
-    setSidebarCollapsed,
-    foldersPanelRef,
-    middlePaneRef,
-    rightPaneRef,
-    lastLeftPaneFocusRef,
-  });
-  const handleFeedKeyboardNavigation = useFeedKeyboardNavigation({
-    shouldNestNotesInNavigation,
-    feedVisibleNavigationItems,
-    feedNodeById,
+  const { clearDraft, clearNote, rightPaneRef } = useEditor();
+  const {
+    flatItemById,
     expanded,
     setExpanded,
+    visibleNavigationItems,
+    feedVisibleNavigationItems,
+    feedNodeById,
     activeFeedGroup,
     setActiveFeedGroup,
-    activeNote,
+    shouldNestNotesInNavigation,
+  } = useNotesTree();
+  const {
+    activeFolder,
     lastSelectedFolder,
+    activeNote,
     lastSelectedNote,
-    setSelectedFolders,
-    setLastSelectedFolder,
-    setActiveFolder,
+    selectFolder,
+    selectNote,
     setSelectedNotes,
     setLastSelectedNote,
     setActiveNote,
-    clearDraft,
-    clearNote,
+  } = useSelection(
+    useShallow((state) => ({
+      activeFolder: state.activeFolder,
+      lastSelectedFolder: state.lastSelectedFolder,
+      activeNote: state.activeNote,
+      lastSelectedNote: state.lastSelectedNote,
+      selectFolder: state.selectFolder,
+      selectNote: state.selectNote,
+      setSelectedNotes: state.setSelectedNotes,
+      setLastSelectedNote: state.setLastSelectedNote,
+      setActiveNote: state.setActiveNote,
+    }))
+  );
+
+  const lastLeftPaneFocusRef = useRef<"folders" | "middle">("middle");
+
+  usePaneShortcuts({
+    appMode,
+    sidebarCollapsed,
+    setSidebarCollapsed,
+    deleteSelectedNotes,
+    lockAppNow,
     foldersPanelRef,
+    middlePaneRef,
+    lastLeftPaneFocusRef,
   });
 
-  // -- Notes list keyboard handler
+  // -- Notes list keyboard handler. Moves within the middle-pane list only, so
+  // it deliberately leaves the folder selection untouched.
   const handleNotesKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
@@ -166,7 +124,9 @@ export function useKeyboardNavigation({
     [activeNote, foldersPanelRef, lastSelectedNote, notes, notesPanelRef, setActiveNote, setLastSelectedNote, setSelectedNotes]
   );
 
-  // -- Folders keyboard handler
+  // -- Folders/Feed pane keyboard handler. Both tabs walk the same flat
+  // visible-rows list; only where a "folder" selection lands differs (a real
+  // folder vs. the Feed pseudo-folder plus a feed group).
   const handleFoldersKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "ArrowRight") {
@@ -190,234 +150,73 @@ export function useKeyboardNavigation({
         event.key !== "ArrowRight"
       )
         return;
-      if (activeNavigationTab === "feed") {
-        handleFeedKeyboardNavigation(event);
-        return;
-      }
 
-      if (shouldNestNotesInNavigation) {
-        if (visibleNavigationItems.length === 0) return;
-        event.preventDefault();
-
-        const navIds = visibleNavigationItems.map((item) => item.id);
-        const current =
-          lastSelectedNote && navIds.includes(lastSelectedNote)
-            ? lastSelectedNote
-            : lastSelectedFolder && navIds.includes(lastSelectedFolder)
-              ? lastSelectedFolder
-              : activeNote && navIds.includes(activeNote)
-                ? activeNote
-                : activeFolder && navIds.includes(activeFolder)
-                  ? activeFolder
-                  : navIds[0];
-        const currentIndex = navIds.indexOf(current);
-        const currentEntry = visibleNavigationItems[currentIndex];
-        if (!currentEntry) return;
-
-        const selectFolder = (folderPath: string) => {
-          setSelectedFolders(new Set([folderPath]));
-          setLastSelectedFolder(folderPath);
-          setActiveFolder(folderPath);
-          setSelectedNotes(new Set());
-          setLastSelectedNote("");
-          setActiveNote(null);
-          clearDraft();
-          clearNote();
-          focusNoScroll(foldersPanelRef.current);
-          requestAnimationFrame(() => {
-            scrollIntoViewIfNeeded(
-              foldersPanelRef.current,
-              `[data-folder="${escapeSelectorValue(folderPath)}"]`
-            );
-          });
-        };
-
-        const selectNote = (notePath: string, parentPath: string) => {
-          setSelectedFolders(new Set(parentPath ? [parentPath] : []));
-          setLastSelectedFolder(parentPath);
-          setActiveFolder(parentPath);
-          setSelectedNotes(new Set([notePath]));
-          setLastSelectedNote(notePath);
-          setActiveNote(notePath);
-          focusNoScroll(foldersPanelRef.current);
-          requestAnimationFrame(() => {
-            scrollIntoViewIfNeeded(
-              foldersPanelRef.current,
-              `[data-note="${escapeSelectorValue(notePath)}"]`
-            );
-          });
-        };
-
-        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-          const delta = event.key === "ArrowUp" ? -1 : 1;
-          const nextIndex = Math.max(
-            0,
-            Math.min(visibleNavigationItems.length - 1, currentIndex + delta)
-          );
-          const nextEntry = visibleNavigationItems[nextIndex];
-          if (!nextEntry) return;
-          if (nextEntry.type === "folder") {
-            selectFolder(nextEntry.id);
-            return;
-          }
-          selectNote(nextEntry.id, nextEntry.parentId);
-          return;
-        }
-
-        if (event.key === "ArrowRight") {
-          if (currentEntry.type !== "folder") return;
-          const folderItem = flatItemById.get(currentEntry.id);
-          const noteCount = folderItem?.notes?.length || 0;
-          const childCount = folderItem?.children.length || 0;
-          const hasNestedItems = childCount > 0 || noteCount > 0;
-          if (!hasNestedItems) return;
-          if (!expanded.has(currentEntry.id)) {
-            setExpanded((prev) => {
-              const next = new Set(prev);
-              next.add(currentEntry.id);
-              return next;
-            });
-            return;
-          }
-          const firstChildEntry = visibleNavigationItems[currentIndex + 1];
-          if (!firstChildEntry || firstChildEntry.parentId !== currentEntry.id) return;
-          if (firstChildEntry.type === "folder") {
-            selectFolder(firstChildEntry.id);
-            return;
-          }
-          selectNote(firstChildEntry.id, firstChildEntry.parentId);
-          return;
-        }
-
-        if (event.key === "ArrowLeft") {
-          if (currentEntry.type === "note") {
-            selectFolder(currentEntry.parentId);
-            return;
-          }
-
-          const folderItem = flatItemById.get(currentEntry.id);
-          const noteCount = folderItem?.notes?.length || 0;
-          const childCount = folderItem?.children.length || 0;
-          const hasNestedItems = childCount > 0 || noteCount > 0;
-          if (hasNestedItems && expanded.has(currentEntry.id)) {
-            setExpanded((prev) => {
-              const next = new Set(prev);
-              next.delete(currentEntry.id);
-              return next;
-            });
-            return;
-          }
-          const parentFolderId = currentEntry.parentId;
-          if (!parentFolderId) return;
-          setExpanded((prev) => {
-            const next = new Set(prev);
-            next.delete(parentFolderId);
-            return next;
-          });
-          selectFolder(parentFolderId);
-        }
-        return;
-      }
-
-      if (visibleItems.length === 0) return;
+      const isFeed = activeNavigationTab === "feed";
+      const items = isFeed ? feedVisibleNavigationItems : visibleNavigationItems;
+      if (items.length === 0) return;
       event.preventDefault();
 
-      const current =
-        lastSelectedFolder && orderedIds.includes(lastSelectedFolder)
-          ? lastSelectedFolder
-          : activeFolder || orderedIds[0];
-      const currentIndex = orderedIds.indexOf(current);
-      const currentItem = visibleItems.find((item) => item.id === current);
-      const parentId = currentItem?.parentId ?? null;
-      const hasChildren = currentItem ? currentItem.children.length > 0 : false;
-      const isExpanded = current ? expanded.has(current) : false;
-
-      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-        const delta = event.key === "ArrowUp" ? -1 : 1;
-        const nextIndex = Math.max(
-          0,
-          Math.min(orderedIds.length - 1, currentIndex + delta)
-        );
-        const nextPath = orderedIds[nextIndex];
-        setSelectedFolders(new Set([nextPath]));
-        setLastSelectedFolder(nextPath);
-        setActiveFolder(nextPath);
-        setSelectedNotes(new Set());
-        setLastSelectedNote("");
-        setActiveNote(null);
-        clearDraft();
-        clearNote();
+      const focusPanel = () => focusNoScroll(foldersPanelRef.current);
+      const scrollRowIntoView = (attribute: "data-folder" | "data-note", id: string) => {
         requestAnimationFrame(() => {
           scrollIntoViewIfNeeded(
             foldersPanelRef.current,
-            `[data-folder="${escapeSelectorValue(nextPath)}"]`
+            `[${attribute}="${escapeSelectorValue(id)}"]`
           );
         });
-        return;
-      }
+      };
 
-      if (event.key === "ArrowRight") {
-        if (currentItem && hasChildren) {
-          if (!isExpanded) {
-            setExpanded((prev) => {
-              const next = new Set(prev);
-              next.add(currentItem.id);
-              return next;
-            });
-            return;
-          }
-          const firstChild = currentItem.children[0];
-          if (firstChild) {
-            setSelectedFolders(new Set([firstChild.id]));
-            setLastSelectedFolder(firstChild.id);
-            setActiveFolder(firstChild.id);
-            setSelectedNotes(new Set());
-            setLastSelectedNote("");
-            setActiveNote(null);
-            clearDraft();
-            clearNote();
-            requestAnimationFrame(() => {
-              scrollIntoViewIfNeeded(
-                foldersPanelRef.current,
-                `[data-folder="${escapeSelectorValue(firstChild.id)}"]`
-              );
-            });
-          }
-        }
-        return;
-      }
-
-      if (event.key === "ArrowLeft") {
-        if (currentItem && hasChildren && isExpanded) {
+      navigateVisibleItems(event.key as NavigationKey, {
+        items,
+        preferredIds: [
+          lastSelectedNote,
+          lastSelectedFolder,
+          activeNote,
+          isFeed ? activeFeedGroup : activeFolder,
+        ],
+        expanded,
+        hasNestedItems: (id) => {
+          const node = isFeed ? feedNodeById.get(id) : flatItemById.get(id);
+          return (
+            (node?.children.length ?? 0) > 0 ||
+            (shouldNestNotesInNavigation && (node?.notes?.length ?? 0) > 0)
+          );
+        },
+        expand: (id) =>
           setExpanded((prev) => {
             const next = new Set(prev);
-            next.delete(currentItem.id);
+            next.add(id);
             return next;
-          });
-          return;
-        }
-        if (parentId) {
+          }),
+        collapse: (id) =>
           setExpanded((prev) => {
             const next = new Set(prev);
-            next.delete(parentId);
+            next.delete(id);
             return next;
-          });
-          setSelectedFolders(new Set([parentId]));
-          setLastSelectedFolder(parentId);
-          setActiveFolder(parentId);
-          setSelectedNotes(new Set());
-          setLastSelectedNote("");
-          setActiveNote(null);
+          }),
+        selectFolder: (id) => {
+          if (isFeed) {
+            setActiveFeedGroup(id);
+            selectFolder(FEED_FOLDER_PATH);
+          } else {
+            selectFolder(id);
+          }
           clearDraft();
           clearNote();
-          requestAnimationFrame(() => {
-            scrollIntoViewIfNeeded(
-              foldersPanelRef.current,
-              `[data-folder="${escapeSelectorValue(parentId)}"]`
-            );
-          });
-        }
-      }
+          focusPanel();
+          scrollRowIntoView("data-folder", id);
+        },
+        selectNote: (id, parentId) => {
+          if (isFeed) {
+            setActiveFeedGroup(parentId);
+            selectNote(id, FEED_FOLDER_PATH);
+          } else {
+            selectNote(id, parentId);
+          }
+          focusPanel();
+          scrollRowIntoView("data-note", id);
+        },
+      });
     },
     [
       activeFolder,
@@ -435,20 +234,13 @@ export function useKeyboardNavigation({
       lastSelectedFolder,
       lastSelectedNote,
       middlePaneRef,
-      orderedIds,
       rightPaneRef,
-      setActiveFolder,
-      setActiveNote,
+      selectFolder,
+      selectNote,
       setActiveFeedGroup,
       setExpanded,
-      setLastSelectedFolder,
-      setLastSelectedNote,
-      setSelectedFolders,
-      setSelectedNotes,
       shouldNestNotesInNavigation,
-      visibleItems,
       visibleNavigationItems,
-      handleFeedKeyboardNavigation,
     ]
   );
 

@@ -1,52 +1,50 @@
 import { useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import type { AppMode, PaneId } from "@typenotes/shared/types";
+import { useAppearance } from "@/app/state/appearance-store";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { focusNoScroll } from "@/shared/lib/dom";
 
 type UsePaneShortcutsArgs = {
-  layoutMode: string;
   appMode: AppMode;
-  shouldNestNotesInNavigation: boolean;
   sidebarCollapsed: boolean;
-  increaseEditorFontSize: () => void;
-  decreaseEditorFontSize: () => void;
-  resetEditorFontSize: () => void;
-  createNewNote: () => Promise<string | null>;
+  setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   deleteSelectedNotes: () => void;
   lockAppNow: () => Promise<void>;
-  setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   foldersPanelRef: React.RefObject<HTMLDivElement | null>;
   middlePaneRef: React.RefObject<HTMLDivElement | null>;
-  rightPaneRef: React.RefObject<HTMLDivElement | null>;
   lastLeftPaneFocusRef: React.MutableRefObject<"folders" | "middle">;
 };
 
 /**
- * Desktop-only global keyboard shortcuts and pane focus management:
+ * Desktop global keyboard shortcuts and pane focus management:
  * cmd/ctrl + T (toggle sidebar), W (cycle left panes), K/J (cycle all panes),
  * N (new note), Backspace (delete), +/-/0 (editor font size), shift+L (lock).
  * Tracks the last-focused left pane so toggling the sidebar can restore it.
  */
 export function usePaneShortcuts({
-  layoutMode,
   appMode,
-  shouldNestNotesInNavigation,
   sidebarCollapsed,
-  increaseEditorFontSize,
-  decreaseEditorFontSize,
-  resetEditorFontSize,
-  createNewNote,
+  setSidebarCollapsed,
   deleteSelectedNotes,
   lockAppNow,
-  setSidebarCollapsed,
   foldersPanelRef,
   middlePaneRef,
-  rightPaneRef,
   lastLeftPaneFocusRef,
 }: UsePaneShortcutsArgs) {
+  const { rightPaneRef } = useEditor();
+  const { createNewNote, shouldNestNotesInNavigation } = useNotesTree();
+  const { increaseEditorFontSize, decreaseEditorFontSize, resetEditorFontSize } =
+    useAppearance(
+      useShallow((state) => ({
+        increaseEditorFontSize: state.increaseEditorFontSize,
+        decreaseEditorFontSize: state.decreaseEditorFontSize,
+        resetEditorFontSize: state.resetEditorFontSize,
+      }))
+    );
+
   useEffect(() => {
-    if (layoutMode !== "desktop") {
-      return;
-    }
     const hasMiddlePane = appMode !== "notes" || !shouldNestNotesInNavigation;
 
     const getFocusedPane = (): PaneId | null => {
@@ -209,7 +207,6 @@ export function usePaneShortcuts({
     decreaseEditorFontSize,
     foldersPanelRef,
     increaseEditorFontSize,
-    layoutMode,
     middlePaneRef,
     resetEditorFontSize,
     rightPaneRef,

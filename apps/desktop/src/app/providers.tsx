@@ -34,12 +34,7 @@ function CaptureFeatureProviders({ children }: { children: ReactNode }) {
   const selection = useSelection(
     useShallow((state) => ({
       activeFolder: state.activeFolder,
-      setSelectedFolders: state.setSelectedFolders,
-      setLastSelectedFolder: state.setLastSelectedFolder,
-      setActiveFolder: state.setActiveFolder,
-      setSelectedNotes: state.setSelectedNotes,
-      setLastSelectedNote: state.setLastSelectedNote,
-      setActiveNote: state.setActiveNote,
+      selectNote: state.selectNote,
     }))
   );
   const editor = useEditor();
@@ -49,12 +44,7 @@ function CaptureFeatureProviders({ children }: { children: ReactNode }) {
     note_path: string;
   }) => {
     await notesTree.refreshTree();
-    selection.setSelectedFolders(new Set([result.folder_path]));
-    selection.setLastSelectedFolder(result.folder_path);
-    selection.setActiveFolder(result.folder_path);
-    selection.setSelectedNotes(new Set([result.note_path]));
-    selection.setLastSelectedNote(result.note_path);
-    selection.setActiveNote(result.note_path);
+    selection.selectNote(result.note_path, result.folder_path);
     editor.clearDraft();
   };
 

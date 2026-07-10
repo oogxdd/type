@@ -79,6 +79,8 @@ export const useTreeInteractions = ({
     lastSelectedNote,
     setLastSelectedNote,
     setActiveNote,
+    selectFolder,
+    selectNote,
   } = useSelection(
     useShallow((state) => ({
       selectedFolders: state.selectedFolders,
@@ -91,6 +93,8 @@ export const useTreeInteractions = ({
       lastSelectedNote: state.lastSelectedNote,
       setLastSelectedNote: state.setLastSelectedNote,
       setActiveNote: state.setActiveNote,
+      selectFolder: state.selectFolder,
+      selectNote: state.selectNote,
     }))
   );
 
@@ -119,14 +123,10 @@ export const useTreeInteractions = ({
 
   const handleFolderClick = (event: ReactMouseEvent, path: string) => {
     event.stopPropagation();
-    setSelectedFolders(
+    selectFolder(
+      path,
       computeRangeSelection(event, selectedFolders, orderedIds, lastSelectedFolder, path)
     );
-    setLastSelectedFolder(path);
-    setActiveFolder(path);
-    setSelectedNotes(new Set());
-    setLastSelectedNote("");
-    setActiveNote(null);
     clearDraft();
     clearNote();
     focusNoScroll(foldersPanelRef.current);
@@ -145,6 +145,8 @@ export const useTreeInteractions = ({
   const handleFolderContextMenu = async (event: ReactMouseEvent, path: string) => {
     event.preventDefault();
     event.stopPropagation();
+    // Keeps the existing multi-selection (and its range anchor) when the
+    // target folder is already part of it.
     if (!selectedFolders.has(path)) {
       setSelectedFolders(new Set([path]));
       setLastSelectedFolder(path);
@@ -177,14 +179,11 @@ export const useTreeInteractions = ({
     const parentNode = findNode(tree, noteParentPath);
     if (!parentNode) return;
     const notePaths = parentNode.notes.map((n) => n.path);
-    setSelectedNotes(
+    selectNote(
+      notePath,
+      noteParentPath,
       computeRangeSelection(event, selectedNotes, notePaths, lastSelectedNote, notePath)
     );
-    setLastSelectedNote(notePath);
-    setSelectedFolders(new Set(noteParentPath ? [noteParentPath] : []));
-    setLastSelectedFolder(noteParentPath);
-    setActiveFolder(noteParentPath);
-    setActiveNote(notePath);
     if (parentPath !== undefined || shouldNestNotesInNavigation) {
       focusNoScroll(foldersPanelRef.current);
     }
@@ -201,6 +200,8 @@ export const useTreeInteractions = ({
     setSelectedFolders(new Set(noteParentPath ? [noteParentPath] : []));
     setLastSelectedFolder(noteParentPath);
     setActiveFolder(noteParentPath);
+    // Keeps the existing multi-selection (and its range anchor) when the
+    // target note is already part of it.
     if (!selectedNotes.has(path)) {
       setSelectedNotes(new Set([path]));
       setLastSelectedNote(path);

@@ -75,8 +75,22 @@ Delete this file when the branch is ready for review.
       local stub exists (this VM keeps an uncommitted typed stub there).
       Consider restoring a committed fallback entry so typecheck works from a
       clean clone.
-
-## Milestones
+- [ ] Manual desktop verification of the navigation refactor (2026-07-10):
+      selection compound actions + hooks reading stores directly + one
+      keyboard-nav path for Feed/Folders (`model/visible-navigation.ts`
+      replaced `use-feed-keyboard-navigation` and both branches of
+      `handleFoldersKeyDown`). Typecheck + vitest (incl. new
+      `visible-navigation.test.ts`) are green, but this VM is headless —
+      exercise in the running app: (1) arrow keys in Folders tab, nested and
+      non-nested (`notesListMode`) — up/down/expand/collapse/enter-child/
+      climb-to-parent; (2) same in Feed tab (groups + notes, active group
+      highlight follows); (3) middle-pane note list arrows + cmd/ctrl+arrows
+      pane hops; (4) folder/note range clicks (shift/cmd) in tree, feed, and
+      middle pane; (5) right-click menus keep an existing multi-selection;
+      (6) folder/note drag-and-drop still reorders/moves (use-drag-drop now
+      reads contexts itself); (7) create note / record / move-to-archive /
+      "flatten into Feed" still land selection where they used to;
+      (8) cmd+N/T/W/K/J/Backspace/±0 shortcuts (layoutMode guard removed).
 
 - [x] M1 — monorepo restructure (apps/desktop, npm + cargo workspaces, CI)
 - [x] M2 — framework-free core crate `crates/type-core` (AppEnv seam)

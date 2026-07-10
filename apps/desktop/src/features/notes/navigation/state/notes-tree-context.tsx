@@ -8,11 +8,8 @@ import {
   type SetStateAction,
 } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { useShallow } from "zustand/react/shallow";
 
 import { useSelection } from "@/app/state/selection-store";
-import { useEditor } from "@/features/notes/editor/hooks/editor-context";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@typenotes/shared/types";
 import type { NotePreview } from "@typenotes/shared/format";
 import type { TreeItem, FlattenedItem } from "@/features/notes/navigation/model/types";
@@ -74,101 +71,20 @@ type NotesTreeContextValue = {
 const NotesTreeContext = createContext<NotesTreeContextValue | null>(null);
 
 export function NotesTreeProvider({ children }: { children: ReactNode }) {
-  const { syncSettings } = useProfiles();
-  const {
-    selectedFolders,
-    setSelectedFolders,
-    setLastSelectedFolder,
-    activeFolder,
-    setActiveFolder,
-    setSelectedNotes,
-    setLastSelectedNote,
-    activeNote,
-    setActiveNote,
-  } = useSelection(
-    useShallow((state) => ({
-      selectedFolders: state.selectedFolders,
-      setSelectedFolders: state.setSelectedFolders,
-      setLastSelectedFolder: state.setLastSelectedFolder,
-      activeFolder: state.activeFolder,
-      setActiveFolder: state.setActiveFolder,
-      setSelectedNotes: state.setSelectedNotes,
-      setLastSelectedNote: state.setLastSelectedNote,
-      activeNote: state.activeNote,
-      setActiveNote: state.setActiveNote,
-    }))
-  );
-  const { clearNote, clearDraft, rightPaneRef } = useEditor();
-  const {
-    tree,
-    setTree,
-    treeData,
-    flatItems,
-    visibleItems,
-    orderedIds,
-    flatItemById,
-    expanded,
-    setExpanded,
-    notes,
-    allNotes,
-    notePreviews,
-    allNotePreviews,
-    activeNode,
-    visibleNavigationItems,
-    feedVisibleNavigationItems,
-    feedTreeData,
-    feedNodeById,
-    activeFeedGroup,
-    setActiveFeedGroup,
-    activeFeedNode,
-    feedNotes,
-    feedNotePreviews,
-    feedLoading,
-    parentById,
-    renamingFolder,
-    setRenamingFolder,
-    renameValue,
-    setRenameValue,
-    refreshTree,
-    shouldNestNotesInNavigation,
-  } = useNotesTreeState({ activeFolder });
-
-  const {
-    createNewNote,
-    deleteFolders,
-    deleteNotes,
-    moveNotesToArchive,
-    moveNotesToFolder,
-    updateNoteMarkers,
-    flattenIntoFeed,
-    showNoteInfo,
-    startRenameFolder,
-    submitRenameFolder,
-    cancelRenameFolder,
-  } = useNotesTreeActions({
-    tree,
-    syncSettings,
-    refreshTree,
-    rightPaneRef,
-    selectedFolders,
-    setSelectedFolders,
-    setLastSelectedFolder,
-    activeFolder,
-    setActiveFolder,
-    setSelectedNotes,
-    setLastSelectedNote,
-    activeNote,
-    setActiveNote,
-    clearDraft,
-    clearNote,
-    renamingFolder,
-    setRenamingFolder,
-    renameValue,
-    setRenameValue,
+  const activeFolder = useSelection((state) => state.activeFolder);
+  const state = useNotesTreeState({ activeFolder });
+  const actions = useNotesTreeActions({
+    tree: state.tree,
+    refreshTree: state.refreshTree,
+    renamingFolder: state.renamingFolder,
+    setRenamingFolder: state.setRenamingFolder,
+    renameValue: state.renameValue,
+    setRenameValue: state.setRenameValue,
   });
 
   // A phone pushing over local sync changes the notes on disk behind the
   // frontend's back; the backend emits this event after each accepted push.
+  const { refreshTree } = state;
   useEffect(() => {
     const unlisten = listen("local-sync-push-received", () => {
       console.log("[notes] local sync push received — refreshing tree");
@@ -180,51 +96,7 @@ export function NotesTreeProvider({ children }: { children: ReactNode }) {
   }, [refreshTree]);
 
   return (
-    <NotesTreeContext.Provider
-      value={{
-        tree,
-        treeData,
-        flatItems,
-        visibleItems,
-        orderedIds,
-        flatItemById,
-        expanded,
-        setExpanded,
-        notes,
-        allNotes,
-        notePreviews,
-        allNotePreviews,
-        activeNode,
-        visibleNavigationItems,
-        feedVisibleNavigationItems,
-        feedTreeData,
-        feedNodeById,
-        activeFeedGroup,
-        setActiveFeedGroup,
-        activeFeedNode,
-        feedNotes,
-        feedNotePreviews,
-        feedLoading,
-        parentById,
-        renamingFolder,
-        renameValue,
-        setRenameValue,
-        startRenameFolder,
-        submitRenameFolder,
-        cancelRenameFolder,
-        refreshTree,
-        createNewNote,
-        deleteNotes,
-        deleteFolders,
-        moveNotesToArchive,
-        moveNotesToFolder,
-        updateNoteMarkers,
-        flattenIntoFeed,
-        showNoteInfo,
-        shouldNestNotesInNavigation,
-        setTree,
-      }}
-    >
+    <NotesTreeContext.Provider value={{ ...state, ...actions }}>
       {children}
     </NotesTreeContext.Provider>
   );

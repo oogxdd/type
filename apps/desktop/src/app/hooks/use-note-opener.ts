@@ -8,7 +8,6 @@ import { useShallow } from "zustand/react/shallow";
 
 import { useSelection } from "@/app/state/selection-store";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
-import { getNoteParentPath } from "@typenotes/shared/notes";
 import type { AppMode } from "@typenotes/shared/types";
 
 type UseNoteOpenerArgs = {
@@ -29,69 +28,29 @@ export type NoteOpener = {
  */
 export const useNoteOpener = ({ setAppMode }: UseNoteOpenerArgs): NoteOpener => {
   const { clearDraft, clearNote } = useEditor();
-  const {
-    setSelectedFolders,
-    setLastSelectedFolder,
-    setActiveFolder,
-    setSelectedNotes,
-    setLastSelectedNote,
-    setActiveNote,
-  } = useSelection(
+  const { selectFolder, selectNote } = useSelection(
     useShallow((state) => ({
-      setSelectedFolders: state.setSelectedFolders,
-      setLastSelectedFolder: state.setLastSelectedFolder,
-      setActiveFolder: state.setActiveFolder,
-      setSelectedNotes: state.setSelectedNotes,
-      setLastSelectedNote: state.setLastSelectedNote,
-      setActiveNote: state.setActiveNote,
+      selectFolder: state.selectFolder,
+      selectNote: state.selectNote,
     }))
   );
 
   const openPinnedFolder = useCallback(
     (folderPath: string) => {
       setAppMode("notes");
-      setSelectedFolders(new Set([folderPath]));
-      setLastSelectedFolder(folderPath);
-      setActiveFolder(folderPath);
-      setSelectedNotes(new Set());
-      setLastSelectedNote("");
-      setActiveNote(null);
+      selectFolder(folderPath);
       clearDraft();
       clearNote();
     },
-    [
-      clearDraft,
-      clearNote,
-      setAppMode,
-      setActiveFolder,
-      setActiveNote,
-      setLastSelectedFolder,
-      setLastSelectedNote,
-      setSelectedFolders,
-      setSelectedNotes,
-    ]
+    [clearDraft, clearNote, selectFolder, setAppMode]
   );
 
   const openNoteByPath = useCallback(
     (notePath: string) => {
-      const noteParentPath = getNoteParentPath(notePath);
       setAppMode("notes");
-      setSelectedFolders(new Set(noteParentPath ? [noteParentPath] : []));
-      setLastSelectedFolder(noteParentPath);
-      setActiveFolder(noteParentPath);
-      setSelectedNotes(new Set([notePath]));
-      setLastSelectedNote(notePath);
-      setActiveNote(notePath);
+      selectNote(notePath);
     },
-    [
-      setAppMode,
-      setActiveFolder,
-      setActiveNote,
-      setLastSelectedFolder,
-      setLastSelectedNote,
-      setSelectedFolders,
-      setSelectedNotes,
-    ]
+    [selectNote, setAppMode]
   );
 
   useEffect(() => {
