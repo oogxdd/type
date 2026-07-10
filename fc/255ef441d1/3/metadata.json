@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "fc255ef441d1",
+  "session_id": "6a50ab42-a17f-4191-8294-6b8ee55d90db",
+  "strategy": "manual-commit",
+  "created_at": "2026-07-10T18:47:50.164538Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/mobile/app.json",
+    "apps/mobile/ios/Type/Info.plist"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "1606eddbe500",
+  "token_usage": {
+    "input_tokens": 3691,
+    "cache_creation_tokens": 92241,
+    "cache_read_tokens": 1562072,
+    "output_tokens": 8816,
+    "api_call_count": 28
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-07-10T18:47:50.104147Z",
+    "agent_lines": 2,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 2,
+    "agent_percentage": 100
+  }
+}

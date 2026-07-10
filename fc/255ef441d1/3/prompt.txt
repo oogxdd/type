@@ -1,0 +1,5 @@
+привет. сбилди iphone билд и задеплой на testflight
+
+---
+
+commit and push
