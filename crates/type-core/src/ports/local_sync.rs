@@ -8,8 +8,10 @@ pub struct LocalSyncServerStatus {
     pub supported: bool,
     /// Whether a usable `git` command-line binary was found.
     pub git_available: bool,
-    /// Whether the embedded local SSH sync server is currently running.
+    /// Whether either local-sync daemon currently owns the LAN port.
     pub running: bool,
+    /// Whether only the lightweight paired-device request listener is running.
+    pub request_listener_running: bool,
     /// Detected LAN / hotspot IPv4 address other devices should connect to.
     pub host: Option<String>,
     /// TCP port the SSH server listens on.

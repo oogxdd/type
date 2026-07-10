@@ -56,6 +56,7 @@ export type LocalSyncServerStatus = {
   supported: boolean;
   git_available: boolean;
   running: boolean;
+  request_listener_running: boolean;
   sync_window_open: boolean;
   sync_window_seconds_remaining: number;
   idle_timeout_minutes: number;

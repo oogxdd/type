@@ -182,8 +182,9 @@ pub(super) struct SshServerHandle {
 
 impl SshServerHandle {
     pub(super) fn stop(self) {
-        // Aborts the accept loop and every in-flight session task.
-        self.runtime.shutdown_background();
+        // Wait briefly for the listening socket to be released so the request
+        // daemon can take over the same port (and vice versa).
+        self.runtime.shutdown_timeout(Duration::from_secs(1));
     }
 }
 
@@ -781,6 +782,14 @@ mod tests {
             SyncAccessDecision::Declined
         );
         assert!(access.snapshot().pending_request.is_none());
+    }
+
+    #[test]
+    fn open_window_expires_after_idle_timeout() {
+        let access = SyncAccessState::new(Duration::from_millis(20), true);
+        assert!(access.snapshot().window_open);
+        std::thread::sleep(Duration::from_millis(30));
+        assert!(!access.snapshot().window_open);
     }
 
     /// End-to-end: a real `git` client pairs with the embedded server over SSH

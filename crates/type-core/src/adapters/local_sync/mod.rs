@@ -24,6 +24,8 @@ use crate::{app_data_dir, ensured_notes_root, load_app_config};
 #[cfg(desktop)]
 mod devices;
 #[cfg(desktop)]
+mod request_server;
+#[cfg(desktop)]
 mod ssh_server;
 
 #[cfg(desktop)]
@@ -33,7 +35,10 @@ use std::{
     net::{IpAddr, UdpSocket},
     path::PathBuf,
     process::Command,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 
 /// Default local-sync port. It intentionally reuses the old git-daemon port so
@@ -54,6 +59,8 @@ pub struct LocalSyncServerStatus {
     pub supported: bool,
     pub git_available: bool,
     pub running: bool,
+    /// Whether the lightweight request-only daemon owns the local-sync port.
+    pub request_listener_running: bool,
     /// Whether Git fetch/push commands are currently allowed.
     pub sync_window_open: bool,
     /// Seconds until the window closes if no further sync completes.
@@ -101,19 +108,44 @@ pub struct DiscoveredServer {
 
 #[cfg(desktop)]
 struct RunningDaemon {
-    server: ssh_server::SshServerHandle,
+    server: RunningServer,
+    mode: DaemonMode,
     host: Option<String>,
     served_name: String,
     branch: String,
     repo_path: PathBuf,
     /// Shared with the SSH server, which rotates it after each pairing —
     /// status polls read the live value so the QR always shows a valid token.
-    pairing_token: std::sync::Arc<Mutex<String>>,
+    pairing_token: Option<Arc<Mutex<String>>>,
     devices_path: PathBuf,
     host_key_sha256: String,
     access: Arc<ssh_server::SyncAccessState>,
+    cancel_idle_monitor: Arc<AtomicBool>,
     /// mDNS advertisement handle, present when discovery is active.
     mdns: Option<MdnsAdvert>,
+}
+
+#[cfg(desktop)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DaemonMode {
+    Request,
+    Git,
+}
+
+#[cfg(desktop)]
+enum RunningServer {
+    Request(request_server::RequestServerHandle),
+    Git(ssh_server::SshServerHandle),
+}
+
+#[cfg(desktop)]
+impl RunningServer {
+    fn stop(self) {
+        match self {
+            Self::Request(server) => server.stop(),
+            Self::Git(server) => server.stop(),
+        }
+    }
 }
 
 #[cfg(desktop)]
@@ -248,18 +280,20 @@ pub fn local_sync_server_status(app: &AppEnv) -> Result<LocalSyncServerStatus, S
 }
 
 pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatus, String> {
-    start_local_sync_server_with_access(app, true)
+    #[cfg(not(desktop))]
+    {
+        let _ = app;
+        Err(NOT_SUPPORTED_MSG.to_string())
+    }
+
+    #[cfg(desktop)]
+    {
+        start_git_daemon(app)
+    }
 }
 
 pub fn start_local_sync_request_listener_impl(
     app: &AppEnv,
-) -> Result<LocalSyncServerStatus, String> {
-    start_local_sync_server_with_access(app, false)
-}
-
-fn start_local_sync_server_with_access(
-    app: &AppEnv,
-    open_immediately: bool,
 ) -> Result<LocalSyncServerStatus, String> {
     #[cfg(not(desktop))]
     {
@@ -269,114 +303,194 @@ fn start_local_sync_server_with_access(
 
     #[cfg(desktop)]
     {
-        let root = ensured_notes_root(app)?;
-        let git = locate_git().ok_or_else(|| GIT_MISSING_MSG.to_string())?;
-        let idle_timeout = Duration::from_secs(configured_idle_timeout_minutes(app) * 60);
-        eprintln!("[local-sync] start requested: repo='{}'", root.display());
+        start_request_daemon(app)
+    }
+}
 
-        let mut guard = DAEMON
-            .lock()
-            .map_err(|_| "local sync server state is poisoned".to_string())?;
+#[cfg(desktop)]
+fn start_request_daemon(app: &AppEnv) -> Result<LocalSyncServerStatus, String> {
+    let root = ensured_notes_root(app)?;
+    let idle_timeout = Duration::from_secs(configured_idle_timeout_minutes(app) * 60);
+    let served_name = served_name_for_root(&root)?;
+    let branch = branch_for_request_listener(&root);
+    let (host_key, host_key_sha256) = devices::ensure_host_key(app)?;
+    let devices_path = devices::devices_path(app)?;
 
-        // Already serving this profile? Return current status (idempotent).
-        if let Some(daemon) = guard.as_ref().filter(|daemon| {
-            daemon.repo_path == root && daemon.access.idle_timeout == idle_timeout
-        }) {
-            if open_immediately {
-                daemon.access.open_window();
-            }
-            eprintln!(
-                "[local-sync] start skipped: server already running for repo='{}' branch='{}'",
-                daemon.repo_path.display(),
-                daemon.branch
-            );
-            return Ok(running_status(daemon));
-        }
-        // Profile switches replace the listener so mDNS and Git always point
-        // at the active working folder.
-        if let Some(previous) = guard.take() {
-            eprintln!(
-                "[local-sync] active repo changed: '{}' -> '{}'",
-                previous.repo_path.display(),
-                root.display()
-            );
-            teardown_daemon(previous);
-        }
+    let mut guard = DAEMON
+        .lock()
+        .map_err(|_| "local sync server state is poisoned".to_string())?;
+    if let Some(daemon) = guard.as_ref().filter(|daemon| {
+        daemon.mode == DaemonMode::Request
+            && daemon.repo_path == root
+            && daemon.access.idle_timeout == idle_timeout
+    }) {
+        return Ok(running_status(daemon));
+    }
+    if let Some(previous) = guard.take() {
+        teardown_daemon(previous);
+    }
 
-        // Make sure the notes folder is a repo and will accept pushes to its
-        // checked-out branch by updating the working tree. Pending desktop
-        // edits are committed by the server just before it serves each fetch
-        // or push (see ssh_server), so starting — including the settings
-        // page's auto-start — never creates commits by itself.
-        let repo = ensure_git_repo(&root)?;
-        repo.config()
-            .and_then(|mut cfg| cfg.set_str("receive.denyCurrentBranch", "updateInstead"))
-            .map_err(|e| format!("Failed to configure repo for local sync: {e}"))?;
-        let branch = resolve_target_branch(&repo, None);
-        switch_or_prepare_branch(&repo, &branch)?;
-        drop(repo);
-
-        let served_name = root
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or_else(|| "Notes folder name is not valid UTF-8.".to_string())?
-            .to_string();
-
-        let (host_key, host_key_sha256) = devices::ensure_host_key(app)?;
-        let (token_path, token) = devices::load_or_create_pairing_token(app)?;
-        let pairing_token = Arc::new(Mutex::new(token));
-        let consumed_pairing_tokens = Arc::new(Mutex::new(Vec::new()));
-        let devices_path = devices::devices_path(app)?;
-        let access = Arc::new(ssh_server::SyncAccessState::new(
-            idle_timeout,
-            open_immediately,
-        ));
-        let shared = Arc::new(ssh_server::ServerShared {
-            git_path: git,
-            repo_path: root.clone(),
+    let access = Arc::new(ssh_server::SyncAccessState::new(idle_timeout, false));
+    let server = request_server::start_request_server(
+        Arc::new(request_server::RequestServerShared {
             served_name: served_name.clone(),
-            branch: branch.clone(),
-            pairing_token: pairing_token.clone(),
-            consumed_pairing_tokens,
-            pairing_token_path: token_path,
+            repo_path: root.clone(),
             devices_path: devices_path.clone(),
             access: access.clone(),
-        });
-        let server = ssh_server::start_ssh_server(shared, &host_key, LOCAL_SYNC_PORT)?;
+        }),
+        &host_key,
+        LOCAL_SYNC_PORT,
+    )?;
+    let host = detect_lan_ip();
+    let mdns = host.as_ref().and_then(|ip| {
+        let ssh_url = ssh_public_url(ip, &served_name);
+        advertise_mdns(ip, &served_name, &branch, &ssh_url, &host_key_sha256)
+    });
+    let daemon = RunningDaemon {
+        server: RunningServer::Request(server),
+        mode: DaemonMode::Request,
+        host,
+        served_name,
+        branch,
+        repo_path: root,
+        pairing_token: None,
+        devices_path,
+        host_key_sha256,
+        access,
+        cancel_idle_monitor: Arc::new(AtomicBool::new(false)),
+        mdns,
+    };
+    let status = running_status(&daemon);
+    eprintln!(
+        "[local-sync] request daemon running: listen=0.0.0.0:{LOCAL_SYNC_PORT} repo='{}' paired_devices={}",
+        daemon.repo_path.display(),
+        status.paired_devices.len()
+    );
+    *guard = Some(daemon);
+    Ok(status)
+}
 
-        // Advertise over mDNS so phones can auto-discover this server without
-        // typing or scanning anything. Best-effort: failure never blocks hosting.
-        // The advertised URL deliberately omits the pairing token: mDNS is
-        // plaintext broadcast, and the token must stay QR-only (already-paired
-        // devices authenticate by key under any username).
-        let host = detect_lan_ip();
-        let mdns = host.as_ref().and_then(|ip| {
-            let ssh_url = ssh_public_url(ip, &served_name);
-            advertise_mdns(ip, &served_name, &branch, &ssh_url, &host_key_sha256)
-        });
+#[cfg(desktop)]
+fn start_git_daemon(app: &AppEnv) -> Result<LocalSyncServerStatus, String> {
+    let root = ensured_notes_root(app)?;
+    let git = locate_git().ok_or_else(|| GIT_MISSING_MSG.to_string())?;
+    let idle_timeout = Duration::from_secs(configured_idle_timeout_minutes(app) * 60);
+    let repo = ensure_git_repo(&root)?;
+    repo.config()
+        .and_then(|mut cfg| cfg.set_str("receive.denyCurrentBranch", "updateInstead"))
+        .map_err(|error| format!("Failed to configure repo for local sync: {error}"))?;
+    let branch = resolve_target_branch(&repo, None);
+    switch_or_prepare_branch(&repo, &branch)?;
+    drop(repo);
 
-        let daemon = RunningDaemon {
-            server,
-            host,
-            served_name,
-            branch,
-            repo_path: root,
-            pairing_token,
-            devices_path,
-            host_key_sha256,
-            access,
-            mdns,
-        };
-        let status = running_status(&daemon);
-        eprintln!(
-            "[local-sync] server running: listen=0.0.0.0:{LOCAL_SYNC_PORT} advertised_host={} branch='{}' repo='{}' paired_devices={}",
-            daemon.host.as_deref().unwrap_or("<unknown>"),
-            daemon.branch,
-            daemon.repo_path.display(),
-            status.paired_devices.len()
-        );
-        *guard = Some(daemon);
-        Ok(status)
+    let served_name = served_name_for_root(&root)?;
+    let (host_key, host_key_sha256) = devices::ensure_host_key(app)?;
+    let (token_path, token) = devices::load_or_create_pairing_token(app)?;
+    let pairing_token = Arc::new(Mutex::new(token));
+    let devices_path = devices::devices_path(app)?;
+    let access = Arc::new(ssh_server::SyncAccessState::new(idle_timeout, true));
+    let shared = Arc::new(ssh_server::ServerShared {
+        git_path: git,
+        repo_path: root.clone(),
+        served_name: served_name.clone(),
+        branch: branch.clone(),
+        pairing_token: pairing_token.clone(),
+        consumed_pairing_tokens: Arc::new(Mutex::new(Vec::new())),
+        pairing_token_path: token_path,
+        devices_path: devices_path.clone(),
+        access: access.clone(),
+    });
+
+    let mut guard = DAEMON
+        .lock()
+        .map_err(|_| "local sync server state is poisoned".to_string())?;
+    if let Some(daemon) = guard.as_ref().filter(|daemon| {
+        daemon.mode == DaemonMode::Git
+            && daemon.repo_path == root
+            && daemon.access.idle_timeout == idle_timeout
+    }) {
+        daemon.access.open_window();
+        return Ok(running_status(daemon));
+    }
+    if let Some(previous) = guard.take() {
+        teardown_daemon(previous);
+    }
+    let server = match ssh_server::start_ssh_server(shared, &host_key, LOCAL_SYNC_PORT) {
+        Ok(server) => server,
+        Err(error) => {
+            drop(guard);
+            if configured_ask_before_sync(app) {
+                let _ = start_request_daemon(app);
+            }
+            return Err(error);
+        }
+    };
+    let host = detect_lan_ip();
+    let mdns = host.as_ref().and_then(|ip| {
+        let ssh_url = ssh_public_url(ip, &served_name);
+        advertise_mdns(ip, &served_name, &branch, &ssh_url, &host_key_sha256)
+    });
+    let cancel_idle_monitor = Arc::new(AtomicBool::new(false));
+    let daemon = RunningDaemon {
+        server: RunningServer::Git(server),
+        mode: DaemonMode::Git,
+        host,
+        served_name,
+        branch,
+        repo_path: root,
+        pairing_token: Some(pairing_token),
+        devices_path,
+        host_key_sha256,
+        access: access.clone(),
+        cancel_idle_monitor: cancel_idle_monitor.clone(),
+        mdns,
+    };
+    let status = running_status(&daemon);
+    eprintln!(
+        "[local-sync] temporary Git server running: listen=0.0.0.0:{LOCAL_SYNC_PORT} branch='{}' repo='{}'",
+        daemon.branch,
+        daemon.repo_path.display()
+    );
+    *guard = Some(daemon);
+    drop(guard);
+    spawn_idle_monitor(app.clone(), access, cancel_idle_monitor);
+    Ok(status)
+}
+
+#[cfg(desktop)]
+fn spawn_idle_monitor(
+    app: AppEnv,
+    access: Arc<ssh_server::SyncAccessState>,
+    cancel: Arc<AtomicBool>,
+) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_millis(500));
+        if cancel.load(Ordering::Acquire) {
+            return;
+        }
+        if !access.snapshot().window_open {
+            transition_expired_git_daemon(&app, &cancel);
+            return;
+        }
+    });
+}
+
+#[cfg(desktop)]
+fn transition_expired_git_daemon(app: &AppEnv, expected_cancel: &Arc<AtomicBool>) {
+    let previous = DAEMON.lock().ok().and_then(|mut guard| {
+        let matches = guard.as_ref().is_some_and(|daemon| {
+            daemon.mode == DaemonMode::Git
+                && Arc::ptr_eq(&daemon.cancel_idle_monitor, expected_cancel)
+        });
+        matches.then(|| guard.take()).flatten()
+    });
+    let Some(previous) = previous else {
+        return;
+    };
+    eprintln!("[local-sync] Git server idle timeout reached");
+    teardown_daemon(previous);
+    if configured_ask_before_sync(app) {
+        let _ = start_request_daemon(app);
     }
 }
 
@@ -388,16 +502,7 @@ pub fn open_local_sync_window_impl(app: &AppEnv) -> Result<LocalSyncServerStatus
     }
     #[cfg(desktop)]
     {
-        let should_start = DAEMON.lock().map(|guard| guard.is_none()).unwrap_or(true);
-        if should_start {
-            return start_local_sync_server_with_access(app, true);
-        }
-        if let Ok(guard) = DAEMON.lock() {
-            if let Some(daemon) = guard.as_ref() {
-                daemon.access.open_window();
-            }
-        }
-        local_sync_server_status(app)
+        start_git_daemon(app)
     }
 }
 
@@ -409,17 +514,26 @@ pub fn close_local_sync_window_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
     }
     #[cfg(desktop)]
     {
-        if let Ok(guard) = DAEMON.lock() {
-            if let Some(daemon) = guard.as_ref() {
-                daemon.access.close_window();
-            }
+        let previous = DAEMON.lock().ok().and_then(|mut guard| {
+            guard
+                .as_ref()
+                .is_some_and(|daemon| daemon.mode == DaemonMode::Git)
+                .then(|| guard.take())
+                .flatten()
+        });
+        if let Some(previous) = previous {
+            teardown_daemon(previous);
         }
-        local_sync_server_status(app)
+        if configured_ask_before_sync(app) {
+            start_request_daemon(app)
+        } else {
+            local_sync_server_status(app)
+        }
     }
 }
 
 pub fn approve_local_sync_request_impl(app: &AppEnv) -> Result<LocalSyncServerStatus, String> {
-    open_local_sync_window_impl(app)
+    start_local_sync_server_impl(app)
 }
 
 pub fn decline_local_sync_request_impl(app: &AppEnv) -> Result<LocalSyncServerStatus, String> {
@@ -475,6 +589,7 @@ pub fn shutdown_local_sync_server() {
 /// Stop the mDNS advertisement (if any) and shut down the embedded SSH server.
 #[cfg(desktop)]
 fn teardown_daemon(mut daemon: RunningDaemon) {
+    daemon.cancel_idle_monitor.store(true, Ordering::Release);
     if let Some(advert) = daemon.mdns.take() {
         let _ = advert.daemon.unregister(&advert.fullname);
         let _ = advert.daemon.shutdown();
@@ -490,6 +605,7 @@ fn unsupported_status(repo_path: String) -> LocalSyncServerStatus {
         supported: false,
         git_available: false,
         running: false,
+        request_listener_running: false,
         sync_window_open: false,
         sync_window_seconds_remaining: 0,
         idle_timeout_minutes: 10,
@@ -515,6 +631,7 @@ fn idle_status(
         supported: true,
         git_available,
         running: false,
+        request_listener_running: false,
         sync_window_open: false,
         sync_window_seconds_remaining: 0,
         idle_timeout_minutes,
@@ -535,13 +652,17 @@ fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
     let access = daemon.access.snapshot();
     let token = daemon
         .pairing_token
-        .lock()
-        .map(|t| t.clone())
-        .unwrap_or_default();
-    let ssh_url = daemon
-        .host
         .as_ref()
-        .map(|host| ssh_pairing_url(host, &daemon.served_name, &token));
+        .and_then(|token| token.lock().ok().map(|value| value.clone()))
+        .unwrap_or_default();
+    let ssh_url = (daemon.mode == DaemonMode::Git)
+        .then(|| {
+            daemon
+                .host
+                .as_ref()
+                .map(|host| ssh_pairing_url(host, &daemon.served_name, &token))
+        })
+        .flatten();
     let paired_devices = devices::list_devices(&daemon.devices_path)
         .into_iter()
         .map(|device| PairedDeviceInfo {
@@ -551,10 +672,15 @@ fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
         .collect();
     LocalSyncServerStatus {
         supported: true,
-        git_available: true,
+        git_available: locate_git().is_some(),
         running: true,
-        sync_window_open: access.window_open,
-        sync_window_seconds_remaining: access.seconds_remaining,
+        request_listener_running: daemon.mode == DaemonMode::Request,
+        sync_window_open: daemon.mode == DaemonMode::Git && access.window_open,
+        sync_window_seconds_remaining: if daemon.mode == DaemonMode::Git {
+            access.seconds_remaining
+        } else {
+            0
+        },
         idle_timeout_minutes: configured_timeout_from_duration(daemon.access.idle_timeout),
         pending_request: access.pending_request,
         host: daemon.host.clone(),
@@ -577,11 +703,33 @@ fn configured_idle_timeout_minutes(app: &AppEnv) -> u64 {
 }
 
 #[cfg(desktop)]
+fn configured_ask_before_sync(app: &AppEnv) -> bool {
+    app_data_dir(app)
+        .map(|path| load_app_config(&path).local_sync_ask_before_sync)
+        .unwrap_or(false)
+}
+
+#[cfg(desktop)]
 fn configured_timeout_from_duration(duration: Duration) -> u64 {
     duration.as_secs().div_ceil(60)
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+#[cfg(desktop)]
+fn served_name_for_root(root: &std::path::Path) -> Result<String, String> {
+    root.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.to_string())
+        .ok_or_else(|| "Notes folder name is not valid UTF-8.".to_string())
+}
+
+#[cfg(desktop)]
+fn branch_for_request_listener(root: &std::path::Path) -> String {
+    git2::Repository::open(root)
+        .map(|repo| resolve_target_branch(&repo, None))
+        .unwrap_or_else(|_| "main".to_string())
+}
 
 /// Locate a usable `git` binary: PATH first, then common GUI-app install spots
 /// (Finder/Dock-launched apps get a minimal PATH, mirroring whisper_env).
