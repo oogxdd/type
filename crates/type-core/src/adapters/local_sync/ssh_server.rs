@@ -22,11 +22,143 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::{Child, ChildStdin, Command};
 
 use super::devices;
+use super::PendingLocalSyncRequest;
 
 /// After one key pairs, libgit2/mobile flows may open another SSH auth session
 /// before the UI has switched to the token-less durable remote. Keep the just
 /// consumed QR token valid briefly so one scan cannot expire mid-setup.
 const CONSUMED_PAIRING_TOKEN_GRACE: Duration = Duration::from_secs(5 * 60);
+
+/// Stable markers propagated through git/libgit2 so mobile can distinguish a
+/// pending desktop decision from ordinary transport failures.
+pub const APPROVAL_REQUIRED_MARKER: &str = "TYPE_SYNC_APPROVAL_REQUIRED";
+pub const APPROVAL_DECLINED_MARKER: &str = "TYPE_SYNC_APPROVAL_DECLINED";
+const DECLINE_COOLDOWN: Duration = Duration::from_secs(30);
+
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum SyncAccessDecision {
+    Allowed,
+    ApprovalRequired { notify_desktop: bool },
+    Declined,
+}
+
+pub(super) struct SyncAccessSnapshot {
+    pub window_open: bool,
+    pub seconds_remaining: u64,
+    pub pending_request: Option<PendingLocalSyncRequest>,
+}
+
+struct SyncAccessInner {
+    window_open_until: Option<Instant>,
+    pending_request: Option<PendingLocalSyncRequest>,
+    declined_until: Option<Instant>,
+}
+
+/// Approval state shared by every SSH connection. The listener stays alive
+/// while a closed window rejects Git commands, so a paired phone can create a
+/// desktop request without the repository being available yet.
+pub(super) struct SyncAccessState {
+    pub(super) idle_timeout: Duration,
+    inner: Mutex<SyncAccessInner>,
+}
+
+impl SyncAccessState {
+    pub(super) fn new(idle_timeout: Duration, open_immediately: bool) -> Self {
+        let now = Instant::now();
+        Self {
+            idle_timeout,
+            inner: Mutex::new(SyncAccessInner {
+                window_open_until: open_immediately.then_some(now + idle_timeout),
+                pending_request: None,
+                declined_until: None,
+            }),
+        }
+    }
+
+    pub(super) fn request(&self, device_name: &str) -> SyncAccessDecision {
+        let now = Instant::now();
+        let Ok(mut inner) = self.inner.lock() else {
+            return SyncAccessDecision::Declined;
+        };
+        if inner
+            .window_open_until
+            .is_some_and(|deadline| deadline > now)
+        {
+            inner.window_open_until = Some(now + self.idle_timeout);
+            return SyncAccessDecision::Allowed;
+        }
+        inner.window_open_until = None;
+        if inner.declined_until.is_some_and(|deadline| deadline > now) {
+            return SyncAccessDecision::Declined;
+        }
+        inner.declined_until = None;
+
+        let notify_desktop = inner
+            .pending_request
+            .as_ref()
+            .is_none_or(|request| request.device_name != device_name);
+        if notify_desktop {
+            inner.pending_request = Some(PendingLocalSyncRequest {
+                device_name: device_name.to_string(),
+                requested_ms: crate::now_ms().unwrap_or(0),
+            });
+        }
+        SyncAccessDecision::ApprovalRequired { notify_desktop }
+    }
+
+    pub(super) fn open_window(&self) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.window_open_until = Some(Instant::now() + self.idle_timeout);
+            inner.pending_request = None;
+            inner.declined_until = None;
+        }
+    }
+
+    pub(super) fn close_window(&self) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.window_open_until = None;
+            inner.pending_request = None;
+        }
+    }
+
+    pub(super) fn decline(&self) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.window_open_until = None;
+            inner.pending_request = None;
+            inner.declined_until = Some(Instant::now() + DECLINE_COOLDOWN);
+        }
+    }
+
+    pub(super) fn mark_activity(&self) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.window_open_until = Some(Instant::now() + self.idle_timeout);
+        }
+    }
+
+    pub(super) fn snapshot(&self) -> SyncAccessSnapshot {
+        let now = Instant::now();
+        let Ok(mut inner) = self.inner.lock() else {
+            return SyncAccessSnapshot {
+                window_open: false,
+                seconds_remaining: 0,
+                pending_request: None,
+            };
+        };
+        let seconds_remaining = inner
+            .window_open_until
+            .filter(|deadline| *deadline > now)
+            .map(|deadline| deadline.duration_since(now).as_secs().saturating_add(1))
+            .unwrap_or(0);
+        if seconds_remaining == 0 {
+            inner.window_open_until = None;
+        }
+        SyncAccessSnapshot {
+            window_open: seconds_remaining > 0,
+            seconds_remaining,
+            pending_request: inner.pending_request.clone(),
+        }
+    }
+}
 
 /// State shared by every client connection of one server run.
 pub(super) struct ServerShared {
@@ -41,6 +173,7 @@ pub(super) struct ServerShared {
     pub consumed_pairing_tokens: Arc<Mutex<Vec<(String, Instant)>>>,
     pub pairing_token_path: PathBuf,
     pub devices_path: PathBuf,
+    pub access: Arc<SyncAccessState>,
 }
 
 pub(super) struct SshServerHandle {
@@ -99,6 +232,7 @@ impl Server for GitSshServer {
         ClientHandler {
             shared: self.shared.clone(),
             stdins: HashMap::new(),
+            authenticated_device: None,
         }
     }
 }
@@ -107,6 +241,7 @@ struct ClientHandler {
     shared: Arc<ServerShared>,
     /// Open stdin pipes of the git child process per exec channel.
     stdins: HashMap<ChannelId, ChildStdin>,
+    authenticated_device: Option<String>,
 }
 
 fn reject() -> Auth {
@@ -206,11 +341,14 @@ impl Handler for ClientHandler {
             return Ok(reject());
         };
         let key_preview = &key_line[key_line.len().saturating_sub(12)..];
-        if devices::is_authorized(&self.shared.devices_path, &key_line) {
+        if let Some(device_name) =
+            devices::device_name_for_key(&self.shared.devices_path, &key_line)
+        {
             eprintln!(
                 "[local-sync] auth ok: paired device key (…{key_preview}) as '{}'",
                 pairing_user_for_log(user)
             );
+            self.authenticated_device = Some(device_name);
             return Ok(Auth::Accept);
         }
         match pairing_token_match(
@@ -233,6 +371,8 @@ impl Handler for ClientHandler {
                         let fresh = devices::rotate_pairing_token(&self.shared.pairing_token_path);
                         let fresh_suffix = pairing_token_suffix(&fresh);
                         *self.shared.pairing_token.lock().unwrap() = fresh;
+                        self.authenticated_device = Some(name.clone());
+                        self.shared.access.open_window();
                         eprintln!(
                             "[local-sync] paired new device '{name}' (…{key_preview}) with current QR token pair-<token:{consumed_suffix}>; rotated to pair-<token:{fresh_suffix}>"
                         );
@@ -250,6 +390,8 @@ impl Handler for ClientHandler {
                 let name = devices::device_name_from_key(key);
                 match devices::register_device(&self.shared.devices_path, &key_line, &name) {
                     Ok(()) => {
+                        self.authenticated_device = Some(name.clone());
+                        self.shared.access.open_window();
                         eprintln!(
                             "[local-sync] paired new device '{name}' (…{key_preview}) with recently consumed QR token '{}'",
                             pairing_user_for_log(user)
@@ -305,6 +447,37 @@ impl Handler for ClientHandler {
             return Ok(());
         }
 
+        let device_name = self
+            .authenticated_device
+            .as_deref()
+            .unwrap_or("Paired phone");
+        match self.shared.access.request(device_name) {
+            SyncAccessDecision::Allowed => {}
+            SyncAccessDecision::ApprovalRequired { notify_desktop } => {
+                session.channel_success(channel)?;
+                fail_channel(
+                    session,
+                    channel,
+                    &format!("{APPROVAL_REQUIRED_MARKER}: Waiting for approval on the desktop."),
+                );
+                if notify_desktop {
+                    if let Some(request) = self.shared.access.snapshot().pending_request {
+                        super::notify_local_sync_request(request);
+                    }
+                }
+                return Ok(());
+            }
+            SyncAccessDecision::Declined => {
+                session.channel_success(channel)?;
+                fail_channel(
+                    session,
+                    channel,
+                    &format!("{APPROVAL_DECLINED_MARKER}: Sync was declined on the desktop."),
+                );
+                return Ok(());
+            }
+        }
+
         eprintln!("[local-sync] serving {service} for '{requested_path}'");
         // Serve the latest notes: the desktop edits its working tree without
         // committing, so pending changes are committed here — right before a
@@ -339,7 +512,7 @@ impl Handler for ClientHandler {
         if let Some(stdin) = child.stdin.take() {
             self.stdins.insert(channel, stdin);
         }
-        pump_child_io(session, channel, child, service);
+        pump_child_io(session, channel, child, service, self.shared.access.clone());
         Ok(())
     }
 
@@ -380,7 +553,13 @@ impl Handler for ClientHandler {
 /// Forward the git child's stdout/stderr to the SSH channel, then report its
 /// exit status and close the channel. A completed receive-pack changed the
 /// live working tree, so the desktop UI is notified to refresh.
-fn pump_child_io(session: &mut Session, channel: ChannelId, mut child: Child, service: &'static str) {
+fn pump_child_io(
+    session: &mut Session,
+    channel: ChannelId,
+    mut child: Child,
+    service: &'static str,
+    access: Arc<SyncAccessState>,
+) {
     let handle = session.handle();
     tokio::spawn(async move {
         let stdout = child.stdout.take();
@@ -436,6 +615,9 @@ fn pump_child_io(session: &mut Session, channel: ChannelId, mut child: Child, se
         let _ = handle.exit_status_request(channel, code).await;
         let _ = handle.eof(channel).await;
         let _ = handle.close(channel).await;
+        if code == 0 {
+            access.mark_activity();
+        }
         if service == "receive-pack" && code == 0 {
             eprintln!("[local-sync] push received — notifying the app to refresh notes");
             super::notify_local_sync_push_received();
@@ -554,6 +736,53 @@ mod tests {
         assert_eq!(percent_decode("plain"), "plain");
     }
 
+    #[test]
+    fn closed_window_requests_once_then_opens_and_renews() {
+        let access = SyncAccessState::new(Duration::from_secs(60), false);
+        assert_eq!(
+            access.request("Alice's phone"),
+            SyncAccessDecision::ApprovalRequired {
+                notify_desktop: true
+            }
+        );
+        assert_eq!(
+            access.request("Alice's phone"),
+            SyncAccessDecision::ApprovalRequired {
+                notify_desktop: false
+            }
+        );
+        assert_eq!(
+            access.snapshot().pending_request,
+            Some(PendingLocalSyncRequest {
+                device_name: "Alice's phone".to_string(),
+                requested_ms: access
+                    .snapshot()
+                    .pending_request
+                    .expect("pending request")
+                    .requested_ms,
+            })
+        );
+
+        access.open_window();
+        assert_eq!(access.request("Alice's phone"), SyncAccessDecision::Allowed);
+        let snapshot = access.snapshot();
+        assert!(snapshot.window_open);
+        assert!(snapshot.seconds_remaining > 0);
+        assert!(snapshot.pending_request.is_none());
+    }
+
+    #[test]
+    fn decline_rejects_retries_during_cooldown() {
+        let access = SyncAccessState::new(Duration::from_secs(60), false);
+        let _ = access.request("Alice's phone");
+        access.decline();
+        assert_eq!(
+            access.request("Alice's phone"),
+            SyncAccessDecision::Declined
+        );
+        assert!(access.snapshot().pending_request.is_none());
+    }
+
     /// End-to-end: a real `git` client pairs with the embedded server over SSH
     /// (unknown key + pairing-token username), clones, pushes, and the push
     /// updates the served working tree via receive.denyCurrentBranch.
@@ -637,6 +866,7 @@ mod tests {
                 consumed_pairing_tokens: Arc::new(Mutex::new(Vec::new())),
                 pairing_token_path: token_path.clone(),
                 devices_path: devices_path.clone(),
+                access: Arc::new(SyncAccessState::new(Duration::from_secs(60), true)),
             }),
             &host_key_text,
             port,
@@ -775,11 +1005,8 @@ mod tests {
         let durable_root = base.join("durable");
         fs::create_dir_all(&durable_root).unwrap();
         let durable_repo = crate::ensure_git_repo(&durable_root).unwrap();
-        crate::ensure_origin_remote(
-            &durable_repo,
-            &format!("ssh://127.0.0.1:{port}/notes"),
-        )
-        .unwrap();
+        crate::ensure_origin_remote(&durable_repo, &format!("ssh://127.0.0.1:{port}/notes"))
+            .unwrap();
         crate::perform_fetch(
             &durable_repo,
             &branch,

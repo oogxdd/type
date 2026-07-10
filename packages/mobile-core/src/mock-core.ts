@@ -45,6 +45,8 @@ const defaultAppConfig = () => ({
   huggingface_api_key: "",
   huggingface_model: "microsoft/trocr-base-handwritten",
   note_file_name_format: "utc_timestamp_slug",
+  local_sync_ask_before_sync: false,
+  local_sync_idle_timeout_minutes: 10,
 });
 
 const parentOf = (path: string) => {

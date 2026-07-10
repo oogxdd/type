@@ -39,6 +39,10 @@ pub(super) fn run() {
                 type_core::set_local_sync_push_listener(Box::new(move || {
                     let _ = push_handle.emit("local-sync-push-received", ());
                 }));
+                let request_handle = app_handle.clone();
+                type_core::set_local_sync_request_listener(Box::new(move |request| {
+                    let _ = request_handle.emit("local-sync-requested", request);
+                }));
             }
             if let Err(error) = crate::sync_recordings_asset_scope(app_handle) {
                 eprintln!(
@@ -107,6 +111,11 @@ pub(super) fn run() {
             git_sync::git_push,
             local_sync::get_local_sync_server_status,
             local_sync::start_local_sync_server,
+            local_sync::start_local_sync_request_listener,
+            local_sync::open_local_sync_window,
+            local_sync::close_local_sync_window,
+            local_sync::approve_local_sync_request,
+            local_sync::decline_local_sync_request,
             local_sync::stop_local_sync_server,
             local_sync::discover_local_sync_servers,
         ])

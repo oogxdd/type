@@ -49,6 +49,11 @@ pub trait LocalSyncGateway {
 
     fn status(&self) -> Result<Self::Status, String>;
     fn start(&self) -> Result<Self::Status, String>;
+    fn start_request_listener(&self) -> Result<Self::Status, String>;
+    fn open_window(&self) -> Result<Self::Status, String>;
+    fn close_window(&self) -> Result<Self::Status, String>;
+    fn approve(&self) -> Result<Self::Status, String>;
+    fn decline(&self) -> Result<Self::Status, String>;
     fn stop(&self) -> Result<Self::Status, String>;
     fn discover(&self, timeout_ms: u64) -> Result<Vec<Self::Discovered>, String>;
 }

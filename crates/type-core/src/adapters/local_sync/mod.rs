@@ -18,8 +18,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::ensured_notes_root;
 use crate::ports::local_sync::LocalSyncGateway;
+use crate::{app_data_dir, ensured_notes_root, load_app_config};
 
 #[cfg(desktop)]
 mod devices;
@@ -54,6 +54,14 @@ pub struct LocalSyncServerStatus {
     pub supported: bool,
     pub git_available: bool,
     pub running: bool,
+    /// Whether Git fetch/push commands are currently allowed.
+    pub sync_window_open: bool,
+    /// Seconds until the window closes if no further sync completes.
+    pub sync_window_seconds_remaining: u64,
+    /// Configured inactivity timeout used for approved windows.
+    pub idle_timeout_minutes: u64,
+    /// Paired device currently waiting for a desktop decision.
+    pub pending_request: Option<PendingLocalSyncRequest>,
     pub host: Option<String>,
     pub port: u16,
     pub branch: Option<String>,
@@ -62,6 +70,12 @@ pub struct LocalSyncServerStatus {
     pub paired_devices: Vec<PairedDeviceInfo>,
     pub repo_path: String,
     pub error: Option<String>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+pub struct PendingLocalSyncRequest {
+    pub device_name: String,
+    pub requested_ms: i64,
 }
 
 /// A phone whose key the sync server accepts (shown on the desktop card so
@@ -80,6 +94,7 @@ pub struct DiscoveredServer {
     pub port: u16,
     pub url: String,
     pub branch: String,
+    pub host_key_sha256: Option<String>,
 }
 
 // ── Running daemon state ─────────────────────────────────────────────────────
@@ -96,6 +111,7 @@ struct RunningDaemon {
     pairing_token: std::sync::Arc<Mutex<String>>,
     devices_path: PathBuf,
     host_key_sha256: String,
+    access: Arc<ssh_server::SyncAccessState>,
     /// mDNS advertisement handle, present when discovery is active.
     mdns: Option<MdnsAdvert>,
 }
@@ -117,6 +133,10 @@ static DAEMON: Mutex<Option<RunningDaemon>> = Mutex::new(None);
 static PUSH_LISTENER: Mutex<Option<Box<dyn Fn() + Send + Sync>>> = Mutex::new(None);
 
 #[cfg(desktop)]
+static REQUEST_LISTENER: Mutex<Option<Box<dyn Fn(PendingLocalSyncRequest) + Send + Sync>>> =
+    Mutex::new(None);
+
+#[cfg(desktop)]
 pub fn set_local_sync_push_listener(listener: Box<dyn Fn() + Send + Sync>) {
     if let Ok(mut guard) = PUSH_LISTENER.lock() {
         *guard = Some(listener);
@@ -128,6 +148,24 @@ fn notify_local_sync_push_received() {
     if let Ok(guard) = PUSH_LISTENER.lock() {
         if let Some(listener) = guard.as_ref() {
             listener();
+        }
+    }
+}
+
+#[cfg(desktop)]
+pub fn set_local_sync_request_listener(
+    listener: Box<dyn Fn(PendingLocalSyncRequest) + Send + Sync>,
+) {
+    if let Ok(mut guard) = REQUEST_LISTENER.lock() {
+        *guard = Some(listener);
+    }
+}
+
+#[cfg(desktop)]
+fn notify_local_sync_request(request: PendingLocalSyncRequest) {
+    if let Ok(guard) = REQUEST_LISTENER.lock() {
+        if let Some(listener) = guard.as_ref() {
+            listener(request);
         }
     }
 }
@@ -156,6 +194,26 @@ impl LocalSyncGateway for LocalSyncAdapter {
         start_local_sync_server_impl(&self.app)
     }
 
+    fn start_request_listener(&self) -> Result<Self::Status, String> {
+        start_local_sync_request_listener_impl(&self.app)
+    }
+
+    fn open_window(&self) -> Result<Self::Status, String> {
+        open_local_sync_window_impl(&self.app)
+    }
+
+    fn close_window(&self) -> Result<Self::Status, String> {
+        close_local_sync_window_impl(&self.app)
+    }
+
+    fn approve(&self) -> Result<Self::Status, String> {
+        approve_local_sync_request_impl(&self.app)
+    }
+
+    fn decline(&self) -> Result<Self::Status, String> {
+        decline_local_sync_request_impl(&self.app)
+    }
+
     fn stop(&self) -> Result<Self::Status, String> {
         stop_local_sync_server_impl(&self.app)
     }
@@ -181,14 +239,28 @@ pub fn local_sync_server_status(app: &AppEnv) -> Result<LocalSyncServerStatus, S
             .lock()
             .map_err(|_| "local sync server state is poisoned".to_string())?;
         let git_available = locate_git().is_some();
+        let idle_timeout_minutes = configured_idle_timeout_minutes(app);
         Ok(match guard.as_ref() {
             Some(daemon) => running_status(daemon),
-            None => idle_status(git_available, repo_path),
+            None => idle_status(git_available, repo_path, idle_timeout_minutes),
         })
     }
 }
 
 pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatus, String> {
+    start_local_sync_server_with_access(app, true)
+}
+
+pub fn start_local_sync_request_listener_impl(
+    app: &AppEnv,
+) -> Result<LocalSyncServerStatus, String> {
+    start_local_sync_server_with_access(app, false)
+}
+
+fn start_local_sync_server_with_access(
+    app: &AppEnv,
+    open_immediately: bool,
+) -> Result<LocalSyncServerStatus, String> {
     #[cfg(not(desktop))]
     {
         let _ = app;
@@ -207,6 +279,9 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
 
         // Already running? Return current status (idempotent).
         if let Some(daemon) = guard.as_ref() {
+            if open_immediately {
+                daemon.access.open_window();
+            }
             eprintln!(
                 "[local-sync] start skipped: server already running for repo='{}' branch='{}'",
                 daemon.repo_path.display(),
@@ -239,6 +314,11 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
         let pairing_token = Arc::new(Mutex::new(token));
         let consumed_pairing_tokens = Arc::new(Mutex::new(Vec::new()));
         let devices_path = devices::devices_path(app)?;
+        let idle_timeout = Duration::from_secs(configured_idle_timeout_minutes(app) * 60);
+        let access = Arc::new(ssh_server::SyncAccessState::new(
+            idle_timeout,
+            open_immediately,
+        ));
         let shared = Arc::new(ssh_server::ServerShared {
             git_path: git,
             repo_path: root.clone(),
@@ -248,6 +328,7 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
             consumed_pairing_tokens,
             pairing_token_path: token_path,
             devices_path: devices_path.clone(),
+            access: access.clone(),
         });
         let server = ssh_server::start_ssh_server(shared, &host_key, LOCAL_SYNC_PORT)?;
 
@@ -259,7 +340,7 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
         let host = detect_lan_ip();
         let mdns = host.as_ref().and_then(|ip| {
             let ssh_url = ssh_public_url(ip, &served_name);
-            advertise_mdns(ip, &served_name, &branch, &ssh_url)
+            advertise_mdns(ip, &served_name, &branch, &ssh_url, &host_key_sha256)
         });
 
         let daemon = RunningDaemon {
@@ -271,6 +352,7 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
             pairing_token,
             devices_path,
             host_key_sha256,
+            access,
             mdns,
         };
         let status = running_status(&daemon);
@@ -283,6 +365,65 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
         );
         *guard = Some(daemon);
         Ok(status)
+    }
+}
+
+pub fn open_local_sync_window_impl(app: &AppEnv) -> Result<LocalSyncServerStatus, String> {
+    #[cfg(not(desktop))]
+    {
+        let _ = app;
+        Err(NOT_SUPPORTED_MSG.to_string())
+    }
+    #[cfg(desktop)]
+    {
+        let should_start = DAEMON.lock().map(|guard| guard.is_none()).unwrap_or(true);
+        if should_start {
+            return start_local_sync_server_with_access(app, true);
+        }
+        if let Ok(guard) = DAEMON.lock() {
+            if let Some(daemon) = guard.as_ref() {
+                daemon.access.open_window();
+            }
+        }
+        local_sync_server_status(app)
+    }
+}
+
+pub fn close_local_sync_window_impl(app: &AppEnv) -> Result<LocalSyncServerStatus, String> {
+    #[cfg(not(desktop))]
+    {
+        let _ = app;
+        Err(NOT_SUPPORTED_MSG.to_string())
+    }
+    #[cfg(desktop)]
+    {
+        if let Ok(guard) = DAEMON.lock() {
+            if let Some(daemon) = guard.as_ref() {
+                daemon.access.close_window();
+            }
+        }
+        local_sync_server_status(app)
+    }
+}
+
+pub fn approve_local_sync_request_impl(app: &AppEnv) -> Result<LocalSyncServerStatus, String> {
+    open_local_sync_window_impl(app)
+}
+
+pub fn decline_local_sync_request_impl(app: &AppEnv) -> Result<LocalSyncServerStatus, String> {
+    #[cfg(not(desktop))]
+    {
+        let _ = app;
+        Err(NOT_SUPPORTED_MSG.to_string())
+    }
+    #[cfg(desktop)]
+    {
+        if let Ok(guard) = DAEMON.lock() {
+            if let Some(daemon) = guard.as_ref() {
+                daemon.access.decline();
+            }
+        }
+        local_sync_server_status(app)
     }
 }
 
@@ -337,6 +478,10 @@ fn unsupported_status(repo_path: String) -> LocalSyncServerStatus {
         supported: false,
         git_available: false,
         running: false,
+        sync_window_open: false,
+        sync_window_seconds_remaining: 0,
+        idle_timeout_minutes: 10,
+        pending_request: None,
         host: None,
         port: LOCAL_SYNC_PORT,
         branch: None,
@@ -349,11 +494,19 @@ fn unsupported_status(repo_path: String) -> LocalSyncServerStatus {
 }
 
 #[cfg(desktop)]
-fn idle_status(git_available: bool, repo_path: String) -> LocalSyncServerStatus {
+fn idle_status(
+    git_available: bool,
+    repo_path: String,
+    idle_timeout_minutes: u64,
+) -> LocalSyncServerStatus {
     LocalSyncServerStatus {
         supported: true,
         git_available,
         running: false,
+        sync_window_open: false,
+        sync_window_seconds_remaining: 0,
+        idle_timeout_minutes,
+        pending_request: None,
         host: None,
         port: LOCAL_SYNC_PORT,
         branch: None,
@@ -367,6 +520,7 @@ fn idle_status(git_available: bool, repo_path: String) -> LocalSyncServerStatus 
 
 #[cfg(desktop)]
 fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
+    let access = daemon.access.snapshot();
     let token = daemon
         .pairing_token
         .lock()
@@ -387,6 +541,10 @@ fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
         supported: true,
         git_available: true,
         running: true,
+        sync_window_open: access.window_open,
+        sync_window_seconds_remaining: access.seconds_remaining,
+        idle_timeout_minutes: configured_timeout_from_duration(daemon.access.idle_timeout),
+        pending_request: access.pending_request,
         host: daemon.host.clone(),
         port: LOCAL_SYNC_PORT,
         branch: Some(daemon.branch.clone()),
@@ -396,6 +554,19 @@ fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
         repo_path: daemon.repo_path.to_string_lossy().to_string(),
         error: None,
     }
+}
+
+#[cfg(desktop)]
+fn configured_idle_timeout_minutes(app: &AppEnv) -> u64 {
+    app_data_dir(app)
+        .map(|path| load_app_config(&path).local_sync_idle_timeout_minutes)
+        .unwrap_or(10)
+        .clamp(1, 60)
+}
+
+#[cfg(desktop)]
+fn configured_timeout_from_duration(duration: Duration) -> u64 {
+    duration.as_secs().div_ceil(60)
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -542,6 +713,7 @@ fn advertise_mdns(
     served_name: &str,
     branch: &str,
     remote_url: &str,
+    host_key_sha256: &str,
 ) -> Option<MdnsAdvert> {
     use mdns_sd::ServiceInfo;
 
@@ -555,6 +727,7 @@ fn advertise_mdns(
         ("path", served_name),
         ("name", label.as_str()),
         ("transport", "ssh"),
+        ("host_key_sha256", host_key_sha256),
     ];
     let info = ServiceInfo::new(
         MDNS_SERVICE_TYPE,
@@ -623,11 +796,15 @@ fn discovered_from_info(info: &mdns_sd::ResolvedService) -> Option<DiscoveredSer
         .get_property_val_str("name")
         .map(|value| value.to_string())
         .unwrap_or_else(|| info.fullname.clone());
+    let host_key_sha256 = info
+        .get_property_val_str("host_key_sha256")
+        .map(|value| value.to_string());
     Some(DiscoveredServer {
         name,
         host,
         port: info.port,
         url,
         branch,
+        host_key_sha256,
     })
 }

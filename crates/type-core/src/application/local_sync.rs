@@ -18,6 +18,26 @@ impl<G: LocalSyncGateway> LocalSyncUseCases<G> {
         self.gateway.start()
     }
 
+    pub fn start_request_listener(&self) -> Result<G::Status, String> {
+        self.gateway.start_request_listener()
+    }
+
+    pub fn open_window(&self) -> Result<G::Status, String> {
+        self.gateway.open_window()
+    }
+
+    pub fn close_window(&self) -> Result<G::Status, String> {
+        self.gateway.close_window()
+    }
+
+    pub fn approve(&self) -> Result<G::Status, String> {
+        self.gateway.approve()
+    }
+
+    pub fn decline(&self) -> Result<G::Status, String> {
+        self.gateway.decline()
+    }
+
     pub fn stop(&self) -> Result<G::Status, String> {
         self.gateway.stop()
     }

@@ -120,9 +120,14 @@ pub(super) fn normalize_key_line(line: &str) -> Option<String> {
 }
 
 pub(super) fn is_authorized(path: &Path, key_line: &str) -> bool {
+    device_name_for_key(path, key_line).is_some()
+}
+
+pub(super) fn device_name_for_key(path: &Path, key_line: &str) -> Option<String> {
     list_devices(path)
-        .iter()
-        .any(|device| device.public_key == key_line)
+        .into_iter()
+        .find(|device| device.public_key == key_line)
+        .map(|device| device.name)
 }
 
 pub(super) fn register_device(path: &Path, key_line: &str, name: &str) -> Result<(), String> {

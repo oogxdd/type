@@ -56,6 +56,10 @@ export type LocalSyncServerStatus = {
   supported: boolean;
   git_available: boolean;
   running: boolean;
+  sync_window_open: boolean;
+  sync_window_seconds_remaining: number;
+  idle_timeout_minutes: number;
+  pending_request: PendingLocalSyncRequest | null;
   host: string | null;
   port: number;
   branch: string | null;
@@ -64,6 +68,11 @@ export type LocalSyncServerStatus = {
   paired_devices: PairedDeviceInfo[];
   repo_path: string;
   error: string | null;
+};
+
+export type PendingLocalSyncRequest = {
+  device_name: string;
+  requested_ms: number;
 };
 
 export type PairedDeviceInfo = {
@@ -87,6 +96,7 @@ export type DiscoveredServer = {
   port: number;
   url: string;
   branch: string;
+  host_key_sha256: string | null;
 };
 
 export type GitCommitHistorySyncState = "synced" | "local";
@@ -118,6 +128,8 @@ export type AppConfig = {
   huggingface_api_key: string;
   huggingface_model: string;
   note_file_name_format: string;
+  local_sync_ask_before_sync: boolean;
+  local_sync_idle_timeout_minutes: number;
 };
 
 export type NotesProfileSnapshot = {

@@ -268,6 +268,8 @@ impl From<crate::ports::profiles::AppConfig> for AppConfig {
             huggingface_api_key: c.huggingface_api_key,
             huggingface_model: c.huggingface_model,
             note_file_name_format: c.note_file_name_format,
+            local_sync_ask_before_sync: c.local_sync_ask_before_sync,
+            local_sync_idle_timeout_minutes: c.local_sync_idle_timeout_minutes,
         }
     }
 }
@@ -283,6 +285,8 @@ impl From<AppConfig> for crate::ports::profiles::AppConfig {
             huggingface_api_key: c.huggingface_api_key,
             huggingface_model: c.huggingface_model,
             note_file_name_format: c.note_file_name_format,
+            local_sync_ask_before_sync: c.local_sync_ask_before_sync,
+            local_sync_idle_timeout_minutes: c.local_sync_idle_timeout_minutes,
         }
     }
 }

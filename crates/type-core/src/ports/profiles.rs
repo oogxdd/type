@@ -28,6 +28,8 @@ pub struct AppConfig {
     pub huggingface_api_key: String,
     pub huggingface_model: String,
     pub note_file_name_format: String,
+    pub local_sync_ask_before_sync: bool,
+    pub local_sync_idle_timeout_minutes: u64,
 }
 
 /// Where recordings made in a working folder get transcribed.

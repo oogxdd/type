@@ -23,6 +23,13 @@ pub struct AppConfig {
     pub huggingface_model: String,
     #[serde(default = "default_note_filename_format")]
     pub note_file_name_format: String,
+    /// Keep a request-only local-sync listener available while the desktop app
+    /// is unlocked. Paired devices must be approved before Git traffic runs.
+    #[serde(default)]
+    pub local_sync_ask_before_sync: bool,
+    /// How long an approved local-sync window remains open after activity.
+    #[serde(default = "default_local_sync_idle_timeout_minutes")]
+    pub local_sync_idle_timeout_minutes: u64,
 }
 
 impl Default for AppConfig {
@@ -36,6 +43,8 @@ impl Default for AppConfig {
             huggingface_api_key: String::new(),
             huggingface_model: default_huggingface_model(),
             note_file_name_format: default_note_filename_format(),
+            local_sync_ask_before_sync: false,
+            local_sync_idle_timeout_minutes: default_local_sync_idle_timeout_minutes(),
         }
     }
 }
@@ -54,6 +63,9 @@ fn default_huggingface_model() -> String {
 }
 fn default_note_filename_format() -> String {
     "utc_timestamp_slug".to_string()
+}
+fn default_local_sync_idle_timeout_minutes() -> u64 {
+    10
 }
 
 /// Profile-specific configuration (stored inside the notes root).
@@ -266,7 +278,8 @@ mod tests {
     use super::*;
 
     fn temp_root(tag: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("type-settings-{tag}-{}", uuid::Uuid::now_v7()));
+        let root =
+            std::env::temp_dir().join(format!("type-settings-{tag}-{}", uuid::Uuid::now_v7()));
         fs::create_dir_all(&root).unwrap();
         root
     }
