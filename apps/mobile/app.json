@@ -10,6 +10,12 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#14171b"
+    },
     "ios": {
       "bundleIdentifier": "com.typenotes.mobile",
       "buildNumber": "2026070801",
@@ -27,7 +33,11 @@
       }
     },
     "android": {
-      "package": "com.typenotes.mobile"
+      "package": "com.typenotes.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#14171b"
+      }
     },
     "plugins": [
       [

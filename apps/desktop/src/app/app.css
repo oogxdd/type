@@ -1722,8 +1722,8 @@ body {
 }
 
 .startup-logo {
-  width: 120px;
-  height: 120px;
+  width: min(36vw, 260px);
+  height: min(36vw, 260px);
   object-fit: contain;
 }
 
