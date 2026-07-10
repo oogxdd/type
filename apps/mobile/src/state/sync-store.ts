@@ -16,8 +16,9 @@ import type {
 
 import { useNotesStore } from "./notes-store";
 import { activeProfile, useSettingsStore } from "./settings-store";
+import { runWithDesktopApproval } from "../lib/sync-approval";
 
-type SyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
+type SyncAction = "idle" | "refresh" | "connect" | "pull" | "push" | "waiting";
 
 const sshHostFromRemote = (remote: string): string => {
   const match = remote.match(/^ssh:\/\/(?:[^@/]+@)?(\[[^\]]+\]|[^/:]+)(?::\d+)?(?:\/|$)/i);
@@ -71,6 +72,18 @@ type SyncState = {
 };
 
 export const useSyncStore = create<SyncState>((set, get) => {
+  const withDesktopApproval = async <T>(work: () => Promise<T>): Promise<T> => {
+    return runWithDesktopApproval(work, {
+      onWaiting: () => {
+        set({
+          action: "waiting",
+          error: null,
+          hint: "Waiting for approval on the desktop...",
+        });
+      },
+    });
+  };
+
   const savedGitConnection = (): ConnectGitArgs | null => {
     const profile = activeProfile(useSettingsStore.getState().snapshot);
     const settings = profile?.settings;
@@ -270,7 +283,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
       if (isBusy("pull")) {
         return;
       }
-      await run("pull", async () => {
+      await run("pull", () => withDesktopApproval(async () => {
         const connection = savedGitConnection();
         logSync(
           `pull: saved connection remote=${redactRemoteForLog(connection?.remote_url)} branch=${
@@ -288,7 +301,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
           }
           throw error;
         });
-      });
+      }));
       // Remote edits may have changed the notes on disk.
       await useNotesStore.getState().refresh();
       logSync("pull: notes refreshed after remote changes");
@@ -308,7 +321,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
       if (isBusy("push")) {
         return;
       }
-      await run("push", async () => {
+      await run("push", () => withDesktopApproval(async () => {
         const connection = savedGitConnection();
         logSync(
           `push: saved connection remote=${redactRemoteForLog(connection?.remote_url)} branch=${
@@ -329,7 +342,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
             }
             throw error;
           });
-      });
+      }));
     },
   };
 });

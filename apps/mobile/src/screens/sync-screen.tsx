@@ -8,7 +8,7 @@
 // button afterwards.
 
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -30,6 +30,7 @@ import {
   transferProgressFraction,
 } from "@typenotes/shared/format";
 import { parseSyncDeepLink, type SyncDeepLinkParams } from "@typenotes/shared/sync-link";
+import type { DiscoveredServer } from "@typenotes/shared/types";
 
 import { useClearInstantParam } from "../navigation";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
@@ -62,6 +63,8 @@ export const SyncScreen = () => {
   const [sshKey, setSshKey] = useState<string | null>(null);
   const [showManual, setShowManual] = useState(false);
   const [connectedVia, setConnectedVia] = useState<string | null>(null);
+  const [nearby, setNearby] = useState<DiscoveredServer[]>([]);
+  const [discovering, setDiscovering] = useState(false);
 
   // QR scanner state
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -74,6 +77,54 @@ export const SyncScreen = () => {
     void core.getSshPublicKey().then(setSshKey).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const findNearby = useCallback(async () => {
+    setDiscovering(true);
+    try {
+      setNearby(await core.discoverLocalSyncServers());
+    } catch (error) {
+      useSyncStore.setState({ error: getErrorMessage(error), hint: null });
+    } finally {
+      setDiscovering(false);
+    }
+  }, []);
+
+  const pairedFingerprint = profile?.settings.git_trusted_ssh_host_key_sha256.trim();
+  useEffect(() => {
+    if (pairedFingerprint) {
+      void findNearby();
+    }
+  }, [findNearby, pairedFingerprint]);
+
+  const syncWithNearby = async (server: DiscoveredServer) => {
+    const currentProfile = activeProfile(useSettingsStore.getState().snapshot);
+    const settings = currentProfile?.settings;
+    const pinnedFingerprint = settings?.git_trusted_ssh_host_key_sha256.trim();
+    if (!settings || !pinnedFingerprint || server.host_key_sha256 !== pinnedFingerprint) {
+      useSyncStore.setState({
+        error: "This computer is not paired with this phone.",
+        hint: "Scan its QR code before using nearby sync.",
+      });
+      return;
+    }
+    try {
+      await settingsStore.saveGitSettings({
+        remoteUrl: server.url,
+        branch: server.branch,
+        username: settings.git_username,
+        password: settings.git_password,
+        commitMessage: settings.git_commit_message || "Sync notes",
+        trustedSshHost: server.host,
+        trustedSshHostKeySha256: pinnedFingerprint,
+      });
+      setRemoteUrl(server.url);
+      setBranch(server.branch);
+      setConnectedVia(server.name);
+      await sync.syncNow();
+    } catch {
+      // Store actions surface the error.
+    }
+  };
 
   const applyLink = async (link: SyncDeepLinkParams) => {
     console.log("[sync:qr] applying parsed sync link");
@@ -142,6 +193,8 @@ export const SyncScreen = () => {
       ? "Connecting..."
       : sync.action === "pull"
         ? "Pulling..."
+        : sync.action === "waiting"
+          ? "Waiting for desktop..."
         : sync.action === "push"
           ? "Pushing..."
           : busy
@@ -274,6 +327,51 @@ export const SyncScreen = () => {
         ) : null}
         {sync.hint ? <InlineNote>{sync.hint}</InlineNote> : null}
       </Section>
+
+      {connected ? (
+        <Section title="Nearby computers">
+          <Button
+            title={discovering ? "Looking..." : "Find computers"}
+            kind="secondary"
+            onPress={() => void findNearby()}
+            disabled={busy || discovering}
+          />
+          {nearby.length === 0 && !discovering ? (
+            <InlineNote>
+              Find a desktop running Type on the same Wi-Fi or hotspot.
+            </InlineNote>
+          ) : null}
+          {nearby.map((server) => {
+            const paired =
+              Boolean(server.host_key_sha256) &&
+              server.host_key_sha256 ===
+                profile?.settings.git_trusted_ssh_host_key_sha256;
+            return (
+              <View
+                key={`${server.host}:${server.port}:${server.url}`}
+                style={[styles.nearbyRow, { borderBottomColor: theme.colors.border }]}
+              >
+                <View style={styles.nearbyText}>
+                  <Text style={{ color: theme.colors.text, fontWeight: "600" }}>
+                    {server.name}
+                  </Text>
+                  <Text style={{ color: theme.colors.secondaryText, fontSize: 12 }}>
+                    {server.host} · {paired ? "paired" : "pairing required"}
+                  </Text>
+                </View>
+                <View style={styles.nearbyAction}>
+                  <Button
+                    title="Request sync"
+                    kind={paired ? "primary" : "secondary"}
+                    onPress={() => void syncWithNearby(server)}
+                    disabled={busy || !paired}
+                  />
+                </View>
+              </View>
+            );
+          })}
+        </Section>
+      ) : null}
 
       {connected ? (
         <Section title="Change connection">
@@ -421,6 +519,15 @@ const styles = StyleSheet.create({
   sshKey: { fontSize: 12, fontFamily: "Courier" },
   commit: { paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, gap: 2 },
   commitMeta: { fontSize: 12 },
+  nearbyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  nearbyText: { flex: 1, gap: 2 },
+  nearbyAction: { minWidth: 116 },
   scanner: { flex: 1, backgroundColor: "#000000" },
   scannerOverlay: {
     flex: 1,

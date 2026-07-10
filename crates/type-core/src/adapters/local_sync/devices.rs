@@ -119,6 +119,7 @@ pub(super) fn normalize_key_line(line: &str) -> Option<String> {
     Some(format!("{algorithm} {base64}"))
 }
 
+#[cfg(test)]
 pub(super) fn is_authorized(path: &Path, key_line: &str) -> bool {
     device_name_for_key(path, key_line).is_some()
 }

@@ -62,6 +62,9 @@ export interface RawCore {
    * Optional: absent in native modules generated before it existed —
    * `core-api` feature-detects and reports idle instead. */
   getGitSyncProgress?(): string;
+  /** mDNS browse for nearby desktop request listeners. Optional until native
+   * bindings are regenerated after this API was introduced. */
+  discoverLocalSyncServers?(timeoutMs: number | undefined): Promise<string>;
 
   // ── Recordings ──
   saveAudioRecording(argsJson: string): Promise<string>;

@@ -9,6 +9,7 @@ import type {
   CreateNoteArgs,
   CreateNoteResult,
   CreateProfileArgs,
+  DiscoveredServer,
   EnableSecurityArgs,
   FolderNode,
   GitCommitHistoryEntry,
@@ -200,6 +201,18 @@ export const getGitSyncProgress = (): GitTransferProgress => {
   } catch {
     return idleTransferProgress;
   }
+};
+
+/** Find Type desktops advertising on the same LAN. Older generated native
+ * modules feature-detect to an empty list until bindings are regenerated. */
+export const discoverLocalSyncServers = async (
+  timeoutMs = 2500
+): Promise<DiscoveredServer[]> => {
+  const discover = getRawCore().discoverLocalSyncServers;
+  if (typeof discover !== "function") {
+    return [];
+  }
+  return parse(await discover(timeoutMs));
 };
 
 // ── Recordings ─────────────────────────────────────────────────────────────────

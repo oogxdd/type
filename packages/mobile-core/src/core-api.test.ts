@@ -96,6 +96,10 @@ describe("core-api over the mock core", () => {
     expect(history[0].is_head).toBe(true);
   });
 
+  it("exposes local desktop discovery through the typed bridge", async () => {
+    await expect(core.discoverLocalSyncServers(500)).resolves.toEqual([]);
+  });
+
   it("throws a helpful error when the raw core is not wired", async () => {
     // @ts-expect-error — deliberately unset for this test
     setRawCore(null);

@@ -856,6 +856,7 @@ mod tests {
         fs::write(&token_path, &token).unwrap();
         let live_token = Arc::new(Mutex::new(token.clone()));
         let devices_path = base.join("devices.json");
+        let server_access = Arc::new(SyncAccessState::new(Duration::from_secs(60), true));
         let server = start_ssh_server(
             Arc::new(ServerShared {
                 git_path: git.clone(),
@@ -866,7 +867,7 @@ mod tests {
                 consumed_pairing_tokens: Arc::new(Mutex::new(Vec::new())),
                 pairing_token_path: token_path.clone(),
                 devices_path: devices_path.clone(),
-                access: Arc::new(SyncAccessState::new(Duration::from_secs(60), true)),
+                access: server_access.clone(),
             }),
             &host_key_text,
             port,
@@ -1019,6 +1020,27 @@ mod tests {
         .unwrap_or_else(|error| {
             panic!("usernameless durable remote should fetch with the paired key: {error}")
         });
+
+        // A closed window reaches mobile through libgit2 with the stable marker
+        // intact, allowing the UI to wait and retry after desktop approval.
+        server_access.close_window();
+        let approval_error = match crate::perform_fetch(
+            &durable_repo,
+            &branch,
+            None,
+            None,
+            Some(client_key_path.clone()),
+            None,
+            None,
+        ) {
+            Ok(_) => panic!("closed sync window should block a paired key"),
+            Err(error) => error,
+        };
+        assert!(
+            approval_error.contains(APPROVAL_REQUIRED_MARKER),
+            "approval marker should survive libgit2: {approval_error}"
+        );
+        server_access.open_window();
 
         // Regression: a libgit2 client with an unpaired key and a stale token
         // must fail fast with pairing guidance — before the credentials

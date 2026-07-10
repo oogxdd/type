@@ -410,6 +410,7 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
         bytes: 0,
         remote_text: "",
       }),
+    discoverLocalSyncServers: async () => "[]",
     gitPush: async (argsJson) => {
       const args = JSON.parse(argsJson) as { message?: string | null };
       counter += 1;

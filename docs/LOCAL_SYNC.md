@@ -21,8 +21,10 @@ flow no longer requires macOS Remote Login, `sshd`, or editing
 
 ## Desktop Server
 
-Opening **Settings -> Sync** starts the local server automatically when Git is
-available. The server:
+The server starts only after an explicit action. **Start server** opens a sync
+window immediately. Enabling **Ask before syncing** starts it automatically
+while the desktop app is open and unlocked, but in request-only mode. The
+server:
 
 1. Ensures the active notes root is a Git repo.
 2. Sets `receive.denyCurrentBranch=updateInstead`, so phone pushes update the
@@ -37,9 +39,11 @@ has no side effects). Instead, pending desktop edits are committed right before
 each serve — a phone pull always sees the desktop's latest notes, and a phone
 push never meets a dirty working tree.
 
-The server also advertises itself over mDNS (`_typenotes-sync._tcp`) for future
-discovery UI. The advertised URL deliberately **omits the pairing token** —
-mDNS is plaintext broadcast; the token travels only inside the QR code.
+The server also advertises itself over mDNS (`_typenotes-sync._tcp`) so paired
+phones can find it when its LAN address changes. The advertised URL deliberately
+**omits the pairing token** — mDNS is plaintext broadcast; the token travels
+only inside the QR code. The host-key fingerprint is advertised so the phone
+can match a discovered listener to its existing pinned pairing.
 
 Port `9418` is intentionally retained from the previous local-sync design so
 existing firewall prompts/rules still make sense, but the protocol on that port
@@ -68,6 +72,25 @@ When the phone scans the QR:
 After pairing, the saved remote URL can keep the old token username. Known keys
 are accepted regardless of username, so server restarts do not break paired
 devices.
+
+## Approval windows
+
+When **Ask before syncing** is enabled, the SSH listener and mDNS advertisement
+remain available, but Git commands are blocked while the sync window is closed.
+Only an already-paired SSH key can create a request. The desktop emits a global
+prompt with the paired device name:
+
+1. The phone starts its normal pull and receives
+   `TYPE_SYNC_APPROVAL_REQUIRED` from the request-only listener.
+2. The phone waits and retries instead of showing a transport failure.
+3. Accepting on desktop opens the window; the next retry continues the pull and
+   push automatically. Declining returns `TYPE_SYNC_APPROVAL_DECLINED` and the
+   phone stops retrying.
+
+The window closes after the configured 5, 10, or 15 minutes without a completed
+Git operation. Every successful fetch or push restarts the timer. Closing the
+window leaves only the authenticated request listener running; **Stop server**
+shuts down both SSH and mDNS completely.
 
 ## Host-Key Verification
 
@@ -120,10 +143,16 @@ crates/type-core/src/adapters/git/mod.rs
 packages/shared/src/sync-link.ts
   type2://sync deep-link builder/parser
 
-apps/desktop/src/features/sync/components/local-sync-server-card.tsx
-  desktop QR and local server controls
+crates/type-ffi/src/local_sync.rs
+packages/mobile-core/src/{raw-core,core-api}.ts
+  mobile mDNS discovery bridge
 
+apps/desktop/src/features/sync/components/local-sync-lifecycle.tsx
+apps/desktop/src/features/sync/components/local-sync-server-card.tsx
+  app-wide approval prompt, QR, preferences, and server controls
+
+apps/mobile/src/lib/sync-approval.ts
 apps/mobile/src/state/sync-store.ts
 apps/mobile/src/screens/sync-screen.tsx
-  QR apply flow, key generation, visible connect/pull/push states
+  discovery, approval retry, QR apply, and visible sync states
 ```
