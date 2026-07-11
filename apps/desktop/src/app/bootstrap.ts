@@ -2,22 +2,22 @@
 // cross-domain reactions that used to live in provider effects. Called once
 // from mountApp(), before React renders — stores are module singletons, so
 // nothing here depends on the component tree.
-import { initAppearancePersistence } from "@/app/state/appearance-store";
-import { useSelection } from "@/app/state/selection-store";
-import { APP_EXTENSIONS } from "@/features/extensions/registry";
-import { initEditor } from "@/features/notes/editor/state/editor-store";
-import { initNotes } from "@/features/notes/navigation/state/notes-actions";
+import { initAppearancePersistence } from "@/state/appearance-store";
+import { useSelection } from "@/state/selection-store";
+import { APP_EXTENSIONS } from "@/lib/extensions";
+import { initEditor } from "@/state/editor-store";
+import { initNotes } from "@/state/notes-actions";
 import {
   initProfiles,
   selectActiveProfileId,
   selectActiveProfileNotesRoot,
   useProfilesStore,
-} from "@/features/profiles/state/profiles-store";
+} from "@/state/profiles-store";
 import {
   initSecurity,
   selectIsLocked,
   useSecurityStore,
-} from "@/features/security/state/security-store";
+} from "@/state/security-store";
 
 let started = false;
 

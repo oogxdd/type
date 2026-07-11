@@ -1,7 +1,7 @@
 import "./app.css";
-import "@/features/notes/navigation/ui/tree.css";
+import "@/components/navigation/tree.css";
 
-import { AppShell } from "./app-shell";
+import { AppShell } from "@/components/shell/app-shell";
 import { ErrorBoundary } from "./error-boundary";
 import { AppProviders } from "./providers";
 

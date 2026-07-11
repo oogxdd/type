@@ -1,15 +1,15 @@
 import { useEffect, type ReactNode } from "react";
 
-import { useAppearance } from "@/app/state/appearance-store";
-import { APP_EXTENSIONS } from "@/features/extensions/registry";
-import { useNotesStore } from "@/features/notes/navigation/state/notes-store";
-import { useProfilesStore } from "@/features/profiles/state/profiles-store";
-import { SecurityLockScreen } from "@/features/security/components/lock-screen";
+import { useAppearance } from "@/state/appearance-store";
+import { APP_EXTENSIONS } from "@/lib/extensions";
+import { useNotesStore } from "@/state/notes-store";
+import { useProfilesStore } from "@/state/profiles-store";
+import { SecurityLockScreen } from "@/components/security/lock-screen";
 import {
   selectIsLocked,
   unlockSecurity,
   useSecurityStore,
-} from "@/features/security/state/security-store";
+} from "@/state/security-store";
 import { hideLaunchSplash } from "./launch-screen";
 
 function StartupScreen({ theme }: { theme: "light" | "dark" }) {

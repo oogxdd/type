@@ -1,11 +1,11 @@
 import { type ReactNode } from "react";
 
-import { useSelection } from "@/app/state/selection-store";
-import { HandwritingProvider } from "@/features/handwriting/hooks/handwriting-context";
-import { clearDraft } from "@/features/notes/editor/state/editor-store";
-import { refreshTree } from "@/features/notes/navigation/state/notes-store";
-import { RecordingsProvider } from "@/features/recording/hooks/recordings-context";
-import { GitSyncProvider } from "@/features/sync/hooks/git-sync-context";
+import { useSelection } from "@/state/selection-store";
+import { HandwritingProvider } from "@/state/handwriting-context";
+import { clearDraft } from "@/state/editor-store";
+import { refreshTree } from "@/state/notes-store";
+import { RecordingsProvider } from "@/state/recordings-context";
+import { GitSyncProvider } from "@/state/git-sync-context";
 import { AppReadinessGate, AppSecurityGate } from "./readiness";
 
 // Capture flows (recording, handwriting) end in the same place: the new note

@@ -1,3 +1,3 @@
-import { mountApp } from "./app/main-app";
+import { mountApp } from "@/app/main-app";
 
 mountApp();

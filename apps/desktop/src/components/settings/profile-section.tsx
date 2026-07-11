@@ -1,0 +1,210 @@
+import { open } from "@tauri-apps/plugin-dialog";
+import { useEffect, useState } from "react";
+import {
+  createProfile,
+  deleteProfile,
+  selectActiveProfile,
+  selectActiveProfileId,
+  selectActiveProfileNotesRoot,
+  selectProfiles,
+  selectSyncSettings,
+  setProfileNotesRoot,
+  switchProfile,
+  updateProfile,
+  updateSyncSettings,
+  useProfilesStore,
+} from "@/state/profiles-store";
+import { useSshKey } from "@/hooks/use-ssh-key";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { GitSettingsCard } from "./git-settings-card";
+import { ProfileManagerDialog } from "./profile-manager-dialog";
+import {
+  SettingsActionRow,
+  SettingsCard,
+  SettingsErrorText,
+  SettingsField,
+  SettingsHelpText,
+  SettingsSection,
+  SettingsSelect,
+} from "./settings-ui";
+
+export function SettingsProfileSection() {
+  const profiles = useProfilesStore(selectProfiles);
+  const activeProfileId = useProfilesStore(selectActiveProfileId);
+  const activeProfileNotesRoot = useProfilesStore(selectActiveProfileNotesRoot);
+  const profilesBusy = useProfilesStore((state) => state.busy);
+  const profilesError = useProfilesStore((state) => state.error);
+  const syncSettings = useProfilesStore(selectSyncSettings);
+  const activeProfile = useProfilesStore(selectActiveProfile);
+  const [notesRootInput, setNotesRootInput] = useState("");
+  const [profileManagerOpen, setProfileManagerOpen] = useState(false);
+
+  useEffect(() => {
+    setNotesRootInput(activeProfile?.notes_root ?? "");
+  }, [activeProfile?.notes_root]);
+
+  const { sshPublicKey, sshBusy, sshError, generateSshKey, deleteSshKey } =
+    useSshKey();
+
+  const chooseWorkingDirectory = async () => {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        defaultPath: notesRootInput || activeProfileNotesRoot || undefined,
+        title: "Select profile notes folder",
+      });
+      if (typeof selected === "string" && selected.trim()) {
+        setNotesRootInput(selected);
+      }
+    } catch (error) {
+      console.error("Failed to pick working directory", error);
+    }
+  };
+
+  return (
+    <SettingsSection title="Profile">
+      <SettingsCard>
+        <SettingsField label="Active profile">
+          <div className="flex flex-wrap items-center gap-2">
+            <SettingsSelect
+              className="min-w-[220px] flex-1"
+              value={activeProfileId ?? ""}
+              onChange={(event) => void switchProfile(event.target.value)}
+              disabled={profilesBusy || profiles.length === 0}
+            >
+              {profiles.length === 0 ? <option value="">No profiles</option> : null}
+              {profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name}
+                </option>
+              ))}
+            </SettingsSelect>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setProfileManagerOpen(true)}
+              disabled={profilesBusy}
+            >
+              Manage profiles
+            </Button>
+          </div>
+        </SettingsField>
+        {activeProfile?.description ? (
+          <SettingsHelpText>{activeProfile.description}</SettingsHelpText>
+        ) : null}
+        {profilesError ? <SettingsErrorText>{profilesError}</SettingsErrorText> : null}
+      </SettingsCard>
+
+      <GitSettingsCard
+        gitSettings={syncSettings}
+        activeProfileId={activeProfileId}
+        busy={profilesBusy}
+        onApply={(next) => updateSyncSettings(next)}
+      />
+
+      <SettingsCard title="SSH key">
+        {sshPublicKey ? (
+          <>
+            <SettingsField label="Public key">
+              <code className="block break-all rounded bg-muted/50 p-2 text-xs text-foreground select-all">
+                {sshPublicKey}
+              </code>
+            </SettingsField>
+            <SettingsHelpText>
+              Add this key to <code>~/.ssh/authorized_keys</code> on your server.
+            </SettingsHelpText>
+            <SettingsActionRow>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void navigator.clipboard.writeText(sshPublicKey)}
+              >
+                Copy
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={sshBusy}
+                onClick={() => void deleteSshKey()}
+              >
+                Delete key
+              </Button>
+            </SettingsActionRow>
+          </>
+        ) : (
+          <>
+            <SettingsHelpText>
+              Generate an Ed25519 keypair for SSH-based git sync.
+            </SettingsHelpText>
+            <SettingsActionRow>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={sshBusy}
+                onClick={() => void generateSshKey()}
+              >
+                {sshBusy ? "Generating..." : "Generate SSH key"}
+              </Button>
+            </SettingsActionRow>
+          </>
+        )}
+        {sshError ? <SettingsErrorText>{sshError}</SettingsErrorText> : null}
+      </SettingsCard>
+
+      <SettingsCard title="Notes folder">
+        <SettingsField label="Working directory">
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              type="text"
+              value={notesRootInput}
+              onChange={(event) => setNotesRootInput(event.target.value)}
+              placeholder="/Users/you/Documents/type"
+              disabled={!activeProfileId || profilesBusy}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={!activeProfileId || profilesBusy}
+              onClick={() => void chooseWorkingDirectory()}
+            >
+              Browse
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!activeProfileId || profilesBusy || !notesRootInput.trim()}
+              onClick={() => {
+                if (!activeProfileId) {
+                  return;
+                }
+                void setProfileNotesRoot(activeProfileId, notesRootInput);
+              }}
+            >
+              Apply
+            </Button>
+          </div>
+        </SettingsField>
+      </SettingsCard>
+
+      <ProfileManagerDialog
+        open={profileManagerOpen}
+        onOpenChange={setProfileManagerOpen}
+        profiles={profiles}
+        activeProfileId={activeProfileId}
+        profilesBusy={profilesBusy}
+        switchProfile={switchProfile}
+        createProfile={createProfile}
+        updateProfile={updateProfile}
+        deleteProfile={deleteProfile}
+      />
+    </SettingsSection>
+  );
+}
