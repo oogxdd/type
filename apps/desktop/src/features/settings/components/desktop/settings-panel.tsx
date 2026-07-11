@@ -1,5 +1,5 @@
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
-import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { rightPaneRef } from "@/features/notes/editor/state/editor-store";
 import { cn } from "@/shared/lib/utils";
 import {
   SETTINGS_SECTIONS,
@@ -122,7 +122,6 @@ export function SettingsDetailPane({
   onOpenTrash: () => void;
   onPaneClick: () => void;
 }) {
-  const { rightPaneRef } = useEditor();
 
   return (
     <div className="pane h-full min-h-0 min-w-0 dark:backdrop-blur-none">

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { AppMode, PaneId } from "@typenotes/shared/types";
 import { useAppearance } from "@/app/state/appearance-store";
-import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { rightPaneRef } from "@/features/notes/editor/state/editor-store";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { focusNoScroll } from "@/shared/lib/dom";
 
@@ -33,7 +33,6 @@ export function usePaneShortcuts({
   middlePaneRef,
   lastLeftPaneFocusRef,
 }: UsePaneShortcutsArgs) {
-  const { rightPaneRef } = useEditor();
   const { createNewNote, shouldNestNotesInNavigation } = useNotesTree();
   const { increaseEditorFontSize, decreaseEditorFontSize, resetEditorFontSize } =
     useAppearance(

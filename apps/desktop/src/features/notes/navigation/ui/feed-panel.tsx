@@ -3,7 +3,7 @@ import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
 import { useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { clearDraft, clearNote } from "@/features/notes/editor/state/editor-store";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { type DesktopContextMenuState } from "@/app/hooks/use-tree-interactions";
 import { useSelection } from "@/app/state/selection-store";
@@ -27,7 +27,6 @@ export function FeedPanel({
   onPaneKeyDown,
   onOpenContextMenu,
 }: FeedPanelProps) {
-  const { clearDraft, clearNote } = useEditor();
   const {
     feedTreeData,
     feedNodeById,

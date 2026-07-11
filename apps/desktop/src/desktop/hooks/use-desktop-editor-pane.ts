@@ -4,7 +4,13 @@ import { useShallow } from "zustand/react/shallow";
 import { useSelection } from "@/app/state/selection-store";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { writeNote } from "@/features/notes/api/notes-api";
-import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import {
+  flushSave,
+  handleEditorChange as updateEditorContent,
+  primeNoteContent,
+  rightPaneRef,
+  useEditorStore,
+} from "@/features/notes/editor/state/editor-store";
 import type { LensNote } from "@/features/lens/hooks/use-lens-annotations";
 import { getLatestFeedTargetTimestamp } from "@/features/notes/navigation/model/feed-tree-model";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
@@ -21,14 +27,8 @@ export function useDesktopEditorPane() {
   );
   const [isLensPinned, setIsLensPinned] = useState(false);
   const [isLensMenuOpen, setIsLensMenuOpen] = useState(false);
-  const {
-    noteContent,
-    draftNoteContent,
-    handleEditorChange: updateEditorContent,
-    flushSave,
-    primeNoteContent,
-    rightPaneRef,
-  } = useEditor();
+  const noteContent = useEditorStore((state) => state.noteContent);
+  const draftNoteContent = useEditorStore((state) => state.draftNoteContent);
   const {
     notes,
     notePreviews,
@@ -83,14 +83,7 @@ export function useDesktopEditorPane() {
         });
       draftCreationRef.current = creation;
     },
-    [
-      activeFeedNode,
-      activeFolder,
-      activeNote,
-      createNewNote,
-      primeNoteContent,
-      updateEditorContent,
-    ]
+    [activeFeedNode, activeFolder, activeNote, createNewNote]
   );
 
   const selectedNotePaths = useMemo(() => {

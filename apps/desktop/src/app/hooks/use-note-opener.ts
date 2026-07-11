@@ -7,7 +7,7 @@ import {
 import { useShallow } from "zustand/react/shallow";
 
 import { useSelection } from "@/app/state/selection-store";
-import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { clearDraft, clearNote } from "@/features/notes/editor/state/editor-store";
 import type { AppMode } from "@typenotes/shared/types";
 
 type UseNoteOpenerArgs = {
@@ -27,7 +27,6 @@ export type NoteOpener = {
  * selection update.
  */
 export const useNoteOpener = ({ setAppMode }: UseNoteOpenerArgs): NoteOpener => {
-  const { clearDraft, clearNote } = useEditor();
   const { selectFolder, selectNote } = useSelection(
     useShallow((state) => ({
       selectFolder: state.selectFolder,

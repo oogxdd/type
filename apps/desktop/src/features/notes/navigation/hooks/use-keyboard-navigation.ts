@@ -4,7 +4,7 @@ import { useShallow } from "zustand/react/shallow";
 import type { AppMode } from "@typenotes/shared/types";
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import { useSelection } from "@/app/state/selection-store";
-import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { clearDraft, clearNote, rightPaneRef } from "@/features/notes/editor/state/editor-store";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { focusNoScroll, scrollIntoViewIfNeeded, escapeSelectorValue } from "@/shared/lib/dom";
 import { usePaneShortcuts } from "./use-pane-shortcuts";
@@ -39,7 +39,6 @@ export function useKeyboardNavigation({
   middlePaneRef,
   notesPanelRef,
 }: UseKeyboardNavigationArgs) {
-  const { clearDraft, clearNote, rightPaneRef } = useEditor();
   const {
     flatItemById,
     expanded,

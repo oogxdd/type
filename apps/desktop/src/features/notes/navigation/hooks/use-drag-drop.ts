@@ -9,7 +9,7 @@ import { useShallow } from "zustand/react/shallow";
 import { moveItems, setOrder } from "@/features/notes/api/notes-api";
 import { logGroup } from "@/shared/api/invoke";
 import { useSelection } from "@/app/state/selection-store";
-import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { clearNote } from "@/features/notes/editor/state/editor-store";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import type { DragData } from "@typenotes/shared/types";
 import { isSystemFolder } from "@typenotes/shared/constants";
@@ -46,7 +46,6 @@ export function useDragDrop() {
     refreshTree,
     parentById,
   } = useNotesTree();
-  const { clearNote } = useEditor();
   const {
     selectedFolders,
     setSelectedFolders,

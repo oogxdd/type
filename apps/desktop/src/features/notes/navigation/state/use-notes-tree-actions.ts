@@ -4,7 +4,11 @@ import { useShallow } from "zustand/react/shallow";
 
 import * as api from "@/features/notes/api/notes-api";
 import { useSelection } from "@/app/state/selection-store";
-import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import {
+  clearDraft,
+  clearNote,
+  rightPaneRef,
+} from "@/features/notes/editor/state/editor-store";
 import {
   selectSyncSettings,
   useProfilesStore,
@@ -38,7 +42,6 @@ export function useNotesTreeActions({
   setRenameValue,
 }: UseNotesTreeActionsArgs) {
   const syncSettings = useProfilesStore(selectSyncSettings);
-  const { clearDraft, clearNote, rightPaneRef } = useEditor();
   const {
     selectedFolders,
     setSelectedFolders,
@@ -103,14 +106,7 @@ export function useNotesTreeActions({
 
       return path;
     },
-    [
-      clearDraft,
-      refreshTree,
-      rightPaneRef,
-      selectNote,
-      syncSettings.noteFileNameFormat,
-      tree,
-    ]
+    [refreshTree, selectNote, syncSettings.noteFileNameFormat, tree]
   );
 
   const applyFolderRename = useCallback(
@@ -193,7 +189,7 @@ export function useNotesTreeActions({
       await refreshTree();
       return true;
     },
-    [activeNote, clearNote, refreshTree, setActiveNote, setLastSelectedNote, setSelectedNotes]
+    [activeNote, refreshTree, setActiveNote, setLastSelectedNote, setSelectedNotes]
   );
 
   const moveNotesToArchive = useCallback(
@@ -204,7 +200,7 @@ export function useNotesTreeActions({
       clearNote();
       await refreshTree();
     },
-    [clearNote, refreshTree, selectFolder]
+    [refreshTree, selectFolder]
   );
 
   const moveNotesToFolder = useCallback(
@@ -218,7 +214,7 @@ export function useNotesTreeActions({
       clearNote();
       await refreshTree();
     },
-    [clearNote, refreshTree, selectFolder]
+    [refreshTree, selectFolder]
   );
 
   const updateNoteMarkers = useCallback(

@@ -8,7 +8,7 @@ import {
 import { useShallow } from "zustand/react/shallow";
 
 import { useSelection } from "@/app/state/selection-store";
-import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { clearDraft, clearNote } from "@/features/notes/editor/state/editor-store";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { findNode } from "@/features/notes/navigation/model/tree-ops";
 import { focusNoScroll } from "@/shared/lib/dom";
@@ -67,7 +67,6 @@ export type TreeInteractions = {
 export const useTreeInteractions = ({
   foldersPanelRef,
 }: UseTreeInteractionsArgs): TreeInteractions => {
-  const { clearDraft, clearNote } = useEditor();
   const {
     selectedFolders,
     setSelectedFolders,

@@ -12,7 +12,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import type { DesktopContextMenuState } from "@/app/hooks/use-tree-interactions";
 import { useSelection } from "@/app/state/selection-store";
-import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { clearNote } from "@/features/notes/editor/state/editor-store";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { FEED_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
 import { computeRangeSelection } from "@/shared/lib/selection";
@@ -43,7 +43,6 @@ export function useDesktopNavigation({
   handleNoteClick,
   handleNoteContextMenu,
 }: UseDesktopNavigationArgs) {
-  const { clearNote } = useEditor();
   const {
     treeData,
     notes,
