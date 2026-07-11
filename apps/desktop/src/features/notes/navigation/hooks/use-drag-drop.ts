@@ -10,7 +10,16 @@ import { moveItems, setOrder } from "@/features/notes/api/notes-api";
 import { logGroup } from "@/shared/api/invoke";
 import { useSelection } from "@/app/state/selection-store";
 import { clearNote } from "@/features/notes/editor/state/editor-store";
-import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import {
+  refreshTree,
+  selectFlatItems,
+  selectOrderedIds,
+  selectParentById,
+  selectTreeData,
+  setExpanded,
+  setTree,
+  useNotesStore,
+} from "@/features/notes/navigation/state/notes-store";
 import type { DragData } from "@typenotes/shared/types";
 import { isSystemFolder } from "@typenotes/shared/constants";
 import { getNoteParentPath } from "@typenotes/shared/notes";
@@ -35,17 +44,12 @@ import {
 import type { TreeItem } from "../model/types";
 
 export function useDragDrop() {
-  const {
-    tree,
-    setTree,
-    treeData,
-    flatItems,
-    orderedIds,
-    expanded,
-    setExpanded,
-    refreshTree,
-    parentById,
-  } = useNotesTree();
+  const tree = useNotesStore((state) => state.tree);
+  const treeData = useNotesStore(selectTreeData);
+  const flatItems = useNotesStore(selectFlatItems);
+  const orderedIds = useNotesStore(selectOrderedIds);
+  const expanded = useNotesStore((state) => state.expanded);
+  const parentById = useNotesStore(selectParentById);
   const {
     selectedFolders,
     setSelectedFolders,

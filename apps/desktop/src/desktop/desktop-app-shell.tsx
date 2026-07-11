@@ -24,7 +24,16 @@ import { useSelection } from "@/app/state/selection-store";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { useAppearance } from "@/app/state/appearance-store";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
-import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import {
+  cancelRenameFolder,
+  createNewNote,
+  submitRenameFolder,
+} from "@/features/notes/navigation/state/notes-actions";
+import {
+  setRenameValue,
+  useNotesStore,
+  useShouldNestNotesInNavigation,
+} from "@/features/notes/navigation/state/notes-store";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { lockSecurity } from "@/features/security/state/security-store";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
@@ -101,17 +110,11 @@ export function DesktopAppShell({
       setActiveNote: state.setActiveNote,
     }))
   );
-  const {
-    expanded,
-    allNotePreviews,
-    renamingFolder,
-    renameValue,
-    setRenameValue,
-    submitRenameFolder,
-    cancelRenameFolder,
-    createNewNote,
-    shouldNestNotesInNavigation,
-  } = useNotesTree();
+  const expanded = useNotesStore((state) => state.expanded);
+  const allNotePreviews = useNotesStore((state) => state.previews);
+  const renamingFolder = useNotesStore((state) => state.renamingFolder);
+  const renameValue = useNotesStore((state) => state.renameValue);
+  const shouldNestNotesInNavigation = useShouldNestNotesInNavigation();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [threePaneLayout, setThreePaneLayout] = useState<Record<string, number>>({

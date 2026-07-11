@@ -17,6 +17,7 @@ import {
   selectSyncSettings,
   useProfilesStore,
 } from "@/features/profiles/state/profiles-store";
+import { invalidateNotePreviews } from "@/features/notes/navigation/state/note-previews";
 import { useAutoQueueLoop } from "@/features/processing/hooks/use-auto-queue-loop";
 import { useProcessingQueue } from "@/features/processing/hooks/use-processing-queue";
 import { jobListSignature } from "@typenotes/shared/jobs";
@@ -109,7 +110,8 @@ export function HandwritingProvider({
   } = useProcessingQueue<HandwritingOcrQueueSnapshot, HandwritingOcrListItem>({
     loadSnapshot: loadHandwritingSnapshot,
     getSignature: jobListSignature,
-    invalidateEventName: "note-previews-invalidated",
+    // A finished OCR pass rewrites its note body on disk.
+    onJobsChanged: invalidateNotePreviews,
     refreshOnMount: true,
   });
 

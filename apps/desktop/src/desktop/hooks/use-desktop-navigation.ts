@@ -13,7 +13,19 @@ import { useShallow } from "zustand/react/shallow";
 import type { DesktopContextMenuState } from "@/app/hooks/use-tree-interactions";
 import { useSelection } from "@/app/state/selection-store";
 import { clearNote } from "@/features/notes/editor/state/editor-store";
-import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import { deleteNotes } from "@/features/notes/navigation/state/notes-actions";
+import {
+  selectTreeData,
+  setActiveFeedGroup,
+  useActiveFeedGroup,
+  useActiveFeedNode,
+  useActiveFolderNotes,
+  useActiveNode,
+  useActiveNotePreviews,
+  useFeedNotePreviews,
+  useFeedNotes,
+  useNotesStore,
+} from "@/features/notes/navigation/state/notes-store";
 import { FEED_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
 import { computeRangeSelection } from "@/shared/lib/selection";
 import type { AppMode } from "@typenotes/shared/types";
@@ -43,18 +55,14 @@ export function useDesktopNavigation({
   handleNoteClick,
   handleNoteContextMenu,
 }: UseDesktopNavigationArgs) {
-  const {
-    treeData,
-    notes,
-    notePreviews,
-    activeNode,
-    activeFeedGroup,
-    setActiveFeedGroup,
-    activeFeedNode,
-    feedNotes,
-    feedNotePreviews,
-    deleteNotes,
-  } = useNotesTree();
+  const treeData = useNotesStore(selectTreeData);
+  const notes = useActiveFolderNotes();
+  const notePreviews = useActiveNotePreviews();
+  const activeNode = useActiveNode();
+  const activeFeedGroup = useActiveFeedGroup();
+  const activeFeedNode = useActiveFeedNode();
+  const feedNotes = useFeedNotes();
+  const feedNotePreviews = useFeedNotePreviews();
   const {
     activeFolder,
     activeNote,
@@ -128,7 +136,7 @@ export function useDesktopNavigation({
     if (paths.length > 0) {
       void deleteNotes(paths);
     }
-  }, [activeNote, deleteNotes]);
+  }, [activeNote]);
 
   const openFeedTab = useCallback(() => {
     closeDesktopContextMenu();
@@ -178,7 +186,6 @@ export function useDesktopNavigation({
       feedNotes,
       lastSelectedNote,
       selectNote,
-      setActiveFeedGroup,
       selectedNotes,
     ]
   );
@@ -219,7 +226,6 @@ export function useDesktopNavigation({
       feedNotes,
       openDesktopContextMenu,
       selectedNotes,
-      setActiveFeedGroup,
       setActiveFolder,
       setActiveNote,
       setLastSelectedFolder,

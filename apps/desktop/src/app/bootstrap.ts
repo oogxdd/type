@@ -6,6 +6,7 @@ import { initAppearancePersistence } from "@/app/state/appearance-store";
 import { useSelection } from "@/app/state/selection-store";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { initEditor } from "@/features/notes/editor/state/editor-store";
+import { initNotes } from "@/features/notes/navigation/state/notes-actions";
 import {
   initProfiles,
   selectActiveProfileId,
@@ -31,6 +32,7 @@ export function bootstrapApp() {
   // Editor lifecycle must react to profile switches before the selection
   // reset below fires, so it registers its subscriptions first.
   initEditor();
+  initNotes();
 
   // Selection belongs to a profile root and must never leak across a switch.
   useProfilesStore.subscribe((state, previous) => {

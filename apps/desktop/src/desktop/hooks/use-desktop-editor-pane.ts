@@ -13,7 +13,14 @@ import {
 } from "@/features/notes/editor/state/editor-store";
 import type { LensNote } from "@/features/lens/hooks/use-lens-annotations";
 import { getLatestFeedTargetTimestamp } from "@/features/notes/navigation/model/feed-tree-model";
-import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import { invalidateNotePreviews } from "@/features/notes/navigation/state/note-previews";
+import { createNewNote } from "@/features/notes/navigation/state/notes-actions";
+import {
+  useActiveFeedNode,
+  useActiveFolderNotes,
+  useActiveNotePreviews,
+  useNotesStore,
+} from "@/features/notes/navigation/state/notes-store";
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import { sanitizeRecordingEditorContent } from "@typenotes/shared/format";
 
@@ -29,13 +36,10 @@ export function useDesktopEditorPane() {
   const [isLensMenuOpen, setIsLensMenuOpen] = useState(false);
   const noteContent = useEditorStore((state) => state.noteContent);
   const draftNoteContent = useEditorStore((state) => state.draftNoteContent);
-  const {
-    notes,
-    notePreviews,
-    allNotePreviews,
-    activeFeedNode,
-    createNewNote,
-  } = useNotesTree();
+  const notes = useActiveFolderNotes();
+  const notePreviews = useActiveNotePreviews();
+  const allNotePreviews = useNotesStore((state) => state.previews);
+  const activeFeedNode = useActiveFeedNode();
   const draftCreationRef = useRef<Promise<string | null> | null>(null);
   const pendingDraftRef = useRef("");
 
@@ -70,7 +74,7 @@ export function useDesktopEditorPane() {
           if (latestContent !== initialContent) {
             await writeNote(path, latestContent);
             primeNoteContent(latestContent);
-            window.dispatchEvent(new CustomEvent("note-previews-invalidated"));
+            invalidateNotePreviews();
           }
           return path;
         })
@@ -83,7 +87,7 @@ export function useDesktopEditorPane() {
         });
       draftCreationRef.current = creation;
     },
-    [activeFeedNode, activeFolder, activeNote, createNewNote]
+    [activeFeedNode, activeFolder, activeNote]
   );
 
   const selectedNotePaths = useMemo(() => {

@@ -3,7 +3,8 @@ import { useShallow } from "zustand/react/shallow";
 import type { AppMode, PaneId } from "@typenotes/shared/types";
 import { useAppearance } from "@/app/state/appearance-store";
 import { rightPaneRef } from "@/features/notes/editor/state/editor-store";
-import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import { createNewNote } from "@/features/notes/navigation/state/notes-actions";
+import { useShouldNestNotesInNavigation } from "@/features/notes/navigation/state/notes-store";
 import { focusNoScroll } from "@/shared/lib/dom";
 
 type UsePaneShortcutsArgs = {
@@ -33,7 +34,7 @@ export function usePaneShortcuts({
   middlePaneRef,
   lastLeftPaneFocusRef,
 }: UsePaneShortcutsArgs) {
-  const { createNewNote, shouldNestNotesInNavigation } = useNotesTree();
+  const shouldNestNotesInNavigation = useShouldNestNotesInNavigation();
   const { increaseEditorFontSize, decreaseEditorFontSize, resetEditorFontSize } =
     useAppearance(
       useShallow((state) => ({
@@ -201,14 +202,12 @@ export function usePaneShortcuts({
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, [
     appMode,
-    createNewNote,
     deleteSelectedNotes,
     decreaseEditorFontSize,
     foldersPanelRef,
     increaseEditorFontSize,
     middlePaneRef,
     resetEditorFontSize,
-    rightPaneRef,
     lockAppNow,
     setSidebarCollapsed,
     shouldNestNotesInNavigation,

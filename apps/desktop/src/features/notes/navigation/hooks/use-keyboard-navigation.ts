@@ -5,7 +5,17 @@ import type { AppMode } from "@typenotes/shared/types";
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import { useSelection } from "@/app/state/selection-store";
 import { clearDraft, clearNote, rightPaneRef } from "@/features/notes/editor/state/editor-store";
-import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import {
+  selectFlatItemById,
+  setActiveFeedGroup,
+  setExpanded,
+  useActiveFeedGroup,
+  useFeedTree,
+  useFeedVisibleNavigationItems,
+  useNotesStore,
+  useShouldNestNotesInNavigation,
+  useVisibleNavigationItems,
+} from "@/features/notes/navigation/state/notes-store";
 import { focusNoScroll, scrollIntoViewIfNeeded, escapeSelectorValue } from "@/shared/lib/dom";
 import { usePaneShortcuts } from "./use-pane-shortcuts";
 import {
@@ -39,17 +49,13 @@ export function useKeyboardNavigation({
   middlePaneRef,
   notesPanelRef,
 }: UseKeyboardNavigationArgs) {
-  const {
-    flatItemById,
-    expanded,
-    setExpanded,
-    visibleNavigationItems,
-    feedVisibleNavigationItems,
-    feedNodeById,
-    activeFeedGroup,
-    setActiveFeedGroup,
-    shouldNestNotesInNavigation,
-  } = useNotesTree();
+  const flatItemById = useNotesStore(selectFlatItemById);
+  const expanded = useNotesStore((state) => state.expanded);
+  const visibleNavigationItems = useVisibleNavigationItems();
+  const feedVisibleNavigationItems = useFeedVisibleNavigationItems();
+  const { nodeById: feedNodeById } = useFeedTree();
+  const activeFeedGroup = useActiveFeedGroup();
+  const shouldNestNotesInNavigation = useShouldNestNotesInNavigation();
   const {
     activeFolder,
     lastSelectedFolder,
@@ -223,8 +229,6 @@ export function useKeyboardNavigation({
       activeFeedGroup,
       activeNavigationTab,
       appMode,
-      clearDraft,
-      clearNote,
       expanded,
       flatItemById,
       feedNodeById,
@@ -233,11 +237,8 @@ export function useKeyboardNavigation({
       lastSelectedFolder,
       lastSelectedNote,
       middlePaneRef,
-      rightPaneRef,
       selectFolder,
       selectNote,
-      setActiveFeedGroup,
-      setExpanded,
       shouldNestNotesInNavigation,
       visibleNavigationItems,
     ]

@@ -9,7 +9,8 @@ type ProcessingSnapshot<TQueue, TItem> = {
 type UseProcessingQueueOptions<TQueue, TItem> = {
   loadSnapshot: () => Promise<ProcessingSnapshot<TQueue, TItem>>;
   getSignature: (items: TItem[]) => string;
-  invalidateEventName: string;
+  /** Fired when the job-list signature changes (e.g. a transcription finished). */
+  onJobsChanged: () => void;
   refreshOnMount?: boolean;
   onSnapshotLoaded?: (snapshot: ProcessingSnapshot<TQueue, TItem>) => void;
 };
@@ -22,7 +23,7 @@ type UseProcessingQueueOptions<TQueue, TItem> = {
 export function useProcessingQueue<TQueue, TItem>({
   loadSnapshot,
   getSignature,
-  invalidateEventName,
+  onJobsChanged,
   refreshOnMount = true,
   onSnapshotLoaded,
 }: UseProcessingQueueOptions<TQueue, TItem>) {
@@ -42,7 +43,7 @@ export function useProcessingQueue<TQueue, TItem>({
       const nextSignature = getSignature(snapshot.items);
       if (signatureRef.current !== nextSignature) {
         signatureRef.current = nextSignature;
-        window.dispatchEvent(new CustomEvent(invalidateEventName));
+        onJobsChanged();
       }
 
       onSnapshotLoaded?.(snapshot);
@@ -52,7 +53,7 @@ export function useProcessingQueue<TQueue, TItem>({
     } finally {
       setBusy(false);
     }
-  }, [getSignature, invalidateEventName, loadSnapshot, onSnapshotLoaded]);
+  }, [getSignature, loadSnapshot, onJobsChanged, onSnapshotLoaded]);
 
   useEffect(() => {
     if (!refreshOnMount) {

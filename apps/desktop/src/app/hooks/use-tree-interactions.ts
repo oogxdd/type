@@ -9,7 +9,12 @@ import { useShallow } from "zustand/react/shallow";
 
 import { useSelection } from "@/app/state/selection-store";
 import { clearDraft, clearNote } from "@/features/notes/editor/state/editor-store";
-import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import {
+  selectOrderedIds,
+  setExpanded,
+  useNotesStore,
+  useShouldNestNotesInNavigation,
+} from "@/features/notes/navigation/state/notes-store";
 import { findNode } from "@/features/notes/navigation/model/tree-ops";
 import { focusNoScroll } from "@/shared/lib/dom";
 import { getNoteParentPath } from "@typenotes/shared/notes";
@@ -97,8 +102,9 @@ export const useTreeInteractions = ({
     }))
   );
 
-  const { tree, orderedIds, setExpanded, shouldNestNotesInNavigation } =
-    useNotesTree();
+  const tree = useNotesStore((state) => state.tree);
+  const orderedIds = useNotesStore(selectOrderedIds);
+  const shouldNestNotesInNavigation = useShouldNestNotesInNavigation();
 
   // Latest selection, readable from menu handlers without re-creating them.
   const selectedFoldersRef = useRef<Set<string>>(new Set());

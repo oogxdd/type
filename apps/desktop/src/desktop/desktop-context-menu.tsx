@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import {
+  deleteFolders,
+  deleteNotes,
+  flattenIntoFeed,
+  moveNotesToArchive,
+  moveNotesToFolder,
+  showNoteInfo,
+  startRenameFolder,
+  updateNoteMarkers,
+} from "@/features/notes/navigation/state/notes-actions";
+import { useNotesStore } from "@/features/notes/navigation/state/notes-store";
 import { isSystemFolder } from "@typenotes/shared/constants";
 import { Button } from "@/shared/ui/button";
 import {
@@ -20,17 +30,7 @@ type DesktopContextMenuProps = {
 };
 
 export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) {
-  const {
-    startRenameFolder,
-    deleteFolders,
-    flattenIntoFeed,
-    moveNotesToArchive,
-    moveNotesToFolder,
-    updateNoteMarkers,
-    deleteNotes,
-    showNoteInfo,
-    allNotePreviews,
-  } = useNotesTree();
+  const allNotePreviews = useNotesStore((storeState) => storeState.previews);
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [destinationPath, setDestinationPath] = useState("");
 

@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from "react";
 
 import { useAppearance } from "@/app/state/appearance-store";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
-import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import { useNotesStore } from "@/features/notes/navigation/state/notes-store";
 import { useProfilesStore } from "@/features/profiles/state/profiles-store";
 import { SecurityLockScreen } from "@/features/security/components/lock-screen";
 import {
@@ -34,9 +34,9 @@ export function AppReadinessGate({ children }: { children: ReactNode }) {
   const activeProfileId = useProfilesStore(
     (state) => state.snapshot?.activeProfileId ?? null
   );
-  const { tree } = useNotesTree();
+  const hasTree = useNotesStore((state) => Boolean(state.tree));
 
-  const appReady = hasSnapshot && (!activeProfileId || Boolean(tree));
+  const appReady = hasSnapshot && (!activeProfileId || hasTree);
   if (!appReady) {
     return <StartupScreen theme={theme} />;
   }

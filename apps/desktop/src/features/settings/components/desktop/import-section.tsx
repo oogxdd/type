@@ -1,4 +1,4 @@
-import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import { refreshTree } from "@/features/notes/navigation/state/notes-store";
 import { useAppleImport } from "@/features/import/hooks/use-apple-import";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -12,7 +12,6 @@ import {
 } from "../settings-ui";
 
 export function SettingsImportSection() {
-  const { refreshTree } = useNotesTree();
   const {
     phase,
     sourcePath,

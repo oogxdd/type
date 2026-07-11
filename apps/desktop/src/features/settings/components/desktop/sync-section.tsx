@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import { refreshTree } from "@/features/notes/navigation/state/notes-store";
 import { useGitSync } from "@/features/sync/hooks/git-sync-context";
 import {
   selectSyncSettings,
@@ -41,7 +41,6 @@ export function SettingsSyncSection() {
     gitPush,
     syncNow,
   } = useGitSync();
-  const { refreshTree } = useNotesTree();
   const { canPull, canPush, canConnect, canSync } = useSettingsData();
 
   useEffect(() => {

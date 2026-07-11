@@ -16,7 +16,17 @@ import {
 } from "lucide-react";
 
 import { useSelection } from "@/app/state/selection-store";
-import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import {
+  createNewNote,
+  deleteFolders,
+  deleteNotes,
+  flattenIntoFeed,
+  moveNotesToArchive,
+  moveNotesToFolder,
+  startRenameFolder,
+  updateNoteMarkers,
+} from "@/features/notes/navigation/state/notes-actions";
+import { useNotesStore } from "@/features/notes/navigation/state/notes-store";
 import { useAppearance } from "@/app/state/appearance-store";
 import { FEED_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
 import { collectFolderPaths, getNoteParentPath } from "@typenotes/shared/notes";
@@ -84,18 +94,8 @@ export function useCommandPaletteCommands({
       activeFolder: state.activeFolder,
     }))
   );
-  const {
-    tree,
-    createNewNote,
-    deleteNotes,
-    deleteFolders,
-    moveNotesToArchive,
-    moveNotesToFolder,
-    flattenIntoFeed,
-    updateNoteMarkers,
-    startRenameFolder,
-    allNotePreviews,
-  } = useNotesTree();
+  const tree = useNotesStore((state) => state.tree);
+  const allNotePreviews = useNotesStore((state) => state.previews);
   const { theme, setTheme } = useAppearance(
     useShallow((state) => ({
       theme: state.theme,

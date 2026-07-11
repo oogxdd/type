@@ -12,6 +12,7 @@ import {
   writeNote,
 } from "@/features/notes/api/notes-api";
 import { getAutoRenameTarget } from "@/features/notes/editor/lib/note-autoname";
+import { refreshTree } from "@/features/notes/navigation/state/notes-store";
 import {
   registerProfileMutationFlush,
   selectActiveProfileId,
@@ -53,10 +54,6 @@ const clearSaveTimer = () => {
     window.clearTimeout(saveTimer);
     saveTimer = null;
   }
-};
-
-const emitTreeInvalidated = () => {
-  window.dispatchEvent(new CustomEvent("notes-tree-invalidated"));
 };
 
 async function saveNow(targetNote: string | null, content: string) {
@@ -151,7 +148,7 @@ async function handleActiveNoteChange(
       const trimmed = previousContent.trim();
       if (previousDirty && !trimmed) {
         await deleteItems([previousNote]);
-        emitTreeInvalidated();
+        void refreshTree();
       } else {
         if (previousDirty) {
           await saveNow(previousNote, previousContent);
@@ -169,7 +166,7 @@ async function handleActiveNoteChange(
           );
           if (renameTarget) {
             await renameItem(previousNote, renameTarget);
-            emitTreeInvalidated();
+            void refreshTree();
           }
         }
       }

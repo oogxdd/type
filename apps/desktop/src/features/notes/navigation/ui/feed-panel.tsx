@@ -4,7 +4,15 @@ import { useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { clearDraft, clearNote } from "@/features/notes/editor/state/editor-store";
-import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import {
+  setActiveFeedGroup,
+  setExpanded,
+  useActiveFeedGroup,
+  useFeedLoading,
+  useFeedTree,
+  useNotesStore,
+  useShouldNestNotesInNavigation,
+} from "@/features/notes/navigation/state/notes-store";
 import { type DesktopContextMenuState } from "@/app/hooks/use-tree-interactions";
 import { useSelection } from "@/app/state/selection-store";
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
@@ -27,17 +35,12 @@ export function FeedPanel({
   onPaneKeyDown,
   onOpenContextMenu,
 }: FeedPanelProps) {
-  const {
-    feedTreeData,
-    feedNodeById,
-    activeFeedGroup,
-    setActiveFeedGroup,
-    expanded,
-    setExpanded,
-    allNotePreviews,
-    feedLoading,
-    shouldNestNotesInNavigation,
-  } = useNotesTree();
+  const { treeData: feedTreeData, nodeById: feedNodeById } = useFeedTree();
+  const activeFeedGroup = useActiveFeedGroup();
+  const expanded = useNotesStore((state) => state.expanded);
+  const allNotePreviews = useNotesStore((state) => state.previews);
+  const feedLoading = useFeedLoading();
+  const shouldNestNotesInNavigation = useShouldNestNotesInNavigation();
   const {
     selectFolder,
     selectNote,
@@ -73,14 +76,7 @@ export function FeedPanel({
       clearNote();
       focusNoScroll(paneBodyRef.current);
     },
-    [
-      clearDraft,
-      clearNote,
-      onNavigateToNotes,
-      paneBodyRef,
-      selectFolder,
-      setActiveFeedGroup,
-    ]
+    [onNavigateToNotes, paneBodyRef, selectFolder]
   );
 
   const handleNoteSelect = useCallback(
@@ -105,7 +101,6 @@ export function FeedPanel({
       paneBodyRef,
       selectNote,
       selectedNotes,
-      setActiveFeedGroup,
       shouldNestNotesInNavigation,
     ]
   );
@@ -123,7 +118,7 @@ export function FeedPanel({
         return next;
       });
     },
-    [setExpanded]
+    []
   );
 
   const handleNoteContextMenu = useCallback(
@@ -158,7 +153,6 @@ export function FeedPanel({
       onOpenContextMenu,
       paneBodyRef,
       selectedNotes,
-      setActiveFeedGroup,
       setActiveFolder,
       setActiveNote,
       setLastSelectedFolder,
