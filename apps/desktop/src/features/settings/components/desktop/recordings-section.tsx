@@ -18,6 +18,7 @@ import {
   SettingsSection,
   SettingsSelect,
 } from "../settings-ui";
+import { LocalOcrEngineCard } from "./local-ocr-engine-card";
 
 export function SettingsRecordingsSection() {
   const { syncSettings, updateSyncSettings } = useProfiles();
@@ -30,6 +31,7 @@ export function SettingsRecordingsSection() {
     refreshHandwritingJobs,
   } = useHandwriting();
 
+  const isLocal = syncSettings.handwritingOcrProvider === "local";
   const isHuggingFace = syncSettings.handwritingOcrProvider === "huggingface";
   const providerKey = isHuggingFace
     ? syncSettings.huggingFaceApiKey
@@ -80,62 +82,68 @@ export function SettingsRecordingsSection() {
             value={syncSettings.handwritingOcrProvider}
             onChange={(event) =>
               updateSyncSettings({
-                handwritingOcrProvider: event.target.value as "openai" | "huggingface",
+                handwritingOcrProvider: event.target.value as
+                  | "local"
+                  | "openai"
+                  | "huggingface",
               })
             }
           >
-            <option value="openai">OpenAI</option>
+            <option value="local">Local (EasyOCR)</option>
+            <option value="openai">OpenAI Vision</option>
             <option value="huggingface">Hugging Face</option>
           </SettingsSelect>
         </SettingsField>
-        <SettingsField label={isHuggingFace ? "Hugging Face API key" : "OpenAI API key"}>
-          <Input
-            type="password"
-            value={providerKey}
-            onChange={(event) =>
-              updateSyncSettings(
-                isHuggingFace
-                  ? { huggingFaceApiKey: event.target.value }
-                  : { openAiApiKey: event.target.value }
-              )
-            }
-            placeholder={isHuggingFace ? "Paste Hugging Face key" : "Paste OpenAI key"}
-            autoCapitalize="off"
-            autoCorrect="off"
-          />
-        </SettingsField>
-        <SettingsField label={isHuggingFace ? "Model ID" : "Model"}>
-          <Input
-            type="text"
-            value={providerModel}
-            onChange={(event) =>
-              updateSyncSettings(
-                isHuggingFace
-                  ? { huggingFaceModel: event.target.value }
-                  : { openAiModel: event.target.value }
-              )
-            }
-            placeholder={
-              isHuggingFace ? "microsoft/trocr-base-handwritten" : "gpt-4.1-mini"
-            }
-            autoCapitalize="off"
-            autoCorrect="off"
-          />
-        </SettingsField>
-        <label className="inline-flex items-center gap-2 text-sm text-foreground">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-border"
-            checked={syncSettings.mobileAutoHandwritingOcrEnabled}
-            onChange={(event) =>
-              updateSyncSettings({
-                mobileAutoHandwritingOcrEnabled: event.target.checked,
-              })
-            }
-          />
-          <span>Auto-queue handwriting OCR on mobile</span>
-        </label>
+        {!isLocal ? (
+          <>
+            <SettingsField label={isHuggingFace ? "Hugging Face API key" : "OpenAI API key"}>
+              <Input
+                type="password"
+                value={providerKey}
+                onChange={(event) =>
+                  updateSyncSettings(
+                    isHuggingFace
+                      ? { huggingFaceApiKey: event.target.value }
+                      : { openAiApiKey: event.target.value }
+                  )
+                }
+                placeholder={isHuggingFace ? "Paste Hugging Face key" : "Paste OpenAI key"}
+                autoCapitalize="off"
+                autoCorrect="off"
+              />
+            </SettingsField>
+            <SettingsField label={isHuggingFace ? "Model ID" : "Model"}>
+              <Input
+                type="text"
+                value={providerModel}
+                onChange={(event) =>
+                  updateSyncSettings(
+                    isHuggingFace
+                      ? { huggingFaceModel: event.target.value }
+                      : { openAiModel: event.target.value }
+                  )
+                }
+                placeholder={
+                  isHuggingFace ? "microsoft/trocr-base-handwritten" : "gpt-4.1-mini"
+                }
+                autoCapitalize="off"
+                autoCorrect="off"
+              />
+            </SettingsField>
+          </>
+        ) : (
+          <SettingsHelpText>
+            Photos stay pending on mobile. This desktop recognizes them after sync.
+          </SettingsHelpText>
+        )}
       </SettingsCard>
+
+      {isLocal ? (
+        <LocalOcrEngineCard
+          modelPath={syncSettings.localOcrModelPath}
+          onModelPathChange={(value) => void updateSyncSettings({ localOcrModelPath: value })}
+        />
+      ) : null}
 
       <SettingsCard title="Handwriting jobs">
         <SettingsInfoGrid>

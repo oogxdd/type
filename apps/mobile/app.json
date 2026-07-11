@@ -18,8 +18,8 @@
         "UIFileSharingEnabled": true,
         "LSSupportsOpeningDocumentsInPlace": true,
         "ITSAppUsesNonExemptEncryption": false,
-        "NSPhotoLibraryUsageDescription": "Type does not access your photo library; this permission is required by a bundled camera component.",
-        "NSPhotoLibraryAddUsageDescription": "Type does not save to your photo library; this permission is required by a bundled camera component.",
+        "NSPhotoLibraryUsageDescription": "Type uses selected photos to create handwritten note attachments.",
+        "NSPhotoLibraryAddUsageDescription": "Type can use photos you take as handwritten note attachments.",
         "NSLocalNetworkUsageDescription": "Type connects to your computer over the local network to sync your notes.",
         "NSBonjourServices": [
           "_typenotes-sync._tcp"
@@ -40,6 +40,13 @@
         "expo-camera",
         {
           "cameraPermission": "Type uses the camera to scan the sync QR code shown by the desktop app."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Type uses selected photos to create handwritten note attachments.",
+          "cameraPermission": "Type uses the camera to create handwritten note attachments."
         }
       ],
       [

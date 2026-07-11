@@ -1,4 +1,4 @@
-//! Handwriting OCR: save attachments, OCR queue (OpenAI / HuggingFace), listing.
+//! Handwriting OCR: save attachments, provider queue, and status listing.
 //!
 //! Per-provider HTTP transcription lives in submodules (openai.rs,
 //! huggingface.rs); this hub owns attachment saving, the OCR queue + worker,
@@ -27,9 +27,11 @@ use crate::{
 };
 
 mod huggingface;
+mod local;
 mod openai;
 
 use huggingface::transcribe_handwriting_with_huggingface;
+use local::{check_local_ocr_availability, transcribe_handwriting_locally};
 use openai::transcribe_handwriting_with_openai;
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -70,6 +72,22 @@ pub struct QueueHandwritingOcrArgs {
     pub provider: Option<String>,
     pub api_key: Option<String>,
     pub model: Option<String>,
+    pub model_path: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct LocalOcrStatusArgs {
+    pub model_path: Option<String>,
+    #[serde(default)]
+    pub setup: bool,
+}
+
+#[derive(Serialize)]
+pub struct LocalOcrStatusResult {
+    pub available: bool,
+    pub python_found: bool,
+    pub model_path: String,
+    pub error: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -113,8 +131,16 @@ pub struct HandwritingOcrListResult {
 #[derive(Copy, Clone)]
 /// Supported OCR backend providers.
 pub enum HandwritingOcrProvider {
+    Local,
     OpenAi,
     HuggingFace,
+}
+
+#[derive(Clone)]
+pub enum HandwritingOcrMethod {
+    Local { app: AppEnv, model_path: PathBuf },
+    OpenAi { api_key: String, model: String },
+    HuggingFace { api_key: String, model: String },
 }
 
 #[derive(Clone)]
@@ -123,9 +149,7 @@ pub struct QueuedHandwritingOcrJob {
     pub note_rel: String,
     pub note_path: PathBuf,
     pub attachment_path: PathBuf,
-    pub provider: HandwritingOcrProvider,
-    pub api_key: String,
-    pub model: String,
+    pub method: HandwritingOcrMethod,
 }
 
 #[derive(Clone)]
@@ -167,6 +191,8 @@ impl HandwritingGateway for HandwritingAdapter {
     type QueueArgs = QueueHandwritingOcrArgs;
     type QueueResult = HandwritingOcrQueueResult;
     type ListResult = HandwritingOcrListResult;
+    type LocalStatusArgs = LocalOcrStatusArgs;
+    type LocalStatus = LocalOcrStatusResult;
 
     fn save(&self, args: Self::SaveArgs) -> Result<Self::WriteResult, String> {
         let root = crate::ensured_notes_root(&self.app)?;
@@ -219,34 +245,61 @@ impl HandwritingGateway for HandwritingAdapter {
             .filter(|s| !s.is_empty())
             .unwrap_or(app_config.handwriting_ocr_provider.as_str());
         let provider = parse_handwriting_ocr_provider(provider_str)?;
-
-        let api_key = args
-            .api_key
-            .as_deref()
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| match provider {
-                HandwritingOcrProvider::OpenAi => app_config.openai_api_key.as_str(),
-                HandwritingOcrProvider::HuggingFace => app_config.huggingface_api_key.as_str(),
-            })
-            .trim();
-
-        if api_key.is_empty() {
-            return Err("OCR API key is required.".to_string());
-        }
-
-        let model = args
-            .model
-            .as_deref()
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| match provider {
-                HandwritingOcrProvider::OpenAi => app_config.openai_model.as_str(),
-                HandwritingOcrProvider::HuggingFace => app_config.huggingface_model.as_str(),
-            })
-            .trim();
-
-        if model.is_empty() {
-            return Err("OCR model is required.".to_string());
-        }
+        let method = match provider {
+            HandwritingOcrProvider::Local => {
+                let configured = args
+                    .model_path
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or(app_config.local_ocr_model_path.as_str());
+                HandwritingOcrMethod::Local {
+                    app: self.app.clone(),
+                    model_path: crate::resolve_local_ocr_model_path(&self.app, configured)?,
+                }
+            }
+            HandwritingOcrProvider::OpenAi | HandwritingOcrProvider::HuggingFace => {
+                let (stored_key, stored_model) = match provider {
+                    HandwritingOcrProvider::OpenAi => (
+                        app_config.openai_api_key.as_str(),
+                        app_config.openai_model.as_str(),
+                    ),
+                    HandwritingOcrProvider::HuggingFace => (
+                        app_config.huggingface_api_key.as_str(),
+                        app_config.huggingface_model.as_str(),
+                    ),
+                    HandwritingOcrProvider::Local => unreachable!(),
+                };
+                let api_key = args
+                    .api_key
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or(stored_key)
+                    .trim();
+                let model = args
+                    .model
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or(stored_model)
+                    .trim();
+                if api_key.is_empty() {
+                    return Err("OCR API key is required.".to_string());
+                }
+                if model.is_empty() {
+                    return Err("OCR model is required.".to_string());
+                }
+                match provider {
+                    HandwritingOcrProvider::OpenAi => HandwritingOcrMethod::OpenAi {
+                        api_key: api_key.to_string(),
+                        model: model.to_string(),
+                    },
+                    HandwritingOcrProvider::HuggingFace => HandwritingOcrMethod::HuggingFace {
+                        api_key: api_key.to_string(),
+                        model: model.to_string(),
+                    },
+                    HandwritingOcrProvider::Local => unreachable!(),
+                }
+            }
+        };
 
         let root = crate::ensured_notes_root(&self.app)?;
         let notes = collect_handwriting_notes(&root)?;
@@ -293,9 +346,7 @@ impl HandwritingGateway for HandwritingAdapter {
                 note_rel: note.note_rel,
                 note_path: note.note_path,
                 attachment_path: note.attachment_path,
-                provider,
-                api_key: api_key.to_string(),
-                model: model.to_string(),
+                method: method.clone(),
             });
         }
 
@@ -363,6 +414,25 @@ impl HandwritingGateway for HandwritingAdapter {
         jobs.sort_by(|a, b| b.updated_ms.unwrap_or(0).cmp(&a.updated_ms.unwrap_or(0)));
         Ok(HandwritingOcrListResult { queue, jobs })
     }
+
+    fn local_status(&self, args: Self::LocalStatusArgs) -> Self::LocalStatus {
+        let configured = args.model_path.unwrap_or_else(|| {
+            crate::app_data_dir(&self.app)
+                .map(|path| crate::load_app_config(&path).local_ocr_model_path)
+                .unwrap_or_default()
+        });
+        match crate::resolve_local_ocr_model_path(&self.app, &configured) {
+            Ok(model_path) => check_local_ocr_availability(&self.app, &model_path, args.setup),
+            Err(error) => LocalOcrStatusResult {
+                available: false,
+                python_found: crate::local_ocr_managed_python(&self.app)
+                    .map(|path| path.exists())
+                    .unwrap_or(false),
+                model_path: configured,
+                error: Some(error),
+            },
+        }
+    }
 }
 
 // ── Static ─────────────────────────────────────────────────────────────────────
@@ -406,15 +476,14 @@ pub fn handwriting_queue_snapshot() -> HandwritingOcrQueueSnapshot {
 }
 
 /// Parse a provider string into the corresponding enum variant.
-pub fn parse_handwriting_ocr_provider(
-    value: &str,
-) -> Result<HandwritingOcrProvider, String> {
+pub fn parse_handwriting_ocr_provider(value: &str) -> Result<HandwritingOcrProvider, String> {
     let normalized = value.trim().to_lowercase();
     match normalized.as_str() {
+        "local" => Ok(HandwritingOcrProvider::Local),
         "openai" => Ok(HandwritingOcrProvider::OpenAi),
         "huggingface" => Ok(HandwritingOcrProvider::HuggingFace),
         _ => Err(format!(
-            "Unsupported OCR provider: {}. Expected \"openai\" or \"huggingface\".",
+            "Unsupported OCR provider: {}. Expected \"local\", \"openai\", or \"huggingface\".",
             value
         )),
     }
@@ -587,18 +656,31 @@ pub fn update_handwriting_note_status(
 }
 
 fn run_handwriting_ocr_job(
-    provider: HandwritingOcrProvider,
-    image_bytes: &[u8],
-    mime_type: &str,
-    api_key: &str,
-    model: &str,
+    method: &HandwritingOcrMethod,
+    image_path: &Path,
 ) -> Result<String, String> {
-    match provider {
-        HandwritingOcrProvider::OpenAi => {
-            transcribe_handwriting_with_openai(image_bytes, mime_type, api_key, model)
+    match method {
+        HandwritingOcrMethod::Local { app, model_path } => {
+            transcribe_handwriting_locally(app, image_path, model_path)
         }
-        HandwritingOcrProvider::HuggingFace => {
-            transcribe_handwriting_with_huggingface(image_bytes, mime_type, api_key, model)
+        HandwritingOcrMethod::OpenAi { api_key, model }
+        | HandwritingOcrMethod::HuggingFace { api_key, model } => {
+            let image_bytes = fs::read(image_path).map_err(|error| error.to_string())?;
+            let extension = image_path
+                .extension()
+                .and_then(|value| value.to_str())
+                .and_then(normalize_image_extension)
+                .ok_or_else(|| "Unsupported attachment format.".to_string())?;
+            let mime_type = image_mime_from_extension(extension);
+            match method {
+                HandwritingOcrMethod::OpenAi { .. } => {
+                    transcribe_handwriting_with_openai(&image_bytes, mime_type, api_key, model)
+                }
+                HandwritingOcrMethod::HuggingFace { .. } => {
+                    transcribe_handwriting_with_huggingface(&image_bytes, mime_type, api_key, model)
+                }
+                HandwritingOcrMethod::Local { .. } => unreachable!(),
+            }
         }
     }
 }
@@ -615,23 +697,7 @@ fn process_handwriting_ocr_job(job: QueuedHandwritingOcrJob) {
         );
     }
 
-    let run = || -> Result<String, String> {
-        let image_bytes = fs::read(&job.attachment_path).map_err(|error| error.to_string())?;
-        let extension = job
-            .attachment_path
-            .extension()
-            .and_then(|value| value.to_str())
-            .and_then(normalize_image_extension)
-            .ok_or_else(|| "Unsupported attachment format.".to_string())?;
-        let mime_type = image_mime_from_extension(extension);
-        run_handwriting_ocr_job(
-            job.provider,
-            &image_bytes,
-            mime_type,
-            &job.api_key,
-            &job.model,
-        )
-    };
+    let run = || run_handwriting_ocr_job(&job.method, &job.attachment_path);
 
     match run() {
         Ok(extracted_text) => {
@@ -732,10 +798,7 @@ pub fn handwriting_note_file_name(
 }
 
 /// Allocate a unique attachment file path inside the Attachments storage folder.
-pub fn handwriting_attachment_file_path(
-    root: &Path,
-    extension: &str,
-) -> Result<PathBuf, String> {
+pub fn handwriting_attachment_file_path(root: &Path, extension: &str) -> Result<PathBuf, String> {
     let storage = handwriting_storage_root(root);
     fs::create_dir_all(&storage).map_err(|error| error.to_string())?;
     for _ in 0..=512usize {
@@ -767,4 +830,22 @@ pub fn resolve_handwriting_target_folder(
     }
     let fallback = root.join(FEED_FOLDER);
     Ok((FEED_FOLDER.to_string(), fallback))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provider_parser_keeps_local_and_cloud_backends_distinct() {
+        assert!(matches!(
+            parse_handwriting_ocr_provider("local").unwrap(),
+            HandwritingOcrProvider::Local
+        ));
+        assert!(matches!(
+            parse_handwriting_ocr_provider("openai").unwrap(),
+            HandwritingOcrProvider::OpenAi
+        ));
+        assert!(parse_handwriting_ocr_provider("unknown").is_err());
+    }
 }

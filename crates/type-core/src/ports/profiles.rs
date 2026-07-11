@@ -23,6 +23,7 @@ pub struct AppConfig {
     pub assemblyai_api_key: String,
     pub whisper_model: String,
     pub handwriting_ocr_provider: String,
+    pub local_ocr_model_path: String,
     pub openai_api_key: String,
     pub openai_model: String,
     pub huggingface_api_key: String,

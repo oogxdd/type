@@ -18,12 +18,14 @@
 uniffi::setup_scaffolding!();
 
 mod git_sync;
+mod handwriting;
 mod notes;
 mod profiles;
 mod recordings;
 mod security;
 
 pub use git_sync::*;
+pub use handwriting::*;
 pub use notes::*;
 pub use profiles::*;
 pub use recordings::*;
