@@ -8,6 +8,9 @@ use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 /// "test-audio" as base64. Providers receive a file path, not parsed audio,
 /// so the content never has to be a real recording.
 const FAKE_AUDIO_BASE64: &str = "dGVzdC1hdWRpbw==";
+/// Minimal payload is sufficient because save validates the declared format,
+/// not image decoding; desktop OCR is intentionally not invoked in this test.
+const FAKE_IMAGE_BASE64: &str = "dGVzdC1pbWFnZQ==";
 
 struct FixedTranscript;
 
@@ -172,6 +175,24 @@ async fn ffi_end_to_end() {
     let listing = parse(&crate::list_recordings().await.unwrap());
     assert_eq!(listing["recordings"].as_array().unwrap().len(), 1);
     assert_eq!(listing["recordings"][0]["status"], "completed");
+
+    // ── Handwriting: mobile saves pending; no OCR runs on the phone ──────────
+    let handwriting_args = serde_json::json!({
+        "image_base64": FAKE_IMAGE_BASE64,
+        "mime_type": "image/jpeg",
+        "file_name": "page.jpg",
+        "folder_path": "Feed"
+    });
+    let handwriting = parse(
+        &crate::save_handwriting_attachment(handwriting_args.to_string())
+            .await
+            .unwrap(),
+    );
+    let handwriting_note =
+        fs::read_to_string(notes_root.join(handwriting["note_path"].as_str().unwrap())).unwrap();
+    assert!(handwriting_note.contains("type: handwriting_attachment"));
+    assert!(handwriting_note.contains("ocr_status: pending"));
+    assert!(!handwriting_note.contains("ocr_status: completed"));
 
     let _ = fs::remove_dir_all(&app_dir);
 }

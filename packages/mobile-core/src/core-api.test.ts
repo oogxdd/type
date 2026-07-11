@@ -84,6 +84,21 @@ describe("core-api over the mock core", () => {
     );
   });
 
+  it("saves a photo as a pending handwriting note without running OCR", async () => {
+    const saved = await core.saveHandwritingAttachment({
+      image_base64: "QUJD",
+      mime_type: "image/jpeg",
+      file_name: "page.jpg",
+    });
+
+    expect(saved.attachment_path.startsWith("Attachments/")).toBe(true);
+    expect(await core.readNote(saved.note_path)).toBe("");
+    const meta = await core.getNoteMeta(saved.note_path);
+    expect(meta.note_type).toBe("handwriting_attachment");
+    expect(meta.handwriting_attachment_path).toBe(saved.attachment_path);
+    expect(meta.ocr_status).toBe("pending");
+  });
+
   it("connects a git remote and records pushes in history", async () => {
     const status = await core.connectGitRepo({
       remote_url: "git@github.com:demo/notes.git",

@@ -17,6 +17,7 @@ import type {
   GitSyncArgs,
   GitSyncStatus,
   GitTransferProgress,
+  HandwritingAttachmentWriteResult,
   NoteMeta,
   NotePreviewEntry,
   ProfilesBackupArchive,
@@ -28,6 +29,7 @@ import type {
   RecordingTranscriptionQueueResult,
   RecordingWriteResult,
   SaveRecordingArgs,
+  SaveHandwritingAttachmentArgs,
   SecurityState,
   SecurityUnlockResult,
   SetNoteMarkersArgs,
@@ -233,6 +235,14 @@ export const readRecordingAudio = async (
   path: string
 ): Promise<RecordingAudioPayload> =>
   parse(await getRawCore().readRecordingAudio(path));
+
+// ── Photo attachments ────────────────────────────────────────────────────────
+
+/** Save a photo-backed note as pending. OCR runs after sync on desktop. */
+export const saveHandwritingAttachment = async (
+  args: SaveHandwritingAttachmentArgs
+): Promise<HandwritingAttachmentWriteResult> =>
+  parse(await getRawCore().saveHandwritingAttachment(JSON.stringify(args)));
 
 // ── Security ───────────────────────────────────────────────────────────────────
 

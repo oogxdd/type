@@ -1,7 +1,7 @@
 // The floating dictation button (bottom-right of the capture page) — this
-// replaced the old Record screen. Tap to start, tap again to stop; or press
-// and hold to record only while held (release = stop & save, handy for quick
-// 5–10s clips). Saving goes through the core (Feed note + audio file +
+// replaced the old Record screen. Tap to start, tap again to stop. Long press
+// reveals camera/gallery actions for handwriting
+// photos. Saving goes through the core (Feed note + audio/image file +
 // transcription_status: pending), then queues transcription according to the
 // working folder's transcription_mode:
 //
@@ -20,6 +20,7 @@ import {
   useAudioRecorderState,
 } from "expo-audio";
 import * as FileSystem from "expo-file-system/legacy";
+import * as ImagePicker from "expo-image-picker";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -35,9 +36,6 @@ import { useNotesStore } from "../state/notes-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useTheme } from "../theme";
 
-// A press released after this long counts as "hold to record" and stops on
-// release; a quicker press is a tap that leaves the recording running.
-const HOLD_TO_RECORD_MS = 400;
 const STATUS_VISIBLE_MS = 4000;
 
 const MODE_SAVED_DETAIL: Record<TranscriptionMode, string> = {
@@ -60,13 +58,13 @@ export const DictationButton = ({
 
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<PillStatus | null>(null);
+  const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Start is async (permission prompt, prepare) — a hold can end before it
   // finishes, so stopAndSave awaits the in-flight start before stopping.
   const startPromise = useRef<Promise<void> | null>(null);
-  const pressInAt = useRef(0);
-  const pressStartedRecording = useRef(false);
+  const suppressNextPress = useRef(false);
 
   const snapshot = useSettingsStore((s) => s.snapshot);
   const settings = activeProfile(snapshot)?.settings;
@@ -149,6 +147,56 @@ export const DictationButton = ({
     }
   };
 
+  const choosePhoto = async (source: "camera" | "library") => {
+    setAttachmentMenuOpen(false);
+    setBusy(true);
+    try {
+      const permission =
+        source === "camera"
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        throw new Error(
+          source === "camera"
+            ? "Camera permission denied — enable it in system settings."
+            : "Photo library permission denied — enable it in system settings."
+        );
+      }
+
+      const result =
+        source === "camera"
+          ? await ImagePicker.launchCameraAsync({
+              mediaTypes: ["images"],
+              base64: true,
+              quality: 1,
+            })
+          : await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ["images"],
+              base64: true,
+              quality: 1,
+              allowsMultipleSelection: false,
+            });
+      if (result.canceled) {
+        return;
+      }
+      const asset = result.assets[0];
+      const imageBase64 =
+        asset.base64 ??
+        (await FileSystem.readAsStringAsync(asset.uri, { encoding: "base64" }));
+      await core.saveHandwritingAttachment({
+        image_base64: imageBase64,
+        mime_type: asset.mimeType ?? "image/jpeg",
+        file_name: asset.fileName ?? undefined,
+      });
+      showStatus({ kind: "success", text: "Saved — your desktop will recognize it" });
+      void useNotesStore.getState().refresh();
+    } catch (err) {
+      showStatus({ kind: "error", text: getErrorMessage(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // Keep the latest stopAndSave reachable from the unmount effect below.
   const stopAndSaveRef = useRef(stopAndSave);
   stopAndSaveRef.current = stopAndSave;
@@ -166,40 +214,37 @@ export const DictationButton = ({
     []
   );
 
-  // The handlers read recorder.isRecording (a live native property) instead
-  // of recorderState, which only re-polls every ~500ms — a quick tap-then-
-  // release would otherwise see stale state.
-  const onPressIn = () => {
+  // Read recorder.isRecording (a live native property) instead of the polled
+  // recorderState so quick start/stop taps cannot observe stale state.
+  const onPress = () => {
+    if (suppressNextPress.current) {
+      suppressNextPress.current = false;
+      return;
+    }
     if (busy) {
       return;
     }
-    pressInAt.current = Date.now();
     if (recorder.isRecording || startPromise.current) {
-      pressStartedRecording.current = false;
+      if (recorder.isRecording) {
+        void stopAndSave();
+      }
       return;
     }
-    pressStartedRecording.current = true;
+    setAttachmentMenuOpen(false);
     setStatus(null);
     startPromise.current = start().catch((err) => {
       startPromise.current = null;
-      pressStartedRecording.current = false;
       showStatus({ kind: "error", text: getErrorMessage(err) });
     });
   };
 
-  const onPressOut = () => {
-    // Only an actual recording can be stopped; if start() is still in flight
-    // (e.g. the first-use permission prompt interrupted the hold), releasing
-    // leaves the recording running once it starts — the next tap stops it.
-    if (busy || !recorder.isRecording) {
+  const onLongPress = () => {
+    if (busy || recorder.isRecording || startPromise.current) {
       return;
     }
-    const held = Date.now() - pressInAt.current;
-    if (pressStartedRecording.current && held < HOLD_TO_RECORD_MS) {
-      // Quick tap: recording keeps running until the next tap.
-      return;
-    }
-    void stopAndSave();
+    suppressNextPress.current = true;
+    setStatus(null);
+    setAttachmentMenuOpen((open) => !open);
   };
 
   const seconds = Math.floor((recorderState.durationMillis ?? 0) / 1000);
@@ -225,11 +270,48 @@ export const DictationButton = ({
           </Text>
         </View>
       ) : null}
+      {attachmentMenuOpen && !recorderState.isRecording ? (
+        <View style={styles.attachmentActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Take handwriting photo"
+            onPress={() => void choosePhoto("camera")}
+            disabled={busy}
+            style={({ pressed }) => [
+              styles.attachmentAction,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                opacity: pressed ? 0.6 : 1,
+              },
+            ]}
+          >
+            <Ionicons name="camera-outline" size={22} color={theme.colors.text} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Choose handwriting photo"
+            onPress={() => void choosePhoto("library")}
+            disabled={busy}
+            style={({ pressed }) => [
+              styles.attachmentAction,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                opacity: pressed ? 0.6 : 1,
+              },
+            ]}
+          >
+            <Ionicons name="images-outline" size={22} color={theme.colors.text} />
+          </Pressable>
+        </View>
+      ) : null}
       {/* Same neutral circle as the toolbar buttons; only the icon signals
           the recording state. */}
       <Pressable
-        onPressIn={onPressIn}
-        onPressOut={onPressOut}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={400}
         disabled={busy}
         hitSlop={10}
         style={({ pressed }) => [
@@ -267,6 +349,15 @@ const styles = StyleSheet.create({
   },
   pillText: { fontSize: 13, fontVariant: ["tabular-nums"] },
   recordingDot: { width: 8, height: 8, borderRadius: 4 },
+  attachmentActions: { flexDirection: "row", gap: 10 },
+  attachmentAction: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   // Slightly larger than the 38px toolbar circles — it's the primary action
   // on the capture page. Keep in sync with the menu's preview replica
   // (menu-screen.tsx previewMic).

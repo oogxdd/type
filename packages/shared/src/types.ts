@@ -362,6 +362,14 @@ export type SaveRecordingArgs = {
   file_name_format?: NoteFileNameFormat;
 };
 
+export type SaveHandwritingAttachmentArgs = {
+  image_base64: string;
+  mime_type?: string | null;
+  file_name?: string | null;
+  folder_path?: string | null;
+  file_name_format?: NoteFileNameFormat;
+};
+
 export type QueueRecordingsArgs = {
   assembly_api_key?: string | null;
 };
