@@ -3,7 +3,7 @@
 // from mountApp(), before React renders — stores are module singletons, so
 // nothing here depends on the component tree.
 import { initAppearancePersistence } from "@/state/appearance-store";
-import { useSelection } from "@/state/selection-store";
+import { resetSelection } from "@/state/selection-store";
 import { APP_EXTENSIONS } from "@/lib/extensions";
 import { initEditor } from "@/state/editor-store";
 import { initGitSync } from "@/state/git-sync-store";
@@ -51,7 +51,7 @@ export function bootstrapApp() {
       activeProfileId !== selectActiveProfileId(previous) ||
       selectActiveProfileNotesRoot(state) !== selectActiveProfileNotesRoot(previous)
     ) {
-      useSelection.getState().resetSelection();
+      resetSelection();
     }
   });
 

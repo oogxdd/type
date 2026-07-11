@@ -5,7 +5,17 @@
 import { listen } from "@tauri-apps/api/event";
 
 import { useAppearance } from "./appearance-store";
-import { useSelection } from "./selection-store";
+import {
+  selectFolder,
+  selectNote,
+  setActiveFolder,
+  setActiveNote,
+  setLastSelectedFolder,
+  setLastSelectedNote,
+  setSelectedFolders,
+  setSelectedNotes,
+  useSelection,
+} from "./selection-store";
 import * as api from "@/api/notes-api";
 import {
   clearDraft,
@@ -59,7 +69,7 @@ export async function createNewNote(
   const path = created.path;
   await refreshTree();
 
-  useSelection.getState().selectNote(path, folderPath);
+  selectNote(path, folderPath);
   clearDraft();
 
   requestAnimationFrame(() => {
@@ -81,10 +91,10 @@ function applyFolderRename(oldPath: string, newPath: string) {
     oldPath,
     newPath
   );
-  selection.setActiveFolder(next.activeFolder);
+  setActiveFolder(next.activeFolder);
   if (next.selectedFolderChanged) {
-    selection.setSelectedFolders(next.selectedFolders);
-    selection.setLastSelectedFolder(newPath);
+    setSelectedFolders(next.selectedFolders);
+    setLastSelectedFolder(newPath);
   }
 }
 
@@ -123,10 +133,9 @@ export async function deleteFolders(paths: string[]) {
   const confirmed = await confirmAction(`Delete ${paths.length} folder(s)?`);
   if (!confirmed) return;
   await api.deleteItems(paths);
-  const selection = useSelection.getState();
-  selection.setSelectedFolders(new Set());
-  if (paths.includes(selection.activeFolder)) {
-    selection.setActiveFolder("");
+  setSelectedFolders(new Set());
+  if (paths.includes(useSelection.getState().activeFolder)) {
+    setActiveFolder("");
   }
   await refreshTree();
 }
@@ -135,12 +144,14 @@ export async function deleteNotes(paths: string[]): Promise<boolean> {
   if (paths.length === 0) return false;
   const confirmed = await confirmAction(`Delete ${paths.length} note(s)?`);
   if (!confirmed) return false;
+  const wasActiveNoteDeleted = paths.includes(
+    useSelection.getState().activeNote || ""
+  );
   await api.deleteItems(paths);
-  const selection = useSelection.getState();
-  selection.setSelectedNotes(new Set());
-  selection.setLastSelectedNote("");
-  if (paths.includes(selection.activeNote || "")) {
-    selection.setActiveNote(null);
+  setSelectedNotes(new Set());
+  setLastSelectedNote("");
+  if (wasActiveNoteDeleted) {
+    setActiveNote(null);
     clearNote();
   }
   await refreshTree();
@@ -150,7 +161,7 @@ export async function deleteNotes(paths: string[]): Promise<boolean> {
 export async function moveNotesToArchive(paths: string[]) {
   if (paths.length === 0) return;
   await api.moveItems(paths, ARCHIEVE_FOLDER_PATH);
-  useSelection.getState().selectFolder(ARCHIEVE_FOLDER_PATH);
+  selectFolder(ARCHIEVE_FOLDER_PATH);
   clearNote();
   await refreshTree();
 }
@@ -161,7 +172,7 @@ export async function moveNotesToFolder(paths: string[], destinationPath: string
     return;
   }
   await api.moveItems(paths, normalizedDestination);
-  useSelection.getState().selectFolder(normalizedDestination);
+  selectFolder(normalizedDestination);
   clearNote();
   await refreshTree();
 }
@@ -216,12 +227,11 @@ export async function flattenIntoFeed(folderPaths: string[], notePaths: string[]
 
   // Deliberately keeps the active note open (it may have just moved into
   // Feed), so this only redirects the folder selection.
-  const selection = useSelection.getState();
-  selection.setSelectedFolders(new Set([FEED_FOLDER_PATH]));
-  selection.setLastSelectedFolder(FEED_FOLDER_PATH);
-  selection.setActiveFolder(FEED_FOLDER_PATH);
-  selection.setSelectedNotes(new Set());
-  selection.setLastSelectedNote("");
+  setSelectedFolders(new Set([FEED_FOLDER_PATH]));
+  setLastSelectedFolder(FEED_FOLDER_PATH);
+  setActiveFolder(FEED_FOLDER_PATH);
+  setSelectedNotes(new Set());
+  setLastSelectedNote("");
   await refreshTree();
 }
 
@@ -234,7 +244,7 @@ export async function completeCapture(result: {
   note_path: string;
 }) {
   await refreshTree();
-  useSelection.getState().selectNote(result.note_path, result.folder_path);
+  selectNote(result.note_path, result.folder_path);
   clearDraft();
 }
 

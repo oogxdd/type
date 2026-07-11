@@ -17,10 +17,16 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { snapCenterToCursor } from "@dnd-kit/modifiers";
-import { useShallow } from "zustand/react/shallow";
 
 import { useTreeInteractions } from "@/hooks/use-tree-interactions";
-import { useSelection } from "@/state/selection-store";
+import {
+  setActiveNote,
+  setLastSelectedFolder,
+  setLastSelectedNote,
+  setSelectedFolders,
+  setSelectedNotes,
+  useSelection,
+} from "@/state/selection-store";
 import { APP_EXTENSIONS } from "@/lib/extensions";
 import { useAppearance } from "@/state/appearance-store";
 import { useHandwritingStore } from "@/state/handwriting-store";
@@ -89,27 +95,9 @@ export function WorkspaceShell({
   const isRecordingAudio = useRecordingsStore((state) => state.isRecording);
   const isRecordingFinalizing = useRecordingsStore((state) => state.isFinalizing);
   const handwritingImportBusy = useHandwritingStore((state) => state.importBusy);
-  const {
-    selectedFolders,
-    activeFolder,
-    selectedNotes,
-    setSelectedFolders,
-    setLastSelectedFolder,
-    setSelectedNotes,
-    setLastSelectedNote,
-    setActiveNote,
-  } = useSelection(
-    useShallow((state) => ({
-      selectedFolders: state.selectedFolders,
-      activeFolder: state.activeFolder,
-      selectedNotes: state.selectedNotes,
-      setSelectedFolders: state.setSelectedFolders,
-      setLastSelectedFolder: state.setLastSelectedFolder,
-      setSelectedNotes: state.setSelectedNotes,
-      setLastSelectedNote: state.setLastSelectedNote,
-      setActiveNote: state.setActiveNote,
-    }))
-  );
+  const selectedFolders = useSelection((state) => state.selectedFolders);
+  const activeFolder = useSelection((state) => state.activeFolder);
+  const selectedNotes = useSelection((state) => state.selectedNotes);
   const expanded = useNotesStore((state) => state.expanded);
   const allNotePreviews = useNotesStore((state) => state.previews);
   const renamingFolder = useNotesStore((state) => state.renamingFolder);

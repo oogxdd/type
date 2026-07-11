@@ -8,10 +8,19 @@ import {
   type MouseEvent as ReactMouseEvent,
   type SetStateAction,
 } from "react";
-import { useShallow } from "zustand/react/shallow";
 
 import type { ContextMenuState } from "./use-tree-interactions";
-import { useSelection } from "@/state/selection-store";
+import {
+  resetSelection,
+  selectNote,
+  setActiveFolder,
+  setActiveNote,
+  setLastSelectedFolder,
+  setLastSelectedNote,
+  setSelectedFolders,
+  setSelectedNotes,
+  useSelection,
+} from "@/state/selection-store";
 import { clearNote } from "@/state/editor-store";
 import { deleteNotes } from "@/state/notes-actions";
 import {
@@ -63,35 +72,10 @@ export function useNavigationTabs({
   const activeFeedNode = useActiveFeedNode();
   const feedNotes = useFeedNotes();
   const feedNotePreviews = useFeedNotePreviews();
-  const {
-    activeFolder,
-    activeNote,
-    selectedNotes,
-    lastSelectedNote,
-    selectNote,
-    resetSelection,
-    setSelectedFolders,
-    setLastSelectedFolder,
-    setActiveFolder,
-    setSelectedNotes,
-    setLastSelectedNote,
-    setActiveNote,
-  } = useSelection(
-    useShallow((state) => ({
-      activeFolder: state.activeFolder,
-      activeNote: state.activeNote,
-      selectedNotes: state.selectedNotes,
-      lastSelectedNote: state.lastSelectedNote,
-      selectNote: state.selectNote,
-      resetSelection: state.resetSelection,
-      setSelectedFolders: state.setSelectedFolders,
-      setLastSelectedFolder: state.setLastSelectedFolder,
-      setActiveFolder: state.setActiveFolder,
-      setSelectedNotes: state.setSelectedNotes,
-      setLastSelectedNote: state.setLastSelectedNote,
-      setActiveNote: state.setActiveNote,
-    }))
-  );
+  const activeFolder = useSelection((state) => state.activeFolder);
+  const activeNote = useSelection((state) => state.activeNote);
+  const selectedNotes = useSelection((state) => state.selectedNotes);
+  const lastSelectedNote = useSelection((state) => state.lastSelectedNote);
 
   const customFoldersTreeData = useMemo(
     () => treeData.filter((node) => !isSystemFolder(node.id)),

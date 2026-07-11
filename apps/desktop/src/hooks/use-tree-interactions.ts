@@ -5,9 +5,18 @@ import {
   type MouseEvent as ReactMouseEvent,
   type RefObject,
 } from "react";
-import { useShallow } from "zustand/react/shallow";
 
-import { useSelection } from "@/state/selection-store";
+import {
+  selectFolder,
+  selectNote,
+  setActiveFolder,
+  setActiveNote,
+  setLastSelectedFolder,
+  setLastSelectedNote,
+  setSelectedFolders,
+  setSelectedNotes,
+  useSelection,
+} from "@/state/selection-store";
 import { clearDraft, clearNote } from "@/state/editor-store";
 import {
   selectOrderedIds,
@@ -72,35 +81,10 @@ export type TreeInteractions = {
 export const useTreeInteractions = ({
   foldersPanelRef,
 }: UseTreeInteractionsArgs): TreeInteractions => {
-  const {
-    selectedFolders,
-    setSelectedFolders,
-    lastSelectedFolder,
-    setLastSelectedFolder,
-    setActiveFolder,
-    selectedNotes,
-    setSelectedNotes,
-    lastSelectedNote,
-    setLastSelectedNote,
-    setActiveNote,
-    selectFolder,
-    selectNote,
-  } = useSelection(
-    useShallow((state) => ({
-      selectedFolders: state.selectedFolders,
-      setSelectedFolders: state.setSelectedFolders,
-      lastSelectedFolder: state.lastSelectedFolder,
-      setLastSelectedFolder: state.setLastSelectedFolder,
-      setActiveFolder: state.setActiveFolder,
-      selectedNotes: state.selectedNotes,
-      setSelectedNotes: state.setSelectedNotes,
-      lastSelectedNote: state.lastSelectedNote,
-      setLastSelectedNote: state.setLastSelectedNote,
-      setActiveNote: state.setActiveNote,
-      selectFolder: state.selectFolder,
-      selectNote: state.selectNote,
-    }))
-  );
+  const selectedFolders = useSelection((state) => state.selectedFolders);
+  const lastSelectedFolder = useSelection((state) => state.lastSelectedFolder);
+  const selectedNotes = useSelection((state) => state.selectedNotes);
+  const lastSelectedNote = useSelection((state) => state.lastSelectedNote);
 
   const tree = useNotesStore((state) => state.tree);
   const orderedIds = useNotesStore(selectOrderedIds);

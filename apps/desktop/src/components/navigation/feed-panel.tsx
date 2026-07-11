@@ -1,7 +1,6 @@
 // Feed navigation renders synthetic time buckets, not the folder tree.
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
 import { useCallback } from "react";
-import { useShallow } from "zustand/react/shallow";
 
 import { clearDraft, clearNote } from "@/state/editor-store";
 import {
@@ -14,7 +13,17 @@ import {
   useShouldNestNotesInNavigation,
 } from "@/state/notes-store";
 import { type ContextMenuState } from "@/hooks/use-tree-interactions";
-import { useSelection } from "@/state/selection-store";
+import {
+  selectFolder,
+  selectNote,
+  setActiveFolder,
+  setActiveNote,
+  setLastSelectedFolder,
+  setLastSelectedNote,
+  setSelectedFolders,
+  setSelectedNotes,
+  useSelection,
+} from "@/state/selection-store";
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import { focusNoScroll } from "@/lib/dom";
 import { computeRangeSelection } from "@/lib/selection";
@@ -41,31 +50,8 @@ export function FeedPanel({
   const allNotePreviews = useNotesStore((state) => state.previews);
   const feedLoading = useFeedLoading();
   const shouldNestNotesInNavigation = useShouldNestNotesInNavigation();
-  const {
-    selectFolder,
-    selectNote,
-    setSelectedFolders,
-    setLastSelectedFolder,
-    setActiveFolder,
-    selectedNotes,
-    setSelectedNotes,
-    lastSelectedNote,
-    setLastSelectedNote,
-    setActiveNote,
-  } = useSelection(
-    useShallow((state) => ({
-      selectFolder: state.selectFolder,
-      selectNote: state.selectNote,
-      setSelectedFolders: state.setSelectedFolders,
-      setLastSelectedFolder: state.setLastSelectedFolder,
-      setActiveFolder: state.setActiveFolder,
-      selectedNotes: state.selectedNotes,
-      setSelectedNotes: state.setSelectedNotes,
-      lastSelectedNote: state.lastSelectedNote,
-      setLastSelectedNote: state.setLastSelectedNote,
-      setActiveNote: state.setActiveNote,
-    }))
-  );
+  const selectedNotes = useSelection((state) => state.selectedNotes);
+  const lastSelectedNote = useSelection((state) => state.lastSelectedNote);
 
   const selectFeedGroup = useCallback(
     (groupId: string) => {

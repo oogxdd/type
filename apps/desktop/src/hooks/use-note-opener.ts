@@ -4,9 +4,8 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { useShallow } from "zustand/react/shallow";
 
-import { useSelection } from "@/state/selection-store";
+import { selectFolder, selectNote } from "@/state/selection-store";
 import { clearDraft, clearNote } from "@/state/editor-store";
 import type { AppMode } from "@typenotes/shared/types";
 
@@ -27,12 +26,6 @@ export type NoteOpener = {
  * selection update.
  */
 export const useNoteOpener = ({ setAppMode }: UseNoteOpenerArgs): NoteOpener => {
-  const { selectFolder, selectNote } = useSelection(
-    useShallow((state) => ({
-      selectFolder: state.selectFolder,
-      selectNote: state.selectNote,
-    }))
-  );
 
   const openPinnedFolder = useCallback(
     (folderPath: string) => {

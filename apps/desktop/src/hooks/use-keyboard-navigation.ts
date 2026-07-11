@@ -1,9 +1,15 @@
 import { useCallback, useRef } from "react";
-import { useShallow } from "zustand/react/shallow";
 
 import type { AppMode } from "@typenotes/shared/types";
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
-import { useSelection } from "@/state/selection-store";
+import {
+  selectFolder,
+  selectNote,
+  setActiveNote,
+  setLastSelectedNote,
+  setSelectedNotes,
+  useSelection,
+} from "@/state/selection-store";
 import { clearDraft, clearNote, rightPaneRef } from "@/state/editor-store";
 import {
   selectFlatItemById,
@@ -56,29 +62,10 @@ export function useKeyboardNavigation({
   const { nodeById: feedNodeById } = useFeedTree();
   const activeFeedGroup = useActiveFeedGroup();
   const shouldNestNotesInNavigation = useShouldNestNotesInNavigation();
-  const {
-    activeFolder,
-    lastSelectedFolder,
-    activeNote,
-    lastSelectedNote,
-    selectFolder,
-    selectNote,
-    setSelectedNotes,
-    setLastSelectedNote,
-    setActiveNote,
-  } = useSelection(
-    useShallow((state) => ({
-      activeFolder: state.activeFolder,
-      lastSelectedFolder: state.lastSelectedFolder,
-      activeNote: state.activeNote,
-      lastSelectedNote: state.lastSelectedNote,
-      selectFolder: state.selectFolder,
-      selectNote: state.selectNote,
-      setSelectedNotes: state.setSelectedNotes,
-      setLastSelectedNote: state.setLastSelectedNote,
-      setActiveNote: state.setActiveNote,
-    }))
-  );
+  const activeFolder = useSelection((state) => state.activeFolder);
+  const lastSelectedFolder = useSelection((state) => state.lastSelectedFolder);
+  const activeNote = useSelection((state) => state.activeNote);
+  const lastSelectedNote = useSelection((state) => state.lastSelectedNote);
 
   const lastLeftPaneFocusRef = useRef<"folders" | "middle">("middle");
 

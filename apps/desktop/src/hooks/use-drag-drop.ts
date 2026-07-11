@@ -5,10 +5,16 @@ import type {
   DragOverEvent,
   DragStartEvent,
 } from "@dnd-kit/core";
-import { useShallow } from "zustand/react/shallow";
 import { moveItems, setOrder } from "@/api/notes-api";
 import { logGroup } from "@/api/invoke";
-import { useSelection } from "@/state/selection-store";
+import {
+  setActiveNote,
+  setLastSelectedFolder,
+  setLastSelectedNote,
+  setSelectedFolders,
+  setSelectedNotes,
+  useSelection,
+} from "@/state/selection-store";
 import { clearNote } from "@/state/editor-store";
 import {
   refreshTree,
@@ -50,27 +56,9 @@ export function useDragDrop() {
   const orderedIds = useNotesStore(selectOrderedIds);
   const expanded = useNotesStore((state) => state.expanded);
   const parentById = useNotesStore(selectParentById);
-  const {
-    selectedFolders,
-    setSelectedFolders,
-    setLastSelectedFolder,
-    selectedNotes,
-    setSelectedNotes,
-    setLastSelectedNote,
-    setActiveNote,
-    activeNote,
-  } = useSelection(
-    useShallow((state) => ({
-      selectedFolders: state.selectedFolders,
-      setSelectedFolders: state.setSelectedFolders,
-      setLastSelectedFolder: state.setLastSelectedFolder,
-      selectedNotes: state.selectedNotes,
-      setSelectedNotes: state.setSelectedNotes,
-      setLastSelectedNote: state.setLastSelectedNote,
-      setActiveNote: state.setActiveNote,
-      activeNote: state.activeNote,
-    }))
-  );
+  const selectedFolders = useSelection((state) => state.selectedFolders);
+  const selectedNotes = useSelection((state) => state.selectedNotes);
+  const activeNote = useSelection((state) => state.activeNote);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [edgeSnap, setEdgeSnap] = useState<{
     id: string;

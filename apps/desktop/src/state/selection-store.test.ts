@@ -1,15 +1,22 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { useSelection } from "./selection-store";
+import {
+  resetSelection,
+  selectFolder,
+  selectNote,
+  setActiveNote,
+  setSelectedNotes,
+  useSelection,
+} from "./selection-store";
 
 describe("selection store", () => {
   beforeEach(() => {
-    useSelection.getState().resetSelection();
+    resetSelection();
   });
 
   it("selects a folder atomically, dropping the note selection", () => {
-    useSelection.getState().setActiveNote("Feed/old.md");
-    useSelection.getState().selectFolder("Projects");
+    setActiveNote("Feed/old.md");
+    selectFolder("Projects");
 
     const state = useSelection.getState();
     expect(state.activeFolder).toBe("Projects");
@@ -21,7 +28,7 @@ describe("selection store", () => {
   });
 
   it("accepts a range override while keeping the clicked folder active", () => {
-    useSelection.getState().selectFolder("b", new Set(["a", "b", "c"]));
+    selectFolder("b", new Set(["a", "b", "c"]));
 
     const state = useSelection.getState();
     expect(state.activeFolder).toBe("b");
@@ -30,7 +37,7 @@ describe("selection store", () => {
   });
 
   it("selects a note and derives its parent folder", () => {
-    useSelection.getState().selectNote("Projects/example.md");
+    selectNote("Projects/example.md");
 
     const state = useSelection.getState();
     expect(state.activeFolder).toBe("Projects");
@@ -41,9 +48,7 @@ describe("selection store", () => {
   });
 
   it("selects a note under an explicit parent with a range override", () => {
-    useSelection
-      .getState()
-      .selectNote("Feed/two.md", "Feed", new Set(["Feed/one.md", "Feed/two.md"]));
+    selectNote("Feed/two.md", "Feed", new Set(["Feed/one.md", "Feed/two.md"]));
 
     const state = useSelection.getState();
     expect(state.activeFolder).toBe("Feed");
@@ -53,8 +58,8 @@ describe("selection store", () => {
   });
 
   it("supports functional selection updates", () => {
-    useSelection.getState().setSelectedNotes(new Set(["Feed/one.md"]));
-    useSelection.getState().setSelectedNotes((current) => {
+    setSelectedNotes(new Set(["Feed/one.md"]));
+    setSelectedNotes((current) => {
       const next = new Set(current);
       next.add("Feed/two.md");
       return next;
