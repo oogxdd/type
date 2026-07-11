@@ -22,7 +22,7 @@ const SECURITY_SETTINGS_SECTIONS: SettingsSection[] = APP_EXTENSIONS.security
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "general", title: "General" },
-  { id: "profile", title: "Working folders" },
+  { id: "profile", title: "Profiles" },
   { id: "import", title: "Import" },
   { id: "sync", title: "Sync" },
   { id: "updates", title: "Updates" },

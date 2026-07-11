@@ -53,8 +53,8 @@ export function SettingsProfileSection() {
   const { sshPublicKey, sshBusy, sshError, generateSshKey, deleteSshKey } =
     useSshKey();
 
-  const onAddFolder = async () => {
-    const directory = await pickDirectory("Add working folder");
+  const onAddProfile = async () => {
+    const directory = await pickDirectory("Choose a folder for the new profile");
     if (directory) {
       await addWorkingFolder(directory);
     }
@@ -82,7 +82,7 @@ export function SettingsProfileSection() {
   };
 
   return (
-    <SettingsSection title="Working folders">
+    <SettingsSection title="Profiles">
       <SettingsCard>
         <div className="flex flex-col gap-1">
           {profiles.map((profile) => {
@@ -146,16 +146,17 @@ export function SettingsProfileSection() {
             variant="outline"
             size="sm"
             disabled={profilesBusy}
-            onClick={() => void onAddFolder()}
+            onClick={() => void onAddProfile()}
           >
             <FolderPlus aria-hidden="true" />
-            Add folder…
+            Add profile…
           </Button>
         </SettingsActionRow>
         <SettingsHelpText>
-          A working folder is a plain folder of Markdown notes (and a git repo
-          when sync is connected). Removing one only takes it off this list —
-          the files stay on disk.
+          A profile is just a folder of Markdown notes (and a git repo when
+          sync is connected). To start a new one, create an empty folder
+          wherever you want in the picker. Removing a profile only takes it
+          off this list — the files stay on disk.
         </SettingsHelpText>
         {profilesError ? <SettingsErrorText>{profilesError}</SettingsErrorText> : null}
       </SettingsCard>
