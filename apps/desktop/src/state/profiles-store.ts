@@ -143,30 +143,23 @@ export async function switchProfile(profileId: string) {
   await runProfileMutation(() => api.setActiveProfile(normalizedId));
 }
 
-export async function createProfile(input?: { name?: string; description?: string }) {
-  const existingNames = new Set(
-    selectProfiles(useProfilesStore.getState()).map((profile) =>
-      profile.name.trim().toLowerCase()
-    )
-  );
-  let index = 1;
-  let fallbackName = "Profile";
-  while (existingNames.has(fallbackName.toLowerCase())) {
-    index += 1;
-    fallbackName = `Profile ${index}`;
-  }
-  const name = input?.name?.trim() || fallbackName;
-  const description = input?.description?.trim() ?? "";
-  await runProfileMutation(() => api.createProfile(name, description));
-}
+/** Last path segment — how a working folder is displayed everywhere. */
+export const folderDisplayName = (root: string) =>
+  root.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || root;
 
-export async function updateProfile(
-  profileId: string,
-  patch: { name?: string; description?: string }
-) {
-  const normalizedProfileId = profileId.trim();
-  if (!normalizedProfileId) return;
-  await runProfileMutation(() => api.updateProfile(normalizedProfileId, patch));
+/**
+ * A profile is just a working folder. Adding one means: register a profile
+ * named after the directory, then point its notes root at that directory
+ * (the backend adopts existing content and ensures the system folders).
+ */
+export async function addWorkingFolder(directory: string) {
+  const normalizedDirectory = directory.trim();
+  if (!normalizedDirectory) return;
+  const name = folderDisplayName(normalizedDirectory);
+  await runProfileMutation(async () => {
+    const created = await api.createProfile(name, "");
+    return api.setProfileNotesRoot(created.activeProfileId, normalizedDirectory);
+  });
 }
 
 export async function deleteProfile(profileId: string) {
