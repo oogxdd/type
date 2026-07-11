@@ -24,13 +24,15 @@ parseNotePreview (TS)         ← shared/lib/format.ts
 buildFeedTree / списки        ← features/notes/navigation/model/feed-tree-model.ts
 ```
 
-Ключевые файлы:
+Ключевые файлы (после перехода на store-слой, 2026-07-11):
 
-- `src/features/notes/list/hooks/use-note-previews.ts` — весь кэш живёт здесь.
-- `src/features/notes/navigation/state/use-notes-tree-state.ts` — вызывает хук,
-  передаёт ключи профиля и флаг шифрования.
+- `src/state/note-previews.ts` — весь кэш живёт здесь (модульный, не хук).
+- `src/state/notes-store.ts` — стор дерева/превью и мемоизированные
+  производные (`computePreviewSourceNotes`).
+- `src/state/notes-actions.ts` (`initNotes`) — подписки, которые дёргают
+  `refreshNotePreviews()` при смене дерева/папки/режима списка.
 - `src-tauri/src/application/notes.rs` (`list_note_previews`) — batch-команда.
-- `src/shared/lib/storage.ts` — префикс ключа localStorage и функция очистки.
+- `src/lib/storage.ts` — префикс ключа localStorage и функция очистки.
 
 ## Три уровня кэша
 
@@ -55,19 +57,23 @@ buildFeedTree / списки        ← features/notes/navigation/model/feed-tre
 Относительные подписи дат ("yesterday") пересчитываются при гидрации из
 localStorage — сами подписи в снапшоте протухают, а timestamps нет.
 
-## Инвалидация: шина CustomEvent
+## Инвалидация: прямые вызовы функций
 
-Типизированного слоя инвалидации нет — есть два window-события:
+Шины CustomEvent больше нет (заменена 2026-07-11 при переходе на store-слой).
+Инвалидация — это два обычных экспорта, найти вызывающих можно по импортам:
 
-| Событие | Кто диспатчит | Кто слушает | Эффект |
-|---|---|---|---|
-| `notes-tree-invalidated` | `use-note-editor` (после сохранений/переименований) | `use-notes-tree-state` | `refreshTree()` → новое дерево → батч превью перезапрашивается |
-| `note-previews-invalidated` | `use-notes-tree-actions` (CRUD), `recordings-context` и `handwriting-context` (через `use-processing-queue`, когда завершилась транскрипция/OCR), `use-desktop-editor-pane` | `use-note-previews` | очистка in-memory кэша + refetch батча |
+- `refreshTree()` (`state/notes-store.ts`) — перечитать дерево; изменение
+  идентичности дерева триггерит перезапрос превью через подписку в
+  `initNotes()`.
+- `invalidateNotePreviews()` (`state/note-previews.ts`) — сбросить in-memory
+  кэш и перезапросить батч. Вызывают: notes-actions (маркеры), сторы
+  recordings/handwriting (когда сигнатура списка задач меняется — завершилась
+  транскрипция/OCR), use-editor-pane (дозапись черновика в свежесозданную
+  заметку).
 
-Это **самое слабое место слоя**: события нетипизированы, их список размазан по
-семи файлам, и узнать "кто инвалидирует превью" можно только grep'ом. Пока
-событий два — терпимо. Если появится третье-четвёртое, см. раздел про
-TanStack Query ниже.
+`refreshNotePreviews()` сам по себе идемпотентен: если производный набор
+заметок-источников не изменился по идентичности, повторный вызов — no-op,
+поэтому подписки могут дёргать его свободно.
 
 ## Смена профиля
 
@@ -98,10 +104,11 @@ TanStack Query ниже.
 
 - stale-while-revalidate, кэш по ключу (`['previews', profileId]`),
   дедупликация запросов;
-- `invalidateQueries()` вместо шины CustomEvent — типизировано и в одном месте;
+- `invalidateQueries()` вместо ручной инвалидации — сегодня это прямые вызовы
+  `refreshTree()`/`invalidateNotePreviews()`, что уже типизировано и greppable;
 - `persistQueryClient` вместо ручного localStorage-слоя;
-- `refetchInterval` для поллинга очередей транскрипции/OCR
-  (`use-auto-queue-loop`);
+- `refetchInterval` для поллинга очередей транскрипции/OCR (сейчас — интервалы
+  в `initRecordings`/`initHandwriting`);
 - devtools.
 
 Почему всё-таки нет:
@@ -125,8 +132,9 @@ TanStack Query ниже.
 
 Когда решение стоит пересмотреть (триггеры):
 
-- событий-инвалидаций становится больше двух и шина CustomEvent начинает
-  болеть;
+- точек инвалидации становится заметно больше и прямые вызовы начинают
+  разъезжаться (2026-07-11: шину CustomEvent заменили прямыми вызовами
+  функций стора — боль из первого триггера снята дешевле, чем TQ);
 - появляются новые поллинг-поверхности кроме очередей транскрипции/OCR;
 - начинается миграция на React Native / UniFFI — TQ одинаково работает в RN,
   и единый слой данных поверх UniFFI-вызовов станет сильным аргументом.

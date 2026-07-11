@@ -181,209 +181,101 @@ module-internal helpers stay private.
 
 ## How the desktop frontend is structured
 
-All paths in this section are inside **`apps/desktop/`**. Platform-free
-helpers that used to live in `src/shared` (domain types, frontmatter,
-note-preview parsing/format, annotation metadata, jobs, pure tree walkers,
-system-folder constants) have moved to **`packages/shared`**
-(`@typenotes/shared/<module>`) so the mobile app shares them; `src/shared`
-keeps only browser-bound pieces (dom, storage/localStorage, base64 +
-yieldToUi, selection modifiers, shadcn `ui/`, the `invoke` wrapper, and
-desktop-only constants).
+All paths in this section are inside **`apps/desktop/src/`**. Platform-free
+helpers (domain types, frontmatter, note-preview parsing/format, annotation
+metadata, jobs, pure tree walkers, system-folder constants) live in
+**`packages/shared`** (`@typenotes/shared/<module>`) so the mobile app shares
+them; this app keeps only browser-bound code.
 
-The frontend is **feature-sliced**. There are four kinds of place code can live:
-
-- `app/` — the composition root (providers, gates, the orchestrating shell), the
-  app-global stores that belong to no single domain (`app/state/`), and the
-  orchestration hooks the shell delegates to (`app/hooks/`).
-- `shared/` — domain-agnostic building blocks usable by anything: `ui/` (shadcn
-  primitives), `lib/` (pure helpers), `api/` (the `invoke` IPC wrapper), `hooks/`,
-  `types.ts`, `constants.ts`. **`shared/` is a leaf** — it must not import from `features/`.
-- `features/<name>/` — one folder per user-facing domain. Each owns its code in
-  **segments**: `components/` (`.tsx`), `hooks/` (React hooks *and* context providers),
-  `lib/` (pure helpers), `api/` (Tauri IPC wrappers). Not every feature needs every segment.
-- `desktop/` — the desktop **composition shell**. It imports feature components/hooks
-  and arranges them; it is not itself a feature. (The old in-repo `mobile/` shell is
-  gone — mobile is now the separate React Native app in `apps/mobile`.)
-
-**Imports** use the `@/` → `src/` alias for cross-directory references (configured in
-`tsconfig.json` and `vite.config.ts`); imports within the same segment/folder stay
-relative. There are intentionally **no `index.ts` barrels** — deep segment paths
-(`@/features/notes/editor/components/note-editor`) keep each import's role explicit.
+The layout is a conventional separation of concerns, with components nested
+by domain:
 
 ```
 src/
-  main.tsx    entry stub (index.html entry → mountApp)
-  app/
-    app.tsx, app-shell.tsx, providers.tsx, readiness.tsx, main-app.tsx,
-    error-boundary.tsx, launch-screen.ts, app.css
-    hooks/      use-tree-interactions, use-note-opener  (app-shell orchestration glue)
-    lifecycle/  use-background-save
-    state/      selection-store, appearance-store (app-global state)
-  shared/
-    ui/         shadcn primitives          lib/   dom, notes, selection, storage,
-    api/invoke  IPC logging wrapper                utils (cn)
-    hooks/use-mobile   constants.ts
-  features/
-    notes/      api/notes-api + editor/ (Tiptap, autosave) + list/ (previews)
-                + navigation/ (tree state/actions/model/ui)
-    lens/       multi-note lens (extension-gated)
-    recording handwriting processing import profiles sync
-    security settings command-palette extensions
-  desktop/    desktop-shell, desktop-app-shell, middle-pane, right-pane,
-              app-sidebar, desktop-context-menu, hooks/
+  main.tsx      entry stub (index.html entry -> mountApp)
+  app/          composition root: app.tsx (gates around the shell),
+                bootstrap.ts (starts the state layer - see below),
+                readiness.tsx (AppSecurityGate / AppReadinessGate),
+                main-app.tsx (mountApp), error-boundary, launch-screen, app.css
+  components/   React components, nested by domain:
+    shell/          app-shell (command palette + workspace wiring),
+                    workspace-shell (panes, DnD, keyboard shortcuts),
+                    pane-layout (2/3-pane resizable), app-sidebar,
+                    middle-pane, right-pane, context-menu
+    navigation/     folders-panel, feed-panel, tree-node/tree-row/nav-note-row
+                    (+ tree.css)
+    editor/         note-editor (Tiptap)
+    notes-list/     note-row (middle-pane list row)
+    settings/       settings-panel + one file per section + settings-ui
+    command-palette/ lens/ recording/ handwriting/ security/ sync/
+    ui/             shadcn primitives
+  state/        the entire state layer: one zustand store per domain plus
+                plain-function actions (see below) - appearance, selection,
+                profiles, security, editor, notes (notes-store +
+                notes-actions + note-previews), recordings, handwriting,
+                git-sync
+  hooks/        React hooks that wire stores/DnD/keyboard/panes into
+                components (use-drag-drop, use-keyboard-navigation,
+                use-tree-interactions, use-editor-pane, use-navigation-tabs,
+                use-command-palette-commands, use-apple-import, ...)
+  lib/          pure helpers: dom, storage, memoize, browser (base64 +
+                yieldToUi), selection modifiers, constants, extensions
+                (the extension registry), folder-search, note-autoname,
+                markdown-editor, profile-sync-settings, settings-sections;
+                lib/notes/ (tree + feed + navigation models, all tested) and
+                lib/lens/ (annotation models)
+  api/          invoke.ts (dev-logged IPC wrapper) + one <domain>-api.ts per
+                backend command group
 ```
 
-### Provider tree (`src/app/providers.tsx`)
+**Imports** use the `@/` -> `src/` alias for cross-directory references;
+imports within the same directory stay relative. There are intentionally
+**no `index.ts` barrels**.
 
-`app.tsx` renders `ErrorBoundary > AppProviders > AppShell`; `providers.tsx` is the
-composition layer. State lives in feature contexts:
+### The state layer (`src/state/`)
 
-```
-AppearanceProvider            — persists appearance store + document theme      (app/state)
-  SecurityProvider            — security state; UI is extension-gated           (features/security)
-    AppSecurityGate           — renders lock screen only when extension enabled (app/readiness)
-      ProfilesProvider        — profile list, active profile, per-profile sync  (features/profiles)
-        GitSyncProvider       — git status, connect/pull/push, commit history   (features/sync)
-          SelectionProvider   — resets selection store on profile changes       (app/state)
-            EditorProvider    — note editor state (wraps useNoteEditor)         (features/notes/editor)
-              NotesTreeProvider — folder tree, CRUD, rename                     (features/notes/navigation)
-                AppReadinessGate — hides the launch splash once data is ready   (app/readiness)
-                  RecordingsProvider  — recording, transcription queue, playback (features/recording)
-                    HandwritingProvider — image import, OCR queue                (features/handwriting)
-                      AppShell  — UI rendering, DnD wiring, keyboard shortcuts
-```
+There are **no React context providers**. Each domain is a module-level
+zustand store holding raw state, plus exported **plain async functions** as
+actions - callable from components, other stores, timers, and Tauri event
+handlers alike, with no hook ceremony. Components subscribe with narrow
+selectors (`useNotesStore((s) => s.tree)`), so unrelated changes do not
+re-render them.
 
-**Don't reorder these providers** without understanding the dependencies: NotesTree consumes
-Selection + Editor; Editor consumes Selection + Profiles; most consume Profiles.
+Derived data (flattened tree, visible rows, feed buckets, per-folder
+previews, sync settings, ...) is computed by `memoizeOne`-wrapped pure
+functions (`lib/memoize.ts`) - the module-level equivalent of a shared
+`useMemo`. React selectors and non-React callers share one cached
+computation per distinct input identity; the pure models themselves live in
+`lib/notes/`.
 
-### app-shell.tsx (`src/app/app-shell.tsx`)
+Cross-domain reactions are store subscriptions, wired once in
+`app/bootstrap.ts` (called from `mountApp()` before React renders):
 
-The composition boundary. It owns command-palette/file-picker coordination and renders
-`DesktopAppShell`; desktop state and behavior (pane sizes, DnD, keyboard navigation,
-pane refs) live in `src/desktop/desktop-app-shell.tsx`. Shared folder/note interaction
-and programmatic navigation live in `app/hooks/`.
+- **Profile/root switch** -> clear editor, reset selection, reload tree, and
+  swap the preview cache for the new profile's persisted snapshot.
+  Registration order matters: `initEditor()` runs before the selection-reset
+  subscription so the flush triggered by that reset sees an already-cleared
+  editor and cannot write stale content into the new root.
+- **Security** -> data domains (re)load on every locked->unlocked transition,
+  because the backend rejects content commands while locked. With the
+  security extension off, data loads immediately; the security-state fetch
+  still happens because the preview-persistence invariant depends on it.
+- **Editor** -> `selection.activeNote` changes drive the flush-previous /
+  load-next workflow (save dirty notes, delete emptied ones, auto-rename by
+  content slug); `visibilitychange`/`beforeunload` flush pending saves; the
+  profiles store calls the registered editor flush before any profile
+  mutation swaps the notes root.
+- **Recordings / handwriting** auto-queue loops tick every 15s and self-gate
+  on lock state, profile readiness, and (for OCR) a configured provider key.
 
-### app/state (`src/app/state/`)
+Invalidation is direct function calls, not events: `refreshTree()`
+(state/notes-store.ts) and `invalidateNotePreviews()`
+(state/note-previews.ts) replaced the old CustomEvent bus. The preview cache
+keeps the stale-while-revalidate design documented in
+`docs/architecture/07-frontend-caching.md`: module-level Map for object
+identity, per-profile localStorage snapshot for instant first paint,
+persistence disabled while encryption is on.
 
-The cross-cutting stores that have no single domain home and are consumed everywhere:
-
-- `appearance-store.tsx` — Zustand store for theme, notes-list mode, and editor font
-  size. Consumers use selectors; `AppearanceProvider` owns localStorage and
-  document-theme synchronization.
-- `selection-store.tsx` — Zustand store for folder/note selection. Consumers use
-  selectors so unrelated selection changes do not re-render them.
-  `SelectionProvider` only resets the store on profile/root changes.
-
-(Features may import these from `@/app/state/...`; this is the one accepted upward edge.)
-
-### app/hooks (`src/app/hooks/`)
-
-Orchestration glue the shell delegates to — composition logic that wires several
-contexts together but belongs to no single feature. It lives here (not in a feature)
-because it depends on NotesTree, and `notes-tree-context` already depends on
-`features/tree/lib`; routing it through the composition root keeps that edge one-way.
-
-- `use-tree-interactions.ts` — folder/note click selection, expand/collapse toggle, and
-  the right-click context-menu state (rendered by `desktop/desktop-context-menu`). Reads
-  Selection + NotesTree from context; takes only `foldersPanelRef` (for post-action focus).
-- `use-note-opener.ts` — `openPinnedFolder` (sidebar Feed/Trash) and the `open-note`
-  window-event handler that jumps to a recording's note from the Transcription page.
-
-### features/
-
-Each feature's context provider lives in `hooks/` alongside its hooks.
-
-- **notes** — the note domain, split into sub-slices:
-  - `api/notes-api` — the IPC surface (`getTree`, `readNote`, `createNote`, `writeNote`,
-    `getNoteMeta`, `listNotePreviews`, `deleteItems`, `moveItems`, `renameItem`, `setOrder`, …),
-    used by every other notes sub-slice.
-  - `editor/` — `components/note-editor` (Tiptap); `hooks/{editor-context, use-note-editor}`;
-    `lib/{markdown-editor, note-autoname}`. `use-note-editor`: debounced 400ms autosave,
-    dirty/saving/error, empty-note cleanup, and the flush/rename bridge into the notes domain.
-  - `list/` — note list components + `hooks/use-note-previews` (stale-while-revalidate
-    preview cache).
-  - `navigation/` — `state/{notes-tree-context, use-notes-tree-state, use-notes-tree-actions}`
-    (tree loading/derived data/rename state; create/delete/move/flatten/rename/info workflows
-    that consume Selection + Editor setters), `model/{notes-tree-model, feed-tree-model,
-    tree-ops, dnd-tree, tree-dnd, types}`, `ui/` (folders panel, tree rows, feed panel),
-    `hooks/` (drag-drop, keyboard navigation).
-- **lens** — the multi-note "lens" extension surface: `components/{multi-note-lens,
-  lens-toolbar, lens-note-stage, note-readonly-content}`; `hooks/use-lens-annotations`;
-  `lib/{note-annotations, lens-geometry}`. Extension-gated and lazy-loaded.
-- **processing** — shared queue helpers for the background job domains:
-  `hooks/{use-processing-queue, use-auto-queue-loop}`. Recording transcription and handwriting
-  OCR each keep their own queue/workers, but both use this shared plumbing for snapshot refresh,
-  preview invalidation, and timer behavior.
-- **recording** — `components/recording-note-header`; `hooks/{recordings-context,
-  use-audio-recorder}`; `api/recordings-api`. Web `MediaRecorder` capture; transcription
-  always auto-queues to local Whisper. Queue bookkeeping uses the shared `processing`
-  hooks above.
-- **handwriting** — `components/handwriting-note-header`; `hooks/handwriting-context`;
-  `api/handwriting-api` (OpenAI / HuggingFace OCR queue). OCR queue bookkeeping uses the
-  shared `processing` hooks above.
-- **import** — Apple Notes importer. `api/import-api` (scan/start/status IPC + folder picker);
-  `hooks/use-apple-import` (pick → scan → import state machine that polls `apple_import_status`).
-  Its UI is the desktop settings "Import" section. Desktop-only (needs a folder picker).
-- **profiles** — `hooks/profiles-context` (thin provider), `hooks/use-profile-actions`
-  (profile CRUD + settings writes with editor flush), `hooks/use-legacy-profile-sync-migration`
-  (one-time localStorage -> backend migration); per-profile `notes_root` + sync settings are
-  stored by the backend. `lib/profile-sync-settings` maps app-wide vs profile-local sync
-  settings; `flushSaveRef` flushes the editor before switching;
-  `api/profiles-api`. Heavily depended upon.
-- **sync** — `components/local-sync-server-card`; `hooks/{git-sync-context,
-  use-git-sync-workflows, use-ssh-key (app-managed Ed25519 keypair lifecycle:
-  load/generate/delete)}`; `api/git-api` (libgit2 IPC + SSH key lifecycle).
-  The `type2://sync` QR-code link format lives in `@typenotes/shared/sync-link`
-  (desktop builds it, the phone scans/parses it).
-- **security** — `components/lock-screen`; `hooks/security-context` (unlock/lock/enable,
-  panic reset, auto-lock on background); `api/security-api`. The shell now treats this as an
-  extension surface, so the UI should be hidden unless the extension registry opts it back in.
-- **settings** — the aggregator UI. `components/desktop/` (settings-panel + sections,
-  incl. "Import" and "Updates"); `hooks/use-settings-data` (shared computed values);
-  `lib/sections` (the `SettingsSectionId` registry). Settings legitimately imports from
-  many other features.
-- **extensions** — typed frontend feature registry for optional surfaces. `registry.ts`
-  controls whether multi-lens, security, and other extension-only UI is surfaced.
-- **command-palette** — `components/command-palette` (renderer) +
-  `hooks/use-command-palette-commands` (⌘K / Ctrl+K listener, command construction,
-  terminal `mv` move-mode state) + `lib/folder-search` (pure `mv` path parsing + folder
-  autocomplete). It reads live Selection + NotesTree + Theme from context, builds
-  context-aware commands (selected notes/folders) plus always-on create/navigate/theme
-  commands, and receives cross-shell navigation callbacks from app-shell. Typing `mv `
-  (or running "Move note to folder…") switches the input into a shell-style folder picker:
-  `mv pe` fuzzy-matches every folder by name, `mv personal/` drills into children, Tab
-  completes the highlighted folder, Enter moves the active/selected notes (creating missing
-  folders).
-
-### Cross-context bridges (all in `src/app/providers.tsx`)
-
-1. **AppSecurityGate** — keeps the provider-heavy app unmounted while encrypted + locked.
-2. **FlushSaveBridge** — writes EditorContext's `flushSave` into ProfilesProvider's
-   `flushSaveRef` so profile switches flush unsaved edits.
-3. **RecordingsProvider.onRecordingComplete** — refreshes the tree + selects the new note.
-4. **GitSyncContext.gitPull({ onAfterPull })** — app-shell passes `refreshTree`.
-5. **NotesTreeContext → Selection/Editor** — CRUD ops update selection + editor state.
-
-### shared/
-
-`shared/api/invoke.ts` — `invokeLogged` (dev-only sanitized IPC tracing) used by every
-feature `api/`. `shared/lib/` — `dom`, `notes` (base64 + yieldToUi), `selection`,
-`storage`, `utils` (`cn`). `shared/ui/` — shadcn. `shared/hooks/use-mobile.ts` — the
-shadcn breakpoint hook (used by the sidebar primitive; not a mobile shell).
-Domain types (`FolderNode`, `NoteEntry`, `GitSyncStatus`, `ProfileSyncSettings`, …),
-`format`, `frontmatter`, and `jobs` live in `@typenotes/shared`.
-
-### Desktop shell (`src/desktop/`)
-
-- `desktop-app-shell.tsx` — desktop interaction state (pane refs, DnD wiring, keyboard
-  navigation, context menus) around the layout.
-- `desktop-shell.tsx` — 2-pane / 3-pane resizable layout.
-- `middle-pane.tsx` — notes list (`SortableContext` + note-row) or settings sections.
-- `right-pane.tsx` — editor or settings detail; `hooks/use-desktop-editor-pane` owns
-  editor/lens mode state, and the multi-note lens is lazy-loaded behind the extension gate.
-- `hooks/use-desktop-navigation` — Feed/Folders tab state and desktop middle-pane note list
-  selection/context-menu behavior.
-- `app-sidebar.tsx` — desktop left rail (feed / new / record / handwriting / settings / trash).
 
 ## Mobile app (apps/mobile) + FFI bridge
 
@@ -441,7 +333,7 @@ The React Native app (Expo) reuses the Rust core through
 - **Encryption scope is note body only**: recordings/attachments are currently stored unencrypted.
 - **Annotation cleanup is shared**: `@typenotes/shared/annotation-metadata` owns the lens/inline annotation stripping used by previews, slugging, and the editor.
 - **Sync history UX**: settings now show commit history from real git log. This cannot reliably encode which device performed push/pull for every commit.
-- **Note previews are persisted per profile** in localStorage (`notes-viewer-note-previews-v1:<profileId>`) and hydrated on launch for an instant first paint, then revalidated via the bulk `list_note_previews` command (stale-while-revalidate). Persistence is disabled while encryption is on, and enabling encryption purges the snapshots (`clearPersistedNotePreviews` in `shared/lib/storage`). `get_tree` never reads note bodies — Feed is name-sorted (file names are time-prefixed) and the UI re-sorts by front-matter timestamps from previews. The full cache/invalidation design (and the deferred TanStack Query decision) is documented in `docs/architecture/07-frontend-caching.md`.
-- **Editor saves are debounced** (400ms). `flushSave()` must be called before navigation away, profile switching, or app backgrounding.
+- **Note previews are persisted per profile** in localStorage (`notes-viewer-note-previews-v1:<profileId>`) and hydrated on launch for an instant first paint, then revalidated via the bulk `list_note_previews` command (stale-while-revalidate). Persistence is disabled while encryption is on, and enabling encryption purges the snapshots (`clearPersistedNotePreviews` in `src/lib/storage.ts`). `get_tree` never reads note bodies — Feed is name-sorted (file names are time-prefixed) and the UI re-sorts by front-matter timestamps from previews. The full cache/invalidation design (and the deferred TanStack Query decision) is documented in `docs/architecture/07-frontend-caching.md`.
+- **Editor saves are debounced** (400ms). `flushSave()` (state/editor-store.ts) must be called before anything that swaps the notes root or hides the app; selection changes, profile mutations, and `beforeunload`/`visibilitychange` already do.
 - **`shouldNestNotesInNavigation`**: When `notesListMode === "nested"`, notes appear inline inside the folder tree instead of in a separate middle pane. This affects keyboard navigation, rendering, and the visible navigation items computation.
-- **Context split ordering matters**: SelectionContext and EditorContext are above NotesTreeContext in the provider tree. NotesTreeContext consumes both to update selection/editor after CRUD ops. Don't reorder providers without understanding these dependencies.
+- **Bootstrap subscription order matters**: in `app/bootstrap.ts`, `initEditor()` must register its profile-switch subscription before the selection-reset subscription — otherwise the selection reset triggers an editor flush of the previous profile's note against the new root. See the state-layer section above.
