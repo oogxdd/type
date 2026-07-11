@@ -113,6 +113,7 @@ export type AppConfig = {
   assemblyai_api_key: string;
   whisper_model: string;
   handwriting_ocr_provider: string;
+  local_ocr_model_path: string;
   openai_api_key: string;
   openai_model: string;
   huggingface_api_key: string;
@@ -235,6 +236,13 @@ export type WhisperStatusResult = {
   error: string | null;
 };
 
+export type LocalOcrStatusResult = {
+  available: boolean;
+  python_found: boolean;
+  model_path: string;
+  error: string | null;
+};
+
 export type NativeRecorderCapabilities = {
   supported: boolean;
   recording: boolean;
@@ -318,7 +326,8 @@ export type ProfileSyncSettings = {
   assemblyAiApiKey: string;
   mobileAutoTranscriptionEnabled: boolean;
   whisperModel: string;
-  handwritingOcrProvider: "openai" | "huggingface";
+  handwritingOcrProvider: "local" | "openai" | "huggingface";
+  localOcrModelPath: string;
   openAiApiKey: string;
   openAiModel: string;
   huggingFaceApiKey: string;

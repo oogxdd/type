@@ -69,20 +69,31 @@ export function HandwritingProvider({
   );
 
   const getProviderConfig = useCallback(() => {
+    if (syncSettings.handwritingOcrProvider === "local") {
+      return {
+        provider: "local" as const,
+        apiKey: "",
+        model: "",
+        modelPath: syncSettings.localOcrModelPath.trim(),
+      };
+    }
     if (syncSettings.handwritingOcrProvider === "huggingface") {
       return {
         provider: "huggingface" as const,
         apiKey: syncSettings.huggingFaceApiKey.trim(),
         model: syncSettings.huggingFaceModel.trim(),
+        modelPath: "",
       };
     }
     return {
       provider: "openai" as const,
       apiKey: syncSettings.openAiApiKey.trim(),
       model: syncSettings.openAiModel.trim(),
+      modelPath: "",
     };
   }, [
     syncSettings.handwritingOcrProvider,
+    syncSettings.localOcrModelPath,
     syncSettings.huggingFaceApiKey,
     syncSettings.huggingFaceModel,
     syncSettings.openAiApiKey,
@@ -116,13 +127,13 @@ export function HandwritingProvider({
         return;
       }
       const config = getProviderConfig();
-      if (!config.apiKey) {
+      if (config.provider !== "local" && !config.apiKey) {
         if (trigger === "manual") {
           setHandwritingStatusMessage("OCR API key is required.");
         }
         return;
       }
-      if (!config.model) {
+      if (config.provider !== "local" && !config.model) {
         if (trigger === "manual") {
           setHandwritingStatusMessage("OCR model is required.");
         }
@@ -135,7 +146,8 @@ export function HandwritingProvider({
         const result = await api.queueHandwritingOcr(
           config.provider,
           config.apiKey,
-          config.model
+          config.model,
+          config.modelPath
         );
         const label =
           trigger === "manual"
@@ -193,7 +205,9 @@ export function HandwritingProvider({
     [queueHandwritingOcr]
   );
   useAutoQueueLoop({
-    enabled: autoQueueConfig.apiKey.length > 0 && autoQueueConfig.model.length > 0,
+    enabled:
+      autoQueueConfig.provider === "local" ||
+      (autoQueueConfig.apiKey.length > 0 && autoQueueConfig.model.length > 0),
     delayMs: 0,
     onTick: autoQueueHandwriting,
   });

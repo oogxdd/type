@@ -13,7 +13,9 @@ underneath. **Swipe from the left edge** (or tap the hamburger) and the menu
 slides in — feed and folders on top, sync and settings at the bottom; swipe
 left from the menu's right edge or tap close to return to a fresh blank page. The floating mic
 button in the bottom-right dictates a voice note: tap to start and tap again
-to stop, or hold it to record only while pressed.
+to stop. Long-press the mic to reveal camera and photo-library actions for a
+handwritten page. The phone saves the image-backed note as `ocr_status:
+pending`; a synced desktop performs recognition.
 
 ## Running it
 
@@ -60,7 +62,7 @@ src/
   lib/feed.ts             tree+previews → list rows (pure, tested)
   state/                  zustand stores: notes, settings (working folders), sync
   screens/                capture, menu, feed, folder, editor, sync, settings
-  ui/                     dictation button (voice capture), audio player, shared
+  ui/                     dictation/photo capture button, audio player, shared
                           primitives for the utility screens
 ```
 
@@ -79,3 +81,12 @@ notes): `assemblyai` queues cloud transcription from the phone, `desktop`
 leaves recordings pending for a synced desktop's local Whisper, `native` is
 the hook for an on-device recognizer via `queueProviderTranscriptions`
 (provider registration not wired yet), `off` does nothing.
+
+## Handwriting photos
+
+Camera and gallery photos use `saveHandwritingAttachment` through the same
+UniFFI/typed-core boundary as recordings. This creates a note that points to a
+file under `Attachments/` and remains pending on mobile. Desktop scans pending
+handwriting notes after sync and dispatches them to the selected local or cloud
+OCR provider. See `docs/ATTACHMENT_RETENTION.md` before adding device cleanup:
+removing a tracked attachment directly would sync that deletion to desktop.

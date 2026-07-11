@@ -40,7 +40,8 @@ const defaultProfileSettings = (): ProfileSettings => ({
 const defaultAppConfig = () => ({
   assemblyai_api_key: "",
   whisper_model: "large-v3",
-  handwriting_ocr_provider: "openai",
+  handwriting_ocr_provider: "local",
+  local_ocr_model_path: "",
   openai_api_key: "",
   openai_model: "gpt-4.1-mini",
   huggingface_api_key: "",

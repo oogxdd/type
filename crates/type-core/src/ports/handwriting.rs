@@ -72,10 +72,13 @@ pub trait HandwritingGateway {
     type QueueArgs;
     type QueueResult;
     type ListResult;
+    type LocalStatusArgs;
+    type LocalStatus;
 
     fn save(&self, args: Self::SaveArgs) -> Result<Self::WriteResult, String>;
     fn queue(&self, args: Self::QueueArgs) -> Result<Self::QueueResult, String>;
     fn list(&self) -> Result<Self::ListResult, String>;
+    fn local_status(&self, args: Self::LocalStatusArgs) -> Self::LocalStatus;
 }
 
 // ─── Implementation Notes ─────────────────────────────────────────────────────
@@ -96,12 +99,12 @@ pub trait HandwritingGateway {
 //   - Supported formats: png, jpg/jpeg, webp, gif
 //
 // queue_ocr(provider, api_key, model)
-//   in:  provider — "openai" or "huggingface"
-//        api_key — API key for the chosen provider
-//        model — model name (e.g. "gpt-4o" for OpenAI, or a HuggingFace model id)
+//   in:  provider — "local", "openai", or "huggingface"
+//        provider-specific credentials/model values (local uses a model cache path)
 //   out: OcrQueueResult — how many scanned, queued, skipped, in flight
 //   - Scans all handwriting notes, skips completed or in-flight ones
 //   - Queues pending/failed notes for OCR processing
+//   - Local: EasyOCR in an app-managed Python environment
 //   - OpenAI: sends image as data URL to the Responses API with a handwriting extraction prompt
 //   - HuggingFace: sends raw image bytes to the Inference API, retries on 503 (model loading)
 //   - On completion, writes extracted text as the note body
@@ -118,4 +121,4 @@ pub trait HandwritingGateway {
 //   - OCR is queue-based with a background worker thread (same pattern as recording transcription)
 //   - Only one OCR job runs at a time (sequential processing)
 //   - Status lifecycle: pending → queued → processing → completed | failed
-//   - Two OCR backends: OpenAI Vision API and HuggingFace Inference API
+//   - Provider dispatch is isolated from queue and note lifecycle behavior

@@ -45,6 +45,7 @@ export function useLegacyProfileSyncMigration({
           assemblyai_api_key: firstSettings.assemblyAiApiKey,
           whisper_model: firstSettings.whisperModel,
           handwriting_ocr_provider: firstSettings.handwritingOcrProvider,
+          local_ocr_model_path: firstSettings.localOcrModelPath,
           openai_api_key: firstSettings.openAiApiKey,
           openai_model: firstSettings.openAiModel,
           huggingface_api_key: firstSettings.huggingFaceApiKey,
