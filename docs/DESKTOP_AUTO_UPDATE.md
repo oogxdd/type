@@ -176,7 +176,7 @@ with a progress readout, install, and relaunch into the new version.
 
 ## Automated with GitHub Actions
 
-`.github/workflows/release.yml` uses
+`.github/workflows/release.yml` runs on `desktop-v*` tags and uses
 [`tauri-apps/tauri-action`](https://github.com/tauri-apps/tauri-action) to build,
 sign, generate `latest.json`, and create the GitHub Release on tag push. It needs
 two repo secrets:
