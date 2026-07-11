@@ -276,6 +276,11 @@ keeps the stale-while-revalidate design documented in
 identity, per-profile localStorage snapshot for instant first paint,
 persistence disabled while encryption is on.
 
+Planned follow-ups on this state rehaul (state-layer tests, dead `ui/`
+deletion, one command registry, de-optimistic drag-and-drop, feed model →
+`packages/shared`) are tracked in
+[docs/DESKTOP_REHAUL_ROADMAP.md](./docs/DESKTOP_REHAUL_ROADMAP.md).
+
 
 ## Mobile app (apps/mobile) + FFI bridge
 
