@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Mic } from "lucide-react";
-import { useRecordings } from "@/state/recordings-context";
+import {
+  queueRecordingTranscriptions,
+  refreshRecordings,
+  resolveAudioSrc,
+  retriggerTranscription,
+  useRecordingsStore,
+} from "@/state/recordings-store";
 import {
   formatRecordingStatus,
   formatRecordingStatusLabel,
@@ -13,16 +19,10 @@ type RecordingNoteHeaderProps = {
 };
 
 export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderProps) {
-  const {
-    recordingsList,
-    recordingsQueue,
-    recordingsError,
-    transcriptionQueueBusy,
-    refreshRecordings,
-    queueRecordingTranscriptions,
-    retriggerTranscription,
-    resolveAudioSrc,
-  } = useRecordings();
+  const recordingsList = useRecordingsStore((state) => state.recordings);
+  const recordingsQueue = useRecordingsStore((state) => state.queue);
+  const recordingsError = useRecordingsStore((state) => state.listError);
+  const transcriptionQueueBusy = useRecordingsStore((state) => state.queueBusy);
   const [audioSrc, setAudioSrc] = useState<string | null>(null);
   const [retriggerBusy, setRetriggerBusy] = useState(false);
 

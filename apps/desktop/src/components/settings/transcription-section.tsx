@@ -5,7 +5,13 @@ import {
   updateSyncSettings,
   useProfilesStore,
 } from "@/state/profiles-store";
-import { useRecordings } from "@/state/recordings-context";
+import {
+  queueRecordingTranscriptions,
+  refreshRecordings,
+  resolveAudioSrc,
+  retriggerTranscription,
+  useRecordingsStore,
+} from "@/state/recordings-store";
 import { useAudioImport } from "@/hooks/use-audio-import";
 import { Button } from "@/components/ui/button";
 import type { RecordingListItem, TranscriptionProgress } from "@typenotes/shared/types";
@@ -134,18 +140,12 @@ function StatBadge({
 
 export function SettingsTranscriptionSection() {
   const syncSettings = useProfilesStore(selectSyncSettings);
-  const {
-    recordingsQueue,
-    recordingsList,
-    recordingsBusy,
-    recordingsError,
-    recordingStatusMessage,
-    transcriptionQueueBusy,
-    refreshRecordings,
-    queueRecordingTranscriptions,
-    retriggerTranscription,
-    resolveAudioSrc,
-  } = useRecordings();
+  const recordingsQueue = useRecordingsStore((state) => state.queue);
+  const recordingsList = useRecordingsStore((state) => state.recordings);
+  const recordingsBusy = useRecordingsStore((state) => state.listBusy);
+  const recordingsError = useRecordingsStore((state) => state.listError);
+  const recordingStatusMessage = useRecordingsStore((state) => state.statusMessage);
+  const transcriptionQueueBusy = useRecordingsStore((state) => state.queueBusy);
 
   const {
     phase: audioImportPhase,

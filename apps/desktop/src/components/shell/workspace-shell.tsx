@@ -23,7 +23,7 @@ import { useTreeInteractions } from "@/hooks/use-tree-interactions";
 import { useSelection } from "@/state/selection-store";
 import { APP_EXTENSIONS } from "@/lib/extensions";
 import { useAppearance } from "@/state/appearance-store";
-import { useHandwriting } from "@/state/handwriting-context";
+import { useHandwritingStore } from "@/state/handwriting-store";
 import {
   cancelRenameFolder,
   createNewNote,
@@ -34,7 +34,12 @@ import {
   useNotesStore,
   useShouldNestNotesInNavigation,
 } from "@/state/notes-store";
-import { useRecordings } from "@/state/recordings-context";
+import {
+  recordingSupported,
+  startRecording,
+  stopRecording,
+  useRecordingsStore,
+} from "@/state/recordings-store";
 import { lockSecurity } from "@/state/security-store";
 import type { SettingsSectionId } from "@/lib/settings-sections";
 import { AppContextMenu } from "./context-menu";
@@ -81,14 +86,9 @@ export function WorkspaceShell({
 }: WorkspaceShellProps) {
   const theme = useAppearance((state) => state.theme);
   const editorFontSize = useAppearance((state) => state.editorFontSize);
-  const {
-    recordingSupported,
-    isRecordingAudio,
-    isRecordingFinalizing,
-    startRecording,
-    stopRecording,
-  } = useRecordings();
-  const { handwritingImportBusy } = useHandwriting();
+  const isRecordingAudio = useRecordingsStore((state) => state.isRecording);
+  const isRecordingFinalizing = useRecordingsStore((state) => state.isFinalizing);
+  const handwritingImportBusy = useHandwritingStore((state) => state.importBusy);
   const {
     selectedFolders,
     activeFolder,

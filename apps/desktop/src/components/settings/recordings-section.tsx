@@ -8,7 +8,10 @@ import {
   updateSyncSettings,
   useProfilesStore,
 } from "@/state/profiles-store";
-import { useHandwriting } from "@/state/handwriting-context";
+import {
+  refreshHandwritingJobs,
+  useHandwritingStore,
+} from "@/state/handwriting-store";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,14 +28,11 @@ import {
 
 export function SettingsRecordingsSection() {
   const syncSettings = useProfilesStore(selectSyncSettings);
-  const {
-    handwritingStatusMessage,
-    handwritingQueue,
-    handwritingJobs,
-    handwritingBusy,
-    handwritingError,
-    refreshHandwritingJobs,
-  } = useHandwriting();
+  const handwritingStatusMessage = useHandwritingStore((state) => state.statusMessage);
+  const handwritingQueue = useHandwritingStore((state) => state.queue);
+  const handwritingJobs = useHandwritingStore((state) => state.jobs);
+  const handwritingBusy = useHandwritingStore((state) => state.listBusy);
+  const handwritingError = useHandwritingStore((state) => state.listError);
 
   const isHuggingFace = syncSettings.handwritingOcrProvider === "huggingface";
   const providerKey = isHuggingFace

@@ -225,6 +225,19 @@ export async function flattenIntoFeed(folderPaths: string[], notePaths: string[]
   await refreshTree();
 }
 
+/**
+ * Capture flows (recording, handwriting, editor drafts) end the same way:
+ * the new note becomes the selection and any scratch draft is dropped.
+ */
+export async function completeCapture(result: {
+  folder_path: string;
+  note_path: string;
+}) {
+  await refreshTree();
+  useSelection.getState().selectNote(result.note_path, result.folder_path);
+  clearDraft();
+}
+
 export async function showNoteInfo(path: string) {
   try {
     const meta = await api.getNoteMeta(path);

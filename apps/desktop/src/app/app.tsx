@@ -3,14 +3,16 @@ import "@/components/navigation/tree.css";
 
 import { AppShell } from "@/components/shell/app-shell";
 import { ErrorBoundary } from "./error-boundary";
-import { AppProviders } from "./providers";
+import { AppReadinessGate, AppSecurityGate } from "./readiness";
 
 function App() {
   return (
     <ErrorBoundary>
-      <AppProviders>
-        <AppShell />
-      </AppProviders>
+      <AppSecurityGate>
+        <AppReadinessGate>
+          <AppShell />
+        </AppReadinessGate>
+      </AppSecurityGate>
     </ErrorBoundary>
   );
 }

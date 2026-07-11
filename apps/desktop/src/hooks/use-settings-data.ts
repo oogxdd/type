@@ -2,18 +2,17 @@ import {
   selectSyncSettings,
   useProfilesStore,
 } from "@/state/profiles-store";
-import { useGitSync } from "@/state/git-sync-context";
-import { useRecordings } from "@/state/recordings-context";
+import { selectGitSyncBusy, useGitSyncStore } from "@/state/git-sync-store";
+import { recordingSupported, useRecordingsStore } from "@/state/recordings-store";
 
 export function useSettingsData() {
   const syncSettings = useProfilesStore(selectSyncSettings);
-  const { gitStatus, gitSyncAction, gitSyncBusy } = useGitSync();
-  const {
-    recordingSupported,
-    isRecordingAudio,
-    isRecordingFinalizing,
-    transcriptionQueueBusy,
-  } = useRecordings();
+  const gitStatus = useGitSyncStore((state) => state.status);
+  const gitSyncAction = useGitSyncStore((state) => state.action);
+  const gitSyncBusy = useGitSyncStore(selectGitSyncBusy);
+  const isRecordingAudio = useRecordingsStore((state) => state.isRecording);
+  const isRecordingFinalizing = useRecordingsStore((state) => state.isFinalizing);
+  const transcriptionQueueBusy = useRecordingsStore((state) => state.queueBusy);
 
   const isRecordingBusy = isRecordingFinalizing || transcriptionQueueBusy;
 

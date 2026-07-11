@@ -1,6 +1,15 @@
 import { useEffect, useMemo } from "react";
 import { refreshTree } from "@/state/notes-store";
-import { useGitSync } from "@/state/git-sync-context";
+import {
+  connectGitRepo,
+  gitPull,
+  gitPush,
+  refreshGitHistory,
+  refreshGitStatus,
+  selectGitSyncBusy,
+  syncNow,
+  useGitSyncStore,
+} from "@/state/git-sync-store";
 import {
   selectSyncSettings,
   useProfilesStore,
@@ -26,27 +35,19 @@ import {
 
 export function SettingsSyncSection() {
   const syncSettings = useProfilesStore(selectSyncSettings);
-  const {
-    gitStatus,
-    gitSyncAction,
-    gitSyncError,
-    gitSyncBusy,
-    gitCommitHistory,
-    gitHistoryBusy,
-    gitHistoryError,
-    refreshGitStatus,
-    refreshGitHistory,
-    connectGitRepo,
-    gitPull,
-    gitPush,
-    syncNow,
-  } = useGitSync();
+  const gitStatus = useGitSyncStore((state) => state.status);
+  const gitSyncAction = useGitSyncStore((state) => state.action);
+  const gitSyncError = useGitSyncStore((state) => state.error);
+  const gitSyncBusy = useGitSyncStore(selectGitSyncBusy);
+  const gitCommitHistory = useGitSyncStore((state) => state.history);
+  const gitHistoryBusy = useGitSyncStore((state) => state.historyBusy);
+  const gitHistoryError = useGitSyncStore((state) => state.historyError);
   const { canPull, canPush, canConnect, canSync } = useSettingsData();
 
   useEffect(() => {
     void refreshGitStatus();
     void refreshGitHistory();
-  }, [refreshGitHistory, refreshGitStatus]);
+  }, []);
 
   const syncHint = useMemo(() => getSyncHint(gitSyncError), [gitSyncError]);
   const lastSuccessfulSyncAt = syncSettings.lastSuccessfulSyncAt

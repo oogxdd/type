@@ -4,7 +4,11 @@ import {
   selectSyncSettings,
   useProfilesStore,
 } from "@/state/profiles-store";
-import { useHandwriting } from "@/state/handwriting-context";
+import {
+  queueHandwritingOcr,
+  refreshHandwritingJobs,
+  useHandwritingStore,
+} from "@/state/handwriting-store";
 import {
   formatHandwritingStatus,
   formatRecordingStatusLabel,
@@ -21,14 +25,10 @@ export function HandwritingNoteHeader({
   preview,
 }: HandwritingNoteHeaderProps) {
   const syncSettings = useProfilesStore(selectSyncSettings);
-  const {
-    handwritingJobs,
-    handwritingQueue,
-    handwritingError,
-    handwritingQueueBusy,
-    refreshHandwritingJobs,
-    queueHandwritingOcr,
-  } = useHandwriting();
+  const handwritingJobs = useHandwritingStore((state) => state.jobs);
+  const handwritingQueue = useHandwritingStore((state) => state.queue);
+  const handwritingError = useHandwritingStore((state) => state.listError);
+  const handwritingQueueBusy = useHandwritingStore((state) => state.queueBusy);
 
   const handwritingItem = useMemo(
     () => handwritingJobs.find((item) => item.note_path === notePath),

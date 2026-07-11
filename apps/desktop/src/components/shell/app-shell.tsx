@@ -4,8 +4,8 @@ import { useNoteOpener } from "@/hooks/use-note-opener";
 import { useSelection } from "@/state/selection-store";
 import { WorkspaceShell } from "./workspace-shell";
 import { CommandPalette } from "@/components/command-palette/command-palette";
-import { useHandwriting } from "@/state/handwriting-context";
-import { useRecordings } from "@/state/recordings-context";
+import { importHandwritingFile } from "@/state/handwriting-store";
+import { startRecording, useRecordingsStore } from "@/state/recordings-store";
 import type { SettingsSectionId } from "@/lib/settings-sections";
 import { ARCHIEVE_FOLDER_PATH, FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import type { AppMode } from "@typenotes/shared/types";
@@ -17,8 +17,7 @@ export function AppShell() {
   const handwritingInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeFolder = useSelection((state) => state.activeFolder);
-  const { isRecordingAudio, startRecording } = useRecordings();
-  const { importHandwritingFile } = useHandwriting();
+  const isRecordingAudio = useRecordingsStore((state) => state.isRecording);
   const { openPinnedFolder } = useNoteOpener({ setAppMode: setDesktopAppMode });
 
   const onHandwritingImportChange = (event: ChangeEvent<HTMLInputElement>) => {

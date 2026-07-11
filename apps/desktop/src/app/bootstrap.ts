@@ -6,7 +6,10 @@ import { initAppearancePersistence } from "@/state/appearance-store";
 import { useSelection } from "@/state/selection-store";
 import { APP_EXTENSIONS } from "@/lib/extensions";
 import { initEditor } from "@/state/editor-store";
+import { initGitSync } from "@/state/git-sync-store";
+import { initHandwriting } from "@/state/handwriting-store";
 import { initNotes } from "@/state/notes-actions";
+import { initRecordings } from "@/state/recordings-store";
 import {
   initProfiles,
   selectActiveProfileId,
@@ -33,6 +36,10 @@ export function bootstrapApp() {
   // reset below fires, so it registers its subscriptions first.
   initEditor();
   initNotes();
+  initGitSync();
+  // The capture queue loops self-gate on lock state and profile readiness.
+  initRecordings();
+  initHandwriting();
 
   // Selection belongs to a profile root and must never leak across a switch.
   useProfilesStore.subscribe((state, previous) => {
