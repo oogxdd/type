@@ -403,16 +403,20 @@ The React Native app (Expo) reuses the Rust core through
   (ubrn 0.31.x = uniffi 0.31); output dirs are gitignored. Regenerate after
   any `type-ffi` change and keep `raw-core.ts` in sync.
 - **`apps/mobile`** — the signature interaction: the app opens on a blank
-  page (type immediately); swipe up files the page into Feed and a fresh
-  blank page appears. `src/lib/capture.ts` (pure, tested) owns that note
-  lifecycle with the same rules as the desktop editor (lazy create,
-  debounced writes, flush on leave, empty-note cleanup). Navigation is one
-  native stack whose root is the menu screen (feed/folders tabs + sync/
-  settings); Capture boots pushed on top of it, so the left-edge swipe-back
-  reveals the menu and a leftward swipe on the menu pushes a fresh capture
-  page. Voice capture is a floating dictation button on the capture page —
-  tap to start/stop or hold to record while pressed (expo-audio →
-  `save_audio_recording` → queue per `transcription_mode`). Other screens:
+  page (type immediately); swipe up slides the page off the top (a fresh
+  blank page rides in from below, finger-driven) and files it into Feed.
+  `src/lib/capture.ts` (pure, tested) owns that note lifecycle with the same
+  rules as the desktop editor (lazy create, debounced writes, flush on
+  leave, empty-note cleanup). The stack root is the Home pager
+  (`screens/home-pager.tsx`, react-native-pager-view): Menu | Capture | Sync
+  as three side-by-side pages — swipe left/right anywhere with native paging
+  physics, no tab bar; pages stay mounted, so paging to the menu and back
+  lands on the same in-progress note (text, scroll, session intact).
+  Feed/Folder/Editor/Settings are pushed onto the stack above the pager.
+  Voice capture is a floating dictation button on the capture page, shown
+  only while the page is blank — tap to start/stop or hold to record while
+  pressed (expo-audio → `save_audio_recording` → queue per
+  `transcription_mode`). Other screens:
   feed, folder browser, plain-text editor, sync (status/connect/pull/push/SSH
   key/history), settings (working folders, notes-root move, transcription
   mode, AssemblyAI key). Zustand stores in `src/state/`. Without the native
