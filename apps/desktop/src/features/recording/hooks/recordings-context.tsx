@@ -12,7 +12,10 @@ import type { RecordingListItem, RecordingQueueSnapshot } from "@typenotes/share
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import { toBase64 } from "@/shared/lib/notes";
 import { useAudioRecorder } from "./use-audio-recorder";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import {
+  selectSyncSettings,
+  useProfilesStore,
+} from "@/features/profiles/state/profiles-store";
 import { useAutoQueueLoop } from "@/features/processing/hooks/use-auto-queue-loop";
 import { useProcessingQueue } from "@/features/processing/hooks/use-processing-queue";
 import { jobListSignature } from "@typenotes/shared/jobs";
@@ -53,7 +56,7 @@ export function RecordingsProvider({
     audio_path: string;
   }) => Promise<void>;
 }) {
-  const { syncSettings } = useProfiles();
+  const syncSettings = useProfilesStore(selectSyncSettings);
   const [recordingStatusMessage, setRecordingStatusMessage] = useState<string | null>(null);
   const [transcriptionQueueBusy, setTranscriptionQueueBusy] = useState(false);
 

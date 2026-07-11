@@ -1,6 +1,9 @@
 import { useEffect, useMemo } from "react";
 import { PenLine } from "lucide-react";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import {
+  selectSyncSettings,
+  useProfilesStore,
+} from "@/features/profiles/state/profiles-store";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
 import {
   formatHandwritingStatus,
@@ -17,7 +20,7 @@ export function HandwritingNoteHeader({
   notePath,
   preview,
 }: HandwritingNoteHeaderProps) {
-  const { syncSettings } = useProfiles();
+  const syncSettings = useProfilesStore(selectSyncSettings);
   const {
     handwritingJobs,
     handwritingQueue,

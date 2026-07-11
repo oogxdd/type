@@ -3,9 +3,13 @@ import { useEffect, type ReactNode } from "react";
 import { useAppearance } from "@/app/state/appearance-store";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import { useProfilesStore } from "@/features/profiles/state/profiles-store";
 import { SecurityLockScreen } from "@/features/security/components/lock-screen";
-import { useSecurity } from "@/features/security/hooks/security-context";
+import {
+  selectIsLocked,
+  unlockSecurity,
+  useSecurityStore,
+} from "@/features/security/state/security-store";
 import { hideLaunchSplash } from "./launch-screen";
 
 function StartupScreen({ theme }: { theme: "light" | "dark" }) {
@@ -26,10 +30,13 @@ function LaunchReveal({ children }: { children: ReactNode }) {
 
 export function AppReadinessGate({ children }: { children: ReactNode }) {
   const theme = useAppearance((state) => state.theme);
-  const { profilesSnapshot, activeProfileId } = useProfiles();
+  const hasSnapshot = useProfilesStore((state) => Boolean(state.snapshot));
+  const activeProfileId = useProfilesStore(
+    (state) => state.snapshot?.activeProfileId ?? null
+  );
   const { tree } = useNotesTree();
 
-  const appReady = Boolean(profilesSnapshot) && (!activeProfileId || Boolean(tree));
+  const appReady = hasSnapshot && (!activeProfileId || Boolean(tree));
   if (!appReady) {
     return <StartupScreen theme={theme} />;
   }
@@ -39,13 +46,10 @@ export function AppReadinessGate({ children }: { children: ReactNode }) {
 
 export function AppSecurityGate({ children }: { children: ReactNode }) {
   const theme = useAppearance((state) => state.theme);
-  const {
-    securityState,
-    securityBusy,
-    securityError,
-    isLocked,
-    unlockSecurity,
-  } = useSecurity();
+  const securityState = useSecurityStore((state) => state.securityState);
+  const securityBusy = useSecurityStore((state) => state.busy);
+  const securityError = useSecurityStore((state) => state.error);
+  const isLocked = useSecurityStore(selectIsLocked);
 
   if (!APP_EXTENSIONS.security) {
     return <>{children}</>;

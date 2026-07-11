@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import {
+  selectSyncSettings,
+  useProfilesStore,
+} from "@/features/profiles/state/profiles-store";
 import {
   getAudioImportStatus,
   importAudioFiles,
@@ -26,7 +29,7 @@ const POLL_INTERVAL_MS = 250;
  * caller can refresh the recordings list.
  */
 export function useAudioImport({ onImported }: { onImported?: () => void } = {}) {
-  const { syncSettings } = useProfiles();
+  const syncSettings = useProfilesStore(selectSyncSettings);
 
   const [phase, setPhase] = useState<AudioImportPhase>("idle");
   const [status, setStatus] = useState<AudioImportState | null>(null);

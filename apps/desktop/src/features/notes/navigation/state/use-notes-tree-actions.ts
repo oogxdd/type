@@ -5,7 +5,10 @@ import { useShallow } from "zustand/react/shallow";
 import * as api from "@/features/notes/api/notes-api";
 import { useSelection } from "@/app/state/selection-store";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import {
+  selectSyncSettings,
+  useProfilesStore,
+} from "@/features/profiles/state/profiles-store";
 import {
   ARCHIEVE_FOLDER_PATH,
   FEED_FOLDER_PATH,
@@ -34,7 +37,7 @@ export function useNotesTreeActions({
   renameValue,
   setRenameValue,
 }: UseNotesTreeActionsArgs) {
-  const { syncSettings } = useProfiles();
+  const syncSettings = useProfilesStore(selectSyncSettings);
   const { clearDraft, clearNote, rightPaneRef } = useEditor();
   const {
     selectedFolders,

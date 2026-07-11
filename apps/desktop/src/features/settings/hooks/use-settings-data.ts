@@ -1,9 +1,12 @@
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import {
+  selectSyncSettings,
+  useProfilesStore,
+} from "@/features/profiles/state/profiles-store";
 import { useGitSync } from "@/features/sync/hooks/git-sync-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
 
 export function useSettingsData() {
-  const { syncSettings } = useProfiles();
+  const syncSettings = useProfilesStore(selectSyncSettings);
   const { gitStatus, gitSyncAction, gitSyncBusy } = useGitSync();
   const {
     recordingSupported,

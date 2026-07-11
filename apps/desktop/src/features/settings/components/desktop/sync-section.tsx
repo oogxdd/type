@@ -1,7 +1,10 @@
 import { useEffect, useMemo } from "react";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { useGitSync } from "@/features/sync/hooks/git-sync-context";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import {
+  selectSyncSettings,
+  useProfilesStore,
+} from "@/features/profiles/state/profiles-store";
 import { useSettingsData } from "@/features/settings/hooks/use-settings-data";
 import {
   formatCommitSummaryForApp,
@@ -22,7 +25,7 @@ import {
 } from "../settings-ui";
 
 export function SettingsSyncSection() {
-  const { syncSettings } = useProfiles();
+  const syncSettings = useProfilesStore(selectSyncSettings);
   const {
     gitStatus,
     gitSyncAction,

@@ -1,6 +1,12 @@
 import { useMemo, useState } from "react";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
-import { useSecurity } from "@/features/security/hooks/security-context";
+import {
+  enableSecurity,
+  lockSecurity,
+  selectIsSecurityEnabled,
+  setAutoLockOnBackground,
+  useSecurityStore,
+} from "@/features/security/state/security-store";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import {
@@ -17,15 +23,10 @@ export function SettingsSecuritySection() {
     return null;
   }
 
-  const {
-    securityState,
-    securityBusy,
-    securityError,
-    isSecurityEnabled,
-    enableSecurity,
-    lockSecurity,
-    setAutoLockOnBackground,
-  } = useSecurity();
+  const securityState = useSecurityStore((state) => state.securityState);
+  const securityBusy = useSecurityStore((state) => state.busy);
+  const securityError = useSecurityStore((state) => state.error);
+  const isSecurityEnabled = useSecurityStore(selectIsSecurityEnabled);
   const [unlockPassword, setUnlockPassword] = useState("");
   const [unlockConfirm, setUnlockConfirm] = useState("");
   const [panicPassword, setPanicPassword] = useState("");

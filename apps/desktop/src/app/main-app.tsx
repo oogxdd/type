@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./app";
+import { bootstrapApp } from "./bootstrap";
 
 const isIosDevice = () => {
   if (typeof window === "undefined") {
@@ -56,6 +57,7 @@ const lockIosZoom = () => {
 };
 
 export const mountApp = () => {
+  bootstrapApp();
   lockIosZoom();
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>

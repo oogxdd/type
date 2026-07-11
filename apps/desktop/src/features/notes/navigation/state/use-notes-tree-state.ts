@@ -1,8 +1,15 @@
 // Read side of the notes navigation slice.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppearance } from "@/app/state/appearance-store";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
-import { useSecurity } from "@/features/security/hooks/security-context";
+import {
+  selectActiveProfileId,
+  selectActiveProfileNotesRoot,
+  useProfilesStore,
+} from "@/features/profiles/state/profiles-store";
+import {
+  selectIsSecurityEnabled,
+  useSecurityStore,
+} from "@/features/security/state/security-store";
 import * as api from "@/features/notes/api/notes-api";
 import { useNotePreviews } from "@/features/notes/list/hooks/use-note-previews";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@typenotes/shared/types";
@@ -68,8 +75,9 @@ export type NotesTreeState = {
 export function useNotesTreeState({
   activeFolder,
 }: UseNotesTreeStateArgs): NotesTreeState {
-  const { activeProfileId, activeProfileNotesRoot } = useProfiles();
-  const { isSecurityEnabled } = useSecurity();
+  const activeProfileId = useProfilesStore(selectActiveProfileId);
+  const activeProfileNotesRoot = useProfilesStore(selectActiveProfileNotesRoot);
+  const isSecurityEnabled = useSecurityStore(selectIsSecurityEnabled);
   const notesListMode = useAppearance((state) => state.notesListMode);
   const hideArchivedFeedNotes = useAppearance((state) => state.hideArchivedFeedNotes);
 

@@ -13,7 +13,10 @@ import type {
 } from "@typenotes/shared/types";
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import { toBase64 } from "@/shared/lib/notes";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import {
+  selectSyncSettings,
+  useProfilesStore,
+} from "@/features/profiles/state/profiles-store";
 import { useAutoQueueLoop } from "@/features/processing/hooks/use-auto-queue-loop";
 import { useProcessingQueue } from "@/features/processing/hooks/use-processing-queue";
 import { jobListSignature } from "@typenotes/shared/jobs";
@@ -50,7 +53,7 @@ export function HandwritingProvider({
     attachment_path: string;
   }) => Promise<void>;
 }) {
-  const { syncSettings } = useProfiles();
+  const syncSettings = useProfilesStore(selectSyncSettings);
   const [handwritingImportBusy, setHandwritingImportBusy] = useState(false);
   const [handwritingStatusMessage, setHandwritingStatusMessage] = useState<string | null>(null);
   const [handwritingQueueBusy, setHandwritingQueueBusy] = useState(false);

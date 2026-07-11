@@ -1,6 +1,11 @@
 import { Trash2 } from "lucide-react";
 
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import {
+  selectActiveProfileId,
+  selectSyncSettings,
+  updateSyncSettings,
+  useProfilesStore,
+} from "@/features/profiles/state/profiles-store";
 import type { NoteFileNameFormat } from "@typenotes/shared/types";
 import { Button } from "@/shared/ui/button";
 import {
@@ -29,7 +34,9 @@ const noteFileNameOptions: Array<{ value: NoteFileNameFormat; label: string; hin
 ];
 
 export function SettingsGeneralSection({ onOpenTrash }: { onOpenTrash: () => void }) {
-  const { activeProfileId, profilesBusy, syncSettings, updateSyncSettings } = useProfiles();
+  const activeProfileId = useProfilesStore(selectActiveProfileId);
+  const profilesBusy = useProfilesStore((state) => state.busy);
+  const syncSettings = useProfilesStore(selectSyncSettings);
 
   return (
     <SettingsSection title="General">

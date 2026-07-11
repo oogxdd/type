@@ -1,7 +1,6 @@
 // Desktop shell composition stays outside the notes slice; it only wires the
 // navigation panels into the current layout mode.
 import {
-  useCallback,
   useMemo,
   useRef,
   useState,
@@ -27,7 +26,7 @@ import { useAppearance } from "@/app/state/appearance-store";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
-import { useSecurity } from "@/features/security/hooks/security-context";
+import { lockSecurity } from "@/features/security/state/security-store";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import { DesktopContextMenu } from "./desktop-context-menu";
 import { useDesktopNavigation } from "./hooks/use-desktop-navigation";
@@ -44,6 +43,15 @@ import { AppSidebar } from "./app-sidebar";
 import { DesktopMiddlePane } from "./middle-pane";
 import { DesktopRightPane } from "./right-pane";
 import { DesktopShell } from "./desktop-shell";
+
+// The lock shortcut is optional. When security is disabled, keep the command
+// surface stable but make it a no-op.
+const lockAppNow = async () => {
+  if (!APP_EXTENSIONS.security) {
+    return;
+  }
+  await lockSecurity();
+};
 
 type DesktopAppShellProps = {
   appMode: AppMode;
@@ -72,13 +80,6 @@ export function DesktopAppShell({
     stopRecording,
   } = useRecordings();
   const { handwritingImportBusy } = useHandwriting();
-  const { lockSecurity } = useSecurity();
-  const lockAppNow = useCallback(async () => {
-    if (!APP_EXTENSIONS.security) {
-      return;
-    }
-    await lockSecurity();
-  }, [lockSecurity]);
   const {
     selectedFolders,
     activeFolder,
@@ -172,8 +173,6 @@ export function DesktopAppShell({
       sidebarCollapsed,
       setSidebarCollapsed,
       deleteSelectedNotes: deleteSelectedNotesByShortcut,
-      // The lock shortcut is optional. When security is disabled, keep the
-      // command surface stable but make it a no-op.
       lockAppNow,
       activeNavigationTab,
       notes: middlePaneNotes,

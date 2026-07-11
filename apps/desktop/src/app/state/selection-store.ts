@@ -1,7 +1,5 @@
-import { useEffect, type ReactNode } from "react";
 import { create } from "zustand";
 
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { getNoteParentPath } from "@typenotes/shared/notes";
 
 type SetValue<T> = T | ((current: T) => T);
@@ -85,19 +83,5 @@ const useSelectionStore = create<SelectionState>((set) => ({
       selectedNotes: new Set(),
     }),
 }));
-
-export function SelectionProvider({ children }: { children: ReactNode }) {
-  const { activeProfileId, activeProfileNotesRoot } = useProfiles();
-  const resetSelection = useSelectionStore((state) => state.resetSelection);
-
-  // Selection belongs to a profile root and must never leak across a switch.
-  useEffect(() => {
-    if (activeProfileId) {
-      resetSelection();
-    }
-  }, [activeProfileId, activeProfileNotesRoot, resetSelection]);
-
-  return children;
-}
 
 export const useSelection = useSelectionStore;

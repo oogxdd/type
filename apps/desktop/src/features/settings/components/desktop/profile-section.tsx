@@ -1,6 +1,19 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useMemo, useState } from "react";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import { useEffect, useState } from "react";
+import {
+  createProfile,
+  deleteProfile,
+  selectActiveProfile,
+  selectActiveProfileId,
+  selectActiveProfileNotesRoot,
+  selectProfiles,
+  selectSyncSettings,
+  setProfileNotesRoot,
+  switchProfile,
+  updateProfile,
+  updateSyncSettings,
+  useProfilesStore,
+} from "@/features/profiles/state/profiles-store";
 import { useSshKey } from "@/features/sync/hooks/use-ssh-key";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
@@ -17,27 +30,15 @@ import {
 } from "../settings-ui";
 
 export function SettingsProfileSection() {
-  const {
-    profiles,
-    activeProfileId,
-    activeProfileNotesRoot,
-    profilesBusy,
-    profilesError,
-    switchProfile,
-    createProfile,
-    updateProfile,
-    deleteProfile,
-    setProfileNotesRoot,
-    syncSettings,
-    updateSyncSettings,
-  } = useProfiles();
+  const profiles = useProfilesStore(selectProfiles);
+  const activeProfileId = useProfilesStore(selectActiveProfileId);
+  const activeProfileNotesRoot = useProfilesStore(selectActiveProfileNotesRoot);
+  const profilesBusy = useProfilesStore((state) => state.busy);
+  const profilesError = useProfilesStore((state) => state.error);
+  const syncSettings = useProfilesStore(selectSyncSettings);
+  const activeProfile = useProfilesStore(selectActiveProfile);
   const [notesRootInput, setNotesRootInput] = useState("");
   const [profileManagerOpen, setProfileManagerOpen] = useState(false);
-
-  const activeProfile = useMemo(
-    () => profiles.find((profile) => profile.id === activeProfileId) ?? null,
-    [activeProfileId, profiles]
-  );
 
   useEffect(() => {
     setNotesRootInput(activeProfile?.notes_root ?? "");

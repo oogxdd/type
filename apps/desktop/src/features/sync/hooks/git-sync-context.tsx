@@ -10,7 +10,12 @@ import type {
   GitSyncAction,
   GitSyncStatus,
 } from "@typenotes/shared/types";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import {
+  selectActiveProfileId,
+  selectSyncSettings,
+  updateSyncSettings,
+  useProfilesStore,
+} from "@/features/profiles/state/profiles-store";
 import { useGitSyncWorkflows } from "./use-git-sync-workflows";
 
 type GitSyncContextValue = {
@@ -38,7 +43,8 @@ type GitSyncContextValue = {
 const GitSyncContext = createContext<GitSyncContextValue | null>(null);
 
 export function GitSyncProvider({ children }: { children: ReactNode }) {
-  const { activeProfileId, syncSettings, updateSyncSettings } = useProfiles();
+  const activeProfileId = useProfilesStore(selectActiveProfileId);
+  const syncSettings = useProfilesStore(selectSyncSettings);
   const [gitStatus, setGitStatus] = useState<GitSyncStatus | null>(null);
   const [gitSyncAction, setGitSyncAction] = useState<GitSyncAction>("idle");
   const [gitSyncError, setGitSyncError] = useState<string | null>(null);

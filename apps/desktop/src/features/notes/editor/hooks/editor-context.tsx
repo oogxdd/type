@@ -7,7 +7,12 @@ import {
 } from "react";
 import { useNoteEditor } from "./use-note-editor";
 import { useSelection } from "@/app/state/selection-store";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import {
+  selectActiveProfileId,
+  selectActiveProfileNotesRoot,
+  selectSyncSettings,
+  useProfilesStore,
+} from "@/features/profiles/state/profiles-store";
 
 type EditorContextValue = {
   noteContent: string;
@@ -30,7 +35,9 @@ export function EditorProvider({
 }: {
   children: ReactNode;
 }) {
-  const { activeProfileId, activeProfileNotesRoot, syncSettings } = useProfiles();
+  const activeProfileId = useProfilesStore(selectActiveProfileId);
+  const activeProfileNotesRoot = useProfilesStore(selectActiveProfileNotesRoot);
+  const syncSettings = useProfilesStore(selectSyncSettings);
   const activeNote = useSelection((state) => state.activeNote);
 
   const {

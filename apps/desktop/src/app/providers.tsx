@@ -1,30 +1,29 @@
-import { useRef, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { AppearanceProvider } from "@/app/state/appearance-store";
-import { SelectionProvider, useSelection } from "@/app/state/selection-store";
-import { EditorProvider, useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { useSelection } from "@/app/state/selection-store";
 import { HandwritingProvider } from "@/features/handwriting/hooks/handwriting-context";
-import { NotesTreeProvider, useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
-import { ProfilesProvider } from "@/features/profiles/hooks/profiles-context";
+import {
+  EditorProvider,
+  useEditor,
+} from "@/features/notes/editor/hooks/editor-context";
+import {
+  NotesTreeProvider,
+  useNotesTree,
+} from "@/features/notes/navigation/state/notes-tree-context";
+import { registerProfileMutationFlush } from "@/features/profiles/state/profiles-store";
 import { RecordingsProvider } from "@/features/recording/hooks/recordings-context";
-import { SecurityProvider } from "@/features/security/hooks/security-context";
 import { GitSyncProvider } from "@/features/sync/hooks/git-sync-context";
 import { useBackgroundSave } from "./lifecycle/use-background-save";
 import { AppReadinessGate, AppSecurityGate } from "./readiness";
 
-function FlushSaveBridge({
-  flushSaveRef,
-}: {
-  flushSaveRef: React.RefObject<(() => Promise<void>) | null>;
-}) {
+function EditorLifecycle() {
   const { flushSave } = useEditor();
-  flushSaveRef.current = flushSave;
-  return null;
-}
-
-function AppLifecycle() {
-  const { flushSave } = useEditor();
+  // Pending editor saves must hit disk before a profile mutation can swap the
+  // active notes root.
+  useEffect(() => {
+    registerProfileMutationFlush(flushSave);
+  }, [flushSave]);
   useBackgroundSave(flushSave);
   return null;
 }
@@ -63,44 +62,19 @@ function CaptureFeatureProviders({ children }: { children: ReactNode }) {
   );
 }
 
-function UnlockedAppProviders({
-  children,
-  flushSaveRef,
-}: {
-  children: ReactNode;
-  flushSaveRef: React.RefObject<(() => Promise<void>) | null>;
-}) {
-  return (
-    <ProfilesProvider flushSaveRef={flushSaveRef}>
-      <GitSyncProvider>
-        <SelectionProvider>
-          <EditorProvider>
-            <NotesTreeProvider>
-              <FlushSaveBridge flushSaveRef={flushSaveRef} />
-              <AppLifecycle />
-              <AppReadinessGate>
-                <CaptureFeatureProviders>{children}</CaptureFeatureProviders>
-              </AppReadinessGate>
-            </NotesTreeProvider>
-          </EditorProvider>
-        </SelectionProvider>
-      </GitSyncProvider>
-    </ProfilesProvider>
-  );
-}
-
 export function AppProviders({ children }: { children: ReactNode }) {
-  const flushSaveRef = useRef<(() => Promise<void>) | null>(null);
-
   return (
-    <AppearanceProvider>
-      <SecurityProvider>
-        <AppSecurityGate>
-          <UnlockedAppProviders flushSaveRef={flushSaveRef}>
-            {children}
-          </UnlockedAppProviders>
-        </AppSecurityGate>
-      </SecurityProvider>
-    </AppearanceProvider>
+    <AppSecurityGate>
+      <GitSyncProvider>
+        <EditorProvider>
+          <NotesTreeProvider>
+            <EditorLifecycle />
+            <AppReadinessGate>
+              <CaptureFeatureProviders>{children}</CaptureFeatureProviders>
+            </AppReadinessGate>
+          </NotesTreeProvider>
+        </EditorProvider>
+      </GitSyncProvider>
+    </AppSecurityGate>
   );
 }

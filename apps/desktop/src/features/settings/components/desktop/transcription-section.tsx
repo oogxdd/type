@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatRecordingStatus, formatUpdatedAt } from "@typenotes/shared/format";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import {
+  selectSyncSettings,
+  updateSyncSettings,
+  useProfilesStore,
+} from "@/features/profiles/state/profiles-store";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { useAudioImport } from "@/features/recording/hooks/use-audio-import";
 import { Button } from "@/shared/ui/button";
@@ -129,7 +133,7 @@ function StatBadge({
 }
 
 export function SettingsTranscriptionSection() {
-  const { syncSettings, updateSyncSettings } = useProfiles();
+  const syncSettings = useProfilesStore(selectSyncSettings);
   const {
     recordingsQueue,
     recordingsList,

@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import {
+  selectSyncSettings,
+  useProfilesStore,
+} from "@/features/profiles/state/profiles-store";
 import {
   chooseAppleNotesFolder,
   getAppleImportStatus,
@@ -29,7 +32,7 @@ const POLL_INTERVAL_MS = 250;
  * the caller can refresh the tree.
  */
 export function useAppleImport({ onImported }: { onImported?: () => void } = {}) {
-  const { syncSettings } = useProfiles();
+  const syncSettings = useProfilesStore(selectSyncSettings);
 
   const [phase, setPhase] = useState<ImportPhase>("idle");
   const [sourcePath, setSourcePath] = useState("");

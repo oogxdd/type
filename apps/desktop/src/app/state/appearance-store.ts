@@ -1,4 +1,3 @@
-import { useEffect, type ReactNode } from "react";
 import { create } from "zustand";
 
 import { applyThemeToDocument } from "@/app/launch-screen";
@@ -55,36 +54,33 @@ export const useAppearance = create<AppearanceState>((set) => ({
   resetEditorFontSize: () => set({ editorFontSize: DEFAULT_EDITOR_FONT_SIZE }),
 }));
 
-export function AppearanceProvider({ children }: { children: ReactNode }) {
-  useEffect(() => {
-    const persist = (state: AppearanceState, previous?: AppearanceState) => {
-      if (!previous || state.theme !== previous.theme) {
-        window.localStorage.setItem("notes-viewer-theme", state.theme);
-        applyThemeToDocument(state.theme);
-      }
-      if (!previous || state.notesListMode !== previous.notesListMode) {
-        window.localStorage.setItem(
-          "notes-viewer-notes-list-mode",
-          state.notesListMode
-        );
-      }
-      if (!previous || state.hideArchivedFeedNotes !== previous.hideArchivedFeedNotes) {
-        window.localStorage.setItem(
-          "notes-viewer-hide-archived-feed-notes",
-          String(state.hideArchivedFeedNotes)
-        );
-      }
-      if (!previous || state.editorFontSize !== previous.editorFontSize) {
-        window.localStorage.setItem(
-          "notes-viewer-editor-font-size",
-          String(state.editorFontSize)
-        );
-      }
-    };
+/** Persist appearance changes and keep the document theme in sync. Call once at boot. */
+export function initAppearancePersistence() {
+  const persist = (state: AppearanceState, previous?: AppearanceState) => {
+    if (!previous || state.theme !== previous.theme) {
+      window.localStorage.setItem("notes-viewer-theme", state.theme);
+      applyThemeToDocument(state.theme);
+    }
+    if (!previous || state.notesListMode !== previous.notesListMode) {
+      window.localStorage.setItem(
+        "notes-viewer-notes-list-mode",
+        state.notesListMode
+      );
+    }
+    if (!previous || state.hideArchivedFeedNotes !== previous.hideArchivedFeedNotes) {
+      window.localStorage.setItem(
+        "notes-viewer-hide-archived-feed-notes",
+        String(state.hideArchivedFeedNotes)
+      );
+    }
+    if (!previous || state.editorFontSize !== previous.editorFontSize) {
+      window.localStorage.setItem(
+        "notes-viewer-editor-font-size",
+        String(state.editorFontSize)
+      );
+    }
+  };
 
-    persist(useAppearance.getState());
-    return useAppearance.subscribe(persist);
-  }, []);
-
-  return children;
+  persist(useAppearance.getState());
+  useAppearance.subscribe(persist);
 }

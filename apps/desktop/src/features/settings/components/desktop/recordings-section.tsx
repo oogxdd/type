@@ -3,7 +3,11 @@ import {
   formatHandwritingStatus,
   formatUpdatedAt,
 } from "@typenotes/shared/format";
-import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import {
+  selectSyncSettings,
+  updateSyncSettings,
+  useProfilesStore,
+} from "@/features/profiles/state/profiles-store";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
 import { Input } from "@/shared/ui/input";
 import { Button } from "@/shared/ui/button";
@@ -20,7 +24,7 @@ import {
 } from "../settings-ui";
 
 export function SettingsRecordingsSection() {
-  const { syncSettings, updateSyncSettings } = useProfiles();
+  const syncSettings = useProfilesStore(selectSyncSettings);
   const {
     handwritingStatusMessage,
     handwritingQueue,
