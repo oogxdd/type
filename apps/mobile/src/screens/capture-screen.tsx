@@ -150,7 +150,12 @@ export const CaptureScreen = () => {
   // Stack navigation emits blur for Menu, Sync, and all pushed destinations.
   // Flush before this capture screen becomes hidden or is popped.
   useEffect(
-    () => navigation.addListener("blur", () => void session.flush()),
+    () =>
+      navigation.addListener("blur", () => {
+        // Navigation should never turn a storage rejection into a fatal,
+        // unhandled JS error. CaptureSession keeps the draft dirty for retry.
+        void session.flush().catch(() => {});
+      }),
     [navigation, session]
   );
 
@@ -173,27 +178,34 @@ export const CaptureScreen = () => {
     iconsOpacity.value = withTiming(0, { duration: 180 });
   };
 
-  // The committed page is off-screen (the ghost covers the viewport), so the
-  // swap happens out of sight: clear the input, park the scroll at the top,
-  // and only snap the page back once React has painted the blank state.
+  // The committed page is off-screen (the ghost covers the viewport). Wait
+  // for persistence before exposing the fresh page: this prevents new typing
+  // from racing the old note's commit and lets a failed write spring the
+  // original page back instead of losing it or surfacing a fatal rejection.
   const finishCommit = () => {
-    void session.commit().then((path) => {
-      if (path) {
-        void useNotesStore.getState().refresh();
-      }
-    });
-    setText("");
-    prevContentHRef.current = 0;
-    runOnUI(() => {
-      scrollTo(scrollRef, 0, 0, false);
-    })();
-    showIcons();
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        pageY.value = 0;
-        transitioning.value = false;
+    void session
+      .commit()
+      .then((path) => {
+        if (path) {
+          void useNotesStore.getState().refresh().catch(() => {});
+        }
+        setText("");
+        prevContentHRef.current = 0;
+        runOnUI(() => {
+          scrollTo(scrollRef, 0, 0, false);
+        })();
+        showIcons();
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            pageY.value = 0;
+            transitioning.value = false;
+          })
+        );
       })
-    );
+      .catch(() => {
+        transitioning.value = false;
+        pageY.value = withSpring(0, CANCEL_SPRING);
+      });
   };
 
   // ---- Scroll plumbing ------------------------------------------------------
