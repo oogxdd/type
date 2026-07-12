@@ -31,6 +31,7 @@ import { isLocked, useSecurityStore } from "./state/security-store";
 import { useSettingsStore } from "./state/settings-store";
 import { useSyncStore } from "./state/sync-store";
 import { useTheme } from "./theme";
+import { ErrorBoundary } from "./ui/error-boundary";
 
 type BootPhase = { state: "booting" } | { state: "ready" } | { state: "failed"; error: string };
 
@@ -233,7 +234,9 @@ export default function App() {
             }
           }}
         >
-          <RootStack />
+          <ErrorBoundary>
+            <RootStack />
+          </ErrorBoundary>
         </NavigationContainer>
         {demoMode ? (
           <View style={[styles.demoBanner, { backgroundColor: theme.colors.accent }]}>
