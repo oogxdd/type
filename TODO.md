@@ -78,6 +78,9 @@ Delete this file when the branch is ready for review.
         reveals Menu; close/left swipe opens a fresh Capture; Capture's
         leftward preview opens Sync; buttons and QR deep links reach the same
         stack destinations without a pager.
+      - Left-edge Capture → Menu swipe wins immediately over filing, keyboard
+        dismissal, Sync, and ScrollView recognizers; it should feel identical
+        to the original pre-pager native back transition.
       - Swipe-up-to-file: works with the keyboard up; on a long note one
         continuous drag scrolls to the bottom and rolls into the page pull;
         the old page follows the finger 1:1 off the top while the fresh page

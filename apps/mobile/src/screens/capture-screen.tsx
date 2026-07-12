@@ -74,8 +74,12 @@ const COMMIT_VELOCITY = -550;
 // the pan claims the touch from the scroll — small enough to feel instant,
 // big enough to ignore jitter.
 const ACTIVATE_PULL = 6;
-// A drag this horizontal belongs to stack navigation, not page filing.
-const HORIZONTAL_FAIL = 32;
+// Reserve the standard iOS back-swipe edge exclusively for native-stack
+// navigation. Capture gestures do not even begin inside this gutter.
+const BACK_SWIPE_GUTTER = 48;
+// Outside the gutter, vertical observers still fail as soon as horizontal
+// intent is clear so the navigator does not wait behind a BEGAN handler.
+const HORIZONTAL_FAIL = 8;
 // Scroll-edge slack (px): treat "within a few px" as at the edge.
 const BOTTOM_SLACK = 6;
 const TOP_SLACK = 4;
@@ -274,6 +278,7 @@ export const CaptureScreen = () => {
   const dragBase = useSharedValue(0);
 
   const swipeToFile = Gesture.Pan()
+    .hitSlop({ left: -BACK_SWIPE_GUTTER })
     .manualActivation(true)
     .onTouchesDown((event, manager) => {
       if (transitioning.value) {
@@ -300,7 +305,7 @@ export const CaptureScreen = () => {
       const dx = touch.x - touchStartX.value;
       const dy = touch.y - touchStartY.value;
       // Clearly-horizontal drags belong to native back or the Sync push.
-      if (Math.abs(dx) > HORIZONTAL_FAIL && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (Math.abs(dx) > HORIZONTAL_FAIL && Math.abs(dx) > Math.abs(dy)) {
         manager.fail();
         return;
       }
@@ -364,10 +369,12 @@ export const CaptureScreen = () => {
   // This observer never activates — it dispatches the dismiss and fails, so
   // the note's own scroll (top bounce) keeps running untouched. Everywhere
   // else the ScrollView's interactive keyboardDismissMode covers it.
+  const escapeStartX = useSharedValue(0);
   const escapeStartY = useSharedValue(0);
   const escapeDone = useSharedValue(false);
 
   const keyboardEscape = Gesture.Pan()
+    .hitSlop({ left: -BACK_SWIPE_GUTTER })
     .manualActivation(true)
     .onTouchesDown((event, manager) => {
       const touch = event.allTouches[0];
@@ -375,6 +382,7 @@ export const CaptureScreen = () => {
         manager.fail();
         return;
       }
+      escapeStartX.value = touch.x;
       escapeStartY.value = touch.y;
       escapeDone.value = false;
     })
@@ -387,7 +395,12 @@ export const CaptureScreen = () => {
         manager.fail();
         return;
       }
+      const dx = touch.x - escapeStartX.value;
       const dy = touch.y - escapeStartY.value;
+      if (Math.abs(dx) > HORIZONTAL_FAIL && Math.abs(dx) > Math.abs(dy)) {
+        manager.fail();
+        return;
+      }
       if (dy < -10) {
         manager.fail();
         return;
@@ -419,8 +432,9 @@ export const CaptureScreen = () => {
   };
 
   const swipeToSync = Gesture.Pan()
+    .hitSlop({ left: -BACK_SWIPE_GUTTER })
     .activeOffsetX(-24)
-    .failOffsetX(24)
+    .failOffsetX(HORIZONTAL_FAIL)
     .failOffsetY([-24, 24])
     .onStart(() => {
       runOnJS(dismissKeyboard)();
@@ -558,6 +572,7 @@ export const CaptureScreen = () => {
                 keyboardDismissMode="interactive"
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
+                directionalLockEnabled
                 alwaysBounceVertical
               >
                 <TextInput
