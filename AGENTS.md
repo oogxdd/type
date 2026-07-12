@@ -408,12 +408,12 @@ The React Native app (Expo) reuses the Rust core through
   blank page rides in from below, finger-driven) and files it into Feed.
   `src/lib/capture.ts` (pure, tested) owns that note lifecycle with the same
   rules as the desktop editor (lazy create, debounced writes, flush on
-  leave, empty-note cleanup). The stack root is the Home pager
-  (`screens/home-pager.tsx`, react-native-pager-view): Menu | Capture | Sync
-  as three side-by-side pages — swipe left/right anywhere with native paging
-  physics, no tab bar; pages stay mounted, so paging to the menu and back
-  lands on the same in-progress note (text, scroll, session intact).
-  Feed/Folder/Editor/Settings are pushed onto the stack above the pager.
+  leave, empty-note cleanup). Mobile navigation uses one native stack with
+  Menu at its root and Capture initially pushed above it. Native back reveals
+  Menu; Menu → Capture and Capture → Sync use finger-driven preview overlays
+  followed by no-animation stack pushes, preserving the pre-pager interaction
+  model. Leaving Capture flushes its draft; returning from Menu opens a fresh
+  capture screen. Feed/Folder/Editor/Sync/Settings are ordinary pushed screens.
   Voice capture is a floating dictation button on the capture page, shown
   only while the page is blank — tap to start/stop or hold to record while
   pressed (expo-audio → `save_audio_recording` → queue per

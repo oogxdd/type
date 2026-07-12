@@ -4,9 +4,10 @@
 // the threshold (or flick) commits it; the keyboard stays up so you can keep
 // typing. Notes land in Feed via the desktop-compatible core.
 //
-// This is the middle page of the Home pager (menu to the left, sync to the
-// right) — the pager owns horizontal swipes natively, so the gestures here
-// only ever claim vertical drags:
+// This is the middle screen in the pre-pager native-stack model: Menu sits
+// behind it to the left, while Sync is pushed to the right. Native back
+// reveals Menu; a leftward drag drives a live Sync preview before the real
+// screen is attached underneath it.
 //
 //   swipe UP   → file the page. The pan uses manual activation gated on the
 //                scroll geometry (shared values), so on a long note one
@@ -26,6 +27,7 @@
 // always sits above it, and content growth keeps the bottom pinned while
 // you're typing at the end (scroll anchoring), like Apple Notes.
 
+import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -40,6 +42,7 @@ import {
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  Easing,
   runOnJS,
   runOnUI,
   scrollTo,
@@ -57,7 +60,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as core from "@typenotes/mobile-core/core-api";
 
 import { CaptureSession } from "../lib/capture";
-import { jumpToHomePage, type RootStackParamList } from "../navigation";
+import { useClearInstantParam, type RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useTheme } from "../theme";
 import { DictationButton } from "../ui/dictation-button";
@@ -71,13 +74,18 @@ const COMMIT_VELOCITY = -550;
 // the pan claims the touch from the scroll — small enough to feel instant,
 // big enough to ignore jitter.
 const ACTIVATE_PULL = 6;
-// A drag this horizontal belongs to the pager, not to us.
+// A drag this horizontal belongs to stack navigation, not page filing.
 const HORIZONTAL_FAIL = 32;
 // Scroll-edge slack (px): treat "within a few px" as at the edge.
 const BOTTOM_SLACK = 6;
 const TOP_SLACK = 4;
 // Pull-down at the top of the note that tucks the keyboard away.
 const ESCAPE_DRAG = 14;
+
+// Horizontal Capture -> Sync preview mechanics, matching Menu -> Capture.
+const SYNC_OPEN_PROGRESS = 0.3;
+const SYNC_OPEN_VELOCITY = -500;
+const SYNC_PARALLAX = 0.3;
 
 const PLACEHOLDER = "Start typing…";
 
@@ -92,12 +100,12 @@ const CANCEL_SPRING = {
   overshootClamping: true,
 } as const;
 
-export const CaptureScreen = ({ active = true }: { active?: boolean }) => {
+export const CaptureScreen = () => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
 
   const [text, setText] = useState("");
   const [iconsVisible, setIconsVisible] = useState(true);
@@ -139,19 +147,16 @@ export const CaptureScreen = ({ active = true }: { active?: boolean }) => {
     []
   );
 
-  // Flush the draft when the capture page stops being visible: paging away
-  // inside the Home pager (`active` flips false — paging is not a navigation
-  // event) and pushes above the pager (the Home screen blurs). The page keeps
-  // its text/scroll/session — coming back lands on the same note.
-  useEffect(() => {
-    if (!active) {
-      void session.flush();
-    }
-  }, [active, session]);
+  // Stack navigation emits blur for Menu, Sync, and all pushed destinations.
+  // Flush before this capture screen becomes hidden or is popped.
   useEffect(
     () => navigation.addListener("blur", () => void session.flush()),
     [navigation, session]
   );
+
+  // Menu's finger-driven preview can attach Capture with animation disabled;
+  // clear that one-shot flag once mounted so later native back gestures work.
+  useClearInstantParam();
 
   // Wrap Keyboard.dismiss so the worklet captures this plain closure rather
   // than the bare method — passing Keyboard.dismiss straight to runOnJS makes
@@ -264,15 +269,25 @@ export const CaptureScreen = ({ active = true }: { active?: boolean }) => {
         return;
       }
       const touch = event.allTouches[0];
+      // iOS can deliver a terminal/cancel frame with no remaining touches.
+      // Never dereference that sparse frame inside a worklet.
+      if (!touch) {
+        manager.fail();
+        return;
+      }
       touchStartX.value = touch.x;
       touchStartY.value = touch.y;
       armY.value = touch.y;
     })
     .onTouchesMove((event, manager) => {
       const touch = event.allTouches[0];
+      if (!touch) {
+        manager.fail();
+        return;
+      }
       const dx = touch.x - touchStartX.value;
       const dy = touch.y - touchStartY.value;
-      // Clearly-horizontal drags belong to the pager's page swipe.
+      // Clearly-horizontal drags belong to native back or the Sync push.
       if (Math.abs(dx) > HORIZONTAL_FAIL && Math.abs(dx) > Math.abs(dy) * 1.5) {
         manager.fail();
         return;
@@ -342,15 +357,25 @@ export const CaptureScreen = ({ active = true }: { active?: boolean }) => {
 
   const keyboardEscape = Gesture.Pan()
     .manualActivation(true)
-    .onTouchesDown((event) => {
-      escapeStartY.value = event.allTouches[0].y;
+    .onTouchesDown((event, manager) => {
+      const touch = event.allTouches[0];
+      if (!touch) {
+        manager.fail();
+        return;
+      }
+      escapeStartY.value = touch.y;
       escapeDone.value = false;
     })
     .onTouchesMove((event, manager) => {
       if (escapeDone.value) {
         return;
       }
-      const dy = event.allTouches[0].y - escapeStartY.value;
+      const touch = event.allTouches[0];
+      if (!touch) {
+        manager.fail();
+        return;
+      }
+      const dy = touch.y - escapeStartY.value;
       if (dy < -10) {
         manager.fail();
         return;
@@ -366,7 +391,65 @@ export const CaptureScreen = ({ active = true }: { active?: boolean }) => {
       }
     });
 
+  // Sync sits to the right of Capture. A clearly-leftward drag pulls in a
+  // lightweight replica of its native header, with the current page moving
+  // in parallax underneath. Once committed, the real Sync screen is pushed
+  // with animation disabled so there is no second transition.
+  const syncProgress = useSharedValue(0);
+
+  const openSyncBehindPreview = () => {
+    navigation.navigate("Sync", { instant: true });
+    // `animation: none` has no reliable attached callback. Keep the preview
+    // for long enough to cover the mount, then park it off-screen again.
+    setTimeout(() => {
+      syncProgress.value = 0;
+    }, 400);
+  };
+
+  const swipeToSync = Gesture.Pan()
+    .activeOffsetX(-24)
+    .failOffsetX(24)
+    .failOffsetY([-24, 24])
+    .onStart(() => {
+      runOnJS(dismissKeyboard)();
+    })
+    .onUpdate((event) => {
+      syncProgress.value = Math.min(
+        1,
+        Math.max(0, -event.translationX / Math.max(width, 1))
+      );
+    })
+    .onEnd((event) => {
+      const shouldOpen =
+        syncProgress.value > SYNC_OPEN_PROGRESS ||
+        event.velocityX < SYNC_OPEN_VELOCITY;
+      if (shouldOpen) {
+        syncProgress.value = withTiming(
+          1,
+          { duration: 160, easing: Easing.out(Easing.cubic) },
+          (finished) => {
+            if (finished) {
+              runOnJS(openSyncBehindPreview)();
+            }
+          }
+        );
+      } else {
+        syncProgress.value = withTiming(0, { duration: 180 });
+      }
+    });
+
   // ---- Animated styles --------------------------------------------------------
+
+  const syncDepthStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: -width * SYNC_PARALLAX * syncProgress.value }],
+  }));
+  const syncDimStyle = useAnimatedStyle(() => ({
+    opacity: 0.08 * syncProgress.value,
+  }));
+  const syncPreviewStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: width * (1 - syncProgress.value) }],
+    opacity: syncProgress.value > 0 ? 1 : 0,
+  }));
 
   // The page rides the swipe and its bottom padding tracks the keyboard so
   // the caret is never covered.
@@ -437,100 +520,161 @@ export const CaptureScreen = ({ active = true }: { active?: boolean }) => {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      <GestureDetector gesture={Gesture.Race(swipeToFile, keyboardEscape)}>
-        <View style={styles.gestureHost} collapsable={false}>
-          <Animated.View
-            style={[
-              styles.page,
-              { backgroundColor: theme.colors.background, paddingTop: insets.top + 12 },
-              pageStyle,
-            ]}
-          >
-            <Animated.ScrollView
-              ref={scrollRef}
-              style={styles.scroll}
-              contentContainerStyle={styles.scrollContent}
-              onScroll={onScroll}
-              scrollEventThrottle={16}
-              onContentSizeChange={onContentSizeChange}
-              onLayout={onScrollViewLayout}
-              keyboardDismissMode="interactive"
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              alwaysBounceVertical
+      <Animated.View style={[styles.depth, syncDepthStyle]}>
+        <GestureDetector
+          gesture={Gesture.Race(swipeToFile, keyboardEscape, swipeToSync)}
+        >
+          <View style={styles.gestureHost} collapsable={false}>
+            <Animated.View
+              style={[
+                styles.page,
+                {
+                  backgroundColor: theme.colors.background,
+                  paddingTop: insets.top + 12,
+                },
+                pageStyle,
+              ]}
             >
-              <TextInput
-                ref={inputRef}
-                style={[styles.input, { color: theme.colors.text }]}
-                value={text}
-                onChangeText={onChange}
-                onPressIn={showIcons}
-                placeholder={PLACEHOLDER}
-                placeholderTextColor={theme.colors.secondaryText}
-                multiline
-                scrollEnabled={false}
-                textAlignVertical="top"
-                keyboardAppearance={theme.dark ? "dark" : "light"}
-              />
-            </Animated.ScrollView>
-            <View pointerEvents="none" style={styles.indicatorTrack}>
-              <Animated.View
+              <Animated.ScrollView
+                ref={scrollRef}
+                style={styles.scroll}
+                contentContainerStyle={styles.scrollContent}
+                onScroll={onScroll}
+                scrollEventThrottle={16}
+                onContentSizeChange={onContentSizeChange}
+                onLayout={onScrollViewLayout}
+                keyboardDismissMode="interactive"
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                alwaysBounceVertical
+              >
+                <TextInput
+                  ref={inputRef}
+                  style={[styles.input, { color: theme.colors.text }]}
+                  value={text}
+                  onChangeText={onChange}
+                  onPressIn={showIcons}
+                  placeholder={PLACEHOLDER}
+                  placeholderTextColor={theme.colors.secondaryText}
+                  multiline
+                  scrollEnabled={false}
+                  textAlignVertical="top"
+                  keyboardAppearance={theme.dark ? "dark" : "light"}
+                />
+              </Animated.ScrollView>
+              <View pointerEvents="none" style={styles.indicatorTrack}>
+                <Animated.View
+                  style={[
+                    styles.indicator,
+                    {
+                      backgroundColor: theme.dark
+                        ? "rgba(255,255,255,0.09)"
+                        : "rgba(0,0,0,0.09)",
+                    },
+                    indicatorStyle,
+                  ]}
+                />
+              </View>
+            </Animated.View>
+
+            {/* The incoming blank page trails exactly one visible-page
+                height below the current one. The real input is cleared only
+                while this ghost fully covers it, avoiding a text flash. */}
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.ghost,
+                {
+                  backgroundColor: theme.colors.background,
+                  borderTopColor: theme.colors.border,
+                  paddingTop: insets.top + 12 + 44,
+                },
+                ghostStyle,
+              ]}
+            >
+              <Text
                 style={[
-                  styles.indicator,
-                  {
-                    backgroundColor: theme.dark
-                      ? "rgba(255,255,255,0.09)"
-                      : "rgba(0,0,0,0.09)",
-                  },
-                  indicatorStyle,
+                  styles.ghostPlaceholder,
+                  { color: theme.colors.secondaryText },
                 ]}
-              />
-            </View>
-          </Animated.View>
+              >
+                {PLACEHOLDER}
+              </Text>
+            </Animated.View>
+          </View>
+        </GestureDetector>
 
-          {/* The incoming blank page. It trails exactly one visible-page
-              height below the current one and shows the same placeholder, so
-              the post-commit swap to the real (now blank) input is
-              invisible. */}
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.ghost,
-              {
-                backgroundColor: theme.colors.background,
-                borderTopColor: theme.colors.border,
-                paddingTop: insets.top + 12 + 44,
-              },
-              ghostStyle,
-            ]}
-          >
-            <Text style={[styles.ghostPlaceholder, { color: theme.colors.secondaryText }]}>
-              {PLACEHOLDER}
-            </Text>
-          </Animated.View>
-        </View>
-      </GestureDetector>
-
-      <Animated.View
-        pointerEvents={iconsVisible ? "auto" : "none"}
-        style={[styles.toolbarLeft, { top: insets.top + 8 }, toolbarStyle]}
-      >
-        <ToolbarButton icon="menu-outline" onPress={() => jumpToHomePage("menu")} />
-      </Animated.View>
-      {micAvailable ? (
         <Animated.View
           pointerEvents={iconsVisible ? "auto" : "none"}
-          style={[styles.fab, { bottom: insets.bottom + 36 }, fabStyle]}
+          style={[styles.toolbarLeft, { top: insets.top + 8 }, toolbarStyle]}
         >
-          <DictationButton onRecordingChange={setRecordingActive} />
+          <ToolbarButton
+            icon="menu-outline"
+            // Menu is the root immediately beneath Capture. popTo avoids
+            // accidentally pushing a duplicate Menu screen.
+            onPress={() => navigation.popTo("Menu")}
+          />
         </Animated.View>
-      ) : null}
+        {micAvailable ? (
+          <Animated.View
+            pointerEvents={iconsVisible ? "auto" : "none"}
+            style={[styles.fab, { bottom: insets.bottom + 36 }, fabStyle]}
+          >
+            <DictationButton onRecordingChange={setRecordingActive} />
+          </Animated.View>
+        ) : null}
+      </Animated.View>
+
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, styles.syncDim, syncDimStyle]}
+      />
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.syncPreview,
+          { backgroundColor: theme.colors.background },
+          syncPreviewStyle,
+        ]}
+      >
+        <View style={{ paddingTop: insets.top }}>
+          <View style={styles.syncPreviewBar}>
+            <Ionicons
+              name="chevron-back"
+              size={26}
+              color={theme.colors.text}
+              style={styles.syncPreviewBack}
+            />
+            <Text style={[styles.syncPreviewTitle, { color: theme.colors.text }]}>
+              Sync
+            </Text>
+          </View>
+        </View>
+      </Animated.View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  depth: { flex: 1 },
+  syncDim: { backgroundColor: "#000" },
+  syncPreview: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    shadowColor: "#000",
+    shadowOffset: { width: -4, height: 0 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+  },
+  // Replica of the native-stack Sync header used only during the interactive
+  // preview; the real screen takes over after the no-animation push.
+  syncPreviewBar: { height: 44, alignItems: "center", justifyContent: "center" },
+  syncPreviewBack: { position: "absolute", left: 8, top: 9 },
+  syncPreviewTitle: { fontSize: 17, fontWeight: "600" },
   gestureHost: { flex: 1 },
   page: { flex: 1, paddingHorizontal: 20 },
   scroll: { flex: 1 },

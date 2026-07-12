@@ -75,13 +75,12 @@ Delete this file when the branch is ready for review.
       local stub exists (this VM keeps an uncommitted typed stub there).
       Consider restoring a committed fallback entry so typecheck works from a
       clean clone.
-- [ ] Capture-gesture rework (2026-07-10, branch `mobile-capture-gestures`) —
-      **on-device** verification on iOS. react-native-pager-view is a new
-      native dependency: rebuild the dev client / TestFlight build on the Mac
-      first (`expo prebuild`, pod install). Then verify on the phone:
-      - Home pager: swipe between Menu | Capture | Sync from anywhere with
-        native paging feel; menu shows fresh lists mid-swipe; buttons
-        (hamburger, close, Sync row) jump pages.
+- [ ] Pre-pager capture/navigation restoration (2026-07-12) — **on-device**
+      verification on iOS. Verify on the phone:
+      - Native-stack flow: Capture starts above Menu; native back/hamburger
+        reveals Menu; close/left swipe opens a fresh Capture; Capture's
+        leftward preview opens Sync; buttons and QR deep links reach the same
+        stack destinations without a pager.
       - Swipe-up-to-file: works with the keyboard up; on a long note one
         continuous drag scrolls to the bottom and rolls into the page pull;
         the old page follows the finger 1:1 off the top while the fresh page
@@ -97,12 +96,12 @@ Delete this file when the branch is ready for review.
       - Mic button: hidden as soon as the page has text (tap-in shows only
         the hamburger); sits ~12px above the keyboard when it's open; stop
         button stays reachable during a running dictation.
-      - Menu → capture roundtrip keeps the in-progress note (text, scroll);
-        typing at the end keeps the caret pinned above the keyboard
-        (scroll anchoring), including while the keyboard animates in.
+      - Leaving Capture flushes the current draft and returning from Menu
+        starts a fresh page. Typing at the end keeps the caret pinned above
+        the keyboard (scroll anchoring), including while it animates in.
       - Regressions: pull-to-refresh on Feed/Folders, dictation save +
-        transcription queueing, editor screen keyboard padding, sync QR flow
-        reachable via pager page 3.
+        transcription queueing, editor screen keyboard padding, and the Sync
+        QR flow as a native-stack screen.
 - [ ] Manual desktop verification of the navigation refactor (2026-07-10):
       selection compound actions + hooks reading stores directly + one
       keyboard-nav path for Feed/Folders (`model/visible-navigation.ts`

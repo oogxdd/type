@@ -7,7 +7,6 @@
 // camera via the deep link) saves the remote and connects, so syncing is one
 // button afterwards.
 
-import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -32,7 +31,7 @@ import {
 } from "@typenotes/shared/format";
 import { parseSyncDeepLink, type SyncDeepLinkParams } from "@typenotes/shared/sync-link";
 
-import { jumpToHomePage } from "../navigation";
+import { useClearInstantParam } from "../navigation";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
@@ -48,6 +47,10 @@ const SETUP_STEPS = [
 export const SyncScreen = () => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  // Capture may have pushed this screen without a native animation because
+  // its live preview already played the transition. Restore normal pop/back
+  // behavior once this real screen is attached.
+  useClearInstantParam();
   const sync = useSyncStore();
   const settingsStore = useSettingsStore();
   const profile = activeProfile(settingsStore.snapshot);
@@ -178,20 +181,6 @@ export const SyncScreen = () => {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      {/* In-page header — as a pager page this screen has no native stack
-          header; back (to the capture page) is the swipe or this chevron. */}
-      <View style={{ paddingTop: insets.top }}>
-        <View style={styles.pageHeader}>
-          <Pressable
-            onPress={() => jumpToHomePage("capture")}
-            hitSlop={10}
-            style={({ pressed }) => [styles.pageHeaderBack, { opacity: pressed ? 0.5 : 1 }]}
-          >
-            <Ionicons name="chevron-back" size={26} color={theme.colors.text} />
-          </Pressable>
-          <Text style={[styles.pageHeaderTitle, { color: theme.colors.text }]}>Sync</Text>
-        </View>
-      </View>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
@@ -414,11 +403,6 @@ const StatusLine = ({ label, value }: { label: string; value: string }) => {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  // Mirrors the native-stack header: 44pt bar, centered 17pt semibold title,
-  // chevron-only back at the left edge.
-  pageHeader: { height: 44, alignItems: "center", justifyContent: "center" },
-  pageHeaderBack: { position: "absolute", left: 8 },
-  pageHeaderTitle: { fontSize: 17, fontWeight: "600" },
   scroll: { flex: 1 },
   content: { padding: 16 },
   stepRow: { flexDirection: "row", gap: 10, alignItems: "flex-start" },

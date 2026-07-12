@@ -13,22 +13,19 @@ import { getErrorMessage } from "@typenotes/shared/errors";
 import { parseSyncDeepLink } from "@typenotes/shared/sync-link";
 
 import { bootCore } from "./core/boot";
-import {
-  jumpToHomePage,
-  navigateToScreen,
-  navigationRef,
-  Stack,
-} from "./navigation";
+import { navigateToScreen, navigationRef, Stack } from "./navigation";
+import { CaptureScreen } from "./screens/capture-screen";
 import { EditorScreen } from "./screens/editor-screen";
 import { FeedScreen } from "./screens/feed-screen";
 import { FolderScreen } from "./screens/folder-screen";
-import { HomePagerScreen } from "./screens/home-pager";
 import { LockScreen } from "./screens/lock-screen";
+import { MenuScreen } from "./screens/menu-screen";
 import {
   SettingsScreen,
   SettingsTranscriptionScreen,
   SettingsWorkingFoldersScreen,
 } from "./screens/settings-screen";
+import { SyncScreen } from "./screens/sync-screen";
 import { useNotesStore } from "./state/notes-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
 import { useSettingsStore } from "./state/settings-store";
@@ -37,11 +34,19 @@ import { useTheme } from "./theme";
 
 type BootPhase = { state: "booting" } | { state: "ready" } | { state: "failed"; error: string };
 
+// Boot with Capture pushed on top of Menu so the blank page is what you see
+// first, while the menu is already behind it. Capture can then use the native
+// interactive back gesture to reveal Menu without keeping all three primary
+// screens mounted in a pager.
+const BOOT_NAVIGATION_STATE = {
+  routes: [{ name: "Menu" as const }, { name: "Capture" as const }],
+};
+
 const RootStack = () => {
   const theme = useTheme();
   return (
     <Stack.Navigator
-      initialRouteName="Home"
+      initialRouteName="Capture"
       screenOptions={{
         headerStyle: { backgroundColor: theme.colors.background },
         headerTintColor: theme.colors.text,
@@ -50,17 +55,28 @@ const RootStack = () => {
         // Swipe back from anywhere on the screen, not just the left edge —
         // still the native UIKit pop transition, driven natively by
         // react-native-screens' pan recognizer. It doesn't steal taps (a pan
-        // needs clear horizontal movement before it claims the touch).
+        // needs clear horizontal movement before it claims the touch), and
+        // the capture/menu gestures fail quickly for the other axis.
         fullScreenGestureEnabled: true,
-        // Chevron-only back everywhere; screen titles say where you are, the
-        // label naming the previous screen is noise.
+        // Chevron-only back everywhere: Sync has more than one entry point,
+        // so naming the previous screen in the label would be noise.
         headerBackButtonDisplayMode: "minimal",
       }}
     >
       <Stack.Screen
-        name="Home"
-        component={HomePagerScreen}
-        options={{ headerShown: false }}
+        name="Menu"
+        component={MenuScreen}
+        options={{ gestureEnabled: false, headerShown: false, title: "Menu" }}
+      />
+      <Stack.Screen
+        name="Capture"
+        component={CaptureScreen}
+        options={({ route }) => ({
+          headerShown: false,
+          // A gesture-driven preview already played this push when instant
+          // is set; attach the real screen underneath without replaying it.
+          animation: route.params?.instant ? "none" : "default",
+        })}
       />
       <Stack.Screen name="Feed" component={FeedScreen} />
       <Stack.Screen
@@ -75,6 +91,15 @@ const RootStack = () => {
           // No title — the note text speaks for itself.
           title: "",
         }}
+      />
+      <Stack.Screen
+        name="Sync"
+        component={SyncScreen}
+        options={({ route }) => ({
+          title: "Sync",
+          // Same preview-to-real-screen handoff as Menu -> Capture.
+          animation: route.params?.instant ? "none" : "default",
+        })}
       />
       <Stack.Screen
         name="Settings"
@@ -98,9 +123,7 @@ const RootStack = () => {
 /**
  * A `type2://sync?...` link (from the desktop's QR code, scanned with the
  * system camera) drops the remote into the sync store and jumps to the Sync
- * page, which applies it. Pops back to the Home pager first in case a screen
- * is pushed on top; on cold start the pager picks the parked jump up on
- * mount.
+ * screen, which applies it.
  */
 const handleSyncUrl = (url: string | null) => {
   const params = url ? parseSyncDeepLink(url) : null;
@@ -108,8 +131,7 @@ const handleSyncUrl = (url: string | null) => {
     return;
   }
   useSyncStore.getState().setPendingLink(params);
-  navigateToScreen("Home");
-  jumpToHomePage("sync", false);
+  navigateToScreen("Sync");
 };
 
 export default function App() {
@@ -203,6 +225,7 @@ export default function App() {
         <NavigationContainer
           ref={navigationRef}
           theme={theme.dark ? DarkTheme : DefaultTheme}
+          initialState={BOOT_NAVIGATION_STATE}
           onReady={() => {
             if (!initialUrlHandled.current) {
               initialUrlHandled.current = true;
