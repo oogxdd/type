@@ -195,9 +195,12 @@ export const CaptureScreen = () => {
         }
         setText("");
         prevContentHRef.current = 0;
-        runOnUI(() => {
-          scrollTo(scrollRef, 0, 0, false);
-        })();
+        offsetY.value = 0;
+        // No scrollTo here. The fresh page's content is empty, so the reused
+        // ScrollView is already at the top. Calling reanimated's scrollTo on
+        // the UI thread as the content collapses to empty threw an uncaught
+        // worklet error on the main thread (Hermes throwPendingError ->
+        // std::terminate -> SIGABRT) — that was the swipe-up-to-file crash.
         showIcons();
         requestAnimationFrame(() =>
           requestAnimationFrame(() => {
