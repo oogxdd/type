@@ -1,21 +1,19 @@
 // Wires a RawCore implementation and initializes the Rust core.
 //
-// On a real device build, generate the native module first (see
-// packages/mobile-core/README.md), then wire it by replacing the mock below:
-//
-//   import * as generated from "@typenotes/mobile-core/generated";
-//   setRawCore(generated);
-//
-// The import must stay commented out until codegen has run — Metro resolves
-// imports statically and would fail the bundle otherwise. Without the native
-// module the app boots against the in-memory mock ("demo mode"): fully
-// interactive, nothing persisted, banner shown in the UI.
+// The package root is a committed in-memory fallback in clean clones and
+// Expo Go. Native codegen overwrites that entry with the real TurboModule on
+// a Mac. The fallback carries a marker so the UI can label demo mode; the
+// generated module intentionally has no such marker.
 
 import * as FileSystem from "expo-file-system/legacy";
 
 import * as generated from "@typenotes/mobile-core";
 import { initCore } from "@typenotes/mobile-core/core-api";
-import { isRawCoreSet, setRawCore } from "@typenotes/mobile-core/raw-core";
+import {
+  isRawCoreSet,
+  setRawCore,
+  type RawCore,
+} from "@typenotes/mobile-core/raw-core";
 
 /** expo-file-system returns file:// URIs; the Rust core wants plain paths. */
 const uriToPath = (uri: string) => decodeURI(uri.replace(/^file:\/\//, ""));
@@ -25,9 +23,10 @@ export type BootResult = {
 };
 
 export const bootCore = async (): Promise<BootResult> => {
-  let demoMode = false;
+  const coreModule = generated as RawCore & { __isDemoCore?: boolean };
+  const demoMode = coreModule.__isDemoCore === true;
   if (!isRawCoreSet()) {
-    setRawCore(generated);
+    setRawCore(coreModule);
   }
 
   // The app's Documents directory is user-visible in the Files app

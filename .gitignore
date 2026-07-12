@@ -40,7 +40,6 @@ packages/mobile-core/cpp/
 packages/mobile-core/ios/
 packages/mobile-core/android/
 packages/mobile-core/src/NativeTypeCore.ts
-packages/mobile-core/src/index.tsx
 packages/mobile-core/TypeCore.podspec
 packages/mobile-core/*.xcframework/
 

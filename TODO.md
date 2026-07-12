@@ -69,12 +69,9 @@ Delete this file when the branch is ready for review.
       - Drawer navigation (hamburger + left-edge swipe), capture screen
         keyboard (no auto-focus, swipe-down dismiss, swipe-up still files the
         page).
-- [ ] `packages/mobile-core/src/index.tsx` is gitignored ubrn output, but
-      `apps/mobile/src/core/boot.ts` imports it statically — on machines
-      without codegen, `tsc --noEmit` for @typenotes/mobile fails unless a
-      local stub exists (this VM keeps an uncommitted typed stub there).
-      Consider restoring a committed fallback entry so typecheck works from a
-      clean clone.
+- [x] Commit a `packages/mobile-core/src/index.tsx` mock fallback so clean
+      clones, CI, and Expo Go resolve the package root without native codegen;
+      ubrn overwrites the same entry with real bindings for device builds.
 - [ ] Pre-pager capture/navigation restoration (2026-07-12) — **on-device**
       verification on iOS. Verify on the phone:
       - Native-stack flow: Capture starts above Menu; native back/hamburger
