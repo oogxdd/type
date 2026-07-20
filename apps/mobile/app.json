@@ -65,7 +65,8 @@
           "microphonePermission": "Type uses the microphone to record voice notes.",
           "speechRecognitionPermission": "Type uses speech recognition to transcribe your voice notes on this device."
         }
-      ]
+      ],
+      "./modules/recording-activity/app.plugin.js"
     ]
   }
 }
