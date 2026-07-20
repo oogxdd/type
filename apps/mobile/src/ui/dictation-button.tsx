@@ -32,6 +32,12 @@ import {
 } from "@typenotes/shared/types";
 
 import { nativeTranscriptionProvider } from "../lib/native-transcription";
+import {
+  addRecordingStopListener,
+  consumePendingRecordingStop,
+  endRecordingActivity,
+  startRecordingActivity,
+} from "../lib/recording-activity";
 import { elapsedSeconds, formatRecordingTimer } from "../lib/recording-timer";
 import { useNotesStore } from "../state/notes-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
@@ -151,6 +157,9 @@ export const DictationButton = ({
     recorder.record();
     recordingStartedAt.current = Date.now();
     setNowMs(Date.now());
+    // Mirror the session onto the Lock Screen / Dynamic Island so it stays
+    // visible (and stoppable) while the phone is asleep. No-op off iOS.
+    startRecordingActivity(recordingStartedAt.current);
   };
 
   const stopAndSave = async () => {
@@ -191,6 +200,7 @@ export const DictationButton = ({
     } finally {
       startPromise.current = null;
       recordingStartedAt.current = null;
+      endRecordingActivity();
       setBusy(false);
       // Leave the play-and-record session and drop the background hold so
       // playback routes normally again.
@@ -268,6 +278,29 @@ export const DictationButton = ({
     },
     []
   );
+
+  // Stopping from the Lock Screen. The Live Activity's Stop button runs a
+  // LiveActivityIntent inside this process, which the native module forwards
+  // here — save the clip exactly as an in-app stop would.
+  useEffect(() => {
+    const stopFromLockScreen = () => {
+      if (recorder.isRecording || startPromise.current) {
+        void stopAndSaveRef.current().catch(() => {});
+      }
+    };
+    const unsubscribe = addRecordingStopListener(stopFromLockScreen);
+    // If the app was suspended when Stop was tapped, the live event never
+    // arrived; honor the durable flag the intent left as soon as we're active.
+    const appStateSub = AppState.addEventListener("change", (next) => {
+      if (next === "active" && consumePendingRecordingStop()) {
+        stopFromLockScreen();
+      }
+    });
+    return () => {
+      unsubscribe();
+      appStateSub.remove();
+    };
+  }, [recorder]);
 
   // Read recorder.isRecording (a live native property) instead of the polled
   // recorderState so quick start/stop taps cannot observe stale state.
