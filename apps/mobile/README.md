@@ -56,11 +56,13 @@ src/
   App.tsx                 boot + navigation container + demo banner
   navigation.ts           typed native-stack route table (menu is the root,
                           capture boots pushed on top of it)
-  theme.ts                light/dark palette
+  theme.ts                the useTheme hook (system scheme + appearance prefs)
   core/boot.ts            wires RawCore (generated native module or mock) + initCore
+  lib/appearance.ts       palette + theme derivation (pure, tested)
   lib/capture.ts          capture-page note lifecycle (pure, tested)
   lib/feed.ts             tree+previews → list rows (pure, tested)
-  state/                  zustand stores: notes, settings (working folders), sync
+  state/                  zustand stores: notes, settings (working folders),
+                          sync, appearance (device-local, no core)
   screens/                capture, menu, feed, folder, editor, sync, settings
   ui/                     dictation/photo capture button, audio player, shared
                           primitives for the utility screens
@@ -81,6 +83,23 @@ notes): `assemblyai` queues cloud transcription from the phone, `desktop`
 leaves recordings pending for a synced desktop's local Whisper, `native` is
 the hook for an on-device recognizer via `queueProviderTranscriptions`
 (provider registration not wired yet), `off` does nothing.
+
+## Appearance
+
+Settings → Appearance picks a background, a text color, and the editor text
+size. These are **device-local**: they persist to `appearance.json` beside
+the core's app data (never inside a notes root), so they cannot reach a
+notes root and cannot sync to another device — one phone can be sepia while
+the desktop stays light.
+
+`theme.ts` derives the whole palette from those two colors rather than
+switching between fixed light/dark tables: the background's luminance
+decides the dark variant (status bar, keyboard appearance), and surface,
+border, and secondary text are blends of the background, so a custom color
+still yields a coherent theme. `readableOn` in `lib/appearance.ts` enforces
+a WCAG-AA floor on the body text/background pair — without it, picking
+white-on-white would leave the user unable to read the screen that undoes
+it. Text size applies to the capture page and the note editor only.
 
 ## Handwriting photos
 

@@ -421,7 +421,7 @@ The React Native app (Expo) reuses the Rust core through
   actions; `save_handwriting_attachment` leaves OCR pending for desktop. Other screens:
   feed, folder browser, plain-text editor, sync (status/connect/pull/push/SSH
   key/history), settings (working folders, notes-root move, transcription
-  mode, AssemblyAI key). Zustand stores in `src/state/`. Without the native
+  mode, AssemblyAI key, appearance). Zustand stores in `src/state/`. Without the native
   module the app boots the mock core in demo mode (bottom banner) — that is
   what CI and Expo Go exercise.
 
@@ -436,6 +436,7 @@ The React Native app (Expo) reuses the Rust core through
   - `uuid_v7_prefix_slug`: `<uuidv7-prefix>-<slug>.md`
   New notes may start with placeholder suffixes (`-note-...`, `-recording-...`, etc.) and then auto-rename to content slug when enough text is available in slug-capable modes. Slug extraction is Unicode-aware (keeps Cyrillic/Latin letters and digits) and ignores `NV_EMPTY_LINE_TOKEN_*` noise.
 - **Empty note cleanup**: if a dirty note is emptied and then focus/selection moves away, it is auto-deleted.
+- **Mobile appearance is device-local and derived**: the phone's background / text color / editor text size live in `appearance.json` beside the core's app data — *not* in `ProfileSettings`, so they never reach a notes root and never sync. `apps/mobile/src/theme.ts` is no longer two fixed palettes: `lib/appearance.ts` derives surface/border/secondary text from the chosen background and picks the dark variant from its luminance. Don't remove `readableOn`'s WCAG-AA floor on body text — an unreadable combination would lock the user out of the settings screen that fixes it. Text size intentionally applies only to the capture page and the note editor, not to lists or chrome.
 - **Per-folder transcription mode**: `.type/settings.json` inside a notes root carries `transcription_mode` (`off` / `desktop` / `assemblyai` / `native`). Absent = fall back to the legacy `mobile_auto_transcription_enabled` flag (true → assemblyai, false → desktop) — use `effective_transcription_mode()` / `effectiveTranscriptionMode()` instead of reading the field. Settings writers that omit the field must not clear a persisted mode (the core's `update_settings` merge handles this).
 - **Two shells, one core**: new backend features go in `crates/type-core`, then get exposed twice — a `#[tauri::command]` in `apps/desktop/src-tauri/src/commands/` and a `#[uniffi::export]` in `crates/type-ffi`. After changing `type-ffi`, regenerate the mobile native module (Mac, ubrn) and keep `packages/mobile-core/src/raw-core.ts` in sync. Step-by-step checklist (and what the ubrn codegen actually does): `docs/architecture/09-adding-features-and-codegen.md`.
 - **Git sync uses libgit2**, not shell git. The Rust backend handles all git operations.
