@@ -343,11 +343,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     rowGap: 14,
-    columnGap: 6,
     paddingHorizontal: 12,
     paddingVertical: 14,
   },
-  // Four to a row on the narrowest phones, and the labels stay on one line.
+  // Exactly four to a row: the cells tile to 100% with no column gap (any gap
+  // would overflow the row and drop the fourth swatch onto the next line), and
+  // the spacing between swatches comes from centering them in their cells.
   swatch: { width: "25%", alignItems: "center", gap: 5 },
   swatchRing: {
     width: 44,
