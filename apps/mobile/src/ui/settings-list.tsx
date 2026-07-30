@@ -1,8 +1,8 @@
 // iOS-style inset-grouped list primitives for the settings screens: a
 // surface card per group with hairline separators, 44pt rows with optional
 // colored icon tiles, right-aligned values, chevrons/checkmarks, blue action
-// rows, and field rows. Header/footer text sits outside the card like the
-// system Settings app.
+// rows, field rows, color-swatch grids, and −/+ stepper rows. Header/footer
+// text sits outside the card like the system Settings app.
 
 import { Ionicons } from "@expo/vector-icons";
 import { Children, Fragment, type ReactNode } from "react";
@@ -167,6 +167,122 @@ export const SettingsActionRow = ({
   );
 };
 
+/**
+ * A wrapping grid of labelled color swatches inside a row. Selection is a ring
+ * rather than a checkmark, so it stays visible on a swatch of any color
+ * (including one that matches the current background).
+ */
+export function SettingsSwatchRow<Id extends string>({
+  options,
+  selected,
+  onSelect,
+}: {
+  /**
+   * `color` is the concrete color to paint — "System" entries must already be
+   * resolved by the caller so the grid previews what you will actually get.
+   * `letter` renders a sample glyph in `color` over `fill` instead of a solid
+   * disc, which is how text colors are previewed against the live background.
+   */
+  options: { id: Id; label: string; color: string; fill?: string }[];
+  selected: Id;
+  onSelect: (id: Id) => void;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={styles.swatchRow}>
+      {options.map((option) => (
+        <Pressable
+          key={option.id}
+          onPress={() => onSelect(option.id)}
+          style={styles.swatch}
+        >
+          <View
+            style={[
+              styles.swatchRing,
+              {
+                borderColor:
+                  option.id === selected ? theme.colors.accent : "transparent",
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.swatchDisc,
+                {
+                  backgroundColor: option.fill ?? option.color,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            >
+              {option.fill ? (
+                <Text style={[styles.swatchGlyph, { color: option.color }]}>Aa</Text>
+              ) : null}
+            </View>
+          </View>
+          <Text
+            style={[styles.swatchLabel, { color: theme.colors.secondaryText }]}
+            numberOfLines={1}
+          >
+            {option.label}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+/** A row whose value is nudged by −/+ buttons, like iOS' text-size controls. */
+export const SettingsStepperRow = ({
+  title,
+  value,
+  onDecrease,
+  onIncrease,
+  canDecrease = true,
+  canIncrease = true,
+}: {
+  title: string;
+  value: string;
+  onDecrease: () => void;
+  onIncrease: () => void;
+  canDecrease?: boolean;
+  canIncrease?: boolean;
+}) => {
+  const theme = useTheme();
+  const step = (
+    icon: "remove" | "add",
+    onPress: () => void,
+    enabled: boolean
+  ) => (
+    <Pressable
+      onPress={onPress}
+      disabled={!enabled}
+      hitSlop={6}
+      style={({ pressed }) => [
+        styles.stepperButton,
+        {
+          backgroundColor: theme.dark ? "#ffffff1a" : "#00000010",
+          opacity: enabled ? (pressed ? 0.5 : 1) : 0.3,
+        },
+      ]}
+    >
+      <Ionicons name={icon} size={18} color={theme.colors.text} />
+    </Pressable>
+  );
+
+  return (
+    <View style={styles.row}>
+      <Text style={[styles.rowTitle, styles.rowText, { color: theme.colors.text }]}>
+        {title}
+      </Text>
+      {step("remove", onDecrease, canDecrease)}
+      <Text style={[styles.stepperValue, { color: theme.colors.secondaryText }]}>
+        {value}
+      </Text>
+      {step("add", onIncrease, canIncrease)}
+    </View>
+  );
+};
+
 /** A text input living directly in a row, like iOS Settings' inline fields. */
 export const SettingsFieldRow = (props: TextInputProps) => {
   const theme = useTheme();
@@ -223,4 +339,40 @@ const styles = StyleSheet.create({
   rowValue: { fontSize: 16, flexShrink: 1 },
   chevron: { marginLeft: -6, opacity: 0.6 },
   fieldInput: { flex: 1, fontSize: 16, paddingVertical: 0 },
+  swatchRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    rowGap: 14,
+    columnGap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+  },
+  // Four to a row on the narrowest phones, and the labels stay on one line.
+  swatch: { width: "25%", alignItems: "center", gap: 5 },
+  swatchRing: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  swatchDisc: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  swatchGlyph: { fontSize: 15, fontWeight: "600" },
+  swatchLabel: { fontSize: 11 },
+  stepperButton: {
+    width: 34,
+    height: 30,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepperValue: { fontSize: 15, minWidth: 44, textAlign: "center" },
 });

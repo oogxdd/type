@@ -21,6 +21,7 @@ import { FolderScreen } from "./screens/folder-screen";
 import { LockScreen } from "./screens/lock-screen";
 import { MenuScreen } from "./screens/menu-screen";
 import {
+  SettingsAppearanceScreen,
   SettingsScreen,
   SettingsTranscriptionScreen,
   SettingsWorkingFoldersScreen,
@@ -117,6 +118,11 @@ const RootStack = () => {
         name="SettingsTranscription"
         component={SettingsTranscriptionScreen}
         options={{ title: "Transcription" }}
+      />
+      <Stack.Screen
+        name="SettingsAppearance"
+        component={SettingsAppearanceScreen}
+        options={{ title: "Appearance" }}
       />
     </Stack.Navigator>
   );
