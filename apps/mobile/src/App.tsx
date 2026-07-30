@@ -26,6 +26,7 @@ import {
   SettingsWorkingFoldersScreen,
 } from "./screens/settings-screen";
 import { SyncScreen } from "./screens/sync-screen";
+import { useAppearanceStore } from "./state/appearance-store";
 import { useNotesStore } from "./state/notes-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
 import { useSettingsStore } from "./state/settings-store";
@@ -145,6 +146,10 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
+        // First, so the boot/lock screens already paint in the user's chosen
+        // colors instead of flashing the system palette. It reads a plain
+        // file, so it does not depend on the core coming up.
+        await useAppearanceStore.getState().load();
         const { demoMode: demo } = await bootCore();
         useSettingsStore.getState().setDemoMode(demo);
         await useSecurityStore.getState().load();
