@@ -4,7 +4,7 @@ import {
   NavigationContainer,
 } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Linking, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -145,6 +145,24 @@ const handleSyncUrl = (url: string | null) => {
 export default function App() {
   const theme = useTheme();
   const [phase, setPhase] = useState<BootPhase>({ state: "booting" });
+  // The stock light/dark navigation themes carry their own background, which
+  // would flash behind screens during transitions once the user picks a
+  // custom one. Feed ours through instead.
+  const navigationTheme = useMemo(() => {
+    const base = theme.dark ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      dark: theme.dark,
+      colors: {
+        ...base.colors,
+        primary: theme.colors.accent,
+        background: theme.colors.background,
+        card: theme.colors.background,
+        text: theme.colors.text,
+        border: theme.colors.border,
+      },
+    };
+  }, [theme]);
   const demoMode = useSettingsStore((s) => s.demoMode);
   const initialUrlHandled = useRef(false);
 
@@ -236,7 +254,7 @@ export default function App() {
       <SafeAreaProvider>
         <NavigationContainer
           ref={navigationRef}
-          theme={theme.dark ? DarkTheme : DefaultTheme}
+          theme={navigationTheme}
           initialState={BOOT_NAVIGATION_STATE}
           onReady={() => {
             if (!initialUrlHandled.current) {
