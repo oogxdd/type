@@ -34,6 +34,7 @@ import { parseSyncDeepLink, type SyncDeepLinkParams } from "@typenotes/shared/sy
 import { useClearInstantParam } from "../navigation";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useSyncStore } from "../state/sync-store";
+import { ObjectSyncSection } from "./object-sync-section";
 import { useTheme } from "../theme";
 import { Button, Field, InlineNote, Section } from "../ui/controls";
 
@@ -274,6 +275,8 @@ export const SyncScreen = () => {
         ) : null}
         {sync.hint ? <InlineNote>{sync.hint}</InlineNote> : null}
       </Section>
+
+      <ObjectSyncSection />
 
       {connected ? (
         <Section title="Change connection">

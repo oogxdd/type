@@ -9,6 +9,7 @@ import { AppState, Linking, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import * as core from "@typenotes/mobile-core/core-api";
 import { getErrorMessage } from "@typenotes/shared/errors";
 import { parseSyncDeepLink } from "@typenotes/shared/sync-link";
 
@@ -180,7 +181,8 @@ export default function App() {
     return () => subscription.remove();
   }, []);
 
-  // Auto-lock when the app goes to background (if enabled in security prefs).
+  // Auto-lock when the app goes to background (if enabled in security prefs),
+  // and check the bucket when it comes back.
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (next) => {
       const security = useSecurityStore.getState();
@@ -190,6 +192,12 @@ export default function App() {
         security.state.auto_lock_on_background
       ) {
         void security.lock();
+        return;
+      }
+      if (next === "active") {
+        // Returning to the app is when desktop edits are most likely waiting.
+        // No-op unless cloud sync is configured.
+        void core.requestObjectSync("foreground").catch(() => {});
       }
     });
     return () => subscription.remove();

@@ -143,7 +143,11 @@ pub trait ObjectCodec: Send + Sync {
 // ── Gateway ────────────────────────────────────────────────────────────────────
 
 /// Application-facing surface for the object-sync domain.
-pub(crate) trait ObjectSyncGateway {
+///
+/// Public rather than `pub(crate)` because `type-ffi` is a separate crate and
+/// drives the same use cases as the Tauri shell — [`crate::ports::git_sync`]
+/// is public for the same reason.
+pub trait ObjectSyncGateway {
     type Settings;
     type Status;
 

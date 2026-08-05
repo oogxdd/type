@@ -144,9 +144,22 @@ export const CaptureScreen = () => {
   const session = useMemo(
     () =>
       new CaptureSession({
-        createNote: async (content) => (await core.createNote({ content })).path,
-        writeNote: core.writeNote,
-        deleteNote: (path) => core.deleteItems([path]),
+        createNote: async (content) => {
+          const { path } = await core.createNote({ content });
+          void core.requestObjectSync("capture").catch(() => {});
+          return path;
+        },
+        writeNote: async (path, content) => {
+          await core.writeNote(path, content);
+          // The scheduler coalesces and rate-limits, so nudging it on every
+          // write is cheap, and it does nothing unless cloud sync is set up.
+          // Never awaited: capture must not wait on the network.
+          void core.requestObjectSync("capture").catch(() => {});
+        },
+        deleteNote: async (path) => {
+          await core.deleteItems([path]);
+          void core.requestObjectSync("capture").catch(() => {});
+        },
       }),
     []
   );

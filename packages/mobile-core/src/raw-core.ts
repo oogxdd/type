@@ -63,6 +63,17 @@ export interface RawCore {
    * `core-api` feature-detects and reports idle instead. */
   getGitSyncProgress?(): string;
 
+  // ── Object-storage sync ──
+  // All optional for the same reason as `getGitSyncProgress`: the native
+  // module is generated on a Mac, so a build made before these existed must
+  // keep working. `core-api` feature-detects each one.
+  getObjectSyncStatus?(): Promise<string>;
+  getObjectSyncSettings?(): Promise<string>;
+  setObjectSyncSettings?(settingsJson: string): Promise<string>;
+  testObjectSyncConnection?(settingsJson: string): Promise<void>;
+  objectSyncNow?(): Promise<string>;
+  requestObjectSync?(reason: string | undefined): Promise<void>;
+
   // ── Recordings ──
   saveAudioRecording(argsJson: string): Promise<string>;
   queueRecordingTranscriptions(argsJson: string): Promise<string>;

@@ -11,6 +11,7 @@ import {
 } from "@typenotes/shared/format";
 import { Button } from "@/shared/ui/button";
 import { LocalSyncServerCard } from "@/features/sync/components/local-sync-server-card";
+import { ObjectSyncCard } from "@/features/sync/components/object-sync-card";
 import {
   SettingsActionRow,
   SettingsCard,
@@ -133,6 +134,8 @@ export function SettingsSyncSection() {
           </Button>
         </SettingsActionRow>
       </SettingsCard>
+
+      <ObjectSyncCard />
 
       <LocalSyncServerCard />
 

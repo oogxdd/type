@@ -111,6 +111,45 @@ describe("core-api over the mock core", () => {
     expect(history[0].is_head).toBe(true);
   });
 
+  it("round-trips object-sync settings without letting the device id be reassigned", async () => {
+    const before = await core.getObjectSyncSettings();
+    expect(core.isObjectSyncAvailable()).toBe(true);
+
+    await core.setObjectSyncSettings({
+      ...before,
+      endpoint: "https://acct.r2.cloudflarestorage.com",
+      bucket: "notes",
+      access_key_id: "AKID",
+      secret_access_key: "SECRET",
+      // The core owns this; a caller sending a new one must not orphan the
+      // device's manifest.
+      device_id: "attacker-supplied",
+      enabled: true,
+    });
+
+    const after = await core.getObjectSyncSettings();
+    expect(after.bucket).toBe("notes");
+    expect(after.device_id).toBe(before.device_id);
+    expect((await core.getObjectSyncStatus()).configured).toBe(true);
+  });
+
+  it("degrades gracefully on a native module built before object sync", async () => {
+    const legacy = createMockCore({ now: () => 1_750_000_000_000 });
+    // Mimic an older generated module: the methods simply are not there.
+    delete legacy.getObjectSyncStatus;
+    delete legacy.getObjectSyncSettings;
+    delete legacy.objectSyncNow;
+    delete legacy.requestObjectSync;
+    setRawCore(legacy);
+
+    expect(core.isObjectSyncAvailable()).toBe(false);
+    // Triggers fire from capture on every keystroke-ish save, so they must
+    // stay silent rather than throw into a hot path...
+    await expect(core.requestObjectSync("capture")).resolves.toBeUndefined();
+    // ...while an explicit action explains why it cannot run.
+    await expect(core.objectSyncNow()).rejects.toThrow(/newer app build/i);
+  });
+
   it("throws a helpful error when the raw core is not wired", async () => {
     // @ts-expect-error — deliberately unset for this test
     setRawCore(null);

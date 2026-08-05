@@ -168,6 +168,39 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
     return note;
   };
 
+  let objectSync = {
+    endpoint: "",
+    bucket: "",
+    prefix: "type-notes/demo",
+    region: "auto",
+    access_key_id: "",
+    secret_access_key: "",
+    force_path_style: null as boolean | null,
+    device_id: "demo-device",
+    enabled: false,
+  };
+  let objectSyncLastSyncedMs: number | null = null;
+
+  const objectSyncStatus = () => ({
+    configured:
+      objectSync.endpoint !== "" &&
+      objectSync.bucket !== "" &&
+      objectSync.access_key_id !== "" &&
+      objectSync.secret_access_key !== "",
+    encrypted: false,
+    needs_passphrase: false,
+    syncing: false,
+    pending: false,
+    last_synced_ms: objectSyncLastSyncedMs,
+    last_error: null,
+    last_outcome: null,
+    device_id: objectSync.device_id,
+    bucket: objectSync.bucket,
+    prefix: objectSync.prefix,
+    endpoint: objectSync.endpoint,
+    tracked_files: 0,
+  });
+
   const gitStatus = () => ({
     git_available: true,
     repo_initialized: profileSettings.git_remote_url !== "",
@@ -421,6 +454,34 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       });
       return JSON.stringify(gitStatus());
     },
+
+    // ── Object-storage sync ──
+    // Settings persist for the session so the setup screen behaves; nothing
+    // is uploaded, matching how the git operations only simulate success.
+    getObjectSyncStatus: async () => JSON.stringify(objectSyncStatus()),
+    getObjectSyncSettings: async () => JSON.stringify(objectSync),
+    setObjectSyncSettings: async (settingsJson) => {
+      const next = JSON.parse(settingsJson) as typeof objectSync;
+      // The core never lets a caller reassign the device id; mirror that here
+      // so the mock cannot pass a test the real thing would fail.
+      objectSync = { ...next, device_id: objectSync.device_id };
+      return JSON.stringify(objectSyncStatus());
+    },
+    testObjectSyncConnection: async () => {},
+    objectSyncNow: async () => {
+      objectSyncLastSyncedMs = now();
+      return JSON.stringify({
+        uploaded: 0,
+        downloaded: 0,
+        deleted_local: 0,
+        deleted_remote: 0,
+        conflicts: [],
+        skipped: [],
+        bytes_uploaded: 0,
+        bytes_downloaded: 0,
+      });
+    },
+    requestObjectSync: async () => {},
 
     // ── Recordings ──
     saveAudioRecording: async (argsJson) => {

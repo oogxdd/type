@@ -20,6 +20,8 @@ import type {
   HandwritingAttachmentWriteResult,
   NoteMeta,
   NotePreviewEntry,
+  ObjectStoreSettings,
+  ObjectSyncStatus,
   ProfilesBackupArchive,
   ProfilesDocumentsExport,
   ProfilesSnapshot,
@@ -30,6 +32,7 @@ import type {
   RecordingWriteResult,
   SaveRecordingArgs,
   SaveHandwritingAttachmentArgs,
+  SyncOutcome,
   SecurityState,
   SecurityUnlockResult,
   SetNoteMarkersArgs,
@@ -267,3 +270,67 @@ export const setSecurityPreferences = async (
   args: SetSecurityPreferencesArgs
 ): Promise<SecurityState> =>
   parse(await getRawCore().setSecurityPreferences(JSON.stringify(args)));
+
+// ── Object-storage sync ───────────────────────────────────────────────────────
+// Every entry point is feature-detected: the native module is generated on a
+// Mac, so a build made before object sync existed must keep running rather
+// than crash on a missing method.
+
+const OBJECT_SYNC_UNAVAILABLE =
+  "Object storage sync needs a newer app build. Update the app to use it.";
+
+const requireObjectSync = <T>(method: T | undefined): T => {
+  if (!method) throw new Error(OBJECT_SYNC_UNAVAILABLE);
+  return method;
+};
+
+/** Whether this build can talk to a bucket at all. Screens use it to hide the
+ *  section instead of showing controls that would throw. */
+export const isObjectSyncAvailable = (): boolean =>
+  typeof getRawCore().getObjectSyncStatus === "function";
+
+export const getObjectSyncStatus = async (): Promise<ObjectSyncStatus> => {
+  const core = getRawCore();
+  return parse(await requireObjectSync(core.getObjectSyncStatus).call(core));
+};
+
+export const getObjectSyncSettings = async (): Promise<ObjectStoreSettings> => {
+  const core = getRawCore();
+  return parse(await requireObjectSync(core.getObjectSyncSettings).call(core));
+};
+
+export const setObjectSyncSettings = async (
+  settings: ObjectStoreSettings
+): Promise<ObjectSyncStatus> => {
+  const core = getRawCore();
+  return parse(
+    await requireObjectSync(core.setObjectSyncSettings).call(
+      core,
+      JSON.stringify(settings)
+    )
+  );
+};
+
+export const testObjectSyncConnection = async (
+  settings: ObjectStoreSettings
+): Promise<void> => {
+  const core = getRawCore();
+  await requireObjectSync(core.testObjectSyncConnection).call(
+    core,
+    JSON.stringify(settings)
+  );
+};
+
+/** Run a round and wait for it — the pull-to-refresh / "Sync now" path. */
+export const objectSyncNow = async (): Promise<SyncOutcome> => {
+  const core = getRawCore();
+  return parse(await requireObjectSync(core.objectSyncNow).call(core));
+};
+
+/** Nudge the scheduler; returns immediately. Safe to call on every capture
+ *  flush — the core coalesces and rate-limits rounds. A build without object
+ *  sync simply ignores it, so callers need no guard. */
+export const requestObjectSync = async (reason = "auto"): Promise<void> => {
+  const core = getRawCore();
+  await core.requestObjectSync?.(reason);
+};

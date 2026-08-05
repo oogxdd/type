@@ -66,6 +66,61 @@ export type LocalSyncServerStatus = {
   error: string | null;
 };
 
+// ── Object-storage sync ───────────────────────────────────────────────────────
+// Sync through an S3-compatible bucket the user brings themselves. Credentials
+// live in the working folder's device-local .type/device.json and never travel
+// between devices. See docs/OBJECT_SYNC.md.
+
+export type ObjectStoreSettings = {
+  endpoint: string;
+  bucket: string;
+  /** Key prefix; defaults to `type-notes/<profile_id>` so one bucket can hold
+   *  several working folders. */
+  prefix: string;
+  /** Signing region. `auto` suits Cloudflare R2; S3 and B2 want a real one. */
+  region: string;
+  access_key_id: string;
+  secret_access_key: string;
+  /** `null` auto-detects: virtual-host for AWS endpoints, path-style elsewhere. */
+  force_path_style?: boolean | null;
+  /** Stable per-device id naming this device's manifest. Assigned by the core —
+   *  never send a new one, or this device orphans its manifest. */
+  device_id: string;
+  enabled: boolean;
+};
+
+export type SyncOutcome = {
+  uploaded: number;
+  downloaded: number;
+  deleted_local: number;
+  deleted_remote: number;
+  /** Paths where both sides changed; the remote copy landed as a
+   *  `.conflict.md` sibling and local was kept. */
+  conflicts: string[];
+  /** Files the round refused to handle, each with its reason. */
+  skipped: string[];
+  bytes_uploaded: number;
+  bytes_downloaded: number;
+};
+
+export type ObjectSyncStatus = {
+  configured: boolean;
+  encrypted: boolean;
+  /** Bucket is encrypted but this device has no vault key yet. */
+  needs_passphrase: boolean;
+  syncing: boolean;
+  /** A change is waiting for the scheduler's debounce to elapse. */
+  pending: boolean;
+  last_synced_ms: number | null;
+  last_error: string | null;
+  last_outcome: SyncOutcome | null;
+  device_id: string;
+  bucket: string;
+  prefix: string;
+  endpoint: string;
+  tracked_files: number;
+};
+
 export type PairedDeviceInfo = {
   name: string;
   added_ms: number;

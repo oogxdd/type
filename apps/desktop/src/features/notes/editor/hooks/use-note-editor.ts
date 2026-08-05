@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { deleteItems, readNote, renameItem, writeNote } from "@/features/notes/api/notes-api";
+import { requestObjectSync } from "@/features/sync/api/object-sync-api";
 import { getAutoRenameTarget } from "@/features/notes/editor/lib/note-autoname";
 import type { NoteFileNameFormat } from "@typenotes/shared/types";
 import { getErrorMessage } from "@typenotes/shared/errors";
@@ -43,6 +44,11 @@ export function useNoteEditor(
           setNoteDirty(false);
           noteDirtyRef.current = false;
         }
+        // Tell the sync scheduler something changed. It coalesces and
+        // rate-limits, so calling it on every save costs nothing, and it is a
+        // no-op unless cloud sync is configured. Deliberately not awaited —
+        // saving must not wait on the network.
+        void requestObjectSync("note-save").catch(() => {});
       } catch (error) {
         const message = getErrorMessage(error);
         setSaveError(message);

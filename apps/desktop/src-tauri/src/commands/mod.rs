@@ -3,6 +3,7 @@ mod handwriting;
 mod import;
 mod local_sync;
 mod notes;
+mod object_sync;
 mod profiles;
 mod recordings;
 mod security;
@@ -40,6 +41,9 @@ pub(super) fn run() {
                     let _ = push_handle.emit("local-sync-push-received", ());
                 }));
             }
+            // Start the object-sync scheduler. It is a no-op until a bucket is
+            // configured, and it owns its own thread, so launch is unaffected.
+            type_core::start_object_sync(&crate::app_env(app_handle)?);
             if let Err(error) = crate::sync_recordings_asset_scope(app_handle) {
                 eprintln!(
                     "[recordings] failed to set initial asset-protocol scope: {}",
@@ -110,6 +114,13 @@ pub(super) fn run() {
             local_sync::start_local_sync_server,
             local_sync::stop_local_sync_server,
             local_sync::discover_local_sync_servers,
+            object_sync::get_object_sync_status,
+            object_sync::get_object_sync_settings,
+            object_sync::set_object_sync_settings,
+            object_sync::test_object_sync_connection,
+            object_sync::object_sync_now,
+            object_sync::request_object_sync,
+            object_sync::collect_object_sync_garbage,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

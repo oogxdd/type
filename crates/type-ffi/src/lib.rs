@@ -20,6 +20,7 @@ uniffi::setup_scaffolding!();
 mod git_sync;
 mod handwriting;
 mod notes;
+mod object_sync;
 mod profiles;
 mod recordings;
 mod security;
@@ -79,6 +80,9 @@ pub fn init_core(app_data_dir: String, documents_dir: Option<String>) -> Result<
     // Mirrors the Tauri shell's setup hook: load persisted security config so
     // the locked/unlocked gate is correct before the first command runs.
     type_core::ensure_security_runtime_initialized_for_setup(&env)?;
+    // Same as the Tauri setup hook: the scheduler owns its own thread and does
+    // nothing until a bucket is configured.
+    type_core::start_object_sync(&env);
     *APP_ENV.write().expect("app env lock poisoned") = Some(env);
     Ok(())
 }
