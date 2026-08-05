@@ -121,6 +121,9 @@ pub(super) fn run() {
             object_sync::object_sync_now,
             object_sync::request_object_sync,
             object_sync::collect_object_sync_garbage,
+            object_sync::enable_object_sync_encryption,
+            object_sync::unlock_object_sync_encryption,
+            object_sync::get_object_sync_pairing_link,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

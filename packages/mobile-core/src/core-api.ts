@@ -334,3 +334,34 @@ export const requestObjectSync = async (reason = "auto"): Promise<void> => {
   const core = getRawCore();
   await core.requestObjectSync?.(reason);
 };
+
+/** Turn on end-to-end encryption for the bucket this folder syncs to. */
+export const enableObjectSyncEncryption = async (
+  passphrase: string
+): Promise<ObjectSyncStatus> => {
+  const core = getRawCore();
+  return parse(
+    await requireObjectSync(core.enableObjectSyncEncryption).call(core, passphrase)
+  );
+};
+
+/** Adopt an already-encrypted bucket here using its secret phrase. */
+export const unlockObjectSyncEncryption = async (
+  passphrase: string
+): Promise<ObjectSyncStatus> => {
+  const core = getRawCore();
+  return parse(
+    await requireObjectSync(core.unlockObjectSyncEncryption).call(core, passphrase)
+  );
+};
+
+/** Apply a scanned `type2://cloud/...` code: bucket settings, plus the vault
+ *  key when the bucket is encrypted. The zero-typing path onto a phone. */
+export const applyObjectSyncPairingLink = async (
+  link: string
+): Promise<ObjectSyncStatus> => {
+  const core = getRawCore();
+  return parse(
+    await requireObjectSync(core.applyObjectSyncPairingLink).call(core, link)
+  );
+};

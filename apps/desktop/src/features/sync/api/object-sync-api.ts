@@ -36,3 +36,25 @@ export const requestObjectSync = (reason = "auto"): Promise<void> =>
 
 export const collectObjectSyncGarbage = (): Promise<number> =>
   invokeLogged<number>("collect_object_sync_garbage");
+
+/** Turn on end-to-end encryption. Rewrites every stored object under new keys;
+ *  local notes are untouched. */
+export const enableObjectSyncEncryption = (
+  passphrase: string
+): Promise<ObjectSyncStatus> =>
+  invokeLogged<ObjectSyncStatus>("enable_object_sync_encryption", {
+    args: { passphrase },
+  });
+
+/** Adopt an already-encrypted bucket on this device. */
+export const unlockObjectSyncEncryption = (
+  passphrase: string
+): Promise<ObjectSyncStatus> =>
+  invokeLogged<ObjectSyncStatus>("unlock_object_sync_encryption", {
+    args: { passphrase },
+  });
+
+/** The pairing QR's payload. Carries bucket credentials *and* the vault key,
+ *  so only fetch it when the user explicitly asks to pair a device. */
+export const getObjectSyncPairingLink = (): Promise<string> =>
+  invokeLogged<string>("get_object_sync_pairing_link");

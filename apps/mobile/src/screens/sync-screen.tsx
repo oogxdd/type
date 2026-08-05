@@ -29,11 +29,16 @@ import {
   formatTransferProgress,
   transferProgressFraction,
 } from "@typenotes/shared/format";
-import { parseSyncDeepLink, type SyncDeepLinkParams } from "@typenotes/shared/sync-link";
+import {
+  isCloudPairingLink,
+  parseSyncDeepLink,
+  type SyncDeepLinkParams,
+} from "@typenotes/shared/sync-link";
 
 import { useClearInstantParam } from "../navigation";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useSyncStore } from "../state/sync-store";
+import { useObjectSyncStore } from "../state/object-sync-store";
 import { ObjectSyncSection } from "./object-sync-section";
 import { useTheme } from "../theme";
 import { Button, Field, InlineNote, Section } from "../ui/controls";
@@ -125,10 +130,21 @@ export const SyncScreen = () => {
     if (handledScanRef.current) {
       return;
     }
+    // One scanner, both kinds of code: the cloud pairing QR carries bucket
+    // settings (and the encryption key), the older one a LAN git remote.
+    if (isCloudPairingLink(data)) {
+      console.log("[sync:qr] cloud pairing QR scanned");
+      handledScanRef.current = true;
+      setScannerOpen(false);
+      void useObjectSyncStore.getState().applyPairingLink(data.trim());
+      return;
+    }
     const link = parseSyncDeepLink(data);
     if (!link) {
       console.log("[sync:qr] scanned QR was not a Type sync link");
-      setScanNotice("That QR code is not a Type sync code — look for the one in desktop Settings → Sync.");
+      setScanNotice(
+        "That QR code is not a Type sync code — look for the one in desktop Settings → Sync."
+      );
       return;
     }
     console.log("[sync:qr] valid Type sync QR scanned");

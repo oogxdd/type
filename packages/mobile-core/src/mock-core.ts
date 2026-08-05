@@ -180,6 +180,7 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
     enabled: false,
   };
   let objectSyncLastSyncedMs: number | null = null;
+  let objectSyncEncrypted = false;
 
   const objectSyncStatus = () => ({
     configured:
@@ -187,7 +188,7 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       objectSync.bucket !== "" &&
       objectSync.access_key_id !== "" &&
       objectSync.secret_access_key !== "",
-    encrypted: false,
+    encrypted: objectSyncEncrypted,
     needs_passphrase: false,
     syncing: false,
     pending: false,
@@ -482,6 +483,26 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       });
     },
     requestObjectSync: async () => {},
+    enableObjectSyncEncryption: async () => {
+      objectSyncEncrypted = true;
+      return JSON.stringify(objectSyncStatus());
+    },
+    unlockObjectSyncEncryption: async (passphrase) => {
+      // The real core fails on the AEAD tag; the mock only needs to reject an
+      // empty phrase so the screen's error path is exercised.
+      if (!passphrase.trim()) {
+        throw new Error("A secret phrase is required.");
+      }
+      objectSyncEncrypted = true;
+      return JSON.stringify(objectSyncStatus());
+    },
+    applyObjectSyncPairingLink: async (link) => {
+      if (!link.startsWith("type2://cloud/")) {
+        throw new Error("That QR code is not a cloud sync pairing code.");
+      }
+      objectSync = { ...objectSync, endpoint: "https://demo", bucket: "demo", enabled: true };
+      return JSON.stringify(objectSyncStatus());
+    },
 
     // ── Recordings ──
     saveAudioRecording: async (argsJson) => {

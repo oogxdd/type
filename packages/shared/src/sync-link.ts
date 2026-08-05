@@ -11,6 +11,17 @@
 
 export const SYNC_DEEP_LINK_SCHEME = "type2";
 
+// The cloud-sync pairing code is a sibling format: `type2://cloud/<payload>`,
+// where the payload is built and parsed in the Rust core (it carries bucket
+// credentials and the vault key, so it never round-trips through JS). The app
+// only needs to recognize it, which is what this prefix is for. Keep in sync
+// with CLOUD_PAIRING_PREFIX in crates/type-core/src/adapters/object_sync/pairing.rs.
+export const CLOUD_PAIRING_LINK_PREFIX = "type2://cloud/";
+
+/** Does this scanned string look like a cloud pairing code? */
+export const isCloudPairingLink = (value: string): boolean =>
+  value.trim().startsWith(CLOUD_PAIRING_LINK_PREFIX);
+
 export type SyncDeepLinkParams = {
   remote: string;
   branch?: string;

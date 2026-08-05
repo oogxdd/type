@@ -15,10 +15,22 @@ import { Button, Field, InlineNote, Section } from "../ui/controls";
  */
 export function ObjectSyncSection() {
   const theme = useTheme();
-  const { available, status, settings, busy, error, notice, refresh, save, test, syncNow } =
-    useObjectSyncStore();
+  const {
+    available,
+    status,
+    settings,
+    busy,
+    error,
+    notice,
+    refresh,
+    save,
+    test,
+    syncNow,
+    unlockEncryption,
+  } = useObjectSyncStore();
   const [form, setForm] = useState<ObjectStoreSettings | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [passphrase, setPassphrase] = useState("");
 
   useEffect(() => {
     void refresh();
@@ -102,12 +114,39 @@ export function ObjectSyncSection() {
         />
       </View>
 
+      {status?.needs_passphrase ? (
+        <>
+          <InlineNote>
+            This bucket is end-to-end encrypted. Enter the same secret phrase
+            you set on the desktop — or scan the pairing QR from desktop
+            Settings → Sync, which brings the key with it and needs no typing.
+          </InlineNote>
+          <Field
+            label="Secret phrase"
+            value={passphrase}
+            secureTextEntry
+            onChangeText={setPassphrase}
+          />
+          <View style={styles.actions}>
+            <Button
+              title={busy ? "Unlocking..." : "Unlock"}
+              onPress={() => {
+                void unlockEncryption(passphrase);
+                setPassphrase("");
+              }}
+              disabled={busy || passphrase.trim() === ""}
+            />
+          </View>
+        </>
+      ) : null}
+
       {expanded ? (
         <>
           <InlineNote>
-            Point this at a bucket you own (Cloudflare R2, Backblaze B2, S3,
-            MinIO). Keys are stored on this device only and never uploaded. The
-            easiest path is to copy the same values you used on the desktop.
+            Scanning the pairing QR from desktop Settings → Sync fills all of
+            this in at once. Otherwise, point it at a bucket you own
+            (Cloudflare R2, Backblaze B2, S3, MinIO). Keys are stored on this
+            device only and never uploaded.
           </InlineNote>
           <Field
             label="Endpoint"

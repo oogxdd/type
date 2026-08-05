@@ -47,30 +47,46 @@ pub struct SyncEngine<'a> {
     pub repo_key: String,
 }
 
-impl<'a> SyncEngine<'a> {
-    /// Read the bucket's format marker, writing it if this is a fresh bucket.
-    ///
-    /// Read before anything else so a device that would otherwise upload
-    /// plaintext into an encrypted bucket stops here instead.
-    pub fn ensure_repo_descriptor(&self, now_ms: i64) -> Result<RepoDescriptor, String> {
-        if let Some(bytes) = self.store.get(&self.repo_key)? {
-            return serde_json::from_slice::<RepoDescriptor>(&bytes)
-                .map_err(|error| format!("Bucket has an unreadable repo.json: {error}"));
-        }
-        let descriptor = RepoDescriptor {
-            encryption: if self.codec.is_encrypted() {
-                crate::domain::object_sync::ENCRYPTION_V1.to_string()
-            } else {
-                crate::domain::object_sync::ENCRYPTION_NONE.to_string()
-            },
-            created_ms: now_ms,
-            ..RepoDescriptor::default()
-        };
-        let bytes = serde_json::to_vec(&descriptor).map_err(|error| error.to_string())?;
-        self.store.put(&self.repo_key, bytes, JSON_CONTENT_TYPE)?;
-        Ok(descriptor)
+/// Read the bucket's format marker, writing it if this is a fresh bucket.
+///
+/// A free function, not a method, because it has to run *before* the codec is
+/// chosen: which codec applies is exactly what this answers.
+pub fn ensure_repo_descriptor(
+    store: &dyn ObjectStore,
+    repo_key: &str,
+    encrypted: bool,
+    now_ms: i64,
+) -> Result<RepoDescriptor, String> {
+    if let Some(bytes) = store.get(repo_key)? {
+        return serde_json::from_slice::<RepoDescriptor>(&bytes)
+            .map_err(|error| format!("Bucket has an unreadable repo.json: {error}"));
     }
+    let descriptor = RepoDescriptor {
+        encryption: if encrypted {
+            crate::domain::object_sync::ENCRYPTION_V1.to_string()
+        } else {
+            crate::domain::object_sync::ENCRYPTION_NONE.to_string()
+        },
+        created_ms: now_ms,
+        ..RepoDescriptor::default()
+    };
+    let bytes = serde_json::to_vec(&descriptor).map_err(|error| error.to_string())?;
+    store.put(repo_key, bytes, JSON_CONTENT_TYPE)?;
+    Ok(descriptor)
+}
 
+/// Overwrite the format marker. Used when turning encryption on, which is the
+/// only thing that legitimately changes a bucket's mode.
+pub fn write_repo_descriptor(
+    store: &dyn ObjectStore,
+    repo_key: &str,
+    descriptor: &RepoDescriptor,
+) -> Result<(), String> {
+    let bytes = serde_json::to_vec(descriptor).map_err(|error| error.to_string())?;
+    store.put(repo_key, bytes, JSON_CONTENT_TYPE)
+}
+
+impl<'a> SyncEngine<'a> {
     /// Every device's published view, ours included — ours records what we last
     /// claimed, which is what makes our own deletes visible in the merge.
     fn fetch_remote_manifests(&self) -> Result<Vec<Manifest>, String> {
@@ -376,6 +392,7 @@ impl<'a> SyncEngine<'a> {
                 base: next_base,
                 cache,
                 last_synced_ms: Some(now_ms),
+                remote_encrypted: self.codec.is_encrypted(),
             },
         })
     }
@@ -833,23 +850,108 @@ mod tests {
     }
 
     #[test]
-    fn the_repo_marker_is_created_once() {
+    fn the_repo_marker_is_created_once_and_reports_the_bucket_mode() {
         let store = MemoryStore::default();
-        let a = Device::new("marker", "a");
-        let codec = PlaintextCodec::new(&settings());
-        let engine = SyncEngine {
-            root: &a.root,
-            store: &store,
-            codec: &codec,
-            device_id: &a.id,
-            repo_key: "p/repo.json".to_string(),
-        };
 
-        let first = engine.ensure_repo_descriptor(1_000).unwrap();
+        let first = ensure_repo_descriptor(&store, "p/repo.json", false, 1_000).unwrap();
         assert_eq!(first.encryption, "none");
         assert_eq!(first.created_ms, 1_000);
+        assert!(!first.is_encrypted());
 
-        let second = engine.ensure_repo_descriptor(9_000).unwrap();
-        assert_eq!(second.created_ms, 1_000, "existing marker must not be rewritten");
+        // A second device must read the existing marker, not stamp its own —
+        // otherwise a plaintext device would silently "convert" an encrypted
+        // bucket back.
+        let second = ensure_repo_descriptor(&store, "p/repo.json", true, 9_000).unwrap();
+        assert_eq!(second.created_ms, 1_000);
+        assert!(!second.is_encrypted());
+    }
+
+    #[test]
+    fn an_encrypted_bucket_round_trips_notes_without_storing_them_readably() {
+        use crate::adapters::object_sync::codec::EncryptedCodec;
+        use crate::adapters::object_sync::crypto::VaultKey;
+
+        let store = MemoryStore::default();
+        let vault = VaultKey::generate();
+        let codec = EncryptedCodec::new(&settings(), &vault);
+
+        let mut a = Device::new("e2ee", "a");
+        let b = Device::new("e2ee", "b");
+        a.write("Feed/secret.md", "the diary entry");
+
+        let run = |root: &PathBuf, id: &str, state: SyncState| {
+            SyncEngine {
+                root,
+                store: &store,
+                codec: &codec,
+                device_id: id,
+                repo_key: "p/repo.json".to_string(),
+            }
+            .run_round(state, 1_000)
+            .unwrap()
+        };
+
+        let first = run(&a.root, "a", SyncState::default());
+        assert_eq!(first.outcome.uploaded, 1);
+        assert!(first.state.remote_encrypted);
+
+        // Nothing readable reached the bucket — not the note, not its path.
+        let stored: Vec<u8> = store
+            .objects
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(key, _)| !key.ends_with("repo.json"))
+            .flat_map(|(key, body)| {
+                let mut bytes = key.clone().into_bytes();
+                bytes.extend_from_slice(body);
+                bytes
+            })
+            .collect();
+        let raw = String::from_utf8_lossy(&stored);
+        assert!(!raw.contains("diary"), "note contents must not be readable");
+        assert!(!raw.contains("secret.md"), "filenames must not be readable");
+
+        // …and the other device gets it back intact.
+        let second = run(&b.root, "b", SyncState::default());
+        assert_eq!(second.outcome.downloaded, 1);
+        assert_eq!(b.read("Feed/secret.md").as_deref(), Some("the diary entry"));
+    }
+
+    #[test]
+    fn a_device_without_the_key_cannot_read_an_encrypted_manifest() {
+        use crate::adapters::object_sync::codec::EncryptedCodec;
+        use crate::adapters::object_sync::crypto::VaultKey;
+
+        let store = MemoryStore::default();
+        let owner = EncryptedCodec::new(&settings(), &VaultKey::generate());
+        let mut a = Device::new("nokey", "a");
+        a.write("Feed/n.md", "content");
+
+        SyncEngine {
+            root: &a.root,
+            store: &store,
+            codec: &owner,
+            device_id: "a",
+            repo_key: "p/repo.json".to_string(),
+        }
+        .run_round(SyncState::default(), 1_000)
+        .unwrap();
+
+        // A plaintext codec pointed at the same bucket must fail loudly rather
+        // than treat undecodable manifests as an empty bucket — which would
+        // look like "every note was deleted".
+        let intruder = PlaintextCodec::new(&settings());
+        let b = Device::new("nokey", "b");
+        let error = SyncEngine {
+            root: &b.root,
+            store: &store,
+            codec: &intruder,
+            device_id: "b",
+            repo_key: "p/repo.json".to_string(),
+        }
+        .run_round(SyncState::default(), 2_000)
+        .unwrap_err();
+        assert!(error.to_lowercase().contains("manifest"), "{error}");
     }
 }

@@ -76,6 +76,14 @@ pub struct SyncState {
     pub cache: BTreeMap<String, CachedHash>,
     #[serde(default)]
     pub last_synced_ms: Option<i64>,
+    /// Whether the bucket was encrypted at the end of the last round.
+    ///
+    /// Tracked because a change of mode rewrites every object under new keys:
+    /// `base` then describes a bucket that no longer exists, and acting on it
+    /// would read as "everything was deleted remotely". See
+    /// `run_sync_round`, which resets state when this disagrees with reality.
+    #[serde(default)]
+    pub remote_encrypted: bool,
 }
 
 fn default_version() -> u32 {
@@ -89,6 +97,7 @@ impl Default for SyncState {
             base: Manifest::default(),
             cache: BTreeMap::new(),
             last_synced_ms: None,
+            remote_encrypted: false,
         }
     }
 }

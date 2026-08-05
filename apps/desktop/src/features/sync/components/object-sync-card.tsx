@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import * as objectSyncApi from "@/features/sync/api/object-sync-api";
 import type {
   ObjectStoreSettings,
@@ -53,7 +54,12 @@ const describeStatus = (status: ObjectSyncStatus | null): string => {
 export function ObjectSyncCard() {
   const [status, setStatus] = useState<ObjectSyncStatus | null>(null);
   const [form, setForm] = useState<ObjectStoreSettings>(EMPTY_SETTINGS);
-  const [busy, setBusy] = useState<null | "save" | "test" | "sync" | "gc">(null);
+  const [busy, setBusy] = useState<
+    null | "save" | "test" | "sync" | "gc" | "encrypt" | "unlock" | "pair"
+  >(null);
+  const [passphrase, setPassphrase] = useState("");
+  // Fetched only on demand: it contains the bucket keys and the vault key.
+  const [pairingLink, setPairingLink] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // Don't stomp on what the user is typing when a poll lands.
@@ -141,6 +147,30 @@ export function ObjectSyncCard() {
         parts.push(`${outcome.conflicts.length} conflict copies`);
       }
       return parts.join(" · ");
+    });
+
+  const enableEncryption = () =>
+    run("encrypt", async () => {
+      setStatus(await objectSyncApi.enableObjectSyncEncryption(passphrase));
+      setPassphrase("");
+      return "Encryption is on. Everything in the bucket was rewritten.";
+    });
+
+  const unlockEncryption = () =>
+    run("unlock", async () => {
+      setStatus(await objectSyncApi.unlockObjectSyncEncryption(passphrase));
+      setPassphrase("");
+      return "Unlocked on this device.";
+    });
+
+  const togglePairing = () =>
+    run("pair", async () => {
+      if (pairingLink) {
+        setPairingLink(null);
+        return null;
+      }
+      setPairingLink(await objectSyncApi.getObjectSyncPairingLink());
+      return null;
     });
 
   const collectGarbage = () =>
@@ -254,6 +284,81 @@ export function ObjectSyncCard() {
         label="Sync this folder automatically"
         description="Uploads on a short delay after each change, and checks for changes from other devices in the background."
       />
+
+      {status?.configured ? (
+        <>
+          <SettingsField
+            label="End-to-end encryption"
+            hint={
+              status.encrypted
+                ? "Notes, filenames and folder names are encrypted before they leave this device. Your storage provider sees only opaque blobs."
+                : "Encrypt everything before it leaves this device — contents, filenames and folder structure. Turning this on rewrites what is already in the bucket; your local notes are untouched. Write the phrase down: without it and with no set-up device left, the data cannot be recovered."
+            }
+          >
+            {status.encrypted && !status.needs_passphrase ? (
+              <SettingsHelpText>
+                On. Pair another device with the QR code below, or enter the
+                same secret phrase there.
+              </SettingsHelpText>
+            ) : (
+              <Input
+                type="password"
+                value={passphrase}
+                autoComplete="new-password"
+                placeholder={
+                  status.needs_passphrase
+                    ? "Enter the secret phrase to unlock"
+                    : "Choose a secret phrase"
+                }
+                onChange={(event) => setPassphrase(event.target.value)}
+              />
+            )}
+          </SettingsField>
+
+          <SettingsActionRow>
+            {status.needs_passphrase ? (
+              <Button
+                size="sm"
+                type="button"
+                onClick={() => void unlockEncryption()}
+                disabled={busy !== null || passphrase.trim() === ""}
+              >
+                {busy === "unlock" ? "Unlocking..." : "Unlock"}
+              </Button>
+            ) : null}
+            {!status.encrypted ? (
+              <Button
+                size="sm"
+                type="button"
+                onClick={() => void enableEncryption()}
+                disabled={busy !== null || passphrase.trim() === ""}
+              >
+                {busy === "encrypt" ? "Encrypting..." : "Turn on encryption"}
+              </Button>
+            ) : null}
+            <Button
+              variant="outline"
+              size="sm"
+              type="button"
+              onClick={() => void togglePairing()}
+              disabled={busy !== null}
+            >
+              {pairingLink ? "Hide pairing code" : "Pair a phone"}
+            </Button>
+          </SettingsActionRow>
+
+          {pairingLink ? (
+            <div className="grid justify-items-center gap-2 py-2">
+              <QRCodeSVG value={pairingLink} size={220} includeMargin />
+              <SettingsHelpText>
+                Scan this on the phone's Sync screen. It carries the bucket keys
+                and the encryption key, so treat it like a password — hide it
+                when you're done.
+              </SettingsHelpText>
+            </div>
+          ) : null}
+        </>
+      ) : null}
 
       <SettingsActionRow>
         <Button size="sm" type="button" onClick={() => void save()} disabled={busy !== null}>

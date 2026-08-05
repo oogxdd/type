@@ -1,9 +1,8 @@
 # Object-storage sync
 
-> **Status:** design + implementation notes for the `object_sync` domain.
-> Supersedes the transport half of [`AUTO_SYNC.md`](./AUTO_SYNC.md), which
-> explored the options; this document records the decision and the design that
-> follows from it.
+> **Status:** implemented, both phases. Supersedes the transport half of
+> [`AUTO_SYNC.md`](./AUTO_SYNC.md), which explored the options; this document
+> records the decision, the design that follows from it, and what shipped.
 
 Automatic, background sync between desktop and phone over an **S3-compatible
 bucket the user brings themselves** (Cloudflare R2, Backblaze B2, AWS S3, MinIO,
@@ -112,9 +111,14 @@ Three inputs, which is what makes conflict detection possible at all:
 - **local** — a fresh scan of `notes_root`.
 - **remote** — the merge of every `manifests/*.json` in the bucket right now.
 
-Merging remote manifests is per-path last-writer-wins on `updated_ms`
-(tombstones carry `deleted_ms` and compete on the same axis); ties break on the
-hash, so every device computes the same answer.
+Merging remote manifests is per-path highest-revision-wins. Ordering by
+timestamp turned out to be unsound: device clocks disagree, filesystem mtimes
+are coarse, and a genuinely newer edit can carry an older-looking stamp. Each
+entry therefore carries a **revision** that encodes causality — a device
+editing a file it has already synced necessarily produces `base.rev + 1`, so its
+version wins without any clock being trusted. Equal revisions mean the edits
+were genuinely concurrent, which is exactly the conflict case. Ties break on
+liveness, then stamp, then hash, so every device computes the same answer.
 
 Then, for each path in the union of the three:
 
@@ -153,7 +157,12 @@ encrypted, which today they never are). Excluded: `.git/`, the device-local
 
 Hashing every file every round would be wasteful once recordings are involved,
 so the local state caches `(size, mtime_ms) → hash` and only re-hashes files
-whose size or mtime moved.
+whose size or mtime moved. With one exception: files touched in the last few
+seconds are **always** re-hashed. Filesystem mtime granularity can be a full
+second, so a note saved twice in quick succession to the same length is
+indistinguishable from an untouched one, and trusting the cache there drops the
+second edit silently. Git solves the same "racy timestamp" problem the same
+way.
 
 ## The orchestrator
 
@@ -239,10 +248,18 @@ phrase at any time.
 
 ### Turning it on
 
-Enabling encryption re-uploads every object under its new key, writes an
-encrypted manifest, flips `repo.json` to `encryption: "v1"`, and GCs the
-plaintext blobs. Other devices see the new mode, ask for the phrase once, and
-rebuild their base state — their local files are never touched.
+Enabling encryption publishes `vault.json` first (so a failure leaves a
+plaintext bucket rather than one nobody can unlock), flips `repo.json` to
+`encryption: "v1"`, deletes the plaintext objects and manifests, and re-uploads
+everything under the new keys. Local notes are never touched.
+
+Every device records the bucket's mode alongside its base state. When the two
+disagree — because another device just re-keyed the bucket — the device resets
+its base rather than acting on it. This matters more than it looks: after a
+re-key, a stale base describes a bucket that no longer exists, and every path
+in it would read as "deleted remotely". Resetting costs one full compare, and
+identical content converges on its hash, so nothing is re-uploaded needlessly
+and nothing is lost.
 
 ## Open questions
 
@@ -256,4 +273,9 @@ rebuild their base state — their local files are never touched.
   offline holding a reference to an old blob.
 - **Credential entry on desktop.** Access key + secret is a technical ask. A
   provider-specific quick-start (R2 has a free tier and zero egress fees) would
-  cut most of the friction.
+  cut most of the friction. The phone already avoids it entirely by scanning
+  the desktop's pairing QR.
+- **Turning encryption back off.** Not implemented. It would mean another full
+  rewrite of the bucket, in the less safe direction, and nobody has asked.
+- **Changing the secret phrase.** The design supports it — re-wrap 32 bytes and
+  re-upload `vault.json` — but there is no UI for it yet.

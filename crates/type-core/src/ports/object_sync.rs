@@ -161,6 +161,15 @@ pub trait ObjectSyncGateway {
     fn request_sync(&self, reason: &str) -> Result<(), String>;
     /// Delete blobs no device manifest references any more.
     fn collect_garbage(&self) -> Result<usize, String>;
+
+    /// Turn on end-to-end encryption and rewrite the bucket under new keys.
+    fn enable_encryption(&self, passphrase: &str) -> Result<Self::Status, String>;
+    /// Adopt an already-encrypted bucket on this device.
+    fn unlock_encryption(&self, passphrase: &str) -> Result<Self::Status, String>;
+    /// The link the desktop renders as a pairing QR.
+    fn pairing_link(&self) -> Result<String, String>;
+    /// Apply a scanned pairing link.
+    fn apply_pairing_link(&self, link: &str) -> Result<Self::Status, String>;
 }
 
 /// Public service contract, mirrored by the Tauri commands and FFI exports.
@@ -171,6 +180,8 @@ pub trait ObjectSyncService {
     fn test_connection(&self, settings: ObjectStoreSettings) -> Result<(), String>;
     fn sync_now(&self) -> Result<SyncOutcome, String>;
     fn request_sync(&self, reason: &str) -> Result<(), String>;
+    fn enable_encryption(&self, passphrase: &str) -> Result<ObjectSyncStatus, String>;
+    fn unlock_encryption(&self, passphrase: &str) -> Result<ObjectSyncStatus, String>;
 }
 
 // ─── Implementation Notes ─────────────────────────────────────────────────────

@@ -161,6 +161,16 @@ struct DeviceSettingsFile {
     /// Bucket endpoint, credentials and prefix. Absent until sync is set up.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     object_sync: Option<ObjectStoreSettings>,
+    /// base64 of this vault's 256-bit key, once the user has unlocked the
+    /// bucket on this device. Kept out of [`ObjectStoreSettings`] on purpose so
+    /// it never reaches the settings UI or a settings write that omits it.
+    ///
+    /// Storing it in the clear is deliberate: the bucket credentials sit in
+    /// this same file, so anyone who can read it can read the bucket regardless.
+    /// End-to-end encryption defends against the storage provider, not against
+    /// someone holding the device — see `adapters/object_sync/crypto.rs`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    object_sync_vault_key: Option<String>,
 }
 
 impl Default for DeviceSettingsFile {
@@ -174,6 +184,7 @@ impl Default for DeviceSettingsFile {
             git_trusted_ssh_host: String::new(),
             git_trusted_ssh_host_key_sha256: String::new(),
             object_sync: None,
+            object_sync_vault_key: None,
         }
     }
 }
@@ -219,13 +230,32 @@ pub fn load_object_store_settings(notes_root: &Path) -> ObjectStoreSettings {
         .unwrap_or_default()
 }
 
-/// Persist the object-storage connection, leaving the git connection alone.
+/// Persist the object-storage connection, leaving the git connection and the
+/// vault key alone.
 pub fn save_object_store_settings(
     notes_root: &Path,
     settings: &ObjectStoreSettings,
 ) -> Result<(), String> {
     let mut device = read_device_settings(notes_root);
     device.object_sync = Some(settings.clone());
+    write_device_settings(notes_root, &device)
+}
+
+/// This device's copy of the vault key, if it has been unlocked here.
+pub fn load_object_sync_vault_key(notes_root: &Path) -> Option<String> {
+    read_device_settings(notes_root)
+        .object_sync_vault_key
+        .filter(|key| !key.trim().is_empty())
+}
+
+/// Store or clear the vault key. `None` forgets it, which is how a device
+/// stops being able to read an encrypted bucket.
+pub fn save_object_sync_vault_key(
+    notes_root: &Path,
+    vault_key: Option<String>,
+) -> Result<(), String> {
+    let mut device = read_device_settings(notes_root);
+    device.object_sync_vault_key = vault_key.filter(|key| !key.trim().is_empty());
     write_device_settings(notes_root, &device)
 }
 
@@ -271,7 +301,8 @@ pub fn save_profile_settings(notes_root: &Path, settings: &ProfileSettings) -> R
     }
 
     // Git connection → device-local file, preserving the object-storage
-    // connection that shares it.
+    // connection and vault key that share it.
+    let existing_device = read_device_settings(notes_root);
     let device = DeviceSettingsFile {
         git_remote_url: settings.git_remote_url.clone(),
         git_branch: settings.git_branch.clone(),
@@ -280,7 +311,8 @@ pub fn save_profile_settings(notes_root: &Path, settings: &ProfileSettings) -> R
         git_commit_message: settings.git_commit_message.clone(),
         git_trusted_ssh_host: settings.git_trusted_ssh_host.clone(),
         git_trusted_ssh_host_key_sha256: settings.git_trusted_ssh_host_key_sha256.clone(),
-        object_sync: read_device_settings(notes_root).object_sync,
+        object_sync: existing_device.object_sync,
+        object_sync_vault_key: existing_device.object_sync_vault_key,
     };
     write_device_settings(notes_root, &device)?;
 

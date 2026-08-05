@@ -41,4 +41,25 @@ impl<G: ObjectSyncGateway> ObjectSyncUseCases<G> {
     pub fn collect_garbage(&self) -> Result<usize, String> {
         self.gateway.collect_garbage()
     }
+
+    /// Turn on end-to-end encryption. Rewrites every object in the bucket
+    /// under new keys; local notes are untouched.
+    pub fn enable_encryption(&self, passphrase: &str) -> Result<G::Status, String> {
+        self.gateway.enable_encryption(passphrase)
+    }
+
+    /// Adopt an already-encrypted bucket on this device.
+    pub fn unlock_encryption(&self, passphrase: &str) -> Result<G::Status, String> {
+        self.gateway.unlock_encryption(passphrase)
+    }
+
+    /// The pairing link the desktop renders as a QR. Carries bucket
+    /// credentials and the vault key, so it is as sensitive as the bucket.
+    pub fn pairing_link(&self) -> Result<String, String> {
+        self.gateway.pairing_link()
+    }
+
+    pub fn apply_pairing_link(&self, link: &str) -> Result<G::Status, String> {
+        self.gateway.apply_pairing_link(link)
+    }
 }

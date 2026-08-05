@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildSyncDeepLink,
+  CLOUD_PAIRING_LINK_PREFIX,
+  isCloudPairingLink,
   parseSyncDeepLink,
   stripPairingUsernameFromSshRemote,
 } from "./sync-link";
@@ -64,5 +66,26 @@ describe("sync deep link", () => {
     expect(stripPairingUsernameFromSshRemote("https://example.com/notes.git")).toBe(
       "https://example.com/notes.git"
     );
+  });
+});
+
+describe("cloud pairing links", () => {
+  it("pins the prefix the Rust core builds", () => {
+    // The payload is built and parsed in
+    // crates/type-core/src/adapters/object_sync/pairing.rs. If that constant
+    // changes and this one doesn't, every scan silently falls through to the
+    // LAN parser and reports "not a Type sync code".
+    expect(CLOUD_PAIRING_LINK_PREFIX).toBe("type2://cloud/");
+  });
+
+  it("recognizes a cloud code without mistaking it for a LAN one", () => {
+    const cloud = `${CLOUD_PAIRING_LINK_PREFIX}eyJlIjoiaHR0cHM6Ly94In0`;
+    expect(isCloudPairingLink(cloud)).toBe(true);
+    // Scanners often return trailing whitespace.
+    expect(isCloudPairingLink(`  ${cloud}\n`)).toBe(true);
+    expect(parseSyncDeepLink(cloud)).toBeNull();
+
+    expect(isCloudPairingLink("type2://sync?remote=ssh%3A%2F%2Fhost%2Fn")).toBe(false);
+    expect(isCloudPairingLink("https://example.com")).toBe(false);
   });
 });

@@ -42,6 +42,10 @@ type ObjectSyncState = {
   test: (settings: ObjectStoreSettings) => Promise<void>;
   /** Run a round and wait — pull-to-refresh and the explicit button. */
   syncNow: () => Promise<void>;
+  /** Apply a scanned `type2://cloud/...` code — the zero-typing setup path. */
+  applyPairingLink: (link: string) => Promise<void>;
+  /** Adopt an already-encrypted bucket here using its secret phrase. */
+  unlockEncryption: (passphrase: string) => Promise<void>;
 };
 
 export const useObjectSyncStore = create<ObjectSyncState>((set, get) => {
@@ -111,6 +115,21 @@ export const useObjectSyncStore = create<ObjectSyncState>((set, get) => {
         return outcome.conflicts.length > 0
           ? `${summary} · ${outcome.conflicts.length} conflict copies`
           : summary;
+      }),
+
+    applyPairingLink: (link) =>
+      run(async () => {
+        log("applying a scanned pairing code");
+        const status = await core.applyObjectSyncPairingLink(link);
+        return status.encrypted
+          ? "Paired, and the encryption key came with it."
+          : "Paired.";
+      }),
+
+    unlockEncryption: (passphrase) =>
+      run(async () => {
+        await core.unlockObjectSyncEncryption(passphrase);
+        return "Unlocked on this device.";
       }),
   };
 });

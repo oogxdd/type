@@ -76,3 +76,42 @@ pub(super) async fn collect_object_sync_garbage(app: tauri::AppHandle) -> Result
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     super::run_blocking_command(move || object_sync_use_cases(app)?.collect_garbage()).await
 }
+
+/// Turn on end-to-end encryption for this bucket.
+///
+/// Rewrites every stored object under new keys and removes the plaintext ones.
+/// Local notes are untouched.
+#[tauri::command]
+pub(super) async fn enable_object_sync_encryption(
+    app: tauri::AppHandle,
+    passphrase: String,
+) -> Result<ObjectSyncStatus, String> {
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
+    super::run_blocking_command(move || {
+        object_sync_use_cases(app)?.enable_encryption(&passphrase)
+    })
+    .await
+}
+
+/// Adopt an already-encrypted bucket on this device using its secret phrase.
+#[tauri::command]
+pub(super) async fn unlock_object_sync_encryption(
+    app: tauri::AppHandle,
+    passphrase: String,
+) -> Result<ObjectSyncStatus, String> {
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
+    super::run_blocking_command(move || {
+        object_sync_use_cases(app)?.unlock_encryption(&passphrase)
+    })
+    .await
+}
+
+/// The link rendered as a pairing QR. Carries bucket credentials *and* the
+/// vault key, so the UI must only show it on an explicit user action.
+#[tauri::command]
+pub(super) async fn get_object_sync_pairing_link(
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
+    super::run_blocking_command(move || object_sync_use_cases(app)?.pairing_link()).await
+}

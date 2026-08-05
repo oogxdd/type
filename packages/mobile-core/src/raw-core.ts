@@ -73,6 +73,9 @@ export interface RawCore {
   testObjectSyncConnection?(settingsJson: string): Promise<void>;
   objectSyncNow?(): Promise<string>;
   requestObjectSync?(reason: string | undefined): Promise<void>;
+  enableObjectSyncEncryption?(passphrase: string): Promise<string>;
+  unlockObjectSyncEncryption?(passphrase: string): Promise<string>;
+  applyObjectSyncPairingLink?(link: string): Promise<string>;
 
   // ── Recordings ──
   saveAudioRecording(argsJson: string): Promise<string>;

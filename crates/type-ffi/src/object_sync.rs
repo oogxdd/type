@@ -63,3 +63,22 @@ pub async fn request_object_sync(reason: Option<String>) -> Result<(), CoreError
     })
     .await
 }
+
+/// Turn on end-to-end encryption. Returns JSON `ObjectSyncStatus`.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn enable_object_sync_encryption(passphrase: String) -> Result<String, CoreError> {
+    run_blocking(move || to_json(&object_sync_use_cases()?.enable_encryption(&passphrase)?)).await
+}
+
+/// Adopt an already-encrypted bucket here using its secret phrase.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn unlock_object_sync_encryption(passphrase: String) -> Result<String, CoreError> {
+    run_blocking(move || to_json(&object_sync_use_cases()?.unlock_encryption(&passphrase)?)).await
+}
+
+/// Apply a scanned `type2://cloud/...` pairing link: bucket settings, plus the
+/// vault key when the bucket is encrypted. Returns JSON `ObjectSyncStatus`.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn apply_object_sync_pairing_link(link: String) -> Result<String, CoreError> {
+    run_blocking(move || to_json(&object_sync_use_cases()?.apply_pairing_link(&link)?)).await
+}
