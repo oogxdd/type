@@ -18,6 +18,8 @@ time = { version = "0.3", features = ["formatting", "macros", "parsing"] }
 argon2 = "0.5"
 chacha20poly1305 = { version = "0.10", features = ["std"] }
 zeroize = "1.8"
+sha2 = "0.10"
+hmac = "0.12"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
 mdns-sd = "0.20.0"
 ssh-key = { version = "0.6", features = ["ed25519"] }

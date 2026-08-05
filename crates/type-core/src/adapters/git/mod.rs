@@ -781,14 +781,27 @@ pub fn ensure_git_repo(root: &Path) -> Result<Repository, String> {
     Ok(repo)
 }
 
-/// Append `.type/device.json` to `.git/info/exclude` (repo-local, not synced)
-/// so per-device git credentials and pinned host keys stay off the remote.
+/// Append the device-local files to `.git/info/exclude` (repo-local, not
+/// synced): `.type/device.json` holds per-device git credentials, pinned host
+/// keys and bucket secrets, and `.type/object-sync-state.json` is the object
+/// -sync bookkeeping every device keeps separately. Both would be actively
+/// harmful on the remote.
+///
 /// Best-effort: sync must not fail over an exclude file.
 fn ensure_device_settings_excluded(repo: &Repository) {
-    let pattern = crate::DEVICE_SETTINGS_EXCLUDE_PATTERN;
+    let patterns = [
+        crate::DEVICE_SETTINGS_EXCLUDE_PATTERN,
+        crate::OBJECT_SYNC_STATE_EXCLUDE_PATTERN,
+    ];
     let exclude_path = repo.path().join("info").join("exclude");
     let existing = fs::read_to_string(&exclude_path).unwrap_or_default();
-    if existing.lines().any(|line| line.trim() == pattern) {
+
+    let missing: Vec<&str> = patterns
+        .iter()
+        .copied()
+        .filter(|pattern| !existing.lines().any(|line| line.trim() == *pattern))
+        .collect();
+    if missing.is_empty() {
         return;
     }
     if let Some(parent) = exclude_path.parent() {
@@ -799,7 +812,8 @@ fn ensure_device_settings_excluded(repo: &Repository) {
     } else {
         "\n"
     };
-    let _ = fs::write(&exclude_path, format!("{existing}{newline}{pattern}\n"));
+    let added = missing.join("\n");
+    let _ = fs::write(&exclude_path, format!("{existing}{newline}{added}\n"));
 }
 
 /// Resolve the target branch name: use provided value, current HEAD, or "main".
@@ -1689,11 +1703,13 @@ mod tests {
         let _ = ensure_git_repo(&root).unwrap();
         let _ = ensure_git_repo(&root).unwrap(); // idempotent
         let exclude = fs::read_to_string(root.join(".git").join("info").join("exclude")).unwrap();
-        let hits = exclude
-            .lines()
-            .filter(|line| line.trim() == crate::DEVICE_SETTINGS_EXCLUDE_PATTERN)
-            .count();
-        assert_eq!(hits, 1);
+        for pattern in [
+            crate::DEVICE_SETTINGS_EXCLUDE_PATTERN,
+            crate::OBJECT_SYNC_STATE_EXCLUDE_PATTERN,
+        ] {
+            let hits = exclude.lines().filter(|line| line.trim() == pattern).count();
+            assert_eq!(hits, 1, "{pattern} should appear exactly once");
+        }
 
         fs::remove_dir_all(&root).unwrap();
     }

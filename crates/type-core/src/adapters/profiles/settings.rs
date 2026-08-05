@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub use crate::ports::object_sync::ObjectStoreSettings;
 pub use crate::ports::profiles::TranscriptionMode;
 
 /// Global application configuration (shared across all profiles).
@@ -138,9 +139,11 @@ pub const DEVICE_SETTINGS_FILE: &str = "device.json";
 /// The repo-relative path git should exclude from sync.
 pub const DEVICE_SETTINGS_EXCLUDE_PATTERN: &str = "/.type/device.json";
 
-/// The git connection fields of [`ProfileSettings`], as persisted per device.
+/// The device-local settings file: the git connection, plus the object-storage
+/// connection. Both describe how *this device* reaches a remote and carry
+/// credentials, so neither may travel between devices.
 #[derive(Deserialize, Serialize)]
-struct DeviceGitSettings {
+struct DeviceSettingsFile {
     #[serde(default)]
     git_remote_url: String,
     #[serde(default = "default_git_branch")]
@@ -155,10 +158,75 @@ struct DeviceGitSettings {
     git_trusted_ssh_host: String,
     #[serde(default)]
     git_trusted_ssh_host_key_sha256: String,
+    /// Bucket endpoint, credentials and prefix. Absent until sync is set up.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    object_sync: Option<ObjectStoreSettings>,
+}
+
+impl Default for DeviceSettingsFile {
+    fn default() -> Self {
+        Self {
+            git_remote_url: String::new(),
+            git_branch: default_git_branch(),
+            git_username: String::new(),
+            git_password: String::new(),
+            git_commit_message: default_git_commit_message(),
+            git_trusted_ssh_host: String::new(),
+            git_trusted_ssh_host_key_sha256: String::new(),
+            object_sync: None,
+        }
+    }
 }
 
 fn device_settings_path(notes_root: &Path) -> PathBuf {
     notes_root.join(SETTINGS_FOLDER).join(DEVICE_SETTINGS_FILE)
+}
+
+fn read_device_settings(notes_root: &Path) -> DeviceSettingsFile {
+    fs::read_to_string(device_settings_path(notes_root))
+        .ok()
+        .and_then(|content| serde_json::from_str(&content).ok())
+        .unwrap_or_default()
+}
+
+fn write_device_settings(
+    notes_root: &Path,
+    device: &DeviceSettingsFile,
+) -> Result<(), String> {
+    let folder = notes_root.join(SETTINGS_FOLDER);
+    if !folder.exists() {
+        fs::create_dir_all(&folder).map_err(|err| {
+            format!(
+                "Failed to create settings folder '{}': {err}",
+                folder.display()
+            )
+        })?;
+    }
+    let content = serde_json::to_string_pretty(device).map_err(|err| err.to_string())?;
+    let path = device_settings_path(notes_root);
+    fs::write(&path, content).map_err(|err| {
+        format!(
+            "Failed to write device settings '{}': {err}",
+            path.display()
+        )
+    })
+}
+
+/// Read this device's object-storage connection for a profile.
+pub fn load_object_store_settings(notes_root: &Path) -> ObjectStoreSettings {
+    read_device_settings(notes_root)
+        .object_sync
+        .unwrap_or_default()
+}
+
+/// Persist the object-storage connection, leaving the git connection alone.
+pub fn save_object_store_settings(
+    notes_root: &Path,
+    settings: &ObjectStoreSettings,
+) -> Result<(), String> {
+    let mut device = read_device_settings(notes_root);
+    device.object_sync = Some(settings.clone());
+    write_device_settings(notes_root, &device)
 }
 
 pub fn load_profile_settings(notes_root: &Path) -> ProfileSettings {
@@ -177,7 +245,7 @@ pub fn load_profile_settings(notes_root: &Path) -> ProfileSettings {
     if device_path.exists() {
         if let Some(device) = fs::read_to_string(&device_path)
             .ok()
-            .and_then(|content| serde_json::from_str::<DeviceGitSettings>(&content).ok())
+            .and_then(|content| serde_json::from_str::<DeviceSettingsFile>(&content).ok())
         {
             settings.git_remote_url = device.git_remote_url;
             settings.git_branch = device.git_branch;
@@ -202,8 +270,9 @@ pub fn save_profile_settings(notes_root: &Path, settings: &ProfileSettings) -> R
         })?;
     }
 
-    // Git connection → device-local file.
-    let device = DeviceGitSettings {
+    // Git connection → device-local file, preserving the object-storage
+    // connection that shares it.
+    let device = DeviceSettingsFile {
         git_remote_url: settings.git_remote_url.clone(),
         git_branch: settings.git_branch.clone(),
         git_username: settings.git_username.clone(),
@@ -211,15 +280,9 @@ pub fn save_profile_settings(notes_root: &Path, settings: &ProfileSettings) -> R
         git_commit_message: settings.git_commit_message.clone(),
         git_trusted_ssh_host: settings.git_trusted_ssh_host.clone(),
         git_trusted_ssh_host_key_sha256: settings.git_trusted_ssh_host_key_sha256.clone(),
+        object_sync: read_device_settings(notes_root).object_sync,
     };
-    let device_content = serde_json::to_string_pretty(&device).map_err(|err| err.to_string())?;
-    let device_path = device_settings_path(notes_root);
-    fs::write(&device_path, device_content).map_err(|err| {
-        format!(
-            "Failed to write device git settings '{}': {err}",
-            device_path.display()
-        )
-    })?;
+    write_device_settings(notes_root, &device)?;
 
     // Everything else → the synced settings.json, with git fields blanked so
     // credentials and per-device remotes stop traveling through the repo.
@@ -322,6 +385,55 @@ mod tests {
         assert_eq!(loaded.git_remote_url, "https://example.com/notes.git");
         assert_eq!(loaded.git_password, "tok");
 
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn object_store_credentials_stay_device_local_and_survive_git_writes() {
+        let root = temp_root("object-store");
+
+        let bucket = ObjectStoreSettings {
+            endpoint: "https://acct.r2.cloudflarestorage.com".to_string(),
+            bucket: "notes".to_string(),
+            prefix: "type-notes/p1".to_string(),
+            region: "auto".to_string(),
+            access_key_id: "AKID".to_string(),
+            secret_access_key: "BUCKET-SECRET".to_string(),
+            device_id: "dev-1".to_string(),
+            enabled: true,
+            ..ObjectStoreSettings::default()
+        };
+        save_object_store_settings(&root, &bucket).unwrap();
+
+        // Writing the git connection must not drop the bucket connection —
+        // they share one file and are saved through different call paths.
+        save_profile_settings(
+            &root,
+            &ProfileSettings {
+                git_remote_url: "ssh://host/notes".to_string(),
+                ..ProfileSettings::default()
+            },
+        )
+        .unwrap();
+
+        let loaded = load_object_store_settings(&root);
+        assert_eq!(loaded, bucket);
+        assert_eq!(load_profile_settings(&root).git_remote_url, "ssh://host/notes");
+
+        // …and nothing about the bucket leaks into the synced settings file.
+        let shared = fs::read_to_string(root.join(".type").join("settings.json")).unwrap();
+        assert!(!shared.contains("BUCKET-SECRET"));
+        assert!(!shared.contains("r2.cloudflarestorage.com"));
+
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn an_unconfigured_profile_reports_no_object_store() {
+        let root = temp_root("object-store-empty");
+        let loaded = load_object_store_settings(&root);
+        assert!(!loaded.is_configured());
+        assert!(!loaded.is_active());
         fs::remove_dir_all(&root).unwrap();
     }
 

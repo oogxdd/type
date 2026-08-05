@@ -3,6 +3,7 @@ pub mod handwriting;
 pub mod import;
 pub mod local_sync;
 pub mod notes;
+pub mod object_sync;
 pub mod profiles;
 pub mod recordings;
 pub mod security;
