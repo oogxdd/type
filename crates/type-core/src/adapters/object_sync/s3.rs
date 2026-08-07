@@ -192,9 +192,23 @@ impl S3ObjectStore {
         };
         let endpoint = Url::parse(&normalized)
             .map_err(|error| format!("Invalid endpoint '{}': {error}", settings.endpoint))?;
-        if endpoint.host_str().is_none() {
+        let Some(host) = endpoint.host_str() else {
             return Err(format!("Endpoint '{}' has no host.", settings.endpoint));
+        };
+
+        // Refuse plaintext HTTP to anything off the local network. Without TLS
+        // every note, filename and — worse — the signing credentials travel in
+        // the clear, which on a public network means anyone nearby can read
+        // and then impersonate. Self-hosted MinIO on localhost or a LAN
+        // address is a deliberate setup and stays allowed, the same line the
+        // git transport already draws between local and internet hosts.
+        if endpoint.scheme() == "http" && !crate::adapters::git::is_local_hostname(host) {
+            return Err(format!(
+                "Refusing to sync to '{host}' over plain http — notes and access keys would \
+                 travel unencrypted and be readable by anyone on the same network. Use https://."
+            ));
         }
+
         Ok(Self { settings, endpoint })
     }
 
@@ -643,6 +657,33 @@ mod tests {
     fn a_bare_hostname_is_assumed_to_be_https() {
         let store = S3ObjectStore::new(settings("acct.r2.cloudflarestorage.com", None)).unwrap();
         assert_eq!(store.endpoint.scheme(), "https");
+    }
+
+    /// The public-wifi case: without TLS a bystander reads the notes *and*
+    /// captures the signing credentials.
+    #[test]
+    fn plaintext_http_is_refused_for_internet_endpoints() {
+        let error = S3ObjectStore::new(settings("http://storage.example.com", None))
+            .err()
+            .expect("plain http to a public host must be refused");
+        assert!(error.contains("plain http"), "{error}");
+        assert!(error.contains("https://"), "should say what to do instead: {error}");
+
+        // …but a deliberate self-hosted MinIO stays workable.
+        for local in [
+            "http://localhost:9000",
+            "http://127.0.0.1:9000",
+            "http://192.168.1.10:9000",
+            "http://nas.local:9000",
+        ] {
+            assert!(
+                S3ObjectStore::new(settings(local, None)).is_ok(),
+                "{local} should be allowed"
+            );
+        }
+
+        // https to the same public host is fine.
+        assert!(S3ObjectStore::new(settings("https://storage.example.com", None)).is_ok());
     }
 
     #[test]

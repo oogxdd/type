@@ -622,6 +622,59 @@ mod tests {
         assert_eq!(a.read("Feed/n.md").as_deref(), Some("from b"));
     }
 
+    /// A rename is a delete plus a create as far as the engine is concerned.
+    /// It must reach the other device, and it must *not* re-upload the bytes:
+    /// the content hash is unchanged, so the blob is already there.
+    #[test]
+    fn renaming_a_note_moves_it_on_the_other_device_without_re_uploading() {
+        let store = MemoryStore::default();
+        let mut a = Device::new("rename", "a");
+        let mut b = Device::new("rename", "b");
+
+        a.write("Feed/old-name.md", "unchanged body");
+        a.sync(&store, 1_000);
+        b.sync(&store, 2_000);
+        let blobs_before = store.list("p/objects/").unwrap().len();
+
+        fs::rename(a.root.join("Feed/old-name.md"), a.root.join("Feed/new-name.md")).unwrap();
+        let out = a.sync(&store, 3_000);
+        assert_eq!(out.deleted_remote, 1, "the old path should be tombstoned");
+        assert_eq!(out.uploaded, 1, "the new path needs a manifest entry");
+        assert_eq!(
+            store.list("p/objects/").unwrap().len(),
+            blobs_before,
+            "identical content must reuse the existing blob"
+        );
+
+        let out = b.sync(&store, 4_000);
+        assert_eq!(out.deleted_local, 1);
+        assert_eq!(out.downloaded, 1);
+        assert!(!b.exists("Feed/old-name.md"));
+        assert_eq!(b.read("Feed/new-name.md").as_deref(), Some("unchanged body"));
+    }
+
+    /// Moving between folders is the same mechanism one level up, and the
+    /// emptied folder should not linger on the other device.
+    #[test]
+    fn moving_a_note_between_folders_propagates() {
+        let store = MemoryStore::default();
+        let mut a = Device::new("move", "a");
+        let mut b = Device::new("move", "b");
+
+        a.write("Projects/note.md", "body");
+        a.sync(&store, 1_000);
+        b.sync(&store, 2_000);
+
+        fs::create_dir_all(a.root.join("Archieve")).unwrap();
+        fs::rename(a.root.join("Projects/note.md"), a.root.join("Archieve/note.md")).unwrap();
+        a.sync(&store, 3_000);
+        b.sync(&store, 4_000);
+
+        assert_eq!(b.read("Archieve/note.md").as_deref(), Some("body"));
+        assert!(!b.exists("Projects/note.md"));
+        assert!(!b.root.join("Projects").exists(), "the emptied folder should go too");
+    }
+
     #[test]
     fn a_delete_racing_an_edit_keeps_the_edit() {
         let store = MemoryStore::default();

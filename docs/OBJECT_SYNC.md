@@ -221,6 +221,26 @@ two purposes:
   leaks — which is exactly the gap that made a hosted tier untenable before.
 - **In transit** is TLS to the provider, underneath all of the above.
 
+### What phase 1 does and does not protect
+
+Worth being precise, because "unencrypted" is easy to over-read. Even without
+phase 2, traffic to the bucket is **HTTPS**, so a bystander on public Wi-Fi sees
+a TLS connection to your provider and nothing else — not the notes, not the
+filenames, not the access keys. A plaintext `http://` endpoint would break that,
+so the client refuses one for any host outside the local network (self-hosted
+MinIO on `localhost` or a LAN address is still allowed, the same line the git
+transport already draws).
+
+What phase 1 leaves exposed is the **provider**, not the network: Cloudflare or
+Backblaze or Amazon can read every note, and so can anyone who obtains your
+access keys or a misconfigured-public bucket. That is exactly the gap phase 2
+closes.
+
+One metadata leak survives both phases: the endpoint hostname is visible to the
+network via DNS and TLS SNI, and with virtual-host addressing the bucket name is
+part of it. Path-style addressing — the default for everything except AWS —
+keeps the bucket name inside the encrypted path instead.
+
 Note the scope difference from the existing app-lock encryption
 (`.notes-security.json`): that one encrypts note *bodies* on local disk and
 leaves front-matter and filenames plaintext by design. This is a separate,

@@ -1258,9 +1258,17 @@ fn is_lan_host(host: &str) -> bool {
 
 /// Like [`is_lan_host`] but tolerant of the `[host]:port` forms libgit2 hands
 /// to the certificate callback, and counting mDNS `.local` names as local.
-fn is_local_hostname(hostname: &str) -> bool {
+///
+/// Shared with the object-sync transport, which uses the same "trust the local
+/// network, not the internet" line to decide whether a plaintext `http://`
+/// endpoint is acceptable.
+pub(crate) fn is_local_hostname(hostname: &str) -> bool {
     let normalized = normalize_host_for_compare(hostname);
-    is_lan_host(&normalized) || normalized.ends_with(".local")
+    // `localhost` is not an IP literal, so `is_lan_host` alone misses the most
+    // common self-hosted address of all.
+    is_lan_host(&normalized)
+        || normalized.eq_ignore_ascii_case("localhost")
+        || normalized.ends_with(".local")
 }
 
 // ── Transfer progress ──────────────────────────────────────────────────────────
