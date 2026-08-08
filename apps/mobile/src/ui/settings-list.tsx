@@ -194,6 +194,9 @@ export function SettingsSwatchRow<Id extends string>({
         <Pressable
           key={option.id}
           onPress={() => onSelect(option.id)}
+          accessibilityRole="button"
+          accessibilityLabel={option.label}
+          accessibilityState={{ selected: option.id === selected }}
           style={styles.swatch}
         >
           <View
@@ -251,11 +254,15 @@ export const SettingsStepperRow = ({
   const step = (
     icon: "remove" | "add",
     onPress: () => void,
-    enabled: boolean
+    enabled: boolean,
+    accessibilityLabel: string
   ) => (
     <Pressable
       onPress={onPress}
       disabled={!enabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled: !enabled }}
       hitSlop={6}
       style={({ pressed }) => [
         styles.stepperButton,
@@ -274,11 +281,11 @@ export const SettingsStepperRow = ({
       <Text style={[styles.rowTitle, styles.rowText, { color: theme.colors.text }]}>
         {title}
       </Text>
-      {step("remove", onDecrease, canDecrease)}
+      {step("remove", onDecrease, canDecrease, `Decrease ${title}`)}
       <Text style={[styles.stepperValue, { color: theme.colors.secondaryText }]}>
         {value}
       </Text>
-      {step("add", onIncrease, canIncrease)}
+      {step("add", onIncrease, canIncrease, `Increase ${title}`)}
     </View>
   );
 };
