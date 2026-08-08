@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "b89b266b4188",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/MACOS_CODE_SIGNING.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/b8/9b266b4188/0/metadata.json",
+      "transcript": "/b8/9b266b4188/0/full.jsonl",
+      "context": "/b8/9b266b4188/0/context.md",
+      "content_hash": "/b8/9b266b4188/0/content_hash.txt",
+      "prompt": "/b8/9b266b4188/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 13,
+    "cache_creation_tokens": 6271,
+    "cache_read_tokens": 1242141,
+    "output_tokens": 6295,
+    "api_call_count": 7
+  }
+}
