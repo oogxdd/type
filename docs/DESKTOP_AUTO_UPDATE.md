@@ -47,6 +47,12 @@ This produces:
 
 ### 2. Paste the public key into config
 
+> **Done as of 0.4.5.** `plugins.updater.pubkey` now holds the real key from
+> `~/.tauri/type-updater.key.pub` (key id `38459F9A77300925`), which is the same
+> key the `TAURI_SIGNING_PRIVATE_KEY` CI secret signs with. Builds released
+> before 0.4.5 shipped the placeholder and **cannot auto-update** — those installs
+> need one manual `.dmg` install to get onto the updater path.
+
 Open `src-tauri/tauri.conf.json` and replace the placeholder:
 
 ```jsonc

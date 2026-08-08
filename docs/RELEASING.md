@@ -72,6 +72,56 @@ GitHub Release via `gh` — exactly what CI does. (`gh auth login` required once
 
 ---
 
+## 2b. Developing locally without touching the installed prod app
+
+The released app and a local dev build are **fully separate installs with
+separate data**, as long as you use the dev config. Never point a dev run at the
+production identifier — `com.digital.type2`'s app-data directory is where the
+real notes live.
+
+| | Production | Dev |
+| --- | --- | --- |
+| Bundle | `/Applications/Type.app` | `/Applications/Type Dev.app` |
+| Identifier | `com.digital.type2` | `com.digital.type2.dev` |
+| App data (notes, profiles, keys) | `~/Library/Application Support/com.digital.type2` | `~/Library/Application Support/com.digital.type2.dev` |
+| Auto-update | on (GitHub `latest.json`) | off (`endpoints: []`) |
+
+Everything above the identifier line is driven by
+`apps/desktop/src-tauri/tauri.dev.conf.json`, which Tauri deep-merges over
+`tauri.conf.json`.
+
+```bash
+npm run desktop:app       # dev run against the dev identifier — safe
+npm run desktop:dmg:dev   # "Type Dev.dmg", installs alongside prod
+```
+
+`npm run desktop:app:prod-data` exists as an explicit escape hatch: it runs the
+dev build against the **production** app-data directory. Use it only when you
+deliberately need to reproduce something against real notes, and back up first
+(see below).
+
+The dev config sets `plugins.updater.endpoints: []`, so a dev build can never
+download and overwrite itself with a production release. The updater errors with
+`EmptyEndpoints` if you press "Check for updates" there — that is intended.
+
+### Backing up production data
+
+Everything the desktop app owns lives under one directory:
+
+```bash
+STAMP=$(date +%Y%m%d-%H%M%S)
+rsync -aH --exclude 'whisper/' --exclude '.DS_Store' \
+  "$HOME/Library/Application Support/com.digital.type2/" \
+  "/Volumes/KINGSTON/Backups/type/prod-$STAMP/app-data/"
+ditto /Applications/Type.app "/Volumes/KINGSTON/Backups/type/prod-$STAMP/Type.app"
+```
+
+`whisper/` is excluded because the managed Python env re-provisions itself.
+Everything that matters — `notes/`, `profiles/`, `config.json`,
+`.notes-profiles.json`, `local_sync/` — is a few tens of MB.
+
+---
+
 ## 3. How to cut a mobile release
 
 ```bash

@@ -7,5 +7,13 @@
         "title": "Type Dev"
       }
     ]
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": []
+    }
   }
 }

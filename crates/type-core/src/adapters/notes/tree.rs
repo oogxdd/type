@@ -183,6 +183,11 @@ pub fn build_folder_node(dir: &Path, rel_path: &str) -> Result<FolderNode, Strin
         if name == ORDER_FILE {
             continue;
         }
+        // Dot-entries are infrastructure, not user content (`.git`, `.type`,
+        // `.DS_Store`, …). `collect_markdown_note_files` skips them too.
+        if name.starts_with('.') {
+            continue;
+        }
         if rel_path.is_empty() && is_hidden_root_folder_name(&name) {
             continue;
         }
@@ -327,4 +332,39 @@ pub fn update_order_rename(
         list[pos] = new_name.to_string();
     }
     write_order_file(dir, &order)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Unique scratch dir — the crate has no tempdir dev-dependency.
+    fn scratch_dir(label: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "type-core-tree-{label}-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("create scratch dir");
+        dir
+    }
+
+    #[test]
+    fn build_folder_node_skips_dot_entries() {
+        let root = scratch_dir("dot-entries");
+        fs::create_dir_all(root.join("Feed")).unwrap();
+        fs::create_dir_all(root.join(".git")).unwrap();
+        fs::create_dir_all(root.join(".type")).unwrap();
+        fs::write(root.join("visible.md"), "body").unwrap();
+        fs::write(root.join(".hidden.md"), "body").unwrap();
+
+        let node = build_folder_node(&root, "").expect("build tree");
+
+        let folders: Vec<&str> = node.children.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(folders, vec!["Feed"]);
+        let notes: Vec<&str> = node.notes.iter().map(|n| n.name.as_str()).collect();
+        assert_eq!(notes, vec!["visible.md"]);
+
+        fs::remove_dir_all(&root).ok();
+    }
 }
