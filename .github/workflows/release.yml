@@ -110,15 +110,51 @@ jobs:
             exit 1
           }
 
-      - name: Build, sign & publish desktop release
+      # A release built locally (apps/desktop/scripts/release-local.sh) publishes
+      # its own assets and creates the tag — which lands here as a tag push. Don't
+      # rebuild over it: whichever path published first wins.
+      - name: Skip if this release was already published
+        id: published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.setup.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --json assets --jq '.assets[].name' 2>/dev/null | grep -qx 'latest.json'; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "$TAG already has latest.json — built elsewhere, skipping CI build."
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # An unset secret interpolates to an empty string, and the Tauri bundler
+      # treats a *defined* APPLE_CERTIFICATE as "sign this" — it then fails on
+      # `security import` with an empty cert instead of shipping unsigned. So the
+      # Apple vars are only put into the environment when actually configured.
+      - name: Detect Apple signing configuration
+        id: apple
+        if: steps.published.outputs.already != 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        run: |
+          set -euo pipefail
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Apple signing configured — the bundle will be signed and notarized."
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "No Apple secrets — shipping an unsigned bundle (Gatekeeper warning on first open)."
+          fi
+
+      - name: Build, sign & publish desktop release (Apple-signed)
+        if: steps.published.outputs.already != 'true' && steps.apple.outputs.configured == 'true'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Updater signing (required) — see docs/RELEASING.md.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # Apple notarization (optional — removes the Gatekeeper warning). Leave
-          # unset to ship an unsigned .dmg (right-click → Open to launch).
+          # Apple code-signing + notarization — independent of the updater key.
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -136,9 +172,26 @@ jobs:
           # and a matching darwin-x86_64 entry (tauri-action handles latest.json).
           args: --bundles app,dmg
 
+      - name: Build & publish desktop release (unsigned)
+        if: steps.published.outputs.already != 'true' && steps.apple.outputs.configured != 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ needs.setup.outputs.tag }}
+          releaseName: "Type Desktop ${{ needs.setup.outputs.version }}"
+          releaseBody: "Automated desktop release. Download the .dmg below; existing installs update in-app via Settings → Updates."
+          releaseDraft: false
+          prerelease: false
+          projectPath: apps/desktop
+          args: --bundles app,dmg
+
       # The desktop updater endpoint reads .../releases/latest/download/latest.json,
       # so the desktop release must be GitHub's "latest".
       - name: Mark release as latest
+        if: steps.published.outputs.already != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${{ needs.setup.outputs.tag }}" --latest --prerelease=false

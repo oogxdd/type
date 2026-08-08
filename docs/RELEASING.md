@@ -174,8 +174,10 @@ warning on first open. With them, tauri-action notarizes automatically:
 `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`,
 `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`.
 
-To base64-encode a file for a secret:
-`base64 -i Certificates.p12 | pbcopy`
+Set **all six or none** — a partially configured setup fails the release rather
+than falling back to unsigned. Full walkthrough, including the microphone
+entitlement the hardened runtime requires:
+[MACOS_CODE_SIGNING.md](./MACOS_CODE_SIGNING.md).
 
 ---
 
@@ -196,7 +198,96 @@ To base64-encode a file for a secret:
 
 ---
 
-## 6. Later: dedicated macOS runners (e.g. getmac.io / self-hosted)
+## 6. What runs when, and what it costs
+
+| Workflow | Trigger | Runner | Builds the app? |
+| --- | --- | --- | --- |
+| `ci.yml` | every push to `main`, every PR commit | `ubuntu-latest` | No — typecheck + unit tests only |
+| `ffi-bindings-check.yml` | PRs touching `type-ffi` / `mobile-core` | `ubuntu-latest` | No |
+| `release.yml` | push of a `desktop-v*` tag, or manual dispatch | `macos-latest` | **Yes** — `.dmg` + updater artifacts |
+| `mobile-testflight.yml` | push of a `mobile-v*` tag | `macos-latest` | Yes — `.ipa` |
+
+So ordinary commits never trigger a desktop build. Only a `desktop-v*` tag does.
+That matters for billing: Linux minutes count 1×, **macOS minutes count 10×**
+against the included pool.
+
+### Why the release build is always cold
+
+`swatinem/rust-cache@v2` is in both workflows, but the release build still
+compiles from scratch every time, for three independent reasons:
+
+1. **Different operating systems.** `ci.yml`'s `rust` job runs on
+   `ubuntu-latest`; `release.yml` runs on `macos-latest`. Rust caches are
+   per-platform, so CI produces nothing the release job could restore. This is
+   the dominant reason.
+2. **Cache scoping by ref.** A tag push runs on `refs/tags/desktop-v1.2.3`.
+   Actions restores from the current ref's scope, falling back to the default
+   branch — so `main → tag` can work, but a cache *saved* under one tag is
+   invisible to the next tag. Tag-to-tag reuse never happens.
+3. **Different profiles.** `cargo test --workspace --lib` builds `debug`;
+   `tauri build` builds `release`. Even on matching platforms you would reuse
+   the downloaded crates, not the compiled dependencies.
+
+### Should you fix it?
+
+Probably not. Warming it means adding a `macos-latest` job on `main` that does a
+release-profile build with a shared `shared-key`, which the tag job then
+restores. That burns 10×-billed macOS minutes on every push to `main` to save
+minutes on releases you cut occasionally — and Actions evicts caches after 7
+days unused, so at a weekly cadence the warm cache is often gone by release time.
+
+**Your fastest path is local.** The repo's `target/` on a dev Mac stays warm
+(~12 GB), so `npm run desktop:release <version>` rebuilds incrementally in a
+couple of minutes. CI is the fallback for when you're away from that machine.
+
+If you do want it warmed, the shape is:
+
+```yaml
+# ci.yml — new job, main only
+warm-desktop-cache:
+  if: github.ref == 'refs/heads/main'
+  runs-on: macos-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: swatinem/rust-cache@v2
+      with:
+        shared-key: desktop-macos-release
+    - run: cargo build --release --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+# release.yml — desktop job restores it, never saves (a tag-scoped
+# save can't be read by anything later)
+- uses: swatinem/rust-cache@v2
+  with:
+    shared-key: desktop-macos-release
+    save-if: false
+```
+
+### Choosing CI or local per release
+
+Both paths produce identical artifacts and both create the GitHub Release, so
+the risk is doing it twice for the same tag. The `desktop` job guards against
+that: it checks whether the release already carries a `latest.json` and exits
+without rebuilding if so. That makes the choice a matter of what you do first,
+with no flags to remember:
+
+- **Local:** `npm run desktop:release 1.2.3`. It builds, signs, publishes, and
+  creates the tag. If that tag push wakes CI, CI sees the finished release and
+  skips.
+- **CI:** just push the tag — `git tag desktop-v1.2.3 && git push origin
+  desktop-v1.2.3`. Nothing is published yet, so CI builds it.
+
+Local releases still need the updater key in the environment (see
+[UPDATER_KEY_ROTATION.md](./UPDATER_KEY_ROTATION.md)):
+
+```bash
+export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/type-updater.key)"
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<password>"
+```
+
+---
+
+## 7. Later: dedicated macOS runners (e.g. getmac.io / self-hosted)
 
 Out of scope for now — high-level only. When free minutes stop being enough and
 local builds get tedious, point the macOS job at a faster/cheaper runner:
