@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "8596a59cae78",
+  "session_id": "87982bbe-c2cd-4c0a-a831-b62ac43a016d",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-08T18:51:15.395295Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".github/workflows/release.yml",
+    "apps/desktop/src-tauri/entitlements.plist",
+    "docs/RELEASING.md",
+    "docs/MACOS_CODE_SIGNING.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "0293ac8efce3",
+  "checkpoint_transcript_start": 371,
+  "transcript_lines_at_start": 371,
+  "token_usage": {
+    "input_tokens": 56,
+    "cache_creation_tokens": 34784,
+    "cache_read_tokens": 4549765,
+    "output_tokens": 30785,
+    "api_call_count": 30
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-08T18:51:15.137156Z",
+    "agent_lines": 330,
+    "human_added": 4,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 334,
+    "agent_percentage": 98.80239520958084
+  }
+}
