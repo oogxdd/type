@@ -67,9 +67,18 @@ ID password will not work for notarization.
 
 ### 4. Set the repository secrets
 
+> `gh secret set` will happily store an **empty** value. Piping into it from a
+> command that failed — a missing `.p12`, a typo'd path — prints a cheerful
+> `✓ Set Actions secret` while writing nothing. Guard the pipe, or you'll be
+> debugging a signing failure whose cause is an empty secret that looks present
+> in `gh secret list`.
+
 ```bash
-base64 -i ~/Desktop/type-developer-id.p12 | tr -d '\n' \
-  | gh secret set APPLE_CERTIFICATE --repo oogxdd/type
+set -o pipefail
+P12=~/Desktop/type-developer-id.p12
+[ -s "$P12" ] && base64 -i "$P12" | tr -d '\n' \
+  | gh secret set APPLE_CERTIFICATE --repo oogxdd/type \
+  || echo "STOP: $P12 missing or empty — secret left untouched"
 
 # each of these prompts; nothing lands in shell history
 read -rs "PW?p12 password: "; echo
