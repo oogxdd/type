@@ -1572,10 +1572,9 @@ body {
   padding-top: calc(24px + var(--left-panels-drag-height));
 }
 
-.app.theme-dark .editor-pane {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
+/* The editor pane keeps the same blur as every other pane. Disabling it here
+   let the native macOS overlay titlebar show through as a hard 3-4px band at
+   the top edge, since nothing was left to diffuse it. */
 
 .app.theme-dark .tiptap-content pre {
   background: rgba(255, 255, 255, 0.09);
