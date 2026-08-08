@@ -16,15 +16,19 @@
  */
 export default ({ config }) => {
   const isDev = process.env.APP_VARIANT === "dev";
+  const releaseVersion = process.env.MOBILE_VERSION;
+  const iosBuildNumber = process.env.IOS_BUILD_NUMBER;
 
   return {
     ...config,
     name: isDev ? "Type Dev" : config.name,
+    version: releaseVersion || config.version,
     ios: {
       ...config.ios,
       bundleIdentifier: isDev
         ? "com.typenotes.mobile.dev"
         : config.ios?.bundleIdentifier,
+      buildNumber: iosBuildNumber || config.ios?.buildNumber,
     },
     android: {
       ...config.android,

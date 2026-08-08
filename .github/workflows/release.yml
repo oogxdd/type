@@ -1,6 +1,6 @@
-name: Release
+name: Desktop Release
 
-# Tag-driven desktop releases: pushing v1.2.3 builds the .dmg + updater
+# Tag-driven desktop releases: pushing desktop-v1.2.3 builds the .dmg + updater
 # artifacts and publishes them as a GitHub Release.
 #
 # You can also trigger manually from the Actions tab (workflow_dispatch) and
@@ -8,7 +8,7 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
+      - "desktop-v*"
   workflow_dispatch:
     inputs:
       version:
@@ -26,15 +26,37 @@ jobs:
       version: ${{ steps.parse.outputs.version }}
       tag: ${{ steps.parse.outputs.tag }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - id: parse
         run: |
-          set -e
+          set -euo pipefail
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ inputs.version }}"
-            TAG="v$VERSION"
+            TAG="desktop-v$VERSION"
+            [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "Expected a semver version like 1.2.3, got $VERSION." >&2
+              exit 1
+            }
+            if [ "${{ github.ref_name }}" != "main" ]; then
+              echo "Manual desktop releases must be run from main." >&2
+              exit 1
+            fi
           else
-            TAG="${{ github.ref_name }}"          # e.g. v1.2.3
-            VERSION="${TAG#v}"                     # strip leading v
+            TAG="${{ github.ref_name }}"          # e.g. desktop-v1.2.3
+            VERSION="${TAG#desktop-v}"             # strip release prefix
+            [[ "$TAG" =~ ^desktop-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "Expected a desktop semver tag like desktop-v1.2.3, got $TAG." >&2
+              exit 1
+            }
+            git fetch origin main
+            RELEASE_SHA="$(git rev-list -n 1 "$TAG")"
+            git merge-base --is-ancestor "$RELEASE_SHA" origin/main || {
+              echo "Tag $TAG does not point to a commit on origin/main." >&2
+              exit 1
+            }
           fi
 
           {
@@ -55,21 +77,38 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Set app version from tag
         working-directory: apps/desktop
         run: bash scripts/set-app-version.sh "${{ needs.setup.outputs.version }}"
+
+      - name: Verify required signing secrets
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] || {
+            echo "Missing TAURI_SIGNING_PRIVATE_KEY repository secret." >&2
+            exit 1
+          }
+          [ -n "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" ] || {
+            echo "Missing TAURI_SIGNING_PRIVATE_KEY_PASSWORD repository secret." >&2
+            exit 1
+          }
 
       - name: Build, sign & publish desktop release
         uses: tauri-apps/tauri-action@v0
@@ -88,7 +127,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ needs.setup.outputs.tag }}
-          releaseName: "Type ${{ needs.setup.outputs.tag }}"
+          releaseName: "Type Desktop ${{ needs.setup.outputs.tag }}"
           releaseBody: "Automated desktop release. Download the .dmg below; existing installs update in-app via Settings → Updates."
           releaseDraft: false
           prerelease: false

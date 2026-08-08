@@ -1,0 +1,156 @@
+name: Mobile TestFlight
+
+on:
+  push:
+    tags:
+      - "mobile-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.2.0"
+        required: true
+        type: string
+      build_number:
+        description: "Optional iOS build number. Defaults to the GitHub run number."
+        required: false
+        type: string
+
+concurrency:
+  group: mobile-testflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+      tag: ${{ steps.parse.outputs.tag }}
+      build_number: ${{ steps.parse.outputs.build_number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: parse
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            TAG="mobile-v$VERSION"
+            BUILD_NUMBER="${{ inputs.build_number }}"
+            [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "Expected a semver version like 0.2.0, got $VERSION." >&2
+              exit 1
+            }
+            if [ "${{ github.ref_name }}" != "main" ]; then
+              echo "Manual mobile releases must be run from main." >&2
+              exit 1
+            fi
+          else
+            TAG="${{ github.ref_name }}"          # e.g. mobile-v0.2.0
+            VERSION="${TAG#mobile-v}"             # strip release prefix
+            BUILD_NUMBER=""
+            [[ "$TAG" =~ ^mobile-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "Expected a mobile semver tag like mobile-v0.2.0, got $TAG." >&2
+              exit 1
+            }
+            git fetch origin main
+            RELEASE_SHA="$(git rev-list -n 1 "$TAG")"
+            git merge-base --is-ancestor "$RELEASE_SHA" origin/main || {
+              echo "Tag $TAG does not point to a commit on origin/main." >&2
+              exit 1
+            }
+          fi
+
+          if [ -z "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER="${{ github.run_number }}"
+          fi
+          [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || {
+            echo "Expected a numeric iOS build number, got $BUILD_NUMBER." >&2
+            exit 1
+          }
+
+          {
+            echo "version=$VERSION"
+            echo "tag=$TAG"
+            echo "build_number=$BUILD_NUMBER"
+          } >> "$GITHUB_OUTPUT"
+          echo "Mobile release -> version=$VERSION build=$BUILD_NUMBER tag=$TAG"
+
+  ios:
+    needs: setup
+    runs-on: macos-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      APP_VARIANT: production
+      MOBILE_VERSION: ${{ needs.setup.outputs.version }}
+      IOS_BUILD_NUMBER: ${{ needs.setup.outputs.build_number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+      - uses: swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify required secrets
+        run: |
+          set -euo pipefail
+          [ -n "$EXPO_TOKEN" ] || {
+            echo "Missing EXPO_TOKEN repository secret." >&2
+            exit 1
+          }
+
+      - name: Generate iOS native core
+        run: npm run --workspace @typenotes/mobile-core codegen:ios:device
+
+      - name: Sync Expo native project
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform ios
+
+      - name: Install iOS pods
+        working-directory: apps/mobile
+        run: npx pod-install ios
+
+      - name: Build iOS app locally
+        working-directory: apps/mobile
+        run: |
+          npx eas-cli@latest build \
+            --platform ios \
+            --profile production \
+            --local \
+            --output "$RUNNER_TEMP/type-ios.ipa" \
+            --non-interactive \
+            --message "GitHub Actions ${{ needs.setup.outputs.tag }}"
+
+      - name: Submit to TestFlight
+        working-directory: apps/mobile
+        run: |
+          npx eas-cli@latest submit \
+            --platform ios \
+            --profile production \
+            --path "$RUNNER_TEMP/type-ios.ipa" \
+            --wait \
+            --non-interactive \
+            --what-to-test "Automated mobile release ${{ needs.setup.outputs.tag }}"
+
+      - name: Upload IPA artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: type-ios-${{ needs.setup.outputs.tag }}
+          path: ${{ runner.temp }}/type-ios.ipa
+          if-no-files-found: ignore
