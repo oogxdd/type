@@ -1,8 +1,19 @@
 # macOS code signing & notarization (direct .dmg distribution)
 
-Without this, the `.dmg` still installs and updates fine — macOS just shows
-"cannot be opened because it is from an unidentified developer" on first open,
-and you get in with right-click → Open. With it, the app opens normally.
+Without this, the `.dmg` still installs and updates fine, but macOS refuses to
+launch it. On macOS 26 the message is **"Type is damaged and can't be opened.
+You should move it to the Trash."** — which is misleading: nothing is damaged.
+The browser attached a `com.apple.quarantine` attribute on download, and
+Gatekeeper can't validate an ad-hoc signature. The old right-click → Open bypass
+no longer works for this case.
+
+Clearing the attribute launches it:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Type.app
+```
+
+With signing + notarization, none of this happens — the app just opens.
 
 This is **independent of the updater signing key** ([UPDATER_KEY_ROTATION.md](./UPDATER_KEY_ROTATION.md)).
 The updater key proves *an update payload came from you*; Apple signing proves

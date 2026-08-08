@@ -197,10 +197,13 @@ two repo secrets:
 
 ## Gotchas / notes
 
-- **Unsigned-by-Apple builds still work** for updates, but the *first* `.dmg` a
-  user opens triggers the macOS Gatekeeper "unidentified developer" warning
-  (right-click → Open to bypass). Apple notarization removes that — separate from
-  the updater signing above.
+- **Unsigned-by-Apple builds still work** for updates, but macOS refuses to
+  *launch* the first `.dmg` a user opens — on macOS 26 with the misleading
+  "…is damaged and can't be opened", and right-click → Open no longer bypasses
+  it. `xattr -dr com.apple.quarantine /Applications/Type.app` does. Apple
+  notarization removes the problem entirely — see
+  [MACOS_CODE_SIGNING.md](./MACOS_CODE_SIGNING.md); it is separate from the
+  updater signing above.
 - The **updater signature** (`TAURI_SIGNING_*`) and **Apple code-signing /
   notarization** are two independent things. The updater refuses unsigned-by-*you*
   payloads regardless of Apple status.
