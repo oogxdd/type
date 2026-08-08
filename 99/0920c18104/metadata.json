@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "990920c18104",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/RELEASING.md",
+    "docs/UPDATER_KEY_ROTATION.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/99/0920c18104/0/metadata.json",
+      "transcript": "/99/0920c18104/0/full.jsonl",
+      "context": "/99/0920c18104/0/context.md",
+      "content_hash": "/99/0920c18104/0/content_hash.txt",
+      "prompt": "/99/0920c18104/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 28,
+    "cache_creation_tokens": 17841,
+    "cache_read_tokens": 1662198,
+    "output_tokens": 14670,
+    "api_call_count": 15
+  }
+}

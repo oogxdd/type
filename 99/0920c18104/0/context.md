@@ -1,0 +1,28 @@
+# Session Context
+
+## User Prompts
+
+### Prompt 1
+
+слушай. я хочу заного сбилдить .dmg. и начать нормально апроачить этот проект. чтобы у меня был .dmg. чтобы когда я релизил десктоп версии мне приходило автообновление. но при этом путь если я хочу подевелопить локально и не заменять прод версию (ни дату ни сам эпп)
+
+также я хочу бэкапнуть текущую прод дату куда-нибудь на /Volumes/KINGSTON
+
+### Prompt 2
+
+<task-notification>
+<task-id>b1a3a01bg</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Volumes-KINGSTON-Projects-type-app/87982bbe-c2cd-4c0a-a831-b62ac43a016d/tasks/b1a3a01bg.output</output-file>
+<status>completed</status>
+<summary>Background command "Watch the release workflow to completion" completed (exit code 0)</summary>
+</task-notification>
+
+### Prompt 3
+
+[Request interrupted by user]
+
+### Prompt 4
+
+хотя стой. лучше дай мне команды. я сгенерю. чтобы мы не считали эти ключи скомпроментированными. а автоапдейт если че не сам качается а предлагает обновиться по кнопке
+
