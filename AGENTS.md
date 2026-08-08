@@ -417,7 +417,14 @@ The React Native app (Expo) reuses the Rust core through
   Voice capture is a floating dictation button on the capture page, shown
   only while the page is blank — tap to start/stop or hold to record while
   pressed (expo-audio → `save_audio_recording` → queue per
-  `transcription_mode`). Long-press reveals camera/gallery handwriting-photo
+  `transcription_mode`). Recording holds a background audio session
+  (`shouldPlayInBackground`) so it survives the screen sleeping, and its timer
+  runs off a wall-clock anchor rather than the recorder's polled
+  `durationMillis`, which freezes while the app is suspended. That same anchor
+  drives an iOS Live Activity (Lock Screen + Dynamic Island, with an
+  interactive Stop) from the local `modules/recording-activity` Expo module —
+  see its README, including which parts still need a Mac to verify.
+  Long-press reveals camera/gallery handwriting-photo
   actions; `save_handwriting_attachment` leaves OCR pending for desktop. Other screens:
   feed, folder browser, plain-text editor, sync (status/connect/pull/push/SSH
   key/history), settings (working folders, notes-root move, transcription
