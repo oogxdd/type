@@ -70,6 +70,9 @@ export interface RawCore {
   listRecordings(): Promise<string>;
   readRecordingAudio(path: string): Promise<string>;
 
+  // ── Photo attachments ──
+  saveHandwritingAttachment(argsJson: string): Promise<string>;
+
   // ── Security ──
   getSecurityState(): Promise<string>;
   enableSecurity(argsJson: string): Promise<string>;

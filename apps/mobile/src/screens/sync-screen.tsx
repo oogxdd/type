@@ -47,9 +47,9 @@ const SETUP_STEPS = [
 export const SyncScreen = () => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  // The capture page's swipe may have pushed this screen with animation:none
-  // (its preview already played the transition) — flip the flag back once
-  // the push settles so the later pop / back swipe animates natively.
+  // Capture may have pushed this screen without a native animation because
+  // its live preview already played the transition. Restore normal pop/back
+  // behavior once this real screen is attached.
   useClearInstantParam();
   const sync = useSyncStore();
   const settingsStore = useSettingsStore();

@@ -11,19 +11,15 @@ import {
 } from "@react-navigation/native-stack";
 import { useEffect } from "react";
 
-// One native stack, with the menu as its root — conceptually the menu sits to
-// the LEFT of the capture page and the sync screen to its RIGHT. The app
-// boots with Capture pushed on top of Menu (see initialState in App.tsx), so
-// the native swipe-back on the capture page reveals the menu; a leftward
-// swipe on the menu drags a capture preview back in, and a leftward swipe on
-// the capture page pushes Sync (swipe-back there lands on capture again).
-// Every other screen is pushed from the menu so swipe-back walks naturally
-// back to it.
+// One native stack, with Menu as its root. Conceptually Menu sits to the
+// left of Capture and Sync sits to its right. The app boots with Capture
+// pushed above Menu (see App.tsx), so the native interactive back gesture
+// reveals Menu. The two forward gestures use live previews and then attach
+// the real stack screen underneath with animation disabled.
 export type RootStackParamList = {
   Menu: undefined;
-  // `instant` skips the push animation: a gesture-driven preview has already
-  // animated the page in (menu → capture, capture → sync), so the real
-  // screen must appear underneath it without animating a second time.
+  // `instant` skips the native push because a gesture-driven preview has
+  // already played the transition (Menu -> Capture or Capture -> Sync).
   Capture: { instant?: boolean } | undefined;
   Feed: undefined;
   Folder: { path: string; title: string };
@@ -32,6 +28,7 @@ export type RootStackParamList = {
   Settings: undefined;
   SettingsWorkingFolders: undefined;
   SettingsTranscription: undefined;
+  SettingsAppearance: undefined;
 };
 
 export const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -49,19 +46,16 @@ export const navigateToScreen = <Screen extends keyof RootStackParamList>(
 };
 
 /**
- * For screens that can be pushed with `instant: true` (their transition was
- * already played by a gesture-driven preview, so the real push used
- * animation:"none"): flips the flag back once the push settles, so the later
- * pop / back swipe animates natively. Clearing on mount would be too early —
- * options would re-evaluate to the default animation before the native push
- * runs, visibly replaying it. The timeout is a fallback in case
- * animation:none emits no transition events.
+ * Screens reached through an already-animated preview are pushed with
+ * `animation: "none"`. Clear that one-shot flag after the push settles so a
+ * later native pop / back swipe animates normally.
  */
 export const useClearInstantParam = () => {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList, "Capture" | "Sync">>();
   const route = useRoute<RouteProp<RootStackParamList, "Capture" | "Sync">>();
   const instant = route.params?.instant;
+
   useEffect(() => {
     if (!instant) {
       return;

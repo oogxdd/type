@@ -19,7 +19,8 @@ export const DEFAULT_PROFILE_SYNC_SETTINGS: ProfileSyncSettings = {
   assemblyAiApiKey: "",
   mobileAutoTranscriptionEnabled: true,
   whisperModel: "large-v3",
-  handwritingOcrProvider: "openai",
+  handwritingOcrProvider: "local",
+  localOcrModelPath: "",
   openAiApiKey: "",
   openAiModel: "gpt-4.1-mini",
   huggingFaceApiKey: "",
@@ -88,7 +89,7 @@ export const getStoredBooleanValue = (key: string, fallback: boolean) => {
 const normalizeHandwritingProvider = (
   value: string
 ): ProfileSyncSettings["handwritingOcrProvider"] =>
-  value === "huggingface" ? "huggingface" : "openai";
+  value === "openai" || value === "huggingface" ? value : "local";
 
 const normalizeNoteFileNameFormat = (
   value: unknown
@@ -217,6 +218,8 @@ export const getProfileSyncSettings = (profileId: string): ProfileSyncSettings =
         legacyFallback.handwritingOcrProvider ??
         DEFAULT_PROFILE_SYNC_SETTINGS.handwritingOcrProvider
     ),
+    localOcrModelPath:
+      stored.localOcrModelPath ?? DEFAULT_PROFILE_SYNC_SETTINGS.localOcrModelPath,
     openAiApiKey:
       stored.openAiApiKey ??
       legacyFallback.openAiApiKey ??

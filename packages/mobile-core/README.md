@@ -24,6 +24,9 @@ apps/mobile  ──imports──▶  core-api.ts   (typed facade, JSON marshalli
   one-to-one, plus `setRawCore()`. The app wires an implementation at startup.
 - **`src/mock-core.ts`** — in-memory `RawCore` used by tests and as demo mode
   when the native module isn't linked. Nothing persists.
+- **`src/index.tsx`** — committed package-root fallback that exports a seeded
+  mock in clean clones/CI/Expo Go. Native ubrn codegen overwrites this file
+  with the real TurboModule entry on a Mac.
 
 This layout keeps `tsc`, `vitest`, and Expo Go working with **no native
 builds** — the generated turbo module is only required for a real device build.
@@ -43,20 +46,20 @@ npm run codegen:ios:device   # device + simulator (needed for `expo run:ios --de
 npm run codegen:android
 ```
 
+Android codegen builds the three application ABIs (`arm64-v8a`, `armeabi-v7a`,
+and `x86_64`) and then patches the generated UBRN project for the package's
+exported module layout and zlib linkage. Use `npm run codegen:android:release`
+when generating optimized Rust libraries for a release build.
+
 `codegen:ios` builds `--sim-only`, so the resulting xcframework has no device
 slice — rerun `codegen:ios:device` before installing on a physical phone.
 From the repo root, `npm run mobile:ios` chains `codegen:ios` + `expo run:ios`
 (the full "Rust changed, rebuild the dev client" one-liner).
 
-This produces `src/generated/` (TS bindings), `cpp/generated/` (JSI glue), and
-the `ios/` / `android/` library projects. Then wire the generated module in
-the app instead of the mock (`apps/mobile/src/core/boot.ts`):
-
-```ts
-import { setRawCore } from "@typenotes/mobile-core/raw-core";
-import * as generated from "@typenotes/mobile-core/generated";
-setRawCore(generated);
-```
+This produces `src/generated/` (TS bindings), `cpp/generated/` (JSI glue),
+the `ios/` / `android/` library projects, and overwrites the package-root
+`src/index.tsx` fallback with the real TurboModule entry. `boot.ts` imports
+that stable package root in both modes.
 
 The generated function names match `RawCore` (uniffi camelCases the Rust
 snake_case exports). If a signature drifts after changing `crates/type-ffi`,

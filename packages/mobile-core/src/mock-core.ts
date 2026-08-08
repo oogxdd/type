@@ -22,6 +22,7 @@ type MockNote = {
 const FEED = "Feed";
 const ARCHIEVE = "Archieve"; // intentional typo, matches persisted data
 const RECORDINGS = "Recordings"; // hidden storage folder
+const ATTACHMENTS = "Attachments"; // hidden storage folder
 
 const defaultProfileSettings = (): ProfileSettings => ({
   git_remote_url: "",
@@ -39,7 +40,8 @@ const defaultProfileSettings = (): ProfileSettings => ({
 const defaultAppConfig = () => ({
   assemblyai_api_key: "",
   whisper_model: "large-v3",
-  handwriting_ocr_provider: "openai",
+  handwriting_ocr_provider: "local",
+  local_ocr_model_path: "",
   openai_api_key: "",
   openai_model: "gpt-4.1-mini",
   huggingface_api_key: "",
@@ -69,9 +71,10 @@ export type MockCoreOptions = {
 export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
   const now = options.now ?? Date.now;
 
-  let folders = new Set<string>([FEED, ARCHIEVE, RECORDINGS]);
+  let folders = new Set<string>([FEED, ARCHIEVE, RECORDINGS, ATTACHMENTS]);
   let notes = new Map<string, MockNote>();
   let audio = new Map<string, { base64: string; mimeType: string }>();
+  let images = new Map<string, { base64: string; mimeType: string }>();
   let counter = 0;
 
   let profileSettings = defaultProfileSettings();
@@ -129,7 +132,7 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
     };
 
     for (const folder of folders) {
-      if (folder !== RECORDINGS) {
+      if (folder !== RECORDINGS && folder !== ATTACHMENTS) {
         ensureFolderNode(folder);
       }
     }
@@ -481,6 +484,33 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       });
     },
 
+    // ── Photo attachments ──
+    saveHandwritingAttachment: async (argsJson) => {
+      const args = JSON.parse(argsJson) as {
+        image_base64: string;
+        mime_type?: string | null;
+        folder_path?: string | null;
+      };
+      counter += 1;
+      const attachmentPath = `${ATTACHMENTS}/attachment-${counter}.jpg`;
+      images.set(attachmentPath, {
+        base64: args.image_base64,
+        mimeType: args.mime_type ?? "image/jpeg",
+      });
+      const folder = args.folder_path || FEED;
+      const notePath = newNote(folder, "", now(), {
+        note_type: "handwriting_attachment",
+        handwriting_attachment_path: attachmentPath,
+        ocr_status: "pending",
+        ocr_updated_ms: now(),
+      });
+      return JSON.stringify({
+        folder_path: folder,
+        note_path: notePath,
+        attachment_path: attachmentPath,
+      });
+    },
+
     // ── Security ──
     getSecurityState: async () => securityStateJson(),
     enableSecurity: async (argsJson) => {
@@ -503,9 +533,10 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       const args = JSON.parse(argsJson) as { password: string };
       if (security.encryption_enabled && args.password === panicPassword) {
         // Panic wipe: reset everything and reseed, like the real core.
-        folders = new Set([FEED, ARCHIEVE, RECORDINGS]);
+        folders = new Set([FEED, ARCHIEVE, RECORDINGS, ATTACHMENTS]);
         notes = new Map();
         audio = new Map();
+        images = new Map();
         commits = [];
         profileSettings = defaultProfileSettings();
         appConfig = defaultAppConfig();

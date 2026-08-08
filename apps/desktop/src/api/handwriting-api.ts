@@ -3,6 +3,7 @@ import type {
   HandwritingAttachmentWriteResult,
   HandwritingOcrListResult,
   HandwritingOcrQueueResult,
+  LocalOcrStatusResult,
   NoteFileNameFormat,
 } from "@typenotes/shared/types";
 
@@ -24,17 +25,27 @@ export const saveHandwritingAttachment = (
   });
 
 export const queueHandwritingOcr = (
-  provider: "openai" | "huggingface",
-  apiKey: string,
-  model: string
+  provider: "local" | "openai" | "huggingface",
+  apiKey?: string,
+  model?: string,
+  modelPath?: string
 ): Promise<HandwritingOcrQueueResult> =>
   invokeLogged<HandwritingOcrQueueResult>("queue_handwriting_ocr", {
     args: {
       provider,
       api_key: apiKey,
       model,
+      model_path: modelPath,
     },
   });
 
 export const listHandwritingOcrJobs = (): Promise<HandwritingOcrListResult> =>
   invokeLogged<HandwritingOcrListResult>("list_handwriting_ocr_jobs");
+
+export const checkLocalOcrStatus = (
+  modelPath?: string,
+  setup = false
+): Promise<LocalOcrStatusResult> =>
+  invokeLogged<LocalOcrStatusResult>("check_local_ocr_status", {
+    args: { model_path: modelPath, setup },
+  });

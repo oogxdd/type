@@ -122,7 +122,8 @@ Key symbols live in `adapters/<domain>.rs`:
 - **security** — XChaCha20-Poly1305 at-rest body encryption with an Argon2id-derived key. `SECURITY_RUNTIME` (OnceLock<Mutex>) holds the in-memory key after unlock. `.notes-security.json` config. `encrypt_note_body_for_write`, `decrypt_note_body_for_read`, `ensure_security_unlocked_for_app` (the lock gate most commands call), panic flow `panic_reset_local_data`.
 - **recordings** — a folder module (`recordings/mod.rs` + `whisper.rs` + `assembly.rs`): save audio → note with metadata. `mod.rs` owns the transcription queue worker (which dispatches on `TranscriptionMethod`), types, queue state, note scanning, and file naming. Backends: `whisper.rs` (desktop, managed-Python `faster-whisper` via `whisper_env`; `check_whisper_availability`, `transcribe_audio_local_whisper`), `assembly.rs` (AssemblyAI cloud, used on mobile), and `TranscriptionMethod::Provider` — a shell-registered `ports::recordings::TranscriptionProvider` (how the mobile FFI plugs native speech recognition into the same queue). `queue_recordings_with_method` is the shared scan-and-enqueue; `collect_recording_notes`, queue snapshot for the UI.
 - **whisper_env** — desktop only. Provisions and owns an isolated CPython + faster-whisper under app-data using [`uv`](https://docs.astral.sh/uv/) (downloading `uv` itself on first use if absent), so the user installs nothing. `whisper_env_ready`, `managed_python`, `ensure_whisper_env`.
-- **handwriting** — a folder module (`handwriting/mod.rs` + `openai.rs` + `huggingface.rs`): save image attachment → note; `HANDWRITING_OCR_QUEUE` worker. `mod.rs` owns attachment saving, the queue + worker, note scanning, and provider dispatch; each provider's HTTP transcription lives in its own submodule — `openai.rs` (`HandwritingOcrProvider::OpenAi`, GPT-4o) and `huggingface.rs` (`::HuggingFace`, 503 retry). `collect_handwriting_notes`.
+- **ocr_env** — desktop-local EasyOCR provisioning in its own managed Python environment. Model weights default under app data, but `AppConfig.local_ocr_model_path` may point to an absolute external-volume folder.
+- **handwriting** — a folder module (`handwriting/mod.rs` + `local.rs` + `openai.rs` + `huggingface.rs`): save image attachment → pending note; `HANDWRITING_OCR_QUEUE` worker. Mobile only saves; desktop scans after sync and dispatches through `HandwritingOcrMethod`. `local.rs` runs EasyOCR in the managed `ocr_env` with configurable model storage, while `openai.rs` (Responses vision) and `huggingface.rs` (Inference API, 503 retry) are cloud options. `collect_handwriting_notes`.
 - **import** — Apple Notes folder importer. Walks an *exported* Apple Notes tree (Markdown/HTML/plain-text — Apple Notes has no native bulk export), creating notes in the active root. Auto-detects note files, converts HTML→Markdown best-effort, strips foreign front-matter, and preserves the original creation date (front-matter `created`/`created_ms`/… → epoch ms / RFC 3339 / date-only, else filesystem time). `preserve` mirrors the source hierarchy under one target folder; `flatten` drops everything into `Feed`. Runs on a worker thread writing to a process-global progress snapshot the UI polls (no Tauri events); `scan_apple_import_source`, `run_apple_notes_import`, `apple_import_snapshot`. Notes are written via `write_note_with_front_matter`, so encryption is transparent (import requires unlock).
 - **git** (the `git_sync` domain) — libgit2 sync. `ensure_git_repo`/`open_repo`, `perform_fetch`/`fast_forward_to`/`merge_fetched_commit`/`commit_all_changes`, `resolve_target_branch`/`switch_or_prepare_branch`. Conflicts keep "ours" and write "theirs" as `.conflict.md` siblings — merge never blocks. `build_git_status`, `build_git_history`. `build_callbacks` auth order: app SSH key file → SSH agent → username/password. Ed25519 keypair under `<app_data_dir>/ssh/`. Bootstrap-artifact detection for first sync.
 - **local_sync** — desktop hosts an **embedded SSH Git server** (russh; `ssh_server.rs` + `devices.rs`) so a phone on the same Wi-Fi / hotspot can push/pull with no external host, encrypted and key-authenticated. Pairing rides the QR: the `ssh://pair-<token>@ip:9418/<folder>` URL carries a per-run token in the username; an unknown key authenticating with it gets registered in the authorized-devices store (host key + devices under `<app_data_dir>/local_sync/`). Starting never commits — pending desktop edits are committed just before each serve. mDNS advertises a token-less URL (`_typenotes-sync._tcp`). State lives in a process-global `Mutex<Option<RunningDaemon>>`, killed on app exit. `receive.denyCurrentBranch=updateInstead` lets phone pushes update the live working tree. See `docs/LOCAL_SYNC.md`.
@@ -300,19 +301,31 @@ The React Native app (Expo) reuses the Rust core through
   (ubrn 0.31.x = uniffi 0.31); output dirs are gitignored. Regenerate after
   any `type-ffi` change and keep `raw-core.ts` in sync.
 - **`apps/mobile`** — the signature interaction: the app opens on a blank
-  page (type immediately); swipe up files the page into Feed and a fresh
-  blank page appears. `src/lib/capture.ts` (pure, tested) owns that note
-  lifecycle with the same rules as the desktop editor (lazy create,
-  debounced writes, flush on leave, empty-note cleanup). Navigation is one
-  native stack whose root is the menu screen (feed/folders tabs + sync/
-  settings); Capture boots pushed on top of it, so the left-edge swipe-back
-  reveals the menu and a leftward swipe on the menu pushes a fresh capture
-  page. Voice capture is a floating dictation button on the capture page —
-  tap to start/stop or hold to record while pressed (expo-audio →
-  `save_audio_recording` → queue per `transcription_mode`). Other screens:
+  page (type immediately); swipe up slides the page off the top (a fresh
+  blank page rides in from below, finger-driven) and files it into Feed.
+  `src/lib/capture.ts` (pure, tested) owns that note lifecycle with the same
+  rules as the desktop editor (lazy create, debounced writes, flush on
+  leave, empty-note cleanup). Mobile navigation uses one native stack with
+  Menu at its root and Capture initially pushed above it. Native back reveals
+  Menu; Menu → Capture and Capture → Sync use finger-driven preview overlays
+  followed by no-animation stack pushes, preserving the pre-pager interaction
+  model. Leaving Capture flushes its draft; returning from Menu opens a fresh
+  capture screen. Feed/Folder/Editor/Sync/Settings are ordinary pushed screens.
+  Voice capture is a floating dictation button on the capture page, shown
+  only while the page is blank — tap to start/stop or hold to record while
+  pressed (expo-audio → `save_audio_recording` → queue per
+  `transcription_mode`). Recording holds a background audio session
+  (`shouldPlayInBackground`) so it survives the screen sleeping, and its timer
+  runs off a wall-clock anchor rather than the recorder's polled
+  `durationMillis`, which freezes while the app is suspended. That same anchor
+  drives an iOS Live Activity (Lock Screen + Dynamic Island, with an
+  interactive Stop) from the local `modules/recording-activity` Expo module —
+  see its README, including which parts still need a Mac to verify.
+  Long-press reveals camera/gallery handwriting-photo
+  actions; `save_handwriting_attachment` leaves OCR pending for desktop. Other screens:
   feed, folder browser, plain-text editor, sync (status/connect/pull/push/SSH
   key/history), settings (working folders, notes-root move, transcription
-  mode, AssemblyAI key). Zustand stores in `src/state/`. Without the native
+  mode, AssemblyAI key, appearance). Zustand stores in `src/state/`. Without the native
   module the app boots the mock core in demo mode (bottom banner) — that is
   what CI and Expo Go exercise.
 
@@ -327,6 +340,7 @@ The React Native app (Expo) reuses the Rust core through
   - `uuid_v7_prefix_slug`: `<uuidv7-prefix>-<slug>.md`
   New notes may start with placeholder suffixes (`-note-...`, `-recording-...`, etc.) and then auto-rename to content slug when enough text is available in slug-capable modes. Slug extraction is Unicode-aware (keeps Cyrillic/Latin letters and digits) and ignores `NV_EMPTY_LINE_TOKEN_*` noise.
 - **Empty note cleanup**: if a dirty note is emptied and then focus/selection moves away, it is auto-deleted.
+- **Mobile appearance is device-local and derived**: the phone's background / text color / editor text size live in `appearance.json` beside the core's app data — *not* in `ProfileSettings`, so they never reach a notes root and never sync. `apps/mobile/src/theme.ts` is no longer two fixed palettes: `lib/appearance.ts` derives surface/border/secondary text from the chosen background and picks the dark variant from its luminance. Don't remove `readableOn`'s WCAG-AA floor on body text — an unreadable combination would lock the user out of the settings screen that fixes it. Text size intentionally applies only to the capture page and the note editor, not to lists or chrome.
 - **Per-folder transcription mode**: `.type/settings.json` inside a notes root carries `transcription_mode` (`off` / `desktop` / `assemblyai` / `native`). Absent = fall back to the legacy `mobile_auto_transcription_enabled` flag (true → assemblyai, false → desktop) — use `effective_transcription_mode()` / `effectiveTranscriptionMode()` instead of reading the field. Settings writers that omit the field must not clear a persisted mode (the core's `update_settings` merge handles this).
 - **Two shells, one core**: new backend features go in `crates/type-core`, then get exposed twice — a `#[tauri::command]` in `apps/desktop/src-tauri/src/commands/` and a `#[uniffi::export]` in `crates/type-ffi`. After changing `type-ffi`, regenerate the mobile native module (Mac, ubrn) and keep `packages/mobile-core/src/raw-core.ts` in sync. Step-by-step checklist (and what the ubrn codegen actually does): `docs/architecture/09-adding-features-and-codegen.md`.
 - **Git sync uses libgit2**, not shell git. The Rust backend handles all git operations.

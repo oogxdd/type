@@ -14,6 +14,8 @@ pub struct AppConfig {
     #[serde(default = "default_handwriting_provider")]
     pub handwriting_ocr_provider: String,
     #[serde(default)]
+    pub local_ocr_model_path: String,
+    #[serde(default)]
     pub openai_api_key: String,
     #[serde(default = "default_openai_model")]
     pub openai_model: String,
@@ -31,6 +33,7 @@ impl Default for AppConfig {
             assemblyai_api_key: String::new(),
             whisper_model: default_whisper_model(),
             handwriting_ocr_provider: default_handwriting_provider(),
+            local_ocr_model_path: String::new(),
             openai_api_key: String::new(),
             openai_model: default_openai_model(),
             huggingface_api_key: String::new(),
@@ -44,7 +47,7 @@ fn default_whisper_model() -> String {
     "large-v3".to_string()
 }
 fn default_handwriting_provider() -> String {
-    "openai".to_string()
+    "local".to_string()
 }
 fn default_openai_model() -> String {
     "gpt-4.1-mini".to_string()
@@ -266,7 +269,8 @@ mod tests {
     use super::*;
 
     fn temp_root(tag: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("type-settings-{tag}-{}", uuid::Uuid::now_v7()));
+        let root =
+            std::env::temp_dir().join(format!("type-settings-{tag}-{}", uuid::Uuid::now_v7()));
         fs::create_dir_all(&root).unwrap();
         root
     }
@@ -317,6 +321,21 @@ mod tests {
         let loaded = load_profile_settings(&root);
         assert_eq!(loaded.git_remote_url, "https://example.com/notes.git");
         assert_eq!(loaded.git_password, "tok");
+
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn local_ocr_is_the_default_and_its_model_path_is_device_local() {
+        let root = temp_root("local-ocr-default");
+        let config = AppConfig::default();
+        assert_eq!(config.handwriting_ocr_provider, "local");
+        assert!(config.local_ocr_model_path.is_empty());
+
+        save_app_config(&root, &config).unwrap();
+        let loaded = load_app_config(&root);
+        assert_eq!(loaded.handwriting_ocr_provider, "local");
+        assert!(loaded.local_ocr_model_path.is_empty());
 
         fs::remove_dir_all(&root).unwrap();
     }

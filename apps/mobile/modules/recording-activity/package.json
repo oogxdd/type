@@ -1,0 +1,7 @@
+{
+  "name": "recording-activity",
+  "version": "0.1.0",
+  "description": "iOS Live Activity (Lock Screen + Dynamic Island) for an in-progress voice recording, with an interactive Stop.",
+  "private": true,
+  "platforms": ["apple"]
+}

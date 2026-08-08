@@ -2,7 +2,7 @@
   "expo": {
     "name": "Type",
     "slug": "typenotes",
-    "version": "0.1.0",
+    "version": "0.2.3",
     "scheme": [
       "typenotes",
       "type2"
@@ -10,16 +10,22 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#14171b"
+    },
     "ios": {
       "bundleIdentifier": "com.typenotes.mobile",
-      "buildNumber": "2026071001",
+      "buildNumber": "2026080801",
       "supportsTablet": true,
       "infoPlist": {
         "UIFileSharingEnabled": true,
         "LSSupportsOpeningDocumentsInPlace": true,
         "ITSAppUsesNonExemptEncryption": false,
-        "NSPhotoLibraryUsageDescription": "Type does not access your photo library; this permission is required by a bundled camera component.",
-        "NSPhotoLibraryAddUsageDescription": "Type does not save to your photo library; this permission is required by a bundled camera component.",
+        "NSPhotoLibraryUsageDescription": "Type uses selected photos to create handwritten note attachments.",
+        "NSPhotoLibraryAddUsageDescription": "Type can use photos you take as handwritten note attachments.",
         "NSLocalNetworkUsageDescription": "Type connects to your computer over the local network to sync your notes.",
         "NSBonjourServices": [
           "_typenotes-sync._tcp"
@@ -27,7 +33,15 @@
       }
     },
     "android": {
-      "package": "com.typenotes.mobile"
+      "package": "com.typenotes.mobile",
+      "versionCode": 2026080801,
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#14171b"
+      }
     },
     "plugins": [
       [
@@ -43,12 +57,20 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Type uses selected photos to create handwritten note attachments.",
+          "cameraPermission": "Type uses the camera to create handwritten note attachments."
+        }
+      ],
+      [
         "expo-speech-recognition",
         {
           "microphonePermission": "Type uses the microphone to record voice notes.",
           "speechRecognitionPermission": "Type uses speech recognition to transcribe your voice notes on this device."
         }
-      ]
+      ],
+      "./modules/recording-activity/app.plugin.js"
     ]
   }
 }

@@ -98,6 +98,22 @@ describe("CaptureSession", () => {
     expect(notes.get("Feed/slow.md")).toBe("ab");
   });
 
+  it("retries a dirty draft after a transient storage failure", async () => {
+    const { storage, notes } = makeStorage();
+    vi.mocked(storage.createNote)
+      .mockRejectedValueOnce(new Error("temporary write failure"))
+      .mockImplementationOnce(async (content: string) => {
+        notes.set("Feed/retried.md", content);
+        return "Feed/retried.md";
+      });
+    const session = new CaptureSession(storage, 10_000);
+
+    session.onChange("still here");
+    await expect(session.flush()).rejects.toThrow("temporary write failure");
+    await expect(session.commit()).resolves.toBe("Feed/retried.md");
+    expect(notes.get("Feed/retried.md")).toBe("still here");
+  });
+
   it("debounces writes on its own timer", async () => {
     vi.useFakeTimers();
     try {

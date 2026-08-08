@@ -42,7 +42,10 @@ export class CaptureSession {
     }
     this.timer = setTimeout(() => {
       this.timer = null;
-      void this.flush();
+      // A background autosave failure must not become an unhandled rejection
+      // (React Native can surface those as a fatal JS error). Keep the draft
+      // dirty so the next explicit flush/commit can retry it.
+      void this.flush().catch(() => {});
     }, this.debounceMs);
   }
 
@@ -52,7 +55,10 @@ export class CaptureSession {
       clearTimeout(this.timer);
       this.timer = null;
     }
-    this.chain = this.chain.then(async () => {
+    // A failed storage call used to leave `chain` permanently rejected, so
+    // every later flush failed without retrying. Recover the queue boundary
+    // while still returning this operation's own error to its caller.
+    this.chain = this.chain.catch(() => {}).then(async () => {
       // Loop: content may change while a write is in flight.
       while (this.dirty) {
         const content = this.content;
@@ -82,7 +88,9 @@ export class CaptureSession {
     const path = this.path;
     const keep = Boolean(path) && Boolean(this.content.trim());
     if (path && !keep) {
-      await (this.chain = this.chain.then(() => this.storage.deleteNote(path)));
+      await (this.chain = this.chain
+        .catch(() => {})
+        .then(() => this.storage.deleteNote(path)));
     }
     this.path = null;
     this.content = "";

@@ -44,17 +44,27 @@ export const useHandwritingStore = create<HandwritingState>(() => ({
 
 const getProviderConfig = () => {
   const settings = selectSyncSettings(useProfilesStore.getState());
+  if (settings.handwritingOcrProvider === "local") {
+    return {
+      provider: "local" as const,
+      apiKey: "",
+      model: "",
+      modelPath: settings.localOcrModelPath.trim(),
+    };
+  }
   if (settings.handwritingOcrProvider === "huggingface") {
     return {
       provider: "huggingface" as const,
       apiKey: settings.huggingFaceApiKey.trim(),
       model: settings.huggingFaceModel.trim(),
+      modelPath: "",
     };
   }
   return {
     provider: "openai" as const,
     apiKey: settings.openAiApiKey.trim(),
     model: settings.openAiModel.trim(),
+    modelPath: "",
   };
 };
 
@@ -88,13 +98,13 @@ export async function queueHandwritingOcr(trigger: "manual" | "auto" = "manual")
     return;
   }
   const config = getProviderConfig();
-  if (!config.apiKey) {
+  if (config.provider !== "local" && !config.apiKey) {
     if (trigger === "manual") {
       useHandwritingStore.setState({ statusMessage: "OCR API key is required." });
     }
     return;
   }
-  if (!config.model) {
+  if (config.provider !== "local" && !config.model) {
     if (trigger === "manual") {
       useHandwritingStore.setState({ statusMessage: "OCR model is required." });
     }
@@ -107,7 +117,8 @@ export async function queueHandwritingOcr(trigger: "manual" | "auto" = "manual")
     const result = await api.queueHandwritingOcr(
       config.provider,
       config.apiKey,
-      config.model
+      config.model,
+      config.modelPath
     );
     const statusMessage =
       trigger === "manual"
@@ -166,7 +177,10 @@ export function initHandwriting() {
       return;
     }
     const config = getProviderConfig();
-    if (!config.apiKey || !config.model) {
+    if (
+      config.provider !== "local" &&
+      (!config.apiKey || !config.model)
+    ) {
       return;
     }
     void queueHandwritingOcr("auto");

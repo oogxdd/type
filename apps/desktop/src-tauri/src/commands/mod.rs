@@ -93,6 +93,7 @@ pub(super) fn run() {
             handwriting::save_handwriting_attachment,
             handwriting::queue_handwriting_ocr,
             handwriting::list_handwriting_ocr_jobs,
+            handwriting::check_local_ocr_status,
             import::scan_apple_notes_folder,
             import::start_apple_notes_import,
             import::apple_import_status,

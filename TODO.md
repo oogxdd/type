@@ -69,12 +69,39 @@ Delete this file when the branch is ready for review.
       - Drawer navigation (hamburger + left-edge swipe), capture screen
         keyboard (no auto-focus, swipe-down dismiss, swipe-up still files the
         page).
-- [ ] `packages/mobile-core/src/index.tsx` is gitignored ubrn output, but
-      `apps/mobile/src/core/boot.ts` imports it statically — on machines
-      without codegen, `tsc --noEmit` for @typenotes/mobile fails unless a
-      local stub exists (this VM keeps an uncommitted typed stub there).
-      Consider restoring a committed fallback entry so typecheck works from a
-      clean clone.
+- [x] Commit a `packages/mobile-core/src/index.tsx` mock fallback so clean
+      clones, CI, and Expo Go resolve the package root without native codegen;
+      ubrn overwrites the same entry with real bindings for device builds.
+- [ ] Pre-pager capture/navigation restoration (2026-07-12) — **on-device**
+      verification on iOS. Verify on the phone:
+      - Native-stack flow: Capture starts above Menu; native back/hamburger
+        reveals Menu; close/left swipe opens a fresh Capture; Capture's
+        leftward preview opens Sync; buttons and QR deep links reach the same
+        stack destinations without a pager.
+      - Left-edge Capture → Menu swipe wins immediately over filing, keyboard
+        dismissal, Sync, and ScrollView recognizers; it should feel identical
+        to the original pre-pager native back transition.
+      - Swipe-up-to-file: works with the keyboard up; on a long note one
+        continuous drag scrolls to the bottom and rolls into the page pull;
+        the old page follows the finger 1:1 off the top while the fresh page
+        (placeholder visible, hairline top edge) rides in from the bottom —
+        from the keyboard's top edge while typing; release past ~20% or a
+        flick commits with a velocity-matched spring; the keyboard STAYS UP
+        and typing continues on the fresh page with no flash of old text.
+      - Keyboard dismiss: drag down toward the keyboard from mid-note
+        (interactive, finger-tracking) and quick pull-down at the top; both
+        work on scrollable notes.
+      - Scroll indicator: barely visible (few tints off bg, both themes),
+        only while scrolling, fades out; no native indicator.
+      - Mic button: hidden as soon as the page has text (tap-in shows only
+        the hamburger); sits ~12px above the keyboard when it's open; stop
+        button stays reachable during a running dictation.
+      - Leaving Capture flushes the current draft and returning from Menu
+        starts a fresh page. Typing at the end keeps the caret pinned above
+        the keyboard (scroll anchoring), including while it animates in.
+      - Regressions: pull-to-refresh on Feed/Folders, dictation save +
+        transcription queueing, editor screen keyboard padding, and the Sync
+        QR flow as a native-stack screen.
 - [ ] Manual desktop verification of the navigation refactor (2026-07-10):
       selection compound actions + hooks reading stores directly + one
       keyboard-nav path for Feed/Folders (`model/visible-navigation.ts`

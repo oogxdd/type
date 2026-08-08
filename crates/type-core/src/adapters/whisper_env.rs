@@ -21,7 +21,7 @@ use crate::app_data_dir;
 /// Python version pinned for the managed env. We deliberately avoid bleeding-edge
 /// releases (e.g. 3.14) that often lack prebuilt wheels for faster-whisper's
 /// compiled dependencies (ctranslate2, onnxruntime, av).
-const MANAGED_PYTHON_VERSION: &str = "3.12";
+pub(crate) const MANAGED_PYTHON_VERSION: &str = "3.12";
 
 /// URL of the official `uv` installer script (Unix).
 const UV_INSTALL_SCRIPT_URL: &str = "https://astral.sh/uv/install.sh";
@@ -114,7 +114,7 @@ fn uv_works(uv: &Path) -> bool {
 }
 
 /// Locate a usable `uv`, downloading one if necessary.
-fn ensure_uv(app: &AppEnv) -> Result<PathBuf, String> {
+pub(crate) fn ensure_uv(app: &AppEnv) -> Result<PathBuf, String> {
     // Prefer our own managed copy for determinism.
     let managed = managed_uv_dir(app)?.join(uv_exe_name());
     if managed.exists() && uv_works(&managed) {
@@ -194,7 +194,7 @@ fn download_uv(app: &AppEnv) -> Result<PathBuf, String> {
 // ── Environment provisioning ─────────────────────────────────────────────────
 
 /// Run a command, mapping a non-zero exit into a readable error.
-fn run(label: &str, cmd: &mut Command) -> Result<(), String> {
+pub(crate) fn run(label: &str, cmd: &mut Command) -> Result<(), String> {
     let output = cmd
         .output()
         .map_err(|e| format!("{label} failed to start: {e}"))?;

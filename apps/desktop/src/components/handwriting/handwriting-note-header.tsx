@@ -47,17 +47,20 @@ export function HandwritingNoteHeader({
     handwritingItem?.attachment_path || preview?.handwritingAttachmentPath || null;
 
   const providerConfig =
-    syncSettings.handwritingOcrProvider === "huggingface"
+    syncSettings.handwritingOcrProvider === "local"
+      ? { configured: true }
+      : syncSettings.handwritingOcrProvider === "huggingface"
       ? {
-          apiKey: syncSettings.huggingFaceApiKey.trim(),
-          model: syncSettings.huggingFaceModel.trim(),
+          configured:
+            syncSettings.huggingFaceApiKey.trim().length > 0 &&
+            syncSettings.huggingFaceModel.trim().length > 0,
         }
       : {
-          apiKey: syncSettings.openAiApiKey.trim(),
-          model: syncSettings.openAiModel.trim(),
+          configured:
+            syncSettings.openAiApiKey.trim().length > 0 &&
+            syncSettings.openAiModel.trim().length > 0,
         };
-  const hasProviderConfig =
-    providerConfig.apiKey.length > 0 && providerConfig.model.length > 0;
+  const hasProviderConfig = providerConfig.configured;
   const showRunNow =
     Boolean(attachmentPath) && !isQueued && !isProcessing && effectiveStatus !== "completed";
 
@@ -123,7 +126,7 @@ export function HandwritingNoteHeader({
       ) : null}
       {!hasProviderConfig && showRunNow ? (
         <p className="recording-note-message">
-          Configure OCR provider key and model in settings to run handwriting OCR.
+          Configure the selected OCR provider in settings to run handwriting OCR.
         </p>
       ) : null}
       {handwritingError ? <p className="recording-note-message error">{handwritingError}</p> : null}

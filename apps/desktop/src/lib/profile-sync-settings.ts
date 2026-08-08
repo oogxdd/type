@@ -35,7 +35,7 @@ const normalizeNoteFileNameFormat = (
 const normalizeHandwritingProvider = (
   value: string
 ): ProfileSyncSettings["handwritingOcrProvider"] =>
-  value === "huggingface" ? "huggingface" : "openai";
+  value === "openai" || value === "huggingface" ? value : "local";
 
 export const profileSyncSettingsFromState = (
   appConfig: AppConfig | null,
@@ -63,6 +63,7 @@ export const profileSyncSettingsFromState = (
     handwritingOcrProvider: normalizeHandwritingProvider(
       appConfig.handwriting_ocr_provider
     ),
+    localOcrModelPath: appConfig.local_ocr_model_path,
     openAiApiKey: appConfig.openai_api_key,
     openAiModel: appConfig.openai_model,
     huggingFaceApiKey: appConfig.huggingface_api_key,
@@ -89,6 +90,9 @@ export const splitProfileSyncSettingsPatch = (
   }
   if ("handwritingOcrProvider" in patch) {
     appConfigPatch.handwriting_ocr_provider = patch.handwritingOcrProvider;
+  }
+  if ("localOcrModelPath" in patch) {
+    appConfigPatch.local_ocr_model_path = patch.localOcrModelPath;
   }
   if ("openAiApiKey" in patch) {
     appConfigPatch.openai_api_key = patch.openAiApiKey;

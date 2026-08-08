@@ -4,7 +4,7 @@ import {
   NavigationContainer,
 } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Linking, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -21,22 +21,26 @@ import { FolderScreen } from "./screens/folder-screen";
 import { LockScreen } from "./screens/lock-screen";
 import { MenuScreen } from "./screens/menu-screen";
 import {
+  SettingsAppearanceScreen,
   SettingsScreen,
   SettingsTranscriptionScreen,
   SettingsWorkingFoldersScreen,
 } from "./screens/settings-screen";
 import { SyncScreen } from "./screens/sync-screen";
+import { useAppearanceStore } from "./state/appearance-store";
 import { useNotesStore } from "./state/notes-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
 import { useSettingsStore } from "./state/settings-store";
 import { useSyncStore } from "./state/sync-store";
 import { useTheme } from "./theme";
+import { ErrorBoundary } from "./ui/error-boundary";
 
 type BootPhase = { state: "booting" } | { state: "ready" } | { state: "failed"; error: string };
 
 // Boot with Capture pushed on top of Menu so the blank page is what you see
-// first, while the menu is already "behind" it — the native left-edge
-// swipe-back on Capture slides the menu in. See navigation.ts for the model.
+// first, while the menu is already behind it. Capture can then use the native
+// interactive back gesture to reveal Menu without keeping all three primary
+// screens mounted in a pager.
 const BOOT_NAVIGATION_STATE = {
   routes: [{ name: "Menu" as const }, { name: "Capture" as const }],
 };
@@ -55,12 +59,10 @@ const RootStack = () => {
         // still the native UIKit pop transition, driven natively by
         // react-native-screens' pan recognizer. It doesn't steal taps (a pan
         // needs clear horizontal movement before it claims the touch), and
-        // screens with their own gestures (capture, menu) only claim
-        // clearly-vertical or leftward drags.
+        // the capture/menu gestures fail quickly for the other axis.
         fullScreenGestureEnabled: true,
-        // Chevron-only back everywhere: with several entry points per screen
-        // (Sync can be reached from the menu or a capture swipe) the label
-        // would name whatever screen you came from — noise.
+        // Chevron-only back everywhere: Sync has more than one entry point,
+        // so naming the previous screen in the label would be noise.
         headerBackButtonDisplayMode: "minimal",
       }}
     >
@@ -74,11 +76,8 @@ const RootStack = () => {
         component={CaptureScreen}
         options={({ route }) => ({
           headerShown: false,
-          // `instant` = the menu's swipe-to-capture already played the push
-          // transition with its preview overlay (menu-screen.tsx), so the
-          // real screen must appear under it without animating again. The
-          // screen clears the param once the push settles so the later
-          // pop/back-swipe animates natively.
+          // A gesture-driven preview already played this push when instant
+          // is set; attach the real screen underneath without replaying it.
           animation: route.params?.instant ? "none" : "default",
         })}
       />
@@ -101,9 +100,7 @@ const RootStack = () => {
         component={SyncScreen}
         options={({ route }) => ({
           title: "Sync",
-          // `instant` = the capture page's leftward swipe already played the
-          // push transition with its preview (capture-screen.tsx); same
-          // mechanism as the menu → capture push above.
+          // Same preview-to-real-screen handoff as Menu -> Capture.
           animation: route.params?.instant ? "none" : "default",
         })}
       />
@@ -121,6 +118,11 @@ const RootStack = () => {
         name="SettingsTranscription"
         component={SettingsTranscriptionScreen}
         options={{ title: "Transcription" }}
+      />
+      <Stack.Screen
+        name="SettingsAppearance"
+        component={SettingsAppearanceScreen}
+        options={{ title: "Appearance" }}
       />
     </Stack.Navigator>
   );
@@ -143,6 +145,24 @@ const handleSyncUrl = (url: string | null) => {
 export default function App() {
   const theme = useTheme();
   const [phase, setPhase] = useState<BootPhase>({ state: "booting" });
+  // The stock light/dark navigation themes carry their own background, which
+  // would flash behind screens during transitions once the user picks a
+  // custom one. Feed ours through instead.
+  const navigationTheme = useMemo(() => {
+    const base = theme.dark ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      dark: theme.dark,
+      colors: {
+        ...base.colors,
+        primary: theme.colors.accent,
+        background: theme.colors.background,
+        card: theme.colors.background,
+        text: theme.colors.text,
+        border: theme.colors.border,
+      },
+    };
+  }, [theme]);
   const demoMode = useSettingsStore((s) => s.demoMode);
   const initialUrlHandled = useRef(false);
 
@@ -150,6 +170,10 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
+        // First, so the boot/lock screens already paint in the user's chosen
+        // colors instead of flashing the system palette. It reads a plain
+        // file, so it does not depend on the core coming up.
+        await useAppearanceStore.getState().load();
         const { demoMode: demo } = await bootCore();
         useSettingsStore.getState().setDemoMode(demo);
         await useSecurityStore.getState().load();
@@ -230,7 +254,7 @@ export default function App() {
       <SafeAreaProvider>
         <NavigationContainer
           ref={navigationRef}
-          theme={theme.dark ? DarkTheme : DefaultTheme}
+          theme={navigationTheme}
           initialState={BOOT_NAVIGATION_STATE}
           onReady={() => {
             if (!initialUrlHandled.current) {
@@ -239,7 +263,9 @@ export default function App() {
             }
           }}
         >
-          <RootStack />
+          <ErrorBoundary>
+            <RootStack />
+          </ErrorBoundary>
         </NavigationContainer>
         {demoMode ? (
           <View style={[styles.demoBanner, { backgroundColor: theme.colors.accent }]}>

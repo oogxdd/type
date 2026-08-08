@@ -21,4 +21,8 @@ impl<G: HandwritingGateway> HandwritingUseCases<G> {
     pub fn list(&self) -> Result<G::ListResult, String> {
         self.gateway.list()
     }
+
+    pub fn local_status(&self, args: G::LocalStatusArgs) -> G::LocalStatus {
+        self.gateway.local_status(args)
+    }
 }
