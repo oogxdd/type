@@ -42,16 +42,27 @@ which is exactly why it was done then rather than later.
 Run these in your own terminal — step 2 prompts for a password, and you don't
 want it landing in an agent transcript or shell history.
 
-### 1. Archive the old key
+### 1. Deal with the old key
 
-Keep it rather than deleting it; it costs nothing and lets you verify old
-signatures.
+**If you still have the old key's password, archive it** — it is the only thing
+that can strand users *back* onto a working update path. See "Migrating users
+across a rotation" below.
 
 ```bash
 mkdir -p ~/.tauri/archive
 STAMP=$(date +%Y%m%d)
 mv ~/.tauri/type-updater.key     ~/.tauri/archive/type-updater-$STAMP.key
 mv ~/.tauri/type-updater.key.pub ~/.tauri/archive/type-updater-$STAMP.key.pub
+```
+
+**If the password is lost, delete both files.** A private key you can't sign
+with is dead weight, and verifying an old signature never uses the private key
+anyway — the public key does that, and the key id is embedded in the signature
+itself. Two similarly-named keys in `~/.tauri/` is a live hazard: point a script
+at the wrong one and you ship a release nobody can install.
+
+```bash
+rm ~/.tauri/type-updater.key ~/.tauri/type-updater.key.pub
 ```
 
 ### 2. Generate the new keypair
@@ -115,6 +126,27 @@ npx tauri signer sign -f ~/.tauri/type-updater.key /tmp/sigtest.txt
 Tag as usual (see [RELEASING.md](./RELEASING.md)). Then install the resulting
 `.dmg` by hand once — your currently-installed build still carries the old
 pubkey and cannot update itself onto the new key.
+
+---
+
+## Migrating users across a rotation
+
+If people are already running builds that carry the **old** pubkey, rotating
+strands them — their app keeps checking, keeps verifying against the old key,
+and rejects everything you sign with the new one.
+
+You can carry them over **without a manual reinstall**, but only while the old
+key is still usable:
+
+1. Build the new version with the **new** pubkey in `tauri.conf.json`.
+2. Sign that payload with the **old** private key.
+3. Publish it. Old installs verify the signature against the old key, accept it,
+   and the app they end up running embeds the new pubkey.
+4. Every release after that is signed with the new key only.
+
+This is the entire reason to archive an old key rather than delete it — and it
+requires the old password. Once that password is gone, so is this path, and
+stranded users have no option but a manual `.dmg`.
 
 ---
 
