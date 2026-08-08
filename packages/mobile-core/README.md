@@ -46,6 +46,11 @@ npm run codegen:ios:device   # device + simulator (needed for `expo run:ios --de
 npm run codegen:android
 ```
 
+Android codegen builds the three application ABIs (`arm64-v8a`, `armeabi-v7a`,
+and `x86_64`) and then patches the generated UBRN project for the package's
+exported module layout and zlib linkage. Use `npm run codegen:android:release`
+when generating optimized Rust libraries for a release build.
+
 `codegen:ios` builds `--sim-only`, so the resulting xcframework has no device
 slice — rerun `codegen:ios:device` before installing on a physical phone.
 From the repo root, `npm run mobile:ios` chains `codegen:ios` + `expo run:ios`
