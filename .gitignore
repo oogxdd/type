@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+/.tmp/
+/apps/mobile/android/keystores/
 
 # Cargo workspace build output (root target/ shared by all crates)
 /target/

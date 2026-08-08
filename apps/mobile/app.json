@@ -34,6 +34,10 @@
     },
     "android": {
       "package": "com.typenotes.mobile",
+      "versionCode": 2026071205,
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#14171b"
