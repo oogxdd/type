@@ -5,10 +5,11 @@
 
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { getErrorMessage } from "@typenotes/shared/errors";
 import {
   effectiveTranscriptionMode,
   type TranscriptionMode,
@@ -23,6 +24,17 @@ import {
   resolveTextColor,
   TEXT_COLORS,
 } from "../lib/appearance";
+import {
+  assemblySetupNotice,
+  hasStoredKey,
+  isKeyActionDisabled,
+  type KeyCheck,
+  keyActionTitle,
+  maskApiKey,
+  queuedRecordingsNotice,
+  type SetupNotice,
+  transcriptionRowValue,
+} from "../lib/assembly-setup";
 import type { RootStackParamList } from "../navigation";
 import { useAppearanceStore } from "../state/appearance-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
@@ -31,32 +43,39 @@ import {
   SettingsActionRow,
   SettingsFieldRow,
   SettingsGroup,
+  SettingsNoticeRow,
   SettingsRow,
   SettingsStepperRow,
   SettingsSwatchRow,
 } from "../ui/settings-list";
 
+// Two of these transcribe automatically the moment a recording is saved and
+// two deliberately don't — that is the whole point of the list. Picking
+// "On my desktop" keeps voice notes off the cloud entirely and hands them to
+// the desktop's local Whisper after sync; the manual action further down still
+// lets a phone push a batch to AssemblyAI on demand.
 const MODES: { mode: TranscriptionMode; label: string; description: string }[] = [
   {
     mode: "assemblyai",
     label: "AssemblyAI (on this phone)",
-    description: "Transcribe right after recording via the AssemblyAI cloud API.",
+    description: "Automatic: upload to the AssemblyAI cloud API right after each recording.",
   },
   {
     mode: "desktop",
     label: "On my desktop",
-    description: "Leave recordings pending; a synced desktop transcribes them with local Whisper.",
+    description:
+      "Manual: recordings stay pending and your synced desktop transcribes them locally, free and private.",
   },
   {
     mode: "native",
     label: "On this phone (on-device)",
     description:
-      "Transcribe right after recording with the system speech recognizer — private, works offline.",
+      "Automatic: the system speech recognizer transcribes after each recording — private, works offline.",
   },
   {
     mode: "off",
     label: "Off",
-    description: "Never transcribe automatically.",
+    description: "Never transcribe automatically. Recordings stay pending until you say so.",
   },
 ];
 
@@ -88,6 +107,15 @@ export const SettingsScreen = () => {
   const appearance = useAppearanceStore((s) => s.appearance);
   const profile = activeProfile(snapshot);
   const currentMode = profile ? effectiveTranscriptionMode(profile.settings) : null;
+  // A mode that can't run has to show as broken from here — otherwise the
+  // phone reads as configured while every recording quietly stays pending.
+  const transcriptionValue = currentMode
+    ? transcriptionRowValue(
+        MODE_VALUE[currentMode],
+        currentMode === "assemblyai",
+        snapshot?.app_config.assemblyai_api_key ?? ""
+      )
+    : "Not set";
 
   return (
     <ScrollView
@@ -114,7 +142,7 @@ export const SettingsScreen = () => {
           icon="mic-outline"
           iconColor={TILE_ORANGE}
           title="Transcription"
-          value={currentMode ? MODE_VALUE[currentMode] : "Not set"}
+          value={transcriptionValue}
           chevron
           onPress={() => navigation.navigate("SettingsTranscription")}
         />
@@ -306,6 +334,14 @@ export const SettingsAppearanceScreen = () => {
   );
 };
 
+/**
+ * Picking a transcription mode and — for AssemblyAI — proving the key works.
+ *
+ * The mode lives in the working folder's synced settings while the key lives on
+ * the device, so "AssemblyAI is selected" and "this phone can reach AssemblyAI"
+ * are two different facts. The screen states both, and the single key action
+ * always ends by asking AssemblyAI, so the answer is never a guess.
+ */
 export const SettingsTranscriptionScreen = () => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -313,14 +349,56 @@ export const SettingsTranscriptionScreen = () => {
   const snapshot = store.snapshot;
   const profile = activeProfile(snapshot);
 
-  const [assemblyKey, setAssemblyKey] = useState(
-    snapshot?.app_config.assemblyai_api_key ?? ""
-  );
+  const storedKey = snapshot?.app_config.assemblyai_api_key ?? "";
+  const [assemblyKey, setAssemblyKey] = useState(storedKey);
+  const [check, setCheck] = useState<KeyCheck>({ status: "idle" });
+  const [manual, setManual] = useState<SetupNotice | null>(null);
+  const [manualBusy, setManualBusy] = useState(false);
+
+  // The snapshot loads asynchronously and changes when the working folder
+  // switches; without this the field would keep showing whatever was there when
+  // the screen mounted — usually nothing.
+  useEffect(() => {
+    setAssemblyKey(storedKey);
+    setCheck({ status: "idle" });
+  }, [storedKey]);
 
   const currentMode = profile ? effectiveTranscriptionMode(profile.settings) : null;
   const modeIsLegacyDerived = profile
     ? profile.settings.transcription_mode == null
     : false;
+  const routedToAssembly = currentMode === "assemblyai";
+  const notice = assemblySetupNotice({ routedToAssembly, storedKey, check });
+
+  const verifyKey = () => {
+    setCheck({ status: "checking" });
+    void store
+      .saveAndVerifyAssemblyAiKey(assemblyKey)
+      .then(() => setCheck({ status: "verified" }))
+      .catch((error: unknown) =>
+        setCheck({ status: "failed", message: getErrorMessage(error) })
+      );
+  };
+
+  const removeKey = () => {
+    setCheck({ status: "idle" });
+    void store
+      .clearAssemblyAiKey()
+      .then(() => setAssemblyKey(""))
+      .catch(() => {});
+  };
+
+  const transcribePending = () => {
+    setManualBusy(true);
+    setManual(null);
+    void store
+      .transcribePendingRecordings()
+      .then((queued) => setManual(queuedRecordingsNotice(queued)))
+      .catch((error: unknown) =>
+        setManual({ tone: "warning", text: getErrorMessage(error) })
+      )
+      .finally(() => setManualBusy(false));
+  };
 
   return (
     <ScrollView
@@ -332,7 +410,7 @@ export const SettingsTranscriptionScreen = () => {
         footer={
           modeIsLegacyDerived
             ? "Mode derived from this folder's legacy auto-transcription setting — pick one to persist it explicitly."
-            : undefined
+            : "The mode belongs to this working folder and syncs with your notes."
         }
       >
         {MODES.map(({ mode, label, description }) => (
@@ -348,17 +426,43 @@ export const SettingsTranscriptionScreen = () => {
 
       <SettingsGroup
         header="AssemblyAI API key"
-        footer="Stored on this device only — never synced."
+        footer="Stored on this phone only — never synced. Get one at assemblyai.com/app/api-keys."
       >
+        <SettingsNoticeRow tone={notice.tone} text={notice.text} />
         <SettingsFieldRow
           value={assemblyKey}
-          onChangeText={setAssemblyKey}
-          placeholder="API key"
+          onChangeText={(next) => {
+            setAssemblyKey(next);
+            // A verdict belongs to the key that earned it.
+            setCheck({ status: "idle" });
+          }}
+          placeholder={hasStoredKey(storedKey) ? maskApiKey(storedKey) : "API key"}
           secureTextEntry
+          accessibilityLabel="AssemblyAI API key"
         />
         <SettingsActionRow
-          title="Save Key"
-          onPress={() => void store.saveAssemblyAiKey(assemblyKey).catch(() => {})}
+          title={
+            check.status === "checking"
+              ? "Checking…"
+              : keyActionTitle(assemblyKey, storedKey)
+          }
+          disabled={isKeyActionDisabled(assemblyKey, storedKey, check)}
+          onPress={verifyKey}
+        />
+        {hasStoredKey(storedKey) ? (
+          <SettingsActionRow title="Remove Key" onPress={removeKey} />
+        ) : null}
+      </SettingsGroup>
+
+      <SettingsGroup
+        header="Transcribe now"
+        footer="Works in any mode: send whatever is still waiting to AssemblyAI once, without switching this folder to automatic uploads."
+      >
+        {manual ? <SettingsNoticeRow tone={manual.tone} text={manual.text} /> : null}
+        <SettingsActionRow
+          title={manualBusy ? "Sending…" : "Transcribe Pending Recordings"}
+          disabled={manualBusy || !hasStoredKey(storedKey)}
+          onPress={transcribePending}
         />
       </SettingsGroup>
 

@@ -66,6 +66,10 @@ export interface RawCore {
   // ── Recordings ──
   saveAudioRecording(argsJson: string): Promise<string>;
   queueRecordingTranscriptions(argsJson: string): Promise<string>;
+  /** Resolves if AssemblyAI accepts the key, rejects with why it didn't.
+   * Optional: absent in native modules generated before it existed —
+   * `core-api` feature-detects and says the check is unavailable. */
+  verifyAssemblyApiKey?(argsJson: string): Promise<void>;
   queueProviderTranscriptions(provider: RawTranscriptionProvider): Promise<string>;
   listRecordings(): Promise<string>;
   readRecordingAudio(path: string): Promise<string>;

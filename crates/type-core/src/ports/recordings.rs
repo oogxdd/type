@@ -124,6 +124,9 @@ pub trait RecordingsGateway {
     fn stop_native(&self) -> Result<Self::AudioPayload, String>;
     fn save(&self, args: Self::SaveArgs) -> Result<Self::WriteResult, String>;
     fn queue_cloud(&self, args: Self::CloudQueueArgs) -> Result<Self::QueueResult, String>;
+    /// Check the cloud credentials a `queue_cloud` job would run with, without
+    /// queuing anything — so a shell can prove the key works when it is entered.
+    fn verify_cloud_key(&self, args: Self::CloudQueueArgs) -> Result<(), String>;
     fn queue_local(&self, args: Self::LocalQueueArgs) -> Result<Self::QueueResult, String>;
     fn retrigger(&self, args: Self::RetriggerArgs) -> Result<(), String>;
     fn whisper_status(&self, args: Self::WhisperArgs) -> Self::WhisperStatus;

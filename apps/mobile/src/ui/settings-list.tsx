@@ -290,6 +290,35 @@ export const SettingsStepperRow = ({
   );
 };
 
+/**
+ * A non-interactive status line inside a card: an icon and wrapping text.
+ * Unlike a group footer this sits *in* the list, next to the control it is
+ * talking about, and it wraps instead of truncating — the text is usually an
+ * error the user has to be able to read in full.
+ */
+export const SettingsNoticeRow = ({
+  tone,
+  text,
+}: {
+  tone: "ok" | "warning" | "info";
+  text: string;
+}) => {
+  const theme = useTheme();
+  const { icon, color } = {
+    ok: { icon: "checkmark-circle" as const, color: theme.colors.accent },
+    warning: { icon: "alert-circle" as const, color: theme.colors.danger },
+    info: { icon: "information-circle" as const, color: theme.colors.secondaryText },
+  }[tone];
+  return (
+    <View style={[styles.row, styles.noticeRow]}>
+      <Ionicons name={icon} size={17} color={color} style={styles.noticeIcon} />
+      <Text style={[styles.noticeText, { color: theme.colors.secondaryText }]}>
+        {text}
+      </Text>
+    </View>
+  );
+};
+
 /** A text input living directly in a row, like iOS Settings' inline fields. */
 export const SettingsFieldRow = (props: TextInputProps) => {
   const theme = useTheme();
@@ -346,6 +375,10 @@ const styles = StyleSheet.create({
   rowValue: { fontSize: 16, flexShrink: 1 },
   chevron: { marginLeft: -6, opacity: 0.6 },
   fieldInput: { flex: 1, fontSize: 16, paddingVertical: 0 },
+  // Top-aligned so the icon sits on the first line of wrapped text.
+  noticeRow: { alignItems: "flex-start", gap: 8, paddingVertical: 11 },
+  noticeIcon: { marginTop: 1 },
+  noticeText: { flex: 1, fontSize: 13, lineHeight: 18 },
   swatchRow: {
     flexDirection: "row",
     flexWrap: "wrap",

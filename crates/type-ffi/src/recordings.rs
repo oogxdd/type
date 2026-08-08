@@ -89,6 +89,21 @@ pub async fn queue_recording_transcriptions(args_json: String) -> Result<String,
     .await
 }
 
+/// Check that AssemblyAI accepts an API key, without queuing or transcribing
+/// anything. `args_json`: `QueueRecordingsArgs` — an explicit
+/// `assembly_api_key` is checked as-is, otherwise the device's stored key is.
+/// Resolves on success; the error carries the reason the key was refused, so
+/// the phone can say so at the moment the key is entered instead of failing
+/// silently at the end of the next recording.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn verify_assembly_api_key(args_json: String) -> Result<(), CoreError> {
+    run_blocking(move || {
+        let args: QueueRecordingsArgs = from_json(&args_json)?;
+        recordings_use_cases()?.verify_cloud_key(args)
+    })
+    .await
+}
+
 /// Queue every pending/failed recording against a host-supplied
 /// [`TranscriptionProvider`]. Returns JSON `RecordingTranscriptionQueueResult`;
 /// jobs then run on the shared background worker.

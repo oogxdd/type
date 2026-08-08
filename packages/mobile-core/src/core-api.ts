@@ -219,6 +219,25 @@ export const queueRecordingTranscriptions = async (
   parse(await getRawCore().queueRecordingTranscriptions(JSON.stringify(args)));
 
 /**
+ * Ask AssemblyAI whether it accepts a key, without queuing or transcribing
+ * anything. Resolves when the key works; rejects with the reason it doesn't
+ * (wrong key, no network) so Settings can show it the moment it's entered.
+ *
+ * Pass a key to check one the user just typed; omit it to check the stored one.
+ */
+export const verifyAssemblyAiKey = async (
+  args: QueueRecordingsArgs = {}
+): Promise<void> => {
+  const raw = getRawCore();
+  if (typeof raw.verifyAssemblyApiKey !== "function") {
+    throw new Error(
+      "This build of the app can't check the key — update the native core to verify it."
+    );
+  }
+  await raw.verifyAssemblyApiKey(JSON.stringify(args));
+};
+
+/**
  * Queue pending/failed recordings against a host-supplied provider (e.g.
  * native on-device speech recognition). Jobs run on the core's background
  * worker, which calls back into `provider`.

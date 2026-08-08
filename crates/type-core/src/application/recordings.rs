@@ -30,6 +30,10 @@ impl<G: RecordingsGateway> RecordingsUseCases<G> {
         self.gateway.queue_cloud(args)
     }
 
+    pub fn verify_cloud_key(&self, args: G::CloudQueueArgs) -> Result<(), String> {
+        self.gateway.verify_cloud_key(args)
+    }
+
     pub fn queue_local(&self, args: G::LocalQueueArgs) -> Result<G::QueueResult, String> {
         self.gateway.queue_local(args)
     }

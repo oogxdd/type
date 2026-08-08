@@ -26,8 +26,12 @@ use base64::Engine as _;
 // Transcription backends — the worker below dispatches to whichever the job
 // selects (local Whisper on desktop, AssemblyAI on iOS).
 mod assembly;
+#[cfg(test)]
+mod test_support;
 mod whisper;
-pub use assembly::transcribe_audio_bytes_with_assembly;
+pub use assembly::{
+    transcribe_audio_bytes_with_assembly, verify_assembly_api_key, ASSEMBLY_API_BASE,
+};
 pub use whisper::{
     check_whisper_availability, save_word_level_json, transcribe_audio_local_whisper,
 };
@@ -170,6 +174,9 @@ pub struct WhisperStatusResult {
 pub enum TranscriptionMethod {
     AssemblyAi {
         api_key: String,
+        /// API root, so tests can drive the real client against a stub server.
+        /// Production callers pass [`ASSEMBLY_API_BASE`].
+        base_url: String,
     },
     /// Local faster-whisper running in the app-managed Python environment.
     /// Carries an `AppEnv` so the worker can provision the env lazily.
@@ -213,6 +220,24 @@ impl RecordingsAdapter {
     ) -> Result<RecordingTranscriptionQueueResult, String> {
         let root = crate::ensured_notes_root(&self.app)?;
         queue_recordings_for_provider_transcription(&root, provider)
+    }
+
+    /// The key an AssemblyAI job would run with: an explicit override wins,
+    /// otherwise the device's stored key. Queuing and the Settings key check
+    /// share this so a verified key is the same key the next recording uses.
+    fn resolve_assembly_key(&self, override_key: Option<&str>) -> Result<String, String> {
+        let app_data = crate::app_data_dir(&self.app)?;
+        let app_config = crate::load_app_config(&app_data);
+        let api_key = override_key
+            .map(str::trim)
+            .filter(|key| !key.is_empty())
+            .unwrap_or(app_config.assemblyai_api_key.trim());
+        if api_key.is_empty() {
+            return Err(
+                "AssemblyAI API key is required. Add it in Settings → Transcription.".to_string(),
+            );
+        }
+        Ok(api_key.to_string())
     }
 }
 
@@ -274,27 +299,20 @@ impl RecordingsGateway for RecordingsAdapter {
     }
 
     fn queue_cloud(&self, args: Self::CloudQueueArgs) -> Result<Self::QueueResult, String> {
-        let app_data = crate::app_data_dir(&self.app)?;
-        let app_config = crate::load_app_config(&app_data);
-
-        let api_key = args
-            .assembly_api_key
-            .as_deref()
-            .filter(|s| !s.is_empty())
-            .unwrap_or(app_config.assemblyai_api_key.as_str())
-            .trim();
-
-        if api_key.is_empty() {
-            return Err("AssemblyAI API key is required.".to_string());
-        }
-
+        let api_key = self.resolve_assembly_key(args.assembly_api_key.as_deref())?;
         let root = crate::ensured_notes_root(&self.app)?;
         queue_recordings_with_method(
             &root,
             &TranscriptionMethod::AssemblyAi {
-                api_key: api_key.to_string(),
+                api_key,
+                base_url: ASSEMBLY_API_BASE.to_string(),
             },
         )
+    }
+
+    fn verify_cloud_key(&self, args: Self::CloudQueueArgs) -> Result<(), String> {
+        let api_key = self.resolve_assembly_key(args.assembly_api_key.as_deref())?;
+        verify_assembly_api_key(&api_key, ASSEMBLY_API_BASE)
     }
 
     fn queue_local(&self, args: Self::LocalQueueArgs) -> Result<Self::QueueResult, String> {
@@ -694,7 +712,7 @@ fn process_transcription_job(job: QueuedTranscriptionJob) {
                 Err(error) => Err(format!("Failed to set up local transcription: {error}")),
             }
         }
-        TranscriptionMethod::AssemblyAi { api_key } => {
+        TranscriptionMethod::AssemblyAi { api_key, base_url } => {
             let audio_bytes = match fs::read(&job.audio_path) {
                 Ok(bytes) => bytes,
                 Err(e) => {
@@ -712,7 +730,7 @@ fn process_transcription_job(job: QueuedTranscriptionJob) {
                     return;
                 }
             };
-            transcribe_audio_bytes_with_assembly(audio_bytes, api_key)
+            transcribe_audio_bytes_with_assembly(audio_bytes, api_key, base_url)
         }
         TranscriptionMethod::Provider { provider } => provider
             .transcribe(&job.audio_path)
@@ -1232,4 +1250,149 @@ fn import_one_audio_file(
         file_name_format,
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod cloud_queue_tests {
+    //! The whole mobile AssemblyAI path minus the phone: a saved recording note
+    //! goes onto the shared queue, the worker drives the real `assembly.rs`
+    //! client against a stub API, and the transcript has to come back *in the
+    //! note file on disk* — the only thing the phone's UI ever reads.
+
+    use super::test_support::StubAssemblyServer;
+    use super::*;
+
+    fn recording_root(tag: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("type-cloud-{tag}-{}", Uuid::now_v7()));
+        fs::create_dir_all(root.join(FEED_FOLDER)).unwrap();
+        root
+    }
+
+    fn save_pending_recording(root: &Path) -> RecordingWriteResult {
+        let audio_path = recording_audio_file_path(root, "m4a").unwrap();
+        fs::write(&audio_path, b"fake audio bytes").unwrap();
+        write_recording_note(
+            root,
+            &audio_path,
+            FEED_FOLDER.to_string(),
+            &root.join(FEED_FOLDER),
+            now_ms().unwrap_or(0),
+            NoteFileNameFormat::default(),
+        )
+        .unwrap()
+    }
+
+    /// Read the note back the way the app does, once the worker is done with it.
+    fn await_terminal_note(root: &Path, note_rel: &str) -> (NoteFrontMatter, String) {
+        let note_path = root.join(note_rel);
+        for _ in 0..300 {
+            let raw = fs::read_to_string(&note_path).unwrap();
+            let (meta, body) = parse_note_front_matter(&raw);
+            match meta.transcription_status.as_deref() {
+                Some(RECORDING_STATUS_COMPLETED) | Some(RECORDING_STATUS_FAILED) => {
+                    return (meta, body)
+                }
+                _ => thread::sleep(std::time::Duration::from_millis(100)),
+            }
+        }
+        panic!("recording never reached a terminal transcription status");
+    }
+
+    fn queue_against(
+        root: &Path,
+        server: &StubAssemblyServer,
+    ) -> RecordingTranscriptionQueueResult {
+        queue_recordings_with_method(
+            root,
+            &TranscriptionMethod::AssemblyAi {
+                api_key: "good-key".to_string(),
+                base_url: server.base_url(),
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_queued_recording_ends_up_with_the_transcript_in_its_note() {
+        let server = StubAssemblyServer::start().with_transcript("the transcript the phone shows");
+        let root = recording_root("ok");
+        let saved = save_pending_recording(&root);
+
+        let queued = queue_against(&root, &server);
+        assert_eq!(queued.queued, 1, "the pending recording should be queued");
+
+        let (meta, body) = await_terminal_note(&root, &saved.note_path);
+        assert_eq!(
+            meta.transcription_status.as_deref(),
+            Some(RECORDING_STATUS_COMPLETED)
+        );
+        assert_eq!(body.trim(), "the transcript the phone shows");
+        assert_eq!(meta.transcription_error, None);
+        assert_eq!(
+            meta.transcription_id.as_deref(),
+            Some(StubAssemblyServer::TRANSCRIPT_ID)
+        );
+        assert_eq!(server.uploaded_bytes(), b"fake audio bytes".to_vec());
+    }
+
+    #[test]
+    fn a_rejected_key_leaves_the_note_failed_with_a_fixable_message() {
+        let server = StubAssemblyServer::start().rejecting_keys();
+        let root = recording_root("badkey");
+        let saved = save_pending_recording(&root);
+
+        queue_against(&root, &server);
+
+        let (meta, _) = await_terminal_note(&root, &saved.note_path);
+        assert_eq!(
+            meta.transcription_status.as_deref(),
+            Some(RECORDING_STATUS_FAILED)
+        );
+        let error = meta.transcription_error.unwrap_or_default();
+        assert!(error.contains("rejected this API key"), "{error}");
+    }
+
+    #[test]
+    fn a_failed_recording_can_be_queued_again_and_succeed() {
+        let root = recording_root("retry");
+        let saved = save_pending_recording(&root);
+
+        let rejecting = StubAssemblyServer::start().rejecting_keys();
+        queue_against(&root, &rejecting);
+        let (failed, _) = await_terminal_note(&root, &saved.note_path);
+        assert_eq!(
+            failed.transcription_status.as_deref(),
+            Some(RECORDING_STATUS_FAILED)
+        );
+        drop(rejecting);
+
+        // Re-queuing after fixing the key must pick the failed note back up
+        // rather than skip it — that is what the retry action relies on.
+        let working = StubAssemblyServer::start().with_transcript("second time around");
+        let requeued = queue_against(&root, &working);
+        assert_eq!(requeued.queued, 1, "a failed recording must be retryable");
+
+        let (meta, body) = await_terminal_note(&root, &saved.note_path);
+        assert_eq!(
+            meta.transcription_status.as_deref(),
+            Some(RECORDING_STATUS_COMPLETED)
+        );
+        assert_eq!(body.trim(), "second time around");
+    }
+
+    #[test]
+    fn an_already_transcribed_recording_is_not_re_uploaded() {
+        let server = StubAssemblyServer::start().with_transcript("only once");
+        let root = recording_root("skip");
+        let saved = save_pending_recording(&root);
+
+        queue_against(&root, &server);
+        await_terminal_note(&root, &saved.note_path);
+        let after_first = server.requests().len();
+
+        let second = queue_against(&root, &server);
+        assert_eq!(second.queued, 0);
+        assert_eq!(second.skipped, 1);
+        assert_eq!(server.requests().len(), after_first, "no extra API calls");
+    }
 }

@@ -84,6 +84,44 @@ describe("core-api over the mock core", () => {
     );
   });
 
+  it("refuses to queue cloud transcription until a key is stored", async () => {
+    await core.saveAudioRecording({ audio_base64: "QUJD", mime_type: "audio/mp4" });
+
+    await expect(core.queueRecordingTranscriptions()).rejects.toThrow(
+      /API key is required/
+    );
+
+    const config = (await core.getProfiles()).app_config;
+    await core.updateAppConfig({
+      ...config,
+      assemblyai_api_key: "0123456789abcdef0123456789abcdef",
+    });
+    expect((await core.queueRecordingTranscriptions()).queued).toBe(1);
+  });
+
+  it("verifies the stored key and reports a rejected one", async () => {
+    const config = (await core.getProfiles()).app_config;
+
+    await expect(core.verifyAssemblyAiKey()).rejects.toThrow(/API key is required/);
+
+    await core.updateAppConfig({ ...config, assemblyai_api_key: "not-a-real-key" });
+    await expect(core.verifyAssemblyAiKey()).rejects.toThrow(/rejected this API key/);
+
+    await core.updateAppConfig({
+      ...config,
+      assemblyai_api_key: "0123456789abcdef0123456789abcdef",
+    });
+    await expect(core.verifyAssemblyAiKey()).resolves.toBeUndefined();
+  });
+
+  it("says so when the native core is too old to check a key", async () => {
+    const core5 = createMockCore({ now: () => 1_750_000_000_000 });
+    delete (core5 as { verifyAssemblyApiKey?: unknown }).verifyAssemblyApiKey;
+    setRawCore(core5);
+
+    await expect(core.verifyAssemblyAiKey()).rejects.toThrow(/can't check the key/);
+  });
+
   it("saves a photo as a pending handwriting note without running OCR", async () => {
     const saved = await core.saveHandwritingAttachment({
       image_base64: "QUJD",

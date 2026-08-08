@@ -197,6 +197,25 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
 
   const securityStateJson = () => JSON.stringify(security);
 
+  // Demo mode still gates the cloud path on a key, and still rejects one that
+  // could not be real, so "set up AssemblyAI" behaves the same way here as on a
+  // native build — the only difference is that no request leaves the phone.
+  // Real keys are 32 hex characters.
+  const DEMO_KEY_PATTERN = /^[0-9a-f]{32}$/i;
+
+  const resolveAssemblyKey = (argsJson: string | undefined) => {
+    const args = argsJson
+      ? (JSON.parse(argsJson) as { assembly_api_key?: string | null })
+      : {};
+    const key = (args.assembly_api_key || appConfig.assemblyai_api_key || "").trim();
+    if (!key) {
+      throw new Error(
+        "AssemblyAI API key is required. Add it in Settings → Transcription."
+      );
+    }
+    return key;
+  };
+
   const completeTranscriptions = async (
     transcribe: (audioPath: string) => Promise<string>
   ) => {
@@ -447,8 +466,18 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
         audio_path: audioPath,
       });
     },
-    queueRecordingTranscriptions: async () =>
-      completeTranscriptions(async () => "(demo transcript)"),
+    queueRecordingTranscriptions: async (argsJson) => {
+      resolveAssemblyKey(argsJson);
+      return completeTranscriptions(async () => "(demo transcript)");
+    },
+    verifyAssemblyApiKey: async (argsJson) => {
+      const key = resolveAssemblyKey(argsJson);
+      if (!DEMO_KEY_PATTERN.test(key)) {
+        throw new Error(
+          "AssemblyAI rejected this API key (HTTP 401). Copy it again from assemblyai.com/app/api-keys."
+        );
+      }
+    },
     queueProviderTranscriptions: async (provider: RawTranscriptionProvider) =>
       completeTranscriptions((audioPath) => Promise.resolve(provider.transcribe(audioPath))),
     listRecordings: async () =>

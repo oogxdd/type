@@ -39,6 +39,10 @@ import {
   startRecordingActivity,
 } from "../lib/recording-activity";
 import { elapsedSeconds, formatRecordingTimer } from "../lib/recording-timer";
+import {
+  describeTranscriptionOutcome,
+  waitForTranscription,
+} from "../lib/transcription-watch";
 import { useNotesStore } from "../state/notes-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useTheme } from "../theme";
@@ -174,27 +178,38 @@ export const DictationButton = ({
       const audioBase64 = await FileSystem.readAsStringAsync(uri, {
         encoding: "base64",
       });
-      await core.saveAudioRecording({
+      const saved = await core.saveAudioRecording({
         audio_base64: audioBase64,
         mime_type: "audio/mp4",
       });
 
+      let queued = false;
       let detail = MODE_SAVED_DETAIL[mode];
       if (mode === "assemblyai") {
         try {
           await core.queueRecordingTranscriptions();
+          queued = true;
         } catch (queueError) {
           detail = `Saved, but queueing failed: ${getErrorMessage(queueError)}`;
         }
       } else if (mode === "native") {
         try {
           await core.queueProviderTranscriptions(nativeTranscriptionProvider);
+          queued = true;
         } catch (queueError) {
           detail = `Saved, but queueing failed: ${getErrorMessage(queueError)}`;
         }
       }
       showStatus({ kind: "success", text: detail });
       void useNotesStore.getState().refresh();
+
+      // Queuing succeeding only means the job was accepted. The transcription
+      // itself runs on the core's background thread and can still fail (a key
+      // AssemblyAI rejects, no network) — watch for the real outcome so the
+      // user isn't left with "transcribing…" as the last thing they ever hear.
+      if (queued) {
+        void watchTranscription(saved.note_path);
+      }
     } catch (err) {
       showStatus({ kind: "error", text: getErrorMessage(err) });
     } finally {
@@ -210,6 +225,21 @@ export const DictationButton = ({
         shouldPlayInBackground: false,
       }).catch(() => {});
     }
+  };
+
+  // Kept out of stopAndSave's try/finally: the recorder is already released and
+  // the button usable again while this runs in the background.
+  const watchTranscription = async (notePath: string) => {
+    const outcome = await waitForTranscription(notePath, {
+      list: core.listRecordings,
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    });
+    if (outcome.status === "pending") {
+      // Nothing new to say — the original "transcribing…" pill still holds.
+      return;
+    }
+    showStatus(describeTranscriptionOutcome(outcome));
+    void useNotesStore.getState().refresh();
   };
 
   const choosePhoto = async (source: "camera" | "library") => {

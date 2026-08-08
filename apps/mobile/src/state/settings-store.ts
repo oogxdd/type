@@ -28,6 +28,20 @@ type SettingsState = {
     trustedSshHostKeySha256?: string | null;
   }) => Promise<void>;
   saveAssemblyAiKey: (key: string) => Promise<void>;
+  /**
+   * Persist `key` when it differs from the stored one, then ask AssemblyAI
+   * whether it is accepted. Rejects with the reason it isn't — the caller shows
+   * that verbatim, since "wrong key" and "no network" need different fixes.
+   */
+  saveAndVerifyAssemblyAiKey: (key: string) => Promise<void>;
+  clearAssemblyAiKey: () => Promise<void>;
+  /**
+   * Send everything still pending to AssemblyAI now. This is what makes the
+   * automatic modes optional: with `desktop` or `off` selected nothing leaves
+   * the phone on its own, and this is the deliberate "actually, do this batch
+   * in the cloud" escape hatch. Returns how many recordings were queued.
+   */
+  transcribePendingRecordings: () => Promise<number>;
 };
 
 const redactRemoteForLog = (remote: string | null | undefined): string => {
@@ -70,6 +84,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
         settings: mutate(profile.settings),
       })
     );
+  };
+
+  const writeAssemblyAiKey = async (key: string) => {
+    const config = get().snapshot?.app_config;
+    if (!config) {
+      throw new Error("Settings not loaded yet.");
+    }
+    apply(await core.updateAppConfig({ ...config, assemblyai_api_key: key.trim() }));
   };
 
   const guarded = async (run: () => Promise<void>) => {
@@ -147,13 +169,31 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
         console.log(`[settings] saved git settings remote=${redactRemoteForLog(saved)}`);
       }),
 
-    saveAssemblyAiKey: (key) =>
+    saveAssemblyAiKey: (key) => guarded(() => writeAssemblyAiKey(key)),
+
+    saveAndVerifyAssemblyAiKey: (key) =>
       guarded(async () => {
-        const config = get().snapshot?.app_config;
-        if (!config) {
-          throw new Error("Settings not loaded yet.");
+        const trimmed = key.trim();
+        const stored = get().snapshot?.app_config.assemblyai_api_key ?? "";
+        if (trimmed && trimmed !== stored.trim()) {
+          await writeAssemblyAiKey(trimmed);
         }
-        apply(await core.updateAppConfig({ ...config, assemblyai_api_key: key }));
+        // Verify the stored key, not the draft: what the next recording will
+        // use is what has to be proven working.
+        await core.verifyAssemblyAiKey();
       }),
+
+    clearAssemblyAiKey: () => guarded(() => writeAssemblyAiKey("")),
+
+    transcribePendingRecordings: async () => {
+      try {
+        const result = await core.queueRecordingTranscriptions();
+        set({ error: null });
+        return result.queued;
+      } catch (error) {
+        set({ error: getErrorMessage(error) });
+        throw error;
+      }
+    },
   };
 });
