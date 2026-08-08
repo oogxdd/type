@@ -580,7 +580,14 @@ export const CaptureScreen = () => {
               >
                 <TextInput
                   ref={inputRef}
-                  style={[styles.input, { color: theme.colors.text }]}
+                  style={[
+                    styles.input,
+                    {
+                      color: theme.colors.text,
+                      fontSize: theme.fontSize,
+                      lineHeight: theme.lineHeight,
+                    },
+                  ]}
                   value={text}
                   onChangeText={onChange}
                   onPressIn={showIcons}
@@ -623,10 +630,13 @@ export const CaptureScreen = () => {
               ]}
             >
               <Text
-                style={[
-                  styles.ghostPlaceholder,
-                  { color: theme.colors.secondaryText },
-                ]}
+                style={{
+                  color: theme.colors.secondaryText,
+                  // Must track the real input, or the incoming page's
+                  // placeholder would not land where the caret will.
+                  fontSize: theme.fontSize,
+                  lineHeight: theme.lineHeight,
+                }}
               >
                 {PLACEHOLDER}
               </Text>
@@ -711,10 +721,9 @@ const styles = StyleSheet.create({
   // flexGrow (not flex) so the input fills the viewport at minimum but the
   // container still grows with the input's content beyond it.
   scrollContent: { flexGrow: 1 },
+  // fontSize/lineHeight come from the theme (Settings → Appearance).
   input: {
     flexGrow: 1,
-    fontSize: 17,
-    lineHeight: 26,
     paddingTop: 44,
     paddingBottom: 24,
   },
@@ -745,10 +754,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.05,
     shadowRadius: 12,
-  },
-  ghostPlaceholder: {
-    fontSize: 17,
-    lineHeight: 26,
   },
   fab: {
     position: "absolute",

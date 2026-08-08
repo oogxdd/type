@@ -4,7 +4,7 @@ import {
   NavigationContainer,
 } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Linking, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -21,11 +21,13 @@ import { FolderScreen } from "./screens/folder-screen";
 import { LockScreen } from "./screens/lock-screen";
 import { MenuScreen } from "./screens/menu-screen";
 import {
+  SettingsAppearanceScreen,
   SettingsScreen,
   SettingsTranscriptionScreen,
   SettingsWorkingFoldersScreen,
 } from "./screens/settings-screen";
 import { SyncScreen } from "./screens/sync-screen";
+import { useAppearanceStore } from "./state/appearance-store";
 import { useNotesStore } from "./state/notes-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
 import { useSettingsStore } from "./state/settings-store";
@@ -117,6 +119,11 @@ const RootStack = () => {
         component={SettingsTranscriptionScreen}
         options={{ title: "Transcription" }}
       />
+      <Stack.Screen
+        name="SettingsAppearance"
+        component={SettingsAppearanceScreen}
+        options={{ title: "Appearance" }}
+      />
     </Stack.Navigator>
   );
 };
@@ -138,6 +145,24 @@ const handleSyncUrl = (url: string | null) => {
 export default function App() {
   const theme = useTheme();
   const [phase, setPhase] = useState<BootPhase>({ state: "booting" });
+  // The stock light/dark navigation themes carry their own background, which
+  // would flash behind screens during transitions once the user picks a
+  // custom one. Feed ours through instead.
+  const navigationTheme = useMemo(() => {
+    const base = theme.dark ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      dark: theme.dark,
+      colors: {
+        ...base.colors,
+        primary: theme.colors.accent,
+        background: theme.colors.background,
+        card: theme.colors.background,
+        text: theme.colors.text,
+        border: theme.colors.border,
+      },
+    };
+  }, [theme]);
   const demoMode = useSettingsStore((s) => s.demoMode);
   const initialUrlHandled = useRef(false);
 
@@ -145,6 +170,10 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
+        // First, so the boot/lock screens already paint in the user's chosen
+        // colors instead of flashing the system palette. It reads a plain
+        // file, so it does not depend on the core coming up.
+        await useAppearanceStore.getState().load();
         const { demoMode: demo } = await bootCore();
         useSettingsStore.getState().setDemoMode(demo);
         await useSecurityStore.getState().load();
@@ -225,7 +254,7 @@ export default function App() {
       <SafeAreaProvider>
         <NavigationContainer
           ref={navigationRef}
-          theme={theme.dark ? DarkTheme : DefaultTheme}
+          theme={navigationTheme}
           initialState={BOOT_NAVIGATION_STATE}
           onReady={() => {
             if (!initialUrlHandled.current) {

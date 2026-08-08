@@ -122,7 +122,12 @@ export const EditorScreen = () => {
       <TextInput
         style={[
           styles.input,
-          { backgroundColor: theme.colors.background, color: theme.colors.text },
+          {
+            backgroundColor: theme.colors.background,
+            color: theme.colors.text,
+            fontSize: theme.fontSize,
+            lineHeight: theme.lineHeight,
+          },
         ]}
         value={text ?? ""}
         editable={text !== null}
@@ -138,10 +143,9 @@ export const EditorScreen = () => {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
+  // fontSize/lineHeight come from the theme (Settings → Appearance).
   input: {
     flex: 1,
-    fontSize: 17,
-    lineHeight: 26,
     paddingHorizontal: 20,
     paddingTop: 16,
   },

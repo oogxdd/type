@@ -28,6 +28,7 @@ export type RootStackParamList = {
   Settings: undefined;
   SettingsWorkingFolders: undefined;
   SettingsTranscription: undefined;
+  SettingsAppearance: undefined;
 };
 
 export const Stack = createNativeStackNavigator<RootStackParamList>();
