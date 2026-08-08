@@ -27,8 +27,8 @@ desktop-v0.5.1   desktop 0.5.1
 > Why GitHub's *latest* release matters for the updater: the desktop updater
 > reads `…/releases/latest/download/latest.json`, so the desktop release must be
 > marked as GitHub's latest release. The desktop workflow forces the `latest`
-> flag on every desktop release. The mobile workflow does not create a GitHub
-> Release.
+> flag on every desktop release. Mobile releases are also listed on GitHub,
+> but are explicitly prevented from replacing the latest desktop release.
 
 ---
 
@@ -82,10 +82,11 @@ git push origin mobile-v0.2.0
 
 CI ([`.github/workflows/mobile-testflight.yml`](../.github/workflows/mobile-testflight.yml)):
 
-1. runs on a macOS runner,
-2. generates the iOS UniFFI/native module from `packages/mobile-core`,
-3. builds a local EAS `.ipa` from `apps/mobile`, and
-4. submits that `.ipa` to TestFlight.
+1. creates a metadata-only GitHub Release without changing the desktop Latest,
+2. runs on a macOS runner,
+3. generates the iOS UniFFI/native module from `packages/mobile-core`,
+4. builds a local EAS `.ipa` from `apps/mobile`, and
+5. submits that `.ipa` to TestFlight.
 
 The workflow sets `MOBILE_VERSION` from the tag and uses the GitHub run number
 as `IOS_BUILD_NUMBER`. For a manual rerun, use Actions → **Mobile TestFlight**

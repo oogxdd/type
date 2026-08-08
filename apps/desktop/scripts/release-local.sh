@@ -17,7 +17,7 @@
 set -euo pipefail
 
 VERSION="${1:-}"
-REPO="oogxdd/type_new"   # owner/name used in the updater download URLs
+REPO="oogxdd/type"   # owner/name used in the updater download URLs
 
 if [ -z "$VERSION" ]; then
   echo "usage: $0 <version>" >&2
@@ -27,7 +27,7 @@ fi
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-TAG="v$VERSION"
+TAG="desktop-v$VERSION"
 echo "==> Releasing $TAG"
 
 bash scripts/set-app-version.sh "$VERSION"
@@ -85,7 +85,7 @@ JSON
 echo "==> Creating GitHub Release $TAG and uploading assets"
 gh release create "$TAG" "$DMG" "$TARGZ" latest.json \
   --repo "$REPO" \
-  --title "Type $TAG" \
+  --title "Type Desktop $VERSION" \
   --notes "Automated desktop release. Existing installs update in-app via Settings → Updates." \
   --latest
 

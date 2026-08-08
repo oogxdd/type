@@ -54,7 +54,7 @@ Open `src-tauri/tauri.conf.json` and replace the placeholder:
   "updater": {
     "pubkey": "REPLACE_WITH_UPDATER_PUBLIC_KEY",   // ← paste contents of type-updater.key.pub
     "endpoints": [
-      "https://github.com/oogxdd/type_new/releases/latest/download/latest.json"
+      "https://github.com/oogxdd/type/releases/latest/download/latest.json"
     ]
   }
 }
@@ -142,7 +142,7 @@ Create a file named `latest.json`:
   "platforms": {
     "darwin-aarch64": {
       "signature": "<paste the ENTIRE contents of Type.app.tar.gz.sig>",
-      "url": "https://github.com/oogxdd/type_new/releases/download/v0.4.3/Type.app.tar.gz"
+      "url": "https://github.com/oogxdd/type/releases/download/desktop-v0.4.3/Type.app.tar.gz"
     }
   }
 }
@@ -155,11 +155,11 @@ Create a file named `latest.json`:
 ### 4. Publish a GitHub Release
 
 ```bash
-gh release create v0.4.3 \
+gh release create desktop-v0.4.3 \
   "src-tauri/target/release/bundle/dmg/Type_0.4.3_aarch64.dmg" \
   "src-tauri/target/release/bundle/macos/Type.app.tar.gz" \
   "latest.json" \
-  --title "v0.4.3" --notes "Release notes here"
+  --title "Type Desktop 0.4.3" --notes "Release notes here" --latest
 ```
 
 Because the configured endpoint is `.../releases/latest/download/latest.json`,

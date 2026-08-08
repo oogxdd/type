@@ -77,6 +77,26 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "Mobile release -> version=$VERSION build=$BUILD_NUMBER tag=$TAG"
 
+  github-release:
+    if: github.event_name == 'push'
+    needs: setup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish GitHub release metadata
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.setup.outputs.tag }}
+          VERSION: ${{ needs.setup.outputs.version }}
+        run: |
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --verify-tag \
+            --title "Type Mobile $VERSION" \
+            --notes "Mobile release $VERSION. TestFlight delivery is handled by the Mobile TestFlight workflow." \
+            --latest=false
+
   ios:
     needs: setup
     runs-on: macos-latest

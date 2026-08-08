@@ -127,7 +127,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ needs.setup.outputs.tag }}
-          releaseName: "Type Desktop ${{ needs.setup.outputs.tag }}"
+          releaseName: "Type Desktop ${{ needs.setup.outputs.version }}"
           releaseBody: "Automated desktop release. Download the .dmg below; existing installs update in-app via Settings → Updates."
           releaseDraft: false
           prerelease: false
