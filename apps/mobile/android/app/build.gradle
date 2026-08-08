@@ -100,8 +100,8 @@ android {
         applicationId 'com.typenotes.mobile'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2026071205
-        versionName "0.2.2"
+        versionCode 2026080801
+        versionName "0.2.3"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
