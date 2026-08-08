@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "df53cf4703c2",
+  "session_id": "87982bbe-c2cd-4c0a-a831-b62ac43a016d",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-08T19:13:27.42673Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "docs/MACOS_CODE_SIGNING.md",
+    "docs/DESKTOP_AUTO_UPDATE.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "01347370a3dc",
+  "checkpoint_transcript_start": 550,
+  "transcript_lines_at_start": 550,
+  "token_usage": {
+    "input_tokens": 57,
+    "cache_creation_tokens": 21925,
+    "cache_read_tokens": 6092527,
+    "output_tokens": 20155,
+    "api_call_count": 31
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-08T19:13:27.126737Z",
+    "agent_lines": 21,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 21,
+    "agent_percentage": 100
+  }
+}
