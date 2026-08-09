@@ -54,11 +54,12 @@ the `.dmg` + updater artifacts and publishes the GitHub Release.
 Actions tab → **Desktop Release** → **Run workflow** → enter the version.
 Useful for re-running a failed build.
 
-### Option C — build locally (the free-tier fallback)
+### Option C — build locally
 
-GitHub's free macOS runners are limited (minutes reset monthly; macOS minutes
-bill at 10× the included pool, so you get relatively few builds). When you run
-out, build on your Mac with the **same result**:
+CI is not rationed here: `oogxdd/type` is public, and GitHub Actions is free on
+standard runners for public repositories. Build locally for *speed*, not cost —
+a cold CI build takes 8–10 minutes, while your Mac rebuilds incrementally in
+about two:
 
 ```bash
 # desktop needs the updater signing key in the environment:
@@ -203,22 +204,23 @@ entitlement the hardened runtime requires:
 | Workflow | Trigger | Runners | Builds the app? |
 | --- | --- | --- | --- |
 | `ci.yml` | push to `main`/`master`; **every** PR commit, any branch, any path | ubuntu ×2 | No — typecheck + unit tests |
-| `ffi-bindings-check.yml` | PRs touching `crates/type-ffi/**`, `packages/mobile-core/**`, `scripts/check-ffi-surface.mjs`; manual | ubuntu + **macOS** | No — surface check + codegen |
+| `ffi-bindings-check.yml` | PRs touching `crates/type-ffi/**`, `packages/mobile-core/**`, `scripts/check-ffi-surface.mjs`; manual | ubuntu (PRs); **macOS only on manual dispatch** — its `codegen` job is gated on `github.event_name == 'workflow_dispatch'` | No — surface check + codegen |
 | `release.yml` | push of a `desktop-v*` tag; manual | ubuntu + **macOS** | **Yes** — `.dmg` + updater artifacts |
 | `mobile-testflight.yml` | push of a `mobile-v*` tag; manual | ubuntu ×2 + **macOS** | Yes — `.ipa` → TestFlight |
 
 Things that trigger **nothing**: pushing a branch that has no open PR, and
 pushing a tag outside the `desktop-v*` / `mobile-v*` namespaces.
 
-Billing: Linux minutes count 1×, **macOS minutes count 10×** against the
-included pool. Ordinary commits never start a macOS runner — but note that
-`ffi-bindings-check` does, on any PR touching the FFI paths. That is the one
-place macOS minutes get spent without releasing anything.
+**Cost: none.** `oogxdd/type` is a public repository, and GitHub Actions is free
+on standard runners for public repos — including `macos-latest`. The macOS
+multiplier and the included-minutes pool that most guidance warns about apply to
+*private* repositories. Nothing here is a reason to avoid a run; what a run
+actually costs is wall-clock time and a little noise.
 
 `[skip ci]` (or `[ci skip]`, `[no ci]`, `[skip actions]`) in a commit message
 suppresses the push/PR-triggered runs. Reasonable for docs-only commits; not
 worth it for code, since the ubuntu run is cheap and catches regressions before
-they surface during a 10×-billed release.
+they surface mid-release.
 
 ### Why the release build is always cold
 
@@ -241,9 +243,10 @@ compiles from scratch every time, for three independent reasons:
 
 Probably not. Warming it means adding a `macos-latest` job on `main` that does a
 release-profile build with a shared `shared-key`, which the tag job then
-restores. That burns 10×-billed macOS minutes on every push to `main` to save
-minutes on releases you cut occasionally — and Actions evicts caches after 7
-days unused, so at a weekly cadence the warm cache is often gone by release time.
+restores. Since the runners are free here, the cost is complexity rather than
+money — an extra job on every push to `main`, plus a cache Actions evicts after
+7 days unused, so at a weekly release cadence the warm cache is often gone by
+the time you need it.
 
 **Your fastest path is local.** The repo's `target/` on a dev Mac stays warm
 (~12 GB), so `npm run desktop:release <version>` rebuilds incrementally in a
@@ -278,8 +281,8 @@ Both paths produce identical artifacts and both create the GitHub Release, so
 the risk is doing it twice for the same tag. The `setup` job guards against
 that: it checks whether the release already carries a `latest.json`, and the
 whole `desktop` job is skipped if so. The check deliberately lives in `setup`
-(ubuntu, billed 1×) rather than inside the macOS job, so a local release costs
-seconds of CI rather than minutes of 10×-billed runner. That makes the choice a
+rather than inside the macOS job, so a local release wastes seconds of CI
+rather than spinning up a macOS runner to do nothing. That makes the choice a
 matter of what you do first, with no flags to remember:
 
 - **Local:** `npm run desktop:release 1.2.3`. It builds, signs, publishes, and

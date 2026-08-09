@@ -68,8 +68,8 @@ jobs:
 
       # A local release (apps/desktop/scripts/release-local.sh) publishes its own
       # assets and creates the tag, which arrives here as a tag push. Detect that
-      # on the Ubuntu runner — macOS minutes bill at 10x, so this must be decided
-      # before the desktop job starts, not inside it.
+      # on the cheap Ubuntu runner, so the decision happens before a macOS runner
+      # is ever started rather than two minutes into it.
       - id: published
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

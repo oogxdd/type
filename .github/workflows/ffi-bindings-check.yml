@@ -9,9 +9,10 @@ name: FFI bindings check
 #            #[uniffi::export] function list against the RawCore interface.
 #   codegen  (macOS, DRAFT, manual trigger only) — actually runs the ubrn
 #            codegen and verifies every RawCore method exists in the
-#            generated bindings. macOS minutes bill at 10× the free pool,
-#            so this is workflow_dispatch-only for now; once it proves
-#            stable, move it to the pull_request trigger too.
+#            generated bindings. workflow_dispatch-only for now because the
+#            job is not yet proven on a real runner; once it is, move it to
+#            the pull_request trigger too. (Runners are free — this repo is
+#            public — so the gate is about trust, not cost.)
 
 on:
   pull_request:
