@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "5283c4331ca1",
+  "session_id": "87982bbe-c2cd-4c0a-a831-b62ac43a016d",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-09T09:54:44.252556Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "AGENTS.md",
+    "docs/MAC_BUILD_AND_TEST.md",
+    "docs/DESKTOP_AUTO_UPDATE.md",
+    "README.md",
+    ".github/workflows/release.yml",
+    "apps/desktop/scripts/release-local.sh"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "8b375193febc",
+  "checkpoint_transcript_start": 737,
+  "transcript_lines_at_start": 737,
+  "token_usage": {
+    "input_tokens": 86,
+    "cache_creation_tokens": 452774,
+    "cache_read_tokens": 10215942,
+    "output_tokens": 29521,
+    "api_call_count": 46
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-09T09:54:43.88402Z",
+    "agent_lines": 89,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 89,
+    "agent_percentage": 100
+  }
+}

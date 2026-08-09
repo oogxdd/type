@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "5283c4331ca1",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".github/workflows/release.yml",
+    "AGENTS.md",
+    "README.md",
+    "apps/desktop/scripts/release-local.sh",
+    "docs/DESKTOP_AUTO_UPDATE.md",
+    "docs/MAC_BUILD_AND_TEST.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/52/83c4331ca1/0/metadata.json",
+      "transcript": "/52/83c4331ca1/0/full.jsonl",
+      "context": "/52/83c4331ca1/0/context.md",
+      "content_hash": "/52/83c4331ca1/0/content_hash.txt",
+      "prompt": "/52/83c4331ca1/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 86,
+    "cache_creation_tokens": 452774,
+    "cache_read_tokens": 10215942,
+    "output_tokens": 29521,
+    "api_call_count": 46
+  }
+}
