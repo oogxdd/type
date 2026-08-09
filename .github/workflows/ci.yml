@@ -3,11 +3,28 @@ name: CI
 # Fast feedback on every PR and on pushes to the default branch: typecheck +
 # unit tests for every npm workspace (desktop app, shared packages, mobile app)
 # and the Rust cargo workspace (core crates + Tauri backend). Release/build
-# workflows live in release.yml and deploy-pages.yml.
+# workflows live in release.yml.
+#
+# paths-ignore skips documentation-only changes. It is deliberately declarative
+# rather than a `[skip ci]` convention: nothing to remember per commit, and it
+# fails in the safe direction — a path not on this list runs CI, and a push or
+# PR that touches *any* other file runs CI even if it also edits docs (the
+# filter only skips when every changed path matches).
+#
+# The two lists are duplicated because GitHub Actions does not support YAML
+# anchors — keep them in sync by hand.
 on:
   push:
     branches: [main, master]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE.md"
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE.md"
 
 jobs:
   typescript:

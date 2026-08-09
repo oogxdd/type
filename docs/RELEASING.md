@@ -203,7 +203,7 @@ entitlement the hardened runtime requires:
 
 | Workflow | Trigger | Runners | Builds the app? |
 | --- | --- | --- | --- |
-| `ci.yml` | push to `main`/`master`; **every** PR commit, any branch, any path | ubuntu ×2 | No — typecheck + unit tests |
+| `ci.yml` | push to `main`/`master`; every PR commit, any branch — **except** changes that touch only `**.md` / `docs/**` | ubuntu ×2 | No — typecheck + unit tests |
 | `ffi-bindings-check.yml` | PRs touching `crates/type-ffi/**`, `packages/mobile-core/**`, `scripts/check-ffi-surface.mjs`; manual | ubuntu (PRs); **macOS only on manual dispatch** — its `codegen` job is gated on `github.event_name == 'workflow_dispatch'` | No — surface check + codegen |
 | `release.yml` | push of a `desktop-v*` tag; manual | ubuntu + **macOS** | **Yes** — `.dmg` + updater artifacts |
 | `mobile-testflight.yml` | push of a `mobile-v*` tag; manual | ubuntu ×2 + **macOS** | Yes — `.ipa` → TestFlight |
@@ -217,10 +217,15 @@ multiplier and the included-minutes pool that most guidance warns about apply to
 *private* repositories. Nothing here is a reason to avoid a run; what a run
 actually costs is wall-clock time and a little noise.
 
+Documentation-only changes are skipped declaratively via `paths-ignore` in
+`ci.yml`, so there is nothing to remember per commit. The filter skips a run
+only when **every** changed path matches, so a commit mixing docs and code still
+runs — it fails in the safe direction.
+
 `[skip ci]` (or `[ci skip]`, `[no ci]`, `[skip actions]`) in a commit message
-suppresses the push/PR-triggered runs. Reasonable for docs-only commits; not
-worth it for code, since the ubuntu run is cheap and catches regressions before
-they surface mid-release.
+still works as a manual override. Avoid it for code changes: an opt-out you have
+to remember gets forgotten exactly when you're in a hurry, which is when CI is
+worth most.
 
 ### Why the release build is always cold
 
