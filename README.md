@@ -89,10 +89,12 @@ Production uses `com.digital.type2` and stores app data under
 `com.digital.type2.dev` and stores app data under
 `~/Library/Application Support/com.digital.type2.dev/`.
 
-To build an isolated dev DMG:
+Run the app against the dev identifier — never the production one, which holds
+real notes:
 
 ```bash
-npm run tauri:build:dev -w type
+npm run desktop:app       # dev run, isolated data, updater disabled
+npm run desktop:dmg:dev   # "Type Dev.dmg", installs alongside production
 ```
 
 ### Build & checks

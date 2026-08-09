@@ -135,16 +135,11 @@ npm run mobile:ios   # с корня: codegen:ios + expo run:ios одной ко
   что сборка не удалась. `.app`/`.dmg`/`.tar.gz` уже собраны к этому
   моменту ("Finished N bundles" в логе выше), падает только шаг подписи
   updater-пейлоада. Причина: `plugins.updater.pubkey` в
-  `tauri.conf.json` непустой (даже если это ещё плейсхолдер
-  `REPLACE_WITH_UPDATER_PUBLIC_KEY`), а `bundle.createUpdaterArtifacts:
-  true` — этого достаточно, чтобы Tauri потребовал приватный ключ,
-  реального base64-содержимого он на этом шаге ещё не проверяет.
+  `tauri.conf.json` непустой, а `bundle.createUpdaterArtifacts: true` —
+  этого достаточно, чтобы Tauri потребовал приватный ключ.
   - Просто хотите потестить билд локально → пересоберите через
-    `npm run tauri:build:dev -w type` (dev-конфиг, апдейтер выключен,
-    ключ не нужен) — см. «Просто DMG для локальной проверки» выше.
-  - Нужен рабочий апдейтер → сгенерируйте ключ и экспортируйте
-    `TAURI_SIGNING_PRIVATE_KEY`/`_PASSWORD` перед сборкой — см. «Полная
-    прод-сборка» выше. Другая, отдельная ошибка на эту же тему —
-    `failed to decode pubkey ... invalid symbol 95` — означает, что в
-    конфиге буквально забыт плейсхолдер, замените его на настоящий
-    публичный ключ.
+    `npm run desktop:dmg:dev` (dev-конфиг, апдейтер выключен, ключ не
+    нужен) — см. «Просто DMG для локальной проверки» выше.
+  - Нужен рабочий апдейтер → экспортируйте
+    `TAURI_SIGNING_PRIVATE_KEY`/`_PASSWORD` перед сборкой — см.
+    [UPDATER_KEY_ROTATION.md](./UPDATER_KEY_ROTATION.md).

@@ -30,7 +30,7 @@ packages/mobile-core/  @typenotes/mobile-core — typed TS bridge to type-ffi
 - **Desktop frontend**: React 19, TypeScript, Vite, Tiptap (editor), DnD Kit (drag-and-drop), Tailwind + Shadcn/ui
 - **Mobile app**: React Native (Expo), react-navigation, reanimated + gesture-handler, expo-audio, zustand
 - **Rust core**: `crates/type-core`, organized as **domain / application / ports / adapters** (clean/hexagonal) across domains: notes, profiles, security, recordings (+ whisper_env), handwriting, import, git_sync, local_sync. The Tauri shell adds the `commands/` layer; `crates/type-ffi` adds the UniFFI layer.
-- **Build**: root `npm run desktop:build` (tsc + vite). Rust: `cargo check --workspace`
+- **Build**: root `npm run desktop:build` (tsc + vite). Rust: `cargo check --workspace`. Running the actual app: `npm run desktop:app` (isolated dev identifier — see Gotchas). Releases are tag-driven, see [docs/RELEASING.md](./docs/RELEASING.md).
 - **Tests**: `npm test` (Vitest per workspace — pure logic; co-located `*.test.ts`) and `cargo test --workspace --lib` (Rust unit tests in `#[cfg(test)]` modules). CI (`.github/workflows/ci.yml`) runs both, plus workspace typechecks, on PRs and pushes to main.
 
 ## Rust core structure (crates/type-core/src/ + the Tauri shell)
@@ -435,6 +435,7 @@ The React Native app (Expo) reuses the Rust core through
 ## Gotchas
 
 - **"Archieve" typo**: The archive folder is spelled "Archieve" in the codebase and in persisted data. Do not "fix" this — it would break existing user data.
+- **Never run the desktop app against production data.** `tauri dev` / `tauri build` with the *default* config uses identifier `com.digital.type2`, whose app-data directory holds the maintainer's real notes — a dev run there edits, renames, and auto-deletes actual content. Use `npm run desktop:app` (or `desktop:dmg:dev`), which layers `src-tauri/tauri.dev.conf.json`: identifier `com.digital.type2.dev`, its own app-data directory, product name "Type Dev", and `plugins.updater.endpoints: []` so a dev build can't replace itself with a production release. `npm run desktop:app:prod-data` is the deliberate escape hatch; back up first (`docs/RELEASING.md` §2b).
 - **Feed folder semantics**: `Feed` is the default notes folder and does not keep `.notes-order.json`.
 - **Recordings storage**: audio files live under hidden `Recordings/`; notes created from recordings can be in `Feed` or the selected folder and reference audio via frontmatter.
 - **Filename lifecycle**: per-profile setting controls new note file names:

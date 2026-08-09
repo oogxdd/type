@@ -48,14 +48,32 @@ if ! printf '%s' "$PUBKEY" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
   exit 1
 fi
 
+# Production releases from CI are Apple-signed and notarized. Releasing locally
+# without these exported would publish an *unsigned* update to people already
+# running a notarized build — a silent downgrade, so say so loudly.
+if [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
+  echo
+  echo "WARNING: APPLE_SIGNING_IDENTITY is not set — this build will NOT be" >&2
+  echo "signed or notarized, and macOS will refuse to launch it on a fresh" >&2
+  echo "install. See docs/MACOS_CODE_SIGNING.md for the four exports needed." >&2
+  echo
+fi
+
 echo "==> Building desktop bundle (.dmg + updater)"
 # macOS updater artifacts are produced from the `app` bundle target when
 # `bundle.createUpdaterArtifacts` is enabled. Building only `dmg` creates the
-# installer but not `Type.app.tar.gz` / `.sig`.
+# installer but not `*.app.tar.gz` / `.sig`.
 npm run tauri build -- --bundles app,dmg
 
-DMG=$(find src-tauri/target/release/bundle/dmg -name "*.dmg" | head -1)
-TARGZ=$(find src-tauri/target/release/bundle/macos -name "*.app.tar.gz" | head -1)
+# One Cargo workspace at the repo root means bundles land in <root>/target/,
+# not under src-tauri/. Ask cargo rather than assuming, so CARGO_TARGET_DIR and
+# any future layout change keep working.
+TARGET_DIR=$(cargo metadata --format-version 1 --no-deps --manifest-path src-tauri/Cargo.toml \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).target_directory))')
+BUNDLE_DIR="$TARGET_DIR/release/bundle"
+
+DMG=$(find "$BUNDLE_DIR/dmg" -name "*.dmg" 2>/dev/null | head -1)
+TARGZ=$(find "$BUNDLE_DIR/macos" -name "*.app.tar.gz" 2>/dev/null | head -1)
 SIG_FILE="$TARGZ.sig"
 
 if [ -z "$DMG" ] || [ -z "$TARGZ" ] || [ ! -f "$SIG_FILE" ]; then
