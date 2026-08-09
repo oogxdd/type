@@ -200,16 +200,25 @@ entitlement the hardened runtime requires:
 
 ## 6. What runs when, and what it costs
 
-| Workflow | Trigger | Runner | Builds the app? |
+| Workflow | Trigger | Runners | Builds the app? |
 | --- | --- | --- | --- |
-| `ci.yml` | every push to `main`, every PR commit | `ubuntu-latest` | No — typecheck + unit tests only |
-| `ffi-bindings-check.yml` | PRs touching `type-ffi` / `mobile-core` | `ubuntu-latest` | No |
-| `release.yml` | push of a `desktop-v*` tag, or manual dispatch | `macos-latest` | **Yes** — `.dmg` + updater artifacts |
-| `mobile-testflight.yml` | push of a `mobile-v*` tag | `macos-latest` | Yes — `.ipa` |
+| `ci.yml` | push to `main`/`master`; **every** PR commit, any branch, any path | ubuntu ×2 | No — typecheck + unit tests |
+| `ffi-bindings-check.yml` | PRs touching `crates/type-ffi/**`, `packages/mobile-core/**`, `scripts/check-ffi-surface.mjs`; manual | ubuntu + **macOS** | No — surface check + codegen |
+| `release.yml` | push of a `desktop-v*` tag; manual | ubuntu + **macOS** | **Yes** — `.dmg` + updater artifacts |
+| `mobile-testflight.yml` | push of a `mobile-v*` tag; manual | ubuntu ×2 + **macOS** | Yes — `.ipa` → TestFlight |
 
-So ordinary commits never trigger a desktop build. Only a `desktop-v*` tag does.
-That matters for billing: Linux minutes count 1×, **macOS minutes count 10×**
-against the included pool.
+Things that trigger **nothing**: pushing a branch that has no open PR, and
+pushing a tag outside the `desktop-v*` / `mobile-v*` namespaces.
+
+Billing: Linux minutes count 1×, **macOS minutes count 10×** against the
+included pool. Ordinary commits never start a macOS runner — but note that
+`ffi-bindings-check` does, on any PR touching the FFI paths. That is the one
+place macOS minutes get spent without releasing anything.
+
+`[skip ci]` (or `[ci skip]`, `[no ci]`, `[skip actions]`) in a commit message
+suppresses the push/PR-triggered runs. Reasonable for docs-only commits; not
+worth it for code, since the ubuntu run is cheap and catches regressions before
+they surface during a 10×-billed release.
 
 ### Why the release build is always cold
 
