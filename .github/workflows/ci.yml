@@ -25,6 +25,9 @@ on:
       - "**.md"
       - "docs/**"
       - "LICENSE.md"
+  # Lets you re-run checks without an empty commit — including for a commit that
+  # a skip marker suppressed.
+  workflow_dispatch:
 
 jobs:
   typescript:

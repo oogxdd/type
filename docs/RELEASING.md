@@ -227,6 +227,13 @@ still works as a manual override. Avoid it for code changes: an opt-out you have
 to remember gets forgotten exactly when you're in a hurry, which is when CI is
 worth most.
 
+> **The marker is matched as a plain substring, anywhere in the message —
+> including the body, and including inside backticks or a quotation.** Writing
+> *about* it ("replaced the skip-marker convention with `paths-ignore`") silently
+> suppresses that commit's run. This bit us on the very commit that added
+> `paths-ignore`. If you need to mention it in a message, break it up or say
+> "skip marker". Actions → CI → Run workflow re-runs checks afterwards.
+
 ### Why the release build is always cold
 
 `swatinem/rust-cache@v2` is in both workflows, but the release build still

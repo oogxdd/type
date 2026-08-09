@@ -42,7 +42,6 @@ type FeedNodeBuilder = {
   notes: Array<NoteEntry & { timestampMs: number }>;
   latestMs: number;
   rank: number;
-  calendarEnsured?: boolean;
 };
 
 // Intl is the hot path of this module: building the feed for thousands of
@@ -52,16 +51,27 @@ type FeedNodeBuilder = {
 const nameCollator = new Intl.Collator();
 const compareNames = (left: string, right: string) => nameCollator.compare(left, right);
 
-const DAY_MS = 86_400_000;
+const WEEK_MS = 604_800_000;
 
+// The feed has two halves and every note lands in exactly one of them, so no
+// day is ever represented twice (see getFeedBoundaries):
+//
+//   relative half   Today / Yesterday / This week / Last week
+//   calendar half   Month -> ISO week -> day   (Year -> Quarter -> ... if older)
+//
+// SPECIAL_GROUP_ORDER ranks the relative half; the calendar half is ranked by
+// getChronologicalRank.
 const SPECIAL_GROUP_ORDER: Record<string, number> = {
   today: 0,
   yesterday: 1,
-  "last-week": 2,
+  "this-week": 2,
+  "last-week": 3,
   undated: 99_999,
 };
 
-const getWeekdayOrder = (date: Date) => (date.getDay() + 6) % 7;
+// Every level of the feed reads newest-first, so calendar nodes are ranked by
+// negated range start rather than by ascending week/day number.
+const getChronologicalRank = (startMs: number) => -startMs;
 
 const createBuilder = (
   id: string,
@@ -163,65 +173,122 @@ const getYearRange = (date: Date, now: Date): FeedDateRange => ({
   ),
 });
 
-const getFirstMondayDay = (date: Date) =>
-  1 + ((8 - new Date(date.getFullYear(), date.getMonth(), 1).getDay()) % 7);
+// --- ISO weeks -------------------------------------------------------------
+// Feed weeks are ISO-8601 weeks: always Monday -> Sunday, never clipped at a
+// month boundary. A week straddling two months stays ONE node holding all seven
+// days; which month it hangs under is a policy decision — see
+// getWeekOwnerMonths, the single place to change it.
 
-const getWeekOfMonth = (date: Date) => {
-  const firstMonday = getFirstMondayDay(date);
-  if (date.getDate() < firstMonday) {
-    return 0;
-  }
-  return Math.floor((date.getDate() - firstMonday) / 7) + 1;
-};
+const addDays = (date: Date, days: number) =>
+  new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 
-const getWeekDateBounds = (date: Date, week = getWeekOfMonth(date)) => {
-  const firstMonday = getFirstMondayDay(date);
-  const startDay = week === 0 ? 1 : firstMonday + (week - 1) * 7;
-  const endDay = Math.min(
-    week === 0 ? firstMonday - 1 : startDay + 6,
-    new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+const getIsoWeekStart = (date: Date) =>
+  addDays(date, -((date.getDay() + 6) % 7));
+
+// Week 1 of an ISO year is the week whose Thursday falls in that year (that is,
+// the week holding January 4th), so the number is derived from the Thursday.
+// Note this number is independent of the ownership policy below: changing which
+// month a week hangs under never renumbers it.
+const getIsoWeekNumber = (weekStart: Date) => {
+  const thursday = addDays(weekStart, 3);
+  const firstThursday = addDays(
+    getIsoWeekStart(new Date(thursday.getFullYear(), 0, 4)),
+    3
   );
-  return {
-    week,
-    start: new Date(date.getFullYear(), date.getMonth(), startDay),
-    end: new Date(
-      date.getFullYear(),
-      date.getMonth(),
-      endDay,
-      23,
-      59,
-      59,
-      999
-    ),
-  };
+  // Rounding absorbs the ±1h a DST switch puts between two local midnights.
+  return 1 + Math.round((thursday.getTime() - firstThursday.getTime()) / WEEK_MS);
 };
 
-const getWeekRange = (date: Date, now: Date): FeedDateRange => {
-  const { start, end } = getWeekDateBounds(date);
-  return {
-    rangeStartMs: start.getTime(),
-    rangeEndMs: clampRangeEnd(end.getTime(), now),
-  };
-};
+type MonthKey = { year: number; monthIndex: number };
 
-const weekRangeLabelCache = new Map<string, string>();
+const monthKeyOf = (date: Date): MonthKey => ({
+  year: date.getFullYear(),
+  monthIndex: date.getMonth(),
+});
 
-const getWeekRangeLabel = (date: Date, week = getWeekOfMonth(date)) => {
-  const cacheKey = `${date.getFullYear()}:${date.getMonth()}:${week}`;
-  const cached = weekRangeLabelCache.get(cacheKey);
+/**
+ * Which calendar month a week hangs under. ISO weeks straddle month boundaries,
+ * so this is a *policy*, not a fact.
+ *
+ * Current policy — the ISO rule: the week belongs to the month containing its
+ * Thursday, i.e. the month owning the majority of its days. The week of
+ * Jul 27 – Aug 2 2026 therefore hangs under July, and so does Jun 29 – Jul 5.
+ * A consequence worth knowing: a week node's range can stick out past its
+ * month node's range. Nothing depends on containment, but don't add code that
+ * assumes it.
+ *
+ * Alternatives, both already supported by the call sites:
+ *  - "the week starts in this month": `return [monthKeyOf(weekStart)];`
+ *  - "show the week under both months": return both keys —
+ *      `[monthKeyOf(weekStart), monthKeyOf(addDays(weekStart, 6))]`, deduped
+ *    when the week sits inside one month. Each copy then collects only the days
+ *    belonging to its own month, because pickWeekOwnerMonth() routes each note
+ *    to the matching copy. The week shows up twice; no note is duplicated.
+ *    Weeks are keyed by ISO number under their owner month, so the two copies
+ *    still get distinct node ids.
+ */
+const getWeekOwnerMonths = (weekStart: Date): MonthKey[] => [
+  monthKeyOf(addDays(weekStart, 3)),
+];
+
+/**
+ * Picks the owner copy a note belongs to. Only meaningful when
+ * getWeekOwnerMonths returns more than one month (the "duplicate across months"
+ * policy); with a single owner it is that owner.
+ */
+const pickWeekOwnerMonth = (owners: MonthKey[], date: Date) =>
+  owners.find(
+    (owner) =>
+      owner.year === date.getFullYear() && owner.monthIndex === date.getMonth()
+  ) ?? owners[0];
+
+const getWeekRange = (weekStart: Date, now: Date): FeedDateRange => ({
+  rangeStartMs: weekStart.getTime(),
+  rangeEndMs: clampRangeEnd(getEndOfDayMs(addDays(weekStart, 6)), now),
+});
+
+const weekLabelCache = new Map<number, string>();
+
+const getWeekLabel = (weekStart: Date) => {
+  const cacheKey = weekStart.getTime();
+  const cached = weekLabelCache.get(cacheKey);
   if (cached) {
     return cached;
   }
-  const { start, end } = getWeekDateBounds(date, week);
-  const formatDate = (value: Date) =>
-    value.toLocaleDateString([], {
-      month: "long",
-      day: "numeric",
-    });
-  const prefix = week === 0 ? "Month start" : `Week ${week}`;
-  const label = `${prefix} (${formatDate(start)} - ${formatDate(end)})`;
-  weekRangeLabelCache.set(cacheKey, label);
+  const weekEnd = addDays(weekStart, 6);
+  const formatDay = (value: Date) =>
+    value.toLocaleDateString([], { month: "short", day: "numeric" });
+  const range =
+    weekStart.getMonth() === weekEnd.getMonth()
+      ? `${formatDay(weekStart)} - ${weekEnd.getDate()}`
+      : `${formatDay(weekStart)} - ${formatDay(weekEnd)}`;
+  const label = `Week ${getIsoWeekNumber(weekStart)} · ${range}`;
+  weekLabelCache.set(cacheKey, label);
   return label;
+};
+
+type FeedBoundaries = {
+  todayStartMs: number;
+  yesterdayStartMs: number;
+  thisWeekStartMs: number;
+  /**
+   * Start of the previous ISO week, and the seam between the feed's two halves:
+   * at or after it a note goes to a relative bucket, before it to the calendar.
+   * Because the seam is a single instant, the halves cannot overlap — which is
+   * what keeps the calendar free of always-empty "the last few days" nodes.
+   */
+  calendarCutoffMs: number;
+};
+
+const getFeedBoundaries = (now: Date): FeedBoundaries => {
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const thisWeekStart = getIsoWeekStart(todayStart);
+  return {
+    todayStartMs: todayStart.getTime(),
+    yesterdayStartMs: addDays(todayStart, -1).getTime(),
+    thisWeekStartMs: thisWeekStart.getTime(),
+    calendarCutoffMs: addDays(thisWeekStart, -7).getTime(),
+  };
 };
 
 const getQuarter = (date: Date) => Math.floor(date.getMonth() / 3) + 1;
@@ -269,11 +336,11 @@ const getMonthLabel = (date: Date) => {
   return label;
 };
 
-const weekdayLabelCache = new Map<number, string>();
+const weekdayNameCache = new Map<number, string>();
 
-const getWeekdayLabel = (date: Date) => {
+const getWeekdayName = (date: Date) => {
   const cacheKey = date.getDay();
-  const cached = weekdayLabelCache.get(cacheKey);
+  const cached = weekdayNameCache.get(cacheKey);
   if (cached) {
     return cached;
   }
@@ -282,13 +349,21 @@ const getWeekdayLabel = (date: Date) => {
       weekday: "long",
     })
   );
-  weekdayLabelCache.set(cacheKey, label);
+  weekdayNameCache.set(cacheKey, label);
   return label;
 };
 
-const getSpecialLabel = (kind: "today" | "yesterday" | "last-week" | "undated") => {
+// Day rows carry the day of month because an ISO week can span two months, so
+// the weekday name alone no longer pins the date. Only the weekday name is
+// cached (7 entries) — the number is appended, keeping this off the hot path.
+const getDayLabel = (date: Date) => `${getWeekdayName(date)} ${date.getDate()}`;
+
+const getSpecialLabel = (
+  kind: "today" | "yesterday" | "this-week" | "last-week" | "undated"
+) => {
   if (kind === "today") return "Today";
   if (kind === "yesterday") return "Yesterday";
+  if (kind === "this-week") return "This week";
   if (kind === "last-week") return "Last week";
   return "Undated";
 };
@@ -312,118 +387,148 @@ const addNoteToBuilder = (builder: FeedNodeBuilder, note: NoteEntry, timestampMs
   }
 };
 
-const addNoteToMonth = (
-  month: FeedNodeBuilder,
-  monthPathSegments: Array<string | number>,
+// A day row under any bucket: relative ("This week") or calendar (an ISO week).
+const addNoteToDay = (
+  parent: FeedNodeBuilder,
+  parentPathSegments: Array<string | number>,
   note: NoteEntry,
   timestampMs: number,
   date: Date,
   now: Date
 ) => {
-  const week = getWeekOfMonth(date);
-  const weekPathSegments = [...monthPathSegments, "week", week];
-  const weekRange = getWeekRange(date, now);
-  const weekNode = ensureBuilder(
-    month,
-    buildPathSegments(weekPathSegments),
-    getWeekRangeLabel(date),
-    "week",
-    week,
-    weekRange.rangeStartMs,
-    weekRange.rangeEndMs
-  );
   const dayRange = getDayRange(date, now);
+  // Seven consecutive dates can never repeat a day of month, so the day number
+  // alone keys a day uniquely inside its week.
   const dayNode = ensureBuilder(
-    weekNode,
-    buildPathSegments([...weekPathSegments, "day", date.getDate()]),
-    getWeekdayLabel(date),
+    parent,
+    buildPathSegments([...parentPathSegments, "day", date.getDate()]),
+    getDayLabel(date),
     "day",
-    date.getDate(),
+    getChronologicalRank(dayRange.rangeStartMs),
     dayRange.rangeStartMs,
     dayRange.rangeEndMs
   );
   addNoteToBuilder(dayNode, note, timestampMs);
 };
 
-const ensureMonthCalendar = (
-  month: FeedNodeBuilder,
-  monthPathSegments: Array<string | number>,
+// Months of the running year sit at the feed root; older ones keep the
+// Year -> Quarter -> Month nesting. Note this is keyed off the month that OWNS
+// the week, not off the note's own date — under the ISO ownership rule a note
+// from Jan 1st can belong to a week owned by the previous December.
+const ensureCalendarMonth = (
+  root: FeedNodeBuilder,
+  owner: MonthKey,
+  now: Date
+) => {
+  const monthDate = new Date(owner.year, owner.monthIndex, 1);
+  const monthRange = getMonthRange(monthDate, now);
+  const monthRank = 10 + getMonthSortRank(monthDate);
+
+  if (owner.year === now.getFullYear()) {
+    const monthPathSegments = ["month", owner.year, owner.monthIndex + 1];
+    return {
+      monthPathSegments,
+      month: ensureBuilder(
+        root,
+        buildPathSegments(monthPathSegments),
+        getMonthLabel(monthDate),
+        "month",
+        monthRank,
+        monthRange.rangeStartMs,
+        monthRange.rangeEndMs
+      ),
+    };
+  }
+
+  const yearRange = getYearRange(monthDate, now);
+  const year = ensureBuilder(
+    root,
+    buildPathSegments(["year", owner.year]),
+    String(owner.year),
+    "year",
+    getYearSortRank(owner.year),
+    yearRange.rangeStartMs,
+    yearRange.rangeEndMs
+  );
+  const quarter = getQuarter(monthDate);
+  const quarterRange = getQuarterRange(monthDate, now);
+  const quarterNode = ensureBuilder(
+    year,
+    buildPathSegments(["year", owner.year, "quarter", quarter]),
+    `Q${quarter}`,
+    "quarter",
+    getQuarterSortRank(quarter),
+    quarterRange.rangeStartMs,
+    quarterRange.rangeEndMs
+  );
+  const monthPathSegments = [
+    "year",
+    owner.year,
+    "quarter",
+    quarter,
+    "month",
+    owner.monthIndex + 1,
+  ];
+  return {
+    monthPathSegments,
+    month: ensureBuilder(
+      quarterNode,
+      buildPathSegments(monthPathSegments),
+      getMonthLabel(monthDate),
+      "month",
+      monthRank,
+      monthRange.rangeStartMs,
+      monthRange.rangeEndMs
+    ),
+  };
+};
+
+const addNoteToCalendar = (
+  root: FeedNodeBuilder,
+  note: NoteEntry,
+  timestampMs: number,
   date: Date,
   now: Date
 ) => {
-  // The calendar skeleton depends only on (year, month, now) — build it once
-  // per month builder instead of once per note.
-  if (month.calendarEnsured) {
-    return;
-  }
-  month.calendarEnsured = true;
-  const monthEndDay = new Date(
-    date.getFullYear(),
-    date.getMonth() + 1,
-    0
-  ).getDate();
-  const visibleEndDay =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth()
-      ? Math.min(monthEndDay, now.getDate())
-      : monthEndDay;
-  const firstMonday = getFirstMondayDay(date);
-  const firstWeek = firstMonday > 1 ? 0 : 1;
-  const lastWeek = getWeekOfMonth(
-    new Date(date.getFullYear(), date.getMonth(), visibleEndDay)
+  const weekStart = getIsoWeekStart(date);
+  const owner = pickWeekOwnerMonth(getWeekOwnerMonths(weekStart), date);
+  const { month, monthPathSegments } = ensureCalendarMonth(root, owner, now);
+
+  // Weeks are keyed by ISO number: unique within an owner month, and stable if
+  // the ownership policy changes.
+  const weekPathSegments = [
+    ...monthPathSegments,
+    "week",
+    getIsoWeekNumber(weekStart),
+  ];
+  const weekRange = getWeekRange(weekStart, now);
+  const weekNode = ensureBuilder(
+    month,
+    buildPathSegments(weekPathSegments),
+    getWeekLabel(weekStart),
+    "week",
+    getChronologicalRank(weekRange.rangeStartMs),
+    weekRange.rangeStartMs,
+    weekRange.rangeEndMs
   );
-
-  for (let week = firstWeek; week <= lastWeek; week += 1) {
-    const bounds = getWeekDateBounds(date, week);
-    if (bounds.start.getDate() > visibleEndDay) {
-      break;
-    }
-    const endDay = Math.min(bounds.end.getDate(), visibleEndDay);
-    const rangeDate = new Date(
-      date.getFullYear(),
-      date.getMonth(),
-      bounds.start.getDate()
-    );
-    const weekPathSegments = [...monthPathSegments, "week", week];
-    const weekRange = getWeekRange(rangeDate, now);
-    const weekNode = ensureBuilder(
-      month,
-      buildPathSegments(weekPathSegments),
-      getWeekRangeLabel(date, week),
-      "week",
-      week,
-      weekRange.rangeStartMs,
-      Math.min(
-        weekRange.rangeEndMs,
-        getEndOfDayMs(
-          new Date(date.getFullYear(), date.getMonth(), endDay)
-        )
-      )
-    );
-
-    for (
-      let day = bounds.start.getDate();
-      day <= endDay;
-      day += 1
-    ) {
-      const dayDate = new Date(date.getFullYear(), date.getMonth(), day);
-      const dayRange = getDayRange(dayDate, now);
-      ensureBuilder(
-        weekNode,
-        buildPathSegments([...weekPathSegments, "day", day]),
-        getWeekdayLabel(dayDate),
-        "day",
-        day,
-        dayRange.rangeStartMs,
-        dayRange.rangeEndMs
-      );
-    }
-  }
+  addNoteToDay(weekNode, weekPathSegments, note, timestampMs, date, now);
 };
+
+// A bucket with no notes anywhere beneath it is never rendered. Nothing builds
+// empty buckets today (there is no calendar skeleton — nodes are created on
+// demand by the note that lands in them), so this filter is an invariant guard
+// for future builders rather than live pruning.
+//
+// Consequence to keep in mind: date buckets double as back-dating targets —
+// selecting one and typing creates a note stamped with
+// getLatestFeedTargetTimestamp(node). With no empty buckets, only dates that
+// already hold a note can be targeted that way.
+const hasNotes = (node: FeedTreeNode) => node.noteCount > 0;
 
 const finalizeBuilder = (builder: FeedNodeBuilder): FeedTreeNode => {
   const children = [...builder.children.values()]
     .map((child) => finalizeBuilder(child))
+    .filter(hasNotes)
     .sort((left, right) => {
       if (left.rank !== right.rank) {
         return left.rank - right.rank;
@@ -457,17 +562,21 @@ const finalizeBuilder = (builder: FeedNodeBuilder): FeedTreeNode => {
 const getFeedTimestamp = (preview?: NotePreview) =>
   preview?.createdMs ?? preview?.updatedMs ?? null;
 
-const addRecentNote = (
+// Routes one dated note into exactly one bucket. The order of the checks below
+// IS the definition of the feed's two halves: each branch consumes a slice of
+// time, so a note that reaches the calendar is provably older than every
+// relative bucket. Today/Yesterday are checked before the week buckets because
+// on a Monday "yesterday" belongs to the previous ISO week.
+const addDatedNote = (
   root: FeedNodeBuilder,
   note: NoteEntry,
   timestampMs: number,
-  now: Date
+  now: Date,
+  bounds: FeedBoundaries
 ) => {
   const date = new Date(timestampMs);
-  const ageDays = Math.floor(
-    (getStartOfDayMs(now) - getStartOfDayMs(date)) / DAY_MS
-  );
-  if (ageDays <= 0) {
+
+  if (timestampMs >= bounds.todayStartMs) {
     const todayRange = getDayRange(now, now);
     const today = ensureBuilder(
       root,
@@ -482,7 +591,7 @@ const addRecentNote = (
     return;
   }
 
-  if (ageDays === 1) {
+  if (timestampMs >= bounds.yesterdayStartMs) {
     const yesterdayRange = getDayRange(date, now);
     const yesterday = ensureBuilder(
       root,
@@ -497,111 +606,39 @@ const addRecentNote = (
     return;
   }
 
-  if (ageDays < 7) {
-    const lastWeekStart = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() - 6
+  // "This week" is the running ISO week minus today and yesterday, so it is
+  // empty (and therefore absent) on Mondays and Tuesdays.
+  if (timestampMs >= bounds.thisWeekStartMs) {
+    const thisWeek = ensureBuilder(
+      root,
+      buildPathSegments(["this-week"]),
+      getSpecialLabel("this-week"),
+      "special",
+      SPECIAL_GROUP_ORDER["this-week"],
+      bounds.thisWeekStartMs,
+      bounds.yesterdayStartMs - 1
     );
-    const lastWeekEnd = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() - 2,
-      23,
-      59,
-      59,
-      999
-    );
+    addNoteToDay(thisWeek, ["this-week"], note, timestampMs, date, now);
+    return;
+  }
+
+  // "Last week" is the whole previous ISO week (Monday–Sunday), not a rolling
+  // seven-day window — minus yesterday when today is a Monday.
+  if (timestampMs >= bounds.calendarCutoffMs) {
     const lastWeek = ensureBuilder(
       root,
       buildPathSegments(["last-week"]),
       getSpecialLabel("last-week"),
       "special",
       SPECIAL_GROUP_ORDER["last-week"],
-      lastWeekStart.getTime(),
-      lastWeekEnd.getTime()
+      bounds.calendarCutoffMs,
+      Math.min(bounds.thisWeekStartMs, bounds.yesterdayStartMs) - 1
     );
-    const dayId = buildPathSegments(["last-week", "day", date.getDay()]);
-    const dayRange = getDayRange(date, now);
-    const day = ensureBuilder(
-      lastWeek,
-      dayId,
-      getWeekdayLabel(date),
-      "day",
-      getWeekdayOrder(date),
-      dayRange.rangeStartMs,
-      dayRange.rangeEndMs
-    );
-    addNoteToBuilder(day, note, timestampMs);
+    addNoteToDay(lastWeek, ["last-week"], note, timestampMs, date, now);
     return;
   }
 
-  if (date.getFullYear() === now.getFullYear()) {
-    const monthPathSegments = [
-      "month",
-      date.getFullYear(),
-      date.getMonth() + 1,
-    ];
-    const monthId = buildPathSegments(monthPathSegments);
-    const monthRange = getMonthRange(date, now);
-    const month = ensureBuilder(
-      root,
-      monthId,
-      getMonthLabel(date),
-      "month",
-      10 + getMonthSortRank(date),
-      monthRange.rangeStartMs,
-      monthRange.rangeEndMs
-    );
-    ensureMonthCalendar(month, monthPathSegments, date, now);
-    addNoteToMonth(month, monthPathSegments, note, timestampMs, date, now);
-    return;
-  }
-
-  const yearId = buildPathSegments(["year", date.getFullYear()]);
-  const yearRange = getYearRange(date, now);
-  const year = ensureBuilder(
-    root,
-    yearId,
-    String(date.getFullYear()),
-    "year",
-    getYearSortRank(date.getFullYear()),
-    yearRange.rangeStartMs,
-    yearRange.rangeEndMs
-  );
-  const quarter = getQuarter(date);
-  const quarterId = buildPathSegments(["year", date.getFullYear(), "quarter", quarter]);
-  const quarterRange = getQuarterRange(date, now);
-  const quarterNode = ensureBuilder(
-    year,
-    quarterId,
-    `Q${quarter}`,
-    "quarter",
-    getQuarterSortRank(quarter),
-    quarterRange.rangeStartMs,
-    quarterRange.rangeEndMs
-  );
-  const monthPathSegments = [
-    "year",
-    date.getFullYear(),
-    "quarter",
-    quarter,
-    "month",
-    date.getMonth() + 1,
-  ];
-  const monthId = buildPathSegments(monthPathSegments);
-  const monthRange = getMonthRange(date, now);
-  const monthNode = ensureBuilder(
-    quarterNode,
-    monthId,
-    getMonthLabel(date),
-    "month",
-    10 + getMonthSortRank(date),
-    monthRange.rangeStartMs,
-    monthRange.rangeEndMs
-  );
-  ensureMonthCalendar(monthNode, monthPathSegments, date, now);
-  addNoteToMonth(monthNode, monthPathSegments, note, timestampMs, date, now);
+  addNoteToCalendar(root, note, timestampMs, date, now);
 };
 
 export function buildFeedTree(
@@ -610,6 +647,7 @@ export function buildFeedTree(
   hideArchivedNotes: boolean
 ): FeedTreeBuildResult {
   const now = new Date();
+  const bounds = getFeedBoundaries(now);
   const root = createBuilder("feed:root", "Feed", "special", null, 0);
 
   notes.forEach((note) => {
@@ -631,11 +669,12 @@ export function buildFeedTree(
       addNoteToBuilder(getUndatedNode(root), note, 0);
       return;
     }
-    addRecentNote(root, note, timestampMs, now);
+    addDatedNote(root, note, timestampMs, now, bounds);
   });
 
   const treeData = [...root.children.values()]
     .map((child) => finalizeBuilder(child))
+    .filter(hasNotes)
     .sort((left, right) => {
       if (left.rank !== right.rank) {
         return left.rank - right.rank;
