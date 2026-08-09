@@ -266,10 +266,12 @@ warm-desktop-cache:
 ### Choosing CI or local per release
 
 Both paths produce identical artifacts and both create the GitHub Release, so
-the risk is doing it twice for the same tag. The `desktop` job guards against
-that: it checks whether the release already carries a `latest.json` and exits
-without rebuilding if so. That makes the choice a matter of what you do first,
-with no flags to remember:
+the risk is doing it twice for the same tag. The `setup` job guards against
+that: it checks whether the release already carries a `latest.json`, and the
+whole `desktop` job is skipped if so. The check deliberately lives in `setup`
+(ubuntu, billed 1×) rather than inside the macOS job, so a local release costs
+seconds of CI rather than minutes of 10×-billed runner. That makes the choice a
+matter of what you do first, with no flags to remember:
 
 - **Local:** `npm run desktop:release 1.2.3`. It builds, signs, publishes, and
   creates the tag. If that tag push wakes CI, CI sees the finished release and
@@ -277,13 +279,40 @@ with no flags to remember:
 - **CI:** just push the tag — `git tag desktop-v1.2.3 && git push origin
   desktop-v1.2.3`. Nothing is published yet, so CI builds it.
 
-Local releases still need the updater key in the environment (see
-[UPDATER_KEY_ROTATION.md](./UPDATER_KEY_ROTATION.md)):
+### Local release credentials — use the Keychain, not a dotenv
+
+`release-local.sh` resolves everything it needs by itself, so a local release is
+one command with no exports. It looks in this order: existing environment →
+login Keychain → derived from the machine.
+
+Derived for free: the updater private key from `~/.tauri/type-updater.key`, the
+signing identity from `security find-identity`, and the Team ID from that
+identity's `(TEAMID)` suffix.
+
+The three actual secrets go in the Keychain once:
 
 ```bash
-export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/type-updater.key)"
-export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<password>"
+security add-generic-password -a "$USER" -s type-updater-key-password -w
+security add-generic-password -a "$USER" -s type-apple-app-password -w
+security add-generic-password -a "$USER" -s type-apple-id -w
 ```
+
+`-w` with no value prompts for it, so nothing lands in shell history.
+
+**Why not a `.env` file:** these are release-signing secrets. A dotenv is
+plaintext on disk and one `.gitignore` slip from being committed, and it invites
+copies to spread. Keychain items are encrypted at rest, survive across shells,
+and live where the Developer ID certificate already is. Plain `export` in a
+shell is worse still — it lasts only until you close the window, and typing the
+password inline puts it in history.
+
+Environment variables still win when set, so CI and one-off overrides keep
+working unchanged.
+
+If the Apple credentials are missing, the script warns and builds **unsigned**
+rather than failing. Take that warning seriously: shipping an unsigned update to
+people running a notarized build means macOS refuses to launch their next fresh
+install.
 
 ---
 

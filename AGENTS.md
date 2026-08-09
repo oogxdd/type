@@ -159,6 +159,7 @@ module-internal helpers stay private.
   - `Archieve` — archive folder (typo is intentional and persisted)
   - `Recordings` — audio file storage folder
 - `Recordings` is hidden from folder tree/navigation and used as backend storage.
+- **Dot-entries are never shown.** `build_folder_node` skips anything whose name starts with `.` — `.git`, `.type`, `.DS_Store`, dot-prefixed `.md` files — matching what `collect_markdown_note_files` already did. A notes root that is a git repo would otherwise surface `.git` as a browsable folder.
 - Legacy migrations are handled by backend:
   - `Unsorted` -> `Feed`
   - `_Recordings` -> `Recordings`
