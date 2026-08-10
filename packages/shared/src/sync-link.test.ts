@@ -7,18 +7,20 @@ import {
 } from "./sync-link";
 
 describe("sync deep link", () => {
-  it("round-trips remote, branch, and name", () => {
+  it("round-trips remote, branch, name, host key, and Iroh ticket", () => {
     const link = buildSyncDeepLink({
       remote: "ssh://pair-token@192.168.1.10:9418/notes",
       branch: "main",
       name: "Computer (mac.local)",
       hostKeySha256: "SHA256:abc123",
+      irohTicket: "iroh-ticket/with+symbols=",
     });
     expect(parseSyncDeepLink(link)).toEqual({
       remote: "ssh://pair-token@192.168.1.10:9418/notes",
       branch: "main",
       name: "Computer (mac.local)",
       hostKeySha256: "SHA256:abc123",
+      irohTicket: "iroh-ticket/with+symbols=",
     });
   });
 
@@ -29,6 +31,7 @@ describe("sync deep link", () => {
       branch: undefined,
       name: undefined,
       hostKeySha256: undefined,
+      irohTicket: undefined,
     });
   });
 
@@ -41,6 +44,7 @@ describe("sync deep link", () => {
       branch: undefined,
       name: "Computer (mac)",
       hostKeySha256: undefined,
+      irohTicket: undefined,
     });
   });
 
