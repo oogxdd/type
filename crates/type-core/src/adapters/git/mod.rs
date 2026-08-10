@@ -803,10 +803,10 @@ pub fn ensure_git_repo(root: &Path) -> Result<Repository, String> {
     Ok(repo)
 }
 
-/// Append `.type/device.json` to `.git/info/exclude` (repo-local, not synced)
-/// so per-device git credentials and pinned host keys stay off the remote.
+/// Append device-only metadata to `.git/info/exclude` (repo-local, not synced)
+/// so credentials, pinned host keys, and cache state stay off the remote.
 /// Best-effort: sync must not fail over an exclude file.
-fn ensure_device_settings_excluded(repo: &Repository) {
+pub(crate) fn ensure_device_settings_excluded(repo: &Repository) {
     let patterns = [
         crate::DEVICE_SETTINGS_EXCLUDE_PATTERN,
         crate::AUDIO_CACHE_EXCLUDE_PATTERN,

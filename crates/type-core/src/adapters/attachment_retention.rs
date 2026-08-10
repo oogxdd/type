@@ -150,6 +150,9 @@ fn prune_mobile_audio_cache_at(root: &Path, now: i64) -> Result<MobileAudioPrune
     let recordings = collect_recording_notes(root)?;
     let repo = Repository::open(root)
         .map_err(|error| format!("Audio cache pruning needs an initialized Git repo: {error}"))?;
+    // Repositories created by older app versions may not have the cache
+    // exclude yet. Add it before the first local manifest can be written.
+    crate::ensure_device_settings_excluded(&repo);
     let cutoff = now.saturating_sub(MOBILE_AUDIO_RETENTION_DAYS.saturating_mul(DAY_MS));
     let mut result = MobileAudioPruneResult {
         scanned: recordings.len(),

@@ -37,9 +37,9 @@ export function LocalSyncServerCard() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
-  // Opening the settings page only *reads* the server status. Starting is an
-  // explicit user action — auto-starting opened a network port (and mDNS
-  // broadcast) as a side effect of merely looking at the settings.
+  // Opening the settings page only reads status. The first start remains an
+  // explicit user action; after that, app startup restores the server until
+  // the user explicitly stops it.
   const refresh = useCallback(async () => {
     try {
       const current = await gitApi.getLocalSyncServerStatus();
@@ -171,7 +171,7 @@ export function LocalSyncServerCard() {
           {deepLink ? (
             <div className="flex flex-col items-center gap-2 rounded-md border border-border/50 bg-background/60 p-4">
               <div className="rounded-md bg-white p-3">
-                <QRCodeSVG value={deepLink} size={168} marginSize={0} />
+                <QRCodeSVG value={deepLink} size={224} marginSize={0} />
               </div>
               <p className="text-center text-xs text-muted-foreground">
                 <strong className="text-foreground">Point your phone's Camera at this</strong> to

@@ -5,8 +5,9 @@ the network path between a phone and a desktop.
 
 ## Transport
 
-- The desktop starts its existing SSH Git server on loopback.
-- An Iroh endpoint exposes a private byte-stream tunnel to that server.
+- The desktop keeps its existing SSH Git server for LAN compatibility.
+- An Iroh endpoint exposes a private byte-stream tunnel and forwards it to the
+  SSH server through desktop loopback.
 - The pairing QR contains the existing one-time SSH pairing remote plus an
   Iroh endpoint ticket.
 - The phone starts a loopback TCP proxy. libgit2 still talks SSH to that proxy;
