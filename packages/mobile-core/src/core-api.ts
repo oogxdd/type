@@ -18,6 +18,7 @@ import type {
   GitSyncStatus,
   GitTransferProgress,
   HandwritingAttachmentWriteResult,
+  IrohClientStatus,
   NoteMeta,
   NotePreviewEntry,
   ProfilesBackupArchive,
@@ -30,6 +31,7 @@ import type {
   RecordingWriteResult,
   SaveRecordingArgs,
   SaveHandwritingAttachmentArgs,
+  StartIrohClientArgs,
   SecurityState,
   SecurityUnlockResult,
   SetNoteMarkersArgs,
@@ -181,6 +183,12 @@ export const gitPull = async (args: GitSyncArgs = {}): Promise<GitSyncStatus> =>
 
 export const gitPush = async (args: GitPushArgs = {}): Promise<GitSyncStatus> =>
   parse(await getRawCore().gitPush(JSON.stringify(args)));
+
+/** Start/reuse the mobile loopback proxy for an SSH-over-Iroh remote. */
+export const startIrohSyncClient = async (
+  args: StartIrohClientArgs
+): Promise<IrohClientStatus> =>
+  parse(await getRawCore().startIrohSyncClient(JSON.stringify(args)));
 
 const idleTransferProgress: GitTransferProgress = {
   phase: "idle",

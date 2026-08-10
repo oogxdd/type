@@ -167,6 +167,7 @@ export const SyncScreen = () => {
         commitMessage: profile?.settings.git_commit_message ?? "Sync notes",
         trustedSshHost: null,
         trustedSshHostKeySha256: null,
+        irohTicket: null,
       });
       await sync.connect({
         remote_url: remoteUrl,

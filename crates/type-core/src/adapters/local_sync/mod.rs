@@ -59,6 +59,8 @@ pub struct LocalSyncServerStatus {
     pub branch: Option<String>,
     pub ssh_url: Option<String>,
     pub host_key_sha256: Option<String>,
+    pub iroh_ticket: Option<String>,
+    pub iroh_endpoint_id: Option<String>,
     pub paired_devices: Vec<PairedDeviceInfo>,
     pub repo_path: String,
     pub error: Option<String>,
@@ -96,6 +98,9 @@ struct RunningDaemon {
     pairing_token: std::sync::Arc<Mutex<String>>,
     devices_path: PathBuf,
     host_key_sha256: String,
+    /// Optional direct/relay transport layered around the loopback SSH server.
+    iroh: Option<crate::IrohServerHandle>,
+    iroh_error: Option<String>,
     /// mDNS advertisement handle, present when discovery is active.
     mdns: Option<MdnsAdvert>,
 }
@@ -251,6 +256,16 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
         });
         let server = ssh_server::start_ssh_server(shared, &host_key, LOCAL_SYNC_PORT)?;
 
+        let (iroh, iroh_error) = match crate::start_iroh_sync_server(app, LOCAL_SYNC_PORT) {
+            Ok(iroh) => (Some(iroh), None),
+            Err(error) => {
+                eprintln!(
+                    "[iroh-sync] desktop endpoint unavailable; LAN sync remains active: {error}"
+                );
+                (None, Some(error))
+            }
+        };
+
         // Advertise over mDNS so phones can auto-discover this server without
         // typing or scanning anything. Best-effort: failure never blocks hosting.
         // The advertised URL deliberately omits the pairing token: mDNS is
@@ -271,6 +286,8 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
             pairing_token,
             devices_path,
             host_key_sha256,
+            iroh,
+            iroh_error,
             mdns,
         };
         let status = running_status(&daemon);
@@ -326,6 +343,9 @@ fn teardown_daemon(mut daemon: RunningDaemon) {
         let _ = advert.daemon.unregister(&advert.fullname);
         let _ = advert.daemon.shutdown();
     }
+    if let Some(iroh) = daemon.iroh.take() {
+        iroh.stop();
+    }
     daemon.server.stop();
 }
 
@@ -342,6 +362,8 @@ fn unsupported_status(repo_path: String) -> LocalSyncServerStatus {
         branch: None,
         ssh_url: None,
         host_key_sha256: None,
+        iroh_ticket: None,
+        iroh_endpoint_id: None,
         paired_devices: Vec::new(),
         repo_path,
         error: None,
@@ -359,6 +381,8 @@ fn idle_status(git_available: bool, repo_path: String) -> LocalSyncServerStatus 
         branch: None,
         ssh_url: None,
         host_key_sha256: None,
+        iroh_ticket: None,
+        iroh_endpoint_id: None,
         paired_devices: Vec::new(),
         repo_path,
         error: None,
@@ -374,8 +398,14 @@ fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
         .unwrap_or_default();
     let ssh_url = daemon
         .host
-        .as_ref()
-        .map(|host| ssh_pairing_url(host, &daemon.served_name, &token));
+        .as_deref()
+        .map(|host| ssh_pairing_url(host, &daemon.served_name, &token))
+        .or_else(|| {
+            daemon
+                .iroh
+                .as_ref()
+                .map(|_| ssh_pairing_url("iroh.invalid", &daemon.served_name, &token))
+        });
     let paired_devices = devices::list_devices(&daemon.devices_path)
         .into_iter()
         .map(|device| PairedDeviceInfo {
@@ -392,9 +422,14 @@ fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
         branch: Some(daemon.branch.clone()),
         ssh_url,
         host_key_sha256: Some(daemon.host_key_sha256.clone()),
+        iroh_ticket: daemon.iroh.as_ref().map(|iroh| iroh.ticket().to_string()),
+        iroh_endpoint_id: daemon
+            .iroh
+            .as_ref()
+            .map(|iroh| iroh.endpoint_id().to_string()),
         paired_devices,
         repo_path: daemon.repo_path.to_string_lossy().to_string(),
-        error: None,
+        error: daemon.iroh_error.clone(),
     }
 }
 

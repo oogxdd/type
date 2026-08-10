@@ -29,7 +29,7 @@ const statusForLog = (status: LocalSyncServerStatus): string =>
     status.host ?? "<none>"
   } branch=${status.branch ?? "<none>"} ssh=${redactRemoteForLog(status.ssh_url)} paired=${
     status.paired_devices.length
-  } error=${status.error ?? "<none>"}`;
+  } iroh=${status.iroh_endpoint_id ?? "<none>"} error=${status.error ?? "<none>"}`;
 
 export function LocalSyncServerCard() {
   const [status, setStatus] = useState<LocalSyncServerStatus | null>(null);
@@ -108,13 +108,20 @@ export function LocalSyncServerCard() {
       branch: status.branch ?? undefined,
       name: status.host ? `Computer (${status.host})` : undefined,
       hostKeySha256: status.host_key_sha256 ?? undefined,
+      irohTicket: status.iroh_ticket ?? undefined,
     });
-  }, [status?.ssh_url, status?.branch, status?.host, status?.host_key_sha256]);
+  }, [
+    status?.ssh_url,
+    status?.branch,
+    status?.host,
+    status?.host_key_sha256,
+    status?.iroh_ticket,
+  ]);
 
   return (
     <SettingsCard
-      title="Local network server"
-      description="Host this computer's notes over encrypted local SSH so your phone can sync without an internet remote — same Wi-Fi, or your phone's personal hotspot."
+      title="Direct sync server"
+      description="Host this computer's notes over SSH through Iroh. Devices connect directly when possible and use an encrypted relay when necessary; the relay does not store your notes."
     >
       {status && !status.git_available ? (
         <SettingsErrorText>
@@ -154,7 +161,7 @@ export function LocalSyncServerCard() {
 
       {running ? (
         <div className="space-y-4">
-          {status?.host ? null : (
+          {status?.host || status?.iroh_ticket ? null : (
             <SettingsErrorText>
               Couldn't auto-detect this computer's network address. Find it in System Settings →
               Network and use the SSH URL below with your computer's IP address.
@@ -168,7 +175,7 @@ export function LocalSyncServerCard() {
               </div>
               <p className="text-center text-xs text-muted-foreground">
                 <strong className="text-foreground">Point your phone's Camera at this</strong> to
-                open the app and sync — nothing to type.
+                pair once. The phone can sync without staying on the same Wi-Fi.
               </p>
             </div>
           ) : null}
@@ -188,6 +195,11 @@ export function LocalSyncServerCard() {
 
           <div className="space-y-2">
             <SettingsHelpText>Or set it up by hand:</SettingsHelpText>
+            {status?.iroh_endpoint_id ? (
+              <SettingsHelpText>
+                Iroh endpoint: <code>{status.iroh_endpoint_id}</code>
+              </SettingsHelpText>
+            ) : null}
             {status?.ssh_url ? (
               <UrlRow
                 label="Pairing SSH URL"

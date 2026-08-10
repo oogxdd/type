@@ -22,7 +22,10 @@ zip = { version = "0.6", default-features = false, features = ["deflate"] }
 mdns-sd = "0.20.0"
 ssh-key = { version = "0.6", features = ["ed25519"] }
 rand_core = { version = "0.6", features = ["std"] }
+iroh = { version = "0.35.0", default-features = false }
+iroh-base = "0.35.0"
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "io-util", "net", "time", "macros", "sync"] }
 
 [target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
 russh = { version = "0.62.2", default-features = false, features = ["ring", "flate2"] }
-tokio = { version = "1.52.3", features = ["rt-multi-thread", "io-util", "process", "net", "time", "macros", "sync"] }
+tokio = { version = "1.52.3", features = ["process"] }

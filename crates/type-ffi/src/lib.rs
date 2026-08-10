@@ -19,6 +19,7 @@ uniffi::setup_scaffolding!();
 
 mod git_sync;
 mod handwriting;
+mod iroh_sync;
 mod notes;
 mod profiles;
 mod recordings;
@@ -26,6 +27,7 @@ mod security;
 
 pub use git_sync::*;
 pub use handwriting::*;
+pub use iroh_sync::*;
 pub use notes::*;
 pub use profiles::*;
 pub use recordings::*;

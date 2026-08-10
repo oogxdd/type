@@ -32,6 +32,7 @@ const defaultProfileSettings = (): ProfileSettings => ({
   git_commit_message: "Sync notes",
   git_trusted_ssh_host: "",
   git_trusted_ssh_host_key_sha256: "",
+  git_iroh_ticket: "",
   mobile_auto_transcription_enabled: true,
   mobile_auto_handwriting_ocr_enabled: true,
   transcription_mode: null,
@@ -420,6 +421,18 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
         authored_ms: now(),
       });
       return JSON.stringify(gitStatus());
+    },
+    startIrohSyncClient: async (argsJson) => {
+      const args = JSON.parse(argsJson) as { remote_url: string };
+      return JSON.stringify({
+        running: true,
+        local_port: 19418,
+        local_remote_url: args.remote_url.replace(
+          /^(ssh:\/\/(?:[^@/]+@)?)(?:\[[^\]]+\]|[^/:]+)(?::\d+)?\//i,
+          "$1127.0.0.1:19418/"
+        ),
+        endpoint_id: "demo-iroh-endpoint",
+      });
     },
 
     // ── Recordings ──

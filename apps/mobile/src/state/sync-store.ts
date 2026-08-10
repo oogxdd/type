@@ -18,6 +18,7 @@ import { useNotesStore } from "./notes-store";
 import { activeProfile, useSettingsStore } from "./settings-store";
 
 type SyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
+type SavedGitConnection = ConnectGitArgs & { irohTicket: string | null };
 
 const sshHostFromRemote = (remote: string): string => {
   const match = remote.match(/^ssh:\/\/(?:[^@/]+@)?(\[[^\]]+\]|[^/:]+)(?::\d+)?(?:\/|$)/i);
@@ -71,7 +72,7 @@ type SyncState = {
 };
 
 export const useSyncStore = create<SyncState>((set, get) => {
-  const savedGitConnection = (): ConnectGitArgs | null => {
+  const savedGitConnection = (): SavedGitConnection | null => {
     const profile = activeProfile(useSettingsStore.getState().snapshot);
     const settings = profile?.settings;
     const remoteUrl = settings?.git_remote_url.trim();
@@ -84,7 +85,23 @@ export const useSyncStore = create<SyncState>((set, get) => {
       branch: settings.git_branch.trim() || null,
       username: settings.git_username.trim() || null,
       password: settings.git_password || null,
+      irohTicket: settings.git_iroh_ticket.trim() || null,
     };
+  };
+
+  const prepareIrohConnection = async (
+    connection: SavedGitConnection | null
+  ): Promise<ConnectGitArgs | null> => {
+    if (!connection?.remote_url || !connection.irohTicket) {
+      return connection;
+    }
+    logSync("iroh: ensuring phone loopback proxy is running");
+    const proxy = await core.startIrohSyncClient({
+      ticket: connection.irohTicket,
+      remote_url: connection.remote_url,
+    });
+    logSync(`iroh: proxy ready port=${proxy.local_port} endpoint=${proxy.endpoint_id}`);
+    return { ...connection, remote_url: proxy.local_remote_url };
   };
 
   const ensureSavedRemote = async (
@@ -201,12 +218,24 @@ export const useSyncStore = create<SyncState>((set, get) => {
       await run("connect", async () => {
         const settingsStore = useSettingsStore.getState();
         const profile = activeProfile(settingsStore.snapshot);
-        const trustedSshHost = link.hostKeySha256 ? sshHostFromRemote(link.remote) : "";
-        const durableRemote = stripPairingUsernameFromSshRemote(link.remote);
+        const pairingRemote = link.irohTicket
+          ? (
+              await core.startIrohSyncClient({
+                ticket: link.irohTicket,
+                remote_url: link.remote,
+              })
+            ).local_remote_url
+          : link.remote;
+        const trustedSshHost = link.hostKeySha256
+          ? sshHostFromRemote(pairingRemote)
+          : "";
+        const durableRemote = stripPairingUsernameFromSshRemote(pairingRemote);
         logSync(
-          `qr: applying link remote=${redactRemoteForLog(link.remote)} durable=${redactRemoteForLog(
+          `qr: applying link remote=${redactRemoteForLog(pairingRemote)} durable=${redactRemoteForLog(
             durableRemote
-          )} branch=${link.branch ?? "main"} hostPin=${Boolean(link.hostKeySha256)} trustedHost=${
+          )} branch=${link.branch ?? "main"} iroh=${Boolean(link.irohTicket)} hostPin=${Boolean(
+            link.hostKeySha256
+          )} trustedHost=${
             trustedSshHost || "<none>"
           }`
         );
@@ -221,6 +250,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
               commitMessage: profile?.settings.git_commit_message || "Sync notes",
               trustedSshHost,
               trustedSshHostKeySha256: trustedSshHost ? link.hostKeySha256 ?? "" : "",
+              irohTicket: link.irohTicket ?? null,
             });
           } catch (error) {
             logSync(
@@ -230,7 +260,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
             );
           }
         };
-        if (link.remote.toLowerCase().startsWith("ssh://")) {
+        if (pairingRemote.toLowerCase().startsWith("ssh://")) {
           const existingKey = await core.getSshPublicKey();
           if (!existingKey) {
             logSync("ssh key: none found; generating app-managed key");
@@ -239,14 +269,14 @@ export const useSyncStore = create<SyncState>((set, get) => {
             logSync("ssh key: existing app-managed key found");
           }
         }
-        logSync(`qr: connecting with pairing remote ${redactRemoteForLog(link.remote)}`);
+        logSync(`qr: connecting with pairing remote ${redactRemoteForLog(pairingRemote)}`);
         const pairingStatus = await core.connectGitRepo({
-          remote_url: link.remote,
+          remote_url: pairingRemote,
           branch: link.branch ?? "main",
           username: null,
           password: null,
         });
-        if (durableRemote !== link.remote) {
+        if (durableRemote !== pairingRemote) {
           logSync(
             `qr: pairing connect succeeded; applying durable origin ${redactRemoteForLog(
               durableRemote
@@ -261,7 +291,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
           await saveLinkSettingsBestEffort(durableRemote);
           return durableStatus;
         }
-        await saveLinkSettingsBestEffort(link.remote);
+        await saveLinkSettingsBestEffort(pairingRemote);
         return pairingStatus;
       });
     },
@@ -271,7 +301,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
         return;
       }
       await run("pull", async () => {
-        const connection = savedGitConnection();
+        const connection = await prepareIrohConnection(savedGitConnection());
         logSync(
           `pull: saved connection remote=${redactRemoteForLog(connection?.remote_url)} branch=${
             connection?.branch ?? "main"
@@ -309,7 +339,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
         return;
       }
       await run("push", async () => {
-        const connection = savedGitConnection();
+        const connection = await prepareIrohConnection(savedGitConnection());
         logSync(
           `push: saved connection remote=${redactRemoteForLog(connection?.remote_url)} branch=${
             connection?.branch ?? "main"

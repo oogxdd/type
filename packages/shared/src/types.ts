@@ -61,6 +61,8 @@ export type LocalSyncServerStatus = {
   branch: string | null;
   ssh_url: string | null;
   host_key_sha256: string | null;
+  iroh_ticket: string | null;
+  iroh_endpoint_id: string | null;
   paired_devices: PairedDeviceInfo[];
   repo_path: string;
   error: string | null;
@@ -301,6 +303,8 @@ export type ProfileSettings = {
   git_commit_message: string;
   git_trusted_ssh_host: string;
   git_trusted_ssh_host_key_sha256: string;
+  /** Device-local endpoint ticket; empty means ordinary Git transport. */
+  git_iroh_ticket: string;
   mobile_auto_transcription_enabled: boolean;
   mobile_auto_handwriting_ocr_enabled: boolean;
   transcription_mode?: TranscriptionMode | null;
@@ -401,6 +405,18 @@ export type GitPushArgs = {
   branch?: string | null;
   username?: string | null;
   password?: string | null;
+};
+
+export type StartIrohClientArgs = {
+  ticket: string;
+  remote_url: string;
+};
+
+export type IrohClientStatus = {
+  running: boolean;
+  local_port: number;
+  local_remote_url: string;
+  endpoint_id: string;
 };
 
 export type GitHistoryArgs = {
