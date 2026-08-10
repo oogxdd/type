@@ -32,6 +32,7 @@ pub struct RecordingListItem {
     pub note_path: String,
     pub folder_path: String,
     pub audio_path: Option<String>,
+    pub archived_on_desktop: bool,
     pub status: String,
     pub error: Option<String>,
     pub updated_ms: Option<i64>,

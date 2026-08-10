@@ -19,6 +19,9 @@ import { activeProfile, useSettingsStore } from "./settings-store";
 
 type SyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
 type SavedGitConnection = ConnectGitArgs & { irohTicket: string | null };
+const AUTO_SYNC_DELAY_MS = 1_500;
+const AUTO_SYNC_BUSY_RETRY_MS = 2_000;
+let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
 
 const sshHostFromRemote = (remote: string): string => {
   const match = remote.match(/^ssh:\/\/(?:[^@/]+@)?(\[[^\]]+\]|[^/:]+)(?::\d+)?(?:\/|$)/i);
@@ -69,6 +72,8 @@ type SyncState = {
   push: (message?: string) => Promise<void>;
   /** The one-button flow: pull, then push. */
   syncNow: () => Promise<void>;
+  /** Debounced, best-effort sync used after saves and foregrounding. */
+  scheduleAutoSync: (reason: string, delayMs?: number) => void;
 };
 
 export const useSyncStore = create<SyncState>((set, get) => {
@@ -322,6 +327,16 @@ export const useSyncStore = create<SyncState>((set, get) => {
       // Remote edits may have changed the notes on disk.
       await useNotesStore.getState().refresh();
       logSync("pull: notes refreshed after remote changes");
+      await core
+        .pruneMobileAudioCache()
+        .then((prune) => {
+          if (prune.evicted > 0) {
+            logSync(`audio cache: evicted ${prune.evicted} verified week-old recording(s)`);
+          }
+        })
+        .catch((error) => {
+          logSync(`audio cache: prune skipped - ${getErrorMessage(error)}`);
+        });
     },
 
     syncNow: async () => {
@@ -332,6 +347,35 @@ export const useSyncStore = create<SyncState>((set, get) => {
       await get().pull();
       logSync("sync now: pull complete; starting push");
       await get().push();
+    },
+
+    scheduleAutoSync: (reason, delayMs = AUTO_SYNC_DELAY_MS) => {
+      if (autoSyncTimer) {
+        clearTimeout(autoSyncTimer);
+      }
+      logSync(`auto: scheduled after ${reason}`);
+      autoSyncTimer = setTimeout(() => {
+        autoSyncTimer = null;
+        if (!savedGitConnection()) {
+          logSync(`auto: skipped ${reason}; no saved remote`);
+          return;
+        }
+        if (get().action !== "idle") {
+          logSync(`auto: delayed ${reason}; ${get().action} is running`);
+          get().scheduleAutoSync(reason, AUTO_SYNC_BUSY_RETRY_MS);
+          return;
+        }
+        logSync(`auto: starting after ${reason}`);
+        void get()
+          .syncNow()
+          .catch((error) => {
+            // Capture/editing remains primary: retry on the next save or
+            // foreground event without turning a network outage into a modal
+            // editing error. Manual Sync now still exposes failures.
+            logSync(`auto: ${reason} failed silently - ${getErrorMessage(error)}`);
+            set({ error: null, hint: null });
+          });
+      }, Math.max(0, delayMs));
     },
 
     push: async (message) => {

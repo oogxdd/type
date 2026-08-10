@@ -19,6 +19,7 @@ import type {
   GitTransferProgress,
   HandwritingAttachmentWriteResult,
   IrohClientStatus,
+  MobileAudioPruneResult,
   NoteMeta,
   NotePreviewEntry,
   ProfilesBackupArchive,
@@ -243,6 +244,10 @@ export const readRecordingAudio = async (
   path: string
 ): Promise<RecordingAudioPayload> =>
   parse(await getRawCore().readRecordingAudio(path));
+
+/** Evict phone audio only after age, transcript, and desktop receipt checks. */
+export const pruneMobileAudioCache = async (): Promise<MobileAudioPruneResult> =>
+  parse(await getRawCore().pruneMobileAudioCache());
 
 // ── Photo attachments ────────────────────────────────────────────────────────
 

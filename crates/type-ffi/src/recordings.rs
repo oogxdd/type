@@ -121,3 +121,9 @@ pub async fn read_recording_audio(path: String) -> Result<String, CoreError> {
     })
     .await
 }
+
+/// Apply the mobile seven-day audio cache policy. Safe and idempotent.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn prune_mobile_audio_cache() -> Result<String, CoreError> {
+    run_blocking(|| to_json(&type_core::prune_mobile_audio_cache(&unlocked_env()?)?)).await
+}

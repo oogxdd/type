@@ -74,6 +74,7 @@ export const RecordingAudioPlayer = ({ audioPath }: { audioPath: string }) => {
   const duration = status.duration || 0;
   const currentTime = status.currentTime || 0;
   const progress = duration > 0 ? Math.min(1, currentTime / duration) : 0;
+  const archivedOnDesktop = error?.includes("archived on your computer") ?? false;
 
   const toggle = () => {
     if (!ready) {
@@ -91,8 +92,23 @@ export const RecordingAudioPlayer = ({ audioPath }: { audioPath: string }) => {
 
   if (error) {
     return (
-      <View style={[styles.root, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
-        <Text style={{ color: theme.colors.danger, fontSize: 12 }}>{error}</Text>
+      <View
+        style={[
+          styles.root,
+          { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+        ]}
+      >
+        {archivedOnDesktop ? (
+          <Ionicons name="desktop-outline" size={16} color={theme.colors.secondaryText} />
+        ) : null}
+        <Text
+          style={{
+            color: archivedOnDesktop ? theme.colors.secondaryText : theme.colors.danger,
+            fontSize: 12,
+          }}
+        >
+          {error}
+        </Text>
       </View>
     );
   }

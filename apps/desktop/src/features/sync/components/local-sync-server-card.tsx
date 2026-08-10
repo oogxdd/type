@@ -152,7 +152,7 @@ export function LocalSyncServerCard() {
               ? "Stopping local SSH..."
               : "Starting local SSH..."
             : running
-              ? "Running — keep this app open while syncing."
+              ? "Running — it will start automatically next time you open the app."
               : "Stopped"}
         </span>
       </SettingsActionRow>

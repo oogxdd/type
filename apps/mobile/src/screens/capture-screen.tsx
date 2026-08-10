@@ -62,6 +62,7 @@ import * as core from "@typenotes/mobile-core/core-api";
 import { CaptureSession } from "../lib/capture";
 import { useClearInstantParam, type RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
+import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
 import { DictationButton } from "../ui/dictation-button";
 import { ToolbarButton } from "../ui/toolbar-button";
@@ -144,9 +145,19 @@ export const CaptureScreen = () => {
   const session = useMemo(
     () =>
       new CaptureSession({
-        createNote: async (content) => (await core.createNote({ content })).path,
-        writeNote: core.writeNote,
-        deleteNote: (path) => core.deleteItems([path]),
+        createNote: async (content) => {
+          const path = (await core.createNote({ content })).path;
+          useSyncStore.getState().scheduleAutoSync("capture saved");
+          return path;
+        },
+        writeNote: async (path, content) => {
+          await core.writeNote(path, content);
+          useSyncStore.getState().scheduleAutoSync("capture saved");
+        },
+        deleteNote: async (path) => {
+          await core.deleteItems([path]);
+          useSyncStore.getState().scheduleAutoSync("capture deleted");
+        },
       }),
     []
   );

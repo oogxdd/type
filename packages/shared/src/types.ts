@@ -199,6 +199,7 @@ export type RecordingListItem = {
   note_path: string;
   folder_path: string;
   audio_path: string | null;
+  archived_on_desktop: boolean;
   status: string;
   error: string | null;
   updated_ms: number | null;
@@ -230,6 +231,15 @@ export type HandwritingOcrListResult = {
 export type RecordingAudioPayload = {
   mime_type: string;
   audio_base64: string;
+};
+
+export type MobileAudioPruneResult = {
+  scanned: number;
+  evicted: number;
+  already_evicted: number;
+  waiting_for_age: number;
+  waiting_for_transcription: number;
+  waiting_for_desktop_receipt: number;
 };
 
 export type WhisperStatusResult = {

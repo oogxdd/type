@@ -70,6 +70,7 @@ export interface RawCore {
   queueProviderTranscriptions(provider: RawTranscriptionProvider): Promise<string>;
   listRecordings(): Promise<string>;
   readRecordingAudio(path: string): Promise<string>;
+  pruneMobileAudioCache(): Promise<string>;
 
   // ── Photo attachments ──
   saveHandwritingAttachment(argsJson: string): Promise<string>;

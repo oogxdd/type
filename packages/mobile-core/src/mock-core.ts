@@ -479,6 +479,7 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
             note_path: path,
             folder_path: parentOf(path),
             audio_path: note.meta.recording_audio_path ?? null,
+            archived_on_desktop: false,
             status: note.meta.transcription_status ?? "pending",
             error: note.meta.transcription_error ?? null,
             updated_ms: note.meta.updated_ms,
@@ -496,6 +497,15 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
         audio_base64: payload.base64,
       });
     },
+    pruneMobileAudioCache: async () =>
+      JSON.stringify({
+        scanned: audio.size,
+        evicted: 0,
+        already_evicted: 0,
+        waiting_for_age: audio.size,
+        waiting_for_transcription: 0,
+        waiting_for_desktop_receipt: 0,
+      }),
 
     // ── Photo attachments ──
     saveHandwritingAttachment: async (argsJson) => {

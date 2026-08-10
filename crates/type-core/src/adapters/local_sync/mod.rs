@@ -30,6 +30,7 @@ mod ssh_server;
 use crate::{ensure_git_repo, resolve_target_branch, switch_or_prepare_branch};
 #[cfg(desktop)]
 use std::{
+    fs,
     net::{IpAddr, UdpSocket},
     path::PathBuf,
     process::Command,
@@ -39,6 +40,7 @@ use std::{
 /// Default local-sync port. It intentionally reuses the old git-daemon port so
 /// existing firewall prompts/rules continue to apply, but the protocol is SSH.
 pub const LOCAL_SYNC_PORT: u16 = 9418;
+const LOCAL_SYNC_AUTO_START_FILE: &str = "direct-sync-enabled";
 
 /// Bonjour/mDNS service type the desktop advertises and clients browse for.
 const MDNS_SERVICE_TYPE: &str = "_typenotes-sync._tcp.local.";
@@ -232,6 +234,12 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
         let branch = resolve_target_branch(&repo, None);
         switch_or_prepare_branch(&repo, &branch)?;
         drop(repo);
+        // Receipts are tracked metadata. The next upload-pack request will
+        // commit them together with any pending desktop changes before the
+        // phone fetches, matching the server's existing serve-time behavior.
+        if let Err(error) = crate::issue_desktop_audio_receipts(&root) {
+            eprintln!("[attachments] could not issue startup audio receipts: {error}");
+        }
 
         let served_name = root
             .file_name()
@@ -298,6 +306,9 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
             daemon.repo_path.display(),
             status.paired_devices.len()
         );
+        if let Err(error) = set_local_sync_auto_start(app, true) {
+            eprintln!("[local-sync] could not persist auto-start preference: {error}");
+        }
         *guard = Some(daemon);
         Ok(status)
     }
@@ -312,6 +323,9 @@ pub fn stop_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatus
 
     #[cfg(desktop)]
     {
+        if let Err(error) = set_local_sync_auto_start(app, false) {
+            eprintln!("[local-sync] could not clear auto-start preference: {error}");
+        }
         if let Ok(mut guard) = DAEMON.lock() {
             if let Some(daemon) = guard.take() {
                 eprintln!(
@@ -323,6 +337,27 @@ pub fn stop_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatus
             }
         }
         local_sync_server_status(app)
+    }
+}
+
+/// Whether the user has started direct sync before without explicitly
+/// stopping it. Used by the desktop shell to restore hosting on app launch.
+#[cfg(desktop)]
+pub fn local_sync_auto_start_enabled(app: &AppEnv) -> bool {
+    crate::app_data_dir(app)
+        .map(|dir| dir.join(LOCAL_SYNC_AUTO_START_FILE).is_file())
+        .unwrap_or(false)
+}
+
+#[cfg(desktop)]
+fn set_local_sync_auto_start(app: &AppEnv, enabled: bool) -> Result<(), String> {
+    let path = crate::app_data_dir(app)?.join(LOCAL_SYNC_AUTO_START_FILE);
+    if enabled {
+        fs::write(path, b"enabled\n").map_err(|error| error.to_string())
+    } else if path.exists() {
+        fs::remove_file(path).map_err(|error| error.to_string())
+    } else {
+        Ok(())
     }
 }
 

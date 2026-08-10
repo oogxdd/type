@@ -528,9 +528,31 @@ pub fn git_has_changes(repo: &Repository) -> bool {
         .include_untracked(true)
         .recurse_untracked_dirs(true)
         .renames_head_to_index(true);
-    repo.statuses(Some(&mut status_opts))
-        .map(|statuses| !statuses.is_empty())
-        .unwrap_or(false)
+    let Ok(statuses) = repo.statuses(Some(&mut status_opts)) else {
+        return false;
+    };
+    let index = repo.index().ok();
+    statuses.iter().any(|entry| {
+        // libgit2 reports a missing skip-worktree file as WT_DELETED even
+        // though native Git correctly treats it as clean. Mobile audio cache
+        // eviction relies on that bit, so mirror Git's behavior here and
+        // avoid an empty auto-sync commit for every archived recording.
+        if entry.status() == git2::Status::WT_DELETED {
+            let skipped = entry
+                .path()
+                .and_then(|path| index.as_ref()?.get_path(Path::new(path), 0))
+                .map(|index_entry| {
+                    index_entry.flags_extended
+                        & git2::IndexEntryExtendedFlag::SKIP_WORKTREE.bits()
+                        != 0
+                })
+                .unwrap_or(false);
+            if skipped {
+                return false;
+            }
+        }
+        true
+    })
 }
 
 // ── Timestamp cache ────────────────────────────────────────────────────────────
@@ -785,10 +807,17 @@ pub fn ensure_git_repo(root: &Path) -> Result<Repository, String> {
 /// so per-device git credentials and pinned host keys stay off the remote.
 /// Best-effort: sync must not fail over an exclude file.
 fn ensure_device_settings_excluded(repo: &Repository) {
-    let pattern = crate::DEVICE_SETTINGS_EXCLUDE_PATTERN;
+    let patterns = [
+        crate::DEVICE_SETTINGS_EXCLUDE_PATTERN,
+        crate::AUDIO_CACHE_EXCLUDE_PATTERN,
+    ];
     let exclude_path = repo.path().join("info").join("exclude");
     let existing = fs::read_to_string(&exclude_path).unwrap_or_default();
-    if existing.lines().any(|line| line.trim() == pattern) {
+    let missing = patterns
+        .into_iter()
+        .filter(|pattern| !existing.lines().any(|line| line.trim() == *pattern))
+        .collect::<Vec<_>>();
+    if missing.is_empty() {
         return;
     }
     if let Some(parent) = exclude_path.parent() {
@@ -799,7 +828,8 @@ fn ensure_device_settings_excluded(repo: &Repository) {
     } else {
         "\n"
     };
-    let _ = fs::write(&exclude_path, format!("{existing}{newline}{pattern}\n"));
+    let additions = missing.join("\n");
+    let _ = fs::write(&exclude_path, format!("{existing}{newline}{additions}\n"));
 }
 
 /// Resolve the target branch name: use provided value, current HEAD, or "main".

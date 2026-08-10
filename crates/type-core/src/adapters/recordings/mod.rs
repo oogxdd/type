@@ -122,6 +122,7 @@ pub struct RecordingListItem {
     pub note_path: String,
     pub folder_path: String,
     pub audio_path: Option<String>,
+    pub archived_on_desktop: bool,
     pub status: String,
     pub error: Option<String>,
     pub updated_ms: Option<i64>,
@@ -344,8 +345,10 @@ impl RecordingsGateway for RecordingsAdapter {
             .map(|recording| {
                 let folder_path = note_parent_folder_path(&recording.note_rel);
                 let audio_exists = recording.audio_path.exists();
+                let archived_on_desktop = !audio_exists
+                    && crate::is_audio_evicted_locally(&root, &recording.audio_rel);
                 let mut error = recording.error.clone();
-                if !audio_exists {
+                if !audio_exists && !archived_on_desktop {
                     error = Some("Audio file is missing.".to_string());
                 }
                 RecordingListItem {
@@ -356,6 +359,7 @@ impl RecordingsGateway for RecordingsAdapter {
                     } else {
                         None
                     },
+                    archived_on_desktop,
                     status: recording.status.clone(),
                     error,
                     updated_ms: recording.updated_ms,
@@ -372,6 +376,12 @@ impl RecordingsGateway for RecordingsAdapter {
 
     fn read_audio(&self, args: Self::ReadArgs) -> Result<Self::AudioPayload, String> {
         let root = crate::ensured_notes_root(&self.app)?;
+        if crate::is_audio_evicted_locally(&root, args.path.trim()) {
+            return Err(
+                "Audio is archived on your computer and is no longer cached on this phone."
+                    .to_string(),
+            );
+        }
         let audio_path = resolve_recording_audio_absolute_path(&root, &args.path)?;
         let bytes = fs::read(&audio_path).map_err(|error| error.to_string())?;
         Ok(RecordingAudioPayload {
@@ -419,6 +429,7 @@ pub struct RecordingNoteInfo {
     pub audio_path: PathBuf,
     pub status: String,
     pub error: Option<String>,
+    pub created_ms: Option<i64>,
     pub updated_ms: Option<i64>,
 }
 
@@ -613,6 +624,7 @@ fn recording_info_from_note_meta(
         audio_path,
         status,
         error: meta.transcription_error.clone(),
+        created_ms: meta.created_ms,
         updated_ms: meta.transcription_updated_ms.or(meta.updated_ms),
     })
 }

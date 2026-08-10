@@ -44,8 +44,9 @@ evicted attachment shows that the audio is archived on the desktop; it must not
 look like corruption. Pending, failed, untranscribed, or unacknowledged audio
 is never evicted.
 
-For this experiment, receipts and cache state are device-local metadata under
-`.type/` and are excluded from Git. The long-term design remains a
+For this experiment, durability receipts are tracked metadata under `.type/`
+so the phone receives them through Git. Cache state is device-local metadata
+under `.type/` and is excluded from Git. The long-term design remains a
 content-addressed attachment store outside the Git working tree, as described
 in `ATTACHMENT_RETENTION.md`.
 

@@ -41,6 +41,7 @@ import {
 import { elapsedSeconds, formatRecordingTimer } from "../lib/recording-timer";
 import { useNotesStore } from "../state/notes-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
+import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
 
 const STATUS_VISIBLE_MS = 4000;
@@ -178,6 +179,7 @@ export const DictationButton = ({
         audio_base64: audioBase64,
         mime_type: "audio/mp4",
       });
+      useSyncStore.getState().scheduleAutoSync("audio saved");
 
       let detail = MODE_SAVED_DETAIL[mode];
       if (mode === "assemblyai") {
@@ -253,6 +255,7 @@ export const DictationButton = ({
         mime_type: asset.mimeType ?? "image/jpeg",
         file_name: asset.fileName ?? undefined,
       });
+      useSyncStore.getState().scheduleAutoSync("attachment saved");
       showStatus({ kind: "success", text: "Saved — your desktop will recognize it" });
       void useNotesStore.getState().refresh();
     } catch (err) {

@@ -7994,6 +7994,7 @@ dependencies = [
  "russh",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "ssh-key 0.6.7",
  "time",
  "tokio",

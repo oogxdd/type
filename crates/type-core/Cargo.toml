@@ -25,6 +25,7 @@ rand_core = { version = "0.6", features = ["std"] }
 iroh = { version = "0.35.0", default-features = false }
 iroh-base = "0.35.0"
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "io-util", "net", "time", "macros", "sync"] }
+sha2 = "0.10"
 
 [target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
 russh = { version = "0.62.2", default-features = false, features = ["ring", "flate2"] }
