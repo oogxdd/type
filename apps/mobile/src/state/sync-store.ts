@@ -111,7 +111,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
 
   const ensureSavedRemote = async (
     currentStatus: GitSyncStatus | null,
-    connection = savedGitConnection()
+    connection: ConnectGitArgs | null = savedGitConnection()
   ): Promise<GitSyncStatus | null> => {
     if (!connection?.remote_url) {
       logSync(`saved remote: none; ${statusForLog(currentStatus)}`);
