@@ -126,6 +126,10 @@ Everything that matters — `notes/`, `profiles/`, `config.json`,
 
 ## 3. How to cut a mobile release
 
+For the planned migration from EAS Build/Submit to a native Xcode build and
+direct App Store Connect upload on GitHub-hosted macOS, see
+[MOBILE_TESTFLIGHT_GITHUB_ACTIONS_NATIVE.md](./MOBILE_TESTFLIGHT_GITHUB_ACTIONS_NATIVE.md).
+
 ```bash
 git checkout main && git pull
 git tag mobile-v0.2.0
