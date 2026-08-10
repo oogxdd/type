@@ -832,6 +832,30 @@ pub(crate) fn ensure_device_settings_excluded(repo: &Repository) {
     let _ = fs::write(&exclude_path, format!("{existing}{newline}{additions}\n"));
 }
 
+/// Keep out-of-band Iroh audio out of Git so evicting it actually releases
+/// phone storage instead of leaving a reachable blob in `.git/objects`.
+pub fn set_audio_git_exclusion(repo: &Repository, enabled: bool) -> Result<(), String> {
+    let exclude_path = repo.path().join("info").join("exclude");
+    let existing = fs::read_to_string(&exclude_path).unwrap_or_default();
+    let patterns = crate::AUDIO_GIT_EXCLUDE_PATTERNS;
+    let mut lines = existing
+        .lines()
+        .filter(|line| !patterns.contains(&line.trim()))
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    if enabled {
+        lines.extend(patterns.into_iter().map(ToOwned::to_owned));
+    }
+    if let Some(parent) = exclude_path.parent() {
+        fs::create_dir_all(parent).map_err(map_git_error_io)?;
+    }
+    fs::write(exclude_path, format!("{}\n", lines.join("\n"))).map_err(map_git_error_io)
+}
+
+fn map_git_error_io(error: std::io::Error) -> String {
+    error.to_string()
+}
+
 /// Resolve the target branch name: use provided value, current HEAD, or "main".
 pub fn resolve_target_branch(repo: &Repository, branch: Option<String>) -> String {
     let requested = branch

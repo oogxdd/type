@@ -17,11 +17,15 @@ use std::{
     sync::Mutex,
     time::Duration,
 };
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use uuid::Uuid;
 
 const IROH_ALPN: &[u8] = b"type/ssh-tunnel/1";
-const IROH_HANDSHAKE: &[u8; 5] = b"type1";
+const IROH_SSH_HANDSHAKE: &[u8; 5] = b"type1";
+const IROH_AUDIO_HANDSHAKE: &[u8; 5] = b"aud01";
 const IROH_ONLINE_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_AUDIO_HEADER_BYTES: usize = 16 * 1024;
+const MAX_AUDIO_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 pub const IROH_CLIENT_PROXY_PORT: u16 = 19_418;
 
 /// Arguments supplied by the mobile shell after scanning a pairing QR.
@@ -38,6 +42,28 @@ pub struct IrohClientStatus {
     pub local_port: u16,
     pub local_remote_url: String,
     pub endpoint_id: String,
+}
+
+#[derive(Clone, Serialize)]
+pub struct IrohAudioArchiveResult {
+    pub scanned: usize,
+    pub uploaded: usize,
+    pub already_archived: usize,
+}
+
+#[derive(Deserialize, Serialize)]
+struct AudioUploadHeader {
+    audio_path: String,
+    sha256: String,
+    byte_length: u64,
+}
+
+#[derive(Deserialize, Serialize)]
+struct AudioUploadResponse {
+    ok: bool,
+    error: Option<String>,
+    sha256: Option<String>,
+    byte_length: Option<u64>,
 }
 
 /// Desktop-side endpoint owned by the embedded local-sync daemon.
@@ -63,6 +89,8 @@ impl IrohServerHandle {
 
 struct IrohClientHandle {
     runtime: tokio::runtime::Runtime,
+    endpoint: Endpoint,
+    remote_addr: iroh::NodeAddr,
     ticket: String,
     endpoint_id: String,
     local_port: u16,
@@ -86,7 +114,11 @@ impl IrohClientHandle {
 static CLIENT: Mutex<Option<IrohClientHandle>> = Mutex::new(None);
 
 /// Start the desktop endpoint and forward accepted streams to the SSH server.
-pub fn start_iroh_sync_server(app: &AppEnv, target_port: u16) -> Result<IrohServerHandle, String> {
+pub fn start_iroh_sync_server(
+    app: &AppEnv,
+    target_port: u16,
+    repo_root: PathBuf,
+) -> Result<IrohServerHandle, String> {
     let secret = load_or_create_secret(app, "server.key")?;
     let runtime = runtime("Iroh sync server")?;
     let endpoint = runtime.block_on(async {
@@ -119,8 +151,9 @@ pub fn start_iroh_sync_server(app: &AppEnv, target_port: u16) -> Result<IrohServ
                     continue;
                 }
             };
+            let repo_root = repo_root.clone();
             tokio::spawn(async move {
-                if let Err(error) = forward_iroh_to_tcp(accepting, target_port).await {
+                if let Err(error) = handle_iroh_connection(accepting, target_port, repo_root).await {
                     eprintln!("[iroh-sync] desktop tunnel failed: {error}");
                 }
             });
@@ -181,6 +214,7 @@ pub fn start_iroh_sync_client(
 
     let endpoint_id = parsed.node_addr().node_id.to_string();
     let remote_addr = parsed.node_addr().clone();
+    let proxy_remote_addr = remote_addr.clone();
     let accept_endpoint = endpoint.clone();
     runtime.spawn(async move {
         loop {
@@ -192,7 +226,7 @@ pub fn start_iroh_sync_client(
                 }
             };
             let endpoint = accept_endpoint.clone();
-            let remote_addr = remote_addr.clone();
+            let remote_addr = proxy_remote_addr.clone();
             tokio::spawn(async move {
                 if let Err(error) = forward_tcp_to_iroh(tcp, endpoint, remote_addr).await {
                     eprintln!("[iroh-sync] phone tunnel for {peer} failed: {error}");
@@ -203,6 +237,8 @@ pub fn start_iroh_sync_client(
 
     let client = IrohClientHandle {
         runtime,
+        endpoint,
+        remote_addr,
         ticket: ticket.to_string(),
         endpoint_id,
         local_port: IROH_CLIENT_PROXY_PORT,
@@ -216,6 +252,69 @@ pub fn start_iroh_sync_client(
     Ok(status)
 }
 
+/// Upload every local audio attachment that does not yet have an exact
+/// desktop acknowledgement. Audio uses a separate Iroh stream and never
+/// enters Git; Markdown and transcripts continue through the SSH tunnel.
+pub fn archive_mobile_audio_with_iroh(app: &AppEnv) -> Result<IrohAudioArchiveResult, String> {
+    let root = crate::ensured_notes_root(app)?;
+    let recordings = crate::collect_recording_notes(&root)?;
+    let mut result = IrohAudioArchiveResult {
+        scanned: recordings.len(),
+        uploaded: 0,
+        already_archived: 0,
+    };
+    let guard = CLIENT
+        .lock()
+        .map_err(|_| "Iroh client state is poisoned.".to_string())?;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Start the Iroh sync connection before archiving audio.".to_string())?;
+
+    for recording in recordings {
+        if !recording.audio_path.is_file() {
+            continue;
+        }
+        let (sha256, byte_length) = crate::hash_file(&recording.audio_path)?;
+        if crate::audio_has_desktop_ack(
+            &root,
+            &recording.audio_rel,
+            &sha256,
+            byte_length,
+        ) {
+            result.already_archived += 1;
+            continue;
+        }
+        let header = AudioUploadHeader {
+            audio_path: recording.audio_rel.clone(),
+            sha256: sha256.clone(),
+            byte_length,
+        };
+        client.runtime.block_on(upload_audio_file(
+            &client.endpoint,
+            client.remote_addr.clone(),
+            &recording.audio_path,
+            &header,
+        ))?;
+        crate::record_desktop_audio_ack(
+            &root,
+            recording.audio_rel,
+            sha256,
+            byte_length,
+        )?;
+        result.uploaded += 1;
+    }
+
+    let repo = crate::ensure_git_repo(&root)?;
+    crate::set_audio_git_exclusion(&repo, true)?;
+    Ok(result)
+}
+
+pub fn set_mobile_audio_git_exclusion(app: &AppEnv, enabled: bool) -> Result<(), String> {
+    let root = crate::ensured_notes_root(app)?;
+    let repo = crate::ensure_git_repo(&root)?;
+    crate::set_audio_git_exclusion(&repo, enabled)
+}
+
 /// Stop the process-global phone proxy. Safe when no proxy is running.
 pub fn shutdown_iroh_sync_client() {
     if let Ok(mut guard) = CLIENT.lock() {
@@ -225,9 +324,10 @@ pub fn shutdown_iroh_sync_client() {
     }
 }
 
-async fn forward_iroh_to_tcp(
+async fn handle_iroh_connection(
     accepting: iroh::endpoint::Connecting,
     target_port: u16,
+    repo_root: PathBuf,
 ) -> Result<(), String> {
     let connection = accepting
         .await
@@ -236,11 +336,14 @@ async fn forward_iroh_to_tcp(
         .accept_bi()
         .await
         .map_err(|error| format!("Iroh stream failed: {error}"))?;
-    let mut handshake = [0u8; IROH_HANDSHAKE.len()];
+    let mut handshake = [0u8; IROH_SSH_HANDSHAKE.len()];
     recv.read_exact(&mut handshake)
         .await
         .map_err(|error| format!("Iroh handshake failed: {error}"))?;
-    if &handshake != IROH_HANDSHAKE {
+    if &handshake == IROH_AUDIO_HANDSHAKE {
+        return receive_audio_file(send, recv, repo_root).await;
+    }
+    if &handshake != IROH_SSH_HANDSHAKE {
         return Err("Iroh handshake was not recognized.".to_string());
     }
     let tcp = tokio::net::TcpStream::connect(("127.0.0.1", target_port))
@@ -264,10 +367,212 @@ async fn forward_tcp_to_iroh(
         .map_err(|error| format!("Could not open the Iroh sync stream: {error}"))?;
     // QUIC opens streams lazily; writing first makes the desktop's accept_bi
     // resolve even if libgit2 has not sent an SSH byte yet.
-    send.write_all(IROH_HANDSHAKE)
+    send.write_all(IROH_SSH_HANDSHAKE)
         .await
         .map_err(|error| format!("Could not start the Iroh sync stream: {error}"))?;
     forward_bidi(tcp, send, recv).await
+}
+
+async fn upload_audio_file(
+    endpoint: &Endpoint,
+    remote_addr: iroh::NodeAddr,
+    audio_path: &Path,
+    header: &AudioUploadHeader,
+) -> Result<(), String> {
+    let connection = endpoint
+        .connect(remote_addr, IROH_ALPN)
+        .await
+        .map_err(|error| format!("Could not reach the desktop for audio archive: {error}"))?;
+    let (mut send, mut recv) = connection
+        .open_bi()
+        .await
+        .map_err(|error| format!("Could not open the Iroh audio stream: {error}"))?;
+    let header_json = serde_json::to_vec(header)
+        .map_err(|error| format!("Failed to encode the audio archive request: {error}"))?;
+    let header_len = u32::try_from(header_json.len())
+        .map_err(|_| "The audio archive header is too large.".to_string())?;
+    send.write_all(IROH_AUDIO_HANDSHAKE)
+        .await
+        .map_err(|error| format!("Could not start the Iroh audio stream: {error}"))?;
+    send.write_u32(header_len)
+        .await
+        .map_err(|error| format!("Could not send the audio archive header: {error}"))?;
+    send.write_all(&header_json)
+        .await
+        .map_err(|error| format!("Could not send the audio archive header: {error}"))?;
+    let mut file = tokio::fs::File::open(audio_path)
+        .await
+        .map_err(|error| format!("Failed to open audio '{}': {error}", audio_path.display()))?;
+    let copied = tokio::io::copy(&mut file, &mut send)
+        .await
+        .map_err(|error| format!("Audio archive upload failed: {error}"))?;
+    if copied != header.byte_length {
+        return Err(format!(
+            "Audio changed while it was uploading (expected {} bytes, sent {copied}).",
+            header.byte_length
+        ));
+    }
+    send.finish()
+        .map_err(|error| format!("Could not finish the audio archive upload: {error}"))?;
+
+    let response_len = recv
+        .read_u32()
+        .await
+        .map_err(|error| format!("Desktop did not acknowledge the audio archive: {error}"))?
+        as usize;
+    if response_len > MAX_AUDIO_HEADER_BYTES {
+        return Err("The desktop returned an invalid audio acknowledgement.".to_string());
+    }
+    let mut response_json = vec![0u8; response_len];
+    recv.read_exact(&mut response_json)
+        .await
+        .map_err(|error| format!("Could not read the desktop audio acknowledgement: {error}"))?;
+    let response: AudioUploadResponse = serde_json::from_slice(&response_json)
+        .map_err(|error| format!("The desktop audio acknowledgement is invalid: {error}"))?;
+    if !response.ok {
+        return Err(response
+            .error
+            .unwrap_or_else(|| "The desktop rejected the audio archive.".to_string()));
+    }
+    if response.sha256.as_deref() != Some(header.sha256.as_str())
+        || response.byte_length != Some(header.byte_length)
+    {
+        return Err("The desktop acknowledged different audio bytes.".to_string());
+    }
+    Ok(())
+}
+
+async fn receive_audio_file(
+    mut send: iroh::endpoint::SendStream,
+    mut recv: iroh::endpoint::RecvStream,
+    repo_root: PathBuf,
+) -> Result<(), String> {
+    let result = receive_audio_file_inner(&mut recv, &repo_root).await;
+    let response = match &result {
+        Ok((sha256, byte_length)) => AudioUploadResponse {
+            ok: true,
+            error: None,
+            sha256: Some(sha256.clone()),
+            byte_length: Some(*byte_length),
+        },
+        Err(error) => AudioUploadResponse {
+            ok: false,
+            error: Some(error.clone()),
+            sha256: None,
+            byte_length: None,
+        },
+    };
+    let response_json = serde_json::to_vec(&response)
+        .map_err(|error| format!("Failed to encode the audio acknowledgement: {error}"))?;
+    send.write_u32(response_json.len() as u32)
+        .await
+        .map_err(|error| format!("Failed to send the audio acknowledgement: {error}"))?;
+    send.write_all(&response_json)
+        .await
+        .map_err(|error| format!("Failed to send the audio acknowledgement: {error}"))?;
+    send.finish()
+        .map_err(|error| format!("Failed to finish the audio acknowledgement: {error}"))?;
+    result.map(|_| ())
+}
+
+async fn receive_audio_file_inner(
+    recv: &mut iroh::endpoint::RecvStream,
+    repo_root: &Path,
+) -> Result<(String, u64), String> {
+    let header_len = recv
+        .read_u32()
+        .await
+        .map_err(|error| format!("Could not read the audio archive header: {error}"))?
+        as usize;
+    if header_len == 0 || header_len > MAX_AUDIO_HEADER_BYTES {
+        return Err("The audio archive header has an invalid size.".to_string());
+    }
+    let mut header_json = vec![0u8; header_len];
+    recv.read_exact(&mut header_json)
+        .await
+        .map_err(|error| format!("Could not read the audio archive header: {error}"))?;
+    let header: AudioUploadHeader = serde_json::from_slice(&header_json)
+        .map_err(|error| format!("The audio archive header is invalid: {error}"))?;
+    if header.byte_length > MAX_AUDIO_BYTES {
+        return Err("The audio archive exceeds the 2 GiB safety limit.".to_string());
+    }
+    let relative = crate::sanitize_relative(&header.audio_path)?;
+    let target = repo_root.join(&relative);
+    if !crate::is_recording_audio_path_allowed(repo_root, &target) {
+        return Err("Only recording audio paths can be archived.".to_string());
+    }
+    let repo = git2::Repository::open(repo_root)
+        .map_err(|error| format!("The desktop notes Git repo is unavailable: {error}"))?;
+    crate::set_audio_git_exclusion(&repo, true)?;
+    let parent = target
+        .parent()
+        .ok_or_else(|| "The audio archive path has no parent.".to_string())?;
+    tokio::fs::create_dir_all(parent)
+        .await
+        .map_err(|error| format!("Could not create the desktop audio folder: {error}"))?;
+    let file_name = target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "The audio archive filename is invalid.".to_string())?;
+    let temporary = parent.join(format!(".{file_name}.iroh-{}.part", Uuid::now_v7()));
+    let mut output = tokio::fs::File::create(&temporary)
+        .await
+        .map_err(|error| format!("Could not create the desktop audio archive: {error}"))?;
+    let mut limited = recv.take(header.byte_length);
+    let copied = match tokio::io::copy(&mut limited, &mut output).await {
+        Ok(copied) => copied,
+        Err(error) => {
+            drop(output);
+            let _ = tokio::fs::remove_file(&temporary).await;
+            return Err(format!("Could not receive the audio archive: {error}"));
+        }
+    };
+    if let Err(error) = output.sync_all().await {
+        drop(output);
+        let _ = tokio::fs::remove_file(&temporary).await;
+        return Err(format!("Could not flush the desktop audio archive: {error}"));
+    }
+    drop(output);
+    if copied != header.byte_length {
+        let _ = tokio::fs::remove_file(&temporary).await;
+        return Err(format!(
+            "The audio archive ended early (expected {} bytes, received {copied}).",
+            header.byte_length
+        ));
+    }
+    let verify_path = temporary.clone();
+    let verified = tokio::task::spawn_blocking(move || crate::hash_file(&verify_path)).await;
+    let (sha256, byte_length) = match verified {
+        Ok(Ok(value)) => value,
+        Ok(Err(error)) => {
+            let _ = tokio::fs::remove_file(&temporary).await;
+            return Err(error);
+        }
+        Err(error) => {
+            let _ = tokio::fs::remove_file(&temporary).await;
+            return Err(format!("Audio verification worker failed: {error}"));
+        }
+    };
+    if sha256 != header.sha256 || byte_length != header.byte_length {
+        let _ = tokio::fs::remove_file(&temporary).await;
+        return Err("The received audio hash does not match the phone.".to_string());
+    }
+    if target.exists() {
+        let existing_path = target.clone();
+        let existing = tokio::task::spawn_blocking(move || crate::hash_file(&existing_path)).await;
+        let _ = tokio::fs::remove_file(&temporary).await;
+        let existing = existing
+            .map_err(|error| format!("Desktop audio verification worker failed: {error}"))??;
+        if existing != (sha256.clone(), byte_length) {
+            return Err("The desktop already has different audio at this path.".to_string());
+        }
+        return Ok((sha256, byte_length));
+    }
+    if let Err(error) = tokio::fs::rename(&temporary, &target).await {
+        let _ = tokio::fs::remove_file(&temporary).await;
+        return Err(format!("Could not finalize the desktop audio archive: {error}"));
+    }
+    Ok((sha256, byte_length))
 }
 
 async fn forward_bidi(

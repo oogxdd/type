@@ -434,6 +434,9 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
         endpoint_id: "demo-iroh-endpoint",
       });
     },
+    archiveMobileAudioWithIroh: async () =>
+      JSON.stringify({ scanned: audio.size, uploaded: 0, already_archived: audio.size }),
+    setMobileAudioGitExclusion: async () => {},
 
     // ── Recordings ──
     saveAudioRecording: async (argsJson) => {
@@ -505,6 +508,7 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
         waiting_for_age: audio.size,
         waiting_for_transcription: 0,
         waiting_for_desktop_receipt: 0,
+        waiting_for_git_migration: 0,
       }),
 
     // ── Photo attachments ──

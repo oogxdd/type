@@ -18,6 +18,7 @@ import type {
   GitSyncStatus,
   GitTransferProgress,
   HandwritingAttachmentWriteResult,
+  IrohAudioArchiveResult,
   IrohClientStatus,
   MobileAudioPruneResult,
   NoteMeta,
@@ -190,6 +191,14 @@ export const startIrohSyncClient = async (
   args: StartIrohClientArgs
 ): Promise<IrohClientStatus> =>
   parse(await getRawCore().startIrohSyncClient(JSON.stringify(args)));
+
+/** Copy local recording bytes to the paired desktop outside Git. */
+export const archiveMobileAudioWithIroh = async (): Promise<IrohAudioArchiveResult> =>
+  parse(await getRawCore().archiveMobileAudioWithIroh());
+
+/** Switch recording paths between Iroh archive mode and ordinary Git mode. */
+export const setMobileAudioGitExclusion = (enabled: boolean): Promise<void> =>
+  getRawCore().setMobileAudioGitExclusion(enabled);
 
 const idleTransferProgress: GitTransferProgress = {
   phase: "idle",

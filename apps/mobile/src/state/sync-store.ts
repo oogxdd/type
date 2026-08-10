@@ -109,6 +109,21 @@ export const useSyncStore = create<SyncState>((set, get) => {
     return { ...connection, remote_url: proxy.local_remote_url };
   };
 
+  const prepareAudioForPush = async (connection: SavedGitConnection | null) => {
+    if (!connection?.irohTicket) {
+      await core.setMobileAudioGitExclusion(false);
+      return;
+    }
+    const archive = await core.archiveMobileAudioWithIroh();
+    if (archive.uploaded > 0) {
+      logSync(`audio archive: copied ${archive.uploaded} recording(s) to desktop over Iroh`);
+    }
+    const prune = await core.pruneMobileAudioCache();
+    if (prune.evicted > 0) {
+      logSync(`audio cache: evicted ${prune.evicted} verified week-old recording(s)`);
+    }
+  };
+
   const ensureSavedRemote = async (
     currentStatus: GitSyncStatus | null,
     connection: ConnectGitArgs | null = savedGitConnection()
@@ -216,7 +231,10 @@ export const useSyncStore = create<SyncState>((set, get) => {
 
     refresh: () => run("refresh", () => core.getGitStatus()),
 
-    connect: (args) => run("connect", () => core.connectGitRepo(args)),
+    connect: async (args) => {
+      await core.setMobileAudioGitExclusion(false);
+      await run("connect", () => core.connectGitRepo(args));
+    },
 
     connectFromLink: async (link) => {
       requireIdle("qr connect");
@@ -274,6 +292,17 @@ export const useSyncStore = create<SyncState>((set, get) => {
             logSync("ssh key: existing app-managed key found");
           }
         }
+        if (link.irohTicket) {
+          await prepareAudioForPush({
+            remote_url: link.remote,
+            branch: link.branch ?? null,
+            username: null,
+            password: null,
+            irohTicket: link.irohTicket,
+          });
+        } else {
+          await core.setMobileAudioGitExclusion(false);
+        }
         logSync(`qr: connecting with pairing remote ${redactRemoteForLog(pairingRemote)}`);
         const pairingStatus = await core.connectGitRepo({
           remote_url: pairingRemote,
@@ -306,7 +335,9 @@ export const useSyncStore = create<SyncState>((set, get) => {
         return;
       }
       await run("pull", async () => {
-        const connection = await prepareIrohConnection(savedGitConnection());
+        const savedConnection = savedGitConnection();
+        const connection = await prepareIrohConnection(savedConnection);
+        await prepareAudioForPush(savedConnection);
         logSync(
           `pull: saved connection remote=${redactRemoteForLog(connection?.remote_url)} branch=${
             connection?.branch ?? "main"
@@ -383,7 +414,9 @@ export const useSyncStore = create<SyncState>((set, get) => {
         return;
       }
       await run("push", async () => {
-        const connection = await prepareIrohConnection(savedGitConnection());
+        const savedConnection = savedGitConnection();
+        const connection = await prepareIrohConnection(savedConnection);
+        await prepareAudioForPush(savedConnection);
         logSync(
           `push: saved connection remote=${redactRemoteForLog(connection?.remote_url)} branch=${
             connection?.branch ?? "main"

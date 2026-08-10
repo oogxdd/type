@@ -12,6 +12,9 @@ the network path between a phone and a desktop.
   Iroh endpoint ticket.
 - The phone starts a loopback TCP proxy. libgit2 still talks SSH to that proxy;
   the proxy carries the bytes over Iroh to the desktop.
+- Recording audio uses a second, hash-verified Iroh stream before Git sync.
+  `Recordings/` is then excluded in that device's local Git config, so new
+  audio never leaves a hidden blob in the phone's `.git/objects` database.
 - SSH host-key pinning and the existing paired-device allowlist remain the
   authentication boundary. Iroh relays are transport only and do not store the
   notes repository.
@@ -37,8 +40,8 @@ A phone may evict an audio file only when all of these are true:
 
 1. The recording is at least seven days old.
 2. Its transcription status is complete.
-3. The desktop has issued a durability receipt for the exact audio content
-   hash after receiving and verifying the bytes.
+3. The desktop has received the out-of-band Iroh upload and then issued a
+   durability receipt for the exact audio content hash.
 
 The Markdown recording note and transcript remain on the phone. Opening an
 evicted attachment shows that the audio is archived on the desktop; it must not
@@ -50,6 +53,12 @@ so the phone receives them through Git. Cache state is device-local metadata
 under `.type/` and is excluded from Git. The long-term design remains a
 content-addressed attachment store outside the Git working tree, as described
 in `ATTACHMENT_RETENTION.md`.
+
+Recordings that were already tracked by Git before this experiment are kept on
+the phone. Removing only their working-tree copy would not release their Git
+blob, so migrating old recordings is deliberately deferred rather than
+presenting a misleading storage saving. New recordings use the true
+out-of-band path.
 
 ## Rollout boundary
 

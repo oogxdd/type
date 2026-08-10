@@ -240,6 +240,7 @@ export type MobileAudioPruneResult = {
   waiting_for_age: number;
   waiting_for_transcription: number;
   waiting_for_desktop_receipt: number;
+  waiting_for_git_migration: number;
 };
 
 export type WhisperStatusResult = {
@@ -427,6 +428,12 @@ export type IrohClientStatus = {
   local_port: number;
   local_remote_url: string;
   endpoint_id: string;
+};
+
+export type IrohAudioArchiveResult = {
+  scanned: number;
+  uploaded: number;
+  already_archived: number;
 };
 
 export type GitHistoryArgs = {

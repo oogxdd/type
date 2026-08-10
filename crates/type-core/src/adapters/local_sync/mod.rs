@@ -264,8 +264,19 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
         });
         let server = ssh_server::start_ssh_server(shared, &host_key, LOCAL_SYNC_PORT)?;
 
-        let (iroh, iroh_error) = match crate::start_iroh_sync_server(app, LOCAL_SYNC_PORT) {
-            Ok(iroh) => (Some(iroh), None),
+        let (iroh, iroh_error) = match crate::start_iroh_sync_server(
+            app,
+            LOCAL_SYNC_PORT,
+            root.clone(),
+        ) {
+            Ok(iroh) => {
+                if let Ok(repo) = git2::Repository::open(&root) {
+                    if let Err(error) = crate::set_audio_git_exclusion(&repo, true) {
+                        eprintln!("[attachments] could not exclude Iroh audio from Git: {error}");
+                    }
+                }
+                (Some(iroh), None)
+            }
             Err(error) => {
                 eprintln!(
                     "[iroh-sync] desktop endpoint unavailable; LAN sync remains active: {error}"

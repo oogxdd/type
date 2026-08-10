@@ -1,13 +1,12 @@
 //! Safe mobile cache eviction for audio attachments.
 //!
-//! Durability receipts are tracked in Git and created only by the desktop
-//! after hashing bytes present in its working tree. Device cache state stays
-//! local. A phone evicts a file only after validating the receipt, age, and
-//! completed transcription status, then marks the Git index entry
-//! `skip-worktree` before removing the worktree copy.
+//! New audio is copied to the desktop outside Git over Iroh. Durability
+//! receipts are created only after the desktop hashes the received bytes;
+//! device cache state stays local. A phone evicts only untracked audio after
+//! validating the receipt, age, and completed transcription status.
 
 use crate::{collect_recording_notes, now_ms, time_to_ms, AppEnv, RECORDING_STATUS_COMPLETED};
-use git2::{IndexEntryExtendedFlag, IndexEntryFlag, Repository};
+use git2::Repository;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -19,6 +18,7 @@ use std::{
 pub const AUDIO_RECEIPTS_REL_PATH: &str = ".type/audio-durability-receipts.json";
 pub const AUDIO_CACHE_REL_PATH: &str = ".type/audio-cache.json";
 pub const AUDIO_CACHE_EXCLUDE_PATTERN: &str = "/.type/audio-cache.json";
+pub const AUDIO_GIT_EXCLUDE_PATTERNS: [&str; 2] = ["/Recordings/", "/_Recordings/"];
 pub const MOBILE_AUDIO_RETENTION_DAYS: i64 = 7;
 const DAY_MS: i64 = 24 * 60 * 60 * 1_000;
 
@@ -57,6 +57,8 @@ struct EvictedAudioEntry {
 struct AudioCacheManifest {
     #[serde(default)]
     evicted: BTreeMap<String, EvictedAudioEntry>,
+    #[serde(default)]
+    desktop_acks: BTreeMap<String, AudioDurabilityReceipt>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -75,6 +77,7 @@ pub struct MobileAudioPruneResult {
     pub waiting_for_age: usize,
     pub waiting_for_transcription: usize,
     pub waiting_for_desktop_receipt: usize,
+    pub waiting_for_git_migration: usize,
 }
 
 /// Hash local desktop audio and publish/refresh receipts in a tracked manifest.
@@ -161,11 +164,12 @@ fn prune_mobile_audio_cache_at(root: &Path, now: i64) -> Result<MobileAudioPrune
         waiting_for_age: 0,
         waiting_for_transcription: 0,
         waiting_for_desktop_receipt: 0,
+        waiting_for_git_migration: 0,
     };
 
     for recording in recordings {
         if !recording.audio_path.is_file() {
-            if cache.evicted.contains_key(&recording.audio_rel) {
+            if is_audio_evicted_locally(root, &recording.audio_rel) {
                 result.already_evicted += 1;
             } else {
                 result.waiting_for_desktop_receipt += 1;
@@ -188,7 +192,12 @@ fn prune_mobile_audio_cache_at(root: &Path, now: i64) -> Result<MobileAudioPrune
             result.waiting_for_age += 1;
             continue;
         }
-        let Some(receipt) = receipts.receipts.get(&recording.audio_rel) else {
+        // Only the tracked desktop manifest authorizes deletion. The direct
+        // upload acknowledgement avoids duplicate transfers but is not a
+        // retention receipt: the desktop can revoke the tracked receipt if
+        // its archive disappears before the phone's next pull.
+        let receipt = receipts.receipts.get(&recording.audio_rel);
+        let Some(receipt) = receipt else {
             result.waiting_for_desktop_receipt += 1;
             continue;
         };
@@ -198,9 +207,19 @@ fn prune_mobile_audio_cache_at(root: &Path, now: i64) -> Result<MobileAudioPrune
             continue;
         }
 
-        set_skip_worktree(&repo, &recording.audio_rel, true)?;
+        if repo
+            .index()
+            .ok()
+            .and_then(|index| index.get_path(Path::new(&recording.audio_rel), 0))
+            .is_some()
+        {
+            // A tracked file would remain as a reachable blob in `.git` even
+            // after its worktree copy was removed. Keep legacy recordings
+            // until they can be migrated without pretending space was freed.
+            result.waiting_for_git_migration += 1;
+            continue;
+        }
         if let Err(error) = fs::remove_file(&recording.audio_path) {
-            let _ = set_skip_worktree(&repo, &recording.audio_rel, false);
             return Err(format!(
                 "Failed to evict cached audio '{}': {error}",
                 recording.audio_path.display()
@@ -224,38 +243,77 @@ fn prune_mobile_audio_cache_at(root: &Path, now: i64) -> Result<MobileAudioPrune
 }
 
 pub fn is_audio_evicted_locally(root: &Path, audio_rel: &str) -> bool {
-    read_json_or_default::<AudioCacheManifest>(&root.join(AUDIO_CACHE_REL_PATH))
-        .evicted
-        .contains_key(audio_rel)
-}
-
-fn set_skip_worktree(repo: &Repository, audio_rel: &str, enabled: bool) -> Result<(), String> {
-    let mut index = repo
-        .index()
-        .map_err(|error| format!("Failed to open the Git index: {error}"))?;
-    let mut entry = index
-        .get_path(Path::new(audio_rel), 0)
-        .ok_or_else(|| format!("Audio is not present in the Git index: {audio_rel}"))?;
-    if enabled {
-        entry.flags |= IndexEntryFlag::EXTENDED.bits();
-        entry.flags_extended |= IndexEntryExtendedFlag::SKIP_WORKTREE.bits();
-    } else {
-        entry.flags_extended &= !IndexEntryExtendedFlag::SKIP_WORKTREE.bits();
-        if entry.flags_extended == 0 {
-            entry.flags &= !IndexEntryFlag::EXTENDED.bits();
-        }
+    if root.join(audio_rel).is_file() {
+        return false;
     }
-    index
-        .add(&entry)
-        .and_then(|_| index.write())
-        .map_err(|error| format!("Failed to protect cached audio from Git deletion: {error}"))
+    let cache = read_json_or_default::<AudioCacheManifest>(&root.join(AUDIO_CACHE_REL_PATH));
+    cache.evicted.contains_key(audio_rel)
+        || read_json_or_default::<AudioReceiptManifest>(&root.join(AUDIO_RECEIPTS_REL_PATH))
+            .receipts
+            .contains_key(audio_rel)
 }
 
-fn hash_file(path: &Path) -> Result<(String, u64), String> {
-    let bytes = fs::read(path)
+pub(crate) fn audio_has_desktop_ack(
+    root: &Path,
+    audio_rel: &str,
+    sha256: &str,
+    byte_length: u64,
+) -> bool {
+    let receipt_path = root.join(AUDIO_RECEIPTS_REL_PATH);
+    if receipt_path.is_file() {
+        return read_json_or_default::<AudioReceiptManifest>(&receipt_path)
+            .receipts
+            .get(audio_rel)
+            .map(|receipt| receipt.sha256 == sha256 && receipt.byte_length == byte_length)
+            .unwrap_or(false);
+    }
+    let cache = read_json_or_default::<AudioCacheManifest>(&root.join(AUDIO_CACHE_REL_PATH));
+    cache
+        .desktop_acks
+        .get(audio_rel)
+        .map(|receipt| receipt.sha256 == sha256 && receipt.byte_length == byte_length)
+        .unwrap_or(false)
+}
+
+pub(crate) fn record_desktop_audio_ack(
+    root: &Path,
+    audio_rel: String,
+    sha256: String,
+    byte_length: u64,
+) -> Result<(), String> {
+    let path = root.join(AUDIO_CACHE_REL_PATH);
+    let mut cache = read_json_or_default::<AudioCacheManifest>(&path);
+    cache.desktop_acks.insert(
+        audio_rel.clone(),
+        AudioDurabilityReceipt {
+            audio_path: audio_rel,
+            sha256,
+            byte_length,
+            verified_on_desktop_ms: now_ms().unwrap_or(0),
+        },
+    );
+    write_json(&path, &cache)
+}
+
+pub(crate) fn hash_file(path: &Path) -> Result<(String, u64), String> {
+    use std::io::Read as _;
+
+    let mut file = fs::File::open(path)
         .map_err(|error| format!("Failed to verify audio '{}': {error}", path.display()))?;
-    let byte_length = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
-    let sha256 = format!("{:x}", Sha256::digest(&bytes));
+    let mut hasher = Sha256::new();
+    let mut byte_length = 0u64;
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|error| format!("Failed to verify audio '{}': {error}", path.display()))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+        byte_length = byte_length.saturating_add(read as u64);
+    }
+    let sha256 = format!("{:x}", hasher.finalize());
     Ok((sha256, byte_length))
 }
 
@@ -302,6 +360,7 @@ mod tests {
         )
         .unwrap();
         let repo = ensure_git_repo(&root).unwrap();
+        crate::set_audio_git_exclusion(&repo, true).unwrap();
         commit_all_changes(&repo, "fixture", "main").unwrap();
         root
     }
@@ -310,6 +369,20 @@ mod tests {
     fn evicts_only_after_matching_receipt_completed_and_week_old() {
         let now = 2_000_000_000_000i64;
         let root = recording_fixture("eligible", "completed", now - 8 * DAY_MS);
+        let repo = Repository::open(&root).unwrap();
+        assert!(repo
+            .index()
+            .unwrap()
+            .get_path(Path::new("Recordings/audio.m4a"), 0)
+            .is_none());
+        assert!(repo
+            .head()
+            .unwrap()
+            .peel_to_tree()
+            .unwrap()
+            .get_path(Path::new("Recordings/audio.m4a"))
+            .is_err());
+        drop(repo);
         let issued = issue_desktop_audio_receipts(&root).unwrap();
         assert_eq!(issued.issued, 1);
         let repo = Repository::open(&root).unwrap();
@@ -365,6 +438,25 @@ mod tests {
             &root.join(AUDIO_RECEIPTS_REL_PATH),
         );
         assert!(manifest.receipts.is_empty());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn keeps_legacy_audio_that_is_still_stored_in_git() {
+        let now = 2_000_000_000_000i64;
+        let root = recording_fixture("legacy", "completed", now - 8 * DAY_MS);
+        let repo = Repository::open(&root).unwrap();
+        crate::set_audio_git_exclusion(&repo, false).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("Recordings/audio.m4a")).unwrap();
+        index.write().unwrap();
+        commit_all_changes(&repo, "legacy tracked audio", "main").unwrap();
+        issue_desktop_audio_receipts(&root).unwrap();
+
+        let result = prune_mobile_audio_cache_at(&root, now).unwrap();
+        assert_eq!(result.evicted, 0);
+        assert_eq!(result.waiting_for_git_migration, 1);
+        assert!(root.join("Recordings/audio.m4a").exists());
         fs::remove_dir_all(root).unwrap();
     }
 }
