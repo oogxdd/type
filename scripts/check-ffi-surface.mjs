@@ -52,7 +52,10 @@ function collectRawCoreMethods() {
     process.exit(2);
   }
   const names = new Set();
-  for (const match of block[1].matchAll(/^\s{2}([a-zA-Z0-9_]+)\(/gm)) {
+  // Optional methods are still part of the declared bridge surface. They are
+  // used for backwards-compatible feature detection against older generated
+  // native modules (for example `getGitSyncProgress?()`).
+  for (const match of block[1].matchAll(/^\s{2}([a-zA-Z0-9_]+)\??\(/gm)) {
     names.add(match[1]);
   }
   return names;

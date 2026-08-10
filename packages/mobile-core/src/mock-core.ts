@@ -10,7 +10,12 @@
 // transcription_mode merge rule), but it is deliberately a toy: nothing
 // persists, git operations only simulate success.
 
-import type { FolderNode, NoteMeta, ProfileSettings } from "@typenotes/shared/types";
+import type {
+  AudioImportState,
+  FolderNode,
+  NoteMeta,
+  ProfileSettings,
+} from "@typenotes/shared/types";
 
 import type { RawCore, RawTranscriptionProvider } from "./raw-core";
 
@@ -81,6 +86,18 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
   let appConfig = defaultAppConfig();
   let commits: { id: string; summary: string; authored_ms: number }[] = [];
   let sshPublicKey: string | null = null;
+  let audioImport: AudioImportState = {
+    running: false,
+    done: false,
+    total: 0,
+    processed: 0,
+    imported: 0,
+    failed: 0,
+    current: "",
+    target_folder: "",
+    error: null,
+    errors: [],
+  };
 
   let security = {
     encryption_enabled: false,
@@ -483,6 +500,41 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
         audio_base64: payload.base64,
       });
     },
+    // The real core copies each file on a worker thread and the caller polls
+    // for progress. Nothing to copy here, so the import completes inline and
+    // the first status poll already reports `done`.
+    importAudioFiles: async (argsJson) => {
+      const args = JSON.parse(argsJson) as {
+        source_paths: string[];
+        target_folder?: string | null;
+      };
+      const folder = args.target_folder || FEED;
+      audioImport = {
+        running: false,
+        done: true,
+        total: args.source_paths.length,
+        processed: args.source_paths.length,
+        imported: args.source_paths.length,
+        failed: 0,
+        current: "",
+        target_folder: folder,
+        error: null,
+        errors: [],
+      };
+      for (const source of args.source_paths) {
+        counter += 1;
+        const extension = source.split(".").pop() || "m4a";
+        const audioPath = `${RECORDINGS}/audio-${counter}.${extension}`;
+        audio.set(audioPath, { base64: "", mimeType: "audio/mp4" });
+        newNote(folder, "", now(), {
+          note_type: "audio_recording",
+          recording_audio_path: audioPath,
+          transcription_status: "pending",
+          transcription_updated_ms: now(),
+        });
+      }
+    },
+    audioImportStatus: async () => JSON.stringify(audioImport),
 
     // ── Photo attachments ──
     saveHandwritingAttachment: async (argsJson) => {

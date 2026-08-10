@@ -69,6 +69,14 @@ export interface RawCore {
   queueProviderTranscriptions(provider: RawTranscriptionProvider): Promise<string>;
   listRecordings(): Promise<string>;
   readRecordingAudio(path: string): Promise<string>;
+  /** Import audio files already on disk (shared in, or picked from Files).
+   * Starts a background worker; poll `audioImportStatus`.
+   * Optional: absent in native modules generated before it existed —
+   * `core-api` feature-detects and falls back to base64 `saveAudioRecording`. */
+  importAudioFiles?(argsJson: string): Promise<void>;
+  /** Progress of the current/last `importAudioFiles` run. Optional for the
+   * same reason as `importAudioFiles`. */
+  audioImportStatus?(): Promise<string>;
 
   // ── Photo attachments ──
   saveHandwritingAttachment(argsJson: string): Promise<string>;

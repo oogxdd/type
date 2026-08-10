@@ -1,9 +1,11 @@
 // The floating dictation button (bottom-right of the capture page) — this
 // replaced the old Record screen. Tap to start, tap again to stop. Long press
-// reveals camera/gallery actions for handwriting
-// photos. Saving goes through the core (Feed note + audio/image file +
-// transcription_status: pending), then queues transcription according to the
-// working folder's transcription_mode:
+// reveals camera/gallery actions for handwriting photos, plus an action for
+// importing an audio file that already exists on the phone (a Voice Memo saved
+// to Files, say — sharing one straight into Type is handled in App.tsx and
+// takes the same path). Saving goes through the core (Feed note + audio/image
+// file + transcription_status: pending), then queues transcription according
+// to the working folder's transcription_mode:
 //
 //   assemblyai → cloud queue now, on this device
 //   native     → on-device speech recognition via the expo-speech-recognition
@@ -19,6 +21,7 @@ import {
   useAudioRecorder,
   useAudioRecorderState,
 } from "expo-audio";
+import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useRef, useState } from "react";
@@ -31,7 +34,7 @@ import {
   type TranscriptionMode,
 } from "@typenotes/shared/types";
 
-import { nativeTranscriptionProvider } from "../lib/native-transcription";
+import { runAudioImport } from "../lib/audio-intake";
 import {
   addRecordingStopListener,
   consumePendingRecordingStop,
@@ -39,6 +42,7 @@ import {
   startRecordingActivity,
 } from "../lib/recording-activity";
 import { elapsedSeconds, formatRecordingTimer } from "../lib/recording-timer";
+import { startTranscription } from "../lib/transcription-queue";
 import { useNotesStore } from "../state/notes-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useTheme } from "../theme";
@@ -179,21 +183,13 @@ export const DictationButton = ({
         mime_type: "audio/mp4",
       });
 
-      let detail = MODE_SAVED_DETAIL[mode];
-      if (mode === "assemblyai") {
-        try {
-          await core.queueRecordingTranscriptions();
-        } catch (queueError) {
-          detail = `Saved, but queueing failed: ${getErrorMessage(queueError)}`;
-        }
-      } else if (mode === "native") {
-        try {
-          await core.queueProviderTranscriptions(nativeTranscriptionProvider);
-        } catch (queueError) {
-          detail = `Saved, but queueing failed: ${getErrorMessage(queueError)}`;
-        }
-      }
-      showStatus({ kind: "success", text: detail });
+      const queueError = await startTranscription(mode);
+      showStatus({
+        kind: "success",
+        text: queueError
+          ? `Saved, but queueing failed: ${queueError}`
+          : MODE_SAVED_DETAIL[mode],
+      });
       void useNotesStore.getState().refresh();
     } catch (err) {
       showStatus({ kind: "error", text: getErrorMessage(err) });
@@ -255,6 +251,38 @@ export const DictationButton = ({
       });
       showStatus({ kind: "success", text: "Saved — your desktop will recognize it" });
       void useNotesStore.getState().refresh();
+    } catch (err) {
+      showStatus({ kind: "error", text: getErrorMessage(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Import audio that already exists on the phone — a voice memo exported to
+  // Files, a clip someone sent. Multi-select: the core imports them as one
+  // background run, one note per file.
+  const chooseAudioFiles = async () => {
+    setAttachmentMenuOpen(false);
+    setBusy(true);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "audio/*",
+        multiple: true,
+        // Without this the picker can hand back a URL we lose access to as
+        // soon as it closes; the copy in the cache is ours to read and delete.
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled) {
+        return;
+      }
+      const { imported, message } = await runAudioImport(
+        result.assets.map((asset) => ({
+          uri: asset.uri,
+          name: asset.name,
+          discardAfterImport: true,
+        }))
+      );
+      showStatus({ kind: imported > 0 ? "success" : "error", text: message });
     } catch (err) {
       showStatus({ kind: "error", text: getErrorMessage(err) });
     } finally {
@@ -393,6 +421,22 @@ export const DictationButton = ({
             ]}
           >
             <Ionicons name="images-outline" size={22} color={theme.colors.text} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Import audio file"
+            onPress={() => void chooseAudioFiles()}
+            disabled={busy}
+            style={({ pressed }) => [
+              styles.attachmentAction,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                opacity: pressed ? 0.6 : 1,
+              },
+            ]}
+          >
+            <Ionicons name="musical-notes-outline" size={22} color={theme.colors.text} />
           </Pressable>
         </View>
       ) : null}

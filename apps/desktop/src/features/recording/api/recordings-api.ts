@@ -1,6 +1,8 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { invokeLogged } from "@/shared/api/invoke";
 import type {
+  AudioImportState,
+  ImportAudioFilesArgs,
   NoteFileNameFormat,
   RecordingAudioPayload,
   RecordingsListResult,
@@ -9,25 +11,7 @@ import type {
   WhisperStatusResult,
 } from "@typenotes/shared/types";
 
-export type ImportAudioFilesArgs = {
-  source_paths: string[];
-  target_folder?: string;
-  file_name_format: NoteFileNameFormat;
-};
-
-/** Pollable bulk-import progress (see backend `AudioImportState`). */
-export type AudioImportState = {
-  running: boolean;
-  done: boolean;
-  total: number;
-  processed: number;
-  imported: number;
-  failed: number;
-  current: string;
-  target_folder: string;
-  error: string | null;
-  errors: string[];
-};
+export type { AudioImportState, ImportAudioFilesArgs };
 
 export const saveAudioRecording = (
   audioBase64: string,

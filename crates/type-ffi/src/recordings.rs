@@ -9,7 +9,8 @@ use std::sync::Arc;
 
 use type_core::{
     application::recordings::RecordingsUseCases, queue_recordings_for_provider_transcription,
-    QueueRecordingsArgs, ReadRecordingAudioArgs, RecordingsAdapter, SaveRecordingArgs,
+    ImportAudioFilesArgs, QueueRecordingsArgs, ReadRecordingAudioArgs, RecordingsAdapter,
+    SaveRecordingArgs,
 };
 
 use crate::{from_json, run_blocking, to_json, unlocked_env, CoreError};
@@ -100,7 +101,9 @@ pub async fn queue_provider_transcriptions(
         let root = type_core::ensured_notes_root(&unlocked_env()?)?;
         let bridged: Arc<dyn type_core::ports::recordings::TranscriptionProvider> =
             Arc::new(ForeignTranscriptionProvider(provider));
-        to_json(&queue_recordings_for_provider_transcription(&root, bridged)?)
+        to_json(&queue_recordings_for_provider_transcription(
+            &root, bridged,
+        )?)
     })
     .await
 }
@@ -120,4 +123,32 @@ pub async fn read_recording_audio(path: String) -> Result<String, CoreError> {
         to_json(&recordings_use_cases()?.read_audio(args)?)
     })
     .await
+}
+
+/// Import audio files that already exist on disk (a Voice Memo shared into the
+/// app, files picked from Files) as recording notes — one note per file,
+/// `transcription_status: pending`, each keeping the source file's own creation
+/// date rather than "now".
+///
+/// `args_json`: `ImportAudioFilesArgs` (`source_paths` — **absolute** paths, not
+/// `file://` URLs — plus optional `target_folder` / `file_name_format`).
+///
+/// Returns as soon as the background worker starts; poll
+/// [`audio_import_status`] for progress. Unlike `save_audio_recording`, the
+/// bytes never cross the FFI boundary — the core copies each file itself, which
+/// is what makes hour-long memos practical on a phone.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn import_audio_files(args_json: String) -> Result<(), CoreError> {
+    run_blocking(move || {
+        let args: ImportAudioFilesArgs = from_json(&args_json)?;
+        RecordingsAdapter::new(unlocked_env()?).import_audio_files(args)
+    })
+    .await
+}
+
+/// Progress of the current/last [`import_audio_files`] run as JSON
+/// (`AudioImportState`).
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn audio_import_status() -> Result<String, CoreError> {
+    run_blocking(|| to_json(&RecordingsAdapter::new(unlocked_env()?).audio_import_status())).await
 }

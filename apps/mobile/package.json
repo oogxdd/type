@@ -21,6 +21,7 @@
     "expo": "~57.0.4",
     "expo-audio": "~57.0.0",
     "expo-camera": "~57.0.1",
+    "expo-document-picker": "~57.0.0",
     "expo-file-system": "~57.0.0",
     "expo-image-picker": "~57.0.2",
     "expo-speech-recognition": "^56.0.1",

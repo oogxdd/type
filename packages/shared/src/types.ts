@@ -383,6 +383,35 @@ export type QueueRecordingsArgs = {
   assembly_api_key?: string | null;
 };
 
+/**
+ * Import audio files that already exist on disk as recording notes — one note
+ * per file, each keeping the source file's creation date. `source_paths` are
+ * absolute filesystem paths, never `file://` URLs.
+ */
+export type ImportAudioFilesArgs = {
+  source_paths: string[];
+  target_folder?: string | null;
+  file_name_format?: NoteFileNameFormat;
+};
+
+/** Pollable progress of the current/last `import_audio_files` run. */
+export type AudioImportState = {
+  running: boolean;
+  done: boolean;
+  total: number;
+  processed: number;
+  imported: number;
+  failed: number;
+  /** Name of the file currently being copied. */
+  current: string;
+  /** Resolved destination folder, for the UI summary. */
+  target_folder: string;
+  /** Fatal error that aborted the whole run, if any. */
+  error: string | null;
+  /** Sample of per-file failures (the backend caps this). */
+  errors: string[];
+};
+
 export type ConnectGitArgs = {
   remote_url?: string | null;
   branch?: string | null;

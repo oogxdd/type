@@ -29,6 +29,19 @@
         "NSLocalNetworkUsageDescription": "Type connects to your computer over the local network to sync your notes.",
         "NSBonjourServices": [
           "_typenotes-sync._tcp"
+        ],
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "Audio recording",
+            "CFBundleTypeRole": "Editor",
+            "LSHandlerRank": "Alternate",
+            "LSItemContentTypes": [
+              "public.mpeg-4-audio",
+              "public.mp3",
+              "public.aac-audio",
+              "com.microsoft.waveform-audio"
+            ]
+          }
         ]
       }
     },

@@ -395,7 +395,9 @@ impl RecordingsAdapter {
     /// Start a bulk import of existing audio files (e.g. Voice Memos already
     /// on disk) as recording notes, one per file, in a background worker
     /// thread. Progress is polled via [`Self::audio_import_status`]. Not part
-    /// of [`RecordingsGateway`] — desktop-only (needs a native file picker).
+    /// of [`RecordingsGateway`] — it needs the shell's own file picker or
+    /// share sheet to produce `source_paths` (a desktop native dialog, or on
+    /// mobile a document picker / an audio file shared into the app).
     pub fn import_audio_files(&self, args: ImportAudioFilesArgs) -> Result<(), String> {
         let root = crate::ensured_notes_root(&self.app)?;
         let (target_folder_rel, target_folder_path) =
@@ -569,7 +571,10 @@ pub fn is_recording_audio_path_allowed(root: &Path, audio_path: &Path) -> bool {
 /// it lands inside the allowed recordings storage folders and actually exists.
 /// Shared by the base64 IPC read and the asset-protocol path resolver so both
 /// shells enforce the exact same boundary.
-pub fn resolve_recording_audio_absolute_path(root: &Path, path_rel: &str) -> Result<PathBuf, String> {
+pub fn resolve_recording_audio_absolute_path(
+    root: &Path,
+    path_rel: &str,
+) -> Result<PathBuf, String> {
     let rel = sanitize_relative(path_rel)?;
     let audio_path = root.join(rel);
     if !is_recording_audio_path_allowed(root, &audio_path) {
@@ -1076,7 +1081,9 @@ pub fn resolve_recording_target_folder(
 // pattern (adapters/import.rs): one note per source file, each preserving
 // the source file's real creation date instead of "now". Unlike the
 // live-recording save() path, the source bytes are already on disk, so this
-// copies the file directly rather than round-tripping it through base64.
+// copies the file directly rather than round-tripping it through base64 —
+// which is what lets the mobile shell import an hour-long voice memo that
+// would be too large to hand across the FFI boundary as a base64 string.
 
 const MAX_AUDIO_IMPORT_ERRORS: usize = 25;
 
@@ -1169,7 +1176,8 @@ fn audio_import_inner(
     for source_rel in &args.source_paths {
         let source = PathBuf::from(source_rel);
         with_audio_import_state(|state| state.current = audio_import_title(&source));
-        let outcome = import_one_audio_file(root, target_folder_path, &source, args.file_name_format);
+        let outcome =
+            import_one_audio_file(root, target_folder_path, &source, args.file_name_format);
         with_audio_import_state(|state| {
             state.processed += 1;
             match outcome {

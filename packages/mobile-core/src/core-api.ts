@@ -5,6 +5,7 @@
 
 import type {
   AppConfig,
+  AudioImportState,
   ConnectGitArgs,
   CreateNoteArgs,
   CreateNoteResult,
@@ -18,6 +19,7 @@ import type {
   GitSyncStatus,
   GitTransferProgress,
   HandwritingAttachmentWriteResult,
+  ImportAudioFilesArgs,
   NoteMeta,
   NotePreviewEntry,
   ProfilesBackupArchive,
@@ -235,6 +237,49 @@ export const readRecordingAudio = async (
   path: string
 ): Promise<RecordingAudioPayload> =>
   parse(await getRawCore().readRecordingAudio(path));
+
+/**
+ * True when the linked native module can import audio files by path. Native
+ * modules generated before `import_audio_files` existed lack it; callers fall
+ * back to reading the file and going through `saveAudioRecording` instead
+ * (see `apps/mobile/src/lib/audio-import.ts`).
+ */
+export const supportsAudioFileImport = (): boolean => {
+  const raw = getRawCore();
+  return (
+    typeof raw.importAudioFiles === "function" &&
+    typeof raw.audioImportStatus === "function"
+  );
+};
+
+/**
+ * Import audio files that already exist on disk as recording notes, one per
+ * file. `source_paths` must be absolute paths (strip any `file://` scheme
+ * first). Resolves once the background worker has started — poll
+ * `getAudioImportStatus` for progress.
+ */
+export const importAudioFiles = async (
+  args: ImportAudioFilesArgs
+): Promise<void> => {
+  const raw = getRawCore();
+  if (!raw.importAudioFiles) {
+    throw new Error(
+      "This build's native core cannot import audio files by path. " +
+        "Regenerate the native module (see packages/mobile-core/README.md)."
+    );
+  }
+  await raw.importAudioFiles(JSON.stringify(args));
+};
+
+export const getAudioImportStatus = async (): Promise<AudioImportState> => {
+  const raw = getRawCore();
+  if (!raw.audioImportStatus) {
+    throw new Error(
+      "This build's native core cannot report audio import progress."
+    );
+  }
+  return parse(await raw.audioImportStatus());
+};
 
 // ── Photo attachments ────────────────────────────────────────────────────────
 

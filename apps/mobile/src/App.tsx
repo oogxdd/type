@@ -4,7 +4,7 @@ import {
   NavigationContainer,
 } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Linking, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -13,6 +13,8 @@ import { getErrorMessage } from "@typenotes/shared/errors";
 import { parseSyncDeepLink } from "@typenotes/shared/sync-link";
 
 import { bootCore } from "./core/boot";
+import { isSupportedAudioFile } from "./lib/audio-import";
+import { runAudioImport } from "./lib/audio-intake";
 import { navigateToScreen, navigationRef, Stack } from "./navigation";
 import { CaptureScreen } from "./screens/capture-screen";
 import { EditorScreen } from "./screens/editor-screen";
@@ -133,14 +135,18 @@ const RootStack = () => {
  * system camera) drops the remote into the sync store and jumps to the Sync
  * screen, which applies it.
  */
-const handleSyncUrl = (url: string | null) => {
+const handleSyncUrl = (url: string | null): boolean => {
   const params = url ? parseSyncDeepLink(url) : null;
   if (!params) {
-    return;
+    return false;
   }
   useSyncStore.getState().setPendingLink(params);
   navigateToScreen("Sync");
+  return true;
 };
+
+/** How long an import banner stays up before fading out on its own. */
+const IMPORT_STATUS_MS = 5000;
 
 export default function App() {
   const theme = useTheme();
@@ -165,6 +171,67 @@ export default function App() {
   }, [theme]);
   const demoMode = useSettingsStore((s) => s.demoMode);
   const initialUrlHandled = useRef(false);
+  const pendingAudioUrl = useRef<string | null>(null);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const importStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showImportStatus = useCallback((text: string | null) => {
+    if (importStatusTimer.current) {
+      clearTimeout(importStatusTimer.current);
+      importStatusTimer.current = null;
+    }
+    setImportStatus(text);
+    if (text) {
+      importStatusTimer.current = setTimeout(
+        () => setImportStatus(null),
+        IMPORT_STATUS_MS
+      );
+    }
+  }, []);
+  useEffect(
+    () => () => {
+      if (importStatusTimer.current) {
+        clearTimeout(importStatusTimer.current);
+      }
+    },
+    []
+  );
+
+  /**
+   * Everything the OS hands us as a URL: the desktop's sync QR code, and audio
+   * files opened into Type from Voice Memos or Files ("Copy to Type" — iOS
+   * copies the file into Documents/Inbox and opens the app with its file://
+   * URL). An imported memo becomes an ordinary recording note in Feed, so the
+   * jump there shows it landing and then transcribing.
+   */
+  const handleIncomingUrl = useCallback(
+    async (url: string | null) => {
+      if (!url || handleSyncUrl(url)) {
+        return;
+      }
+      if (!isSupportedAudioFile(url)) {
+        return;
+      }
+      // Content calls are rejected while encrypted mode is locked. Remember a
+      // live share event here: unlike the cold-start URL, iOS will not deliver
+      // it a second time after the user unlocks Type.
+      if (isLocked(useSecurityStore.getState().state)) {
+        pendingAudioUrl.current = url;
+        return;
+      }
+      showImportStatus("Importing audio…");
+      try {
+        const { imported, message } = await runAudioImport([{ uri: url }]);
+        showImportStatus(message);
+        if (imported > 0) {
+          navigateToScreen("Feed");
+        }
+      } catch (error) {
+        showImportStatus(getErrorMessage(error));
+      }
+    },
+    [showImportStatus]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -203,11 +270,11 @@ export default function App() {
   // Deep links while the app is running; the initial (cold-start) URL is
   // picked up in the container's onReady below.
   useEffect(() => {
-    const subscription = Linking.addEventListener("url", ({ url }) =>
-      handleSyncUrl(url)
-    );
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      void handleIncomingUrl(url);
+    });
     return () => subscription.remove();
-  }, []);
+  }, [handleIncomingUrl]);
 
   // Auto-lock when the app goes to background (if enabled in security prefs).
   useEffect(() => {
@@ -226,6 +293,15 @@ export default function App() {
 
   const securityState = useSecurityStore((s) => s.state);
   const locked = isLocked(securityState);
+
+  useEffect(() => {
+    if (locked || !pendingAudioUrl.current) {
+      return;
+    }
+    const url = pendingAudioUrl.current;
+    pendingAudioUrl.current = null;
+    void handleIncomingUrl(url);
+  }, [handleIncomingUrl, locked]);
 
   if (phase.state !== "ready") {
     return (
@@ -259,7 +335,7 @@ export default function App() {
           onReady={() => {
             if (!initialUrlHandled.current) {
               initialUrlHandled.current = true;
-              void Linking.getInitialURL().then(handleSyncUrl);
+              void Linking.getInitialURL().then(handleIncomingUrl);
             }
           }}
         >
@@ -267,6 +343,26 @@ export default function App() {
             <RootStack />
           </ErrorBoundary>
         </NavigationContainer>
+        {/* A file shared into Type can land on any screen, so its result is
+            reported here rather than in the capture page's status pill. */}
+        {importStatus ? (
+          <View
+            style={[
+              styles.importBanner,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <Text
+              style={[styles.importBannerText, { color: theme.colors.text }]}
+              numberOfLines={2}
+            >
+              {importStatus}
+            </Text>
+          </View>
+        ) : null}
         {demoMode ? (
           <View style={[styles.demoBanner, { backgroundColor: theme.colors.accent }]}>
             <Text style={styles.demoBannerText}>
@@ -293,4 +389,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   demoBannerText: { color: "#ffffff", fontSize: 12, fontWeight: "600" },
+  // Same pill language as the capture page's status, parked above the demo
+  // banner so the two never overlap.
+  importBanner: {
+    position: "absolute",
+    bottom: 28,
+    left: 16,
+    right: 16,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  importBannerText: { fontSize: 13 },
 });
