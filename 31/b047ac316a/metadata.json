@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "31b047ac316a",
+  "strategy": "manual-commit",
+  "branch": "agent/document-ios-testflight-actions",
+  "checkpoints_count": 5,
+  "files_touched": [
+    ".github/workflows/mobile-testflight.yml",
+    "apps/mobile/ios/Podfile",
+    "apps/mobile/modules/recording-activity/plugin/__tests__/add-widget-target.test.mjs",
+    "apps/mobile/modules/recording-activity/plugin/withRecordingActivity.js",
+    "docs/MOBILE_TESTFLIGHT_GITHUB_ACTIONS_NATIVE.md",
+    "docs/RELEASING.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/31/b047ac316a/0/metadata.json",
+      "transcript": "/31/b047ac316a/0/full.jsonl",
+      "context": "",
+      "content_hash": "/31/b047ac316a/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}

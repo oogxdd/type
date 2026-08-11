@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "31b047ac316a",
+  "session_id": "019ff288-7dc8-7ae3-9d82-ac20f29c5965",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-11T22:47:26.132466Z",
+  "branch": "agent/document-ios-testflight-actions",
+  "checkpoints_count": 5,
+  "files_touched": [
+    ".github/workflows/mobile-testflight.yml",
+    "apps/mobile/ios/Podfile",
+    "apps/mobile/modules/recording-activity/plugin/__tests__/add-widget-target.test.mjs",
+    "apps/mobile/modules/recording-activity/plugin/withRecordingActivity.js",
+    "docs/MOBILE_TESTFLIGHT_GITHUB_ACTIONS_NATIVE.md",
+    "docs/RELEASING.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f99718b8c438",
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-11T22:47:25.413964Z",
+    "agent_lines": 37,
+    "human_added": 0,
+    "human_modified": 414,
+    "human_removed": 112,
+    "total_committed": 451,
+    "agent_percentage": 8.2039911308204
+  }
+}
