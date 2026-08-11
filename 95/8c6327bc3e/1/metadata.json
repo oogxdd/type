@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "958c6327bc3e",
+  "session_id": "87982bbe-c2cd-4c0a-a831-b62ac43a016d",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-11T20:34:49.969882Z",
+  "branch": "feed-relative-buckets-iso-weeks",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/desktop/src/features/notes/navigation/model/feed-tree-model.test.ts",
+    "apps/desktop/src/features/notes/navigation/model/feed-tree-model.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "827d371353fa",
+  "token_usage": {
+    "input_tokens": 2491,
+    "cache_creation_tokens": 986589,
+    "cache_read_tokens": 43095142,
+    "output_tokens": 173699,
+    "api_call_count": 234
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-11T20:34:49.541291Z",
+    "agent_lines": 198,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 198,
+    "agent_percentage": 100
+  }
+}
