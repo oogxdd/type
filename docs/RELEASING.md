@@ -126,6 +126,10 @@ Everything that matters — `notes/`, `profiles/`, `config.json`,
 
 ## 3. How to cut a mobile release
 
+For the native Xcode build and direct App Store Connect upload used by the
+GitHub-hosted macOS runner, see
+[MOBILE_TESTFLIGHT_GITHUB_ACTIONS_NATIVE.md](./MOBILE_TESTFLIGHT_GITHUB_ACTIONS_NATIVE.md).
+
 ```bash
 git checkout main && git pull
 git tag mobile-v0.2.0
@@ -137,8 +141,8 @@ CI ([`.github/workflows/mobile-testflight.yml`](../.github/workflows/mobile-test
 1. creates a metadata-only GitHub Release without changing the desktop Latest,
 2. runs on a macOS runner,
 3. generates the iOS UniFFI/native module from `packages/mobile-core`,
-4. builds a local EAS `.ipa` from `apps/mobile`, and
-5. submits that `.ipa` to TestFlight.
+4. archives and exports an `.ipa` with Xcode, and
+5. validates and uploads that `.ipa` directly to App Store Connect/TestFlight.
 
 The workflow sets `MOBILE_VERSION` from the tag and uses the GitHub run number
 as `IOS_BUILD_NUMBER`. For a manual rerun, use Actions → **Mobile TestFlight**
@@ -152,12 +156,23 @@ Add under **Settings → Secrets and variables → Actions**.
 
 ### Mobile (required)
 
-| Secret       | What it is                                      |
-| ------------ | ----------------------------------------------- |
-| `EXPO_TOKEN` | Expo access token with access to the EAS project |
+The `ios` job uses the `testflight` GitHub Environment. Add the following as
+environment secrets (or repository secrets if environment scoping is not
+desired):
 
-EAS must also have remote iOS build credentials for `com.typenotes.mobile` and
-submit credentials for App Store Connect.
+| Secret | What it is |
+| --- | --- |
+| `APPLE_TEAM_ID` | Apple Developer team ID |
+| `APP_STORE_CONNECT_KEY_ID` | Team App Store Connect API key ID |
+| `APP_STORE_CONNECT_ISSUER_ID` | Team App Store Connect API issuer ID |
+| `APP_STORE_CONNECT_PRIVATE_KEY` | Complete contents of the API key `.p8` file |
+
+The runner creates an unsigned intermediate archive, then Xcode uses the team
+API key and cloud-managed signing to export the signed IPA. A distribution
+`.p12`, temporary Keychain, `EXPO_TOKEN`, and EAS-managed credentials are not
+used by the native workflow.
+See [MOBILE_TESTFLIGHT_GITHUB_ACTIONS_NATIVE.md](./MOBILE_TESTFLIGHT_GITHUB_ACTIONS_NATIVE.md)
+for the one-time Apple and GitHub setup.
 
 ### Desktop (required)
 
