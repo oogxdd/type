@@ -15,7 +15,11 @@ import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 const xcode = require("xcode");
-const { addWidgetTarget, WIDGET_NAME } = require("../withRecordingActivity.js");
+const {
+  addRustCoreLinkerFlagsToPodfile,
+  addWidgetTarget,
+  WIDGET_NAME,
+} = require("../withRecordingActivity.js");
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PBXPROJ = path.join(here, "..", "..", "..", "..", "ios", "Type.xcodeproj", "project.pbxproj");
@@ -109,5 +113,28 @@ describe("addWidgetTarget against the real project.pbxproj", () => {
 
   it("is idempotent on a second run", () => {
     expect(addWidgetTarget(proj, APP_BUNDLE_ID)).toBe(false);
+  });
+});
+
+describe("addRustCoreLinkerFlagsToPodfile", () => {
+  const generatedPodfile = `post_install do |installer|
+    react_native_post_install(
+      installer,
+      config[:reactNativePath],
+      :mac_catalyst_enabled => false,
+      :ccache_enabled => ccache_enabled?(podfile_properties),
+    )
+  end`;
+
+  it("adds zlib and iconv to the generated aggregate xcconfigs", () => {
+    const patched = addRustCoreLinkerFlagsToPodfile(generatedPodfile);
+    expect(patched).toContain("@typenotes/link-rust-system-libraries");
+    expect(patched).toContain("['-lz', '-liconv']");
+    expect(patched).toContain("Pods-Type.*.xcconfig");
+  });
+
+  it("is idempotent", () => {
+    const once = addRustCoreLinkerFlagsToPodfile(generatedPodfile);
+    expect(addRustCoreLinkerFlagsToPodfile(once)).toBe(once);
   });
 });

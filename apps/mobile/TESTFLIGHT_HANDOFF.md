@@ -19,8 +19,9 @@ the toolchain (Xcode ≥ 26.6); no source patches are needed.
   - Key ID: `W2Y52J5N33`
   - Issuer ID: `bd0c62da-fcbf-4770-a10d-2ee30da0963e`
   - Key file: `~/.appstoreconnect/private_keys/AuthKey_W2Y52J5N33.p8`
-- **Signing:** automatic, team `Y377P5XKGJ`. `ios/ExportOptions.plist` is written
-  for `app-store-connect` export.
+- **Signing:** automatic, team `Y377P5XKGJ`.
+  `apps/mobile/ExportOptions.plist` is kept outside generated `ios/` and is
+  written for `app-store-connect` export.
 - **Export compliance** is pre-answered in config (`ITSAppUsesNonExemptEncryption`
   in `app.json`), so uploads don't prompt the encryption questionnaire — see
   `EXPORT_COMPLIANCE.md`.
@@ -36,12 +37,11 @@ Rust core xcframework generated with a **device** slice
    per TestFlight upload; we use a date-based `YYYYMMDDNN`). Bump `version` for a
    new marketing version.
 
-2. **Align deps + regenerate the native project.** `--clean` wipes `ios/`
-   (including `ExportOptions.plist`, which is git-tracked — restore it after):
+2. **Align deps + regenerate the native project.** `--clean` wipes `ios/`, but
+   the export options plist is deliberately stored one level above it:
    ```bash
    npx expo install --fix
    npx expo prebuild --platform ios --clean   # runs pod install
-   git checkout -- ios/ExportOptions.plist
    ```
    Verify the regenerated `ios/Type/Info.plist` has the camera / mic / speech
    permissions and the `type2` URL scheme, and `ios/Podfile.lock` includes
@@ -67,7 +67,7 @@ Rust core xcframework generated with a **device** slice
 4. **Export the `.ipa`:**
    ```bash
    xcodebuild -exportArchive -archivePath build/Type.xcarchive \
-     -exportOptionsPlist ExportOptions.plist -exportPath build/export \
+     -exportOptionsPlist ../ExportOptions.plist -exportPath build/export \
      -allowProvisioningUpdates \
      -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_W2Y52J5N33.p8 \
      -authenticationKeyID W2Y52J5N33 \
@@ -80,7 +80,7 @@ Rust core xcframework generated with a **device** slice
      --apiKey W2Y52J5N33 --apiIssuer bd0c62da-fcbf-4770-a10d-2ee30da0963e
    ```
 
-### ExportOptions.plist (git-tracked at `ios/ExportOptions.plist`)
+### ExportOptions.plist (git-tracked at `apps/mobile/ExportOptions.plist`)
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
