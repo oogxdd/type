@@ -3,7 +3,8 @@ name = "type-ffi"
 version = "0.1.0"
 description = "UniFFI bindings over type-core for non-Tauri shells (React Native)"
 license = "GPL-3.0"
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
 
 [lib]
 name = "type_ffi"

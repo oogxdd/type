@@ -3,6 +3,22 @@
 This experiment keeps the existing Git/SSH sync semantics and replaces only
 the network path between a phone and a desktop.
 
+## Version and stability boundary
+
+- Type pins Rust `1.97.1` in `rust-toolchain.toml`; the workspace manifests,
+  CI, desktop release, and iOS codegen all use that same toolchain.
+- The transport uses stable `iroh 1.0.3` and `iroh-tickets 1.0.0`.
+- The compatible blob protocol is `iroh-blobs 0.103.0`. Upstream explicitly
+  labels this rewritten line as not yet production quality and recommends
+  `0.35` for production blob workloads. Type accepts that risk only for this
+  opt-in experiment so the transport itself is not built on the legacy Iroh
+  wire protocol. Keep the adapter boundary and exact version pin until the
+  blob crate reaches its own stable release.
+- The rewritten blob store uses versioned `*-blobs-v103` cache directories.
+  It never opens or mutates a cache created by `iroh-blobs 0.35`.
+- Iroh 0.35 and 1.x peers are not wire-compatible. After upgrading both apps,
+  pair the phone again so it receives a new endpoint ticket.
+
 ## Transport
 
 - The desktop keeps its existing SSH Git server for LAN compatibility.

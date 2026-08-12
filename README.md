@@ -63,6 +63,9 @@ If you want a gentler architecture introduction in Russian, read
 
 ## Quick start
 
+Rust is pinned to `1.97.1` by `rust-toolchain.toml`. With `rustup` installed,
+Cargo selects and installs the same toolchain used by CI and release builds.
+
 ```bash
 npm install                  # once, at the repo root (npm workspaces)
 npm run desktop:dev          # desktop web dev server

@@ -8,26 +8,22 @@
 
 use crate::{app_data_dir, AppEnv};
 use iroh::{
-    endpoint::Connection,
-    protocol::{ProtocolHandler, Router},
-    Endpoint, SecretKey,
+    endpoint::{presets, Connection},
+    protocol::{AcceptError, ProtocolHandler, Router},
+    Endpoint, EndpointAddr, SecretKey,
 };
-use iroh_base::ticket::NodeTicket;
 use iroh_blobs::{
-    net_protocol::Blobs,
-    rpc::client::blobs::{MemClient as BlobsClient, WrapOption},
-    store::{ExportFormat, ExportMode},
+    api::{Store as BlobStore, TempTag},
+    store::fs::FsStore,
     ticket::BlobTicket,
-    util::SetTagOption,
-    BlobFormat,
+    BlobFormat, BlobsProtocol,
 };
+use iroh_tickets::endpoint::EndpointTicket;
 use rand_core::{OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
-    future::Future,
     path::{Path, PathBuf},
-    pin::Pin,
     str::FromStr,
     sync::Mutex,
     time::Duration,
@@ -113,8 +109,8 @@ impl IrohServerHandle {
 struct IrohClientHandle {
     runtime: tokio::runtime::Runtime,
     router: Router,
-    blobs: BlobsClient,
-    remote_addr: iroh::NodeAddr,
+    blobs: BlobStore,
+    remote_addr: EndpointAddr,
     ticket: String,
     endpoint_id: String,
     local_port: u16,
@@ -143,20 +139,21 @@ impl IrohClientHandle {
 struct TypeSyncProtocol {
     target_port: u16,
     repo_root: PathBuf,
-    blobs: BlobsClient,
+    endpoint: Endpoint,
+    blobs: BlobStore,
 }
 
 impl ProtocolHandler for TypeSyncProtocol {
-    fn accept(
-        &self,
-        connection: Connection,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'static>> {
-        let this = self.clone();
-        Box::pin(async move {
-            handle_iroh_connection(connection, this.target_port, this.repo_root, this.blobs)
-                .await
-                .map_err(anyhow::Error::msg)
-        })
+    async fn accept(&self, connection: Connection) -> Result<(), AcceptError> {
+        handle_iroh_connection(
+            connection,
+            self.target_port,
+            self.repo_root.clone(),
+            self.endpoint.clone(),
+            self.blobs.clone(),
+        )
+        .await
+        .map_err(|error| AcceptError::from_err(anyhow::Error::msg(error)))
     }
 }
 
@@ -169,22 +166,27 @@ pub fn start_iroh_sync_server(
     repo_root: PathBuf,
 ) -> Result<IrohServerHandle, String> {
     let secret = load_or_create_secret(app, "server.key")?;
-    let blobs_path = blob_store_path(app, "server-blobs")?;
+    // The post-0.35 blob store is a rewrite with a different on-disk format.
+    // Keep its cache isolated so an experimental upgrade cannot corrupt an
+    // older store. Both are disposable caches; durable audio lives in notes.
+    let blobs_path = blob_store_path(app, "server-blobs-v103")?;
     let runtime = runtime("Iroh sync server")?;
     let router = runtime.block_on(async {
-        let endpoint = Endpoint::builder()
+        let endpoint = Endpoint::builder(presets::N0)
             .secret_key(secret)
             .bind()
             .await
             .map_err(|error| format!("Failed to bind the Iroh sync endpoint: {error}"))?;
-        let blobs = Blobs::persistent(blobs_path)
+        let store = FsStore::load(blobs_path)
             .await
-            .map_err(|error| format!("Failed to open the desktop Iroh blob store: {error}"))?
-            .build(&endpoint);
+            .map_err(|error| format!("Failed to open the desktop Iroh blob store: {error}"))?;
+        let store: BlobStore = store.into();
+        let blobs = BlobsProtocol::new(&store, None);
         let sync = TypeSyncProtocol {
             target_port,
             repo_root,
-            blobs: blobs.client().clone(),
+            endpoint: endpoint.clone(),
+            blobs: store,
         };
         Ok::<Router, String>(
             Router::builder(endpoint)
@@ -196,15 +198,14 @@ pub fn start_iroh_sync_server(
 
     // A relay address makes the QR useful across networks. Offline startup is
     // still allowed: the ticket can retain direct addresses for LAN testing.
-    let node_addr = runtime
+    runtime
         .block_on(tokio::time::timeout(
             IROH_ONLINE_TIMEOUT,
-            router.endpoint().node_addr(),
+            router.endpoint().online(),
         ))
-        .map_err(|_| "Iroh did not discover a relay or direct address in time.".to_string())?
-        .map_err(|error| format!("Failed to resolve the Iroh endpoint address: {error}"))?;
-    let ticket = NodeTicket::new(node_addr).to_string();
-    let endpoint_id = router.endpoint().node_id().to_string();
+        .map_err(|_| "Iroh did not discover a relay or direct address in time.".to_string())?;
+    let ticket = EndpointTicket::new(router.endpoint().addr()).to_string();
+    let endpoint_id = router.endpoint().id().to_string();
 
     eprintln!("[iroh-sync] desktop endpoint ready: {endpoint_id}");
     Ok(IrohServerHandle {
@@ -224,7 +225,7 @@ pub fn start_iroh_sync_client(
     if ticket.is_empty() {
         return Err("The Iroh endpoint ticket is empty.".to_string());
     }
-    let parsed = NodeTicket::from_str(ticket)
+    let parsed = EndpointTicket::from_str(ticket)
         .map_err(|error| format!("The Iroh endpoint ticket is invalid: {error}"))?;
 
     let mut guard = CLIENT
@@ -240,19 +241,19 @@ pub fn start_iroh_sync_client(
     }
 
     let secret = load_or_create_secret(app, "client.key")?;
-    let blobs_path = blob_store_path(app, "client-blobs")?;
+    let blobs_path = blob_store_path(app, "client-blobs-v103")?;
     let runtime = runtime("Iroh sync client")?;
     let (router, blobs, listener) = runtime.block_on(async {
-        let endpoint = Endpoint::builder()
+        let endpoint = Endpoint::builder(presets::N0)
             .secret_key(secret)
             .bind()
             .await
             .map_err(|error| format!("Failed to bind the Iroh client endpoint: {error}"))?;
-        let blobs = Blobs::persistent(blobs_path)
+        let store = FsStore::load(blobs_path)
             .await
-            .map_err(|error| format!("Failed to open the phone Iroh blob store: {error}"))?
-            .build(&endpoint);
-        let blobs_client = blobs.client().clone();
+            .map_err(|error| format!("Failed to open the phone Iroh blob store: {error}"))?;
+        let store: BlobStore = store.into();
+        let blobs = BlobsProtocol::new(&store, None);
         let router = Router::builder(endpoint)
             .accept(iroh_blobs::ALPN, blobs)
             .spawn();
@@ -263,11 +264,11 @@ pub fn start_iroh_sync_client(
                 "Failed to start the phone sync proxy on port {IROH_CLIENT_PROXY_PORT}: {error}"
             )
             })?;
-        Ok::<_, String>((router, blobs_client, listener))
+        Ok::<_, String>((router, store, listener))
     })?;
 
-    let endpoint_id = parsed.node_addr().node_id.to_string();
-    let remote_addr = parsed.node_addr().clone();
+    let endpoint_id = parsed.endpoint_addr().id.to_string();
+    let remote_addr = parsed.endpoint_addr().clone();
     let proxy_remote_addr = remote_addr.clone();
     let accept_endpoint = router.endpoint().clone();
     runtime.spawn(async move {
@@ -335,7 +336,7 @@ pub fn archive_mobile_audio_with_iroh(app: &AppEnv) -> Result<IrohAudioArchiveRe
             result.already_archived += 1;
             continue;
         }
-        let (header, blob_hash) = client.runtime.block_on(prepare_audio_blob_offer(
+        let (header, blob_tag) = client.runtime.block_on(prepare_audio_blob_offer(
             client.router.endpoint(),
             &client.blobs,
             &recording.audio_path,
@@ -348,9 +349,9 @@ pub fn archive_mobile_audio_with_iroh(app: &AppEnv) -> Result<IrohAudioArchiveRe
             client.remote_addr.clone(),
             &header,
         ))?;
-        if let Err(error) = client.runtime.block_on(client.blobs.delete_blob(blob_hash)) {
-            eprintln!("[iroh-sync] could not release archived phone blob: {error}");
-        }
+        // The temporary tag keeps the source alive for the entire transfer.
+        // Dropping it makes the imported cache entry eligible for blob-store GC.
+        drop(blob_tag);
         crate::record_desktop_audio_ack(&root, recording.audio_rel, sha256, byte_length)?;
         result.uploaded += 1;
     }
@@ -379,7 +380,8 @@ async fn handle_iroh_connection(
     connection: Connection,
     target_port: u16,
     repo_root: PathBuf,
-    blobs: BlobsClient,
+    endpoint: Endpoint,
+    blobs: BlobStore,
 ) -> Result<(), String> {
     let (send, mut recv) = connection
         .accept_bi()
@@ -390,7 +392,7 @@ async fn handle_iroh_connection(
         .await
         .map_err(|error| format!("Iroh handshake failed: {error}"))?;
     if &handshake == IROH_AUDIO_HANDSHAKE {
-        return receive_audio_blob_offer(send, recv, repo_root, blobs).await;
+        return receive_audio_blob_offer(send, recv, repo_root, endpoint, blobs).await;
     }
     if &handshake != IROH_SSH_HANDSHAKE {
         return Err("Iroh handshake was not recognized.".to_string());
@@ -404,7 +406,7 @@ async fn handle_iroh_connection(
 async fn forward_tcp_to_iroh(
     tcp: tokio::net::TcpStream,
     endpoint: Endpoint,
-    remote_addr: iroh::NodeAddr,
+    remote_addr: EndpointAddr,
 ) -> Result<(), String> {
     let connection = endpoint
         .connect(remote_addr, IROH_ALPN)
@@ -424,30 +426,26 @@ async fn forward_tcp_to_iroh(
 
 async fn prepare_audio_blob_offer(
     endpoint: &Endpoint,
-    blobs: &BlobsClient,
+    blobs: &BlobStore,
     audio_path: &Path,
     audio_rel: String,
     sha256: String,
     byte_length: u64,
-) -> Result<(AudioUploadHeader, iroh_blobs::Hash), String> {
+) -> Result<(AudioUploadHeader, TempTag), String> {
     let absolute = std::path::absolute(audio_path)
         .map_err(|error| format!("Could not resolve the recording path: {error}"))?;
     let added = blobs
-        .add_from_path(absolute, true, SetTagOption::Auto, WrapOption::NoWrap)
-        .await
-        .map_err(|error| format!("Could not add the recording to iroh-blobs: {error}"))?
-        .finish()
+        .blobs()
+        .add_path(absolute)
         .await
         .map_err(|error| format!("Could not hash the recording with iroh-blobs: {error}"))?;
     if added.format != BlobFormat::Raw {
         return Err("The recording was imported as an unexpected blob collection.".to_string());
     }
-    let node_addr = tokio::time::timeout(IROH_ONLINE_TIMEOUT, endpoint.node_addr())
+    tokio::time::timeout(IROH_ONLINE_TIMEOUT, endpoint.online())
         .await
-        .map_err(|_| "The phone could not publish an Iroh blob address in time.".to_string())?
-        .map_err(|error| format!("Could not publish the phone Iroh blob address: {error}"))?;
-    let ticket = BlobTicket::new(node_addr, added.hash, added.format)
-        .map_err(|error| format!("Could not create the recording blob ticket: {error}"))?;
+        .map_err(|_| "The phone could not publish an Iroh blob address in time.".to_string())?;
+    let ticket = BlobTicket::new(endpoint.addr(), added.hash, added.format);
     let header = AudioUploadHeader {
         audio_path: audio_rel,
         sha256,
@@ -455,12 +453,12 @@ async fn prepare_audio_blob_offer(
         byte_length,
         blob_ticket: ticket.to_string(),
     };
-    Ok((header, added.hash))
+    Ok((header, added))
 }
 
 async fn send_audio_blob_offer(
     endpoint: &Endpoint,
-    remote_addr: iroh::NodeAddr,
+    remote_addr: EndpointAddr,
     header: &AudioUploadHeader,
 ) -> Result<(), String> {
     let connection = endpoint
@@ -519,9 +517,10 @@ async fn receive_audio_blob_offer(
     mut send: iroh::endpoint::SendStream,
     mut recv: iroh::endpoint::RecvStream,
     repo_root: PathBuf,
-    blobs: BlobsClient,
+    endpoint: Endpoint,
+    blobs: BlobStore,
 ) -> Result<(), String> {
-    let result = receive_audio_blob_inner(&mut recv, &repo_root, &blobs).await;
+    let result = receive_audio_blob_inner(&mut recv, &repo_root, &endpoint, &blobs).await;
     let response = match &result {
         Ok((sha256, blake3, byte_length)) => AudioUploadResponse {
             ok: true,
@@ -554,7 +553,8 @@ async fn receive_audio_blob_offer(
 async fn receive_audio_blob_inner(
     recv: &mut iroh::endpoint::RecvStream,
     repo_root: &Path,
-    blobs: &BlobsClient,
+    endpoint: &Endpoint,
+    blobs: &BlobStore,
 ) -> Result<(String, String, u64), String> {
     let header_len = recv
         .read_u32()
@@ -608,23 +608,18 @@ async fn receive_audio_blob_inner(
         .and_then(|name| name.to_str())
         .ok_or_else(|| "The audio archive filename is invalid.".to_string())?;
     let temporary = parent.join(format!(".{file_name}.iroh-{}.part", Uuid::now_v7()));
-    blobs
-        .download(ticket.hash(), ticket.node_addr().clone())
+    let blob_connection = endpoint
+        .connect(ticket.addr().clone(), iroh_blobs::ALPN)
         .await
-        .map_err(|error| format!("Could not start the recording blob download: {error}"))?
-        .finish()
+        .map_err(|error| format!("Could not reach the phone's recording blob: {error}"))?;
+    blobs
+        .remote()
+        .fetch(blob_connection, ticket.hash())
         .await
         .map_err(|error| format!("Could not download the recording blob: {error}"))?;
     blobs
-        .export(
-            ticket.hash(),
-            temporary.clone(),
-            ExportFormat::Blob,
-            ExportMode::Copy,
-        )
-        .await
-        .map_err(|error| format!("Could not start exporting the recording blob: {error}"))?
-        .finish()
+        .blobs()
+        .export(ticket.hash(), temporary.clone())
         .await
         .map_err(|error| format!("Could not export the recording blob: {error}"))?;
     let verify_path = temporary.clone();
@@ -650,7 +645,6 @@ async fn receive_audio_blob_inner(
             "Could not finalize the desktop audio archive: {error}"
         ));
     }
-    let _ = blobs.delete_blob(ticket.hash()).await;
     Ok((sha256, header.blake3, byte_length))
 }
 
