@@ -73,7 +73,6 @@ follow the normal release flow (see `LOCAL_TESTFLIGHT.md` / `TESTFLIGHT_HANDOFF.
 ```sh
 # Prebuild production (no APP_VARIANT) — restores com.typenotes.mobile
 cd apps/mobile && npx expo prebuild --platform ios --clean && cd -
-git checkout -- apps/mobile/ios/ExportOptions.plist
 ```
 
 Then continue with the archive → export → upload steps in `LOCAL_TESTFLIGHT.md`.

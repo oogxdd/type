@@ -146,7 +146,10 @@ CI ([`.github/workflows/mobile-testflight.yml`](../.github/workflows/mobile-test
 
 The workflow sets `MOBILE_VERSION` from the tag and uses the GitHub run number
 as `IOS_BUILD_NUMBER`. For a manual rerun, use Actions → **Mobile TestFlight**
-and optionally enter an explicit build number.
+and optionally enter an explicit build number. Manual dispatch uploads a new
+TestFlight build but does not create a GitHub Release; the `github-release` job
+runs only for a pushed `mobile-v*` tag. A GitHub Release is version/tag-level,
+not one-per-TestFlight-build-number.
 
 ---
 
