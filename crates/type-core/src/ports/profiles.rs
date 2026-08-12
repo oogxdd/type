@@ -22,6 +22,8 @@ pub struct ProfilesSnapshot {
 pub struct AppConfig {
     pub assemblyai_api_key: String,
     pub whisper_model: String,
+    /// Desktop transcription backend: "whisper" (local) or "assemblyai".
+    pub transcription_provider: String,
     pub handwriting_ocr_provider: String,
     pub local_ocr_model_path: String,
     pub openai_api_key: String,

@@ -39,6 +39,11 @@ pub const RECORDING_FRONTMATTER_TYPE: &str = "audio_recording";
 
 pub const DEFAULT_WHISPER_MODEL: &str = "large-v3";
 
+/// The `AppConfig.transcription_provider` value that selects the cloud
+/// backend; anything else (including the "whisper" default) means local
+/// Whisper, so an unrecognized value degrades to the key-less backend.
+pub const TRANSCRIPTION_PROVIDER_ASSEMBLYAI: &str = "assemblyai";
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 /// Arguments for saving a new audio recording to disk.
@@ -76,6 +81,12 @@ pub struct QueueLocalTranscriptionsArgs {
 pub struct RetriggerTranscriptionArgs {
     pub note_path: String,
     pub model: Option<String>,
+    /// Backend to retry with: "assemblyai" or "whisper". Absent falls back to
+    /// the app config's `transcription_provider`, so a retry uses the same
+    /// backend the queue would have used.
+    pub provider: Option<String>,
+    /// Overrides the stored AssemblyAI key, same as the cloud queue args.
+    pub assembly_api_key: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -204,6 +215,63 @@ impl RecordingsAdapter {
         Self { app }
     }
 
+    /// Build the AssemblyAI method, taking the key from the caller's override
+    /// or falling back to the stored app config.
+    fn assembly_method(&self, key_override: Option<&str>) -> Result<TranscriptionMethod, String> {
+        let app_data = crate::app_data_dir(&self.app)?;
+        let app_config = crate::load_app_config(&app_data);
+        let api_key = key_override
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(app_config.assemblyai_api_key.as_str())
+            .trim();
+        if api_key.is_empty() {
+            return Err("AssemblyAI API key is required.".to_string());
+        }
+        Ok(TranscriptionMethod::AssemblyAi {
+            api_key: api_key.to_string(),
+        })
+    }
+
+    /// Build the local Whisper method, taking the model from the caller's
+    /// override or falling back to the stored app config.
+    fn whisper_method(&self, model_override: Option<&str>) -> Result<TranscriptionMethod, String> {
+        let app_data = crate::app_data_dir(&self.app)?;
+        let app_config = crate::load_app_config(&app_data);
+        let model = model_override
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(app_config.whisper_model.as_str())
+            .trim();
+        if model.is_empty() {
+            return Err("Whisper model is required.".to_string());
+        }
+        Ok(TranscriptionMethod::LocalWhisper {
+            model: model.to_string(),
+            app: self.app.clone(),
+        })
+    }
+
+    /// Resolve the backend for a retry: explicit `provider` wins, otherwise
+    /// the app config's desktop default, otherwise local Whisper.
+    fn configured_method(
+        &self,
+        provider: Option<&str>,
+        model_override: Option<&str>,
+        key_override: Option<&str>,
+    ) -> Result<TranscriptionMethod, String> {
+        let requested = match provider.map(str::trim).filter(|value| !value.is_empty()) {
+            Some(value) => value.to_string(),
+            None => {
+                let app_data = crate::app_data_dir(&self.app)?;
+                crate::load_app_config(&app_data).transcription_provider
+            }
+        };
+        if requested.eq_ignore_ascii_case(TRANSCRIPTION_PROVIDER_ASSEMBLYAI) {
+            self.assembly_method(key_override)
+        } else {
+            self.whisper_method(model_override)
+        }
+    }
+
     /// Queue pending recordings for a shell-registered transcription provider.
     /// Not part of [`RecordingsGateway`] — only shells that register a provider
     /// (the mobile FFI) call this.
@@ -274,46 +342,15 @@ impl RecordingsGateway for RecordingsAdapter {
     }
 
     fn queue_cloud(&self, args: Self::CloudQueueArgs) -> Result<Self::QueueResult, String> {
-        let app_data = crate::app_data_dir(&self.app)?;
-        let app_config = crate::load_app_config(&app_data);
-
-        let api_key = args
-            .assembly_api_key
-            .as_deref()
-            .filter(|s| !s.is_empty())
-            .unwrap_or(app_config.assemblyai_api_key.as_str())
-            .trim();
-
-        if api_key.is_empty() {
-            return Err("AssemblyAI API key is required.".to_string());
-        }
-
+        let method = self.assembly_method(args.assembly_api_key.as_deref())?;
         let root = crate::ensured_notes_root(&self.app)?;
-        queue_recordings_with_method(
-            &root,
-            &TranscriptionMethod::AssemblyAi {
-                api_key: api_key.to_string(),
-            },
-        )
+        queue_recordings_with_method(&root, &method)
     }
 
     fn queue_local(&self, args: Self::LocalQueueArgs) -> Result<Self::QueueResult, String> {
-        let app_data = crate::app_data_dir(&self.app)?;
-        let app_config = crate::load_app_config(&app_data);
-
-        let model = args
-            .model
-            .as_deref()
-            .filter(|s| !s.is_empty())
-            .unwrap_or(app_config.whisper_model.as_str())
-            .trim();
-
-        if model.is_empty() {
-            return Err("Whisper model is required.".to_string());
-        }
-
+        let method = self.whisper_method(args.model.as_deref())?;
         let root = crate::ensured_notes_root(&self.app)?;
-        queue_recordings_for_local_transcription(&self.app, &root, model)
+        queue_recordings_with_method(&root, &method)
     }
 
     fn retrigger(&self, args: Self::RetriggerArgs) -> Result<(), String> {
@@ -322,8 +359,12 @@ impl RecordingsGateway for RecordingsAdapter {
         if note_rel.is_empty() {
             return Err("Note path is required.".to_string());
         }
-        let model = args.model.as_deref().unwrap_or(DEFAULT_WHISPER_MODEL);
-        retrigger_single_transcription(&self.app, &root, note_rel, model)
+        let method = self.configured_method(
+            args.provider.as_deref(),
+            args.model.as_deref(),
+            args.assembly_api_key.as_deref(),
+        )?;
+        retrigger_single_transcription(&root, note_rel, method)
     }
 
     fn whisper_status(&self, args: Self::WhisperArgs) -> Self::WhisperStatus {
@@ -924,12 +965,11 @@ fn queue_recordings_with_method(
     })
 }
 
-/// Reset a single recording's status and re-queue it for local transcription.
+/// Reset a single recording's status and re-queue it with `method`.
 pub fn retrigger_single_transcription(
-    app: &AppEnv,
     root: &Path,
     note_rel: &str,
-    model: &str,
+    method: TranscriptionMethod,
 ) -> Result<(), String> {
     let note_path = root.join(note_rel);
     if !note_path.exists() {
@@ -958,10 +998,7 @@ pub fn retrigger_single_transcription(
             note_rel: note_rel.to_string(),
             note_path,
             audio_path: info.audio_path,
-            method: TranscriptionMethod::LocalWhisper {
-                model: model.to_string(),
-                app: app.clone(),
-            },
+            method,
         });
     }
 

@@ -19,6 +19,7 @@ export const DEFAULT_PROFILE_SYNC_SETTINGS: ProfileSyncSettings = {
   assemblyAiApiKey: "",
   mobileAutoTranscriptionEnabled: true,
   whisperModel: "large-v3",
+  transcriptionProvider: "whisper",
   handwritingOcrProvider: "local",
   localOcrModelPath: "",
   openAiApiKey: "",
@@ -90,6 +91,11 @@ const normalizeHandwritingProvider = (
   value: string
 ): ProfileSyncSettings["handwritingOcrProvider"] =>
   value === "openai" || value === "huggingface" ? value : "local";
+
+const normalizeTranscriptionProvider = (
+  value: unknown
+): ProfileSyncSettings["transcriptionProvider"] =>
+  value === "assemblyai" ? "assemblyai" : "whisper";
 
 const normalizeNoteFileNameFormat = (
   value: unknown
@@ -213,6 +219,10 @@ export const getProfileSyncSettings = (profileId: string): ProfileSyncSettings =
       DEFAULT_PROFILE_SYNC_SETTINGS.mobileAutoTranscriptionEnabled,
     whisperModel:
       stored.whisperModel ?? DEFAULT_PROFILE_SYNC_SETTINGS.whisperModel,
+    transcriptionProvider: normalizeTranscriptionProvider(
+      stored.transcriptionProvider ??
+        DEFAULT_PROFILE_SYNC_SETTINGS.transcriptionProvider
+    ),
     handwritingOcrProvider: normalizeHandwritingProvider(
       stored.handwritingOcrProvider ??
         legacyFallback.handwritingOcrProvider ??

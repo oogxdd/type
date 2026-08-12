@@ -22,7 +22,11 @@ export function useSettingsData() {
   const canConnect = !gitSyncBusy && syncSettings.gitRemoteUrl.trim().length > 0;
   // One-tap sync connects on demand, so it only needs a remote URL.
   const canSync = !gitSyncBusy && syncSettings.gitRemoteUrl.trim().length > 0;
-  const canQueue = !isRecordingBusy && syncSettings.assemblyAiApiKey.trim().length > 0;
+  // Local Whisper needs no credentials; only the cloud backend gates on a key.
+  const canQueue =
+    !isRecordingBusy &&
+    (syncSettings.transcriptionProvider !== "assemblyai" ||
+      syncSettings.assemblyAiApiKey.trim().length > 0);
 
   const syncActionLabel =
     gitSyncAction === "connect"
