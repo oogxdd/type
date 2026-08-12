@@ -1,0 +1,19 @@
+[package]
+name = "type-sync-peer"
+version = "0.1.0"
+description = "Persistent, keyless iroh-docs replica for Type's optional zero-knowledge sync topology."
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "type-sync-peer"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+iroh = { version = "1.0.3", default-features = false, features = ["tls-ring"] }
+iroh-blobs = "0.103.0"
+iroh-docs = "0.101.0"
+iroh-gossip = "0.101.0"
+iroh-tickets = "1.0.0"
+tokio = { version = "1.52.3", features = ["fs", "io-util", "macros", "rt-multi-thread", "signal"] }

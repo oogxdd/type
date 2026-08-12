@@ -10,6 +10,7 @@ members = [
     "apps/desktop/src-tauri",
     "crates/type-core",
     "crates/type-ffi",
+    "crates/type-sync-peer",
 ]
 
 [workspace.package]
