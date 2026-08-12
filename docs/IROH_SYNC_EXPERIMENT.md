@@ -34,9 +34,11 @@ the network path between a phone and a desktop.
   acknowledgement. `iroh-blobs` performs verified, resumable transfer.
   `Recordings/` is excluded in that device's local Git config, so new audio
   never leaves a hidden blob in the phone's `.git/objects` database.
-- SSH host-key pinning and the existing paired-device allowlist remain the
-  authentication boundary. Iroh relays are transport only and do not store the
-  notes repository.
+- SSH host-key pinning and the existing paired-device allowlist remain the Git
+  authentication boundary. During QR setup the same one-time token also binds
+  the phone's authenticated Iroh Endpoint ID into a desktop allowlist; audio
+  offers from any other Endpoint ID are rejected before a blob is fetched.
+  Iroh relays are transport only and do not store the notes repository.
 
 The first version deliberately does not replace Git with `iroh-docs` or a new
 merge model. That keeps note conflicts, history, backup, and rollback behavior

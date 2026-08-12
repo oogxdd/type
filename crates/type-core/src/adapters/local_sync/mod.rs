@@ -268,6 +268,7 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
             app,
             LOCAL_SYNC_PORT,
             root.clone(),
+            pairing_token.clone(),
         ) {
             Ok(iroh) => {
                 if let Ok(repo) = git2::Repository::open(&root) {

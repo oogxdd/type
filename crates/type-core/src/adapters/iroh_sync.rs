@@ -25,18 +25,22 @@ use std::{
     fs,
     path::{Path, PathBuf},
     str::FromStr,
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::Duration,
 };
+use subtle::ConstantTimeEq;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
 
 const IROH_ALPN: &[u8] = b"type/ssh-tunnel/1";
 const IROH_SSH_HANDSHAKE: &[u8; 5] = b"type1";
 const IROH_AUDIO_HANDSHAKE: &[u8; 5] = b"aud02";
+const IROH_PAIR_HANDSHAKE: &[u8; 5] = b"pair1";
 const IROH_ONLINE_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_AUDIO_HEADER_BYTES: usize = 16 * 1024;
 const MAX_AUDIO_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+const MAX_PAIRING_TOKEN_BYTES: usize = 128;
+const IROH_ENDPOINTS_FILE: &str = "iroh_endpoints.json";
 pub const IROH_CLIENT_PROXY_PORT: u16 = 19_418;
 
 /// Arguments supplied by the mobile shell after scanning a pairing QR.
@@ -80,6 +84,51 @@ struct AudioUploadResponse {
     byte_length: Option<u64>,
 }
 
+#[derive(Clone, Debug)]
+struct IrohServerAuth {
+    pairing_token: Arc<Mutex<String>>,
+    endpoints_path: PathBuf,
+    endpoints_lock: Arc<Mutex<()>>,
+}
+
+impl IrohServerAuth {
+    fn is_authorized(&self, endpoint_id: &str) -> bool {
+        let Ok(_guard) = self.endpoints_lock.lock() else {
+            return false;
+        };
+        load_authorized_iroh_endpoints(&self.endpoints_path)
+            .iter()
+            .any(|allowed| allowed == endpoint_id)
+    }
+
+    fn authorize_with_pairing_token(
+        &self,
+        endpoint_id: &str,
+        supplied_token: &str,
+    ) -> Result<(), String> {
+        if self.is_authorized(endpoint_id) {
+            return Ok(());
+        }
+        let current = self
+            .pairing_token
+            .lock()
+            .map_err(|_| "The direct-sync pairing state is unavailable.".to_string())?;
+        if current.is_empty()
+            || supplied_token.len() != current.len()
+            || !bool::from(supplied_token.as_bytes().ct_eq(current.as_bytes()))
+        {
+            return Err("This phone is not paired for Iroh audio sync. Scan the QR again.".into());
+        }
+        drop(current);
+
+        let _guard = self
+            .endpoints_lock
+            .lock()
+            .map_err(|_| "The Iroh paired-device store is unavailable.".to_string())?;
+        register_authorized_iroh_endpoint(&self.endpoints_path, endpoint_id)
+    }
+}
+
 /// Desktop-side endpoint owned by the embedded local-sync daemon.
 pub struct IrohServerHandle {
     runtime: tokio::runtime::Runtime,
@@ -111,6 +160,7 @@ struct IrohClientHandle {
     router: Router,
     blobs: BlobStore,
     remote_addr: EndpointAddr,
+    pairing_token: Option<String>,
     ticket: String,
     endpoint_id: String,
     local_port: u16,
@@ -141,6 +191,7 @@ struct TypeSyncProtocol {
     repo_root: PathBuf,
     endpoint: Endpoint,
     blobs: BlobStore,
+    auth: IrohServerAuth,
 }
 
 impl ProtocolHandler for TypeSyncProtocol {
@@ -151,6 +202,7 @@ impl ProtocolHandler for TypeSyncProtocol {
             self.repo_root.clone(),
             self.endpoint.clone(),
             self.blobs.clone(),
+            self.auth.clone(),
         )
         .await
         .map_err(|error| AcceptError::from_err(std::io::Error::other(error)))
@@ -164,12 +216,18 @@ pub fn start_iroh_sync_server(
     app: &AppEnv,
     target_port: u16,
     repo_root: PathBuf,
+    pairing_token: Arc<Mutex<String>>,
 ) -> Result<IrohServerHandle, String> {
     let secret = load_or_create_secret(app, "server.key")?;
     // The post-0.35 blob store is a rewrite with a different on-disk format.
     // Keep its cache isolated so an experimental upgrade cannot corrupt an
     // older store. Both are disposable caches; durable audio lives in notes.
     let blobs_path = blob_store_path(app, "server-blobs-v103")?;
+    let auth = IrohServerAuth {
+        pairing_token,
+        endpoints_path: iroh_endpoints_path(app)?,
+        endpoints_lock: Arc::new(Mutex::new(())),
+    };
     let runtime = runtime("Iroh sync server")?;
     let router = runtime.block_on(async {
         let endpoint = Endpoint::builder(presets::N0)
@@ -187,6 +245,7 @@ pub fn start_iroh_sync_server(
             repo_root,
             endpoint: endpoint.clone(),
             blobs: store,
+            auth,
         };
         Ok::<Router, String>(
             Router::builder(endpoint)
@@ -227,12 +286,21 @@ pub fn start_iroh_sync_client(
     }
     let parsed = EndpointTicket::from_str(ticket)
         .map_err(|error| format!("The Iroh endpoint ticket is invalid: {error}"))?;
+    let pairing_token = pairing_token_from_ssh_remote(&args.remote_url);
 
     let mut guard = CLIENT
         .lock()
         .map_err(|_| "Iroh client state is poisoned.".to_string())?;
-    if let Some(client) = guard.as_ref() {
+    if let Some(client) = guard.as_mut() {
         if client.ticket == ticket {
+            if let Some(token) = pairing_token.as_deref() {
+                client.runtime.block_on(pair_iroh_endpoint(
+                    client.router.endpoint(),
+                    client.remote_addr.clone(),
+                    token,
+                ))?;
+                client.pairing_token = Some(token.to_string());
+            }
             return client.status_for_remote(&args.remote_url);
         }
     }
@@ -295,10 +363,21 @@ pub fn start_iroh_sync_client(
         router,
         blobs,
         remote_addr,
+        pairing_token,
         ticket: ticket.to_string(),
         endpoint_id,
         local_port: IROH_CLIENT_PROXY_PORT,
     };
+    if let Some(token) = client.pairing_token.as_deref() {
+        if let Err(error) = client.runtime.block_on(pair_iroh_endpoint(
+            client.router.endpoint(),
+            client.remote_addr.clone(),
+            token,
+        )) {
+            client.stop();
+            return Err(error);
+        }
+    }
     let status = client.status_for_remote(&args.remote_url)?;
     eprintln!(
         "[iroh-sync] phone proxy ready on 127.0.0.1:{} for endpoint {}",
@@ -382,7 +461,9 @@ async fn handle_iroh_connection(
     repo_root: PathBuf,
     endpoint: Endpoint,
     blobs: BlobStore,
+    auth: IrohServerAuth,
 ) -> Result<(), String> {
+    let remote_endpoint_id = connection.remote_id().to_string();
     let (send, mut recv) = connection
         .accept_bi()
         .await
@@ -392,7 +473,19 @@ async fn handle_iroh_connection(
         .await
         .map_err(|error| format!("Iroh handshake failed: {error}"))?;
     if &handshake == IROH_AUDIO_HANDSHAKE {
-        return receive_audio_blob_offer(send, recv, repo_root, endpoint, blobs).await;
+        return receive_audio_blob_offer(
+            send,
+            recv,
+            repo_root,
+            endpoint,
+            blobs,
+            remote_endpoint_id,
+            auth,
+        )
+        .await;
+    }
+    if &handshake == IROH_PAIR_HANDSHAKE {
+        return receive_iroh_pairing(send, recv, remote_endpoint_id, auth).await;
     }
     if &handshake != IROH_SSH_HANDSHAKE {
         return Err("Iroh handshake was not recognized.".to_string());
@@ -401,6 +494,74 @@ async fn handle_iroh_connection(
         .await
         .map_err(|error| format!("Could not reach the desktop SSH server: {error}"))?;
     forward_bidi(tcp, send, recv).await
+}
+
+async fn pair_iroh_endpoint(
+    endpoint: &Endpoint,
+    remote_addr: EndpointAddr,
+    pairing_token: &str,
+) -> Result<(), String> {
+    let connection = endpoint
+        .connect(remote_addr, IROH_ALPN)
+        .await
+        .map_err(|error| format!("Could not reach the desktop for Iroh pairing: {error}"))?;
+    let (mut send, mut recv) = connection
+        .open_bi()
+        .await
+        .map_err(|error| format!("Could not open the Iroh pairing stream: {error}"))?;
+    let token = pairing_token.as_bytes();
+    let token_len = u16::try_from(token.len())
+        .map_err(|_| "The direct-sync pairing token is invalid.".to_string())?;
+    send.write_all(IROH_PAIR_HANDSHAKE)
+        .await
+        .map_err(|error| format!("Could not start Iroh pairing: {error}"))?;
+    send.write_u16(token_len)
+        .await
+        .map_err(|error| format!("Could not send the Iroh pairing token: {error}"))?;
+    send.write_all(token)
+        .await
+        .map_err(|error| format!("Could not send the Iroh pairing token: {error}"))?;
+    send.finish()
+        .map_err(|error| format!("Could not finish Iroh pairing: {error}"))?;
+    match recv
+        .read_u8()
+        .await
+        .map_err(|error| format!("The desktop did not acknowledge Iroh pairing: {error}"))?
+    {
+        1 => Ok(()),
+        _ => Err("The desktop rejected Iroh pairing. Scan the current QR again.".to_string()),
+    }
+}
+
+async fn receive_iroh_pairing(
+    mut send: iroh::endpoint::SendStream,
+    mut recv: iroh::endpoint::RecvStream,
+    remote_endpoint_id: String,
+    auth: IrohServerAuth,
+) -> Result<(), String> {
+    let token_len = recv
+        .read_u16()
+        .await
+        .map_err(|error| format!("Could not read the Iroh pairing token: {error}"))?
+        as usize;
+    if token_len == 0 || token_len > MAX_PAIRING_TOKEN_BYTES {
+        let _ = send.write_u8(0).await;
+        let _ = send.finish();
+        return Err("The Iroh pairing token has an invalid size.".to_string());
+    }
+    let mut token = vec![0u8; token_len];
+    recv.read_exact(&mut token)
+        .await
+        .map_err(|error| format!("Could not read the Iroh pairing token: {error}"))?;
+    let token =
+        String::from_utf8(token).map_err(|_| "The Iroh pairing token is invalid.".to_string())?;
+    let result = auth.authorize_with_pairing_token(&remote_endpoint_id, &token);
+    send.write_u8(u8::from(result.is_ok()))
+        .await
+        .map_err(|error| format!("Could not acknowledge Iroh pairing: {error}"))?;
+    send.finish()
+        .map_err(|error| format!("Could not finish Iroh pairing: {error}"))?;
+    result
 }
 
 async fn forward_tcp_to_iroh(
@@ -520,8 +681,18 @@ async fn receive_audio_blob_offer(
     repo_root: PathBuf,
     endpoint: Endpoint,
     blobs: BlobStore,
+    remote_endpoint_id: String,
+    auth: IrohServerAuth,
 ) -> Result<(), String> {
-    let result = receive_audio_blob_inner(&mut recv, &repo_root, &endpoint, &blobs).await;
+    let result = receive_audio_blob_inner(
+        &mut recv,
+        &repo_root,
+        &endpoint,
+        &blobs,
+        &remote_endpoint_id,
+        &auth,
+    )
+    .await;
     let response = match &result {
         Ok((sha256, blake3, byte_length)) => AudioUploadResponse {
             ok: true,
@@ -556,6 +727,8 @@ async fn receive_audio_blob_inner(
     repo_root: &Path,
     endpoint: &Endpoint,
     blobs: &BlobStore,
+    remote_endpoint_id: &str,
+    auth: &IrohServerAuth,
 ) -> Result<(String, String, u64), String> {
     let header_len = recv
         .read_u32()
@@ -571,6 +744,9 @@ async fn receive_audio_blob_inner(
         .map_err(|error| format!("Could not read the audio archive header: {error}"))?;
     let header: AudioUploadHeader = serde_json::from_slice(&header_json)
         .map_err(|error| format!("The audio archive header is invalid: {error}"))?;
+    if !auth.is_authorized(remote_endpoint_id) {
+        return Err("This Iroh endpoint is not paired for audio sync. Scan the QR again.".into());
+    }
     if header.byte_length > MAX_AUDIO_BYTES {
         return Err("The audio archive exceeds the 2 GiB safety limit.".to_string());
     }
@@ -700,6 +876,32 @@ fn blob_store_path(app: &AppEnv, folder_name: &str) -> Result<PathBuf, String> {
     Ok(folder)
 }
 
+fn iroh_endpoints_path(app: &AppEnv) -> Result<PathBuf, String> {
+    let folder = app_data_dir(app)?.join("local_sync");
+    fs::create_dir_all(&folder)
+        .map_err(|error| format!("Failed to create the direct-sync data folder: {error}"))?;
+    Ok(folder.join(IROH_ENDPOINTS_FILE))
+}
+
+fn load_authorized_iroh_endpoints(path: &Path) -> Vec<String> {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|content| serde_json::from_str(&content).ok())
+        .unwrap_or_default()
+}
+
+fn register_authorized_iroh_endpoint(path: &Path, endpoint_id: &str) -> Result<(), String> {
+    let mut endpoints = load_authorized_iroh_endpoints(path);
+    if endpoints.iter().any(|allowed| allowed == endpoint_id) {
+        return Ok(());
+    }
+    endpoints.push(endpoint_id.to_string());
+    let content = serde_json::to_vec_pretty(&endpoints)
+        .map_err(|error| format!("Could not encode the Iroh paired-device store: {error}"))?;
+    write_private_key(path, &content)
+        .map_err(|error| format!("Could not save the Iroh paired-device store: {error}"))
+}
+
 fn load_or_create_secret(app: &AppEnv, file_name: &str) -> Result<SecretKey, String> {
     let path = secret_path(app, file_name)?;
     if path.exists() {
@@ -748,6 +950,17 @@ fn rewrite_ssh_remote_to_loopback(remote_url: &str, port: u16) -> Result<String,
     Ok(format!("ssh://{user}127.0.0.1:{port}/{path}"))
 }
 
+fn pairing_token_from_ssh_remote(remote_url: &str) -> Option<String> {
+    let remote = remote_url.trim();
+    let rest = remote
+        .strip_prefix("ssh://")
+        .or_else(|| remote.strip_prefix("SSH://"))?;
+    let (userinfo, _) = rest.split_once('@')?;
+    let token = userinfo.strip_prefix("pair-")?;
+    (!token.is_empty() && token.chars().all(|char| char.is_ascii_hexdigit()))
+        .then(|| token.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -764,5 +977,38 @@ mod tests {
     #[test]
     fn rejects_non_ssh_remotes() {
         assert!(rewrite_ssh_remote_to_loopback("https://example.test/repo", 19_418).is_err());
+    }
+
+    #[test]
+    fn extracts_only_hex_pairing_tokens_from_ssh_urls() {
+        assert_eq!(
+            pairing_token_from_ssh_remote("ssh://pair-deadbeef@example.test/Notes").as_deref(),
+            Some("deadbeef")
+        );
+        assert!(pairing_token_from_ssh_remote("ssh://example.test/Notes").is_none());
+        assert!(pairing_token_from_ssh_remote("ssh://pair-not-hex@example.test/Notes").is_none());
+    }
+
+    #[test]
+    fn pairing_token_registers_an_iroh_endpoint_once() {
+        let folder = std::env::temp_dir().join(format!("type-iroh-auth-{}", Uuid::now_v7()));
+        fs::create_dir_all(&folder).unwrap();
+        let auth = IrohServerAuth {
+            pairing_token: Arc::new(Mutex::new("deadbeef".to_string())),
+            endpoints_path: folder.join(IROH_ENDPOINTS_FILE),
+            endpoints_lock: Arc::new(Mutex::new(())),
+        };
+        assert!(!auth.is_authorized("phone-endpoint"));
+        assert!(auth
+            .authorize_with_pairing_token("phone-endpoint", "bad0cafe")
+            .is_err());
+        auth.authorize_with_pairing_token("phone-endpoint", "deadbeef")
+            .unwrap();
+        assert!(auth.is_authorized("phone-endpoint"));
+        assert_eq!(
+            load_authorized_iroh_endpoints(&auth.endpoints_path),
+            vec!["phone-endpoint"]
+        );
+        fs::remove_dir_all(folder).unwrap();
     }
 }
