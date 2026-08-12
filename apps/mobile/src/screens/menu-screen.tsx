@@ -40,6 +40,7 @@ import {
   groupNoteRowsByDate,
 } from "../lib/feed";
 import { formatRelativeTime } from "../lib/relative-time";
+import { autoSyncLabel } from "../lib/sync-experience";
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useSyncStore } from "../state/sync-store";
@@ -167,6 +168,9 @@ export const MenuScreen = () => {
     });
 
   const lastSyncedMs = useSyncStore((s) => s.history[0]?.authored_ms ?? null);
+  const autoSyncState = useSyncStore((s) => s.autoSyncState);
+  const syncSubtitle =
+    autoSyncLabel(autoSyncState) ?? `Last synced ${formatRelativeTime(lastSyncedMs)}`;
 
   // Boot pushes Capture on top of the menu in the same first React commit,
   // so building the note/folder lists here would sit on the app's
@@ -286,7 +290,7 @@ export const MenuScreen = () => {
           <BottomItem
             icon="sync-outline"
             label="Sync"
-            subtitle={`Last synced ${formatRelativeTime(lastSyncedMs)}`}
+            subtitle={syncSubtitle}
             onPress={() => openScreen("Sync")}
           />
           <View style={[styles.bottomSeparator, { backgroundColor: theme.colors.border }]} />

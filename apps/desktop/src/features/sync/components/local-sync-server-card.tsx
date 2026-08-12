@@ -152,7 +152,7 @@ export function LocalSyncServerCard() {
               ? "Stopping local SSH..."
               : "Starting local SSH..."
             : running
-              ? "Running — it will start automatically next time you open the app."
+              ? "Running — on macOS you may close the window; quitting Type stops sync."
               : "Stopped"}
         </span>
       </SettingsActionRow>
@@ -211,7 +211,7 @@ export function LocalSyncServerCard() {
             <ol className="list-decimal space-y-1 pl-5 text-xs leading-relaxed text-muted-foreground">
               <li>
                 On the phone: menu → <strong>Sync</strong> → <strong>Scan QR code</strong>, point at
-                the code above, then tap <strong>Sync now</strong>.
+                the code above. After that, opening Type on the phone starts sync automatically.
               </li>
               <li>
                 No camera? Sync → Advanced: paste the Remote URL, set Branch to{" "}
@@ -221,6 +221,10 @@ export function LocalSyncServerCard() {
               <li>
                 This URL is served by Type itself over SSH. macOS Remote Login and{" "}
                 <code>authorized_keys</code> are not required.
+              </li>
+              <li>
+                On macOS the red close button leaves the sync host running in the background;
+                use <strong>Quit Type</strong> or <strong>Stop server</strong> to stop it.
               </li>
             </ol>
           </div>

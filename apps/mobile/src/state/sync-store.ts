@@ -14,6 +14,11 @@ import type {
   GitTransferProgress,
 } from "@typenotes/shared/types";
 
+import {
+  autoSyncRetryDelayMs,
+  saveReasonHasLocalChanges,
+  type AutoSyncState,
+} from "../lib/sync-experience";
 import { useNotesStore } from "./notes-store";
 import { activeProfile, useSettingsStore } from "./settings-store";
 
@@ -22,6 +27,7 @@ type SavedGitConnection = ConnectGitArgs & { irohTicket: string | null };
 const AUTO_SYNC_DELAY_MS = 1_500;
 const AUTO_SYNC_BUSY_RETRY_MS = 2_000;
 let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let autoSyncFailureCount = 0;
 
 const sshHostFromRemote = (remote: string): string => {
   const match = remote.match(/^ssh:\/\/(?:[^@/]+@)?(\[[^\]]+\]|[^/:]+)(?::\d+)?(?:\/|$)/i);
@@ -61,6 +67,8 @@ type SyncState = {
   progress: GitTransferProgress | null;
   error: string | null;
   hint: string | null;
+  autoSyncState: AutoSyncState | null;
+  lastAutoSyncedAt: number | null;
   /** A scanned/deep-linked type2://sync remote waiting to be applied. */
   pendingLink: SyncDeepLinkParams | null;
   setPendingLink: (link: SyncDeepLinkParams | null) => void;
@@ -218,6 +226,46 @@ export const useSyncStore = create<SyncState>((set, get) => {
     throw new Error(message);
   };
 
+  const scheduleAutoSyncAttempt = (reason: string, delayMs: number) => {
+    if (autoSyncTimer) {
+      clearTimeout(autoSyncTimer);
+    }
+    logSync(`auto: scheduled after ${reason} in ${delayMs}ms`);
+    autoSyncTimer = setTimeout(() => {
+      autoSyncTimer = null;
+      if (!savedGitConnection()) {
+        logSync(`auto: skipped ${reason}; no saved remote`);
+        return;
+      }
+      if (get().action !== "idle") {
+        logSync(`auto: delayed ${reason}; ${get().action} is running`);
+        scheduleAutoSyncAttempt(reason, AUTO_SYNC_BUSY_RETRY_MS);
+        return;
+      }
+      logSync(`auto: starting after ${reason}`);
+      set({ autoSyncState: "syncing" });
+      void get()
+        .syncNow()
+        .then(() => {
+          autoSyncFailureCount = 0;
+          set({ autoSyncState: "synced", lastAutoSyncedAt: Date.now() });
+        })
+        .catch((error) => {
+          autoSyncFailureCount += 1;
+          const retryMs = autoSyncRetryDelayMs(autoSyncFailureCount);
+          logSync(
+            `auto: ${reason} failed silently - ${getErrorMessage(error)}; retry in ${retryMs}ms`
+          );
+          set({
+            autoSyncState: "waiting_for_computer",
+            error: null,
+            hint: null,
+          });
+          scheduleAutoSyncAttempt("computer unavailable", retryMs);
+        });
+    }, Math.max(0, delayMs));
+  };
+
   return {
     status: null,
     history: [],
@@ -225,6 +273,8 @@ export const useSyncStore = create<SyncState>((set, get) => {
     progress: null,
     error: null,
     hint: null,
+    autoSyncState: null,
+    lastAutoSyncedAt: null,
     pendingLink: null,
 
     setPendingLink: (link) => set({ pendingLink: link }),
@@ -375,38 +425,25 @@ export const useSyncStore = create<SyncState>((set, get) => {
         return;
       }
       logSync("sync now: starting pull then push");
-      await get().pull();
-      logSync("sync now: pull complete; starting push");
-      await get().push();
+      set({ autoSyncState: "syncing" });
+      try {
+        await get().pull();
+        logSync("sync now: pull complete; starting push");
+        await get().push();
+        autoSyncFailureCount = 0;
+        set({ autoSyncState: "synced", lastAutoSyncedAt: Date.now() });
+      } catch (error) {
+        set({ autoSyncState: "waiting_for_computer" });
+        throw error;
+      }
     },
 
     scheduleAutoSync: (reason, delayMs = AUTO_SYNC_DELAY_MS) => {
-      if (autoSyncTimer) {
-        clearTimeout(autoSyncTimer);
+      autoSyncFailureCount = 0;
+      if (saveReasonHasLocalChanges(reason)) {
+        set({ autoSyncState: "saved_locally" });
       }
-      logSync(`auto: scheduled after ${reason}`);
-      autoSyncTimer = setTimeout(() => {
-        autoSyncTimer = null;
-        if (!savedGitConnection()) {
-          logSync(`auto: skipped ${reason}; no saved remote`);
-          return;
-        }
-        if (get().action !== "idle") {
-          logSync(`auto: delayed ${reason}; ${get().action} is running`);
-          get().scheduleAutoSync(reason, AUTO_SYNC_BUSY_RETRY_MS);
-          return;
-        }
-        logSync(`auto: starting after ${reason}`);
-        void get()
-          .syncNow()
-          .catch((error) => {
-            // Capture/editing remains primary: retry on the next save or
-            // foreground event without turning a network outage into a modal
-            // editing error. Manual Sync now still exposes failures.
-            logSync(`auto: ${reason} failed silently - ${getErrorMessage(error)}`);
-            set({ error: null, hint: null });
-          });
-      }, Math.max(0, delayMs));
+      scheduleAutoSyncAttempt(reason, delayMs);
     },
 
     push: async (message) => {

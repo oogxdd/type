@@ -24,6 +24,8 @@ ssh-key = { version = "0.6", features = ["ed25519"] }
 rand_core = { version = "0.6", features = ["std"] }
 iroh = { version = "0.35.0", default-features = false }
 iroh-base = "0.35.0"
+iroh-blobs = "0.35.0"
+anyhow = "1"
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "io-util", "net", "time", "macros", "sync"] }
 sha2 = "0.10"
 

@@ -125,7 +125,31 @@ pub(super) fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|_app_handle, event| {
+    app.run(|app_handle, event| {
+        // On macOS the red close button means "hide the window", not "stop
+        // direct sync". Keep the Tauri process (and therefore SSH + Iroh)
+        // resident, and restore the same window when the Dock icon is opened.
+        // Cmd-Q still emits Exit and performs the normal clean shutdown.
+        #[cfg(target_os = "macos")]
+        match &event {
+            tauri::RunEvent::WindowEvent {
+                label,
+                event: tauri::WindowEvent::CloseRequested { api, .. },
+                ..
+            } if label == "main" => {
+                api.prevent_close();
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+            }
+            tauri::RunEvent::Reopen { .. } => {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            _ => {}
+        }
         // Tear down the local sync git daemon when the app exits so we never
         // leave an orphaned process holding port 9418.
         if matches!(event, tauri::RunEvent::Exit) {

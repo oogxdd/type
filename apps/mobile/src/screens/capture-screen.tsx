@@ -60,6 +60,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as core from "@typenotes/mobile-core/core-api";
 
 import { CaptureSession } from "../lib/capture";
+import { autoSyncLabel } from "../lib/sync-experience";
 import { useClearInstantParam, type RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useSyncStore } from "../state/sync-store";
@@ -115,6 +116,8 @@ export const CaptureScreen = () => {
   const [text, setText] = useState("");
   const [iconsVisible, setIconsVisible] = useState(true);
   const [recordingActive, setRecordingActive] = useState(false);
+  const autoSyncState = useSyncStore((state) => state.autoSyncState);
+  const syncLabel = autoSyncLabel(autoSyncState);
   const iconsOpacity = useSharedValue(1);
   const inputRef = useRef<TextInput>(null);
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
@@ -666,6 +669,23 @@ export const CaptureScreen = () => {
             onPress={() => navigation.popTo("Menu")}
           />
         </Animated.View>
+        {syncLabel ? (
+          <View
+            pointerEvents="none"
+            style={[styles.syncStatus, { top: insets.top + 18 }]}
+          >
+            <Text
+              style={{
+                color:
+                  autoSyncState === "synced"
+                    ? theme.colors.success
+                    : theme.colors.secondaryText,
+              }}
+            >
+              {syncLabel}
+            </Text>
+          </View>
+        ) : null}
         {micAvailable ? (
           <Animated.View
             pointerEvents={iconsVisible ? "auto" : "none"}
@@ -775,5 +795,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 20,
     flexDirection: "row",
+  },
+  syncStatus: {
+    position: "absolute",
+    right: 20,
   },
 });

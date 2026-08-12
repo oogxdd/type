@@ -32,6 +32,7 @@ import {
 import { parseSyncDeepLink, type SyncDeepLinkParams } from "@typenotes/shared/sync-link";
 
 import { useClearInstantParam } from "../navigation";
+import { autoSyncLabel } from "../lib/sync-experience";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
@@ -41,7 +42,7 @@ const SETUP_STEPS = [
   "Open the Type app on your computer.",
   "Open desktop Settings → Sync (phone and computer on the same Wi-Fi or hotspot).",
   "Tap “Scan QR code” below and point the camera at the code on the computer's screen.",
-  "Tap “Sync now”. That's it — repeat “Sync now” whenever you want to sync.",
+  "After pairing, just open Type on your phone near the computer — sync starts automatically.",
 ];
 
 export const SyncScreen = () => {
@@ -150,6 +151,7 @@ export const SyncScreen = () => {
   const status = sync.status;
   const transferLabel = formatTransferProgress(sync.progress);
   const transferFraction = transferProgressFraction(sync.progress);
+  const automaticStatus = autoSyncLabel(sync.autoSyncState);
   // A saved remote counts as connected even when the repo's origin is missing
   // (e.g. an earlier connect attempt failed halfway): pull/push re-apply the
   // saved connection via ensureSavedRemote, so the buttons must stay usable —
@@ -221,6 +223,9 @@ export const SyncScreen = () => {
         ) : null}
         {status ? (
           <View style={styles.statusGrid}>
+            {automaticStatus ? (
+              <StatusLine label="Automatic sync" value={automaticStatus} />
+            ) : null}
             <StatusLine label="Connection" value={connected ? "connected" : "not paired"} />
             <StatusLine label="Remote" value={status.remote_url ?? (savedRemote || "—")} />
             <StatusLine label="Branch" value={status.current_branch ?? "—"} />
