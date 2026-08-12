@@ -19,6 +19,9 @@ pub enum Command {
     New(Option<String>),
     /// `:d` — delete the open note.
     Delete,
+    /// `:connect <url>` — point this notes root at a git remote, initialising
+    /// the repo if needed. Without it there is nothing for `:sync` to talk to.
+    Connect(String),
     /// `:sync` — pull, then push. The common case, bound to one word.
     Sync,
     Pull,
@@ -55,6 +58,7 @@ pub fn parse(input: &str) -> Command {
             }
         }
         "d" | "delete" => Command::Delete,
+        "connect" => Command::Connect(rest.to_string()),
         "sync" => Command::Sync,
         "pull" => Command::Pull,
         "push" => Command::Push,

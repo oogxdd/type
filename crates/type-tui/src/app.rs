@@ -451,6 +451,7 @@ impl App {
             Command::Move(destination) => self.move_note(&destination),
             Command::New(folder) => self.create_note(folder),
             Command::Delete => self.delete_note(),
+            Command::Connect(url) => self.git_connect(&url),
             Command::Sync => self.git_sync(),
             Command::Pull => self.git_pull(),
             Command::Push => self.git_push(),
@@ -458,7 +459,7 @@ impl App {
             Command::SshKey => self.ssh_key(),
             Command::Help => {
                 self.status =
-                    "j/k move · Enter open · Ctrl+W pane · i insert · :mv <folder> · :new · :d · :sync · :q"
+                    "j/k move · Enter open · Ctrl+W pane · i insert · :mv <folder> · :new · :d · :connect <url> · :sync · :q"
                         .to_string();
             }
             Command::Unknown(name) => self.status = format!("unknown command: {name}"),
@@ -576,6 +577,37 @@ impl App {
                 };
             }
             Err(err) => self.status = format!("git status: {err}"),
+        }
+    }
+
+    /// `:connect <url> [branch]` — initialise the repo, set `origin`, fetch.
+    ///
+    /// The core handles first-sync bootstrapping: if this device already holds
+    /// notes, they are committed so the first pull merges both sides instead of
+    /// one overwriting the other.
+    fn git_connect(&mut self, argument: &str) {
+        let mut parts = argument.split_whitespace();
+        let Some(url) = parts.next() else {
+            self.status = "usage: :connect <url> [branch]".to_string();
+            return;
+        };
+        self.flush_editor();
+        let args = type_core::ConnectGitArgs {
+            remote_url: Some(url.to_string()),
+            branch: parts.next().map(str::to_string),
+            username: None,
+            password: None,
+        };
+        match self.core.git().connect(args) {
+            Ok(status) => {
+                self.status = format!(
+                    "connected · {}",
+                    status.current_branch.unwrap_or_else(|| "?".into())
+                );
+                self.refresh_tree();
+                self.reload_notes();
+            }
+            Err(err) => self.status = format!("connect: {err}"),
         }
     }
 
