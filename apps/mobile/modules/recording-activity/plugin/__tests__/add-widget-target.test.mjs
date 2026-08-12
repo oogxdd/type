@@ -126,10 +126,10 @@ describe("addRustCoreLinkerFlagsToPodfile", () => {
     )
   end`;
 
-  it("adds zlib and iconv to the generated aggregate xcconfigs", () => {
+  it("adds zlib, iconv and SystemConfiguration to the generated aggregate xcconfigs", () => {
     const patched = addRustCoreLinkerFlagsToPodfile(generatedPodfile);
     expect(patched).toContain("@typenotes/link-rust-system-libraries");
-    expect(patched).toContain("['-lz', '-liconv']");
+    expect(patched).toContain("['-lz', '-liconv', '-framework SystemConfiguration']");
     expect(patched).toContain("Pods-Type.*.xcconfig");
   });
 

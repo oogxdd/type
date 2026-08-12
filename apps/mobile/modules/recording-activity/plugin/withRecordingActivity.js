@@ -60,6 +60,9 @@ const withWidgetSourcesCopied = (config) =>
  * Keep the system-library flags required by TypeCore across Expo prebuilds.
  * The generated TypeCore podspec vendors a Rust static library containing
  * libgit2, whose zlib/iconv references must be resolved by the app target.
+ * The Iroh sync transport also pulls in hickory-resolver and netdev, which
+ * reference SCDynamicStore, SCNetworkInterface and SCPreferences APIs on
+ * Apple platforms (SystemConfiguration.framework) for the same reason.
  */
 const addRustCoreLinkerFlagsToPodfile = (contents) => {
   if (contents.includes(RUST_LINKER_MARKER)) return contents;
@@ -77,7 +80,7 @@ const addRustCoreLinkerFlagsToPodfile = (contents) => {
     `    ${RUST_LINKER_MARKER}`,
     "    Dir.glob(File.join(__dir__, 'Pods', 'Target Support Files', 'Pods-Type', 'Pods-Type.*.xcconfig')).each do |xcconfig_path|",
     "      contents = File.read(xcconfig_path)",
-    "      additions = ['-lz', '-liconv'].reject { |flag| contents.include?(flag) }",
+    "      additions = ['-lz', '-liconv', '-framework SystemConfiguration'].reject { |flag| contents.include?(flag) }",
     "      next if additions.empty?",
     "      contents = contents.gsub(/^(OTHER_LDFLAGS = .*)$/) { \"#{$1} #{additions.join(' ')}\" }",
     "      File.write(xcconfig_path, contents)",
