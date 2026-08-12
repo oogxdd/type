@@ -121,10 +121,9 @@ Rust-библиотека. Дальше повседневная разрабо�
    `npm install --no-save uniffi-bindgen-react-native@0.31.0-3` там же).
    Скрипт собирает `--sim-only` — только слайсы под симулятор, это вдвое
    меньше cargo-работы; перед установкой на физический телефон нужен
-   `npm run codegen:ios:device`.
-2. В `apps/mobile/src/core/boot.ts` раскомментировать импорт сгенерированного
-   модуля (`setRawCore(generated)`) — он закомментирован, пока кодгена не
-   было, потому что Metro резолвит импорты статически.
+   `IPHONEOS_DEPLOYMENT_TARGET=16.4 npm run codegen:ios:device`.
+2. `ubrn` сам заменяет стабильный package entry `src/index.tsx` реальным
+   TurboModule; вручную менять `apps/mobile/src/core/boot.ts` не нужно.
 3. `npm run prebuild -w @typenotes/mobile`, затем
    `npm run ios -w @typenotes/mobile` — ставит dev-клиент на
    симулятор/устройство.
@@ -155,10 +154,11 @@ dev-режиме в приложение не вшит — он тянется �
 перекомпилирует и перезапускает бинарник» — здесь «перезапустить бинарник»
 означает переустановить приложение на устройстве.
 
-Без Мака: iOS-сборка невозможна в принципе (Xcode). Обходные пути —
+Без Мака локальная iOS-сборка невозможна (нужен Xcode). Обходные пути —
 Android-dev-клиент (`npm run codegen:android` работает и на Linux, нужен NDK)
-или облачная сборка EAS Build (раннеры-маки; кодген придётся встроить шагом
-сборки, потому что `generated/` не лежит в git).
+или нативный workflow `.github/workflows/mobile-testflight.yml` на GitHub
+macOS runner. Он сам выполняет codegen, Expo prebuild, Xcode export и загрузку
+в TestFlight; EAS Build не используется.
 
 ## День разработчика: три петли
 

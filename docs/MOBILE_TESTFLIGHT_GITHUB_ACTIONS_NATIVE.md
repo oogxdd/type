@@ -139,7 +139,10 @@ git push origin mobile-v0.2.4
 
 For a controlled first run, use Actions -> **Mobile TestFlight** -> **Run
 workflow** from `main`, supply a semantic version, and optionally supply a
-unique numeric build number.
+unique numeric build number. A manual dispatch uploads to TestFlight but skips
+the GitHub Release job. GitHub Release metadata is created only when a new
+`mobile-vX.Y.Z` tag is pushed; additional TestFlight build numbers for the same
+version reuse that existing release.
 
 Apple identifies a build by bundle ID, marketing version, and build string.
 Releasing the same marketing version again requires a new build number. A
