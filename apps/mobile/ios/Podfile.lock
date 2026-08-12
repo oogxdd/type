@@ -1977,6 +1977,8 @@ PODS:
     - React-utils (= 0.86.0)
     - ReactNativeDependencies
   - ReactNativeDependencies (0.86.0)
+  - RecordingActivity (0.1.0):
+    - ExpoModulesCore
   - RNGestureHandler (2.32.0):
     - hermes-engine
     - RCTRequired
@@ -2337,6 +2339,7 @@ DEPENDENCIES:
   - ReactCodegen (from `build/generated/ios/ReactCodegen`)
   - ReactCommon/turbomodule/core (from `../../../node_modules/react-native/ReactCommon`)
   - ReactNativeDependencies (from `../../../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)
+  - RecordingActivity (from `../modules/recording-activity`)
   - RNGestureHandler (from `../../../node_modules/react-native-gesture-handler`)
   - RNReanimated (from `../../../node_modules/react-native-reanimated`)
   - RNScreens (from `../../../node_modules/react-native-screens`)
@@ -2531,6 +2534,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/react-native/ReactCommon"
   ReactNativeDependencies:
     :podspec: "../../../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec"
+  RecordingActivity:
+    :path: "../modules/recording-activity"
   RNGestureHandler:
     :path: "../../../node_modules/react-native-gesture-handler"
   RNReanimated:
@@ -2559,13 +2564,13 @@ SPEC CHECKSUMS:
   ExpoImagePicker: 27f4e9a5d797abc31c75237362f90ac012d1a8fe
   ExpoKeepAwake: 8a96e2075b75641001f55393d7e6600a5b808f09
   ExpoLogBox: b39a76aab749833d58111c3be1264bb90f3b92d4
-  ExpoModulesCore: e0b100f95360fa46c08134992c52b8dc07b02ce4
+  ExpoModulesCore: 9f9b3ef39842dffdebdb23cf2a74eb9efd937cab
   ExpoModulesJSI: 0fad44a0464a4469b83a06e34e529c13043f2f69
   ExpoModulesWorklets: f6b71b8ddeb8dceb2ce3504544ecfbd708ba79a2
   ExpoModulesWorkletsAdapter: 639de30e8de038293a0ca7ce95d1d29146a85a3f
   ExpoSpeechRecognition: 119acf84448579e53f841d040aad76982f945e2d
   FBLazyVector: b3e7ad108f0d882e30445c5527d774e3fd432f3d
-  hermes-engine: 29149732020eeac870b01ab2da4c3c83724a8c2d
+  hermes-engine: 2dcc8f6ea68096b594e10507ccd6eeefe75fa358
   RCTDeprecation: 2a74a2c57675e64419bd89078efde81f7c1de90b
   RCTRequired: 30451112e6fef4e6f31b4e7eee0845156e35e4b0
   RCTSwiftUI: 5aaf0b07e747ba749dc6acc94d8bd41eea4b570f
@@ -2639,6 +2644,7 @@ SPEC CHECKSUMS:
   ReactCodegen: 21807c5e7d6d0e334667f755e23063834d581e62
   ReactCommon: d5c1bb4427bf51c443de5926aac332c89ddd9363
   ReactNativeDependencies: fa0a54b3f5319ae0e3b9aff32bfee7a424b88e66
+  RecordingActivity: 618f753a417a502817ee2c72f1ef754d1022171c
   RNGestureHandler: 92172e79df6e88e0e93b6341f9dcd8b5a02746ba
   RNReanimated: c66c5c9b1200bb4c0ca7b597064328b16bb1d667
   RNScreens: 991cc417cd396602a6cf59a42139e5a9d91462a9
@@ -2647,6 +2653,6 @@ SPEC CHECKSUMS:
   uniffi-bindgen-react-native: 5a59022841548d4c890e8f259016bdb8a797208a
   Yoga: fe50ab299e578f397fef753cf309c6703a4db29b
 
-PODFILE CHECKSUM: d6ff357a1867ee27ac281f2ec2c84e3b75715d4a
+PODFILE CHECKSUM: bc312c7663b9c70c87bdbb2cddfbd593dc9eb35b
 
 COCOAPODS: 1.16.2
