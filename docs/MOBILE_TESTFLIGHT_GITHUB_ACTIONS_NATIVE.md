@@ -103,12 +103,14 @@ The workflow:
 2. checks out the repository and selects Xcode 26.6;
 3. runs mobile typechecking/tests;
 4. generates the Rust/UniFFI device framework;
-5. runs `expo prebuild` and CocoaPods;
-6. writes the `.p8` secret to Xcode's standard private-key directory;
-7. archives without code signing;
-8. exports with automatic cloud signing;
-9. validates and uploads the resulting IPA with `altool`;
-10. retains the IPA as a GitHub artifact.
+5. refuses to continue if the device framework/package entry is missing or
+   still points at the demo core;
+6. runs `expo prebuild` and CocoaPods;
+7. writes the `.p8` secret to Xcode's standard private-key directory;
+8. archives without code signing;
+9. exports with automatic cloud signing;
+10. validates and uploads the resulting IPA with `altool`;
+11. retains the IPA as a GitHub artifact.
 
 `MOBILE_VERSION` and `IOS_BUILD_NUMBER` are present before `expo prebuild`, so
 `apps/mobile/app.config.js` writes them into the generated app Info.plist. The
@@ -120,6 +122,9 @@ generated Xcode defaults.
 `apps/mobile/ios/`: Expo prebuild can recreate that directory. Likewise, the
 recording-activity Expo config plugin adds `-lz -liconv` to the generated Pods
 aggregate xcconfigs so the Rust static library links on a clean runner.
+The job also exports `IPHONEOS_DEPLOYMENT_TARGET=16.4` while building Rust so
+vendored libgit2/OpenSSL objects and the final library target the same minimum
+iOS version as the app.
 
 ## Cutting a release
 
