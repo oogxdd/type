@@ -15,6 +15,7 @@ pub mod profiles;
 pub mod recordings;
 pub mod attachment_retention;
 pub mod security;
+pub mod sync_peer;
 pub mod whisper_env;
 
 // Re-export all adapter symbols so the rest of the crate can use them directly.
@@ -29,4 +30,5 @@ pub use profiles::*;
 pub use recordings::*;
 pub use attachment_retention::*;
 pub use security::*;
+pub use sync_peer::*;
 pub use whisper_env::*;
