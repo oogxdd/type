@@ -1328,7 +1328,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c54e03a951783e8b327515db3f2a2fd0e3bed362a96b066f341ce66ed49b4ead"
 dependencies = [
  "data-encoding",
- "syn 2.0.114",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -1696,7 +1696,7 @@ dependencies = [
  "digest 0.11.3",
  "ff 0.14.0",
  "group 0.14.0",
- "hkdf",
+ "hkdf 0.13.0",
  "hybrid-array",
  "pem-rfc7468 1.0.0",
  "pkcs8 0.11.0",
@@ -2749,6 +2749,15 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tracing",
+]
+
+[[package]]
+name = "hkdf"
+version = "0.12.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b5f8eb2ad728638ea2c7d47a21db23b7b58a72ed6a38256b8a1849f15fbbdf7"
+dependencies = [
+ "hmac 0.12.1",
 ]
 
 [[package]]
@@ -8204,6 +8213,7 @@ dependencies = [
  "base64 0.22.1",
  "chacha20poly1305",
  "git2",
+ "hkdf 0.12.4",
  "iroh",
  "iroh-blobs",
  "iroh-tickets",
