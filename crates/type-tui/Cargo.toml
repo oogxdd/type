@@ -1,0 +1,28 @@
+[package]
+name = "type-tui"
+version = "0.1.0"
+description = "Terminal shell for the Type notes app: folder tree, note list, vim-like editor, and git sync over the same type-core services the desktop and mobile apps use."
+edition = "2021"
+
+[[bin]]
+name = "type-tui"
+path = "src/main.rs"
+
+[dependencies]
+# The shared core. `default-features = false` skips local-sync (russh + tokio +
+# mDNS), recordings and handwriting (reqwest), the Apple Notes importer, and the
+# profile backup zip. We keep `git-sync` because `:sync` needs libgit2.
+type-core = { path = "../type-core", default-features = false, features = ["git-sync"] }
+
+ratatui = "0.30"
+
+# NOTE: the widely-known `tui-textarea` (rhysd) has no soft wrap — its word-wrap
+# issue has been open since 2022 and the crate's last release was Oct 2024.
+# `tui-textarea-2` is the maintained fork; `WrapMode` is the reason we use it,
+# since notes are markdown paragraphs stored as single long lines.
+# "search" adds the regex-backed `/pattern` search we bind to vim's `/`, `n`, `N`.
+tui-textarea-2 = { version = "0.12", features = ["search"] }
+
+# Resolve the platform app-data directory (what `AppEnv` needs), so the TUI
+# reads the same notes root the desktop app writes.
+dirs = "5"
