@@ -871,11 +871,12 @@ async fn load_document_entries(
     context: &SyncContext,
 ) -> Result<HashMap<String, Vec<StoredOperation>>, String> {
     let mut grouped: HashMap<String, Vec<StoredOperation>> = HashMap::new();
-    let mut stream = context
+    let stream = context
         .doc
         .get_many(Query::all())
         .await
         .map_err(|error| format!("Failed to read the Iroh document index: {error}"))?;
+    tokio::pin!(stream);
     while let Some(entry) = stream.next().await {
         let entry =
             entry.map_err(|error| format!("Failed to read an Iroh document entry: {error}"))?;
