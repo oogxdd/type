@@ -29,7 +29,7 @@ const statusForLog = (status: LocalSyncServerStatus): string =>
     status.host ?? "<none>"
   } branch=${status.branch ?? "<none>"} ssh=${redactRemoteForLog(status.ssh_url)} paired=${
     status.paired_devices.length
-  } error=${status.error ?? "<none>"}`;
+  } iroh=${status.iroh_endpoint_id ?? "<none>"} error=${status.error ?? "<none>"}`;
 
 export function LocalSyncServerCard() {
   const [status, setStatus] = useState<LocalSyncServerStatus | null>(null);
@@ -37,9 +37,9 @@ export function LocalSyncServerCard() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
-  // Opening the settings page only *reads* the server status. Starting is an
-  // explicit user action — auto-starting opened a network port (and mDNS
-  // broadcast) as a side effect of merely looking at the settings.
+  // Opening the settings page only reads status. The first start remains an
+  // explicit user action; after that, app startup restores the server until
+  // the user explicitly stops it.
   const refresh = useCallback(async () => {
     try {
       const current = await gitApi.getLocalSyncServerStatus();
@@ -108,13 +108,20 @@ export function LocalSyncServerCard() {
       branch: status.branch ?? undefined,
       name: status.host ? `Computer (${status.host})` : undefined,
       hostKeySha256: status.host_key_sha256 ?? undefined,
+      irohTicket: status.iroh_ticket ?? undefined,
     });
-  }, [status?.ssh_url, status?.branch, status?.host, status?.host_key_sha256]);
+  }, [
+    status?.ssh_url,
+    status?.branch,
+    status?.host,
+    status?.host_key_sha256,
+    status?.iroh_ticket,
+  ]);
 
   return (
     <SettingsCard
-      title="Local network server"
-      description="Host this computer's notes over encrypted local SSH so your phone can sync without an internet remote — same Wi-Fi, or your phone's personal hotspot."
+      title="Direct sync server"
+      description="Host this computer's notes over SSH through Iroh. Devices connect directly when possible and use an encrypted relay when necessary; the relay does not store your notes."
     >
       {status && !status.git_available ? (
         <SettingsErrorText>
@@ -145,7 +152,7 @@ export function LocalSyncServerCard() {
               ? "Stopping local SSH..."
               : "Starting local SSH..."
             : running
-              ? "Running — keep this app open while syncing."
+              ? "Running — on macOS you may close the window; quitting Type stops sync."
               : "Stopped"}
         </span>
       </SettingsActionRow>
@@ -154,7 +161,7 @@ export function LocalSyncServerCard() {
 
       {running ? (
         <div className="space-y-4">
-          {status?.host ? null : (
+          {status?.host || status?.iroh_ticket ? null : (
             <SettingsErrorText>
               Couldn't auto-detect this computer's network address. Find it in System Settings →
               Network and use the SSH URL below with your computer's IP address.
@@ -164,11 +171,11 @@ export function LocalSyncServerCard() {
           {deepLink ? (
             <div className="flex flex-col items-center gap-2 rounded-md border border-border/50 bg-background/60 p-4">
               <div className="rounded-md bg-white p-3">
-                <QRCodeSVG value={deepLink} size={168} marginSize={0} />
+                <QRCodeSVG value={deepLink} size={224} marginSize={0} />
               </div>
               <p className="text-center text-xs text-muted-foreground">
                 <strong className="text-foreground">Point your phone's Camera at this</strong> to
-                open the app and sync — nothing to type.
+                pair once. The phone can sync without staying on the same Wi-Fi.
               </p>
             </div>
           ) : null}
@@ -188,6 +195,11 @@ export function LocalSyncServerCard() {
 
           <div className="space-y-2">
             <SettingsHelpText>Or set it up by hand:</SettingsHelpText>
+            {status?.iroh_endpoint_id ? (
+              <SettingsHelpText>
+                Iroh endpoint: <code>{status.iroh_endpoint_id}</code>
+              </SettingsHelpText>
+            ) : null}
             {status?.ssh_url ? (
               <UrlRow
                 label="Pairing SSH URL"
@@ -199,7 +211,7 @@ export function LocalSyncServerCard() {
             <ol className="list-decimal space-y-1 pl-5 text-xs leading-relaxed text-muted-foreground">
               <li>
                 On the phone: menu → <strong>Sync</strong> → <strong>Scan QR code</strong>, point at
-                the code above, then tap <strong>Sync now</strong>.
+                the code above. After that, opening Type on the phone starts sync automatically.
               </li>
               <li>
                 No camera? Sync → Advanced: paste the Remote URL, set Branch to{" "}
@@ -209,6 +221,10 @@ export function LocalSyncServerCard() {
               <li>
                 This URL is served by Type itself over SSH. macOS Remote Login and{" "}
                 <code>authorized_keys</code> are not required.
+              </li>
+              <li>
+                On macOS the red close button leaves the sync host running in the background;
+                use <strong>Quit Type</strong> or <strong>Stop server</strong> to stop it.
               </li>
             </ol>
           </div>

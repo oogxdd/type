@@ -291,7 +291,7 @@ warm-desktop-cache:
   runs-on: macos-latest
   steps:
     - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@stable
+    - uses: dtolnay/rust-toolchain@1.97.1
     - uses: swatinem/rust-cache@v2
       with:
         shared-key: desktop-macos-release

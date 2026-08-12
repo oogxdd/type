@@ -30,6 +30,7 @@ mod ssh_server;
 use crate::{ensure_git_repo, resolve_target_branch, switch_or_prepare_branch};
 #[cfg(desktop)]
 use std::{
+    fs,
     net::{IpAddr, UdpSocket},
     path::PathBuf,
     process::Command,
@@ -39,6 +40,7 @@ use std::{
 /// Default local-sync port. It intentionally reuses the old git-daemon port so
 /// existing firewall prompts/rules continue to apply, but the protocol is SSH.
 pub const LOCAL_SYNC_PORT: u16 = 9418;
+const LOCAL_SYNC_AUTO_START_FILE: &str = "direct-sync-enabled";
 
 /// Bonjour/mDNS service type the desktop advertises and clients browse for.
 const MDNS_SERVICE_TYPE: &str = "_typenotes-sync._tcp.local.";
@@ -59,6 +61,8 @@ pub struct LocalSyncServerStatus {
     pub branch: Option<String>,
     pub ssh_url: Option<String>,
     pub host_key_sha256: Option<String>,
+    pub iroh_ticket: Option<String>,
+    pub iroh_endpoint_id: Option<String>,
     pub paired_devices: Vec<PairedDeviceInfo>,
     pub repo_path: String,
     pub error: Option<String>,
@@ -96,6 +100,9 @@ struct RunningDaemon {
     pairing_token: std::sync::Arc<Mutex<String>>,
     devices_path: PathBuf,
     host_key_sha256: String,
+    /// Optional direct/relay transport layered around the loopback SSH server.
+    iroh: Option<crate::IrohServerHandle>,
+    iroh_error: Option<String>,
     /// mDNS advertisement handle, present when discovery is active.
     mdns: Option<MdnsAdvert>,
 }
@@ -227,6 +234,12 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
         let branch = resolve_target_branch(&repo, None);
         switch_or_prepare_branch(&repo, &branch)?;
         drop(repo);
+        // Receipts are tracked metadata. The next upload-pack request will
+        // commit them together with any pending desktop changes before the
+        // phone fetches, matching the server's existing serve-time behavior.
+        if let Err(error) = crate::issue_desktop_audio_receipts(&root) {
+            eprintln!("[attachments] could not issue startup audio receipts: {error}");
+        }
 
         let served_name = root
             .file_name()
@@ -251,6 +264,28 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
         });
         let server = ssh_server::start_ssh_server(shared, &host_key, LOCAL_SYNC_PORT)?;
 
+        let (iroh, iroh_error) = match crate::start_iroh_sync_server(
+            app,
+            LOCAL_SYNC_PORT,
+            root.clone(),
+            pairing_token.clone(),
+        ) {
+            Ok(iroh) => {
+                if let Ok(repo) = git2::Repository::open(&root) {
+                    if let Err(error) = crate::set_audio_git_exclusion(&repo, true) {
+                        eprintln!("[attachments] could not exclude Iroh audio from Git: {error}");
+                    }
+                }
+                (Some(iroh), None)
+            }
+            Err(error) => {
+                eprintln!(
+                    "[iroh-sync] desktop endpoint unavailable; LAN sync remains active: {error}"
+                );
+                (None, Some(error))
+            }
+        };
+
         // Advertise over mDNS so phones can auto-discover this server without
         // typing or scanning anything. Best-effort: failure never blocks hosting.
         // The advertised URL deliberately omits the pairing token: mDNS is
@@ -271,6 +306,8 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
             pairing_token,
             devices_path,
             host_key_sha256,
+            iroh,
+            iroh_error,
             mdns,
         };
         let status = running_status(&daemon);
@@ -281,6 +318,9 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
             daemon.repo_path.display(),
             status.paired_devices.len()
         );
+        if let Err(error) = set_local_sync_auto_start(app, true) {
+            eprintln!("[local-sync] could not persist auto-start preference: {error}");
+        }
         *guard = Some(daemon);
         Ok(status)
     }
@@ -295,6 +335,9 @@ pub fn stop_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatus
 
     #[cfg(desktop)]
     {
+        if let Err(error) = set_local_sync_auto_start(app, false) {
+            eprintln!("[local-sync] could not clear auto-start preference: {error}");
+        }
         if let Ok(mut guard) = DAEMON.lock() {
             if let Some(daemon) = guard.take() {
                 eprintln!(
@@ -306,6 +349,27 @@ pub fn stop_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatus
             }
         }
         local_sync_server_status(app)
+    }
+}
+
+/// Whether the user has started direct sync before without explicitly
+/// stopping it. Used by the desktop shell to restore hosting on app launch.
+#[cfg(desktop)]
+pub fn local_sync_auto_start_enabled(app: &AppEnv) -> bool {
+    crate::app_data_dir(app)
+        .map(|dir| dir.join(LOCAL_SYNC_AUTO_START_FILE).is_file())
+        .unwrap_or(false)
+}
+
+#[cfg(desktop)]
+fn set_local_sync_auto_start(app: &AppEnv, enabled: bool) -> Result<(), String> {
+    let path = crate::app_data_dir(app)?.join(LOCAL_SYNC_AUTO_START_FILE);
+    if enabled {
+        fs::write(path, b"enabled\n").map_err(|error| error.to_string())
+    } else if path.exists() {
+        fs::remove_file(path).map_err(|error| error.to_string())
+    } else {
+        Ok(())
     }
 }
 
@@ -326,6 +390,9 @@ fn teardown_daemon(mut daemon: RunningDaemon) {
         let _ = advert.daemon.unregister(&advert.fullname);
         let _ = advert.daemon.shutdown();
     }
+    if let Some(iroh) = daemon.iroh.take() {
+        iroh.stop();
+    }
     daemon.server.stop();
 }
 
@@ -342,6 +409,8 @@ fn unsupported_status(repo_path: String) -> LocalSyncServerStatus {
         branch: None,
         ssh_url: None,
         host_key_sha256: None,
+        iroh_ticket: None,
+        iroh_endpoint_id: None,
         paired_devices: Vec::new(),
         repo_path,
         error: None,
@@ -359,6 +428,8 @@ fn idle_status(git_available: bool, repo_path: String) -> LocalSyncServerStatus 
         branch: None,
         ssh_url: None,
         host_key_sha256: None,
+        iroh_ticket: None,
+        iroh_endpoint_id: None,
         paired_devices: Vec::new(),
         repo_path,
         error: None,
@@ -374,8 +445,14 @@ fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
         .unwrap_or_default();
     let ssh_url = daemon
         .host
-        .as_ref()
-        .map(|host| ssh_pairing_url(host, &daemon.served_name, &token));
+        .as_deref()
+        .map(|host| ssh_pairing_url(host, &daemon.served_name, &token))
+        .or_else(|| {
+            daemon
+                .iroh
+                .as_ref()
+                .map(|_| ssh_pairing_url("iroh.invalid", &daemon.served_name, &token))
+        });
     let paired_devices = devices::list_devices(&daemon.devices_path)
         .into_iter()
         .map(|device| PairedDeviceInfo {
@@ -392,9 +469,14 @@ fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
         branch: Some(daemon.branch.clone()),
         ssh_url,
         host_key_sha256: Some(daemon.host_key_sha256.clone()),
+        iroh_ticket: daemon.iroh.as_ref().map(|iroh| iroh.ticket().to_string()),
+        iroh_endpoint_id: daemon
+            .iroh
+            .as_ref()
+            .map(|iroh| iroh.endpoint_id().to_string()),
         paired_devices,
         repo_path: daemon.repo_path.to_string_lossy().to_string(),
-        error: None,
+        error: daemon.iroh_error.clone(),
     }
 }
 

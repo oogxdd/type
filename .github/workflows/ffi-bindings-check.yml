@@ -54,7 +54,7 @@ jobs:
           node-version: 20
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           # Codegen extracts uniffi metadata from a compiled library, so the
           # crate must actually build for an Apple target. Sim target only —

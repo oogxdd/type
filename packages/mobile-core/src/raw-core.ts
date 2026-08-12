@@ -58,6 +58,9 @@ export interface RawCore {
   connectGitRepo(argsJson: string): Promise<string>;
   gitPull(argsJson: string): Promise<string>;
   gitPush(argsJson: string): Promise<string>;
+  startIrohSyncClient(argsJson: string): Promise<string>;
+  archiveMobileAudioWithIroh(): Promise<string>;
+  setMobileAudioGitExclusion(enabled: boolean): Promise<void>;
   /** Snapshot of the in-flight pull/push transfer progress (sync read).
    * Optional: absent in native modules generated before it existed —
    * `core-api` feature-detects and reports idle instead. */
@@ -69,6 +72,7 @@ export interface RawCore {
   queueProviderTranscriptions(provider: RawTranscriptionProvider): Promise<string>;
   listRecordings(): Promise<string>;
   readRecordingAudio(path: string): Promise<string>;
+  pruneMobileAudioCache(): Promise<string>;
 
   // ── Photo attachments ──
   saveHandwritingAttachment(argsJson: string): Promise<string>;

@@ -18,6 +18,9 @@ import type {
   GitSyncStatus,
   GitTransferProgress,
   HandwritingAttachmentWriteResult,
+  IrohAudioArchiveResult,
+  IrohClientStatus,
+  MobileAudioPruneResult,
   NoteMeta,
   NotePreviewEntry,
   ProfilesBackupArchive,
@@ -30,6 +33,7 @@ import type {
   RecordingWriteResult,
   SaveRecordingArgs,
   SaveHandwritingAttachmentArgs,
+  StartIrohClientArgs,
   SecurityState,
   SecurityUnlockResult,
   SetNoteMarkersArgs,
@@ -182,6 +186,20 @@ export const gitPull = async (args: GitSyncArgs = {}): Promise<GitSyncStatus> =>
 export const gitPush = async (args: GitPushArgs = {}): Promise<GitSyncStatus> =>
   parse(await getRawCore().gitPush(JSON.stringify(args)));
 
+/** Start/reuse the mobile loopback proxy for an SSH-over-Iroh remote. */
+export const startIrohSyncClient = async (
+  args: StartIrohClientArgs
+): Promise<IrohClientStatus> =>
+  parse(await getRawCore().startIrohSyncClient(JSON.stringify(args)));
+
+/** Copy local recording bytes to the paired desktop outside Git. */
+export const archiveMobileAudioWithIroh = async (): Promise<IrohAudioArchiveResult> =>
+  parse(await getRawCore().archiveMobileAudioWithIroh());
+
+/** Switch recording paths between Iroh archive mode and ordinary Git mode. */
+export const setMobileAudioGitExclusion = (enabled: boolean): Promise<void> =>
+  getRawCore().setMobileAudioGitExclusion(enabled);
+
 const idleTransferProgress: GitTransferProgress = {
   phase: "idle",
   objects_done: 0,
@@ -235,6 +253,10 @@ export const readRecordingAudio = async (
   path: string
 ): Promise<RecordingAudioPayload> =>
   parse(await getRawCore().readRecordingAudio(path));
+
+/** Evict phone audio only after age, transcript, and desktop receipt checks. */
+export const pruneMobileAudioCache = async (): Promise<MobileAudioPruneResult> =>
+  parse(await getRawCore().pruneMobileAudioCache());
 
 // ── Photo attachments ────────────────────────────────────────────────────────
 

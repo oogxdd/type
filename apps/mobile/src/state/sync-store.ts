@@ -14,10 +14,20 @@ import type {
   GitTransferProgress,
 } from "@typenotes/shared/types";
 
+import {
+  autoSyncRetryDelayMs,
+  saveReasonHasLocalChanges,
+  type AutoSyncState,
+} from "../lib/sync-experience";
 import { useNotesStore } from "./notes-store";
 import { activeProfile, useSettingsStore } from "./settings-store";
 
 type SyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
+type SavedGitConnection = ConnectGitArgs & { irohTicket: string | null };
+const AUTO_SYNC_DELAY_MS = 1_500;
+const AUTO_SYNC_BUSY_RETRY_MS = 2_000;
+let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let autoSyncFailureCount = 0;
 
 const sshHostFromRemote = (remote: string): string => {
   const match = remote.match(/^ssh:\/\/(?:[^@/]+@)?(\[[^\]]+\]|[^/:]+)(?::\d+)?(?:\/|$)/i);
@@ -57,6 +67,8 @@ type SyncState = {
   progress: GitTransferProgress | null;
   error: string | null;
   hint: string | null;
+  autoSyncState: AutoSyncState | null;
+  lastAutoSyncedAt: number | null;
   /** A scanned/deep-linked type2://sync remote waiting to be applied. */
   pendingLink: SyncDeepLinkParams | null;
   setPendingLink: (link: SyncDeepLinkParams | null) => void;
@@ -68,10 +80,12 @@ type SyncState = {
   push: (message?: string) => Promise<void>;
   /** The one-button flow: pull, then push. */
   syncNow: () => Promise<void>;
+  /** Debounced, best-effort sync used after saves and foregrounding. */
+  scheduleAutoSync: (reason: string, delayMs?: number) => void;
 };
 
 export const useSyncStore = create<SyncState>((set, get) => {
-  const savedGitConnection = (): ConnectGitArgs | null => {
+  const savedGitConnection = (): SavedGitConnection | null => {
     const profile = activeProfile(useSettingsStore.getState().snapshot);
     const settings = profile?.settings;
     const remoteUrl = settings?.git_remote_url.trim();
@@ -84,12 +98,43 @@ export const useSyncStore = create<SyncState>((set, get) => {
       branch: settings.git_branch.trim() || null,
       username: settings.git_username.trim() || null,
       password: settings.git_password || null,
+      irohTicket: settings.git_iroh_ticket.trim() || null,
     };
+  };
+
+  const prepareIrohConnection = async (
+    connection: SavedGitConnection | null
+  ): Promise<ConnectGitArgs | null> => {
+    if (!connection?.remote_url || !connection.irohTicket) {
+      return connection;
+    }
+    logSync("iroh: ensuring phone loopback proxy is running");
+    const proxy = await core.startIrohSyncClient({
+      ticket: connection.irohTicket,
+      remote_url: connection.remote_url,
+    });
+    logSync(`iroh: proxy ready port=${proxy.local_port} endpoint=${proxy.endpoint_id}`);
+    return { ...connection, remote_url: proxy.local_remote_url };
+  };
+
+  const prepareAudioForPush = async (connection: SavedGitConnection | null) => {
+    if (!connection?.irohTicket) {
+      await core.setMobileAudioGitExclusion(false);
+      return;
+    }
+    const archive = await core.archiveMobileAudioWithIroh();
+    if (archive.uploaded > 0) {
+      logSync(`audio archive: copied ${archive.uploaded} recording(s) to desktop over Iroh`);
+    }
+    const prune = await core.pruneMobileAudioCache();
+    if (prune.evicted > 0) {
+      logSync(`audio cache: evicted ${prune.evicted} verified week-old recording(s)`);
+    }
   };
 
   const ensureSavedRemote = async (
     currentStatus: GitSyncStatus | null,
-    connection = savedGitConnection()
+    connection: ConnectGitArgs | null = savedGitConnection()
   ): Promise<GitSyncStatus | null> => {
     if (!connection?.remote_url) {
       logSync(`saved remote: none; ${statusForLog(currentStatus)}`);
@@ -181,6 +226,46 @@ export const useSyncStore = create<SyncState>((set, get) => {
     throw new Error(message);
   };
 
+  const scheduleAutoSyncAttempt = (reason: string, delayMs: number) => {
+    if (autoSyncTimer) {
+      clearTimeout(autoSyncTimer);
+    }
+    logSync(`auto: scheduled after ${reason} in ${delayMs}ms`);
+    autoSyncTimer = setTimeout(() => {
+      autoSyncTimer = null;
+      if (!savedGitConnection()) {
+        logSync(`auto: skipped ${reason}; no saved remote`);
+        return;
+      }
+      if (get().action !== "idle") {
+        logSync(`auto: delayed ${reason}; ${get().action} is running`);
+        scheduleAutoSyncAttempt(reason, AUTO_SYNC_BUSY_RETRY_MS);
+        return;
+      }
+      logSync(`auto: starting after ${reason}`);
+      set({ autoSyncState: "syncing" });
+      void get()
+        .syncNow()
+        .then(() => {
+          autoSyncFailureCount = 0;
+          set({ autoSyncState: "synced", lastAutoSyncedAt: Date.now() });
+        })
+        .catch((error) => {
+          autoSyncFailureCount += 1;
+          const retryMs = autoSyncRetryDelayMs(autoSyncFailureCount);
+          logSync(
+            `auto: ${reason} failed silently - ${getErrorMessage(error)}; retry in ${retryMs}ms`
+          );
+          set({
+            autoSyncState: "waiting_for_computer",
+            error: null,
+            hint: null,
+          });
+          scheduleAutoSyncAttempt("computer unavailable", retryMs);
+        });
+    }, Math.max(0, delayMs));
+  };
+
   return {
     status: null,
     history: [],
@@ -188,25 +273,42 @@ export const useSyncStore = create<SyncState>((set, get) => {
     progress: null,
     error: null,
     hint: null,
+    autoSyncState: null,
+    lastAutoSyncedAt: null,
     pendingLink: null,
 
     setPendingLink: (link) => set({ pendingLink: link }),
 
     refresh: () => run("refresh", () => core.getGitStatus()),
 
-    connect: (args) => run("connect", () => core.connectGitRepo(args)),
+    connect: async (args) => {
+      await core.setMobileAudioGitExclusion(false);
+      await run("connect", () => core.connectGitRepo(args));
+    },
 
     connectFromLink: async (link) => {
       requireIdle("qr connect");
       await run("connect", async () => {
         const settingsStore = useSettingsStore.getState();
         const profile = activeProfile(settingsStore.snapshot);
-        const trustedSshHost = link.hostKeySha256 ? sshHostFromRemote(link.remote) : "";
-        const durableRemote = stripPairingUsernameFromSshRemote(link.remote);
+        const pairingRemote = link.irohTicket
+          ? (
+              await core.startIrohSyncClient({
+                ticket: link.irohTicket,
+                remote_url: link.remote,
+              })
+            ).local_remote_url
+          : link.remote;
+        const trustedSshHost = link.hostKeySha256
+          ? sshHostFromRemote(pairingRemote)
+          : "";
+        const durableRemote = stripPairingUsernameFromSshRemote(pairingRemote);
         logSync(
-          `qr: applying link remote=${redactRemoteForLog(link.remote)} durable=${redactRemoteForLog(
+          `qr: applying link remote=${redactRemoteForLog(pairingRemote)} durable=${redactRemoteForLog(
             durableRemote
-          )} branch=${link.branch ?? "main"} hostPin=${Boolean(link.hostKeySha256)} trustedHost=${
+          )} branch=${link.branch ?? "main"} iroh=${Boolean(link.irohTicket)} hostPin=${Boolean(
+            link.hostKeySha256
+          )} trustedHost=${
             trustedSshHost || "<none>"
           }`
         );
@@ -221,6 +323,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
               commitMessage: profile?.settings.git_commit_message || "Sync notes",
               trustedSshHost,
               trustedSshHostKeySha256: trustedSshHost ? link.hostKeySha256 ?? "" : "",
+              irohTicket: link.irohTicket ?? null,
             });
           } catch (error) {
             logSync(
@@ -230,7 +333,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
             );
           }
         };
-        if (link.remote.toLowerCase().startsWith("ssh://")) {
+        if (pairingRemote.toLowerCase().startsWith("ssh://")) {
           const existingKey = await core.getSshPublicKey();
           if (!existingKey) {
             logSync("ssh key: none found; generating app-managed key");
@@ -239,14 +342,25 @@ export const useSyncStore = create<SyncState>((set, get) => {
             logSync("ssh key: existing app-managed key found");
           }
         }
-        logSync(`qr: connecting with pairing remote ${redactRemoteForLog(link.remote)}`);
+        if (link.irohTicket) {
+          await prepareAudioForPush({
+            remote_url: link.remote,
+            branch: link.branch ?? null,
+            username: null,
+            password: null,
+            irohTicket: link.irohTicket,
+          });
+        } else {
+          await core.setMobileAudioGitExclusion(false);
+        }
+        logSync(`qr: connecting with pairing remote ${redactRemoteForLog(pairingRemote)}`);
         const pairingStatus = await core.connectGitRepo({
-          remote_url: link.remote,
+          remote_url: pairingRemote,
           branch: link.branch ?? "main",
           username: null,
           password: null,
         });
-        if (durableRemote !== link.remote) {
+        if (durableRemote !== pairingRemote) {
           logSync(
             `qr: pairing connect succeeded; applying durable origin ${redactRemoteForLog(
               durableRemote
@@ -261,7 +375,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
           await saveLinkSettingsBestEffort(durableRemote);
           return durableStatus;
         }
-        await saveLinkSettingsBestEffort(link.remote);
+        await saveLinkSettingsBestEffort(pairingRemote);
         return pairingStatus;
       });
     },
@@ -271,7 +385,9 @@ export const useSyncStore = create<SyncState>((set, get) => {
         return;
       }
       await run("pull", async () => {
-        const connection = savedGitConnection();
+        const savedConnection = savedGitConnection();
+        const connection = await prepareIrohConnection(savedConnection);
+        await prepareAudioForPush(savedConnection);
         logSync(
           `pull: saved connection remote=${redactRemoteForLog(connection?.remote_url)} branch=${
             connection?.branch ?? "main"
@@ -292,6 +408,16 @@ export const useSyncStore = create<SyncState>((set, get) => {
       // Remote edits may have changed the notes on disk.
       await useNotesStore.getState().refresh();
       logSync("pull: notes refreshed after remote changes");
+      await core
+        .pruneMobileAudioCache()
+        .then((prune) => {
+          if (prune.evicted > 0) {
+            logSync(`audio cache: evicted ${prune.evicted} verified week-old recording(s)`);
+          }
+        })
+        .catch((error) => {
+          logSync(`audio cache: prune skipped - ${getErrorMessage(error)}`);
+        });
     },
 
     syncNow: async () => {
@@ -299,9 +425,25 @@ export const useSyncStore = create<SyncState>((set, get) => {
         return;
       }
       logSync("sync now: starting pull then push");
-      await get().pull();
-      logSync("sync now: pull complete; starting push");
-      await get().push();
+      set({ autoSyncState: "syncing" });
+      try {
+        await get().pull();
+        logSync("sync now: pull complete; starting push");
+        await get().push();
+        autoSyncFailureCount = 0;
+        set({ autoSyncState: "synced", lastAutoSyncedAt: Date.now() });
+      } catch (error) {
+        set({ autoSyncState: "waiting_for_computer" });
+        throw error;
+      }
+    },
+
+    scheduleAutoSync: (reason, delayMs = AUTO_SYNC_DELAY_MS) => {
+      autoSyncFailureCount = 0;
+      if (saveReasonHasLocalChanges(reason)) {
+        set({ autoSyncState: "saved_locally" });
+      }
+      scheduleAutoSyncAttempt(reason, delayMs);
     },
 
     push: async (message) => {
@@ -309,7 +451,9 @@ export const useSyncStore = create<SyncState>((set, get) => {
         return;
       }
       await run("push", async () => {
-        const connection = savedGitConnection();
+        const savedConnection = savedGitConnection();
+        const connection = await prepareIrohConnection(savedConnection);
+        await prepareAudioForPush(savedConnection);
         logSync(
           `push: saved connection remote=${redactRemoteForLog(connection?.remote_url)} branch=${
             connection?.branch ?? "main"

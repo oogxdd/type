@@ -61,6 +61,8 @@ export type LocalSyncServerStatus = {
   branch: string | null;
   ssh_url: string | null;
   host_key_sha256: string | null;
+  iroh_ticket: string | null;
+  iroh_endpoint_id: string | null;
   paired_devices: PairedDeviceInfo[];
   repo_path: string;
   error: string | null;
@@ -201,6 +203,7 @@ export type RecordingListItem = {
   note_path: string;
   folder_path: string;
   audio_path: string | null;
+  archived_on_desktop: boolean;
   status: string;
   error: string | null;
   updated_ms: number | null;
@@ -232,6 +235,16 @@ export type HandwritingOcrListResult = {
 export type RecordingAudioPayload = {
   mime_type: string;
   audio_base64: string;
+};
+
+export type MobileAudioPruneResult = {
+  scanned: number;
+  evicted: number;
+  already_evicted: number;
+  waiting_for_age: number;
+  waiting_for_transcription: number;
+  waiting_for_desktop_receipt: number;
+  waiting_for_git_migration: number;
 };
 
 export type WhisperStatusResult = {
@@ -305,6 +318,8 @@ export type ProfileSettings = {
   git_commit_message: string;
   git_trusted_ssh_host: string;
   git_trusted_ssh_host_key_sha256: string;
+  /** Device-local endpoint ticket; empty means ordinary Git transport. */
+  git_iroh_ticket: string;
   mobile_auto_transcription_enabled: boolean;
   mobile_auto_handwriting_ocr_enabled: boolean;
   transcription_mode?: TranscriptionMode | null;
@@ -406,6 +421,24 @@ export type GitPushArgs = {
   branch?: string | null;
   username?: string | null;
   password?: string | null;
+};
+
+export type StartIrohClientArgs = {
+  ticket: string;
+  remote_url: string;
+};
+
+export type IrohClientStatus = {
+  running: boolean;
+  local_port: number;
+  local_remote_url: string;
+  endpoint_id: string;
+};
+
+export type IrohAudioArchiveResult = {
+  scanned: number;
+  uploaded: number;
+  already_archived: number;
 };
 
 export type GitHistoryArgs = {

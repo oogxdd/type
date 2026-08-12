@@ -7,11 +7,13 @@
 pub mod git;
 pub mod handwriting;
 pub mod import;
+pub mod iroh_sync;
 pub mod local_sync;
 pub mod notes;
 pub mod ocr_env;
 pub mod profiles;
 pub mod recordings;
+pub mod attachment_retention;
 pub mod security;
 pub mod whisper_env;
 
@@ -19,10 +21,12 @@ pub mod whisper_env;
 pub use git::*;
 pub use handwriting::*;
 pub use import::*;
+pub use iroh_sync::*;
 pub use local_sync::*;
 pub use notes::*;
 pub use ocr_env::*;
 pub use profiles::*;
 pub use recordings::*;
+pub use attachment_retention::*;
 pub use security::*;
 pub use whisper_env::*;

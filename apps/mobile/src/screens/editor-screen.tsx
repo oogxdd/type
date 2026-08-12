@@ -17,6 +17,7 @@ import type { NoteMeta } from "@typenotes/shared/types";
 
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
+import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
 import { RecordingAudioPlayer } from "../ui/audio-player";
 
@@ -78,6 +79,7 @@ export const EditorScreen = () => {
     try {
       await core.writeNote(path, latest.current.text);
       await useNotesStore.getState().refreshPreviews([path]);
+      useSyncStore.getState().scheduleAutoSync("note saved");
     } catch (err) {
       setError(getErrorMessage(err));
     }

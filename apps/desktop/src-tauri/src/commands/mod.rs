@@ -40,6 +40,17 @@ pub(super) fn run() {
                     let _ = push_handle.emit("local-sync-push-received", ());
                 }));
             }
+            let auto_start_env = crate::app_env(app_handle)?;
+            if type_core::local_sync_auto_start_enabled(&auto_start_env) {
+                std::thread::spawn(move || {
+                    if type_core::ensure_security_unlocked_for_app(&auto_start_env).is_ok() {
+                        if let Err(error) = type_core::start_local_sync_server_impl(&auto_start_env)
+                        {
+                            eprintln!("[local-sync] automatic startup failed: {error}");
+                        }
+                    }
+                });
+            }
             if let Err(error) = crate::sync_recordings_asset_scope(app_handle) {
                 eprintln!(
                     "[recordings] failed to set initial asset-protocol scope: {}",
@@ -114,7 +125,31 @@ pub(super) fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|_app_handle, event| {
+    app.run(|app_handle, event| {
+        // On macOS the red close button means "hide the window", not "stop
+        // direct sync". Keep the Tauri process (and therefore SSH + Iroh)
+        // resident, and restore the same window when the Dock icon is opened.
+        // Cmd-Q still emits Exit and performs the normal clean shutdown.
+        #[cfg(target_os = "macos")]
+        match &event {
+            tauri::RunEvent::WindowEvent {
+                label,
+                event: tauri::WindowEvent::CloseRequested { api, .. },
+                ..
+            } if label == "main" => {
+                api.prevent_close();
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+            }
+            tauri::RunEvent::Reopen { .. } => {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            _ => {}
+        }
         // Tear down the local sync git daemon when the app exits so we never
         // leave an orphaned process holding port 9418.
         if matches!(event, tauri::RunEvent::Exit) {

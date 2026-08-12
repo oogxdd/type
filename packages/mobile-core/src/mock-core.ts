@@ -32,6 +32,7 @@ const defaultProfileSettings = (): ProfileSettings => ({
   git_commit_message: "Sync notes",
   git_trusted_ssh_host: "",
   git_trusted_ssh_host_key_sha256: "",
+  git_iroh_ticket: "",
   mobile_auto_transcription_enabled: true,
   mobile_auto_handwriting_ocr_enabled: true,
   transcription_mode: null,
@@ -422,6 +423,21 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       });
       return JSON.stringify(gitStatus());
     },
+    startIrohSyncClient: async (argsJson) => {
+      const args = JSON.parse(argsJson) as { remote_url: string };
+      return JSON.stringify({
+        running: true,
+        local_port: 19418,
+        local_remote_url: args.remote_url.replace(
+          /^(ssh:\/\/(?:[^@/]+@)?)(?:\[[^\]]+\]|[^/:]+)(?::\d+)?\//i,
+          "$1127.0.0.1:19418/"
+        ),
+        endpoint_id: "demo-iroh-endpoint",
+      });
+    },
+    archiveMobileAudioWithIroh: async () =>
+      JSON.stringify({ scanned: audio.size, uploaded: 0, already_archived: audio.size }),
+    setMobileAudioGitExclusion: async () => {},
 
     // ── Recordings ──
     saveAudioRecording: async (argsJson) => {
@@ -467,6 +483,7 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
             note_path: path,
             folder_path: parentOf(path),
             audio_path: note.meta.recording_audio_path ?? null,
+            archived_on_desktop: false,
             status: note.meta.transcription_status ?? "pending",
             error: note.meta.transcription_error ?? null,
             updated_ms: note.meta.updated_ms,
@@ -484,6 +501,16 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
         audio_base64: payload.base64,
       });
     },
+    pruneMobileAudioCache: async () =>
+      JSON.stringify({
+        scanned: audio.size,
+        evicted: 0,
+        already_evicted: 0,
+        waiting_for_age: audio.size,
+        waiting_for_transcription: 0,
+        waiting_for_desktop_receipt: 0,
+        waiting_for_git_migration: 0,
+      }),
 
     // ── Photo attachments ──
     saveHandwritingAttachment: async (argsJson) => {

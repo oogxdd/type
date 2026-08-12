@@ -26,6 +26,7 @@ type SettingsState = {
     commitMessage: string;
     trustedSshHost?: string | null;
     trustedSshHostKeySha256?: string | null;
+    irohTicket?: string | null;
   }) => Promise<void>;
   saveAssemblyAiKey: (key: string) => Promise<void>;
 };
@@ -124,6 +125,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       commitMessage,
       trustedSshHost,
       trustedSshHostKeySha256,
+      irohTicket,
     }) =>
       guarded(async () => {
         console.log(
@@ -142,6 +144,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
             trustedSshHostKeySha256 === undefined
               ? settings.git_trusted_ssh_host_key_sha256
               : trustedSshHostKeySha256 ?? "",
+          git_iroh_ticket:
+            irohTicket === undefined ? settings.git_iroh_ticket : irohTicket ?? "",
         }));
         const saved = activeProfile(get().snapshot)?.settings.git_remote_url;
         console.log(`[settings] saved git settings remote=${redactRemoteForLog(saved)}`);

@@ -185,6 +185,7 @@ export default function App() {
           // Best-effort — populates the menu's "last synced" label without
           // forcing the user through the Sync screen first.
           void useSyncStore.getState().refresh().catch(() => {});
+          useSyncStore.getState().scheduleAutoSync("app opened", 0);
         }
         if (!cancelled) {
           setPhase({ state: "ready" });
@@ -213,6 +214,9 @@ export default function App() {
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (next) => {
       const security = useSecurityStore.getState();
+      if (next === "active" && !isLocked(security.state)) {
+        useSyncStore.getState().scheduleAutoSync("app foregrounded", 0);
+      }
       if (
         next === "background" &&
         security.state?.encryption_enabled &&

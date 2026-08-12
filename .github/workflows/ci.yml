@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.97.1
       - uses: swatinem/rust-cache@v2
       # Tauri's Linux build needs these system libraries to compile the lib
       # (and therefore its test harness).

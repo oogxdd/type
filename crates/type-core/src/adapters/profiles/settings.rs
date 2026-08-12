@@ -86,6 +86,9 @@ pub struct ProfileSettings {
     pub git_trusted_ssh_host: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub git_trusted_ssh_host_key_sha256: String,
+    /// Device-local Iroh endpoint ticket. Empty keeps ordinary Git transport.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub git_iroh_ticket: String,
     #[serde(default = "default_true")]
     pub mobile_auto_transcription_enabled: bool,
     #[serde(default = "default_true")]
@@ -107,6 +110,7 @@ impl Default for ProfileSettings {
             git_commit_message: default_git_commit_message(),
             git_trusted_ssh_host: String::new(),
             git_trusted_ssh_host_key_sha256: String::new(),
+            git_iroh_ticket: String::new(),
             mobile_auto_transcription_enabled: true,
             mobile_auto_handwriting_ocr_enabled: true,
             transcription_mode: None,
@@ -165,6 +169,8 @@ struct DeviceGitSettings {
     git_trusted_ssh_host: String,
     #[serde(default)]
     git_trusted_ssh_host_key_sha256: String,
+    #[serde(default)]
+    git_iroh_ticket: String,
 }
 
 fn device_settings_path(notes_root: &Path) -> PathBuf {
@@ -196,6 +202,7 @@ pub fn load_profile_settings(notes_root: &Path) -> ProfileSettings {
             settings.git_commit_message = device.git_commit_message;
             settings.git_trusted_ssh_host = device.git_trusted_ssh_host;
             settings.git_trusted_ssh_host_key_sha256 = device.git_trusted_ssh_host_key_sha256;
+            settings.git_iroh_ticket = device.git_iroh_ticket;
         }
     }
     settings
@@ -221,6 +228,7 @@ pub fn save_profile_settings(notes_root: &Path, settings: &ProfileSettings) -> R
         git_commit_message: settings.git_commit_message.clone(),
         git_trusted_ssh_host: settings.git_trusted_ssh_host.clone(),
         git_trusted_ssh_host_key_sha256: settings.git_trusted_ssh_host_key_sha256.clone(),
+        git_iroh_ticket: settings.git_iroh_ticket.clone(),
     };
     let device_content = serde_json::to_string_pretty(&device).map_err(|err| err.to_string())?;
     let device_path = device_settings_path(notes_root);
@@ -241,6 +249,7 @@ pub fn save_profile_settings(notes_root: &Path, settings: &ProfileSettings) -> R
     shared.git_commit_message = default_git_commit_message();
     shared.git_trusted_ssh_host = String::new();
     shared.git_trusted_ssh_host_key_sha256 = String::new();
+    shared.git_iroh_ticket = String::new();
     let path = folder.join(SETTINGS_FILE);
     let content = serde_json::to_string_pretty(&shared).map_err(|err| err.to_string())?;
     fs::write(&path, content).map_err(|err| {
