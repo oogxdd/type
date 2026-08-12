@@ -37,6 +37,13 @@ const normalizeHandwritingProvider = (
 ): ProfileSyncSettings["handwritingOcrProvider"] =>
   value === "openai" || value === "huggingface" ? value : "local";
 
+// Anything unrecognized (including configs written before this setting
+// existed) falls back to local Whisper, which needs no API key.
+const normalizeTranscriptionProvider = (
+  value: string
+): ProfileSyncSettings["transcriptionProvider"] =>
+  value === "assemblyai" ? "assemblyai" : "whisper";
+
 export const profileSyncSettingsFromState = (
   appConfig: AppConfig | null,
   profileSettings: ProfileSettings | null
@@ -60,6 +67,9 @@ export const profileSyncSettingsFromState = (
     mobileAutoTranscriptionEnabled:
       profileSettings.mobile_auto_transcription_enabled,
     whisperModel: appConfig.whisper_model,
+    transcriptionProvider: normalizeTranscriptionProvider(
+      appConfig.transcription_provider
+    ),
     handwritingOcrProvider: normalizeHandwritingProvider(
       appConfig.handwriting_ocr_provider
     ),
@@ -87,6 +97,9 @@ export const splitProfileSyncSettingsPatch = (
   }
   if ("whisperModel" in patch) {
     appConfigPatch.whisper_model = patch.whisperModel;
+  }
+  if ("transcriptionProvider" in patch) {
+    appConfigPatch.transcription_provider = patch.transcriptionProvider;
   }
   if ("handwritingOcrProvider" in patch) {
     appConfigPatch.handwriting_ocr_provider = patch.handwritingOcrProvider;

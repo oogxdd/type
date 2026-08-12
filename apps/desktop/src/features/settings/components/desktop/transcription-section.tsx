@@ -4,15 +4,22 @@ import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { useAudioImport } from "@/features/recording/hooks/use-audio-import";
 import { Button } from "@/shared/ui/button";
-import type { RecordingListItem, TranscriptionProgress } from "@typenotes/shared/types";
+import { Input } from "@/shared/ui/input";
+import type {
+  ProfileSyncSettings,
+  RecordingListItem,
+  TranscriptionProgress,
+} from "@typenotes/shared/types";
 import { WhisperEngineCard } from "./whisper-engine-card";
 import {
   SettingsActionRow,
   SettingsCard,
   SettingsErrorText,
+  SettingsField,
   SettingsHelpText,
   SettingsInfoGrid,
   SettingsSection,
+  SettingsSelect,
 } from "../settings-ui";
 
 type DisplayStatus =
@@ -151,6 +158,10 @@ export function SettingsTranscriptionSection() {
     reset: resetAudioImport,
   } = useAudioImport({ onImported: () => void refreshRecordings() });
 
+  const useCloudTranscription = syncSettings.transcriptionProvider === "assemblyai";
+  const missingAssemblyKey =
+    useCloudTranscription && syncSettings.assemblyAiApiKey.trim().length === 0;
+
   const [busyPaths, setBusyPaths] = useState<Set<string>>(new Set());
   const [playingPath, setPlayingPath] = useState<string | null>(null);
   const [playingSrc, setPlayingSrc] = useState<string | null>(null);
@@ -239,12 +250,60 @@ export function SettingsTranscriptionSection() {
   return (
     <SettingsSection
       title="Transcription"
-      description="Transcribe your voice recordings locally with Whisper. Trigger one recording or all pending at once, and watch their status live."
+      description="Transcribe your voice recordings with local Whisper or AssemblyAI. Trigger one recording or all pending at once, and watch their status live."
     >
-      <WhisperEngineCard
-        whisperModel={syncSettings.whisperModel}
-        onWhisperModelChange={(value) => updateSyncSettings({ whisperModel: value })}
-      />
+      <SettingsCard
+        title="Transcription engine"
+        description="Which backend this desktop sends recordings to. Local Whisper runs offline and needs no key; AssemblyAI is faster on long backlogs but uploads your audio."
+      >
+        <SettingsField label="Provider">
+          <SettingsSelect
+            value={syncSettings.transcriptionProvider}
+            onChange={(event) =>
+              updateSyncSettings({
+                transcriptionProvider: event.target
+                  .value as ProfileSyncSettings["transcriptionProvider"],
+              })
+            }
+          >
+            <option value="whisper">Local Whisper</option>
+            <option value="assemblyai">AssemblyAI (cloud)</option>
+          </SettingsSelect>
+        </SettingsField>
+
+        {useCloudTranscription ? (
+          <>
+            <SettingsField label="AssemblyAI API key">
+              <Input
+                type="password"
+                value={syncSettings.assemblyAiApiKey}
+                onChange={(event) =>
+                  updateSyncSettings({ assemblyAiApiKey: event.target.value })
+                }
+                placeholder="Paste AssemblyAI key"
+                autoCapitalize="off"
+                autoCorrect="off"
+              />
+            </SettingsField>
+            {missingAssemblyKey ? (
+              <SettingsErrorText>
+                An API key is required before recordings can be queued.
+              </SettingsErrorText>
+            ) : null}
+            <SettingsHelpText>
+              The same key the mobile app uses. This setting is device-local — it
+              does not sync to your phone.
+            </SettingsHelpText>
+          </>
+        ) : null}
+      </SettingsCard>
+
+      {useCloudTranscription ? null : (
+        <WhisperEngineCard
+          whisperModel={syncSettings.whisperModel}
+          onWhisperModelChange={(value) => updateSyncSettings({ whisperModel: value })}
+        />
+      )}
 
       <SettingsCard
         title="Import audio files"

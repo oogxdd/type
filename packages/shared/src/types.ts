@@ -111,9 +111,13 @@ export type NotesProfile = {
   settings: ProfileSettings;
 };
 
+/** Which backend the desktop queues recordings to. */
+export type TranscriptionProvider = "whisper" | "assemblyai";
+
 export type AppConfig = {
   assemblyai_api_key: string;
   whisper_model: string;
+  transcription_provider: string;
   handwriting_ocr_provider: string;
   local_ocr_model_path: string;
   openai_api_key: string;
@@ -341,6 +345,7 @@ export type ProfileSyncSettings = {
   assemblyAiApiKey: string;
   mobileAutoTranscriptionEnabled: boolean;
   whisperModel: string;
+  transcriptionProvider: TranscriptionProvider;
   handwritingOcrProvider: "local" | "openai" | "huggingface";
   localOcrModelPath: string;
   openAiApiKey: string;

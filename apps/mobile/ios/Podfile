@@ -64,6 +64,7 @@ target 'Type' do
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
 
+    # @typenotes/link-rust-system-libraries
     # The Rust core (TypeCore's vendored libtype_ffi.a) statically bundles
     # libgit2, which references zlib (crc32/deflate*/inflate*) and libiconv
     # (iconv*). Those live in the iOS system dylibs libz/libiconv but the

@@ -44,6 +44,7 @@ export function useLegacyProfileSyncMigration({
         await api.updateAppConfig({
           assemblyai_api_key: firstSettings.assemblyAiApiKey,
           whisper_model: firstSettings.whisperModel,
+          transcription_provider: firstSettings.transcriptionProvider,
           handwriting_ocr_provider: firstSettings.handwritingOcrProvider,
           local_ocr_model_path: firstSettings.localOcrModelPath,
           openai_api_key: firstSettings.openAiApiKey,

@@ -264,6 +264,7 @@ impl From<crate::ports::profiles::AppConfig> for AppConfig {
         Self {
             assemblyai_api_key: c.assemblyai_api_key,
             whisper_model: c.whisper_model,
+            transcription_provider: c.transcription_provider,
             handwriting_ocr_provider: c.handwriting_ocr_provider,
             local_ocr_model_path: c.local_ocr_model_path,
             openai_api_key: c.openai_api_key,
@@ -280,6 +281,7 @@ impl From<AppConfig> for crate::ports::profiles::AppConfig {
         Self {
             assemblyai_api_key: c.assemblyai_api_key,
             whisper_model: c.whisper_model,
+            transcription_provider: c.transcription_provider,
             handwriting_ocr_provider: c.handwriting_ocr_provider,
             local_ocr_model_path: c.local_ocr_model_path,
             openai_api_key: c.openai_api_key,

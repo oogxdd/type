@@ -80,6 +80,59 @@ fn move_dir_contents(source: &Path, destination: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Split an iOS app-container path into `(container root, remainder)`.
+///
+/// Container paths look like
+/// `/var/mobile/Containers/Data/Application/<UUID>/Documents/…`; the UUID is
+/// the component right after the `Containers/Data/Application` marker.
+fn split_ios_container(path: &Path) -> Option<(PathBuf, PathBuf)> {
+    let components: Vec<_> = path.components().collect();
+    let names: Vec<&str> = components
+        .iter()
+        .map(|component| component.as_os_str().to_str().unwrap_or_default())
+        .collect();
+    for index in 0..names.len() {
+        // The UUID component after the marker must exist for the split.
+        if index + 3 >= names.len() {
+            break;
+        }
+        if names[index..index + 3] == ["Containers", "Data", "Application"] {
+            let container: PathBuf = components[..index + 4].iter().collect();
+            let remainder: PathBuf = components[index + 4..].iter().collect();
+            return Some((container, remainder));
+        }
+    }
+    None
+}
+
+/// Re-anchor a notes root that a previous iOS install persisted.
+///
+/// iOS hands the app a **new** data-container UUID on every install and update
+/// while preserving the container's contents, so an absolute notes root written
+/// by an earlier install points into a container that no longer exists. The
+/// sandbox also denies traversal of `/var/mobile/Containers/Data/Application`,
+/// so creating such a path fails with EPERM ("Operation not permitted") rather
+/// than a plain "not found" — which is why this must be repaired instead of
+/// left to `create_dir_all`. Rebuild the path inside the container the shell
+/// handed us this launch; returns `None` when there is nothing to repair.
+fn rebase_stale_container_path(app: &AppEnv, root: &Path) -> Option<PathBuf> {
+    if root.exists() {
+        return None;
+    }
+    let (stale_container, remainder) = split_ios_container(root)?;
+    let current_container = [
+        Some(app.app_data_dir.as_path()),
+        app.documents_dir.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .find_map(|dir| split_ios_container(dir).map(|(container, _)| container))?;
+    if current_container == stale_container {
+        return None;
+    }
+    Some(current_container.join(remainder))
+}
+
 /// Resolve the notes root using env vars / cwd / app data fallback.
 pub fn legacy_notes_root(app: &AppEnv) -> Result<PathBuf, String> {
     if let Ok(path) = std::env::var("NOTES_ROOT") {
@@ -162,7 +215,15 @@ fn push_normalized_profile(
         profile.notes_root = profile_root_for_id(app, &id)?.to_string_lossy().to_string();
     }
 
-    let root = PathBuf::from(profile.notes_root.trim());
+    let mut root = PathBuf::from(profile.notes_root.trim());
+    if let Some(rebased) = rebase_stale_container_path(app, &root) {
+        println!(
+            "[profiles] re-anchored notes root from a previous app container: {} -> {}",
+            root.display(),
+            rebased.display()
+        );
+        root = rebased;
+    }
     if !root.exists() {
         fs::create_dir_all(&root)
             .map_err(|err| format!("Failed to create notes root '{}': {err}", root.display()))?;
@@ -534,4 +595,69 @@ pub fn set_profile_notes_root_state(
     state.profiles[index].notes_root = next_root.to_string_lossy().to_string();
     write_profiles_state(app, &state)?;
     Ok(state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const OLD_CONTAINER: &str =
+        "/var/mobile/Containers/Data/Application/9CD5AD91-AB1A-4C60-9E57-0D36055DA0F1";
+    const NEW_CONTAINER: &str =
+        "/var/mobile/Containers/Data/Application/1F2E3D4C-5B6A-7988-A0B1-C2D3E4F50617";
+
+    fn ios_env() -> AppEnv {
+        AppEnv::new(format!("{NEW_CONTAINER}/Documents/typenotes"))
+            .with_documents_dir(format!("{NEW_CONTAINER}/Documents"))
+    }
+
+    #[test]
+    fn stale_container_root_is_rebased_onto_the_current_container() {
+        let stale = PathBuf::from(format!("{OLD_CONTAINER}/Documents/typenotes/notes"));
+
+        let rebased = rebase_stale_container_path(&ios_env(), &stale).unwrap();
+
+        assert_eq!(
+            rebased,
+            PathBuf::from(format!("{NEW_CONTAINER}/Documents/typenotes/notes"))
+        );
+    }
+
+    #[test]
+    fn current_container_root_is_left_alone() {
+        let current = PathBuf::from(format!("{NEW_CONTAINER}/Documents/typenotes/notes"));
+
+        assert!(rebase_stale_container_path(&ios_env(), &current).is_none());
+    }
+
+    #[test]
+    fn non_container_root_is_left_alone() {
+        // A desktop root on an unmounted volume must not be rewritten — the
+        // user's notes are there, not in app data.
+        let env = AppEnv::new("/home/user/.local/share/type");
+        let root = PathBuf::from("/Volumes/External/notes");
+
+        assert!(rebase_stale_container_path(&env, &root).is_none());
+    }
+
+    #[test]
+    fn existing_root_is_left_alone() {
+        let root = std::env::temp_dir();
+
+        assert!(rebase_stale_container_path(&ios_env(), &root).is_none());
+    }
+
+    #[test]
+    fn container_split_keeps_the_uuid_with_the_container() {
+        let (container, remainder) =
+            split_ios_container(Path::new(&format!("{OLD_CONTAINER}/Documents/typenotes")))
+                .unwrap();
+
+        assert_eq!(container, PathBuf::from(OLD_CONTAINER));
+        assert_eq!(remainder, PathBuf::from("Documents/typenotes"));
+        // A marker with no UUID after it is not a container path.
+        assert!(
+            split_ios_container(Path::new("/var/mobile/Containers/Data/Application")).is_none()
+        );
+    }
 }

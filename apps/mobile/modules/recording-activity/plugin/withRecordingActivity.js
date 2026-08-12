@@ -1,5 +1,6 @@
 const {
   withInfoPlist,
+  withPodfile,
   withXcodeProject,
   withDangerousMod,
 } = require("@expo/config-plugins");
@@ -18,6 +19,7 @@ const WIDGET_FILES = [
 // the widget target needs its own copies compiled in.
 const SHARED_FILES = ["RecordingActivityAttributes.swift", "StopRecordingIntent.swift"];
 const SWIFT_FILES = [...WIDGET_FILES, ...SHARED_FILES];
+const RUST_LINKER_MARKER = "# @typenotes/link-rust-system-libraries";
 
 const widgetDir = () => path.join(__dirname, "..", "widget");
 const sharedDir = () => path.join(__dirname, "..", "ios");
@@ -53,6 +55,45 @@ const withWidgetSourcesCopied = (config) =>
       return config;
     },
   ]);
+
+/**
+ * Keep the system-library flags required by TypeCore across Expo prebuilds.
+ * The generated TypeCore podspec vendors a Rust static library containing
+ * libgit2, whose zlib/iconv references must be resolved by the app target.
+ */
+const addRustCoreLinkerFlagsToPodfile = (contents) => {
+  if (contents.includes(RUST_LINKER_MARKER)) return contents;
+
+  const anchor = [
+    "      :ccache_enabled => ccache_enabled?(podfile_properties),",
+    "    )",
+  ].join("\n");
+  if (!contents.includes(anchor)) {
+    throw new Error("Could not find react_native_post_install in the generated Podfile");
+  }
+
+  const linkerPatch = [
+    "",
+    `    ${RUST_LINKER_MARKER}`,
+    "    Dir.glob(File.join(__dir__, 'Pods', 'Target Support Files', 'Pods-Type', 'Pods-Type.*.xcconfig')).each do |xcconfig_path|",
+    "      contents = File.read(xcconfig_path)",
+    "      additions = ['-lz', '-liconv'].reject { |flag| contents.include?(flag) }",
+    "      next if additions.empty?",
+    "      contents = contents.gsub(/^(OTHER_LDFLAGS = .*)$/) { \"#{$1} #{additions.join(' ')}\" }",
+    "      File.write(xcconfig_path, contents)",
+    "    end",
+  ].join("\n");
+
+  return contents.replace(anchor, `${anchor}${linkerPatch}`);
+};
+
+const withRustCoreLinkerFlags = (config) =>
+  withPodfile(config, (config) => {
+    config.modResults.contents = addRustCoreLinkerFlagsToPodfile(
+      config.modResults.contents
+    );
+    return config;
+  });
 
 /**
  * Add + embed the WidgetKit extension target into a parsed `xcode` project.
@@ -150,6 +191,7 @@ const withWidgetXcodeTarget = (config) =>
 /** @type {import('@expo/config-plugins').ConfigPlugin} */
 const withRecordingActivity = (config) => {
   config = withLiveActivitiesEnabled(config);
+  config = withRustCoreLinkerFlags(config);
   config = withWidgetSourcesCopied(config);
   config = withWidgetXcodeTarget(config);
   return config;
@@ -158,5 +200,6 @@ const withRecordingActivity = (config) => {
 module.exports = withRecordingActivity;
 // Exposed for the pbxproj mutation test (plugin/__tests__/add-widget-target.test.cjs).
 module.exports.addWidgetTarget = addWidgetTarget;
+module.exports.addRustCoreLinkerFlagsToPodfile = addRustCoreLinkerFlagsToPodfile;
 module.exports.WIDGET_NAME = WIDGET_NAME;
 module.exports.SWIFT_FILES = SWIFT_FILES;

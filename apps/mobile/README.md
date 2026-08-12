@@ -35,8 +35,8 @@ native build.
 
 1. Generate the native core module — see `packages/mobile-core/README.md`
    (ubrn codegen + iOS/Android Rust builds).
-2. Wire it in `src/core/boot.ts` (uncomment the generated-module import).
-3. Prebuild and run:
+2. Prebuild and run. `ubrn` overwrites the stable package entry with the real
+   TurboModule; `src/core/boot.ts` needs no manual edit:
 
 ```sh
 npm run prebuild -w @typenotes/mobile    # expo prebuild → ios/ + android/

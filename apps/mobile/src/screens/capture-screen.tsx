@@ -30,10 +30,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Keyboard,
   type LayoutChangeEvent,
+  type ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -44,10 +45,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
   runOnJS,
-  runOnUI,
-  scrollTo,
   useAnimatedKeyboard,
-  useAnimatedRef,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
@@ -87,6 +85,11 @@ const BOTTOM_SLACK = 6;
 const TOP_SLACK = 4;
 // Pull-down at the top of the note that tucks the keyboard away.
 const ESCAPE_DRAG = 14;
+// How long filing waits for storage before showing the fresh page anyway. Two
+// small file writes take single-digit milliseconds, so this is only ever
+// reached when something is genuinely stuck — and then a blank page you can
+// type on beats a page frozen off-screen.
+const COMMIT_HANDOVER_MS = 1200;
 
 // Horizontal Capture -> Sync preview mechanics, matching Menu -> Capture.
 const SYNC_OPEN_PROGRESS = 0.3;
@@ -120,7 +123,10 @@ export const CaptureScreen = () => {
   const syncLabel = autoSyncLabel(autoSyncState);
   const iconsOpacity = useSharedValue(1);
   const inputRef = useRef<TextInput>(null);
-  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  // A plain ref, not useAnimatedRef: nothing reads the scroll view from a
+  // worklet any more, and an animated ref only exists to be handed to the UI
+  // runtime. See scrollToY below.
+  const scrollRef = useRef<ScrollView>(null);
 
   // The keyboard height (0 when hidden) as a UI-thread shared value; the page
   // padding and the floating controls ride it so nothing hides under the
@@ -145,7 +151,11 @@ export const CaptureScreen = () => {
 
   const indicatorOpacity = useSharedValue(0);
 
-  const session = useMemo(
+  // One session per page, not one per screen: filing hands the finished page's
+  // session off to storage and the fresh page starts on its own, so a keystroke
+  // that lands while the previous write is still in flight can never be folded
+  // into the note being filed.
+  const newSession = useCallback(
     () =>
       new CaptureSession({
         createNote: async (content) => {
@@ -164,6 +174,10 @@ export const CaptureScreen = () => {
       }),
     []
   );
+  const sessionRef = useRef<CaptureSession | null>(null);
+  if (sessionRef.current === null) {
+    sessionRef.current = newSession();
+  }
 
   // Stack navigation emits blur for Menu, Sync, and all pushed destinations.
   // Flush before this capture screen becomes hidden or is popped.
@@ -172,9 +186,9 @@ export const CaptureScreen = () => {
       navigation.addListener("blur", () => {
         // Navigation should never turn a storage rejection into a fatal,
         // unhandled JS error. CaptureSession keeps the draft dirty for retry.
-        void session.flush().catch(() => {});
+        void sessionRef.current?.flush().catch(() => {});
       }),
-    [navigation, session]
+    [navigation]
   );
 
   // Menu's finger-driven preview can attach Capture with animation disabled;
@@ -196,34 +210,64 @@ export const CaptureScreen = () => {
     iconsOpacity.value = withTiming(0, { duration: 180 });
   };
 
-  // The committed page is off-screen (the ghost covers the viewport). Wait
-  // for persistence before exposing the fresh page: this prevents new typing
-  // from racing the old note's commit and lets a failed write spring the
-  // original page back instead of losing it or surfacing a fatal rejection.
+  // Reveal the fresh blank page. The filed page is off-screen at this point
+  // (the ghost covers the viewport), so clearing the input is invisible.
+  const openBlankPage = () => {
+    setText("");
+    prevContentHRef.current = 0;
+    offsetY.value = 0;
+    // No scrollTo here. The fresh page's content is empty, so the reused
+    // ScrollView is already at the top.
+    showIcons();
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        pageY.value = 0;
+        transitioning.value = false;
+      })
+    );
+  };
+
+  // The committed page is off-screen. Wait for persistence before exposing the
+  // fresh page, so a failed write springs the original page back (with its own
+  // session, so the retry updates the same note) instead of losing it. The wait
+  // is bounded: storage that stalls must not strand the page off-screen with
+  // the app looking dead — past the deadline the fresh page comes in anyway and
+  // the handed-off session finishes on its own.
   const finishCommit = () => {
-    void session
+    const filed = sessionRef.current;
+    if (!filed) {
+      openBlankPage();
+      return;
+    }
+    sessionRef.current = newSession();
+
+    let handedOver = false;
+    const handOver = () => {
+      handedOver = true;
+      openBlankPage();
+    };
+    const deadline = setTimeout(handOver, COMMIT_HANDOVER_MS);
+
+    void filed
       .commit()
       .then((path) => {
+        clearTimeout(deadline);
         if (path) {
-          void useNotesStore.getState().refresh().catch(() => {});
+          // Not a full refresh: see notes-store's noteFiled.
+          void useNotesStore.getState().noteFiled(path).catch(() => {});
         }
-        setText("");
-        prevContentHRef.current = 0;
-        offsetY.value = 0;
-        // No scrollTo here. The fresh page's content is empty, so the reused
-        // ScrollView is already at the top. Calling reanimated's scrollTo on
-        // the UI thread as the content collapses to empty threw an uncaught
-        // worklet error on the main thread (Hermes throwPendingError ->
-        // std::terminate -> SIGABRT) — that was the swipe-up-to-file crash.
-        showIcons();
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            pageY.value = 0;
-            transitioning.value = false;
-          })
-        );
+        if (!handedOver) {
+          handOver();
+        }
       })
       .catch(() => {
+        clearTimeout(deadline);
+        if (handedOver) {
+          // The fresh page is already in front of the user and owns the live
+          // session; the failed one keeps its draft for its own retry.
+          return;
+        }
+        sessionRef.current = filed;
         transitioning.value = false;
         pageY.value = withSpring(0, CANCEL_SPRING);
       });
@@ -242,6 +286,28 @@ export const CaptureScreen = () => {
     },
   });
 
+  // Scroll anchoring runs through the ScrollView's own imperative scrollTo on
+  // the JS thread. It must never go back to reanimated's `scrollTo` inside
+  // runOnUI:
+  //
+  // A worklet scheduled onto the UI runtime runs on the iOS *main* thread, and
+  // a JS exception there cannot be caught by any .catch, by the React error
+  // boundary, or by anything else — Hermes turns it into throwPendingError ->
+  // __cxa_throw -> std::terminate -> abort. Two TestFlight crash reports show
+  // exactly that stack (0.2.3 build 2026081202: SIGABRT on
+  // com.apple.main-thread, _dispatch_main_queue_drain ->
+  // HermesRuntimeImpl::call -> throwPendingError), and these were the only
+  // runOnUI calls in the app.
+  //
+  // runOnUI is also asynchronous — it batches through a microtask and then
+  // dispatches — so a scrollTo queued during one layout pass can land after
+  // the swipe has already re-committed the page with a whole screen less
+  // content, i.e. against a shadow node that no longer matches. Nothing about
+  // keeping the bottom pinned needs that kind of precision.
+  const scrollToY = (y: number) => {
+    scrollRef.current?.scrollTo({ y, animated: false });
+  };
+
   // Scroll anchoring: when content grows while the view sits at (or near) the
   // bottom — typing at the end of the note — keep the bottom pinned so the
   // caret stays above the keyboard. Growth while reading higher up never
@@ -257,9 +323,7 @@ export const CaptureScreen = () => {
     const wasAtBottom =
       previous <= viewport || offsetY.value >= previous - viewport - 48;
     if (wasAtBottom) {
-      runOnUI(() => {
-        scrollTo(scrollRef, 0, contentHeight - viewport, false);
-      })();
+      scrollToY(contentHeight - viewport);
     }
   };
 
@@ -274,9 +338,7 @@ export const CaptureScreen = () => {
     if (viewport < previous && content > viewport) {
       const wasAtBottom = offsetY.value >= content - previous - 48;
       if (wasAtBottom) {
-        runOnUI(() => {
-          scrollTo(scrollRef, 0, content - viewport, false);
-        })();
+        scrollToY(content - viewport);
       }
     }
   };
@@ -548,7 +610,7 @@ export const CaptureScreen = () => {
 
   const onChange = (value: string) => {
     setText(value);
-    session.onChange(value);
+    sessionRef.current?.onChange(value);
     // Keep the page uncluttered while writing; tapping back into the text
     // brings the buttons back. While a dictation is running the stop button
     // must stay reachable, so nothing fades.

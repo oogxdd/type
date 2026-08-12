@@ -11,6 +11,12 @@ pub struct AppConfig {
     pub assemblyai_api_key: String,
     #[serde(default = "default_whisper_model")]
     pub whisper_model: String,
+    /// Which backend the desktop queues recordings to: "whisper" (local,
+    /// no key needed) or "assemblyai" (cloud, needs `assemblyai_api_key`).
+    /// Device-local like the other provider defaults — the phone picks its
+    /// own backend through the profile's `transcription_mode`.
+    #[serde(default = "default_transcription_provider")]
+    pub transcription_provider: String,
     #[serde(default = "default_handwriting_provider")]
     pub handwriting_ocr_provider: String,
     #[serde(default)]
@@ -32,6 +38,7 @@ impl Default for AppConfig {
         Self {
             assemblyai_api_key: String::new(),
             whisper_model: default_whisper_model(),
+            transcription_provider: default_transcription_provider(),
             handwriting_ocr_provider: default_handwriting_provider(),
             local_ocr_model_path: String::new(),
             openai_api_key: String::new(),
@@ -45,6 +52,9 @@ impl Default for AppConfig {
 
 fn default_whisper_model() -> String {
     "large-v3".to_string()
+}
+fn default_transcription_provider() -> String {
+    "whisper".to_string()
 }
 fn default_handwriting_provider() -> String {
     "local".to_string()
@@ -345,6 +355,28 @@ mod tests {
         let loaded = load_app_config(&root);
         assert_eq!(loaded.handwriting_ocr_provider, "local");
         assert!(loaded.local_ocr_model_path.is_empty());
+
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// A config written before the desktop could pick a transcription backend
+    /// must keep transcribing locally — silently switching an existing install
+    /// to the cloud would upload audio the user never agreed to send.
+    #[test]
+    fn transcription_provider_defaults_to_local_whisper() {
+        let root = temp_root("transcription-provider-default");
+        assert_eq!(AppConfig::default().transcription_provider, "whisper");
+
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("config.json"),
+            r#"{"assemblyai_api_key":"key","whisper_model":"large-v3"}"#,
+        )
+        .unwrap();
+
+        let loaded = load_app_config(&root);
+        assert_eq!(loaded.transcription_provider, "whisper");
+        assert_eq!(loaded.assemblyai_api_key, "key");
 
         fs::remove_dir_all(&root).unwrap();
     }

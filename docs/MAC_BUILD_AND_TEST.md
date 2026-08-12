@@ -107,9 +107,10 @@ npm install --no-save uniffi-bindgen-react-native@0.31.0-3
 npm run mobile:ios   # с корня: codegen:ios + expo run:ios одной командой
 ```
 
-Перед первым разом раскомментировать импорт сгенерённого модуля в
-`apps/mobile/src/core/boot.ts` (`setRawCore(generated)`) — по умолчанию
-закомментирован, т.к. `src/generated/` не в гите.
+Ручная проводка не нужна: `ubrn` заменяет стабильный demo fallback
+`packages/mobile-core/src/index.tsx` сгенерированным TurboModule entry.
+`apps/mobile/src/core/boot.ts` импортирует один и тот же package entry в обоих
+режимах.
 
 Дальше цикл разработки:
 - правите TS → `npm run mobile:start`, hot reload в уже стоящий
@@ -118,8 +119,9 @@ npm run mobile:ios   # с корня: codegen:ios + expo run:ios одной ко
   `npm run mobile:ios` (или фоновый вотчер `npm run mobile:ios:watch`,
   сам следит за `crates/` и пересобирает).
 
-Для реального устройства (не симулятора) — `codegen:ios:device` вместо
-`codegen:ios` (симуляторная сборка не даёт device-слайс).
+Для реального устройства (не симулятора) —
+`IPHONEOS_DEPLOYMENT_TARGET=16.4 npm run codegen:ios:device -w @typenotes/mobile-core`
+вместо `codegen:ios` (симуляторная сборка не даёт device-слайс).
 
 Подробности: [`apps/mobile/README.md`](../apps/mobile/README.md),
 [`packages/mobile-core/README.md`](../packages/mobile-core/README.md),
