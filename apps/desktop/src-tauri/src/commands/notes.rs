@@ -27,6 +27,12 @@ fn notes_service(
     ))
 }
 
+fn schedule_sync(app: &tauri::AppHandle) {
+    if let Ok(env) = crate::app_env(app) {
+        type_core::schedule_iroh_docs_sync(&env);
+    }
+}
+
 #[tauri::command]
 pub(super) async fn get_tree(app: tauri::AppHandle) -> Result<FolderNode, String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
@@ -45,7 +51,9 @@ pub(super) fn create_note(
     args: CreateNoteArgs,
 ) -> Result<CreateNoteResult, String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
-    notes_service(&app)?.create_note(args)
+    let result = notes_service(&app)?.create_note(args)?;
+    schedule_sync(&app);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -55,7 +63,9 @@ pub(super) fn write_note(
     content: String,
 ) -> Result<(), String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
-    notes_service(&app)?.write_note(&path, &content)
+    notes_service(&app)?.write_note(&path, &content)?;
+    schedule_sync(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -64,7 +74,9 @@ pub(super) fn set_note_timestamp(
     args: SetNoteTimestampArgs,
 ) -> Result<(), String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
-    notes_service(&app)?.set_note_timestamp(args)
+    notes_service(&app)?.set_note_timestamp(args)?;
+    schedule_sync(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -73,7 +85,9 @@ pub(super) fn update_note_markers(
     args: SetNoteMarkersArgs,
 ) -> Result<(), String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
-    notes_service(&app)?.update_note_markers(&args.path, args.archived, args.reviewed)
+    notes_service(&app)?.update_note_markers(&args.path, args.archived, args.reviewed)?;
+    schedule_sync(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -98,13 +112,17 @@ pub(super) fn move_items(
     destination: String,
 ) -> Result<(), String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
-    notes_service(&app)?.move_items(items, destination)
+    notes_service(&app)?.move_items(items, destination)?;
+    schedule_sync(&app);
+    Ok(())
 }
 
 #[tauri::command]
 pub(super) fn delete_items(app: tauri::AppHandle, items: Vec<String>) -> Result<(), String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
-    notes_service(&app)?.delete_items(items)
+    notes_service(&app)?.delete_items(items)?;
+    schedule_sync(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -114,11 +132,15 @@ pub(super) fn rename_item(
     new_name: String,
 ) -> Result<String, String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
-    notes_service(&app)?.rename_item(&path, &new_name)
+    let result = notes_service(&app)?.rename_item(&path, &new_name)?;
+    schedule_sync(&app);
+    Ok(result)
 }
 
 #[tauri::command]
 pub(super) fn set_order(app: tauri::AppHandle, args: SetOrderArgs) -> Result<(), String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
-    notes_service(&app)?.set_order(args)
+    notes_service(&app)?.set_order(args)?;
+    schedule_sync(&app);
+    Ok(())
 }

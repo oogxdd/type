@@ -68,6 +68,61 @@ export type LocalSyncServerStatus = {
   error: string | null;
 };
 
+export type IrohDocsSyncStatus = {
+  configured: boolean;
+  running: boolean;
+  profile_id: string;
+  document_id: string | null;
+  endpoint_id: string | null;
+  peer_configured: boolean;
+  phase:
+    | "disabled"
+    | "stopped"
+    | "running"
+    | "saved_locally"
+    | "syncing"
+    | "synced"
+    | "waiting_for_peer"
+    | "error"
+    | string;
+  last_sync_ms: number | null;
+  last_error: string | null;
+  neighbors: number;
+};
+
+export type IrohDocsPairingBundle = {
+  write_doc_ticket: string;
+  vault_key: string;
+  peer_endpoint_ticket: string | null;
+};
+
+export type IrohDocsBootstrapResult = {
+  status: IrohDocsSyncStatus;
+  pairing: IrohDocsPairingBundle;
+  peer_read_doc_ticket: string;
+};
+
+export type IrohDocsSyncResult = {
+  published: number;
+  unchanged: number;
+  tombstones: number;
+  applied: number;
+  conflicts: number;
+  entries_received: number;
+  entries_sent: number;
+  connected: boolean;
+};
+
+export type ConfigureIrohDocsSyncArgs = {
+  write_doc_ticket: string;
+  vault_key: string;
+  peer_endpoint_ticket?: string | null;
+};
+
+export type SetIrohDocsSyncPeerArgs = {
+  peer_endpoint_ticket?: string | null;
+};
+
 export type PairedDeviceInfo = {
   name: string;
   added_ms: number;

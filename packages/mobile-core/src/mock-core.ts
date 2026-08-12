@@ -82,6 +82,20 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
   let appConfig = defaultAppConfig();
   let commits: { id: string; summary: string; authored_ms: number }[] = [];
   let sshPublicKey: string | null = null;
+  let irohDocsConfigured = false;
+
+  const irohDocsStatus = () => ({
+    configured: irohDocsConfigured,
+    running: irohDocsConfigured,
+    profile_id: "default",
+    document_id: irohDocsConfigured ? "demo-document" : null,
+    endpoint_id: irohDocsConfigured ? "demo-docs-endpoint" : null,
+    peer_configured: false,
+    phase: irohDocsConfigured ? "synced" : "disabled",
+    last_sync_ms: irohDocsConfigured ? now() : null,
+    last_error: null,
+    neighbors: 0,
+  });
 
   let security = {
     encryption_enabled: false,
@@ -339,6 +353,26 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       return renamed;
     },
     setOrder: async () => {},
+
+    // ── Encrypted iroh-docs sync ──
+    configureIrohDocsSync: async () => {
+      irohDocsConfigured = true;
+      return JSON.stringify(irohDocsStatus());
+    },
+    startIrohDocsSync: async () => JSON.stringify(irohDocsStatus()),
+    getIrohDocsSyncStatus: async () => JSON.stringify(irohDocsStatus()),
+    syncIrohDocsNow: async () =>
+      JSON.stringify({
+        published: notes.size,
+        unchanged: 0,
+        tombstones: 0,
+        applied: 0,
+        conflicts: 0,
+        entries_received: 0,
+        entries_sent: notes.size,
+        connected: irohDocsConfigured,
+      }),
+    setIrohDocsSyncPeer: async () => JSON.stringify(irohDocsStatus()),
 
     // ── Working folders ──
     getProfiles: async () => profilesSnapshot(),

@@ -11,6 +11,7 @@ import {
 } from "@typenotes/shared/format";
 import { Button } from "@/shared/ui/button";
 import { LocalSyncServerCard } from "@/features/sync/components/local-sync-server-card";
+import { IrohDocsSyncCard } from "@/features/sync/components/iroh-docs-sync-card";
 import {
   SettingsActionRow,
   SettingsCard,
@@ -54,7 +55,9 @@ export function SettingsSyncSection() {
 
   return (
     <SettingsSection title="Sync">
-      <SettingsCard>
+      <IrohDocsSyncCard />
+
+      <SettingsCard title="Git snapshots (optional)" description="Manual history, backup and export. Automatic Iroh sync does not create commits.">
         <SettingsInfoGrid>
           <SettingsInfoRow label="Status">
             <code className="text-xs">

@@ -12,6 +12,8 @@ import type {
   GitCommitHistoryEntry,
   GitSyncStatus,
   GitTransferProgress,
+  IrohDocsSyncResult,
+  IrohDocsSyncStatus,
 } from "@typenotes/shared/types";
 
 import {
@@ -22,7 +24,7 @@ import {
 import { useNotesStore } from "./notes-store";
 import { activeProfile, useSettingsStore } from "./settings-store";
 
-type SyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
+type SyncAction = "idle" | "refresh" | "connect" | "pull" | "push" | "sync";
 type SavedGitConnection = ConnectGitArgs & { irohTicket: string | null };
 const AUTO_SYNC_DELAY_MS = 1_500;
 const AUTO_SYNC_BUSY_RETRY_MS = 2_000;
@@ -61,6 +63,8 @@ const logSync = (message: string) => console.log(`[sync] ${message}`);
 
 type SyncState = {
   status: GitSyncStatus | null;
+  docsStatus: IrohDocsSyncStatus | null;
+  docsResult: IrohDocsSyncResult | null;
   history: GitCommitHistoryEntry[];
   action: SyncAction;
   /** Live transfer progress of the running pull/push, null when idle. */
@@ -233,41 +237,41 @@ export const useSyncStore = create<SyncState>((set, get) => {
     logSync(`auto: scheduled after ${reason} in ${delayMs}ms`);
     autoSyncTimer = setTimeout(() => {
       autoSyncTimer = null;
-      if (!savedGitConnection()) {
-        logSync(`auto: skipped ${reason}; no saved remote`);
-        return;
-      }
-      if (get().action !== "idle") {
-        logSync(`auto: delayed ${reason}; ${get().action} is running`);
-        scheduleAutoSyncAttempt(reason, AUTO_SYNC_BUSY_RETRY_MS);
-        return;
-      }
-      logSync(`auto: starting after ${reason}`);
-      set({ autoSyncState: "syncing" });
-      void get()
-        .syncNow()
-        .then(() => {
+      void (async () => {
+        const docsStatus = await core.getIrohDocsSyncStatus().catch(() => null);
+        if (docsStatus) set({ docsStatus });
+        if (!docsStatus?.configured && !savedGitConnection()) {
+          logSync(`auto: skipped ${reason}; sync is not configured`);
+          return;
+        }
+        if (get().action !== "idle") {
+          logSync(`auto: delayed ${reason}; ${get().action} is running`);
+          scheduleAutoSyncAttempt(reason, AUTO_SYNC_BUSY_RETRY_MS);
+          return;
+        }
+        logSync(`auto: starting after ${reason}`);
+        set({ autoSyncState: "syncing" });
+        try {
+          await get().syncNow();
           autoSyncFailureCount = 0;
           set({ autoSyncState: "synced", lastAutoSyncedAt: Date.now() });
-        })
-        .catch((error) => {
+        } catch (error) {
           autoSyncFailureCount += 1;
           const retryMs = autoSyncRetryDelayMs(autoSyncFailureCount);
           logSync(
             `auto: ${reason} failed silently - ${getErrorMessage(error)}; retry in ${retryMs}ms`
           );
-          set({
-            autoSyncState: "waiting_for_computer",
-            error: null,
-            hint: null,
-          });
+          set({ autoSyncState: "waiting_for_computer", error: null, hint: null });
           scheduleAutoSyncAttempt("computer unavailable", retryMs);
-        });
+        }
+      })();
     }, Math.max(0, delayMs));
   };
 
   return {
     status: null,
+    docsStatus: null,
+    docsResult: null,
     history: [],
     action: "idle",
     progress: null,
@@ -279,7 +283,12 @@ export const useSyncStore = create<SyncState>((set, get) => {
 
     setPendingLink: (link) => set({ pendingLink: link }),
 
-    refresh: () => run("refresh", () => core.getGitStatus()),
+    refresh: async () => {
+      const docsStatus = await core.getIrohDocsSyncStatus().catch(() => null);
+      if (docsStatus) set({ docsStatus });
+      if (docsStatus?.configured) return;
+      await run("refresh", () => core.getGitStatus());
+    },
 
     connect: async (args) => {
       await core.setMobileAudioGitExclusion(false);
@@ -288,6 +297,31 @@ export const useSyncStore = create<SyncState>((set, get) => {
 
     connectFromLink: async (link) => {
       requireIdle("qr connect");
+      if (link.irohDocTicket && link.irohVaultKey) {
+        set({ action: "connect", error: null, hint: null });
+        try {
+          const docsStatus = await core.configureIrohDocsSync({
+            write_doc_ticket: link.irohDocTicket,
+            vault_key: link.irohVaultKey,
+            peer_endpoint_ticket: link.irohPeerTicket ?? null,
+          });
+          set({ docsStatus });
+          const docsResult = await core.syncIrohDocsNow();
+          set({ docsResult, docsStatus: await core.getIrohDocsSyncStatus() });
+          await useNotesStore.getState().refresh();
+        } catch (error) {
+          const message = getErrorMessage(error);
+          set({ error: message, hint: getSyncHint(message) });
+          throw error;
+        } finally {
+          set({ action: "idle" });
+        }
+        return;
+      }
+      if (!link.remote) {
+        throw new Error("This sync link has neither an Iroh vault nor a Git remote.");
+      }
+      const remote = link.remote;
       await run("connect", async () => {
         const settingsStore = useSettingsStore.getState();
         const profile = activeProfile(settingsStore.snapshot);
@@ -295,10 +329,10 @@ export const useSyncStore = create<SyncState>((set, get) => {
           ? (
               await core.startIrohSyncClient({
                 ticket: link.irohTicket,
-                remote_url: link.remote,
+                remote_url: remote,
               })
             ).local_remote_url
-          : link.remote;
+          : remote;
         const trustedSshHost = link.hostKeySha256
           ? sshHostFromRemote(pairingRemote)
           : "";
@@ -344,7 +378,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
         }
         if (link.irohTicket) {
           await prepareAudioForPush({
-            remote_url: link.remote,
+            remote_url: remote,
             branch: link.branch ?? null,
             username: null,
             password: null,
@@ -423,6 +457,27 @@ export const useSyncStore = create<SyncState>((set, get) => {
     syncNow: async () => {
       if (isBusy("sync now")) {
         return;
+      }
+      const docsStatus = await core.getIrohDocsSyncStatus().catch(() => null);
+      if (docsStatus?.configured) {
+        set({ action: "sync", autoSyncState: "syncing", error: null, hint: null });
+        try {
+          const docsResult = await core.syncIrohDocsNow();
+          const nextStatus = await core.getIrohDocsSyncStatus();
+          set({ docsResult, docsStatus: nextStatus });
+          await useNotesStore.getState().refresh();
+          if (!docsResult.connected) {
+            throw new Error("Computer is offline; the encrypted change remains queued locally.");
+          }
+          autoSyncFailureCount = 0;
+          set({ autoSyncState: "synced", lastAutoSyncedAt: Date.now() });
+          return;
+        } catch (error) {
+          set({ autoSyncState: "waiting_for_computer" });
+          throw error;
+        } finally {
+          set({ action: "idle" });
+        }
       }
       logSync("sync now: starting pull then push");
       set({ autoSyncState: "syncing" });

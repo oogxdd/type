@@ -6,6 +6,7 @@
 import type {
   AppConfig,
   ConnectGitArgs,
+  ConfigureIrohDocsSyncArgs,
   CreateNoteArgs,
   CreateNoteResult,
   CreateProfileArgs,
@@ -20,6 +21,8 @@ import type {
   HandwritingAttachmentWriteResult,
   IrohAudioArchiveResult,
   IrohClientStatus,
+  IrohDocsSyncResult,
+  IrohDocsSyncStatus,
   MobileAudioPruneResult,
   NoteMeta,
   NotePreviewEntry,
@@ -39,6 +42,7 @@ import type {
   SetNoteMarkersArgs,
   SetNoteTimestampArgs,
   SetOrderArgs,
+  SetIrohDocsSyncPeerArgs,
   SetSecurityPreferencesArgs,
   UnlockSecurityArgs,
   UpdateProfileArgs,
@@ -154,6 +158,27 @@ export const createProfilesBackupZip = async (): Promise<ProfilesBackupArchive> 
 export const exportProfilesToDocuments =
   async (): Promise<ProfilesDocumentsExport> =>
     parse(await getRawCore().exportProfilesToDocuments());
+
+// ── Encrypted iroh-docs sync ─────────────────────────────────────────────────
+
+export const configureIrohDocsSync = async (
+  args: ConfigureIrohDocsSyncArgs
+): Promise<IrohDocsSyncStatus> =>
+  parse(await getRawCore().configureIrohDocsSync(JSON.stringify(args)));
+
+export const startIrohDocsSync = async (): Promise<IrohDocsSyncStatus> =>
+  parse(await getRawCore().startIrohDocsSync());
+
+export const getIrohDocsSyncStatus = async (): Promise<IrohDocsSyncStatus> =>
+  parse(await getRawCore().getIrohDocsSyncStatus());
+
+export const syncIrohDocsNow = async (): Promise<IrohDocsSyncResult> =>
+  parse(await getRawCore().syncIrohDocsNow());
+
+export const setIrohDocsSyncPeer = async (
+  args: SetIrohDocsSyncPeerArgs
+): Promise<IrohDocsSyncStatus> =>
+  parse(await getRawCore().setIrohDocsSyncPeer(JSON.stringify(args)));
 
 // ── Git sync ───────────────────────────────────────────────────────────────────
 

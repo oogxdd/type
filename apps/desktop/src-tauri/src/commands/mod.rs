@@ -1,6 +1,7 @@
 mod git_sync;
 mod handwriting;
 mod import;
+mod iroh_docs_sync;
 mod local_sync;
 mod notes;
 mod profiles;
@@ -39,7 +40,17 @@ pub(super) fn run() {
                 type_core::set_local_sync_push_listener(Box::new(move || {
                     let _ = push_handle.emit("local-sync-push-received", ());
                 }));
+                let docs_handle = app_handle.clone();
+                type_core::set_iroh_docs_sync_listener(Box::new(move || {
+                    let _ = docs_handle.emit("iroh-docs-sync-received", ());
+                }));
             }
+            let docs_start_env = crate::app_env(app_handle)?;
+            std::thread::spawn(move || {
+                if let Err(error) = type_core::start_iroh_docs_sync_if_configured(&docs_start_env) {
+                    eprintln!("[iroh-docs] automatic startup failed: {error}");
+                }
+            });
             let auto_start_env = crate::app_env(app_handle)?;
             if type_core::local_sync_auto_start_enabled(&auto_start_env) {
                 std::thread::spawn(move || {
@@ -117,6 +128,11 @@ pub(super) fn run() {
             git_sync::connect_git_repo,
             git_sync::git_pull,
             git_sync::git_push,
+            iroh_docs_sync::bootstrap_iroh_docs_sync,
+            iroh_docs_sync::configure_iroh_docs_sync,
+            iroh_docs_sync::set_iroh_docs_sync_peer,
+            iroh_docs_sync::get_iroh_docs_sync_status,
+            iroh_docs_sync::sync_iroh_docs_now,
             local_sync::get_local_sync_server_status,
             local_sync::start_local_sync_server,
             local_sync::stop_local_sync_server,
@@ -154,6 +170,7 @@ pub(super) fn run() {
         // leave an orphaned process holding port 9418.
         if matches!(event, tauri::RunEvent::Exit) {
             type_core::shutdown_local_sync_server();
+            type_core::shutdown_iroh_docs_sync();
         }
     });
 }

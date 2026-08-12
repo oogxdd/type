@@ -48,6 +48,6 @@ managed-relay provisioning and cost are documented in
 ## What the peer can still observe
 
 The peer cannot decrypt Type values, but it can observe the Iroh document
-namespace, author public keys, timestamps, random entry ids, ciphertext hashes
-and sizes, connection addresses/timing, and total storage. This is
+namespace, author public keys, timestamps, stable opaque per-path entry ids,
+ciphertext hashes and sizes, connection addresses/timing, and total storage. This is
 zero-knowledge for shared content, not traffic-analysis anonymity.

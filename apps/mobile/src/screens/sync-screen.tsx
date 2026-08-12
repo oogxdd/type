@@ -1,11 +1,4 @@
-// Git sync for the active working folder — fully compatible with the desktop
-// app: same libgit2 core, same .type/settings.json, same conflict rule
-// (conflicts keep local and write the remote as a .conflict.md sibling).
-//
-// The primary flow is QR-based: the desktop's "Local network server" card
-// shows a type2://sync QR; scanning it here (in-app camera, or the system
-// camera via the deep link) saves the remote and connects, so syncing is one
-// button afterwards.
+// Primary encrypted filesystem sync plus optional legacy Git setup.
 
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useEffect, useRef, useState } from "react";
@@ -78,12 +71,12 @@ export const SyncScreen = () => {
 
   const applyLink = async (link: SyncDeepLinkParams) => {
     console.log("[sync:qr] applying parsed sync link");
-    setRemoteUrl(link.remote);
+    setRemoteUrl(link.remote ?? "");
     setBranch(link.branch ?? "main");
     try {
       await sync.connectFromLink(link);
       console.log("[sync:qr] sync link applied successfully");
-      setConnectedVia(link.name ?? link.remote);
+      setConnectedVia(link.name ?? link.remote ?? "computer");
     } catch (error) {
       console.log(`[sync:qr] failed to apply sync link: ${getErrorMessage(error)}`);
       // surfaced via store error state
@@ -149,6 +142,7 @@ export const SyncScreen = () => {
             ? "Syncing..."
             : "Sync now";
   const status = sync.status;
+  const docsStatus = sync.docsStatus;
   const transferLabel = formatTransferProgress(sync.progress);
   const transferFraction = transferProgressFraction(sync.progress);
   const automaticStatus = autoSyncLabel(sync.autoSyncState);
@@ -157,7 +151,9 @@ export const SyncScreen = () => {
   // saved connection via ensureSavedRemote, so the buttons must stay usable —
   // otherwise a half-connected state locks the user out of the recovery path.
   const savedRemote = profile?.settings.git_remote_url.trim();
-  const connected = Boolean(status?.repo_initialized && (status?.remote_url || savedRemote));
+  const docsConnected = Boolean(docsStatus?.configured);
+  const connected =
+    docsConnected || Boolean(status?.repo_initialized && (status?.remote_url || savedRemote));
 
   const connectManually = async () => {
     try {
@@ -221,7 +217,28 @@ export const SyncScreen = () => {
             Connected to {connectedVia}.
           </Text>
         ) : null}
-        {status ? (
+        {docsConnected && docsStatus ? (
+          <View style={styles.statusGrid}>
+            {automaticStatus ? (
+              <StatusLine label="Automatic sync" value={automaticStatus} />
+            ) : null}
+            <StatusLine
+              label="State"
+              value={
+                docsStatus.phase === "waiting_for_peer"
+                  ? "waiting for computer"
+                  : docsStatus.phase.replaceAll("_", " ")
+              }
+            />
+            <StatusLine label="Nearby peers" value={String(docsStatus.neighbors)} />
+            {sync.docsResult ? (
+              <StatusLine
+                label="Last transfer"
+                value={`${sync.docsResult.published} sent · ${sync.docsResult.applied} applied`}
+              />
+            ) : null}
+          </View>
+        ) : status ? (
           <View style={styles.statusGrid}>
             {automaticStatus ? (
               <StatusLine label="Automatic sync" value={automaticStatus} />
@@ -238,7 +255,7 @@ export const SyncScreen = () => {
         ) : (
           <InlineNote>Pull to refresh status.</InlineNote>
         )}
-        {status && !status.remote_url && savedRemote ? (
+        {!docsConnected && status && !status.remote_url && savedRemote ? (
           <InlineNote>
             The saved connection will be re-applied on the next sync.
           </InlineNote>
@@ -267,14 +284,16 @@ export const SyncScreen = () => {
             </Text>
           </View>
         ) : null}
-        <View style={styles.buttonRow}>
-          <View style={styles.buttonGrow}>
-            <Button title="Pull only" kind="secondary" onPress={() => void sync.pull().catch(() => {})} disabled={busy || !connected} />
+        {!docsConnected ? (
+          <View style={styles.buttonRow}>
+            <View style={styles.buttonGrow}>
+              <Button title="Pull only" kind="secondary" onPress={() => void sync.pull().catch(() => {})} disabled={busy || !connected} />
+            </View>
+            <View style={styles.buttonGrow}>
+              <Button title="Push only" kind="secondary" onPress={() => void sync.push().catch(() => {})} disabled={busy || !connected} />
+            </View>
           </View>
-          <View style={styles.buttonGrow}>
-            <Button title="Push only" kind="secondary" onPress={() => void sync.push().catch(() => {})} disabled={busy || !connected} />
-          </View>
-        </View>
+        ) : null}
         {sync.error ? (
           <Text style={{ color: theme.colors.danger }}>{sync.error}</Text>
         ) : null}
@@ -308,7 +327,7 @@ export const SyncScreen = () => {
         ) : null}
       </Section>
 
-      <Section title="SSH key">
+      {!docsConnected ? <Section title="SSH key">
         {sshKey ? (
           <>
             <Text selectable style={[styles.sshKey, { color: theme.colors.text }]}>
@@ -344,9 +363,9 @@ export const SyncScreen = () => {
             </InlineNote>
           </>
         )}
-      </Section>
+      </Section> : null}
 
-      <Section title="History">
+      {!docsConnected ? <Section title="Git history (optional)">
         {sync.history.length === 0 ? (
           <InlineNote>No commits yet.</InlineNote>
         ) : (
@@ -362,7 +381,7 @@ export const SyncScreen = () => {
             </View>
           ))
         )}
-      </Section>
+      </Section> : null}
 
       </ScrollView>
 

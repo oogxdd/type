@@ -155,7 +155,6 @@ struct IrohDocsNode {
     runtime: tokio::runtime::Runtime,
     router: Router,
     context: Arc<SyncContext>,
-    endpoint_ticket: String,
 }
 
 impl IrohDocsNode {
@@ -323,7 +322,7 @@ pub fn start_iroh_docs_sync_if_configured(app: &AppEnv) -> Result<IrohDocsSyncSt
 
 pub fn get_iroh_docs_sync_status(app: &AppEnv) -> Result<IrohDocsSyncStatus, String> {
     let profile = active_profile(app)?;
-    let configured = read_config(&profile)?.is_some();
+    let config = read_config(&profile)?;
     let guard = NODE
         .lock()
         .map_err(|_| "Iroh Docs node lock poisoned.".to_string())?;
@@ -333,14 +332,14 @@ pub fn get_iroh_docs_sync_status(app: &AppEnv) -> Result<IrohDocsSyncStatus, Str
     {
         return Ok(node.status());
     }
-    if configured {
+    if let Some(config) = config {
         Ok(IrohDocsSyncStatus {
             configured: true,
             running: false,
             profile_id: profile.id,
             document_id: None,
             endpoint_id: None,
-            peer_configured: false,
+            peer_configured: config.peer_endpoint_ticket.is_some(),
             phase: "stopped".to_string(),
             last_sync_ms: None,
             last_error: None,
@@ -578,12 +577,10 @@ fn finish_node(
         debounce_generation: AtomicU64::new(0),
     });
     spawn_event_loop(&runtime, context.clone(), events);
-    let endpoint_ticket = EndpointTicket::new(protocols.endpoint_addr).to_string();
     Ok(IrohDocsNode {
         runtime,
         router: protocols.router,
         context,
-        endpoint_ticket,
     })
 }
 

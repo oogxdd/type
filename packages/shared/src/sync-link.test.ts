@@ -21,6 +21,9 @@ describe("sync deep link", () => {
       name: "Computer (mac.local)",
       hostKeySha256: "SHA256:abc123",
       irohTicket: "iroh-ticket/with+symbols=",
+      irohDocTicket: undefined,
+      irohVaultKey: undefined,
+      irohPeerTicket: undefined,
     });
   });
 
@@ -32,6 +35,9 @@ describe("sync deep link", () => {
       name: undefined,
       hostKeySha256: undefined,
       irohTicket: undefined,
+      irohDocTicket: undefined,
+      irohVaultKey: undefined,
+      irohPeerTicket: undefined,
     });
   });
 
@@ -45,6 +51,28 @@ describe("sync deep link", () => {
       name: "Computer (mac)",
       hostKeySha256: undefined,
       irohTicket: undefined,
+      irohDocTicket: undefined,
+      irohVaultKey: undefined,
+      irohPeerTicket: undefined,
+    });
+  });
+
+  it("round-trips a docs-only trusted-device bundle", () => {
+    const link = buildSyncDeepLink({
+      name: "My Mac",
+      irohDocTicket: "doc-ticket+write",
+      irohVaultKey: "secret/key=",
+      irohPeerTicket: "peer-ticket",
+    });
+    expect(parseSyncDeepLink(link)).toEqual({
+      remote: undefined,
+      branch: undefined,
+      name: "My Mac",
+      hostKeySha256: undefined,
+      irohTicket: undefined,
+      irohDocTicket: "doc-ticket+write",
+      irohVaultKey: "secret/key=",
+      irohPeerTicket: "peer-ticket",
     });
   });
 

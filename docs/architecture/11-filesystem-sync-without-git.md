@@ -19,39 +19,31 @@ object database on mobile, and awkward treatment of large attachments. Any
 replacement must explicitly cover the jobs Type still wants rather than merely
 removing `git commit`.
 
-## Recommended replacement: operation journal + content-addressed blobs
+## Chosen replacement: `iroh-docs` current state + content-addressed blobs
 
-Keep ordinary Markdown files in the notes root. Add a device-local index and an
-append-only sync journal under app data, not inside the visible notes tree.
+Keep ordinary Markdown files in the notes root. Use the persistent `iroh-docs`
+replica itself as the device-local index, retry queue, and set-reconciliation
+engine. Do not add `sync.sqlite` or an application-owned append-only journal.
 
 ```text
-FileRecord {
-  file_id,             // stable UUID, independent of path
-  relative_path,
-  content_hash,
-  generation,
-  modified_hlc,
-  modified_by,
-  deleted
-}
-
-Operation = Put | Move | Delete
+entry_key = HMAC(vault_id_key, normalized_relative_path)
+entry_value = AEAD(vault_object_key, upsert_or_tombstone)
 ```
 
-- A watcher plus explicit editor hooks update the index after atomic saves.
-- Markdown bytes and attachments are addressed by cryptographic hash and moved
-  with `iroh-blobs`.
-- Small signed manifests exchange journal ranges and referenced blob hashes.
-- A stable `file_id` makes rename/move distinct from delete-plus-create.
-- A hybrid logical clock plus per-device generation identifies concurrent
-  changes without trusting wall-clock ordering.
-- After acknowledgement by the other device, old journal segments and
-  unreferenced blobs can be compacted.
+- Explicit editor hooks publish after a short debounce; opening the app and the
+  manual button also scan/reconcile the filesystem.
+- Repeated saves overwrite the same per-author entry for that opaque path.
+- `iroh-docs` stores values through `iroh-blobs`, verifies content, resumes
+  transfer, persists pending state, and reconciles peer sets.
+- Each trusted device has an author identity. Devices compare all authors for a
+  path, apply the deterministic winner, and preserve concurrent content.
+- Rename is initially represented as tombstone plus upsert; empty folders are
+  implicit rather than replicated objects.
 
-This produces sync checkpoints, not user-visible commits. Ten notes edited
-thirty times may create thirty cheap local operations, but history can expose
-one logical version per editing session and the journal can compact acknowledged
-intermediate states.
+This produces convergent current state, not user-visible commits. Ten notes
+edited thirty times still leave only one current entry per author and path.
+Iroh's blob garbage collection can reclaim values no longer referenced by the
+document according to an explicit retention policy.
 
 ## Conflict rule
 
@@ -61,13 +53,14 @@ rule rather than introducing character-level CRDT behavior:
 - non-concurrent updates apply normally;
 - concurrent edits keep the local file and materialize the remote version as
   `name.conflict-<device>.md`;
-- concurrent move/edit follows the stable `file_id` to the moved path;
+- concurrent move/edit may initially surface as delete/upsert conflicts because
+  the opaque key is path-derived;
 - delete versus concurrent edit preserves the edit and records a visible
   conflict instead of silently deleting it.
 
-The index is reconstructible by scanning the filesystem plus retained journal.
-The Markdown folder remains usable with Finder, editors, backups, and simple
-zip export even if Type itself is unavailable.
+The local replica is reconstructible from the filesystem and peers. The
+Markdown folder remains usable with Finder, editors, backups, and simple zip
+export even if Type itself is unavailable.
 
 ## History options
 
@@ -83,18 +76,12 @@ History no longer needs to equal transport:
 This lets the product say "version from yesterday" instead of exposing dozens
 of identical `Sync notes` commits.
 
-## Where `iroh-docs` fits
+## What Type still owns
 
-`iroh-docs` can reconcile signed key/value entries whose values reference blob
-hashes. It could carry `FileRecord` entries and tombstones, while `iroh-blobs`
-carries the bytes. It does not automatically provide filesystem semantics,
-rename detection, user-facing history, conflict-file policy, background
-availability, or zero-knowledge storage. Type would still need the index,
-filesystem projection, encryption-before-storage, and retention rules.
-
-It is attractive if Type later needs many peers or live collaborative state.
-For the current phone-plus-Mac workflow, a small Type-specific journal is easier
-to reason about and migrate incrementally.
+`iroh-docs` replaces the custom pending database, but it does not provide Type's
+filesystem semantics, encryption-before-storage, conflict-file policy,
+user-facing history, attachment retention, or product status language. Type
+still owns those small policy layers and the Markdown projection.
 
 Character-level CRDTs such as Automerge, Yjs, or Loro are a different product
 choice. They help simultaneous collaborative editing but make external Markdown
@@ -103,13 +90,14 @@ complex. They are unnecessary for occasional two-device conflicts.
 
 ## Migration path from Git
 
-1. Keep the current Git + SSH-over-Iroh flow and move audio to `iroh-blobs`.
-2. Introduce stable file IDs and a shadow journal while Git remains authoritative.
-3. Compare journal convergence against Git in tests and real opt-in profiles.
-4. Make the journal the sync transport while continuing optional local Git
-   checkpoints for rollback/export.
-5. Eventually disable automatic Git commits; keep manual Git export as a
-   compatibility feature.
+1. Opt a profile into encrypted `iroh-docs` with a one-time trusted-device QR.
+2. Sync Markdown, ordering metadata, and shared settings without committing.
+3. Keep the existing Git commands available as manual snapshots/export during
+   the experiment, not as the automatic transport.
+4. Move encrypted audio through the document blob store and connect desktop
+   durability receipts to the seven-day mobile eviction policy.
+5. Add explicit retention/GC, revocation, and a tested peer handoff before
+   calling the persistent-peer topology production-ready.
 
 This avoids a flag-day migration and preserves the user's plain folder at every
 stage.

@@ -37,6 +37,13 @@ export interface RawCore {
   renameItem(path: string, newName: string): Promise<string>;
   setOrder(argsJson: string): Promise<void>;
 
+  // ── Encrypted iroh-docs sync ──
+  configureIrohDocsSync(argsJson: string): Promise<string>;
+  startIrohDocsSync(): Promise<string>;
+  getIrohDocsSyncStatus(): Promise<string>;
+  syncIrohDocsNow(): Promise<string>;
+  setIrohDocsSyncPeer(argsJson: string): Promise<string>;
+
   // ── Working folders ("profiles") + device app config ──
   getProfiles(): Promise<string>;
   createProfile(argsJson: string): Promise<string>;

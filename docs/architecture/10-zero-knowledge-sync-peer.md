@@ -37,10 +37,10 @@ from reusing another surface's key material.
 
 ## Stored objects
 
-Use immutable encrypted envelopes:
+Use encrypted current-state envelopes:
 
 ```text
-opaque_object_id = HMAC(id_key, random_object_id)
+opaque_object_id = HMAC(id_key, normalized_relative_path)
 ciphertext = XChaCha20-Poly1305(
   object_key,
   random_nonce,
@@ -49,37 +49,25 @@ ciphertext = XChaCha20-Poly1305(
 )
 ```
 
-Random object identifiers avoid exposing hashes of predictable plaintext.
-Authenticated encryption detects modification. Notes, Git bundles, manifests,
-audio chunks, tombstones, and receipts all use the same envelope framing but
-different object kinds and derived keys.
-
-The peer API can stay intentionally small:
-
-```text
-PUT    /vault/{opaque-vault}/objects/{opaque-id}
-LIST   /vault/{opaque-vault}/changes?after={opaque-cursor}
-GET    /vault/{opaque-vault}/objects/{opaque-id}
-POST   /vault/{opaque-vault}/acks
-DELETE /vault/{opaque-vault}/objects/{opaque-id}
-```
-
-An Iroh protocol can expose equivalent operations without HTTP. Storage
-semantics, encryption, quotas, and acknowledgement rules remain application
-responsibilities either way.
+The stable HMAC key lets repeated saves of the same path replace that device's
+existing Iroh entry. The peer cannot dictionary-test filenames without the
+derived id key. A random nonce makes equal contents produce different
+ciphertext, and authenticated encryption detects modification. Upserts and
+tombstones use the same envelope framing.
 
 ## Sync flow
 
-1. The phone saves locally and creates an encrypted immutable change package.
-2. The phone uploads it to the mailbox and may close immediately after the
-   peer durably acknowledges the ciphertext.
-3. The Mac later lists opaque changes, downloads, authenticates, decrypts, and
-   applies them locally.
-4. The Mac emits an encrypted, signed receipt naming the exact applied object
-   and resulting content hash.
-5. The phone downloads the receipt on a later session.
+1. The phone atomically saves Markdown locally.
+2. After a short debounce it writes the encrypted current state under the
+   stable opaque file key. Several autosaves replace one per-author entry; they
+   do not create Git commits or an application-owned operation queue.
+3. `iroh-docs` reconciles entries directly with the Mac or persistent peer.
+4. The Mac later decrypts and projects the winning state back to its ordinary
+   Markdown folder. Concurrent content is preserved as a conflict sibling.
+5. The Mac publishes its own baseline for the received file, which can later
+   serve as the basis for an encrypted durability acknowledgement.
 6. Phone audio is eligible for deletion only after the current seven-day and
-   completed-transcription checks plus that exact Mac durability receipt.
+   completed-transcription checks plus an exact Mac durability receipt.
 
 `iroh-blobs` is suitable for encrypted audio chunks: encrypt first, then add
 the ciphertext to the blob store. Its BLAKE3 addressing and verified resume
@@ -123,7 +111,7 @@ mailbox or desktop disk with validly transported garbage.
 | `iroh-docs` with opaque keys and encrypted values | Persistent replication, set reconciliation, blobs, live notifications, read-only replicas | Chosen foundation. Type still owns encryption, operation semantics, rollback detection, receipts, retention, and UI. |
 | HTTPS object storage | Mature durability and cheap storage | A viable fallback, but introduces provider credentials and a second transport while the app is already using Iroh. |
 
-### Decision: encrypted operation log over `iroh-docs`
+### Decision: encrypted current filesystem state over `iroh-docs`
 
 Use one Iroh document per Type vault. Trusted devices receive the document's
 write capability plus the Type vault root key during pairing. The always-online
@@ -132,7 +120,7 @@ and their blobs but cannot create namespace-valid entries.
 
 Neither the Iroh document key nor its blob values are Type plaintext:
 
-- every entry key is a random 32-byte opaque operation id;
+- every entry key is a stable 32-byte HMAC of the normalized relative path;
 - every entry value is a Type encrypted envelope;
 - path, filename, object kind, device id, sequence, predecessor, hashes, note
   bytes, and attachment bytes are all inside the envelope;
@@ -141,28 +129,27 @@ Neither the Iroh document key nor its blob values are Type plaintext:
 - the peer still observes namespace id, author public ids, timestamps, opaque
   keys, content hashes, sizes, and connection metadata.
 
-The log contains filesystem operations (`upsert`, `delete`) rather than making
-the Iroh document itself the note database. A device applies unseen operations
-to Markdown/filesystem state and commits the resulting batch to local Git. If a
-remote operation's base hash does not match a concurrently changed local file,
-Type preserves both versions using the existing `.conflict.md` behavior.
+Each author has at most one current entry for a path. The value describes an
+`upsert` or tombstone, but the Iroh document is the reconciliation state and
+durable queue: there is no `sync.sqlite` or append-only Type journal. A device
+groups the entries for a key, projects the winning state to the filesystem, and
+preserves concurrent content using a deterministic `.conflict-<hash>.md`
+sibling. It then publishes a local baseline. Git is outside this hot path and
+may still be used manually for snapshots or export.
 
 `iroh-docs` is a useful sync engine here, but it is not a security boundary and
 does not make the design automatically production-ready. Type must encrypt
-before `set_bytes`, use opaque keys, bound downloads, remember accepted device
-sequences, and retain independent backups. The current `iroh-docs` stack also
-inherits the pre-production stability boundary of the rewritten
-`iroh-blobs` line.
+before `set_bytes`, use opaque keys, bound downloads, and retain independent
+backups. Stable per-path keys intentionally leak update linkage for the same
+unknown path; they do not reveal the path itself.
 
 ### Delivery slices
 
-1. Define and test the encrypted envelope and per-device sequence state without
-   network dependencies.
-2. Add an `iroh-docs` client store and a standalone persistent read-only peer;
-   prove phone-online → peer → phone-offline → Mac-online in an integration
-   test.
-3. Publish encrypted Markdown upsert/delete operations and apply them with
-   conflict preservation, then make one Git commit per received batch.
+1. Define and test the encrypted envelope and stable opaque per-path ids.
+2. Add the persistent `iroh-docs` client store and project Markdown, ordering,
+   and shared settings with conflict preservation and no automatic Git commits.
+3. Add the standalone persistent read-only peer and prove phone-online → peer →
+   phone-offline → Mac-online in an integration test.
 4. Move encrypted audio through the document's blob store and issue an encrypted
    Mac durability receipt before the seven-day phone eviction policy can run.
 5. Add device revocation, signed receipt chains, rollback warnings, quotas,

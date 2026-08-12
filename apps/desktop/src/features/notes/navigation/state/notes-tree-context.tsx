@@ -86,12 +86,17 @@ export function NotesTreeProvider({ children }: { children: ReactNode }) {
   // frontend's back; the backend emits this event after each accepted push.
   const { refreshTree } = state;
   useEffect(() => {
-    const unlisten = listen("local-sync-push-received", () => {
+    const unlistenLocal = listen("local-sync-push-received", () => {
       console.log("[notes] local sync push received — refreshing tree");
       void refreshTree();
     });
+    const unlistenDocs = listen("iroh-docs-sync-received", () => {
+      console.log("[notes] iroh docs state received — refreshing tree");
+      void refreshTree();
+    });
     return () => {
-      void unlisten.then((dispose) => dispose());
+      void unlistenLocal.then((dispose) => dispose());
+      void unlistenDocs.then((dispose) => dispose());
     };
   }, [refreshTree]);
 

@@ -19,6 +19,7 @@ uniffi::setup_scaffolding!();
 
 mod git_sync;
 mod handwriting;
+mod iroh_docs_sync;
 mod iroh_sync;
 mod notes;
 mod profiles;
@@ -27,6 +28,7 @@ mod security;
 
 pub use git_sync::*;
 pub use handwriting::*;
+pub use iroh_docs_sync::*;
 pub use iroh_sync::*;
 pub use notes::*;
 pub use profiles::*;
@@ -81,7 +83,12 @@ pub fn init_core(app_data_dir: String, documents_dir: Option<String>) -> Result<
     // Mirrors the Tauri shell's setup hook: load persisted security config so
     // the locked/unlocked gate is correct before the first command runs.
     type_core::ensure_security_runtime_initialized_for_setup(&env)?;
-    *APP_ENV.write().expect("app env lock poisoned") = Some(env);
+    *APP_ENV.write().expect("app env lock poisoned") = Some(env.clone());
+    std::thread::spawn(move || {
+        if let Err(error) = type_core::start_iroh_docs_sync_if_configured(&env) {
+            eprintln!("[iroh-docs] automatic startup failed: {error}");
+        }
+    });
     Ok(())
 }
 
