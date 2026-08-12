@@ -112,14 +112,59 @@ mailbox or desktop disk with validly transported garbage.
 
 ## Incremental implementation
 
-1. Define and fuzz-test the encrypted envelope format independently of Iroh.
-2. Implement a local fake mailbox and end-to-end offline-device tests.
-3. Upload encrypted Git bundles and encrypted `iroh-blobs` audio objects.
-4. Add signed cursors, receipt chains, quotas, and garbage collection.
-5. Deploy a single-user peer, then add backup/replication and operational
-   monitoring that never logs plaintext or keys.
+### Options considered
 
-A true macOS launch-at-login helper should be introduced with the same rule:
-one process exclusively owns the embedded Git/Iroh server. The GUI queries and
-controls it over a local authenticated IPC socket. Running an independent GUI
-server and helper against the same working tree is not safe.
+| Option | Useful parts | Why it is or is not the first choice |
+| --- | --- | --- |
+| Plain Iroh relay | NAT traversal and encrypted packet forwarding | Stateless; cannot accept a phone upload while the Mac is offline. |
+| Custom mailbox protocol | Small wire surface and complete policy control | Type would have to invent and maintain set reconciliation, cursors, blob availability, and retry semantics. |
+| Encrypted Git bundles | Reuses Git object and merge semantics | Still needs a durable index, acknowledgement protocol, attachment handling, and bundle lifecycle. Useful as an envelope payload, not as the peer itself. |
+| `iroh-docs` with plaintext entries | Persistent replication, CRDT metadata, blobs, gossip | The peer replica sees entry keys and can fetch values, violating the zero-knowledge goal. |
+| `iroh-docs` with opaque keys and encrypted values | Persistent replication, set reconciliation, blobs, live notifications, read-only replicas | Chosen foundation. Type still owns encryption, operation semantics, rollback detection, receipts, retention, and UI. |
+| HTTPS object storage | Mature durability and cheap storage | A viable fallback, but introduces provider credentials and a second transport while the app is already using Iroh. |
+
+### Decision: encrypted operation log over `iroh-docs`
+
+Use one Iroh document per Type vault. Trusted devices receive the document's
+write capability plus the Type vault root key during pairing. The always-online
+sync peer receives only a read capability. It can replicate valid signed entries
+and their blobs but cannot create namespace-valid entries.
+
+Neither the Iroh document key nor its blob values are Type plaintext:
+
+- every entry key is a random 32-byte opaque operation id;
+- every entry value is a Type encrypted envelope;
+- path, filename, object kind, device id, sequence, predecessor, hashes, note
+  bytes, and attachment bytes are all inside the envelope;
+- `iroh-docs` author signatures authenticate the writing replica, while the
+  Type envelope's AEAD prevents a read-only peer from producing valid content;
+- the peer still observes namespace id, author public ids, timestamps, opaque
+  keys, content hashes, sizes, and connection metadata.
+
+The log contains filesystem operations (`upsert`, `delete`) rather than making
+the Iroh document itself the note database. A device applies unseen operations
+to Markdown/filesystem state and commits the resulting batch to local Git. If a
+remote operation's base hash does not match a concurrently changed local file,
+Type preserves both versions using the existing `.conflict.md` behavior.
+
+`iroh-docs` is a useful sync engine here, but it is not a security boundary and
+does not make the design automatically production-ready. Type must encrypt
+before `set_bytes`, use opaque keys, bound downloads, remember accepted device
+sequences, and retain independent backups. The current `iroh-docs` stack also
+inherits the pre-production stability boundary of the rewritten
+`iroh-blobs` line.
+
+### Delivery slices
+
+1. Define and test the encrypted envelope and per-device sequence state without
+   network dependencies.
+2. Add an `iroh-docs` client store and a standalone persistent read-only peer;
+   prove phone-online → peer → phone-offline → Mac-online in an integration
+   test.
+3. Publish encrypted Markdown upsert/delete operations and apply them with
+   conflict preservation, then make one Git commit per received batch.
+4. Move encrypted audio through the document's blob store and issue an encrypted
+   Mac durability receipt before the seven-day phone eviction policy can run.
+5. Add device revocation, signed receipt chains, rollback warnings, quotas,
+   garbage collection, backup/replication, and operational monitoring that
+   never logs plaintext or keys.
