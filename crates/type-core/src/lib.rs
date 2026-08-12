@@ -135,6 +135,10 @@ pub fn decode_image_base64(payload: &str) -> Result<Vec<u8>, String> {
 }
 
 /// Format an HTTP error response with status code and body.
+///
+/// Only the cloud transcription/OCR backends call this, so it follows reqwest
+/// through the same feature gates rather than forcing HTTP on every consumer.
+#[cfg(any(feature = "recordings", feature = "handwriting"))]
 pub fn response_error(status: reqwest::StatusCode, body: String, context: &str) -> String {
     let compact = body.replace('\n', " ");
     if compact.trim().is_empty() {

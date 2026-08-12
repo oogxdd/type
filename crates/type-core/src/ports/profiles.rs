@@ -135,7 +135,11 @@ pub trait ProfilesGateway {
     type DeleteArgs;
     type UpdateSettingsArgs;
     type UpdateAppConfigArgs;
+    // Backup/export ride the `profile-backup` feature (zip); a lean shell that
+    // never exports profiles does not have to name these types at all.
+    #[cfg(feature = "profile-backup")]
     type Backup;
+    #[cfg(feature = "profile-backup")]
     type Export;
 
     fn list(&self) -> Result<Self::Snapshot, String>;
@@ -146,7 +150,9 @@ pub trait ProfilesGateway {
     fn delete(&self, args: Self::DeleteArgs) -> Result<Self::Snapshot, String>;
     fn update_settings(&self, args: Self::UpdateSettingsArgs) -> Result<Self::Snapshot, String>;
     fn update_app_config(&self, args: Self::UpdateAppConfigArgs) -> Result<Self::Snapshot, String>;
+    #[cfg(feature = "profile-backup")]
     fn create_backup(&self) -> Result<Self::Backup, String>;
+    #[cfg(feature = "profile-backup")]
     fn export_to_documents(&self) -> Result<Self::Export, String>;
 }
 

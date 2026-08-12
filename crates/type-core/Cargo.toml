@@ -7,22 +7,71 @@ edition = "2021"
 [lib]
 name = "type_core"
 
+# ---------------------------------------------------------------------------
+# Features
+# ---------------------------------------------------------------------------
+#
+# The crate used to compile every domain unconditionally, which meant any
+# consumer — even one that only wants to read and write notes — paid for
+# libgit2 (with vendored OpenSSL), reqwest, an embedded SSH server (russh),
+# a tokio runtime, and mDNS. That is ~336 transitive packages.
+#
+# `default = ["full"]` keeps the Tauri shell and the UniFFI crate byte-for-byte
+# unchanged. Lean shells (the TUI in `crates/type-tui`) opt out with
+# `default-features = false` and re-add only what they use.
+#
+# Always compiled, because everything else builds on them:
+#   notes / profiles / security  — no heavy dependencies at all
+#
+[features]
+default = ["full"]
+full = [
+    "git-sync",
+    "local-sync",
+    "recordings",
+    "handwriting",
+    "import",
+    "profile-backup",
+]
+
+# libgit2 sync against a remote (also pulls the app-managed Ed25519 keypair).
+git-sync = ["dep:git2", "dep:ssh-key", "dep:rand_core"]
+
+# The embedded LAN SSH git server + mDNS advertising. Builds on git-sync
+# because the daemon commits through the same git helpers before serving.
+local-sync = ["git-sync", "dep:russh", "dep:tokio", "dep:mdns-sd"]
+
+# Audio recordings and the transcription queue. `whisper_env` provisions the
+# managed Python env over HTTP, hence reqwest.
+recordings = ["dep:reqwest"]
+
+# Handwriting OCR (OpenAI / HuggingFace clouds + the local EasyOCR env).
+handwriting = ["dep:reqwest"]
+
+# Apple Notes folder importer — pure filesystem work, no extra crates.
+import = []
+
+# Profile backup zip + export to Documents.
+profile-backup = ["dep:zip"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-git2 = { version = "0.20", features = ["vendored-openssl"] }
 base64 = "0.22"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 uuid = { version = "1", features = ["v7"] }
 time = { version = "0.3", features = ["formatting", "macros", "parsing"] }
 argon2 = "0.5"
 chacha20poly1305 = { version = "0.10", features = ["std"] }
 zeroize = "1.8"
-zip = { version = "0.6", default-features = false, features = ["deflate"] }
-mdns-sd = "0.20.0"
-ssh-key = { version = "0.6", features = ["ed25519"] }
-rand_core = { version = "0.6", features = ["std"] }
+
+# Optional — each is pulled in by the feature named in the comment.
+git2 = { version = "0.20", features = ["vendored-openssl"], optional = true }   # git-sync
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"], optional = true }  # recordings / handwriting
+zip = { version = "0.6", default-features = false, features = ["deflate"], optional = true }  # profile-backup
+mdns-sd = { version = "0.20.0", optional = true }                              # local-sync
+ssh-key = { version = "0.6", features = ["ed25519"], optional = true }          # git-sync
+rand_core = { version = "0.6", features = ["std"], optional = true }            # git-sync
 
 [target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
-russh = { version = "0.62.2", default-features = false, features = ["ring", "flate2"] }
-tokio = { version = "1.52.3", features = ["rt-multi-thread", "io-util", "process", "net", "time", "macros", "sync"] }
+russh = { version = "0.62.2", default-features = false, features = ["ring", "flate2"], optional = true }  # local-sync
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "io-util", "process", "net", "time", "macros", "sync"], optional = true }  # local-sync

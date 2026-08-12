@@ -11,10 +11,14 @@ use std::path::{Path, PathBuf};
 use crate::app_data_dir;
 use crate::ports::profiles::ProfilesGateway;
 
+// Backup is the only profiles submodule with a heavy dependency (zip), so it
+// is gated separately — discovery, settings, and state stay unconditional.
+#[cfg(feature = "profile-backup")]
 mod backup;
 mod settings;
 mod state;
 
+#[cfg(feature = "profile-backup")]
 pub use backup::*;
 pub use settings::*;
 pub use state::*;
@@ -42,7 +46,9 @@ impl ProfilesGateway for ProfilesAdapter {
     type DeleteArgs = DeleteProfileArgs;
     type UpdateSettingsArgs = UpdateProfileSettingsArgs;
     type UpdateAppConfigArgs = UpdateAppConfigArgs;
+    #[cfg(feature = "profile-backup")]
     type Backup = ProfilesBackupArchive;
+    #[cfg(feature = "profile-backup")]
     type Export = ProfilesDocumentsExport;
 
     fn list(&self) -> Result<Self::Snapshot, String> {
@@ -115,10 +121,12 @@ impl ProfilesGateway for ProfilesAdapter {
         Ok(profiles_snapshot(&self.app, &state))
     }
 
+    #[cfg(feature = "profile-backup")]
     fn create_backup(&self) -> Result<Self::Backup, String> {
         create_profiles_backup_zip_impl(&self.app)
     }
 
+    #[cfg(feature = "profile-backup")]
     fn export_to_documents(&self) -> Result<Self::Export, String> {
         export_profiles_to_documents_impl(&self.app)
     }

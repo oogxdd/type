@@ -43,10 +43,12 @@ impl<G: ProfilesGateway> ProfilesUseCases<G> {
         self.gateway.update_app_config(args)
     }
 
+    #[cfg(feature = "profile-backup")]
     pub fn create_backup(&self) -> Result<G::Backup, String> {
         self.gateway.create_backup()
     }
 
+    #[cfg(feature = "profile-backup")]
     pub fn export_to_documents(&self) -> Result<G::Export, String> {
         self.gateway.export_to_documents()
     }
