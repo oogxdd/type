@@ -3,6 +3,33 @@ import type { NotePreview } from "@typenotes/shared/format";
 
 // Feed is not the folder tree. It is a synthetic hierarchy built from note
 // timestamps so the navigation UI can browse recent work by time bucket.
+//
+// Shape of the tree (today = Sun 9 Aug 2026, for example):
+//
+//   Today                                    <- relative half
+//   Yesterday
+//   This week            running ISO week minus today/yesterday
+//   Last week            the whole previous ISO week (Mon-Sun)
+//   July                                     <- calendar half
+//     Week 30 · Jul 20 - 26
+//     Week 29 · Jul 13 - 19
+//       Monday 13
+//       ...
+//   2025
+//     Q4 > December > Week 52 · Dec 22 - 28 > Monday 22
+//   Undated
+//
+// Three rules hold the whole thing together; break one and the old pathologies
+// (empty buckets, "Month start" stubs, a week cut in half by a month boundary)
+// come back:
+//
+//   1. The two halves are separated by one instant, FeedBoundaries.
+//      calendarCutoffMs, so a date is in exactly one of them. The calendar
+//      never covers the last two weeks, so it can't grow buckets that are
+//      empty by construction.
+//   2. Weeks are ISO weeks, never clipped to a month (getWeekOwnerMonths
+//      decides which month a straddling week hangs under).
+//   3. Every level reads newest-first (getChronologicalRank).
 export type FeedTreeNodeKind =
   | "special"
   | "year"
