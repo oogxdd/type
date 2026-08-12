@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "6365eac99310",
+  "strategy": "manual-commit",
+  "branch": "docs/sync-ios-release-guides",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/mobile/DEVICE_DEVELOPMENT.md",
+    "apps/mobile/LOCAL_TESTFLIGHT.md",
+    "apps/mobile/README.md",
+    "apps/mobile/TESTFLIGHT_HANDOFF.md",
+    "docs/MAC_BUILD_AND_TEST.md",
+    "docs/MOBILE_TESTFLIGHT_GITHUB_ACTIONS_NATIVE.md",
+    "docs/RELEASING.md",
+    "docs/architecture/08-shared-code-review.md",
+    "docs/architecture/09-adding-features-and-codegen.md",
+    "packages/mobile-core/README.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/63/65eac99310/0/metadata.json",
+      "transcript": "/63/65eac99310/0/full.jsonl",
+      "context": "",
+      "content_hash": "/63/65eac99310/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
