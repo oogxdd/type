@@ -153,7 +153,7 @@ impl ProtocolHandler for TypeSyncProtocol {
             self.blobs.clone(),
         )
         .await
-        .map_err(|error| AcceptError::from_err(anyhow::Error::msg(error)))
+        .map_err(|error| AcceptError::from_err(std::io::Error::other(error)))
     }
 }
 
@@ -437,19 +437,20 @@ async fn prepare_audio_blob_offer(
     let added = blobs
         .blobs()
         .add_path(absolute)
+        .temp_tag()
         .await
         .map_err(|error| format!("Could not hash the recording with iroh-blobs: {error}"))?;
-    if added.format != BlobFormat::Raw {
+    if added.format() != BlobFormat::Raw {
         return Err("The recording was imported as an unexpected blob collection.".to_string());
     }
     tokio::time::timeout(IROH_ONLINE_TIMEOUT, endpoint.online())
         .await
         .map_err(|_| "The phone could not publish an Iroh blob address in time.".to_string())?;
-    let ticket = BlobTicket::new(endpoint.addr(), added.hash, added.format);
+    let ticket = BlobTicket::new(endpoint.addr(), added.hash(), added.format());
     let header = AudioUploadHeader {
         audio_path: audio_rel,
         sha256,
-        blake3: added.hash.to_string(),
+        blake3: added.hash().to_string(),
         byte_length,
         blob_ticket: ticket.to_string(),
     };
