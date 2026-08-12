@@ -41,6 +41,14 @@ pub struct Editor {
     /// Body as last written to disk. Lets us skip no-op writes when the user
     /// moves the cursor around without changing anything.
     saved: String,
+    /// True while this note exists only because `:new` created it and nothing
+    /// has been typed into it yet.
+    ///
+    /// The desktop does not need this flag: it creates the file lazily on the
+    /// first keystroke, so an abandoned new note never reaches disk. `:new`
+    /// creates eagerly — it has to, the note list is the thing you navigate —
+    /// so the flag is how we still avoid leaving an empty file behind.
+    created_here: bool,
 }
 
 impl Editor {
@@ -56,6 +64,7 @@ impl Editor {
             path: None,
             dirty_since: None,
             saved: String::new(),
+            created_here: false,
         }
     }
 
@@ -74,6 +83,14 @@ impl Editor {
         self.path = Some(path);
         self.saved = body;
         self.dirty_since = None;
+        self.created_here = false;
+    }
+
+    /// Open a note `:new` just created. Same as [`Editor::open`] with an empty
+    /// body, but marks the note as ours to clean up if it is never typed into.
+    pub fn open_created(&mut self, path: String) {
+        self.open(path, String::new());
+        self.created_here = true;
     }
 
     /// Drop the buffer without touching disk (used after a delete).
@@ -83,6 +100,7 @@ impl Editor {
         self.path = None;
         self.saved = String::new();
         self.dirty_since = None;
+        self.created_here = false;
     }
 
     /// Record that the buffer changed. Restarting the clock on every keystroke
@@ -114,16 +132,25 @@ impl Editor {
             return Ok(FlushOutcome::default());
         };
         let body = self.text();
+        let is_empty = body.trim().is_empty();
+        // An untouched note we created is still pending cleanup, so it must not
+        // take the no-op path below.
+        let pending_cleanup = is_empty && self.created_here;
 
         // Nothing changed since the last write: skip the filesystem entirely.
-        if !self.is_dirty() && body == self.saved {
+        if !self.is_dirty() && body == self.saved && !pending_cleanup {
             return Ok(FlushOutcome::default());
         }
 
-        // Empty-note cleanup. The desktop deletes a note the moment a dirty
-        // buffer is emptied and focus moves elsewhere; flushing is exactly that
-        // moment for us.
-        if body.trim().is_empty() {
+        // Empty-note cleanup. The desktop deletes a note the moment a *dirty*
+        // buffer is emptied and focus moves elsewhere; flushing is that moment
+        // for us. `created_here` extends the same rule to a `:new` note that
+        // was abandoned before a single keystroke — see the field's comment.
+        //
+        // Note what is deliberately excluded: an already-empty note that the
+        // user merely opened and left. It is neither dirty nor ours, so it
+        // survives. Opening a note must never be what destroys it.
+        if is_empty && (self.is_dirty() || self.created_here) {
             notes.delete_items(vec![path])?;
             self.close();
             return Ok(FlushOutcome {
@@ -135,6 +162,8 @@ impl Editor {
         notes.write_note(&path, &body)?;
         self.saved = body.clone();
         self.dirty_since = None;
+        // It has real content on disk now; it is no longer ours to reclaim.
+        self.created_here = false;
 
         // Auto-rename runs after the write so the file we rename already holds
         // the content the slug was derived from.

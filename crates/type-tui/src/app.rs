@@ -519,7 +519,8 @@ impl App {
                 self.reload_notes();
                 // Jump straight into insert mode: a new note exists to be typed
                 // into, and this is the app's signature interaction elsewhere.
-                self.editor.open(result.path.clone(), String::new());
+                // `open_created` marks it for cleanup if it is never typed into.
+                self.editor.open_created(result.path.clone());
                 self.focus = Pane::Editor;
                 self.vim = Vim::new();
                 self.vim.mode = Mode::Insert;
