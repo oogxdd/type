@@ -23,8 +23,8 @@ use iroh_docs::{
     engine::LiveEvent,
     protocol::Docs,
     store::Query,
-    sync::{AuthorId, Capability},
-    DocTicket, ALPN as DOCS_ALPN,
+    sync::Capability,
+    AuthorId, DocTicket, ALPN as DOCS_ALPN,
 };
 use iroh_gossip::{net::Gossip, ALPN as GOSSIP_ALPN};
 use iroh_tickets::endpoint::EndpointTicket;
