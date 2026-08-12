@@ -6,6 +6,7 @@ import type {
   RecordingsListResult,
   RecordingTranscriptionQueueResult,
   RecordingWriteResult,
+  TranscriptionProvider,
   WhisperStatusResult,
 } from "@typenotes/shared/types";
 
@@ -53,14 +54,34 @@ export const queueLocalTranscriptions = (
     },
   });
 
+/**
+ * Queue pending recordings against AssemblyAI. The backend falls back to the
+ * stored key when `apiKey` is omitted, but passing the settings value keeps a
+ * just-edited key working before it round-trips through the profile snapshot.
+ */
+export const queueCloudTranscriptions = (
+  apiKey?: string
+): Promise<RecordingTranscriptionQueueResult> =>
+  invokeLogged<RecordingTranscriptionQueueResult>("queue_recording_transcriptions", {
+    args: {
+      assembly_api_key: apiKey || undefined,
+    },
+  });
+
 export const retriggerTranscription = (
   notePath: string,
-  model?: string
+  options: {
+    provider?: TranscriptionProvider;
+    model?: string;
+    assemblyApiKey?: string;
+  } = {}
 ): Promise<void> =>
   invokeLogged<void>("retrigger_transcription", {
     args: {
       note_path: notePath,
-      model,
+      provider: options.provider,
+      model: options.model,
+      assembly_api_key: options.assemblyApiKey || undefined,
     },
   });
 

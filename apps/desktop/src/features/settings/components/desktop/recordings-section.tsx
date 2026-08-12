@@ -51,14 +51,14 @@ export function SettingsRecordingsSection() {
     >
       <SettingsCard
         title="Voice transcription (mobile)"
-        description="Mobile uses AssemblyAI cloud transcription."
+        description="Mobile uses AssemblyAI cloud transcription. The key below is shared with desktop AssemblyAI transcription, if you selected it under Transcription."
       >
         <SettingsField label="AssemblyAI API key">
           <Input
             type="password"
             value={syncSettings.assemblyAiApiKey}
             onChange={(event) => updateSyncSettings({ assemblyAiApiKey: event.target.value })}
-            placeholder="Paste AssemblyAI key (mobile only)"
+            placeholder="Paste AssemblyAI key"
             autoCapitalize="off"
             autoCorrect="off"
           />

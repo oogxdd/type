@@ -95,17 +95,34 @@ export function RecordingsProvider({
         return;
       }
 
+      const useCloud = syncSettings.transcriptionProvider === "assemblyai";
+
+      // The cloud backend errors without a key. On the auto-queue tick that
+      // would repeat forever, so stay quiet and let the settings UI be the
+      // one place that tells the user the key is missing.
+      if (useCloud && !syncSettings.assemblyAiApiKey.trim()) {
+        if (trigger === "manual") {
+          setRecordingStatusMessage(
+            "AssemblyAI API key is required — add it in Settings or switch to local Whisper."
+          );
+        }
+        return;
+      }
+
       transcriptionQueueBusyRef.current = true;
       setTranscriptionQueueBusy(true);
       try {
-        // Local whisper transcription — no API key needed.
-        const result = await api.queueLocalTranscriptions(
-          syncSettings.whisperModel.trim() || undefined
-        );
+        const result = useCloud
+          ? await api.queueCloudTranscriptions(syncSettings.assemblyAiApiKey.trim())
+          : // Local whisper transcription — no API key needed.
+            await api.queueLocalTranscriptions(
+              syncSettings.whisperModel.trim() || undefined
+            );
+        const backend = useCloud ? "AssemblyAI" : "Whisper";
         const label =
           trigger === "manual"
-            ? `Scanned ${result.scanned}, queued ${result.queued}, in-flight ${result.in_flight}.`
-            : `Auto queue: scanned ${result.scanned}, queued ${result.queued}.`;
+            ? `${backend}: scanned ${result.scanned}, queued ${result.queued}, in-flight ${result.in_flight}.`
+            : `Auto queue (${backend}): scanned ${result.scanned}, queued ${result.queued}.`;
         setRecordingStatusMessage(label);
       } catch (error) {
         const message = getErrorMessage(error);
@@ -116,16 +133,22 @@ export function RecordingsProvider({
         void refreshRecordings();
       }
     },
-    [refreshRecordings, syncSettings.whisperModel]
+    [
+      refreshRecordings,
+      syncSettings.assemblyAiApiKey,
+      syncSettings.transcriptionProvider,
+      syncSettings.whisperModel,
+    ]
   );
 
   const retriggerTranscription = useCallback(
     async (notePath: string) => {
       try {
-        await api.retriggerTranscription(
-          notePath,
-          syncSettings.whisperModel.trim() || undefined
-        );
+        await api.retriggerTranscription(notePath, {
+          provider: syncSettings.transcriptionProvider,
+          model: syncSettings.whisperModel.trim() || undefined,
+          assemblyApiKey: syncSettings.assemblyAiApiKey.trim() || undefined,
+        });
         setRecordingStatusMessage(`Re-queued ${notePath} for transcription.`);
         void refreshRecordings();
       } catch (error) {
@@ -133,7 +156,12 @@ export function RecordingsProvider({
         setRecordingStatusMessage(`Retrigger failed: ${message}`);
       }
     },
-    [refreshRecordings, syncSettings.whisperModel]
+    [
+      refreshRecordings,
+      syncSettings.assemblyAiApiKey,
+      syncSettings.transcriptionProvider,
+      syncSettings.whisperModel,
+    ]
   );
 
   const resolveRecordingTargetFolder = useCallback(
