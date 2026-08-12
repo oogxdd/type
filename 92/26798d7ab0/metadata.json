@@ -1,0 +1,40 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "9226798d7ab0",
+  "strategy": "manual-commit",
+  "branch": "feat/desktop-transcription-provider",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "AGENTS.md",
+    "apps/desktop/src/features/profiles/hooks/use-legacy-profile-sync-migration.ts",
+    "apps/desktop/src/features/profiles/lib/profile-sync-settings.ts",
+    "apps/desktop/src/features/recording/api/recordings-api.ts",
+    "apps/desktop/src/features/recording/hooks/recordings-context.tsx",
+    "apps/desktop/src/features/settings/components/desktop/recordings-section.tsx",
+    "apps/desktop/src/features/settings/components/desktop/transcription-section.tsx",
+    "apps/desktop/src/features/settings/hooks/use-settings-data.ts",
+    "apps/desktop/src/shared/lib/storage.ts",
+    "crates/type-core/src/adapters/profiles/mod.rs",
+    "crates/type-core/src/adapters/profiles/settings.rs",
+    "crates/type-core/src/adapters/recordings/mod.rs",
+    "crates/type-core/src/ports/profiles.rs",
+    "packages/mobile-core/src/mock-core.ts",
+    "packages/shared/src/types.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/92/26798d7ab0/0/metadata.json",
+      "transcript": "/92/26798d7ab0/0/full.jsonl",
+      "context": "/92/26798d7ab0/0/context.md",
+      "content_hash": "/92/26798d7ab0/0/content_hash.txt",
+      "prompt": "/92/26798d7ab0/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 160,
+    "cache_creation_tokens": 137474,
+    "cache_read_tokens": 8734723,
+    "output_tokens": 46858,
+    "api_call_count": 87
+  }
+}
