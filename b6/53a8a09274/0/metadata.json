@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "b653a8a09274",
+  "session_id": "cdb9a0bf-402e-4e84-aba4-a9227082fa43",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-12T15:13:45.941881Z",
+  "branch": "feat/desktop-transcription-provider",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "scripts/check-ffi-surface.mjs"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f29f731eb539",
+  "checkpoint_transcript_start": 466,
+  "transcript_lines_at_start": 466,
+  "token_usage": {
+    "input_tokens": 21,
+    "cache_creation_tokens": 8272,
+    "cache_read_tokens": 1719599,
+    "output_tokens": 3899,
+    "api_call_count": 11
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-12T15:13:45.657379Z",
+    "agent_lines": 5,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 5,
+    "agent_percentage": 100
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "b653a8a09274",
+  "strategy": "manual-commit",
+  "branch": "feat/desktop-transcription-provider",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "scripts/check-ffi-surface.mjs"
+  ],
+  "sessions": [
+    {
+      "metadata": "/b6/53a8a09274/0/metadata.json",
+      "transcript": "/b6/53a8a09274/0/full.jsonl",
+      "context": "/b6/53a8a09274/0/context.md",
+      "content_hash": "/b6/53a8a09274/0/content_hash.txt",
+      "prompt": "/b6/53a8a09274/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 21,
+    "cache_creation_tokens": 8272,
+    "cache_read_tokens": 1719599,
+    "output_tokens": 3899,
+    "api_call_count": 11
+  }
+}
