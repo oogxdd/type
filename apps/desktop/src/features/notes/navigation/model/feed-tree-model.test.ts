@@ -3,10 +3,18 @@ import type { NotePreview } from "@typenotes/shared/format";
 import type { NoteEntry } from "@typenotes/shared/types";
 import {
   buildFeedTree,
+  type FeedTreeNode,
   findFeedNode,
   getLatestFeedTargetTimestamp,
 } from "./feed-tree-model";
 
+// Thursday, so "This week" (the running ISO week minus today and yesterday) is
+// non-empty. The feed splits this NOW as:
+//   Today      Thu Dec 31
+//   Yesterday  Wed Dec 30
+//   This week  Mon Dec 28 - Tue Dec 29   (ISO week 53)
+//   Last week  Mon Dec 21 - Sun Dec 27   (ISO week 52)
+//   calendar   everything before Mon Dec 21
 const NOW = new Date(2026, 11, 31, 12);
 
 const note = (path: string): NoteEntry => ({
@@ -32,35 +40,6 @@ const preview = (created: Date): NotePreview => ({
   ocrStatus: null,
 });
 
-const weekRangeLabel = (
-  week: number,
-  year: number,
-  month: number,
-  startDay: number,
-  endDay: number
-) => {
-  const formatDate = (day: number) =>
-    new Date(year, month, day).toLocaleDateString([], {
-      month: "long",
-      day: "numeric",
-    });
-  return `Week ${week} (${formatDate(startDay)} - ${formatDate(endDay)})`;
-};
-
-const monthStartRangeLabel = (
-  year: number,
-  month: number,
-  startDay: number,
-  endDay: number
-) => {
-  const formatDate = (day: number) =>
-    new Date(year, month, day).toLocaleDateString([], {
-      month: "long",
-      day: "numeric",
-    });
-  return `Month start (${formatDate(startDay)} - ${formatDate(endDay)})`;
-};
-
 const buildTree = (datesByPath: Record<string, Date>) => {
   const notes = Object.keys(datesByPath).map(note);
   const previews = Object.fromEntries(
@@ -83,6 +62,25 @@ const endOfDayMs = (date: Date) =>
     999
   ).getTime();
 
+// Mirrors getWeekLabel: "Week <iso> · Nov 30 - Dec 6" (or "· Dec 14 - 20" when
+// the week stays inside one month).
+const weekLabel = (isoWeek: number, start: Date, end: Date) => {
+  const formatDay = (value: Date) =>
+    value.toLocaleDateString([], { month: "short", day: "numeric" });
+  const range =
+    start.getMonth() === end.getMonth()
+      ? `${formatDay(start)} - ${end.getDate()}`
+      : `${formatDay(start)} - ${formatDay(end)}`;
+  return `Week ${isoWeek} · ${range}`;
+};
+
+// Mirrors getDayLabel: "Monday 14".
+const dayLabel = (date: Date) =>
+  `${date.toLocaleDateString([], { weekday: "long" })} ${date.getDate()}`;
+
+const walkFeed = (nodes: FeedTreeNode[]): FeedTreeNode[] =>
+  nodes.flatMap((node) => [node, ...walkFeed(node.children)]);
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(NOW);
@@ -92,177 +90,23 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("buildFeedTree calendar hierarchy", () => {
-  it("nests current-year month notes under seven-day week buckets and day nodes", () => {
+describe("buildFeedTree relative buckets", () => {
+  it("splits the last two weeks into Today, Yesterday, This week, and Last week", () => {
     const { treeData } = buildTree({
-      "may-01.md": new Date(2026, 4, 1, 9),
-      "may-04.md": new Date(2026, 4, 4, 9),
-      "may-07.md": new Date(2026, 4, 7, 9),
-      "may-08.md": new Date(2026, 4, 8, 9),
-      "may-31.md": new Date(2026, 4, 31, 9),
-    });
-
-    const may = findFeedNode(treeData, "feed:month:2026:5");
-    expect(may).toMatchObject({
-      kind: "month",
-      notes: [],
-      noteCount: 5,
-      rangeStartMs: new Date(2026, 4, 1).getTime(),
-      rangeEndMs: endOfDayMs(new Date(2026, 4, 31)),
-    });
-    expect(may?.children.map((week) => week.id)).toEqual([
-      "feed:month:2026:5:week:0",
-      "feed:month:2026:5:week:1",
-      "feed:month:2026:5:week:2",
-      "feed:month:2026:5:week:3",
-      "feed:month:2026:5:week:4",
-    ]);
-    expect(may?.children.map((week) => week.name)).toEqual([
-      monthStartRangeLabel(2026, 4, 1, 3),
-      weekRangeLabel(1, 2026, 4, 4, 10),
-      weekRangeLabel(2, 2026, 4, 11, 17),
-      weekRangeLabel(3, 2026, 4, 18, 24),
-      weekRangeLabel(4, 2026, 4, 25, 31),
-    ]);
-    expect(may?.children.every((week) => week.notes.length === 0)).toBe(true);
-
-    const weekOne = may?.children[1];
-    expect(weekOne).toMatchObject({
-      rangeStartMs: new Date(2026, 4, 4).getTime(),
-      rangeEndMs: endOfDayMs(new Date(2026, 4, 10)),
-    });
-    expect(weekOne?.children.map((day) => day.id)).toEqual([
-      "feed:month:2026:5:week:1:day:4",
-      "feed:month:2026:5:week:1:day:5",
-      "feed:month:2026:5:week:1:day:6",
-      "feed:month:2026:5:week:1:day:7",
-      "feed:month:2026:5:week:1:day:8",
-      "feed:month:2026:5:week:1:day:9",
-      "feed:month:2026:5:week:1:day:10",
-    ]);
-    expect(weekOne?.children.every((day) => day.kind === "day")).toBe(true);
-    expect(weekOne?.children.map((day) => day.notes[0]?.path ?? null)).toEqual([
-      "may-04.md",
-      null,
-      null,
-      "may-07.md",
-      "may-08.md",
-      null,
-      null,
-    ]);
-    expect(weekOne?.children[0]).toMatchObject({
-      rangeStartMs: startOfDayMs(new Date(2026, 4, 4)),
-      rangeEndMs: endOfDayMs(new Date(2026, 4, 4)),
-    });
-    expect(findFeedNode(treeData, "feed:month:2026:5:week:0:day:1")?.notes[0]?.path).toBe(
-      "may-01.md"
-    );
-  });
-
-  it("orders current-year months newest first while weeks and days stay chronological", () => {
-    const { treeData } = buildTree({
-      "feb-14.md": new Date(2026, 1, 14, 9),
-      "feb-08.md": new Date(2026, 1, 8, 9),
-      "oct-01.md": new Date(2026, 9, 1, 9),
+      "dec-31.md": new Date(2026, 11, 31, 8),
+      "dec-30.md": new Date(2026, 11, 30, 8),
+      "dec-29.md": new Date(2026, 11, 29, 8),
+      "dec-28.md": new Date(2026, 11, 28, 8),
+      "dec-27.md": new Date(2026, 11, 27, 8),
+      "dec-21.md": new Date(2026, 11, 21, 8),
     });
 
     expect(treeData.map((node) => node.id)).toEqual([
-      "feed:month:2026:10",
-      "feed:month:2026:2",
+      "feed:today",
+      "feed:yesterday",
+      "feed:this-week",
+      "feed:last-week",
     ]);
-    const february = findFeedNode(treeData, "feed:month:2026:2");
-    expect(february?.children.map((week) => week.id)).toEqual([
-      "feed:month:2026:2:week:0",
-      "feed:month:2026:2:week:1",
-      "feed:month:2026:2:week:2",
-      "feed:month:2026:2:week:3",
-      "feed:month:2026:2:week:4",
-    ]);
-    expect(february?.children[1]?.children.map((day) => day.id)).toEqual([
-      "feed:month:2026:2:week:1:day:2",
-      "feed:month:2026:2:week:1:day:3",
-      "feed:month:2026:2:week:1:day:4",
-      "feed:month:2026:2:week:1:day:5",
-      "feed:month:2026:2:week:1:day:6",
-      "feed:month:2026:2:week:1:day:7",
-      "feed:month:2026:2:week:1:day:8",
-    ]);
-  });
-
-  it("clips week ranges at short and long month boundaries", () => {
-    const { treeData } = buildTree({
-      "feb-28.md": new Date(2026, 1, 28, 9),
-      "apr-30.md": new Date(2026, 3, 30, 9),
-      "may-31.md": new Date(2026, 4, 31, 9),
-    });
-
-    expect(
-      findFeedNode(treeData, "feed:month:2026:2:week:4")?.name
-    ).toBe(weekRangeLabel(4, 2026, 1, 23, 28));
-    expect(
-      findFeedNode(treeData, "feed:month:2026:4:week:4")?.name
-    ).toBe(weekRangeLabel(4, 2026, 3, 27, 30));
-    expect(
-      findFeedNode(treeData, "feed:month:2026:5:week:5")?.name
-    ).toBeUndefined();
-  });
-
-  it("preserves the historical year, quarter, and month hierarchy", () => {
-    const { treeData } = buildTree({
-      "dec-29-2025.md": new Date(2025, 11, 29, 9),
-      "dec-31-2025.md": new Date(2025, 11, 31, 9),
-      "jan-01-2025.md": new Date(2025, 0, 1, 9),
-      "jun-15-2024.md": new Date(2024, 5, 15, 9),
-    });
-
-    expect(treeData.map((node) => node.id)).toEqual([
-      "feed:year:2025",
-      "feed:year:2024",
-    ]);
-
-    const year2025 = findFeedNode(treeData, "feed:year:2025");
-    expect(year2025?.children.map((quarter) => quarter.id)).toEqual([
-      "feed:year:2025:quarter:4",
-      "feed:year:2025:quarter:1",
-    ]);
-    expect(year2025?.children[0]?.children.map((month) => month.id)).toEqual([
-      "feed:year:2025:quarter:4:month:12",
-    ]);
-
-    const finalDecemberWeek = findFeedNode(
-      treeData,
-      "feed:year:2025:quarter:4:month:12:week:5"
-    );
-    expect(finalDecemberWeek).toMatchObject({
-      kind: "week",
-      name: weekRangeLabel(5, 2025, 11, 29, 31),
-      notes: [],
-      noteCount: 2,
-      rangeStartMs: new Date(2025, 11, 29).getTime(),
-      rangeEndMs: endOfDayMs(new Date(2025, 11, 31)),
-    });
-    expect(finalDecemberWeek?.children.map((day) => day.id)).toEqual([
-      "feed:year:2025:quarter:4:month:12:week:5:day:29",
-      "feed:year:2025:quarter:4:month:12:week:5:day:30",
-      "feed:year:2025:quarter:4:month:12:week:5:day:31",
-    ]);
-
-    expect(year2025).toMatchObject({
-      rangeStartMs: new Date(2025, 0, 1).getTime(),
-      rangeEndMs: endOfDayMs(new Date(2025, 11, 31)),
-    });
-    expect(year2025?.children[0]).toMatchObject({
-      rangeStartMs: new Date(2025, 9, 1).getTime(),
-      rangeEndMs: endOfDayMs(new Date(2025, 11, 31)),
-    });
-  });
-
-  it("assigns coherent ranges to Today, Yesterday, and Last week", () => {
-    const { treeData } = buildTree({
-      "today.md": new Date(2026, 11, 31, 8),
-      "yesterday.md": new Date(2026, 11, 30, 8),
-      "last-week.md": new Date(2026, 11, 27, 8),
-    });
 
     expect(findFeedNode(treeData, "feed:today")).toMatchObject({
       rangeStartMs: startOfDayMs(NOW),
@@ -272,20 +116,174 @@ describe("buildFeedTree calendar hierarchy", () => {
       rangeStartMs: startOfDayMs(new Date(2026, 11, 30)),
       rangeEndMs: endOfDayMs(new Date(2026, 11, 30)),
     });
+    expect(findFeedNode(treeData, "feed:this-week")).toMatchObject({
+      noteCount: 2,
+      rangeStartMs: startOfDayMs(new Date(2026, 11, 28)),
+      rangeEndMs: startOfDayMs(new Date(2026, 11, 30)) - 1,
+    });
     expect(findFeedNode(treeData, "feed:last-week")).toMatchObject({
-      rangeStartMs: startOfDayMs(new Date(2026, 11, 25)),
-      rangeEndMs: endOfDayMs(new Date(2026, 11, 29)),
+      noteCount: 2,
+      rangeStartMs: startOfDayMs(new Date(2026, 11, 21)),
+      rangeEndMs: endOfDayMs(new Date(2026, 11, 27)),
     });
   });
 
-  it("clamps current calendar endpoints and exposes the latest valid target timestamp", () => {
+  it("orders day rows inside a relative bucket newest first", () => {
+    const { treeData } = buildTree({
+      "dec-21.md": new Date(2026, 11, 21, 8),
+      "dec-24.md": new Date(2026, 11, 24, 8),
+      "dec-27.md": new Date(2026, 11, 27, 8),
+    });
+
+    const lastWeek = findFeedNode(treeData, "feed:last-week");
+    expect(lastWeek?.children.map((day) => day.id)).toEqual([
+      "feed:last-week:day:27",
+      "feed:last-week:day:24",
+      "feed:last-week:day:21",
+    ]);
+    expect(lastWeek?.children.map((day) => day.name)).toEqual([
+      dayLabel(new Date(2026, 11, 27)),
+      dayLabel(new Date(2026, 11, 24)),
+      dayLabel(new Date(2026, 11, 21)),
+    ]);
+  });
+
+  it("puts the whole previous ISO week in Last week and everything older in the calendar", () => {
+    const { treeData } = buildTree({
+      "dec-21.md": new Date(2026, 11, 21, 8),
+      "dec-20.md": new Date(2026, 11, 20, 8),
+    });
+
+    // Mon Dec 21 is the cutoff: at or after it the note is relative, before it
+    // the note is calendar. The two halves must never claim the same day.
+    expect(findFeedNode(treeData, "feed:last-week")?.noteCount).toBe(1);
+    expect(
+      findFeedNode(treeData, "feed:last-week:day:21")?.notes[0]?.path
+    ).toBe("dec-21.md");
+    expect(
+      findFeedNode(treeData, "feed:month:2026:12:week:51:day:20")?.notes[0]?.path
+    ).toBe("dec-20.md");
+    expect(findFeedNode(treeData, "feed:month:2026:12:week:52")).toBeNull();
+  });
+});
+
+describe("buildFeedTree calendar hierarchy", () => {
+  it("keeps an ISO week whole across a month boundary", () => {
+    const { treeData } = buildTree({
+      "nov-30.md": new Date(2026, 10, 30, 8),
+      "dec-01.md": new Date(2026, 11, 1, 8),
+      "dec-06.md": new Date(2026, 11, 6, 8),
+    });
+
+    // Mon Nov 30 - Sun Dec 6 is one ISO week. Its Thursday (Dec 3) is in
+    // December, so the whole week hangs under December instead of being cut in
+    // two — and no November node is created at all.
+    expect(treeData.map((node) => node.id)).toEqual(["feed:month:2026:12"]);
+    const week = findFeedNode(treeData, "feed:month:2026:12:week:49");
+    expect(week).toMatchObject({
+      kind: "week",
+      noteCount: 3,
+      name: weekLabel(49, new Date(2026, 10, 30), new Date(2026, 11, 6)),
+      rangeStartMs: startOfDayMs(new Date(2026, 10, 30)),
+      rangeEndMs: endOfDayMs(new Date(2026, 11, 6)),
+    });
+    expect(week?.children.map((day) => day.id)).toEqual([
+      "feed:month:2026:12:week:49:day:6",
+      "feed:month:2026:12:week:49:day:1",
+      "feed:month:2026:12:week:49:day:30",
+    ]);
+  });
+
+  it("orders months, weeks, and days newest first", () => {
+    const { treeData } = buildTree({
+      "feb-09.md": new Date(2026, 1, 9, 8),
+      "feb-10.md": new Date(2026, 1, 10, 8),
+      "feb-16.md": new Date(2026, 1, 16, 8),
+      "oct-01.md": new Date(2026, 9, 1, 8),
+    });
+
+    expect(treeData.map((node) => node.id)).toEqual([
+      "feed:month:2026:10",
+      "feed:month:2026:2",
+    ]);
+    const february = findFeedNode(treeData, "feed:month:2026:2");
+    expect(february?.children.map((week) => week.id)).toEqual([
+      "feed:month:2026:2:week:8",
+      "feed:month:2026:2:week:7",
+    ]);
+    expect(
+      findFeedNode(treeData, "feed:month:2026:2:week:7")?.children.map(
+        (day) => day.id
+      )
+    ).toEqual([
+      "feed:month:2026:2:week:7:day:10",
+      "feed:month:2026:2:week:7:day:9",
+    ]);
+  });
+
+  it("never emits a bucket without notes", () => {
+    const { treeData } = buildTree({
+      "dec-31.md": new Date(2026, 11, 31, 8),
+      "dec-01.md": new Date(2026, 11, 1, 8),
+      "mar-04.md": new Date(2026, 2, 4, 8),
+      "jun-15-2024.md": new Date(2024, 5, 15, 8),
+    });
+
+    expect(walkFeed(treeData).every((node) => node.noteCount > 0)).toBe(true);
+    // One note in a month yields exactly one week and one day beneath it.
+    expect(findFeedNode(treeData, "feed:month:2026:3")?.children).toHaveLength(1);
+  });
+
+  it("preserves the year, quarter, and month nesting for older years", () => {
+    const { treeData } = buildTree({
+      "jun-15-2024.md": new Date(2024, 5, 15, 8),
+      "jan-08-2025.md": new Date(2025, 0, 8, 8),
+    });
+
+    expect(treeData.map((node) => node.id)).toEqual([
+      "feed:year:2025",
+      "feed:year:2024",
+    ]);
+    expect(
+      findFeedNode(treeData, "feed:year:2024")?.children.map((q) => q.id)
+    ).toEqual(["feed:year:2024:quarter:2"]);
+    expect(
+      findFeedNode(treeData, "feed:year:2024:quarter:2:month:6:week:24:day:15")
+        ?.notes[0]?.path
+    ).toBe("jun-15-2024.md");
+  });
+
+  it("files a year-straddling week under the month owning its Thursday", () => {
+    const { treeData } = buildTree({
+      "dec-29-2025.md": new Date(2025, 11, 29, 8),
+      "jan-02-2026.md": new Date(2026, 0, 2, 8),
+    });
+
+    // Mon Dec 29 2025 - Sun Jan 4 2026 is ISO week 1 of 2026 and its Thursday
+    // (Jan 1 2026) is in January, so both notes share one week under January of
+    // the running year. Nothing is filed under 2025.
+    expect(treeData.map((node) => node.id)).toEqual(["feed:month:2026:1"]);
+    const week = findFeedNode(treeData, "feed:month:2026:1:week:1");
+    expect(week).toMatchObject({
+      noteCount: 2,
+      name: weekLabel(1, new Date(2025, 11, 29), new Date(2026, 0, 4)),
+    });
+    expect(week?.children.map((day) => day.id)).toEqual([
+      "feed:month:2026:1:week:1:day:2",
+      "feed:month:2026:1:week:1:day:29",
+    ]);
+  });
+});
+
+describe("getLatestFeedTargetTimestamp", () => {
+  it("clamps a running-period bucket to now and a past day to its end", () => {
     const { treeData } = buildTree({
       "dec-01.md": new Date(2026, 11, 1, 8),
     });
     const december = findFeedNode(treeData, "feed:month:2026:12");
     const decemberFirst = findFeedNode(
       treeData,
-      "feed:month:2026:12:week:0:day:1"
+      "feed:month:2026:12:week:49:day:1"
     );
 
     expect(december).toMatchObject({
