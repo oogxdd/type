@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "c65ed7991cf6",
+  "session_id": "5ae31363-1fcf-4410-8617-b7d3987309d6",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-12T22:13:30.948771Z",
+  "branch": "agent/iroh-auto-sync-retention",
+  "checkpoints_count": 10,
+  "files_touched": [
+    "apps/mobile/ios/Podfile",
+    "apps/mobile/ios/Podfile.lock"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "f7ceb90a5ced",
+  "token_usage": {
+    "input_tokens": 377,
+    "cache_creation_tokens": 247595,
+    "cache_read_tokens": 26072614,
+    "output_tokens": 107781,
+    "api_call_count": 158
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-12T22:13:30.569038Z",
+    "agent_lines": 16,
+    "human_added": 4868,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 4884,
+    "agent_percentage": 0.32760032760032765
+  }
+}
