@@ -52,7 +52,11 @@ function collectRawCoreMethods() {
     process.exit(2);
   }
   const names = new Set();
-  for (const match of block[1].matchAll(/^\s{2}([a-zA-Z0-9_]+)\(/gm)) {
+  // `name?(` is a deliberate declaration, not drift: a method is marked
+  // optional when native modules generated before it existed may lack it and
+  // core-api feature-detects. Match those too, or the guard reports a method
+  // that is in fact declared right there.
+  for (const match of block[1].matchAll(/^\s{2}([a-zA-Z0-9_]+)\??\(/gm)) {
     names.add(match[1]);
   }
   return names;
