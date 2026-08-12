@@ -4,5 +4,7 @@
 //! metadata, and file contents are encrypted here before they reach Iroh.
 
 mod envelope;
+mod iroh_docs;
 
 pub use envelope::*;
+pub use iroh_docs::*;
