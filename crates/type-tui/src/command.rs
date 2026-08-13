@@ -29,6 +29,10 @@ pub enum Command {
     Status,
     /// `:key` — print the app-managed SSH public key, generating it if absent.
     SshKey,
+    /// `:feed` — show the Feed's time-grouped tree in the left panel.
+    Feed,
+    /// `:folders` — show the folder tree in the left panel.
+    Folders,
     Help,
     Empty,
     Unknown(String),
@@ -64,6 +68,8 @@ pub fn parse(input: &str) -> Command {
         "push" => Command::Push,
         "status" | "st" => Command::Status,
         "key" | "sshkey" => Command::SshKey,
+        "feed" => Command::Feed,
+        "folders" => Command::Folders,
         "h" | "help" => Command::Help,
         _ => Command::Unknown(head.to_string()),
     }

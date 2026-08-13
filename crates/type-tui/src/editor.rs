@@ -93,6 +93,15 @@ impl Editor {
         self.created_here = true;
     }
 
+    /// Show a note read-only, as the list-cursor follows it. Identical to
+    /// [`Editor::open`] in effect — the buffer is not dirty, so a later flush is
+    /// a no-op and moving on never writes — but named to flag the call site's
+    /// intent: this is a preview, not an edit target. Press `Enter` in the list
+    /// to actually drop into the editor.
+    pub fn preview(&mut self, path: String, body: String) {
+        self.open(path, body);
+    }
+
     /// Drop the buffer without touching disk (used after a delete).
     pub fn close(&mut self) {
         self.area = TextArea::default();

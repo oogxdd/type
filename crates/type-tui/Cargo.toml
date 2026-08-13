@@ -26,3 +26,7 @@ tui-textarea-2 = { version = "0.12", features = ["search"] }
 # Resolve the platform app-data directory (what `AppEnv` needs), so the TUI
 # reads the same notes root the desktop app writes.
 dirs = "5"
+
+# Date math for the Feed's time buckets (Today / Yesterday / ISO weeks / months).
+# `clock` gives `Local::now()`, matching the desktop's local-time bucketing.
+chrono = { version = "0.4", default-features = false, features = ["clock"] }

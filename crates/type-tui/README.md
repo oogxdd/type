@@ -7,8 +7,13 @@ alongside the Tauri desktop commands and the UniFFI mobile exports.
 cargo run -p type-tui
 ```
 
-Three panes: folder tree, note list, editor. Vim-like keys, a `:` command line,
-and git sync.
+Three areas divided by thin rules: navigation on the left, the note list in
+the middle, the editor on the right. The left panel switches between the
+**Feed** (notes grouped by date — Today / Yesterday / This week / Last week /
+Month → Week → Day, the same buckets as the desktop app) and the **Folders**
+tree. Vim-like keys, a `:` command line, git sync, and live auto-preview:
+moving `j`/`k` in the note list shows each note's body in the editor as you
+scroll, before you commit to opening it.
 
 ## Which notes root it opens
 
@@ -23,16 +28,17 @@ To use a real notes root, say so explicitly:
 TYPE_TUI_APP_DATA_DIR="$HOME/.local/share/com.digital.type2" cargo run -p type-tui
 ```
 
-The folders pane title always shows which root is open.
+The left pane header always shows which root is open.
 
 ## Keys
 
 | | |
 |---|---|
 | `Ctrl+W` then `h` / `l` | move focus between panes (`Ctrl+W Ctrl+W` cycles) |
-| `j` / `k` | move down / up in any pane |
+| `Tab` | in the left panel: switch between Feed and Folders |
+| `j` / `k` | move down / up in any pane (the editor previews the note under the list cursor) |
 | `l` / `h` | in the tree: expand / collapse; in the list: open the note |
-| `Enter` | open the folder / note |
+| `Enter` | open the folder / note (focus the editor) |
 | `g` / `G` | jump to first / last |
 | `o` | new note in the current folder (list pane) |
 | `:` | command line |
@@ -51,6 +57,7 @@ Those need a real parser and are not what this app is for.
 |---|---|
 | `:w` `:q` `:q!` `:wq` | write / quit (`:q` flushes first, `:q!` does not) |
 | `:new [folder]` | create a note and start typing |
+| `:feed` / `:folders` | switch the left panel to the Feed / folder tree |
 | `:mv <folder>` | move the open note; `Tab` completes folders fuzzily |
 | `:d` | delete the open note |
 | `:connect <url> [branch]` | point this notes root at a git remote |

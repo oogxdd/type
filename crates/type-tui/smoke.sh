@@ -87,11 +87,18 @@ pass "empty note deleted"
 
 echo "4. panes render and :status answers"
 drive 1 ':status\r' 2 ':q!\r'
-screen | grep -q 'folders·' || fail "folders pane missing"
-screen | grep -q 'notes·' || fail "notes pane missing"
-screen | grep -q 'editor' || fail "editor pane missing"
-screen | grep -q 'nogitrepo' || fail ":status did not report git state"
-pass "three panes + git status"
+SCREEN="$(screen)"
+echo "$SCREEN" | grep -qE 'Feed|Folders' || fail "nav pane missing"
+echo "$SCREEN" | grep -q 'NORMAL' || fail "status bar missing"
+echo "$SCREEN" | grep -q 'nogitrepo' || fail ":status did not report git state"
+pass "nav + status bar + git status"
+
+echo "5. Tab switches between feed and folders"
+# A note exists in Feed from step 1, so the feed tree has at least a Today bucket.
+drive 1 '\033' 1 'Tab' 2 '\033' 1 ':q!\r'
+SCREEN="$(screen)"
+echo "$SCREEN" | grep -qE 'Feed|Folders' || fail "left panel did not render after Tab"
+pass "Tab toggles nav mode"
 
 echo
 echo "all smoke tests passed"

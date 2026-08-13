@@ -1,8 +1,10 @@
 //! Terminal shell for the Type notes app.
 //!
-//! Three panes (folders / notes / editor), vim-like keys, `:` commands, and git
-//! sync — all driven through the same `type-core` services the desktop app and
-//! the mobile app use. Nothing about the note format lives here.
+//! Three rule-divided areas (navigation / note list / editor), a left panel that
+//! toggles between the Feed's date-grouped tree and the folder tree, live
+//! auto-preview as you scroll, vim-like keys, `:` commands, and git sync — all
+//! driven through the same `type-core` services the desktop app and the mobile
+//! app use. Nothing about the note format lives here.
 //!
 //! Run it with `cargo run -p type-tui`. By default it opens the **dev** notes
 //! root; see `core::DEV_APP_IDENTIFIER` for how to point it at a real one.
