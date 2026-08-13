@@ -33,6 +33,27 @@ export TYPE_TUI_APP_DATA_DIR="$WORK"
 ROOT="$WORK/notes"
 LOG="$WORK/screen.log"
 
+# `timeout` is GNU coreutils; macOS has it only as `gtimeout` if coreutils is
+# installed via Homebrew. Skip the timeout wrapper entirely if neither exists.
+TIMEOUT_BIN="$(command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null || true)"
+
+# `script` provides the pty ratatui needs to render. util-linux `script`
+# (Linux) takes the command via `-c`; BSD `script` (macOS) has no `-c` and
+# instead runs a trailing positional command directly against the pty.
+pty_run() {
+    log="$1"; secs="$2"; cmd="$3"
+    if [ "$(uname -s)" = "Darwin" ]; then
+        set -- script -q /dev/null sh -c "$cmd"
+    else
+        set -- script -qec "$cmd" /dev/null
+    fi
+    if [ -n "$TIMEOUT_BIN" ]; then
+        "$TIMEOUT_BIN" "$secs" "$@" > "$log" 2>&1
+    else
+        "$@" > "$log" 2>&1
+    fi
+}
+
 # Run the TUI with keys piped in. Arguments are alternating delay/keys.
 drive() {
     {
@@ -42,7 +63,7 @@ drive() {
             shift 2
         done
         sleep 2
-    } | timeout 30 script -qec "stty rows 30 cols 120; $BIN" /dev/null > "$LOG" 2>&1
+    } | pty_run "$LOG" 30 "stty rows 30 cols 120; $BIN"
 }
 
 # The rendered screen with escape sequences removed.
