@@ -339,6 +339,9 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
     if !pending.is_empty() {
         spans.push(Span::styled(format!("  {pending}"), Style::default().fg(Color::Yellow)));
     }
+    if app.git_busy() {
+        spans.push(Span::styled("  ⟳ git…", Style::default().fg(Color::Yellow)));
+    }
     if app.pending_window {
         spans.push(Span::styled("  ^W", Style::default().fg(Color::Yellow)));
     }

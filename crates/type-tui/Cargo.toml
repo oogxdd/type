@@ -30,3 +30,8 @@ dirs = "5"
 # Date math for the Feed's time buckets (Today / Yesterday / ISO weeks / months).
 # `clock` gives `Local::now()`, matching the desktop's local-time bucketing.
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+# Async runtime for non-blocking git sync. `rt-multi-thread` gives us a worker
+# pool for `spawn_blocking` (git operations are blocking — libgit2), and `sync`
+# gives us `mpsc` channels to send results back to the event loop.
+tokio = { version = "1", features = ["rt-multi-thread", "sync"] }

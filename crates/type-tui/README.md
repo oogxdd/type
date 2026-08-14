@@ -77,7 +77,15 @@ Both come from the core / libgit2, not from this shell:
   history so nothing is lost, which means the local branch is not a descendant
   of the remote yet. Use `:sync`, which pulls (and merges) before pushing.
 
-Git operations block the UI while they run. The status line reports the result.
+### Git sync runs in the background
+
+`:sync`, `:pull`, `:push` and `:connect` execute on a background thread (tokio
+`spawn_blocking`), so a slow remote never freezes the UI: the status line shows
+`⟳ git…` while one is in flight, and the result is applied when it lands. The
+editor buffer is flushed before the task starts and reloaded after a pull
+(kept untouched if you typed during the sync). One git operation runs at a
+time; `:q` waits for it to finish, `:q!` quits immediately. See `ASYNC.md` for
+a walkthrough of the whole path.
 
 ## What this crate owns, and what it does not
 

@@ -63,11 +63,18 @@ screen() {
         | tr -d '\r '
 }
 
+# shellcheck disable=SC2317  # kept for debugging: sh crates/type-tui/smoke-sync.sh debug
+
 echo "1. device A: write a note, connect, sync"
 # `:sync` rather than a bare `:push`. After connect the local branch is not a
 # descendant of the remote (the core commits this device's notes as their own
 # history so nothing is lost), so a raw push is correctly rejected as
 # non-fast-forwardable. `:sync` pulls — which merges — and then pushes.
+#
+# Assertions check the filesystem and the remote, not the rendered screen:
+# git runs on a background thread and ratatui redraws only changed cells, so a
+# status string can be split across frames in the captured byte stream and
+# grepping for "connected·" is unreliable.
 run_device a \
     1 ':new\r' \
     1 'Note written on device A' \
@@ -75,9 +82,13 @@ run_device a \
     1 ":connect $REMOTE\r" \
     3 ':sync\r' \
     5 ':q\r'
-screen a | grep -q 'connected·' || fail "device A did not connect: $(screen a | grep -o 'connect:[^│]*' | head -1)"
+GIT_CONFIG_A="$WORK/a/notes/.git/config"
+[ -f "$GIT_CONFIG_A" ] || fail "device A has no git repo — connect never ran"
+grep -q "$REMOTE" "$GIT_CONFIG_A" || fail "device A's origin is not the remote"
 pass "connected"
-screen a | grep -q 'pushed·' || fail "device A did not sync: $(screen a | grep -oE '(push|pull):[^│]*' | head -1)"
+
+git --git-dir="$REMOTE" log --oneline -1 >/dev/null 2>&1 || fail "remote has no commits after sync"
+git --git-dir="$REMOTE" ls-tree -r --name-only HEAD | grep -q '\.md$' || fail "remote has no notes after sync"
 pass "synced"
 
 echo "2. remote now holds a commit"
@@ -90,7 +101,9 @@ run_device b \
     1 ":connect $REMOTE\r" \
     3 ':pull\r' \
     4 ':q\r'
-screen b | grep -q 'connected·' || fail "device B did not connect: $(screen b | grep -o 'connect:[^│]*' | head -1)"
+GIT_CONFIG_B="$WORK/b/notes/.git/config"
+[ -f "$GIT_CONFIG_B" ] || fail "device B has no git repo — connect never ran"
+grep -q "$REMOTE" "$GIT_CONFIG_B" || fail "device B's origin is not the remote"
 pass "connected"
 
 FOUND="$(grep -rl 'Note written on device A' "$WORK/b/notes" 2>/dev/null | head -1)"

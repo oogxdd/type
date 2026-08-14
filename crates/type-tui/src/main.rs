@@ -8,6 +8,9 @@
 //!
 //! Run it with `cargo run -p type-tui`. By default it opens the **dev** notes
 //! root; see `core::DEV_APP_IDENTIFIER` for how to point it at a real one.
+//!
+//! Git operations run on a background thread through the tokio runtime created
+//! here — see `ASYNC.md` for how a `:sync` flows through this file.
 
 mod app;
 mod command;
@@ -25,14 +28,20 @@ use ratatui::crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
+use tokio::runtime::Runtime;
 
-use crate::{app::App, core::Core};
+use crate::{
+    app::{run_git_task, App, AsyncOutcome},
+    core::Core,
+};
 
 /// How long we block waiting for a key before looping.
 ///
 /// This doubles as the debounce timer's resolution: the loop needs to wake up
 /// on its own to notice that the editor has been idle long enough to save, and
-/// 50ms is well under the 400ms debounce while costing nothing when idle.
+/// 50ms is well under the 400ms debounce while costing nothing when idle. It
+/// is also what bounds the latency of applying a finished git result — the
+/// channel is drained once per loop.
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 fn main() {
@@ -46,8 +55,18 @@ fn run() -> Result<(), String> {
     let core = Core::new()?;
     let mut app = App::new(core)?;
 
+    // The runtime that executes background git work. One async worker is
+    // plenty — nothing here is async; the runtime exists so we can use its
+    // thread pool (`spawn_blocking`) and its channel (`mpsc`). Dropping it at
+    // the end of `run` waits for any in-flight git operation to finish, which
+    // is exactly the safety we want on the way out.
+    let runtime = Runtime::new().map_err(|err| err.to_string())?;
+    // Results flow worker -> event loop through this channel. Capacity 8 is
+    // arbitrary headroom; the app only ever allows one git task at a time.
+    let (tx, rx) = tokio::sync::mpsc::channel::<AsyncOutcome>(8);
+
     let mut terminal = setup_terminal().map_err(|err| err.to_string())?;
-    let result = event_loop(&mut terminal, &mut app);
+    let result = event_loop(&mut terminal, &mut app, &runtime, tx, rx);
     // Restore the terminal even if the loop failed — leaving a user in raw mode
     // with no cursor is a far worse outcome than the original error.
     restore_terminal(&mut terminal).map_err(|err| err.to_string())?;
@@ -57,6 +76,9 @@ fn run() -> Result<(), String> {
 fn event_loop(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut App,
+    runtime: &Runtime,
+    tx: tokio::sync::mpsc::Sender<AsyncOutcome>,
+    mut rx: tokio::sync::mpsc::Receiver<AsyncOutcome>,
 ) -> Result<(), String> {
     loop {
         terminal
@@ -70,6 +92,26 @@ fn event_loop(
                 Event::Key(key) if key.kind == KeyEventKind::Press => app.on_key(key),
                 _ => {}
             }
+        }
+
+        // A command queued git work — hand it to the runtime. `Core` is a
+        // cheap clone (two PathBufs) and `GitTask` is owned data, so the
+        // closure satisfies the `'static + Send` that `spawn_blocking`
+        // requires. Inside the worker we are in plain blocking code, hence
+        // `blocking_send` rather than `.send().await`.
+        if let Some(task) = app.take_git_task() {
+            let core = app.core.clone();
+            let tx = tx.clone();
+            runtime.spawn_blocking(move || {
+                let outcome = run_git_task(&core, task);
+                let _ = tx.blocking_send(outcome);
+            });
+        }
+
+        // Apply finished background work. `try_recv` never blocks: keys keep
+        // flowing while a git operation is still running.
+        while let Ok(outcome) = rx.try_recv() {
+            app.apply_async(outcome);
         }
 
         // Fires the debounced write once the buffer has gone quiet.

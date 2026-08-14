@@ -43,6 +43,10 @@ pub type Notes = NotesService<
 >;
 
 /// Holds the shell seam (`AppEnv`) and builds core services on demand.
+///
+/// `Clone` is cheap (one `AppEnv`, which is two `PathBuf`s) and lets the event
+/// loop hand a fresh copy to a background thread for async git operations.
+#[derive(Clone)]
 pub struct Core {
     env: AppEnv,
 }

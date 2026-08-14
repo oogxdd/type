@@ -12,10 +12,11 @@
 //! [`EditorState`] (the buffer + vim mode machine). [`App`] wires them together
 //! with the core, the prompt overlay, and top-level flags.
 //!
-//! Core calls are synchronous. For filesystem work that is invisible; for git
-//! it means `:sync` blocks the UI until it returns. That is a deliberate v1
-//! trade — a background worker would need a channel and a redraw signal, and
-//! the status line already tells the user what is happening.
+//! Core calls are synchronous — for filesystem work that is invisible at this
+//! scale. Git is the one slow operation, so those commands queue a [`GitTask`]
+//! which `main.rs` runs on a background thread via tokio; the result comes
+//! back through a channel as an [`AsyncOutcome`] and lands in
+//! [`App::apply_async`]. See `ASYNC.md` for a walkthrough of that path.
 
 use std::collections::HashSet;
 
@@ -60,6 +61,43 @@ pub struct Prompt {
     /// Folder completions for `:mv`, cycled with Tab.
     pub completions: Vec<String>,
     pub completion_index: usize,
+}
+
+/// A git operation queued by a command, waiting for the event loop to spawn it
+/// on a background thread. App does not know about tokio — it just sets
+/// `pending_git` and lets `main.rs` drain it.
+#[derive(Clone)]
+pub enum GitTask {
+    Pull,
+    Push,
+    /// Pull then push — the common `:sync` path.
+    Sync,
+    /// `:connect <url> [branch]` — arguments captured at request time.
+    Connect(String),
+}
+
+/// The result of a background git operation. The event loop applies this to
+/// the app: update the status line, optionally refresh the tree, optionally
+/// reload the open note (after a pull that may have rewritten it).
+pub struct AsyncOutcome {
+    pub status: String,
+    pub refresh: bool,
+    pub reload_note: bool,
+}
+
+impl AsyncOutcome {
+    fn done(msg: impl Into<String>) -> Self {
+        Self { status: msg.into(), refresh: false, reload_note: false }
+    }
+    fn refreshed(msg: impl Into<String>) -> Self {
+        Self { status: msg.into(), refresh: true, reload_note: false }
+    }
+    fn pulled(msg: impl Into<String>) -> Self {
+        Self { status: msg.into(), refresh: true, reload_note: true }
+    }
+    fn error(msg: impl Into<String>) -> Self {
+        Self { status: msg.into(), refresh: false, reload_note: false }
+    }
 }
 
 // ── Sub-models ─────────────────────────────────────────────────────────────
@@ -206,6 +244,11 @@ pub struct App {
     pub should_quit: bool,
     /// True after `Ctrl+W`, waiting for a direction key.
     pub pending_window: bool,
+    /// A git operation queued by a command, drained by the event loop.
+    pub pending_git: Option<GitTask>,
+    /// How many background git operations are in flight. One at a time:
+    /// overlapping pulls and pushes on the same repo race each other.
+    pub git_in_flight: usize,
 }
 
 impl App {
@@ -226,6 +269,8 @@ impl App {
             root_label,
             should_quit: false,
             pending_window: false,
+            pending_git: None,
+            git_in_flight: 0,
         };
         // Feed is the default view: it is where new notes land and where the
         // date-grouped browse the desktop offers lives.
@@ -701,11 +746,19 @@ impl App {
             }
             Command::Quit => {
                 self.flush_editor();
+                if self.git_busy() {
+                    self.status = "git in progress — wait or :q! to force".to_string();
+                    return;
+                }
                 self.should_quit = true;
             }
             Command::QuitNoSave => self.should_quit = true,
             Command::WriteQuit => {
                 self.flush_editor();
+                if self.git_busy() {
+                    self.status = "git in progress — wait or :q! to force".to_string();
+                    return;
+                }
                 self.should_quit = true;
             }
             Command::Move(destination) => self.move_note(&destination),
@@ -832,73 +885,83 @@ impl App {
 
     /// `:connect <url> [branch]` — initialise the repo, set `origin`, fetch.
     fn git_connect(&mut self, argument: &str) {
-        let mut parts = argument.split_whitespace();
-        let Some(url) = parts.next() else {
+        if argument.split_whitespace().next().is_none() {
             self.status = "usage: :connect <url> [branch]".to_string();
             return;
-        };
-        self.flush_editor();
-        let args = type_core::ConnectGitArgs {
-            remote_url: Some(url.to_string()),
-            branch: parts.next().map(str::to_string),
-            username: None,
-            password: None,
-        };
-        match self.core.git().connect(args) {
-            Ok(status) => {
-                self.status = format!(
-                    "connected · {}",
-                    status.current_branch.unwrap_or_else(|| "?".into())
-                );
-                self.refresh_current();
-            }
-            Err(err) => self.status = format!("connect: {err}"),
         }
+        // The remote work reads and writes the repo, so the buffer must be on
+        // disk before the task starts — same reason as `git_pull`.
+        self.flush_editor();
+        self.status = "connecting…".to_string();
+        self.pending_git = Some(GitTask::Connect(argument.to_string()));
     }
 
     fn git_pull(&mut self) {
+        // Pull rewrites files under us, so the buffer has to be on disk first.
         self.flush_editor();
-        let args = GitSyncArgs {
-            branch: None,
-            username: None,
-            password: None,
-        };
-        match self.core.git().pull(args) {
-            Ok(status) => {
-                self.status = format!("pulled · behind {}", status.behind);
-                self.refresh_current();
-                self.reload_open_note();
-            }
-            Err(err) => self.status = format!("pull: {err}"),
-        }
+        self.status = "pulling…".to_string();
+        self.pending_git = Some(GitTask::Pull);
     }
 
     fn git_push(&mut self) {
         self.flush_editor();
-        let args = GitPushArgs {
-            message: None,
-            branch: None,
-            username: None,
-            password: None,
-        };
-        match self.core.git().push(args) {
-            Ok(status) => self.status = format!("pushed · ahead {}", status.ahead),
-            Err(err) => self.status = format!("push: {err}"),
-        }
+        self.status = "pushing…".to_string();
+        self.pending_git = Some(GitTask::Push);
     }
 
     fn git_sync(&mut self) {
-        self.git_pull();
-        if !self.status.starts_with("pull:") {
-            self.git_push();
+        self.flush_editor();
+        self.status = "syncing…".to_string();
+        self.pending_git = Some(GitTask::Sync);
+    }
+
+    /// Hand the queued git task to the event loop, which spawns it on the
+    /// tokio runtime. Returns `None` when nothing is queued or another
+    /// operation is already in flight.
+    pub fn take_git_task(&mut self) -> Option<GitTask> {
+        let task = self.pending_git.take()?;
+        if self.git_in_flight > 0 {
+            self.status = "git: another operation is already running".to_string();
+            return None;
+        }
+        self.git_in_flight += 1;
+        Some(task)
+    }
+
+    /// Apply a finished background operation: status line, then the side
+    /// effects the outcome asks for.
+    pub fn apply_async(&mut self, outcome: AsyncOutcome) {
+        self.git_in_flight = self.git_in_flight.saturating_sub(1);
+        self.status = outcome.status;
+        if outcome.refresh {
+            self.refresh_current();
+        }
+        if outcome.reload_note {
+            self.reload_open_note();
         }
     }
 
+    /// True while a background git operation is running. `:q` refuses to quit
+    /// in this state; `:q!` still quits immediately.
+    pub fn git_busy(&self) -> bool {
+        self.git_in_flight > 0
+    }
+
     /// Re-read the open note after a pull, which may have rewritten it.
+    ///
+    /// Only safe because the pull path flushes first: the buffer and the file
+    /// agreed before the merge, so whatever is on disk now is the merged truth.
+    /// If the user typed *during* the pull (buffer dirty again), we keep the
+    /// buffer — reloading would silently discard those keystrokes, and
+    /// overwriting the merged file with the stale buffer would be worse.
     fn reload_open_note(&mut self) {
         let Some(path) = self.ed.editor.path.clone() else {
             return;
         };
+        if self.ed.editor.is_dirty() {
+            self.status.push_str(" · open note kept (unsaved edits)");
+            return;
+        }
         match self.core.notes().and_then(|notes| notes.read_note(&path)) {
             Ok(body) => self.ed.editor.open(path, body),
             Err(_) => {
@@ -920,4 +983,68 @@ impl App {
             Err(err) => self.status = format!("ssh key: {err}"),
         }
     }
+}
+
+// ── Background git execution ───────────────────────────────────────────────
+//
+// These run on a worker thread (`tokio::task::spawn_blocking`), not on the
+// async runtime's own threads: libgit2 is a blocking C library, and blocking
+// work must never occupy an async worker. They take a cloned `Core`, which is
+// two `PathBuf`s — cheap to clone, safe to move across threads (`Send`), and
+// it rebuilds its services per call, so the background thread never shares
+// mutable state with the UI thread.
+
+/// Run one queued git task to completion and describe the result.
+pub fn run_git_task(core: &Core, task: GitTask) -> AsyncOutcome {
+    match task {
+        GitTask::Pull => match do_pull(core) {
+            Ok(msg) => AsyncOutcome::pulled(msg),
+            Err(err) => AsyncOutcome::error(format!("pull: {err}")),
+        },
+        GitTask::Push => match do_push(core) {
+            Ok(msg) => AsyncOutcome::done(msg),
+            Err(err) => AsyncOutcome::error(format!("push: {err}")),
+        },
+        GitTask::Sync => match do_pull(core) {
+            Ok(pull_msg) => match do_push(core) {
+                // The pull already changed files on disk, so even a failed
+                // push must refresh and reload — hence `pulled`, not `error`.
+                Ok(push_msg) => AsyncOutcome::pulled(format!("{pull_msg} · {push_msg}")),
+                Err(err) => AsyncOutcome::pulled(format!("{pull_msg} · push: {err}")),
+            },
+            Err(err) => AsyncOutcome::error(format!("pull: {err}")),
+        },
+        GitTask::Connect(argument) => match do_connect(core, &argument) {
+            Ok(msg) => AsyncOutcome::refreshed(msg),
+            Err(err) => AsyncOutcome::error(format!("connect: {err}")),
+        },
+    }
+}
+
+fn do_pull(core: &Core) -> Result<String, String> {
+    let args = GitSyncArgs { branch: None, username: None, password: None };
+    core.git()
+        .pull(args)
+        .map(|status| format!("pulled · behind {}", status.behind))
+}
+
+fn do_push(core: &Core) -> Result<String, String> {
+    let args = GitPushArgs { message: None, branch: None, username: None, password: None };
+    core.git()
+        .push(args)
+        .map(|status| format!("pushed · ahead {}", status.ahead))
+}
+
+fn do_connect(core: &Core, argument: &str) -> Result<String, String> {
+    let mut parts = argument.split_whitespace();
+    let url = parts.next().unwrap_or_default();
+    let args = type_core::ConnectGitArgs {
+        remote_url: Some(url.to_string()),
+        branch: parts.next().map(str::to_string),
+        username: None,
+        password: None,
+    };
+    core.git().connect(args).map(|status| {
+        format!("connected · {}", status.current_branch.unwrap_or_else(|| "?".into()))
+    })
 }
