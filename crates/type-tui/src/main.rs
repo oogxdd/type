@@ -1,6 +1,6 @@
 //! Terminal shell for the Type notes app.
 //!
-//! Three rule-divided areas (navigation / note list / editor), a left panel that
+//! Three panes in one frame (navigation / note list / editor), a left panel that
 //! toggles between the Feed's date-grouped tree and the folder tree, live
 //! auto-preview as you scroll, vim-like keys, `:` commands, and git sync — all
 //! driven through the same `type-core` services the desktop app and the mobile
@@ -8,6 +8,8 @@
 //!
 //! Run it with `cargo run -p type-tui`. By default it opens the **dev** notes
 //! root; see `core::DEV_APP_IDENTIFIER` for how to point it at a real one.
+//! Pass a folder — `cargo run -p type-tui -- ~/wiki` — to browse any directory
+//! of markdown instead, with no Feed and nothing written into it uninvited.
 //!
 //! Git operations run on a background thread through the tokio runtime created
 //! here — see `ASYNC.md` for how a `:sync` flows through this file.
@@ -44,6 +46,27 @@ use crate::{
 /// channel is drained once per loop.
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 
+const USAGE: &str = "\
+type-tui — terminal shell for the Type notes app
+
+usage:
+    type-tui [FOLDER]
+
+    FOLDER   browse this folder instead of the notes root. Any directory
+             works: with no `Feed` inside it the left pane is simply the
+             folder tree, and nothing is created in it uninvited.
+             `:open <path>` does the same from inside the app, and `:open`
+             with no path returns to the notes root.
+
+options:
+    -h, --help   show this
+
+environment:
+    TYPE_TUI_APP_DATA_DIR   which app-data directory (and therefore which
+                            profile's notes root) to open. Defaults to the
+                            dev identifier, never your real notes.
+";
+
 fn main() {
     if let Err(err) = run() {
         eprintln!("type-tui: {err}");
@@ -52,7 +75,15 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
-    let core = Core::new()?;
+    let mut core = Core::new()?;
+    match parse_args(std::env::args().skip(1))? {
+        Args::Help => {
+            print!("{USAGE}");
+            return Ok(());
+        }
+        Args::Open(Some(folder)) => core.open_folder(&folder)?,
+        Args::Open(None) => {}
+    }
     let mut app = App::new(core)?;
 
     // The runtime that executes background git work. One async worker is
@@ -71,6 +102,28 @@ fn run() -> Result<(), String> {
     // with no cursor is a far worse outcome than the original error.
     restore_terminal(&mut terminal).map_err(|err| err.to_string())?;
     result
+}
+
+/// What the command line asked for.
+enum Args {
+    Help,
+    /// A folder to browse, or `None` for the profile's notes root.
+    Open(Option<String>),
+}
+
+fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
+    let mut folder = None;
+    for arg in args {
+        match arg.as_str() {
+            "-h" | "--help" => return Ok(Args::Help),
+            other if other.starts_with('-') => {
+                return Err(format!("unknown option: {other}\n\n{USAGE}"))
+            }
+            other if folder.is_none() => folder = Some(other.to_string()),
+            other => return Err(format!("unexpected argument: {other}\n\n{USAGE}")),
+        }
+    }
+    Ok(Args::Open(folder))
 }
 
 fn event_loop(

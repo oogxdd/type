@@ -7,15 +7,16 @@ alongside the Tauri desktop commands and the UniFFI mobile exports.
 cargo run -p type-tui
 ```
 
-Three areas divided by thin rules: navigation on the left, the note list in
-the middle, the editor on the right. The left panel switches between the
-**Feed** (notes grouped by date — Today / Yesterday / This week / Last week /
-Month → Week → Day, the same buckets as the desktop app) and the **Folders**
-tree. Vim-like keys, a `:` command line, git sync, and live auto-preview:
-moving `j`/`k` in the note list shows each note's body in the editor as you
-scroll, before you commit to opening it.
+One rounded frame holds three bordered panes: navigation on the left, the note
+list in the middle, the editor on the right. The focused pane is the one with
+the accent border. The left pane switches between the **Feed** (notes grouped by
+date — Today / Yesterday / This week / Last week / Month → Week → Day, the same
+buckets as the desktop app) and the **Folders** tree, whose first row is the
+open folder itself. Vim-like keys, a `:` command line, background git sync, and
+live auto-preview: moving `j`/`k` in the note list shows each note's body in the
+editor as you scroll, before you commit to opening it.
 
-## Which notes root it opens
+## Which folder it opens
 
 **By default it opens the _dev_ app-data directory** (`com.digital.type2.dev`),
 not your real notes. This is deliberate: the TUI runs the same note lifecycle as
@@ -28,20 +29,41 @@ To use a real notes root, say so explicitly:
 TYPE_TUI_APP_DATA_DIR="$HOME/.local/share/com.digital.type2" cargo run -p type-tui
 ```
 
-The left pane header always shows which root is open.
+**Or open any folder at all**, notes root or not:
+
+```sh
+cargo run -p type-tui -- ~/wiki      # or `:open ~/wiki` from inside
+```
+
+A folder opened this way is browsed as it is. Nothing is scaffolded into it —
+no `Feed`, no `Archieve`, no `Recordings` — and with no `Feed` folder present
+there is no Feed view to switch to: the left pane is the folder tree, the
+opened folder is its root row, and notes sitting loose in that root are reached
+by selecting it. `:open` with no argument goes back to the profile's notes
+root. Git sync stays with the profile root and is declined while a folder is
+open, since the remote, branch and SSH key all live in the profile.
+
+The frame's title always shows which folder is open.
 
 ## Keys
 
 | | |
 |---|---|
-| `Ctrl+W` then `h` / `l` | move focus between panes (`Ctrl+W Ctrl+W` cycles) |
-| `Tab` | in the left panel: switch between Feed and Folders |
+| `Ctrl+W` | move focus to the next pane — one press, one hop |
+| `Ctrl+T` (`Cmd+T`, `Alt+T`) | hide / show both left panes, giving the editor the frame |
+| `Tab` | in the left pane: switch between Feed and Folders |
 | `j` / `k` | move down / up in any pane (the editor previews the note under the list cursor) |
-| `l` / `h` | in the tree: expand / collapse; in the list: open the note |
+| `→` / `l` | in the tree: expand, then step into the first child, then hand over to the note list; in the list: open the note |
+| `←` / `h` | in the tree: collapse, else jump out to the parent row; in the list: back to the tree |
 | `Enter` | open the folder / note (focus the editor) |
 | `g` / `G` | jump to first / last |
 | `o` | new note in the current folder (list pane) |
 | `:` | command line |
+
+`Cmd` only reaches a terminal application through the kitty keyboard protocol
+(Kitty, WezTerm, Ghostty); macOS Terminal.app and iTerm keep it for themselves,
+which is why `Ctrl+T` is the binding to remember. `:panels` does the same thing
+for a terminal that binds all three chords itself.
 
 In the editor, normal mode supports `h j k l w b e 0 $ { }`, `gg` / `G`,
 `i a I A o O`, `x`, `D`, `C`, `dd` `dw` `db` `d$` `d0`, `yy` `yw`, `p`, `u` /
@@ -57,7 +79,9 @@ Those need a real parser and are not what this app is for.
 |---|---|
 | `:w` `:q` `:q!` `:wq` | write / quit (`:q` flushes first, `:q!` does not) |
 | `:new [folder]` | create a note and start typing |
+| `:open [folder]` | browse any folder; without one, return to the notes root |
 | `:feed` / `:folders` | switch the left panel to the Feed / folder tree |
+| `:panels` | hide / show the left panes (the `Ctrl+T` toggle) |
 | `:mv <folder>` | move the open note; `Tab` completes folders fuzzily |
 | `:d` | delete the open note |
 | `:connect <url> [branch]` | point this notes root at a git remote |
@@ -103,6 +127,13 @@ ported from the desktop's `use-note-editor.ts` and `note-autoname.ts`:
 One case the desktop does not have: `:new` creates the file eagerly, where the
 desktop creates lazily on the first keystroke. `Editor::created_here` is how an
 abandoned new note still gets cleaned up. See the comments in `src/editor.rs`.
+
+The other line this crate draws is around **folders it did not create**. The
+core's `FilesystemNotesRepository::new` guarantees the system folders exist,
+which is what a notes root wants; `::without_system_folders` (added for this
+shell) skips that, which is what an opened folder wants. Creating a note in
+such a folder still writes the usual `.notes-order.json` beside it — that is
+the core's ordering file, and it is the only thing the app leaves behind.
 
 The audio badge (`♪`) comes from front matter (`recording_audio_path`), so this
 crate needs none of the recordings machinery — it builds `type-core` with

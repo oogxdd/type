@@ -1,12 +1,18 @@
 //! Application state and key dispatch.
 //!
-//! Three areas divided by thin rules: navigation on the left (the Feed's
+//! Three panes inside one frame: navigation on the left (the Feed's
 //! date-grouped tree, or the folder tree — `Tab` flips between them), that
 //! selection's notes in the middle, the editor on the right. `Ctrl+W` moves
-//! focus between them, `:` opens the command line from anywhere.
+//! focus between them, `Ctrl+T` hides the two left panes so the editor has the
+//! whole frame, and `:` opens the command line from anywhere.
 //!
 //! The editor follows the note list: moving `j`/`k` previews each note's body
 //! without opening it; `Enter` drops into the editor for real.
+//!
+//! The open root is either the active profile's notes root (the default) or any
+//! folder the user pointed us at — `type-tui <path>` / `:open <path>`. A folder
+//! with no `Feed` in it simply has no Feed view: the left pane is the folder
+//! tree, and nothing scaffolds the missing folder into place.
 //!
 //! State is decomposed into [`NavState`] (the folder/feed tree + note list) and
 //! [`EditorState`] (the buffer + vim mode machine). [`App`] wires them together
@@ -18,7 +24,7 @@
 //! back through a channel as an [`AsyncOutcome`] and lands in
 //! [`App::apply_async`]. See `ASYNC.md` for a walkthrough of that path.
 
-use std::collections::HashSet;
+use std::{collections::HashSet, path::Path};
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use type_core::{CreateNoteArgs, FolderNode, GitPushArgs, GitSyncArgs, NoteFileNameFormat};
@@ -111,7 +117,10 @@ impl AsyncOutcome {
 pub struct NavState {
     /// Whole tree as the core last returned it.
     pub tree: FolderNode,
+    /// Display name of the open root, shown as the tree's first row.
+    pub root_name: String,
     /// Paths of expanded folders — the only tree state the core does not own.
+    /// Always contains [`model::ROOT_PATH`], so the tree opens expanded.
     pub expanded: HashSet<String>,
     pub folder_rows: Vec<FolderRow>,
     /// Cursor into whichever set of rows the left panel is showing. Shared by
@@ -119,6 +128,10 @@ pub struct NavState {
     pub folder_cursor: usize,
     /// Folder whose notes are listed in the middle pane (folders mode).
     pub open_folder: Option<String>,
+    /// The root-level feed folder, when this root has one. `None` disables the
+    /// whole Feed view — no tab, no `:feed`, no time buckets — which is the
+    /// normal state for a plain folder opened from the command line.
+    pub feed_path: Option<String>,
     /// Feed state. Built from a bulk preview of every note in the Feed folder.
     pub nav_mode: NavMode,
     pub feed_buckets: Vec<FeedBucket>,
@@ -132,14 +145,16 @@ pub struct NavState {
 }
 
 impl NavState {
-    pub fn new(tree: FolderNode) -> Self {
+    pub fn new(tree: FolderNode, root_name: String) -> Self {
         Self {
             tree,
-            expanded: HashSet::new(),
+            root_name,
+            expanded: HashSet::from([model::ROOT_PATH.to_string()]),
             folder_rows: Vec::new(),
             folder_cursor: 0,
             open_folder: None,
-            nav_mode: NavMode::Feed,
+            feed_path: None,
+            nav_mode: NavMode::Folders,
             feed_buckets: Vec::new(),
             feed_rows: Vec::new(),
             feed_expanded: HashSet::new(),
@@ -167,10 +182,7 @@ impl NavState {
     /// Rebuild the rows the left panel is currently drawing.
     pub fn rebuild_left_rows(&mut self) {
         match self.nav_mode {
-            NavMode::Folders => {
-                self.folder_rows = model::flatten_folders(&self.tree, &self.expanded);
-                self.clamp_left_cursor();
-            }
+            NavMode::Folders => self.rebuild_folder_rows(),
             NavMode::Feed => {
                 self.feed_rows = model::flatten_feed(&self.feed_buckets, &self.feed_expanded);
                 self.clamp_left_cursor();
@@ -179,7 +191,7 @@ impl NavState {
     }
 
     pub fn rebuild_folder_rows(&mut self) {
-        self.folder_rows = model::flatten_folders(&self.tree, &self.expanded);
+        self.folder_rows = model::flatten_folders(&self.tree, &self.expanded, &self.root_name);
         if self.folder_cursor >= self.folder_rows.len() {
             self.folder_cursor = self.folder_rows.len().saturating_sub(1);
         }
@@ -197,6 +209,41 @@ impl NavState {
             self.feed_expanded.remove(&id);
         }
         self.rebuild_left_rows();
+    }
+
+    /// Whether the row under the cursor can be opened up, and whether it
+    /// already is — the two facts arrow-key tree navigation runs on.
+    fn cursor_row_shape(&self) -> Option<(bool, bool)> {
+        match self.nav_mode {
+            NavMode::Folders => self
+                .folder_rows
+                .get(self.folder_cursor)
+                .map(|row| (row.has_children, row.expanded)),
+            NavMode::Feed => self
+                .feed_rows
+                .get(self.folder_cursor)
+                .map(|row| (row.has_children, row.expanded)),
+        }
+    }
+
+    fn row_depth(&self, index: usize) -> Option<usize> {
+        match self.nav_mode {
+            NavMode::Folders => self.folder_rows.get(index).map(|row| row.depth),
+            NavMode::Feed => self.feed_rows.get(index).map(|row| row.depth),
+        }
+    }
+
+    /// Index of the row that owns `index`: the nearest row above it at a
+    /// smaller depth. Works for both trees because the flattened rows are in
+    /// depth-first order, so no parent pointers are needed.
+    fn parent_index(&self, index: usize) -> Option<usize> {
+        let depth = self.row_depth(index)?;
+        if depth == 0 {
+            return None;
+        }
+        (0..index)
+            .rev()
+            .find(|&i| self.row_depth(i).is_some_and(|other| other < depth))
     }
 
     /// The note a command acts on: the open one, else the list selection.
@@ -232,6 +279,48 @@ impl EditorState {
 
 // ── App ────────────────────────────────────────────────────────────────────
 
+/// The one-line key reminder, shown at startup and by `:h`. `{tab}` is where
+/// the Feed/Folders hint goes in a root that has a Feed to switch to.
+const HELP_LINE: &str =
+    "j/k move · →/← open/close · Enter edit · {tab}Ctrl+W pane · Ctrl+T panels · : commands";
+
+/// A modifier + letter chord, accepting any of `modifiers`.
+///
+/// `Cmd` only arrives in terminals that report the Super modifier (kitty
+/// keyboard protocol: Kitty, WezTerm, Ghostty, …) — macOS Terminal.app and
+/// iTerm keep `Cmd` for themselves and never forward it. That is why `Ctrl` is
+/// the binding we document, with `Cmd` and `Alt` accepted where they arrive.
+fn is_chord(key: &KeyEvent, ch: char, modifiers: KeyModifiers) -> bool {
+    key.modifiers.intersects(modifiers)
+        && matches!(key.code, KeyCode::Char(pressed) if pressed.eq_ignore_ascii_case(&ch))
+}
+
+/// `Ctrl+W` / `Cmd+W` — cycle panes.
+const PANE_CHORD: KeyModifiers = KeyModifiers::CONTROL.union(KeyModifiers::SUPER);
+/// `Ctrl+T` / `Cmd+T` / `Alt+T` — hide the left panes. `Alt` is here because a
+/// terminal that forwards neither `Cmd` nor a free `Ctrl+T` usually forwards
+/// `Alt` (macOS: Option-as-Meta).
+const PANELS_CHORD: KeyModifiers = PANE_CHORD.union(KeyModifiers::ALT);
+
+/// Placeholder tree used for the split second between constructing `App` and
+/// loading the real root.
+fn empty_tree() -> FolderNode {
+    FolderNode {
+        name: String::new(),
+        path: String::new(),
+        children: Vec::new(),
+        notes: Vec::new(),
+    }
+}
+
+/// Name for the tree's root row: the folder's own name, falling back to the
+/// whole path for roots like `/` that have none.
+fn root_display_name(root: &Path) -> String {
+    root.file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| root.display().to_string())
+}
+
 pub struct App {
     pub core: Core,
     pub nav: NavState,
@@ -242,8 +331,10 @@ pub struct App {
     pub status: String,
     pub root_label: String,
     pub should_quit: bool,
-    /// True after `Ctrl+W`, waiting for a direction key.
-    pub pending_window: bool,
+    /// `Ctrl+T`: the two left panes are hidden and the editor has the frame.
+    pub panels_hidden: bool,
+    /// Where focus goes when the panes come back.
+    focus_before_hide: Pane,
     /// A git operation queued by a command, drained by the event loop.
     pub pending_git: Option<GitTask>,
     /// How many background git operations are in flight. One at a time:
@@ -253,41 +344,94 @@ pub struct App {
 
 impl App {
     pub fn new(core: Core) -> Result<Self, String> {
-        let tree = core.notes()?.get_tree()?;
-        let root_label = core
-            .root_path()
-            .map(|path| path.display().to_string())
-            .unwrap_or_else(|_| "?".to_string());
-
         let mut app = Self {
             core,
-            nav: NavState::new(tree),
+            nav: NavState::new(empty_tree(), String::new()),
             ed: EditorState::new(),
             focus: Pane::Folders,
             prompt: None,
-            status: "Tab feed/folders · j/k move · Enter open · Ctrl+W panes · : for commands".to_string(),
-            root_label,
+            status: String::new(),
+            root_label: String::new(),
             should_quit: false,
-            pending_window: false,
+            panels_hidden: false,
+            focus_before_hide: Pane::Folders,
             pending_git: None,
             git_in_flight: 0,
         };
-        // Feed is the default view: it is where new notes land and where the
-        // date-grouped browse the desktop offers lives.
-        app.reload_feed();
-        app.nav.rebuild_left_rows();
-        app.select_first_feed();
-        // Fall back to the folder tree if the Feed folder is empty or absent,
-        // so a fresh notes root still shows something to navigate.
-        if app.nav.feed_rows.is_empty() {
-            app.nav.nav_mode = NavMode::Folders;
-            app.nav.rebuild_left_rows();
-            if let Some(index) = app.nav.folder_rows.iter().position(|row| row.path == "Feed") {
-                app.nav.folder_cursor = index;
-                app.select_left();
+        app.load_root()?;
+        Ok(app)
+    }
+
+    // ── Roots ──────────────────────────────────────────────────────────────
+
+    /// Read the open root from scratch: tree, labels, whether it has a Feed,
+    /// and the initial selection. Shared by startup and `:open`.
+    fn load_root(&mut self) -> Result<(), String> {
+        let tree = self.core.notes()?.get_tree()?;
+        let root = self.core.root_path()?;
+        self.root_label = root.display().to_string();
+        self.ed.editor.close();
+        self.nav = NavState::new(tree, root_display_name(&root));
+        self.nav.feed_path = model::find_feed_folder(&self.nav.tree);
+
+        // Feed is the default view where there is one: it is where new notes
+        // land, and the date-grouped browse is the reason it exists.
+        if self.nav.feed_path.is_some() {
+            self.nav.nav_mode = NavMode::Feed;
+            self.reload_feed();
+            self.select_first_feed();
+        }
+        // No feed folder, or one with nothing in it: navigate plain folders.
+        if self.nav.feed_rows.is_empty() {
+            self.nav.nav_mode = NavMode::Folders;
+            self.nav.rebuild_left_rows();
+            if let Some(feed) = self.nav.feed_path.clone() {
+                if let Some(index) = self.nav.folder_rows.iter().position(|row| row.path == feed) {
+                    self.nav.folder_cursor = index;
+                }
+            }
+            self.select_left();
+        }
+        self.focus = Pane::Folders;
+        self.preview_selected_note();
+        self.status = self.help_line();
+        Ok(())
+    }
+
+    /// The key reminder, minus the parts this root cannot do.
+    fn help_line(&self) -> String {
+        let tab = if self.nav.feed_path.is_some() {
+            "Tab feed/folders · "
+        } else {
+            ""
+        };
+        HELP_LINE.replace("{tab}", tab)
+    }
+
+    /// `:open <path>` — browse any folder. Without an argument it goes back to
+    /// the active profile's notes root.
+    ///
+    /// The previous `Core` is kept until the new root has loaded, so a typo
+    /// leaves you where you were instead of in a half-opened folder.
+    fn open_root(&mut self, path: Option<String>) {
+        self.flush_editor();
+        let previous = self.core.clone();
+        let opened = match &path {
+            Some(path) => self.core.open_folder(path),
+            None => {
+                self.core.close_folder();
+                Ok(())
+            }
+        };
+        let result = opened.and_then(|()| self.load_root());
+        match result {
+            Ok(()) => self.status = format!("opened {}", self.root_label),
+            Err(err) => {
+                self.core = previous;
+                let _ = self.load_root();
+                self.status = format!("open: {err}");
             }
         }
-        Ok(app)
     }
 
     // ── Data loading ───────────────────────────────────────────────────────
@@ -296,6 +440,14 @@ impl App {
         match self.core.notes().and_then(|notes| notes.get_tree()) {
             Ok(tree) => {
                 self.nav.tree = tree;
+                // A Feed folder can appear or vanish under us — a pull, a
+                // rename, a `:mv` into a new folder — so this is re-derived on
+                // every refresh rather than cached at load time.
+                self.nav.feed_path = model::find_feed_folder(&self.nav.tree);
+                if self.nav.feed_path.is_none() && self.nav.nav_mode == NavMode::Feed {
+                    self.nav.nav_mode = NavMode::Folders;
+                    self.nav.folder_cursor = 0;
+                }
                 self.nav.rebuild_left_rows();
             }
             Err(err) => self.status = format!("tree: {err}"),
@@ -347,8 +499,16 @@ impl App {
     // ── Feed mode ──────────────────────────────────────────────────────────
 
     /// Rebuild the feed tree from a fresh bulk preview of the Feed folder.
+    ///
+    /// A root with no feed folder gets an empty tree rather than an error: the
+    /// Feed view is simply not offered there.
     pub fn reload_feed(&mut self) {
-        let paths: Vec<String> = model::find_folder(&self.nav.tree, "Feed")
+        let Some(feed) = self.nav.feed_path.clone() else {
+            self.nav.feed_buckets.clear();
+            self.nav.rebuild_left_rows();
+            return;
+        };
+        let paths: Vec<String> = model::find_folder(&self.nav.tree, &feed)
             .map(|node| node.notes.iter().map(|n| n.path.clone()).collect())
             .unwrap_or_default();
         let rows = match self
@@ -386,7 +546,7 @@ impl App {
             return;
         };
         self.nav.active_feed_id = Some(first.id.clone());
-        self.nav.open_folder = Some("Feed".to_string());
+        self.nav.open_folder = self.nav.feed_path.clone();
         self.reload_feed_selection();
     }
 
@@ -412,13 +572,17 @@ impl App {
             return;
         };
         self.nav.active_feed_id = Some(row.id.clone());
-        self.nav.open_folder = Some("Feed".to_string());
+        self.nav.open_folder = self.nav.feed_path.clone();
         self.nav.note_cursor = 0;
         self.reload_feed_selection();
     }
 
     /// Switch the left panel between the folder tree and the feed tree.
     pub fn set_nav_mode(&mut self, mode: NavMode) {
+        if mode == NavMode::Feed && self.nav.feed_path.is_none() {
+            self.status = "no Feed folder here — this root is folders only".to_string();
+            return;
+        }
         if self.nav.nav_mode == mode {
             return;
         }
@@ -506,18 +670,14 @@ impl App {
             return;
         }
 
-        if self.pending_window {
-            self.pending_window = false;
-            self.focus = match key.code {
-                KeyCode::Char('h') | KeyCode::Left => self.pane_left(),
-                KeyCode::Char('l') | KeyCode::Right => self.pane_right(),
-                KeyCode::Char('w') => self.pane_right(),
-                _ => self.focus,
-            };
+        // Global chords, checked before the focused pane sees the key so they
+        // behave the same everywhere — including inside insert mode.
+        if is_chord(&key, 'w', PANE_CHORD) {
+            self.cycle_focus();
             return;
         }
-        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('w') {
-            self.pending_window = true;
+        if is_chord(&key, 't', PANELS_CHORD) {
+            self.toggle_panels();
             return;
         }
 
@@ -528,25 +688,47 @@ impl App {
         }
     }
 
-    fn pane_left(&self) -> Pane {
-        match self.focus {
-            Pane::Folders => Pane::Folders,
-            Pane::Notes => Pane::Folders,
-            Pane::Editor => Pane::Notes,
+    /// One `Ctrl+W` moves to the next pane. It used to be vim's two-key
+    /// `Ctrl+W` *then* a direction, which left the app swallowing the next
+    /// keystroke — pressing `→` after it switched panes instead of expanding
+    /// the row under the cursor.
+    fn cycle_focus(&mut self) {
+        if self.panels_hidden {
+            self.status = "panels are hidden — Ctrl+T brings them back".to_string();
+            return;
         }
-    }
-
-    fn pane_right(&self) -> Pane {
-        match self.focus {
+        self.focus = match self.focus {
             Pane::Folders => Pane::Notes,
             Pane::Notes => Pane::Editor,
             Pane::Editor => Pane::Folders,
+        };
+    }
+
+    /// `Ctrl+T` (or `Cmd+T` / `Alt+T` where the terminal forwards them) hides
+    /// both left panes and gives the whole frame to the editor.
+    pub fn toggle_panels(&mut self) {
+        self.panels_hidden = !self.panels_hidden;
+        if self.panels_hidden {
+            self.focus_before_hide = self.focus;
+            self.focus = Pane::Editor;
+            self.status = "panels hidden · Ctrl+T to show".to_string();
+        } else {
+            self.focus = self.focus_before_hide;
+            self.status = "panels shown".to_string();
+        }
+    }
+
+    /// Bring the left panes back, for commands whose whole effect happens over
+    /// there — `:feed` with the navigation hidden would otherwise look inert.
+    fn show_panels(&mut self) {
+        if self.panels_hidden {
+            self.toggle_panels();
         }
     }
 
     fn folders_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Tab => {
+            KeyCode::Tab | KeyCode::BackTab => {
                 self.set_nav_mode(match self.nav.nav_mode {
                     NavMode::Folders => NavMode::Feed,
                     NavMode::Feed => NavMode::Folders,
@@ -573,8 +755,8 @@ impl App {
                 self.select_left();
                 self.preview_selected_note();
             }
-            KeyCode::Char('l') | KeyCode::Right | KeyCode::Char(' ') => self.toggle_left_expand(true),
-            KeyCode::Char('h') | KeyCode::Left => self.toggle_left_expand(false),
+            KeyCode::Char('l') | KeyCode::Right | KeyCode::Char(' ') => self.expand_or_descend(),
+            KeyCode::Char('h') | KeyCode::Left => self.collapse_or_ascend(),
             KeyCode::Enter => {
                 self.select_left();
                 self.focus = Pane::Notes;
@@ -582,6 +764,42 @@ impl App {
             }
             KeyCode::Char(':') => self.open_prompt(PromptKind::Command),
             _ => {}
+        }
+    }
+
+    /// `→` / `l`: open the row under the cursor, one step at a time — expand a
+    /// collapsed row, then step into its first child, then hand over to the
+    /// note list once there is nothing left to open.
+    fn expand_or_descend(&mut self) {
+        match self.nav.cursor_row_shape() {
+            Some((true, false)) => self.toggle_left_expand(true),
+            Some((true, true)) => {
+                self.nav.folder_cursor =
+                    (self.nav.folder_cursor + 1).min(self.nav.left_len().saturating_sub(1));
+                self.select_left();
+                self.preview_selected_note();
+            }
+            Some((false, _)) => {
+                self.focus = Pane::Notes;
+                self.preview_selected_note();
+            }
+            None => {}
+        }
+    }
+
+    /// `←` / `h`: the mirror image — collapse an open row, otherwise jump out
+    /// to the row that owns it.
+    fn collapse_or_ascend(&mut self) {
+        match self.nav.cursor_row_shape() {
+            Some((_, true)) => self.toggle_left_expand(false),
+            Some(_) | None => {
+                let Some(parent) = self.nav.parent_index(self.nav.folder_cursor) else {
+                    return;
+                };
+                self.nav.folder_cursor = parent;
+                self.select_left();
+                self.preview_selected_note();
+            }
         }
     }
 
@@ -764,25 +982,25 @@ impl App {
             Command::Move(destination) => self.move_note(&destination),
             Command::New(folder) => self.create_note(folder),
             Command::Delete => self.delete_note(),
+            Command::Open(path) => self.open_root(path),
             Command::Connect(url) => self.git_connect(&url),
             Command::Sync => self.git_sync(),
             Command::Pull => self.git_pull(),
             Command::Push => self.git_push(),
             Command::Status => self.git_status(),
             Command::SshKey => self.ssh_key(),
+            Command::Panels => self.toggle_panels(),
             Command::Feed => {
+                self.show_panels();
                 self.set_nav_mode(NavMode::Feed);
                 self.preview_selected_note();
             }
             Command::Folders => {
+                self.show_panels();
                 self.set_nav_mode(NavMode::Folders);
                 self.preview_selected_note();
             }
-            Command::Help => {
-                self.status =
-                    "Tab feed/folders · j/k move · Enter open · Ctrl+W pane · i insert · :mv <folder> · :new · :d · :feed · :folders · :connect · :sync · :q"
-                        .to_string();
-            }
+            Command::Help => self.status = self.help_line(),
             Command::Unknown(name) => self.status = format!("unknown command: {name}"),
         }
     }
@@ -815,7 +1033,15 @@ impl App {
 
     fn create_note(&mut self, folder: Option<String>) {
         self.flush_editor();
-        let folder_path = folder.or_else(|| self.nav.open_folder.clone());
+        // The core reads an empty folder as "put it in Feed". That is the right
+        // default for a notes root and the wrong one for a folder someone
+        // opened to browse, so the root row spells itself out as ".".
+        let folder_path = match folder.or_else(|| self.nav.open_folder.clone()) {
+            Some(path) if path.is_empty() => Some(".".to_string()),
+            Some(path) => Some(path),
+            None if self.nav.feed_path.is_none() => Some(".".to_string()),
+            None => None,
+        };
         let args = CreateNoteArgs {
             folder_path,
             content: None,
@@ -859,7 +1085,23 @@ impl App {
 
     // ── Git sync ───────────────────────────────────────────────────────────
 
+    /// Git sync belongs to the profile: the remote, branch, credentials and SSH
+    /// key all live there. A folder opened for browsing has none of that, and
+    /// running these against the profile root instead would be a quiet lie
+    /// about which files are being pushed.
+    fn git_available(&mut self) -> bool {
+        if self.core.is_custom_root() {
+            self.status =
+                "git sync belongs to the notes root — `:open` with no path returns to it".to_string();
+            return false;
+        }
+        true
+    }
+
     fn git_status(&mut self) {
+        if !self.git_available() {
+            return;
+        }
         match self.core.git().status() {
             Ok(status) => {
                 self.status = if status.repo_initialized {
@@ -885,6 +1127,9 @@ impl App {
 
     /// `:connect <url> [branch]` — initialise the repo, set `origin`, fetch.
     fn git_connect(&mut self, argument: &str) {
+        if !self.git_available() {
+            return;
+        }
         if argument.split_whitespace().next().is_none() {
             self.status = "usage: :connect <url> [branch]".to_string();
             return;
@@ -897,6 +1142,9 @@ impl App {
     }
 
     fn git_pull(&mut self) {
+        if !self.git_available() {
+            return;
+        }
         // Pull rewrites files under us, so the buffer has to be on disk first.
         self.flush_editor();
         self.status = "pulling…".to_string();
@@ -904,12 +1152,18 @@ impl App {
     }
 
     fn git_push(&mut self) {
+        if !self.git_available() {
+            return;
+        }
         self.flush_editor();
         self.status = "pushing…".to_string();
         self.pending_git = Some(GitTask::Push);
     }
 
     fn git_sync(&mut self) {
+        if !self.git_available() {
+            return;
+        }
         self.flush_editor();
         self.status = "syncing…".to_string();
         self.pending_git = Some(GitTask::Sync);

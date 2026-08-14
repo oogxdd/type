@@ -1,14 +1,20 @@
 //! Rendering. Pure presentation.
 //!
+//! The whole app lives inside one rounded frame: a title bar naming the open
+//! root, three bordered panes (navigation / notes / editor), and a status line
+//! along the bottom. The focused pane is the one with the accent border, which
+//! is the only chrome that changes as you move around — everything else stays
+//! put, so the layout never shifts under you.
+//!
 //! Each draw function receives the smallest sub-model it needs: the left and
 //! middle panes get [`NavState`], the editor pane gets [`EditorState`], and
-//! only the status bar — which spans everything — sees [`App`].
+//! only the frame and status bar — which span everything — see [`App`].
 
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, BorderType, List, ListItem, ListState, Padding, Paragraph},
     Frame,
 };
 
@@ -17,112 +23,235 @@ use crate::{
     model,
 };
 
-/// Accent colour for the focused pane's divider and the mode label.
-const FOCUSED: Color = Color::Cyan;
+/// Accent for the focused pane, the active tab and the prompt.
+const ACCENT: Color = Color::Cyan;
+/// Everything the eye should skip: unfocused borders, hints, counts.
+const MUTED: Color = Color::DarkGray;
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
-    let outer = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(3), Constraint::Length(1)])
-        .split(frame.area());
+    let area = frame.area();
+    let shell = shell_block(app);
+    let inner = shell.inner(area);
+    frame.render_widget(shell, area);
 
-    let panes = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(24),
-            Constraint::Percentage(26),
-            Constraint::Min(20),
-        ])
-        .split(outer[0]);
+    let [body, status] =
+        Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).areas(inner);
 
     let focus = app.focus;
-    draw_left(frame, &app.nav, focus == Pane::Folders, &app.root_label, panes[0]);
-    draw_middle(frame, &app.nav, focus == Pane::Notes, panes[1]);
-    draw_editor(frame, &mut app.ed, focus == Pane::Editor, focus == Pane::Notes, panes[2]);
-    draw_status(frame, app, outer[1]);
+    if app.panels_hidden {
+        // Ctrl+T: the editor gets the whole frame.
+        draw_editor(frame, &mut app.ed, focus == Pane::Editor, false, body);
+    } else {
+        let [left, middle, right] = Layout::horizontal([
+            Constraint::Percentage(26),
+            Constraint::Percentage(27),
+            Constraint::Min(24),
+        ])
+        .areas(body);
+        draw_left(frame, &app.nav, focus == Pane::Folders, left);
+        draw_middle(frame, &app.nav, focus == Pane::Notes, middle);
+        draw_editor(
+            frame,
+            &mut app.ed,
+            focus == Pane::Editor,
+            focus == Pane::Notes,
+            right,
+        );
+    }
+    draw_status(frame, app, status);
 }
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
 
 fn dim() -> Style {
-    Style::default().fg(Color::DarkGray)
+    Style::default().fg(MUTED)
 }
 
-fn header_style(focused: bool) -> Style {
-    if focused {
-        Style::default().add_modifier(Modifier::BOLD)
-    } else {
-        dim()
+fn accent() -> Style {
+    Style::default().fg(ACCENT)
+}
+
+/// The pane frame. Its border is the focus indicator, so every pane is drawn
+/// the same way and only the colour differs.
+fn pane_block(title: Line<'static>, focused: bool) -> Block<'static> {
+    Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(if focused { accent() } else { dim() })
+        .title_top(title)
+        .padding(Padding::horizontal(1))
+}
+
+fn pane_title(label: String, focused: bool) -> Line<'static> {
+    Line::from(vec![
+        Span::raw(" "),
+        Span::styled(
+            label,
+            if focused {
+                Style::default()
+                    .fg(ACCENT)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().add_modifier(Modifier::BOLD)
+            },
+        ),
+        Span::raw(" "),
+    ])
+}
+
+/// `$HOME/notes` reads better as `~/notes`, and a long path is cut from the
+/// left so the part that identifies the folder survives.
+fn display_root(path: &str) -> String {
+    let shortened = match dirs::home_dir() {
+        Some(home) => match path.strip_prefix(home.to_string_lossy().as_ref()) {
+            Some(rest) => format!("~{rest}"),
+            None => path.to_string(),
+        },
+        None => path.to_string(),
+    };
+    if shortened.chars().count() <= 48 {
+        return shortened;
     }
-}
-
-fn selection_style(focused: bool) -> Style {
-    if focused {
-        Style::default()
-            .bg(Color::DarkGray)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().add_modifier(Modifier::DIM)
-    }
-}
-
-fn short_root(path: &str) -> String {
-    let parts: Vec<&str> = path.rsplit('/').take(2).collect();
-    parts.into_iter().rev().collect::<Vec<_>>().join("/")
-}
-
-fn header_body(area: Rect) -> (Rect, Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(1)])
-        .split(area);
-    (chunks[0], chunks[1])
+    let tail: String = shortened
+        .chars()
+        .skip(shortened.chars().count() - 45)
+        .collect();
+    format!("…{tail}")
 }
 
 fn empty_list(label: &'static str) -> List<'static> {
     List::new(vec![ListItem::new(Span::styled(label, dim()))])
 }
 
+fn selection_style(focused: bool) -> Style {
+    if focused {
+        Style::default()
+            .bg(MUTED)
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().add_modifier(Modifier::BOLD)
+    }
+}
+
+/// Draw a list with the shared selection treatment: a bar in the gutter marks
+/// the cursor row even when the pane is unfocused and the highlight is faint.
+fn draw_list(
+    frame: &mut Frame,
+    items: Vec<ListItem<'static>>,
+    empty: &'static str,
+    cursor: usize,
+    focused: bool,
+    area: Rect,
+) {
+    let is_empty = items.is_empty();
+    let list = if is_empty {
+        empty_list(empty)
+    } else {
+        List::new(items)
+            .highlight_style(selection_style(focused))
+            .highlight_symbol(if focused { "▌" } else { "▏" })
+    };
+    let mut state = ListState::default();
+    if !is_empty {
+        state.select(Some(cursor));
+    }
+    frame.render_stateful_widget(list, area, &mut state);
+}
+
+// ── The frame around everything ────────────────────────────────────────────
+
+fn shell_block(app: &App) -> Block<'static> {
+    let mut right = Vec::new();
+    if app.panels_hidden {
+        right.push(Span::styled(" panels hidden ", dim()));
+    }
+    if app.git_busy() {
+        right.push(Span::styled(
+            " ⟳ git… ",
+            Style::default().fg(Color::Yellow),
+        ));
+    }
+    right.push(Span::styled(
+        format!(" {} ", display_root(&app.root_label)),
+        dim(),
+    ));
+
+    Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(dim())
+        .title_top(Line::from(vec![
+            Span::styled(" type ", accent().add_modifier(Modifier::BOLD)),
+        ]))
+        .title_top(Line::from(right).right_aligned())
+        .title_bottom(
+            Line::from(vec![Span::styled(
+                " ^w pane · ^t panels · : commands ",
+                dim(),
+            )])
+            .right_aligned(),
+        )
+        .padding(Padding::new(1, 1, 0, 0))
+}
+
 // ── Left pane: feed / folders ──────────────────────────────────────────────
 
-fn draw_left(frame: &mut Frame, nav: &NavState, focused: bool, root_label: &str, area: Rect) {
-    let (header, body) = header_body(area);
+fn draw_left(frame: &mut Frame, nav: &NavState, focused: bool, area: Rect) {
+    let block = pane_block(nav_tabs(nav, focused), focused);
+    let body = block.inner(area);
+    frame.render_widget(block, area);
 
-    let mode_label = match nav.nav_mode {
-        NavMode::Feed => "Feed",
-        NavMode::Folders => "Folders",
-    };
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled(mode_label, header_style(focused)),
-            Span::styled("  Tab", dim()),
-            Span::styled(format!("  {}", short_root(root_label)), dim()),
-        ])),
-        header,
-    );
-
-    let mut state = ListState::default();
     match nav.nav_mode {
-        NavMode::Folders => {
-            let items = folder_item_rows(&nav.folder_rows);
-            let list = List::new(items).highlight_style(selection_style(focused));
-            if !nav.folder_rows.is_empty() {
-                state.select(Some(nav.folder_cursor));
-            }
-            frame.render_stateful_widget(list, body, &mut state);
-        }
-        NavMode::Feed => {
-            let items = feed_item_rows(&nav.feed_rows);
-            let list = if nav.feed_rows.is_empty() {
-                empty_list("no feed notes")
+        NavMode::Folders => draw_list(
+            frame,
+            folder_item_rows(&nav.folder_rows),
+            "empty folder",
+            nav.folder_cursor,
+            focused,
+            body,
+        ),
+        NavMode::Feed => draw_list(
+            frame,
+            feed_item_rows(&nav.feed_rows),
+            "no feed notes",
+            nav.folder_cursor,
+            focused,
+            body,
+        ),
+    }
+}
+
+/// The pane title doubles as the Feed / Folders tab strip — and shows only
+/// `Folders` in a root that has no feed folder to switch to.
+fn nav_tabs(nav: &NavState, focused: bool) -> Line<'static> {
+    let mut spans = vec![Span::raw(" ")];
+    if nav.feed_path.is_some() {
+        spans.push(tab_span("Feed", nav.nav_mode == NavMode::Feed, focused));
+        spans.push(Span::styled(" · ", dim()));
+        spans.push(tab_span(
+            "Folders",
+            nav.nav_mode == NavMode::Folders,
+            focused,
+        ));
+        spans.push(Span::styled(" ⇥ ", dim()));
+    } else {
+        spans.push(tab_span("Folders", true, focused));
+        spans.push(Span::raw(" "));
+    }
+    Line::from(spans)
+}
+
+fn tab_span(label: &'static str, active: bool, focused: bool) -> Span<'static> {
+    if active {
+        Span::styled(
+            label,
+            if focused {
+                accent().add_modifier(Modifier::BOLD)
             } else {
-                List::new(items).highlight_style(selection_style(focused))
-            };
-            if !nav.feed_rows.is_empty() {
-                state.select(Some(nav.folder_cursor));
-            }
-            frame.render_stateful_widget(list, body, &mut state);
-        }
+                Style::default().add_modifier(Modifier::BOLD)
+            },
+        )
+    } else {
+        Span::styled(label, dim())
     }
 }
 
@@ -130,7 +259,11 @@ fn folder_item_rows(rows: &[model::FolderRow]) -> Vec<ListItem<'static>> {
     rows.iter()
         .map(|row| {
             let marker = if row.has_children {
-                if row.expanded { "▾ " } else { "▸ " }
+                if row.expanded {
+                    "▾ "
+                } else {
+                    "▸ "
+                }
             } else {
                 "  "
             };
@@ -148,7 +281,11 @@ fn feed_item_rows(rows: &[model::FeedRow]) -> Vec<ListItem<'static>> {
     rows.iter()
         .map(|row| {
             let marker = if row.has_children {
-                if row.expanded { "▾ " } else { "▸ " }
+                if row.expanded {
+                    "▾ "
+                } else {
+                    "▸ "
+                }
             } else {
                 "· "
             };
@@ -173,24 +310,22 @@ fn feed_item_rows(rows: &[model::FeedRow]) -> Vec<ListItem<'static>> {
 // ── Middle pane: note list ─────────────────────────────────────────────────
 
 fn draw_middle(frame: &mut Frame, nav: &NavState, focused: bool, area: Rect) {
-    let divider_color = if focused || nav_is_active(nav) {
-        FOCUSED
-    } else {
-        Color::DarkGray
-    };
-    let block = Block::default()
-        .borders(Borders::LEFT)
-        .border_style(Style::default().fg(divider_color));
-    let inner = block.inner(area);
+    let block = pane_block(pane_title(middle_title(nav), focused), focused).title_top(
+        Line::from(vec![Span::styled(
+            if nav.notes.is_empty() {
+                String::new()
+            } else {
+                format!(" {} ", nav.notes.len())
+            },
+            dim(),
+        )])
+        .right_aligned(),
+    );
+    let body = block.inner(area);
     frame.render_widget(block, area);
 
-    let (header, body) = header_body(inner);
-    frame.render_widget(
-        Paragraph::new(Span::styled(middle_title(nav), header_style(focused))),
-        header,
-    );
-
-    let items: Vec<ListItem> = nav.notes
+    let items: Vec<ListItem> = nav
+        .notes
         .iter()
         .map(|row| {
             let mut spans = Vec::new();
@@ -202,33 +337,25 @@ fn draw_middle(frame: &mut Frame, nav: &NavState, focused: bool, area: Rect) {
         })
         .collect();
 
-    let list = if nav.notes.is_empty() {
-        empty_list("no notes")
-    } else {
-        List::new(items).highlight_style(selection_style(focused))
-    };
-
-    let mut state = ListState::default();
-    if !nav.notes.is_empty() {
-        state.select(Some(nav.note_cursor));
-    }
-    frame.render_stateful_widget(list, body, &mut state);
-}
-
-/// Whether the nav pane or the note list has keyboard focus — used only to
-/// decide the divider colour.
-fn nav_is_active(_nav: &NavState) -> bool {
-    false
+    draw_list(frame, items, "no notes", nav.note_cursor, focused, body);
 }
 
 fn middle_title(nav: &NavState) -> String {
     match nav.nav_mode {
-        NavMode::Folders => nav.open_folder.clone().unwrap_or_else(|| "—".into()),
+        NavMode::Folders => match nav.open_folder.as_deref() {
+            // The root row's path is empty — name it after the folder itself.
+            Some(model::ROOT_PATH) => nav.root_name.clone(),
+            Some(path) => path.to_string(),
+            None => "—".into(),
+        },
         NavMode::Feed => nav
             .active_feed_id
             .as_deref()
             .and_then(|id| {
-                nav.feed_rows.iter().find(|row| row.id == id).map(|row| row.label.clone())
+                nav.feed_rows
+                    .iter()
+                    .find(|row| row.id == id)
+                    .map(|row| row.label.clone())
             })
             .unwrap_or_else(|| "Feed".into()),
     }
@@ -243,38 +370,23 @@ fn draw_editor(
     list_focused: bool,
     area: Rect,
 ) {
-    let divider_color = if focused || list_focused {
-        FOCUSED
-    } else {
-        Color::DarkGray
-    };
-    let block = Block::default()
-        .borders(Borders::LEFT)
-        .border_style(Style::default().fg(divider_color));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    let (header, body) = header_body(inner);
-
     let title = match &ed.editor.path {
-        Some(path) => {
-            let dirty = if ed.editor.is_dirty() { " ●" } else { "" };
-            format!("{}{}", model::file_stem(path), dirty)
-        }
+        Some(path) => model::file_stem(path).to_string(),
         None => "—".to_string(),
     };
-    let preview_hint = if ed.editor.path.is_some() && !focused && list_focused {
-        "  ⏎ to edit"
-    } else {
-        ""
-    };
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled(title, header_style(focused)),
-            Span::styled(preview_hint, dim()),
-        ])),
-        header,
-    );
+    let mut block = pane_block(pane_title(title, focused), focused);
+    if ed.editor.path.is_some() {
+        let marker = if ed.editor.is_dirty() {
+            Span::styled(" ● unsaved ", Style::default().fg(Color::Yellow))
+        } else if !focused && list_focused {
+            Span::styled(" ⏎ to edit ", dim())
+        } else {
+            Span::styled(" saved ", dim())
+        };
+        block = block.title_top(Line::from(vec![marker]).right_aligned());
+    }
+    let body = block.inner(area);
+    frame.render_widget(block, area);
 
     if ed.editor.path.is_none() {
         frame.render_widget(
@@ -302,13 +414,17 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
             PromptKind::Search => '/',
         };
         let mut spans = vec![
-            Span::styled(sigil.to_string(), Style::default().fg(FOCUSED)),
+            Span::styled(sigil.to_string(), accent()),
             Span::raw(prompt.input.clone()),
-            Span::styled("█", Style::default().fg(FOCUSED)),
+            Span::styled("█", accent()),
         ];
         if !prompt.completions.is_empty() {
             spans.push(Span::styled(
-                format!("   [{}/{}]", prompt.completion_index + 1, prompt.completions.len()),
+                format!(
+                    "   [{}/{}]",
+                    prompt.completion_index + 1,
+                    prompt.completions.len()
+                ),
                 dim(),
             ));
         }
@@ -323,7 +439,7 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
         Pane::Folders => Color::Magenta,
     };
 
-    let mut spans = vec![
+    let spans = vec![
         Span::styled(
             format!(" {mode} "),
             Style::default()
@@ -334,17 +450,19 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
         Span::raw(" "),
         Span::raw(app.status.clone()),
     ];
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 
+    // Half-typed vim sequences sit on the right so a pending `d` or `12` is
+    // visible without pushing the status message around.
     let pending = app.ed.vim.pending_hint();
     if !pending.is_empty() {
-        spans.push(Span::styled(format!("  {pending}"), Style::default().fg(Color::Yellow)));
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                pending,
+                Style::default().fg(Color::Yellow),
+            )))
+            .alignment(Alignment::Right),
+            area,
+        );
     }
-    if app.git_busy() {
-        spans.push(Span::styled("  ⟳ git…", Style::default().fg(Color::Yellow)));
-    }
-    if app.pending_window {
-        spans.push(Span::styled("  ^W", Style::default().fg(Color::Yellow)));
-    }
-
-    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }

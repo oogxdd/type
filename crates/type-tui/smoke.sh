@@ -55,6 +55,9 @@ pty_run() {
 }
 
 # Run the TUI with keys piped in. Arguments are alternating delay/keys.
+# `$ARGS` is passed to the binary, which is how the custom-folder case opens
+# something other than the profile's notes root.
+ARGS=""
 drive() {
     {
         while [ $# -gt 0 ]; do
@@ -63,7 +66,7 @@ drive() {
             shift 2
         done
         sleep 2
-    } | pty_run "$LOG" 30 "stty rows 30 cols 120; $BIN"
+    } | pty_run "$LOG" 30 "stty rows 30 cols 120; $BIN $ARGS"
 }
 
 # The rendered screen with escape sequences removed.
@@ -115,11 +118,42 @@ echo "$SCREEN" | grep -q 'nogitrepo' || fail ":status did not report git state"
 pass "nav + status bar + git status"
 
 echo "5. Tab switches between feed and folders"
-# A note exists in Feed from step 1, so the feed tree has at least a Today bucket.
-drive 1 '\033' 1 'Tab' 2 '\033' 1 ':q!\r'
-SCREEN="$(screen)"
-echo "$SCREEN" | grep -qE 'Feed|Folders' || fail "left panel did not render after Tab"
+# Step 2 moved the only note out of Feed, so switching to the feed view has to
+# land on its empty state — which is also proof the switch happened at all.
+drive 1 '\t' 2 ':q!\r'
+screen | grep -q 'nofeednotes' || fail "Tab did not switch to the feed view"
 pass "Tab toggles nav mode"
+
+echo "6. one Ctrl+W moves focus (it used to take two)"
+# `o` creates a note only in the note *list* pane, so a note appearing after a
+# single Ctrl+W is proof that one press left the tree. The old two-key
+# `Ctrl+W` prefix would have swallowed the `o` instead.
+drive 1 '\027' 1 'o' 1 'focus moved with one ctrl w' 1 '\033' 1 ':wq\r'
+grep -rq 'focus moved with one ctrl w' "$ROOT" \
+    || fail "a single Ctrl+W did not reach the note list"
+pass "Ctrl+W is one press"
+
+echo "7. Ctrl+T hides both left panels"
+drive 1 '\024' 2 ':q!\r'
+SCREEN="$(screen)"
+echo "$SCREEN" | grep -q 'panelshidden' || fail "Ctrl+T did not hide the panels"
+pass "Ctrl+T hides the navigation"
+
+echo "8. an arbitrary folder opens with no Feed and nothing written into it"
+WIKI="$WORK/wiki"
+mkdir -p "$WIKI/projects"
+printf -- '# Inbox\n\nloose note\n' > "$WIKI/inbox.md"
+printf -- '# Alpha\n\nproject note\n' > "$WIKI/projects/alpha.md"
+ARGS="$WIKI"
+drive 1 '\t' 2 ':q!\r'
+ARGS=""
+SCREEN="$(screen)"
+echo "$SCREEN" | grep -q 'noFeedfolderhere' || fail "Tab offered a Feed that does not exist"
+echo "$SCREEN" | grep -q 'wiki' || fail "the opened folder is not the tree root"
+[ ! -d "$WIKI/Feed" ] || fail "opening a folder created Feed/ in it"
+[ ! -d "$WIKI/Archieve" ] || fail "opening a folder created Archieve/ in it"
+[ ! -d "$WIKI/Recordings" ] || fail "opening a folder created Recordings/ in it"
+pass "custom folder browses without being converted into a notes root"
 
 echo
 echo "all smoke tests passed"

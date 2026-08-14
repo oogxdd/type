@@ -124,11 +124,30 @@ pub fn strip_root(root: &Path, path: &Path) -> String {
 
 pub struct FilesystemNotesRepository {
     root: PathBuf,
+    /// Whether `ensured_root` scaffolds `Feed` / `Archieve` / `Recordings`.
+    ///
+    /// A notes root owned by a profile always wants them. A folder the user
+    /// merely pointed a shell at (`type-tui ~/some/folder`) does not: browsing
+    /// someone's markdown directory must not litter it with folders they never
+    /// asked for, and the shell decides what to show when `Feed` is absent.
+    scaffold_system_folders: bool,
 }
 
 impl FilesystemNotesRepository {
     pub fn new(root: PathBuf) -> Self {
-        Self { root }
+        Self {
+            root,
+            scaffold_system_folders: true,
+        }
+    }
+
+    /// The same repository over a plain folder: the root itself is still
+    /// created if missing, but no system folders are added to it.
+    pub fn without_system_folders(root: PathBuf) -> Self {
+        Self {
+            root,
+            scaffold_system_folders: false,
+        }
     }
 }
 
@@ -137,7 +156,9 @@ impl NotesRepository for FilesystemNotesRepository {
         if !self.root.exists() {
             fs::create_dir_all(&self.root).map_err(|err| err.to_string())?;
         }
-        ensure_system_folders(&self.root)?;
+        if self.scaffold_system_folders {
+            ensure_system_folders(&self.root)?;
+        }
         Ok(self.root.clone())
     }
 

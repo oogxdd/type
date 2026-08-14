@@ -44,11 +44,19 @@ pub type Notes = NotesService<
 
 /// Holds the shell seam (`AppEnv`) and builds core services on demand.
 ///
-/// `Clone` is cheap (one `AppEnv`, which is two `PathBuf`s) and lets the event
-/// loop hand a fresh copy to a background thread for async git operations.
+/// `Clone` is cheap (one `AppEnv`, which is two `PathBuf`s, plus an optional
+/// root) and lets the event loop hand a fresh copy to a background thread for
+/// async git operations.
 #[derive(Clone)]
 pub struct Core {
     env: AppEnv,
+    /// A folder opened directly — `type-tui <path>` or `:open <path>` — instead
+    /// of the active profile's notes root.
+    ///
+    /// This is what makes the TUI usable as a plain markdown browser: any
+    /// directory can be opened, and because such a folder is *not* a notes root
+    /// we never scaffold `Feed` / `Archieve` / `Recordings` into it.
+    custom_root: Option<PathBuf>,
 }
 
 impl Core {
@@ -64,7 +72,33 @@ impl Core {
         if let Some(documents) = dirs::document_dir() {
             env = env.with_documents_dir(documents);
         }
-        Ok(Self { env })
+        Ok(Self {
+            env,
+            custom_root: None,
+        })
+    }
+
+    /// Open an arbitrary folder. `~` is expanded and relative paths resolve
+    /// against the working directory, so `:open .` does what it looks like.
+    pub fn open_folder(&mut self, path: &str) -> Result<(), String> {
+        let resolved = resolve_folder_argument(path)?;
+        if !resolved.is_dir() {
+            return Err(format!("not a folder: {}", resolved.display()));
+        }
+        self.custom_root = Some(resolved);
+        Ok(())
+    }
+
+    /// Go back to the active profile's notes root.
+    pub fn close_folder(&mut self) {
+        self.custom_root = None;
+    }
+
+    /// True while a folder opened by the user is in effect, rather than the
+    /// profile's notes root. Feed and git sync are profile-root concepts, so
+    /// several commands check this.
+    pub fn is_custom_root(&self) -> bool {
+        self.custom_root.is_some()
     }
 
     /// Build a notes service.
@@ -74,9 +108,12 @@ impl Core {
     /// a profile switch made elsewhere is picked up without any invalidation
     /// logic on our side.
     pub fn notes(&self) -> Result<Notes, String> {
-        let root = notes_root(&self.env)?;
+        let repository = match &self.custom_root {
+            Some(root) => FilesystemNotesRepository::without_system_folders(root.clone()),
+            None => FilesystemNotesRepository::new(notes_root(&self.env)?),
+        };
         Ok(NotesService::new(
-            FilesystemNotesRepository::new(root),
+            repository,
             FrontMatterNoteDocumentCodec,
             RuntimeNoteBodyCrypto,
             UuidNoteIdGenerator,
@@ -85,13 +122,39 @@ impl Core {
     }
 
     /// Git sync use cases (status / pull / push / SSH key management).
+    ///
+    /// These always act on the profile's notes root — the git remote, SSH key
+    /// and branch all live in the profile — which is why the app refuses git
+    /// commands while a custom folder is open.
     pub fn git(&self) -> GitSyncUseCases<GitSyncAdapter> {
         GitSyncUseCases::new(GitSyncAdapter::new(self.env.clone()))
     }
 
-    /// Absolute path of the active profile's notes root — shown in the status
-    /// bar so it is always obvious which folder is being edited.
+    /// Absolute path of the open root — shown in the title bar so it is always
+    /// obvious which folder is being edited.
     pub fn root_path(&self) -> Result<PathBuf, String> {
-        notes_root(&self.env)
+        match &self.custom_root {
+            Some(root) => Ok(root.clone()),
+            None => notes_root(&self.env),
+        }
     }
+}
+
+/// Expand `~`, then make the path absolute against the working directory.
+pub fn resolve_folder_argument(path: &str) -> Result<PathBuf, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("no folder given".to_string());
+    }
+    let expanded = if trimmed == "~" || trimmed.starts_with("~/") {
+        let home = dirs::home_dir().ok_or_else(|| "no home directory".to_string())?;
+        home.join(trimmed.trim_start_matches('~').trim_start_matches('/'))
+    } else {
+        PathBuf::from(trimmed)
+    };
+    if expanded.is_absolute() {
+        return Ok(expanded);
+    }
+    let cwd = std::env::current_dir().map_err(|err| err.to_string())?;
+    Ok(cwd.join(expanded))
 }

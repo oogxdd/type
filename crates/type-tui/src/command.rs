@@ -19,6 +19,11 @@ pub enum Command {
     New(Option<String>),
     /// `:d` — delete the open note.
     Delete,
+    /// `:open [path]` — browse any folder; without a path, go back to the
+    /// active profile's notes root.
+    Open(Option<String>),
+    /// `:panels` — the `Ctrl+T` toggle, for terminals that eat the chord.
+    Panels,
     /// `:connect <url>` — point this notes root at a git remote, initialising
     /// the repo if needed. Without it there is nothing for `:sync` to talk to.
     Connect(String),
@@ -62,6 +67,14 @@ pub fn parse(input: &str) -> Command {
             }
         }
         "d" | "delete" => Command::Delete,
+        "open" | "o" | "cd" => {
+            if rest.is_empty() {
+                Command::Open(None)
+            } else {
+                Command::Open(Some(rest.to_string()))
+            }
+        }
+        "panels" | "t" => Command::Panels,
         "connect" => Command::Connect(rest.to_string()),
         "sync" => Command::Sync,
         "pull" => Command::Pull,
@@ -132,6 +145,13 @@ mod tests {
         assert_eq!(parse("new Feed"), Command::New(Some("Feed".into())));
         assert_eq!(parse("nope"), Command::Unknown("nope".into()));
         assert_eq!(parse("   "), Command::Empty);
+    }
+
+    #[test]
+    fn open_takes_an_optional_folder() {
+        assert_eq!(parse("open"), Command::Open(None));
+        assert_eq!(parse("open ~/notes"), Command::Open(Some("~/notes".into())));
+        assert_eq!(parse("cd /tmp/wiki"), Command::Open(Some("/tmp/wiki".into())));
     }
 
     #[test]

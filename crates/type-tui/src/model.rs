@@ -6,7 +6,7 @@
 
 use std::collections::HashSet;
 
-use type_core::{FolderNode, NotePreviewEntry};
+use type_core::{FolderNode, NotePreviewEntry, FEED_FOLDER};
 
 /// One visible row in the folder pane.
 pub struct FolderRow {
@@ -19,17 +19,50 @@ pub struct FolderRow {
     pub has_children: bool,
 }
 
+/// The folder pane's id for the opened root itself. It is the empty string
+/// because that is what the core gives the root `FolderNode`, so `find_folder`
+/// resolves it like any other row.
+pub const ROOT_PATH: &str = "";
+
 /// Flatten the tree into the rows the folder pane draws, honouring collapse
 /// state: a collapsed folder contributes its own row but none of its children.
 ///
-/// The root node itself is not rendered — its children (`Feed`, `Archieve`, and
-/// the user's folders) are the top level.
-pub fn flatten_folders(root: &FolderNode, expanded: &HashSet<String>) -> Vec<FolderRow> {
-    let mut rows = Vec::new();
-    for child in &root.children {
-        push_folder_rows(child, expanded, 0, &mut rows);
+/// The opened folder is the first row, with its children (`Feed`, `Archieve`,
+/// and the user's folders) nested under it. Drawing the root matters most for a
+/// folder opened with `type-tui <path>`: it names what is open, reaches notes
+/// that sit directly in it, and collapses the whole tree in one keystroke.
+pub fn flatten_folders(
+    root: &FolderNode,
+    expanded: &HashSet<String>,
+    root_name: &str,
+) -> Vec<FolderRow> {
+    let root_expanded = expanded.contains(ROOT_PATH);
+    let mut rows = vec![FolderRow {
+        path: ROOT_PATH.to_string(),
+        name: root_name.to_string(),
+        depth: 0,
+        expanded: root_expanded,
+        has_children: !root.children.is_empty(),
+    }];
+    if root_expanded {
+        for child in &root.children {
+            push_folder_rows(child, expanded, 1, &mut rows);
+        }
     }
     rows
+}
+
+/// The root-level folder the feed is built from, if this root has one.
+///
+/// Matched case-insensitively: `Feed` is what the app's own notes roots use,
+/// but a folder someone opened with `type-tui ~/notes` may spell it `feed` —
+/// and a folder with no feed at all is the ordinary case, which is why this
+/// returns an `Option` instead of assuming the name.
+pub fn find_feed_folder(root: &FolderNode) -> Option<String> {
+    root.children
+        .iter()
+        .find(|child| child.name.eq_ignore_ascii_case(FEED_FOLDER))
+        .map(|child| child.path.clone())
 }
 
 fn push_folder_rows(
@@ -663,6 +696,80 @@ impl FeedTreeBuilder {
             children,
             notes,
         })
+    }
+}
+
+#[cfg(test)]
+mod folder_tests {
+    use super::*;
+
+    fn folder(name: &str, path: &str, children: Vec<FolderNode>) -> FolderNode {
+        FolderNode {
+            name: name.into(),
+            path: path.into(),
+            children,
+            notes: Vec::new(),
+        }
+    }
+
+    fn tree() -> FolderNode {
+        folder(
+            "Notes",
+            "",
+            vec![
+                folder("Feed", "Feed", Vec::new()),
+                folder(
+                    "projects",
+                    "projects",
+                    vec![folder("beta", "projects/beta", Vec::new())],
+                ),
+            ],
+        )
+    }
+
+    #[test]
+    fn the_open_root_is_the_first_row() {
+        let expanded = HashSet::from([ROOT_PATH.to_string()]);
+        let rows = flatten_folders(&tree(), &expanded, "wiki");
+        assert_eq!(rows[0].path, ROOT_PATH);
+        assert_eq!(rows[0].name, "wiki");
+        assert_eq!(rows[0].depth, 0);
+        // Children hang off it rather than sitting at the top level.
+        assert!(rows[1..].iter().all(|row| row.depth >= 1));
+    }
+
+    #[test]
+    fn collapsing_the_root_hides_the_whole_tree() {
+        let rows = flatten_folders(&tree(), &HashSet::new(), "wiki");
+        assert_eq!(rows.len(), 1);
+        assert!(!rows[0].expanded);
+    }
+
+    #[test]
+    fn nested_folders_appear_only_when_their_parent_is_expanded() {
+        let mut expanded = HashSet::from([ROOT_PATH.to_string()]);
+        assert!(!flatten_folders(&tree(), &expanded, "wiki")
+            .iter()
+            .any(|row| row.path == "projects/beta"));
+        expanded.insert("projects".to_string());
+        assert!(flatten_folders(&tree(), &expanded, "wiki")
+            .iter()
+            .any(|row| row.path == "projects/beta" && row.depth == 2));
+    }
+
+    #[test]
+    fn feed_is_found_by_name_whatever_its_case() {
+        assert_eq!(find_feed_folder(&tree()).as_deref(), Some("Feed"));
+        let lowercase = folder("Notes", "", vec![folder("feed", "feed", Vec::new())]);
+        assert_eq!(find_feed_folder(&lowercase).as_deref(), Some("feed"));
+    }
+
+    #[test]
+    fn a_folder_without_a_feed_has_none() {
+        // The case that switches the whole Feed view off: an ordinary folder
+        // someone opened to browse.
+        let plain = folder("wiki", "", vec![folder("reading", "reading", Vec::new())]);
+        assert_eq!(find_feed_folder(&plain), None);
     }
 }
 
