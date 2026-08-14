@@ -7,13 +7,14 @@ alongside the Tauri desktop commands and the UniFFI mobile exports.
 cargo run -p type-tui
 ```
 
-Three areas divided by thin rules: navigation on the left, the note list in
-the middle, the editor on the right. The left panel switches between the
-**Feed** (notes grouped by date — Today / Yesterday / This week / Last week /
-Month → Week → Day, the same buckets as the desktop app) and the **Folders**
-tree. Vim-like keys, a `:` command line, git sync, and live auto-preview:
-moving `j`/`k` in the note list shows each note's body in the editor as you
-scroll, before you commit to opening it.
+One rounded frame around everything: navigation on the left, the note list in
+the middle, the editor on the right, separated by thin rules. The left panel
+switches between the **Feed** (notes grouped by date — Today / Yesterday /
+This week / Last week / Month → Week → Day, the same buckets as the desktop
+app) and the **Folders** tree; when the notes root has no `Feed` folder, only
+the folder tree is offered. Vim-like keys, a `:` command line, background git
+sync, and live auto-preview: moving `j`/`k` in the note list shows each note's
+body in the editor as you scroll, before you commit to opening it.
 
 ## Which notes root it opens
 
@@ -28,16 +29,18 @@ To use a real notes root, say so explicitly:
 TYPE_TUI_APP_DATA_DIR="$HOME/.local/share/com.digital.type2" cargo run -p type-tui
 ```
 
-The left pane header always shows which root is open.
+The container's title always shows which root is open.
 
 ## Keys
 
 | | |
 |---|---|
-| `Ctrl+W` then `h` / `l` | move focus between panes (`Ctrl+W Ctrl+W` cycles) |
+| `Ctrl+W` | cycle pane focus (one press = one hop) |
 | `Tab` | in the left panel: switch between Feed and Folders |
+| `Cmd+T` / `Alt+T` | hide / show both navigation panels |
 | `j` / `k` | move down / up in any pane (the editor previews the note under the list cursor) |
-| `l` / `h` | in the tree: expand / collapse; in the list: open the note |
+| `→` / `l` | in the tree: expand, or descend into an open bucket; on a leaf folder: jump to its notes; in the list: open the note |
+| `←` / `h` | in the tree: collapse, or jump up to the parent row; in the list: focus the tree |
 | `Enter` | open the folder / note (focus the editor) |
 | `g` / `G` | jump to first / last |
 | `o` | new note in the current folder (list pane) |

@@ -8,7 +8,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph},
     Frame,
 };
 
@@ -26,19 +26,38 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         .constraints([Constraint::Min(3), Constraint::Length(1)])
         .split(frame.area());
 
+    // One frame around everything. The dividers inside stay thin — the outer
+    // border is what gives the layout its shape, the dividers only separate.
+    let title = Line::from(vec![
+        Span::styled(" type ", Style::default().fg(FOCUSED).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("· {} ", short_root(&app.root_label)), dim()),
+    ]);
+    let container = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::DarkGray))
+        .title(title);
+    frame.render_widget(&container, outer[0]);
+    let inner = container.inner(outer[0]);
+
+    let show_left = !app.left_hidden;
+    let constraints: &[Constraint] = if show_left {
+        &[Constraint::Percentage(24), Constraint::Percentage(26), Constraint::Min(20)]
+    } else {
+        &[Constraint::Percentage(38), Constraint::Min(20)]
+    };
     let panes = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(24),
-            Constraint::Percentage(26),
-            Constraint::Min(20),
-        ])
-        .split(outer[0]);
+        .constraints(constraints)
+        .split(inner);
 
     let focus = app.focus;
-    draw_left(frame, &app.nav, focus == Pane::Folders, &app.root_label, panes[0]);
-    draw_middle(frame, &app.nav, focus == Pane::Notes, panes[1]);
-    draw_editor(frame, &mut app.ed, focus == Pane::Editor, focus == Pane::Notes, panes[2]);
+    if show_left {
+        draw_left(frame, &app.nav, focus == Pane::Folders, panes[0]);
+    }
+    let middle = if show_left { panes[1] } else { panes[0] };
+    let editor = panes[panes.len() - 1];
+    draw_middle(frame, &app.nav, focus == Pane::Notes, middle, show_left);
+    draw_editor(frame, &mut app.ed, focus == Pane::Editor, focus == Pane::Notes, editor);
     draw_status(frame, app, outer[1]);
 }
 
@@ -85,7 +104,7 @@ fn empty_list(label: &'static str) -> List<'static> {
 
 // ── Left pane: feed / folders ──────────────────────────────────────────────
 
-fn draw_left(frame: &mut Frame, nav: &NavState, focused: bool, root_label: &str, area: Rect) {
+fn draw_left(frame: &mut Frame, nav: &NavState, focused: bool, area: Rect) {
     let (header, body) = header_body(area);
 
     let mode_label = match nav.nav_mode {
@@ -96,7 +115,6 @@ fn draw_left(frame: &mut Frame, nav: &NavState, focused: bool, root_label: &str,
         Paragraph::new(Line::from(vec![
             Span::styled(mode_label, header_style(focused)),
             Span::styled("  Tab", dim()),
-            Span::styled(format!("  {}", short_root(root_label)), dim()),
         ])),
         header,
     );
@@ -172,15 +190,17 @@ fn feed_item_rows(rows: &[model::FeedRow]) -> Vec<ListItem<'static>> {
 
 // ── Middle pane: note list ─────────────────────────────────────────────────
 
-fn draw_middle(frame: &mut Frame, nav: &NavState, focused: bool, area: Rect) {
-    let divider_color = if focused || nav_is_active(nav) {
-        FOCUSED
+fn draw_middle(frame: &mut Frame, nav: &NavState, focused: bool, area: Rect, show_divider: bool) {
+    // When the navigation is hidden there is nothing to the left of this pane
+    // except the container border — a divider there would read as a double line.
+    let block = if show_divider {
+        let color = if focused { FOCUSED } else { Color::DarkGray };
+        Block::default()
+            .borders(Borders::LEFT)
+            .border_style(Style::default().fg(color))
     } else {
-        Color::DarkGray
+        Block::default()
     };
-    let block = Block::default()
-        .borders(Borders::LEFT)
-        .border_style(Style::default().fg(divider_color));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -213,12 +233,6 @@ fn draw_middle(frame: &mut Frame, nav: &NavState, focused: bool, area: Rect) {
         state.select(Some(nav.note_cursor));
     }
     frame.render_stateful_widget(list, body, &mut state);
-}
-
-/// Whether the nav pane or the note list has keyboard focus — used only to
-/// decide the divider colour.
-fn nav_is_active(_nav: &NavState) -> bool {
-    false
 }
 
 fn middle_title(nav: &NavState) -> String {
@@ -341,9 +355,6 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
     }
     if app.git_busy() {
         spans.push(Span::styled("  ⟳ git…", Style::default().fg(Color::Yellow)));
-    }
-    if app.pending_window {
-        spans.push(Span::styled("  ^W", Style::default().fg(Color::Yellow)));
     }
 
     frame.render_widget(Paragraph::new(Line::from(spans)), area);

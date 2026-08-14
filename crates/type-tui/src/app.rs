@@ -242,8 +242,9 @@ pub struct App {
     pub status: String,
     pub root_label: String,
     pub should_quit: bool,
-    /// True after `Ctrl+W`, waiting for a direction key.
-    pub pending_window: bool,
+    /// Both left panels (feed / folders) hidden, leaving notes + editor.
+    /// Toggled with Cmd+T (Alt+T on terminals without a Super key).
+    pub left_hidden: bool,
     /// A git operation queued by a command, drained by the event loop.
     pub pending_git: Option<GitTask>,
     /// How many background git operations are in flight. One at a time:
@@ -265,10 +266,10 @@ impl App {
             ed: EditorState::new(),
             focus: Pane::Folders,
             prompt: None,
-            status: "Tab feed/folders · j/k move · Enter open · Ctrl+W panes · : for commands".to_string(),
+            status: "Ctrl+W cycles panes · Tab feed/folders · j/k move · Enter open · : for commands".to_string(),
             root_label,
             should_quit: false,
-            pending_window: false,
+            left_hidden: false,
             pending_git: None,
             git_in_flight: 0,
         };
@@ -306,6 +307,12 @@ impl App {
     /// structural change.
     fn refresh_current(&mut self) {
         self.refresh_tree();
+        // A sync may have brought in a notes root with no Feed folder — leave
+        // feed mode rather than render an empty panel forever.
+        if self.nav.nav_mode == NavMode::Feed && model::find_folder(&self.nav.tree, "Feed").is_none()
+        {
+            self.nav.nav_mode = NavMode::Folders;
+        }
         match self.nav.nav_mode {
             NavMode::Folders => self.reload_notes(),
             NavMode::Feed => {
@@ -418,8 +425,17 @@ impl App {
     }
 
     /// Switch the left panel between the folder tree and the feed tree.
+    ///
+    /// Feed mode is only offered when the notes root actually has a `Feed`
+    /// folder: with a custom root that never had one, the feed tree would be
+    /// an eternally empty panel, so `Tab` and `:feed` are declined and the
+    /// folder tree stays the only navigation.
     pub fn set_nav_mode(&mut self, mode: NavMode) {
         if self.nav.nav_mode == mode {
+            return;
+        }
+        if mode == NavMode::Feed && model::find_folder(&self.nav.tree, "Feed").is_none() {
+            self.status = "no Feed folder in this notes root".to_string();
             return;
         }
         self.nav.nav_mode = mode;
@@ -506,18 +522,21 @@ impl App {
             return;
         }
 
-        if self.pending_window {
-            self.pending_window = false;
-            self.focus = match key.code {
-                KeyCode::Char('h') | KeyCode::Left => self.pane_left(),
-                KeyCode::Char('l') | KeyCode::Right => self.pane_right(),
-                KeyCode::Char('w') => self.pane_right(),
-                _ => self.focus,
-            };
+        // A single Ctrl+W moves focus to the next pane — no prefix sequence.
+        // (Vim's `<C-w>h/l` prefix read as "swallowed keystroke" here; one
+        // press, one hop, and with three panes a cycle is enough.)
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('w') {
+            self.cycle_focus();
             return;
         }
-        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('w') {
-            self.pending_window = true;
+
+        // Cmd+T hides the navigation panels (Alt+T where terminals have no
+        // Super key). Global on purpose: it must work from any pane.
+        let hide_panels = key.code == KeyCode::Char('t')
+            && (key.modifiers.contains(KeyModifiers::SUPER)
+                || key.modifiers.contains(KeyModifiers::ALT));
+        if hide_panels {
+            self.toggle_left_panels();
             return;
         }
 
@@ -528,20 +547,33 @@ impl App {
         }
     }
 
-    fn pane_left(&self) -> Pane {
-        match self.focus {
-            Pane::Folders => Pane::Folders,
-            Pane::Notes => Pane::Folders,
-            Pane::Editor => Pane::Notes,
-        }
+    /// Move focus to the next visible pane, wrapping around.
+    fn cycle_focus(&mut self) {
+        let candidates: Vec<Pane> = [Pane::Folders, Pane::Notes, Pane::Editor]
+            .into_iter()
+            .filter(|pane| !(*pane == Pane::Folders && self.left_hidden))
+            .collect();
+        let next = candidates
+            .iter()
+            .position(|pane| *pane == self.focus)
+            .map(|index| candidates[(index + 1) % candidates.len()])
+            .unwrap_or(Pane::Notes);
+        self.focus = next;
     }
 
-    fn pane_right(&self) -> Pane {
-        match self.focus {
-            Pane::Folders => Pane::Notes,
-            Pane::Notes => Pane::Editor,
-            Pane::Editor => Pane::Folders,
+    /// Show or hide both left panels. Hiding moves focus off the navigation
+    /// (it is about to disappear); showing restores the layout but leaves
+    /// focus where it was.
+    pub fn toggle_left_panels(&mut self) {
+        self.left_hidden = !self.left_hidden;
+        if self.left_hidden && self.focus == Pane::Folders {
+            self.focus = Pane::Notes;
         }
+        self.status = if self.left_hidden {
+            "navigation hidden · Cmd/Ctrl+Alt+T to show".to_string()
+        } else {
+            "navigation shown".to_string()
+        };
     }
 
     fn folders_key(&mut self, key: KeyEvent) {
@@ -573,8 +605,12 @@ impl App {
                 self.select_left();
                 self.preview_selected_note();
             }
-            KeyCode::Char('l') | KeyCode::Right | KeyCode::Char(' ') => self.toggle_left_expand(true),
-            KeyCode::Char('h') | KeyCode::Left => self.toggle_left_expand(false),
+            // `l` / `→` opens a level: expand a collapsed bucket, step into an
+            // expanded one, and on a leaf folder move to the note list.
+            KeyCode::Char('l') | KeyCode::Right | KeyCode::Char(' ') => self.descend_left(),
+            // `h` / `←` closes a level: collapse an expanded bucket, or jump
+            // up to the parent of a child row.
+            KeyCode::Char('h') | KeyCode::Left => self.ascend_left(),
             KeyCode::Enter => {
                 self.select_left();
                 self.focus = Pane::Notes;
@@ -582,6 +618,81 @@ impl App {
             }
             KeyCode::Char(':') => self.open_prompt(PromptKind::Command),
             _ => {}
+        }
+    }
+
+    /// `(has_children, expanded, depth)` of the row under the left cursor.
+    fn left_row_state(&self) -> Option<(bool, bool, usize)> {
+        match self.nav.nav_mode {
+            NavMode::Folders => self
+                .nav
+                .folder_rows
+                .get(self.nav.folder_cursor)
+                .map(|row| (row.has_children, row.expanded, row.depth)),
+            NavMode::Feed => self
+                .nav
+                .feed_rows
+                .get(self.nav.folder_cursor)
+                .map(|row| (row.has_children, row.expanded, row.depth)),
+        }
+    }
+
+    fn descend_left(&mut self) {
+        let Some((has_children, expanded, _)) = self.left_row_state() else {
+            return;
+        };
+        if !has_children {
+            // A leaf folder has nothing to reveal — move on to its notes.
+            // (Feed buckets always have children or are day leaves; day leaves
+            // show the same notes the middle pane already lists, so nothing
+            // to do there.)
+            if self.nav.nav_mode == NavMode::Folders {
+                self.focus = Pane::Notes;
+                self.preview_selected_note();
+            }
+            return;
+        }
+        if expanded {
+            // Already open — step onto the first child row.
+            self.nav.folder_cursor = (self.nav.folder_cursor + 1).min(self.nav.left_len().saturating_sub(1));
+        } else {
+            self.toggle_left_expand(true);
+        }
+    }
+
+    fn ascend_left(&mut self) {
+        let Some((has_children, expanded, depth)) = self.left_row_state() else {
+            return;
+        };
+        if has_children && expanded {
+            self.toggle_left_expand(false);
+            return;
+        }
+        if depth == 0 {
+            // Top level, collapsed: nothing to ascend out of.
+            return;
+        }
+        // Child row: jump to the nearest preceding row one level up — the
+        // flattened list is depth-first, so that row is the parent.
+        let target_depth = depth - 1;
+        let parent = match self.nav.nav_mode {
+            NavMode::Folders => self
+                .nav
+                .folder_rows
+                .iter()
+                .take(self.nav.folder_cursor)
+                .rposition(|row| row.depth == target_depth),
+            NavMode::Feed => self
+                .nav
+                .feed_rows
+                .iter()
+                .take(self.nav.folder_cursor)
+                .rposition(|row| row.depth == target_depth),
+        };
+        if let Some(index) = parent {
+            self.nav.folder_cursor = index;
+            self.select_left();
+            self.preview_selected_note();
         }
     }
 
@@ -622,7 +733,12 @@ impl App {
                 self.preview_selected_note();
             }
             KeyCode::Enter | KeyCode::Char('l') | KeyCode::Right => self.open_selected_note(),
-            KeyCode::Char('h') | KeyCode::Left => self.focus = Pane::Folders,
+            KeyCode::Char('h') | KeyCode::Left => {
+                // Only meaningful when the navigation panel is on screen.
+                if !self.left_hidden {
+                    self.focus = Pane::Folders;
+                }
+            }
             KeyCode::Char('o') => self.create_note(None),
             KeyCode::Char(':') => self.open_prompt(PromptKind::Command),
             _ => {}
@@ -780,7 +896,7 @@ impl App {
             }
             Command::Help => {
                 self.status =
-                    "Tab feed/folders · j/k move · Enter open · Ctrl+W pane · i insert · :mv <folder> · :new · :d · :feed · :folders · :connect · :sync · :q"
+                    "Ctrl+W cycle panes · Tab feed/folders · →/← expand · j/k move · Enter open · Cmd+T hide panels · :h more"
                         .to_string();
             }
             Command::Unknown(name) => self.status = format!("unknown command: {name}"),
