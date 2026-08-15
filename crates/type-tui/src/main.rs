@@ -28,7 +28,9 @@ use std::{io, time::Duration};
 use ratatui::crossterm::{
     event::{self, Event, KeyEventKind},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{
+        disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, SetTitle,
+    },
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::runtime::Runtime;
@@ -183,7 +185,9 @@ fn event_loop(
 fn setup_terminal() -> io::Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    // iTerm otherwise keeps whatever transient title the launcher used (often
+    // "Loading…") for the lifetime of the alternate-screen application.
+    execute!(stdout, SetTitle("type"), EnterAlternateScreen)?;
     Terminal::new(CrosstermBackend::new(stdout))
 }
 

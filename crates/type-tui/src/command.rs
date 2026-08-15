@@ -18,7 +18,7 @@ pub enum UiStyle {
     Frame,
     /// Three independent rounded panel containers; no parent frame.
     Panes,
-    /// Borderless navigation rails feeding a contained writing surface.
+    /// Dedicated panel headers and a completely open writing surface.
     Focus,
 }
 
@@ -35,7 +35,7 @@ impl UiStyle {
         match self {
             Self::Frame => "frame",
             Self::Panes => "panes",
-            Self::Focus => "focus",
+            Self::Focus => "writing",
         }
     }
 }
@@ -68,6 +68,12 @@ pub enum Command {
     SetUiStyle(UiStyle),
     /// Cycle frame → panes → focus without remembering a name.
     NextUiStyle,
+    /// Show the open note as rendered Markdown (read-only).
+    ViewMarkdown,
+    /// Return the open note to its editable Markdown source.
+    ViewSource,
+    /// Switch between source and rendered Markdown.
+    ToggleMarkdownView,
     /// `:connect <url>` — point this notes root at a git remote, initialising
     /// the repo if needed. Without it there is nothing for `:sync` to talk to.
     Connect(String),
@@ -96,12 +102,49 @@ pub struct PaletteSuggestion {
     pub input: String,
     pub label: String,
     pub detail: String,
+    pub group: PaletteGroup,
+    pub icon: &'static str,
+}
+
+/// Stable palette sections. Suggestions are returned in this order so the
+/// keyboard cursor and the grouped renderer always agree about what is next.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PaletteGroup {
+    Note,
+    Navigate,
+    View,
+    Git,
+    App,
+}
+
+impl PaletteGroup {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Note => "Note",
+            Self::Navigate => "Navigate",
+            Self::View => "View",
+            Self::Git => "Git",
+            Self::App => "App",
+        }
+    }
+
+    pub fn icon(self) -> &'static str {
+        match self {
+            Self::Note => "✎",
+            Self::Navigate => "↪",
+            Self::View => "◉",
+            Self::Git => "⎇",
+            Self::App => "⌘",
+        }
+    }
 }
 
 struct CatalogEntry {
     input: &'static str,
     label: &'static str,
     keywords: &'static str,
+    group: PaletteGroup,
+    icon: &'static str,
 }
 
 /// Discoverable commands. Their execution still goes through [`parse`], so
@@ -111,126 +154,204 @@ const CATALOG: &[CatalogEntry] = &[
         input: "mv ",
         label: "Move note to folder…",
         keywords: "move file folder destination",
+        group: PaletteGroup::Note,
+        icon: "→",
     },
     CatalogEntry {
         input: "mark:archive",
         label: "Mark note archived",
         keywords: "archive hide marker",
+        group: PaletteGroup::Note,
+        icon: "◇",
     },
     CatalogEntry {
         input: "mark:unarchive",
         label: "Mark note unarchived",
         keywords: "restore archive marker",
+        group: PaletteGroup::Note,
+        icon: "◇",
     },
     CatalogEntry {
         input: "mark:reviewed",
         label: "Mark note reviewed",
         keywords: "review done marker",
+        group: PaletteGroup::Note,
+        icon: "✓",
     },
     CatalogEntry {
         input: "mark:unreviewed",
         label: "Mark note unreviewed",
         keywords: "review pending marker",
+        group: PaletteGroup::Note,
+        icon: "✓",
     },
     CatalogEntry {
         input: "new",
         label: "Create note",
         keywords: "add write note",
+        group: PaletteGroup::Note,
+        icon: "+",
     },
     CatalogEntry {
         input: "search ",
         label: "Search in note…",
         keywords: "find pattern regex",
+        group: PaletteGroup::Navigate,
+        icon: "?",
     },
     CatalogEntry {
         input: "feed",
         label: "Open Feed",
         keywords: "navigate inbox",
+        group: PaletteGroup::Navigate,
+        icon: "≡",
     },
     CatalogEntry {
         input: "folders",
         label: "Open folders",
         keywords: "navigate tree knowledge",
+        group: PaletteGroup::Navigate,
+        icon: "▸",
     },
     CatalogEntry {
         input: "panels",
         label: "Toggle navigation panels",
         keywords: "hide show focus zen",
+        group: PaletteGroup::View,
+        icon: "◫",
+    },
+    CatalogEntry {
+        input: "view:toggle",
+        label: "Toggle Markdown preview",
+        keywords: "render rendered markdown glow source preview",
+        group: PaletteGroup::View,
+        icon: "M",
+    },
+    CatalogEntry {
+        input: "view:markdown",
+        label: "View rendered Markdown",
+        keywords: "render markdown glow preview read",
+        group: PaletteGroup::View,
+        icon: "M",
+    },
+    CatalogEntry {
+        input: "view:source",
+        label: "Edit Markdown source",
+        keywords: "raw source markdown edit",
+        group: PaletteGroup::View,
+        icon: "#",
     },
     CatalogEntry {
         input: "ui:next",
         label: "Try next UI layout",
         keywords: "appearance experiment chrome cycle",
+        group: PaletteGroup::View,
+        icon: "◌",
     },
     CatalogEntry {
         input: "ui:frame",
         label: "UI: shared outer frame",
         keywords: "appearance container dividers layout",
+        group: PaletteGroup::View,
+        icon: "□",
     },
     CatalogEntry {
         input: "ui:panes",
         label: "UI: separate pane cards",
         keywords: "appearance containers cards layout",
+        group: PaletteGroup::View,
+        icon: "▦",
     },
     CatalogEntry {
         input: "ui:focus",
         label: "UI: writing-focused hybrid",
         keywords: "appearance custom editor rail layout",
+        group: PaletteGroup::View,
+        icon: "✎",
     },
     CatalogEntry {
         input: "write",
         label: "Save note",
         keywords: "write persist",
+        group: PaletteGroup::Note,
+        icon: "✓",
     },
     CatalogEntry {
         input: "delete",
         label: "Delete note",
         keywords: "remove trash",
+        group: PaletteGroup::Note,
+        icon: "×",
     },
     CatalogEntry {
         input: "open ",
         label: "Open working folder…",
         keywords: "cd root browse",
+        group: PaletteGroup::Navigate,
+        icon: "↪",
     },
     CatalogEntry {
         input: "sync",
         label: "Pull, then push",
         keywords: "git synchronize",
+        group: PaletteGroup::Git,
+        icon: "⇅",
     },
     CatalogEntry {
         input: "pull",
         label: "Pull changes",
         keywords: "git download",
+        group: PaletteGroup::Git,
+        icon: "↓",
     },
     CatalogEntry {
         input: "push",
         label: "Push changes",
         keywords: "git upload",
+        group: PaletteGroup::Git,
+        icon: "↑",
     },
     CatalogEntry {
         input: "status",
         label: "Show git status",
         keywords: "git changes",
+        group: PaletteGroup::Git,
+        icon: "●",
+    },
+    CatalogEntry {
+        input: "connect ",
+        label: "Connect git remote…",
+        keywords: "git remote url branch setup",
+        group: PaletteGroup::Git,
+        icon: "⌘",
     },
     CatalogEntry {
         input: "key",
         label: "Show SSH public key",
         keywords: "git connect ssh",
+        group: PaletteGroup::Git,
+        icon: "◇",
     },
     CatalogEntry {
         input: "help",
         label: "Show key reminder",
         keywords: "shortcuts keys",
+        group: PaletteGroup::App,
+        icon: "?",
     },
     CatalogEntry {
         input: "quit",
         label: "Save and quit",
         keywords: "exit close",
+        group: PaletteGroup::App,
+        icon: "✕",
     },
     CatalogEntry {
         input: "q!",
         label: "Quit without saving",
         keywords: "exit force discard",
+        group: PaletteGroup::App,
+        icon: "!",
     },
 ];
 
@@ -275,6 +396,9 @@ pub fn parse(input: &str) -> Command {
         "ui:frame" => Command::SetUiStyle(UiStyle::Frame),
         "ui:panes" => Command::SetUiStyle(UiStyle::Panes),
         "ui:focus" => Command::SetUiStyle(UiStyle::Focus),
+        "view" | "view:toggle" => Command::ToggleMarkdownView,
+        "markdown" | "md" | "preview" | "view:markdown" => Command::ViewMarkdown,
+        "source" | "view:source" => Command::ViewSource,
         "connect" => Command::Connect(rest.to_string()),
         "sync" => Command::Sync,
         "pull" => Command::Pull,
@@ -304,23 +428,61 @@ pub fn palette_suggestions(query: &str, folders: &[String]) -> Vec<PaletteSugges
     }
 
     let needle = query.trim().to_lowercase();
-    let mut scored: Vec<((u8, usize, usize), &CatalogEntry)> = CATALOG
+    let mut scored: Vec<(PaletteGroup, (u8, usize, usize), usize, &CatalogEntry)> = CATALOG
         .iter()
-        .filter_map(|entry| {
-            let searchable =
-                format!("{} {} {}", entry.input, entry.label, entry.keywords).to_lowercase();
-            fuzzy_score(&needle, &searchable).map(|score| (score, entry))
+        .enumerate()
+        .filter_map(|(index, entry)| {
+            let searchable = format!(
+                "{} {} {} {}",
+                entry.input,
+                entry.label,
+                entry.keywords,
+                entry.group.label()
+            )
+            .to_lowercase();
+            let score = if needle.is_empty() {
+                Some((0, catalog_order(entry.input), 0))
+            } else {
+                fuzzy_score(&needle, &searchable)
+            };
+            score
+                // Very loose cross-word subsequences create surprising rows
+                // (`glow` used to match "Open working folder"). Keep fuzzy
+                // discovery, but require the matched span to stay close to
+                // what the user typed.
+                .filter(|(tier, span, _)| {
+                    *tier < 2 || *span <= needle.chars().count().saturating_mul(3)
+                })
+                .map(|score| (entry.group, score, index, entry))
         })
         .collect();
-    scored.sort_by(|a, b| a.0.cmp(&b.0));
+    scored.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
     scored
         .into_iter()
-        .map(|(_, entry)| PaletteSuggestion {
+        .map(|(_, _, _, entry)| PaletteSuggestion {
             input: entry.input.to_string(),
             label: entry.label.to_string(),
             detail: entry.input.trim().to_string(),
+            group: entry.group,
+            icon: entry.icon,
         })
         .collect()
+}
+
+/// Default order inside each section. A filtered palette still ranks by its
+/// fuzzy score; these priorities only shape the useful, query-empty overview.
+fn catalog_order(input: &str) -> usize {
+    match input {
+        "new" | "feed" | "view:toggle" | "sync" | "help" => 0,
+        "write" | "folders" | "view:markdown" | "pull" | "quit" => 1,
+        "mv " | "open " | "view:source" | "push" | "q!" => 2,
+        "delete" | "search " | "panels" | "status" => 3,
+        "mark:archive" | "ui:focus" | "connect " => 4,
+        "mark:unarchive" | "ui:next" | "key" => 5,
+        "mark:reviewed" | "ui:panes" => 6,
+        "mark:unreviewed" | "ui:frame" => 7,
+        _ => usize::MAX,
+    }
 }
 
 fn move_suggestions(argument: &str, folders: &[String]) -> Vec<PaletteSuggestion> {
@@ -342,6 +504,8 @@ fn move_suggestions(argument: &str, folders: &[String]) -> Vec<PaletteSuggestion
             } else {
                 "new folder".into()
             },
+            group: PaletteGroup::Note,
+            icon: "→",
         });
     }
 
@@ -353,6 +517,8 @@ fn move_suggestions(argument: &str, folders: &[String]) -> Vec<PaletteSuggestion
             input: format!("mv {folder}"),
             label: format!("Move note to {folder}"),
             detail: folder,
+            group: PaletteGroup::Note,
+            icon: "→",
         });
     }
     rows
@@ -454,6 +620,9 @@ mod tests {
         assert_eq!(parse("search roadmap"), Command::Search("roadmap".into()));
         assert_eq!(parse("ui"), Command::NextUiStyle);
         assert_eq!(parse("ui:focus"), Command::SetUiStyle(UiStyle::Focus));
+        assert_eq!(parse("md"), Command::ViewMarkdown);
+        assert_eq!(parse("view:source"), Command::ViewSource);
+        assert_eq!(parse("view"), Command::ToggleMarkdownView);
         assert_eq!(parse("nope"), Command::Unknown("nope".into()));
         assert_eq!(parse("   "), Command::Empty);
     }
@@ -509,6 +678,21 @@ mod tests {
 
         let rows = palette_suggestions("destination", &[]);
         assert_eq!(rows[0].input, "mv ");
+    }
+
+    #[test]
+    fn empty_palette_is_grouped_in_visual_navigation_order() {
+        let rows = palette_suggestions("", &[]);
+        assert!(rows.windows(2).all(|pair| pair[0].group <= pair[1].group));
+        assert_eq!(rows.first().map(|row| row.group), Some(PaletteGroup::Note));
+        assert_eq!(rows.last().map(|row| row.group), Some(PaletteGroup::App));
+    }
+
+    #[test]
+    fn markdown_reader_commands_live_in_view() {
+        let rows = palette_suggestions("glow", &[]);
+        assert_eq!(rows[0].input, "view:markdown");
+        assert!(rows.iter().all(|row| row.group == PaletteGroup::View));
     }
 
     #[test]

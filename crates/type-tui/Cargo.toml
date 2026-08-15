@@ -14,7 +14,7 @@ path = "src/main.rs"
 # profile backup zip. We keep `git-sync` because `:sync` needs libgit2.
 type-core = { path = "../type-core", default-features = false, features = ["git-sync"] }
 
-ratatui = "0.30"
+ratatui = { version = "0.30", features = ["unstable-rendered-line-info"] }
 
 # NOTE: the widely-known `tui-textarea` (rhysd) has no soft wrap — its word-wrap
 # issue has been open since 2022 and the crate's last release was Oct 2024.
@@ -22,6 +22,11 @@ ratatui = "0.30"
 # since notes are markdown paragraphs stored as single long lines.
 # "search" adds the regex-backed `/pattern` search we bind to vim's `/`, `n`, `N`.
 tui-textarea-2 = { version = "0.12", features = ["search"] }
+
+# Render the same Markdown source as a styled, read-only document. Syntax
+# highlighting is deliberately off: keeping the reader light matters more than
+# embedding a full TextMate theme engine in the terminal shell.
+tui-markdown = { version = "0.3.9", default-features = false }
 
 # Resolve the platform app-data directory (what `AppEnv` needs), so the TUI
 # reads the same notes root the desktop app writes.

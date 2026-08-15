@@ -76,7 +76,7 @@ drive() {
 # together. Assertions therefore drop spaces on both sides and match
 # space-free patterns.
 screen() {
-    sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g; s/\x1b[()][A-Z0-9]//g; s/\x1b[=>]//g' "$LOG" \
+    sed 's/\x1b][^\x07]*\x07//g; s/\x1b\[[0-9;?]*[a-zA-Z]//g; s/\x1b[()][A-Z0-9]//g; s/\x1b[=>]//g' "$LOG" \
         | tr -d '\r '
 }
 
@@ -154,25 +154,42 @@ echo "9. all three UI experiments switch without restarting"
 drive 1 ':ui:panes\r' 1 ':ui:focus\r' 1 ':ui:frame\r' 2 ':q!\r'
 SCREEN="$(screen)"
 echo "$SCREEN" | grep -q 'UIlayout→panes' || fail "pane-card layout did not activate"
-echo "$SCREEN" | grep -q 'UIlayout→focus' || fail "writing-focused layout did not activate"
+echo "$SCREEN" | grep -q 'UIlayout→writing' || fail "writing-focused layout did not activate"
 echo "$SCREEN" | grep -q 'UIlayout→frame' || fail "shared-frame layout did not activate"
 pass "frame, panes, and focus layouts render"
 
-echo "10. an arbitrary folder opens with no Feed and nothing written into it"
+echo "10. an arbitrary markdown folder opens and renders without changing it"
 WIKI="$WORK/wiki"
 mkdir -p "$WIKI/projects"
+printf -- '%s\n' \
+    '---' \
+    'topic: career-timeline' \
+    'sources:' \
+    '  - iCloud/jobs/60-80.md' \
+    '---' \
+    '' \
+    '# Career' \
+    '' \
+    '> A quoted source.' \
+    '' \
+    '- first role' > "$WIKI/career-timeline.md"
 printf -- '# Inbox\n\nloose note\n' > "$WIKI/inbox.md"
 printf -- '# Alpha\n\nproject note\n' > "$WIKI/projects/alpha.md"
+cp "$WIKI/career-timeline.md" "$WORK/career-before.md"
 ARGS="$WIKI"
-drive 1 '\t' 2 ':q!\r'
+drive 1 'm' 1 '\t' 2 ':q!\r'
 ARGS=""
 SCREEN="$(screen)"
-echo "$SCREEN" | grep -q 'noFeedfolderhere' || fail "Tab offered a Feed that does not exist"
+echo "$SCREEN" | grep -q 'foldersonly' || fail "Tab offered a Feed that does not exist"
 echo "$SCREEN" | grep -q 'wiki' || fail "the opened folder is not the tree root"
+echo "$SCREEN" | grep -q 'renderedMarkdow' || fail "m did not open the rendered Markdown reader"
+echo "$SCREEN" | grep -q 'Career' || fail "rendered Markdown body did not appear"
+cmp -s "$WORK/career-before.md" "$WIKI/career-timeline.md" \
+    || fail "browsing rewrote the markdown/frontmatter"
 [ ! -d "$WIKI/Feed" ] || fail "opening a folder created Feed/ in it"
 [ ! -d "$WIKI/Archieve" ] || fail "opening a folder created Archieve/ in it"
 [ ! -d "$WIKI/Recordings" ] || fail "opening a folder created Recordings/ in it"
-pass "custom folder browses without being converted into a notes root"
+pass "custom folder renders read-only without being converted into a notes root"
 
 echo
 echo "all smoke tests passed"

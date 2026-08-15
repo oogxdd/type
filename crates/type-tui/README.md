@@ -8,8 +8,10 @@ cargo run -p type-tui
 ```
 
 Three panes show navigation on the left, the note list in the middle, and the
-editor on the right. Their chrome is an experiment you can switch live: a
-shared outer frame, three separate pane cards, or a writing-focused hybrid.
+editor on the right. The default is a writing-focused hybrid: slim navigation
+rails, distinct one-line panel headers, and an open editor with no enclosing
+container. A divider separates the workspace from the vim-like lane. Two older
+chrome experiments can still be switched live for comparison.
 The left pane switches between the **Feed** (notes grouped by date — Today /
 Yesterday / This week / Last week / Month → Week → Day, the same buckets as the
 desktop app) and the **Folders** tree, whose first row is the open folder itself.
@@ -44,17 +46,25 @@ by selecting it. `:open` with no argument goes back to the profile's notes
 root. Git sync stays with the profile root and is declined while a folder is
 open, since the remote, branch and SSH key all live in the profile.
 
+Directly opened folders are treated as ordinary Markdown rather than Type
+storage: source mode includes the complete file (including arbitrary YAML
+frontmatter), rendered mode presents that source as a styled document, and a
+save writes the raw Markdown back without injecting Type metadata. Type profile
+roots keep their normal behavior: app frontmatter stays metadata and encrypted
+bodies go through the shared core.
+
 The open root is always shown either in the shared frame or the status line.
 
 ## Trying the UI layouts
 
-Run `ui:next` from the palette (or `:ui`) to cycle these without restarting:
+The writing layout is the default. Run `ui:next` from the palette (or `:ui`) to
+cycle these without restarting:
 
 - `ui:frame` — one rounded parent container; the panels are borderless and
   separated by vertical rules. The vim-like status bar sits below it.
 - `ui:panes` — three independent rounded pane containers with no parent.
-- `ui:focus` — borderless navigation rails plus one padded editor container;
-  this is the deliberately custom, writing-first option.
+- `ui:focus` — panel header bands, light vertical rules, and an open padded
+  editor surface; this is the default writing-first option.
 
 All three use exactly the same state and pane functions. Choosing one later is
 a small default/removal change, not a rewrite, and switching cannot touch notes.
@@ -72,6 +82,7 @@ a small default/removal change, not a rewrite, and switching cannot touch notes.
 | `Enter` | open the folder / note (focus the editor) |
 | `g` / `G` | jump to first / last |
 | `o` | new note in the current folder (list pane) |
+| `m` | toggle editable Markdown source / rendered Markdown reader |
 | `/` or `Ctrl+K` (`Cmd+K`) | open the searchable command palette |
 | `:` | command line |
 
@@ -89,6 +100,11 @@ palette with `n` / `N` for later matches, and `Ctrl+d` / `Ctrl+u` to scroll.
 Deliberately absent: registers, marks, macros, text objects (`ciw`), `.` repeat.
 Those need a real parser and are not what this app is for.
 
+Rendered Markdown is read-only and styled in-process (headings, emphasis,
+quotes, lists, links, code, tables, and YAML metadata in ordinary folders).
+Use `j` / `k`, `Ctrl+d` / `Ctrl+u`, and `g` / `G` to scroll; `m` returns to
+source, while `i` returns to source directly in insert mode.
+
 ## Commands
 
 | | |
@@ -98,6 +114,9 @@ Those need a real parser and are not what this app is for.
 | `:open [folder]` | browse any folder; without one, return to the notes root |
 | `:feed` / `:folders` | switch the left panel to the Feed / folder tree |
 | `:panels` | hide / show the left panes (the `Ctrl+T` toggle) |
+| `:view` / `:view:toggle` | toggle source / rendered Markdown |
+| `:md` / `:view:markdown` | open rendered Markdown |
+| `:source` / `:view:source` | return to editable source |
 | `:ui` / `ui:next` | cycle the three chrome experiments |
 | `ui:frame` / `ui:panes` / `ui:focus` | switch directly to one layout |
 | `:mv <folder>` | move the open note; `Tab` completes folders fuzzily |

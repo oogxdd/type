@@ -96,16 +96,32 @@ pub struct AsyncOutcome {
 
 impl AsyncOutcome {
     fn done(msg: impl Into<String>) -> Self {
-        Self { status: msg.into(), refresh: false, reload_note: false }
+        Self {
+            status: msg.into(),
+            refresh: false,
+            reload_note: false,
+        }
     }
     fn refreshed(msg: impl Into<String>) -> Self {
-        Self { status: msg.into(), refresh: true, reload_note: false }
+        Self {
+            status: msg.into(),
+            refresh: true,
+            reload_note: false,
+        }
     }
     fn pulled(msg: impl Into<String>) -> Self {
-        Self { status: msg.into(), refresh: true, reload_note: true }
+        Self {
+            status: msg.into(),
+            refresh: true,
+            reload_note: true,
+        }
     }
     fn error(msg: impl Into<String>) -> Self {
-        Self { status: msg.into(), refresh: false, reload_note: false }
+        Self {
+            status: msg.into(),
+            refresh: false,
+            reload_note: false,
+        }
     }
 }
 
@@ -264,6 +280,26 @@ impl NavState {
 pub struct EditorState {
     pub editor: Editor,
     pub vim: Vim,
+    /// Source is editable; Markdown is a Glow-like rendered reader.
+    pub view: EditorView,
+    /// Vertical reader offset. Source mode keeps its own cursor/scroll inside
+    /// `TextArea`, so the two views never fight over a shared position.
+    pub markdown_scroll: u16,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum EditorView {
+    Source,
+    Markdown,
+}
+
+impl EditorView {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Source => "source",
+            Self::Markdown => "markdown",
+        }
+    }
 }
 
 impl EditorState {
@@ -271,12 +307,18 @@ impl EditorState {
         Self {
             editor: Editor::new(),
             vim: Vim::new(),
+            view: EditorView::Source,
+            markdown_scroll: 0,
         }
     }
 
     /// Reset the vim machine to normal mode, as when opening a different note.
     pub fn reset_vim(&mut self) {
         self.vim = Vim::new();
+    }
+
+    pub fn reset_reader_scroll(&mut self) {
+        self.markdown_scroll = 0;
     }
 }
 
@@ -285,7 +327,7 @@ impl EditorState {
 /// The one-line key reminder, shown at startup and by `:h`. `{tab}` is where
 /// the Feed/Folders hint goes in a root that has a Feed to switch to.
 const HELP_LINE: &str =
-    "j/k move · →/← open/close · Enter edit · {tab}Ctrl+W pane · Ctrl+T panels · / commands";
+    "j/k move · →/← open/close · Enter edit · {tab}Ctrl+W pane · m markdown · / commands";
 
 /// A modifier + letter chord, accepting any of `modifiers`.
 ///
@@ -362,7 +404,7 @@ impl App {
             root_label: String::new(),
             should_quit: false,
             panels_hidden: false,
-            ui_style: UiStyle::Frame,
+            ui_style: UiStyle::Focus,
             focus_before_hide: Pane::Folders,
             pending_git: None,
             git_in_flight: 0,
@@ -380,6 +422,7 @@ impl App {
         let root = self.core.root_path()?;
         self.root_label = root.display().to_string();
         self.ed.editor.close();
+        self.ed.reset_reader_scroll();
         self.nav = NavState::new(tree, root_display_name(&root));
         self.nav.feed_path = model::find_feed_folder(&self.nav.tree);
 
@@ -618,9 +661,10 @@ impl App {
             return;
         };
         let path = row.path.clone();
-        match self.core.notes().and_then(|notes| notes.read_note(&path)) {
+        match self.core.read_note(&path) {
             Ok(body) => {
                 self.ed.editor.open(path, body);
+                self.ed.reset_reader_scroll();
                 self.focus = Pane::Editor;
                 self.ed.reset_vim();
             }
@@ -638,18 +682,18 @@ impl App {
         if self.ed.editor.path.as_deref() == Some(path.as_str()) {
             return;
         }
-        match self.core.notes().and_then(|notes| notes.read_note(&path)) {
-            Ok(body) => self.ed.editor.preview(path, body),
+        match self.core.read_note(&path) {
+            Ok(body) => {
+                self.ed.editor.preview(path, body);
+                self.ed.reset_reader_scroll();
+            }
             Err(err) => self.status = format!("preview: {err}"),
         }
     }
 
     /// Write pending edits and apply the empty-note / auto-rename policies.
     pub fn flush_editor(&mut self) {
-        let Ok(notes) = self.core.notes() else {
-            return;
-        };
-        match self.ed.editor.flush(&notes) {
+        match self.ed.editor.flush(&self.core) {
             Ok(outcome) => {
                 if outcome.deleted {
                     self.status = "note was empty — deleted".to_string();
@@ -702,6 +746,17 @@ impl App {
             && !(self.focus == Pane::Editor && self.ed.vim.mode == Mode::Insert);
         if slash_opens_palette {
             self.open_palette();
+            return;
+        }
+
+        // A single key flips the visible note between editable source and a
+        // rendered reader. It is global while navigating, but never steals an
+        // `m` that the user is typing in insert/visual mode.
+        let m_toggles_markdown = key.code == KeyCode::Char('m')
+            && key.modifiers.is_empty()
+            && (self.focus != Pane::Editor || self.ed.vim.mode == Mode::Normal);
+        if m_toggles_markdown {
+            self.toggle_editor_view();
             return;
         }
 
@@ -760,7 +815,8 @@ impl App {
                 self.preview_selected_note();
             }
             KeyCode::Char('j') | KeyCode::Down => {
-                self.nav.folder_cursor = (self.nav.folder_cursor + 1).min(self.nav.left_len().saturating_sub(1));
+                self.nav.folder_cursor =
+                    (self.nav.folder_cursor + 1).min(self.nav.left_len().saturating_sub(1));
                 self.select_left();
                 self.preview_selected_note();
             }
@@ -848,7 +904,8 @@ impl App {
     fn notes_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => {
-                self.nav.note_cursor = (self.nav.note_cursor + 1).min(self.nav.notes.len().saturating_sub(1));
+                self.nav.note_cursor =
+                    (self.nav.note_cursor + 1).min(self.nav.notes.len().saturating_sub(1));
                 self.preview_selected_note();
             }
             KeyCode::Char('k') | KeyCode::Up => {
@@ -872,6 +929,34 @@ impl App {
     }
 
     fn editor_key(&mut self, key: KeyEvent) {
+        if self.ed.view == EditorView::Markdown {
+            match key.code {
+                KeyCode::Char('j') | KeyCode::Down => {
+                    self.ed.markdown_scroll = self.ed.markdown_scroll.saturating_add(1)
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    self.ed.markdown_scroll = self.ed.markdown_scroll.saturating_sub(1)
+                }
+                KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.ed.markdown_scroll = self.ed.markdown_scroll.saturating_add(10)
+                }
+                KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.ed.markdown_scroll = self.ed.markdown_scroll.saturating_sub(10)
+                }
+                KeyCode::Char('g') | KeyCode::Home => self.ed.markdown_scroll = 0,
+                KeyCode::Char('G') | KeyCode::End => self.ed.markdown_scroll = u16::MAX,
+                // `i` is the fastest path from reading back into writing.
+                KeyCode::Char('i') => {
+                    self.set_editor_view(EditorView::Source);
+                    self.ed.vim.mode = Mode::Insert;
+                }
+                KeyCode::Char(':') => self.open_prompt(PromptKind::Command),
+                KeyCode::Esc | KeyCode::Char('h') | KeyCode::Left => self.focus = Pane::Notes,
+                _ => {}
+            }
+            return;
+        }
+
         let action = self.ed.vim.handle(&mut self.ed.editor.area, key);
         match action {
             VimAction::Edited => self.ed.editor.touch(),
@@ -989,12 +1074,10 @@ impl App {
             // executes it; for argument-taking commands it simply enters the
             // mode (`mv ` / `search `) and keeps the palette open.
             KeyCode::Tab => {
-                let selected = self.prompt.as_ref().and_then(|prompt| {
-                    prompt
-                        .suggestions
-                        .get(prompt.suggestion_index)
-                        .cloned()
-                });
+                let selected = self
+                    .prompt
+                    .as_ref()
+                    .and_then(|prompt| prompt.suggestions.get(prompt.suggestion_index).cloned());
                 if let (Some(prompt), Some(selected)) = (self.prompt.as_mut(), selected) {
                     prompt.input = selected.input;
                 }
@@ -1032,9 +1115,9 @@ impl App {
         let mut folders = Vec::new();
         model::collect_folder_paths(&self.nav.tree, &mut folders);
         prompt.suggestions = command::palette_suggestions(&prompt.input, &folders);
-        prompt.suggestion_index = prompt
-            .suggestion_index
-            .min(prompt.suggestions.len().saturating_sub(1));
+        // A changed query is a new result set: start at its first visual row,
+        // matching the grouped palette the user is now looking at.
+        prompt.suggestion_index = 0;
     }
 
     /// Tab completion for `:mv`. Cycles through ranked folders, replacing the
@@ -1124,6 +1207,9 @@ impl App {
             Command::Panels => self.toggle_panels(),
             Command::SetUiStyle(style) => self.set_ui_style(style),
             Command::NextUiStyle => self.set_ui_style(self.ui_style.next()),
+            Command::ViewMarkdown => self.set_editor_view(EditorView::Markdown),
+            Command::ViewSource => self.set_editor_view(EditorView::Source),
+            Command::ToggleMarkdownView => self.toggle_editor_view(),
             Command::Feed => {
                 self.show_panels();
                 self.set_nav_mode(NavMode::Feed);
@@ -1168,6 +1254,30 @@ impl App {
     fn set_ui_style(&mut self, style: UiStyle) {
         self.ui_style = style;
         self.status = format!("UI layout → {}", style.label());
+    }
+
+    fn set_editor_view(&mut self, view: EditorView) {
+        if self.ed.editor.path.is_none() {
+            self.status = "no note open".to_string();
+            return;
+        }
+        self.ed.view = view;
+        self.ed.reset_reader_scroll();
+        if view == EditorView::Markdown {
+            self.ed.reset_vim();
+        }
+        self.status = match view {
+            EditorView::Source => "Markdown source · editable".to_string(),
+            EditorView::Markdown => "rendered Markdown · m returns to source".to_string(),
+        };
+    }
+
+    fn toggle_editor_view(&mut self) {
+        let next = match self.ed.view {
+            EditorView::Source => EditorView::Markdown,
+            EditorView::Markdown => EditorView::Source,
+        };
+        self.set_editor_view(next);
     }
 
     fn set_note_marker(&mut self, marker: Marker, enabled: bool) {
@@ -1222,6 +1332,8 @@ impl App {
             Ok(result) => {
                 self.refresh_current();
                 self.ed.editor.open_created(result.path.clone());
+                self.ed.view = EditorView::Source;
+                self.ed.reset_reader_scroll();
                 self.focus = Pane::Editor;
                 self.ed.reset_vim();
                 self.ed.vim.mode = Mode::Insert;
@@ -1261,8 +1373,8 @@ impl App {
     /// about which files are being pushed.
     fn git_available(&mut self) -> bool {
         if self.core.is_custom_root() {
-            self.status =
-                "git sync belongs to the notes root — `:open` with no path returns to it".to_string();
+            self.status = "git sync belongs to the notes root — `:open` with no path returns to it"
+                .to_string();
             return false;
         }
         true
@@ -1386,8 +1498,11 @@ impl App {
             self.status.push_str(" · open note kept (unsaved edits)");
             return;
         }
-        match self.core.notes().and_then(|notes| notes.read_note(&path)) {
-            Ok(body) => self.ed.editor.open(path, body),
+        match self.core.read_note(&path) {
+            Ok(body) => {
+                self.ed.editor.open(path, body);
+                self.ed.reset_reader_scroll();
+            }
             Err(_) => {
                 self.ed.editor.close();
                 self.focus = Pane::Notes;
@@ -1446,14 +1561,23 @@ pub fn run_git_task(core: &Core, task: GitTask) -> AsyncOutcome {
 }
 
 fn do_pull(core: &Core) -> Result<String, String> {
-    let args = GitSyncArgs { branch: None, username: None, password: None };
+    let args = GitSyncArgs {
+        branch: None,
+        username: None,
+        password: None,
+    };
     core.git()
         .pull(args)
         .map(|status| format!("pulled · behind {}", status.behind))
 }
 
 fn do_push(core: &Core) -> Result<String, String> {
-    let args = GitPushArgs { message: None, branch: None, username: None, password: None };
+    let args = GitPushArgs {
+        message: None,
+        branch: None,
+        username: None,
+        password: None,
+    };
     core.git()
         .push(args)
         .map(|status| format!("pushed · ahead {}", status.ahead))
@@ -1469,6 +1593,9 @@ fn do_connect(core: &Core, argument: &str) -> Result<String, String> {
         password: None,
     };
     core.git().connect(args).map(|status| {
-        format!("connected · {}", status.current_branch.unwrap_or_else(|| "?".into()))
+        format!(
+            "connected · {}",
+            status.current_branch.unwrap_or_else(|| "?".into())
+        )
     })
 }

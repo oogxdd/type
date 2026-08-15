@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use tui_textarea::{TextArea, WrapMode};
 use type_core::slug_from_content;
 
-use crate::core::Notes;
+use crate::core::Core;
 
 /// Same debounce the desktop editor uses. Keep them in sync: it is the interval
 /// that decides how much work a crash can lose.
@@ -38,9 +38,6 @@ pub struct Editor {
     pub path: Option<String>,
     /// Set on every buffer mutation, cleared by [`Editor::flush`].
     dirty_since: Option<Instant>,
-    /// Body as last written to disk. Lets us skip no-op writes when the user
-    /// moves the cursor around without changing anything.
-    saved: String,
     /// True while this note exists only because `:new` created it and nothing
     /// has been typed into it yet.
     ///
@@ -63,7 +60,6 @@ impl Editor {
             area,
             path: None,
             dirty_since: None,
-            saved: String::new(),
             created_here: false,
         }
     }
@@ -71,17 +67,14 @@ impl Editor {
     /// Load a note into the buffer. The caller is responsible for flushing the
     /// previously open note first — see [`Editor::flush`].
     pub fn open(&mut self, path: String, body: String) {
-        let lines: Vec<String> = if body.is_empty() {
-            vec![String::new()]
-        } else {
-            body.lines().map(str::to_string).collect()
-        };
+        // `split` (unlike `str::lines`) keeps the final empty segment, so a
+        // conventional trailing newline survives a real edit/save round trip.
+        let lines: Vec<String> = body.split('\n').map(str::to_string).collect();
         let mut area = TextArea::new(lines);
         area.set_wrap_mode(WrapMode::WordOrGlyph);
         area.set_max_histories(500);
         self.area = area;
         self.path = Some(path);
-        self.saved = body;
         self.dirty_since = None;
         self.created_here = false;
     }
@@ -107,7 +100,6 @@ impl Editor {
         self.area = TextArea::default();
         self.area.set_wrap_mode(WrapMode::WordOrGlyph);
         self.path = None;
-        self.saved = String::new();
         self.dirty_since = None;
         self.created_here = false;
     }
@@ -136,7 +128,7 @@ impl Editor {
     ///
     /// Safe to call when nothing is dirty — it becomes a no-op, which is why
     /// callers can flush unconditionally before navigating away.
-    pub fn flush(&mut self, notes: &Notes) -> Result<FlushOutcome, String> {
+    pub fn flush(&mut self, core: &Core) -> Result<FlushOutcome, String> {
         let Some(path) = self.path.clone() else {
             return Ok(FlushOutcome::default());
         };
@@ -146,8 +138,11 @@ impl Editor {
         // take the no-op path below.
         let pending_cleanup = is_empty && self.created_here;
 
-        // Nothing changed since the last write: skip the filesystem entirely.
-        if !self.is_dirty() && body == self.saved && !pending_cleanup {
+        // Nothing was edited: skip the filesystem entirely. `TextArea`
+        // normalizes a final newline when it builds its line buffer, so
+        // comparing reconstructed text with the original would turn mere browsing
+        // into a write for files that end in `\n`.
+        if !self.is_dirty() && !pending_cleanup {
             return Ok(FlushOutcome::default());
         }
 
@@ -160,7 +155,7 @@ impl Editor {
         // user merely opened and left. It is neither dirty nor ours, so it
         // survives. Opening a note must never be what destroys it.
         if is_empty && (self.is_dirty() || self.created_here) {
-            notes.delete_items(vec![path])?;
+            core.delete_note(&path)?;
             self.close();
             return Ok(FlushOutcome {
                 deleted: true,
@@ -168,8 +163,7 @@ impl Editor {
             });
         }
 
-        notes.write_note(&path, &body)?;
-        self.saved = body.clone();
+        core.write_note(&path, &body)?;
         self.dirty_since = None;
         // It has real content on disk now; it is no longer ours to reclaim.
         self.created_here = false;
@@ -178,7 +172,7 @@ impl Editor {
         // the content the slug was derived from.
         let mut outcome = FlushOutcome::default();
         if let Some(new_name) = auto_rename_target(&path, &body) {
-            let new_path = notes.rename_item(&path, &new_name)?;
+            let new_path = core.rename_note(&path, &new_name)?;
             self.path = Some(new_path.clone());
             outcome.renamed_to = Some(new_path);
         }
@@ -287,8 +281,13 @@ fn is_uuid_prefix(stem: &str) -> bool {
     if bytes.len() < 13 {
         return false;
     }
-    (0..13).all(|i| if i == 8 { bytes[i] == b'-' } else { bytes[i].is_ascii_hexdigit() })
-        && (bytes.len() == 13 || bytes[13] == b'-')
+    (0..13).all(|i| {
+        if i == 8 {
+            bytes[i] == b'-'
+        } else {
+            bytes[i].is_ascii_hexdigit()
+        }
+    }) && (bytes.len() == 13 || bytes[13] == b'-')
 }
 
 /// Slug length ignoring separators, matching the desktop's threshold.
@@ -324,6 +323,13 @@ mod tests {
     const BODY: &str = "Grocery list for the weekend";
 
     #[test]
+    fn opening_source_preserves_a_final_newline() {
+        let mut editor = Editor::new();
+        editor.open("note.md".into(), "# Note\n".into());
+        assert_eq!(editor.text(), "# Note\n");
+    }
+
+    #[test]
     fn renames_timestamped_placeholder() {
         let target = auto_rename_target("Feed/2026-08-12T10-30-00Z-note-a1b2c3d4.md", BODY);
         assert_eq!(
@@ -352,9 +358,7 @@ mod tests {
     #[test]
     fn leaves_bare_uuid_alone() {
         // Ambiguous between uuid_v7 and uuid_v7_prefix_slug — see module note.
-        assert!(
-            auto_rename_target("Feed/0191e2a1-1b2c-7d3e-8f40-a1b2c3d4e5f6.md", BODY).is_none()
-        );
+        assert!(auto_rename_target("Feed/0191e2a1-1b2c-7d3e-8f40-a1b2c3d4e5f6.md", BODY).is_none());
     }
 
     #[test]
