@@ -14,7 +14,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, List, ListItem, ListState, Padding, Paragraph},
+    widgets::{Block, BorderType, Clear, List, ListItem, ListState, Padding, Paragraph},
     Frame,
 };
 
@@ -59,6 +59,13 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         );
     }
     draw_status(frame, app, status);
+    if app
+        .prompt
+        .as_ref()
+        .is_some_and(|prompt| prompt.kind == PromptKind::Palette)
+    {
+        draw_palette(frame, app, area);
+    }
 }
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
@@ -185,7 +192,7 @@ fn shell_block(app: &App) -> Block<'static> {
         .title_top(Line::from(right).right_aligned())
         .title_bottom(
             Line::from(vec![Span::styled(
-                " ^w pane · ^t panels · : commands ",
+                " ^w pane · ^t panels · / commands ",
                 dim(),
             )])
             .right_aligned(),
@@ -409,9 +416,19 @@ fn draw_editor(
 
 fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
     if let Some(prompt) = &app.prompt {
+        if prompt.kind == PromptKind::Palette {
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled(" COMMAND ", accent().add_modifier(Modifier::BOLD)),
+                    Span::styled(" ↑↓ choose · Tab complete · Enter run · Esc close", dim()),
+                ])),
+                area,
+            );
+            return;
+        }
         let sigil = match prompt.kind {
             PromptKind::Command => ':',
-            PromptKind::Search => '/',
+            PromptKind::Palette => unreachable!("palette renders as an overlay"),
         };
         let mut spans = vec![
             Span::styled(sigil.to_string(), accent()),
@@ -465,4 +482,80 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
             area,
         );
     }
+}
+
+/// Discoverable command surface shared by `/` and Cmd/Ctrl+K. It deliberately
+/// floats over the panes: opening it never reshapes the workspace underneath.
+fn draw_palette(frame: &mut Frame, app: &App, area: Rect) {
+    let Some(prompt) = app.prompt.as_ref() else {
+        return;
+    };
+    let visible_rows = prompt.suggestions.len().clamp(1, 9) as u16;
+    let popup_height = (visible_rows + 4).min(area.height.saturating_sub(2));
+    let popup_width = area
+        .width
+        .saturating_mul(4)
+        .saturating_div(5)
+        .clamp(30, 78)
+        .min(area.width);
+    let popup = Rect {
+        x: area.x + area.width.saturating_sub(popup_width) / 2,
+        y: area.y + 1.min(area.height.saturating_sub(popup_height)),
+        width: popup_width,
+        height: popup_height,
+    };
+
+    frame.render_widget(Clear, popup);
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(accent())
+        .title_top(Line::from(vec![
+            Span::styled(" command ", accent().add_modifier(Modifier::BOLD)),
+            Span::styled(" / or ^K / ⌘K ", dim()),
+        ]))
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+
+    let [input_area, list_area, hint_area] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Min(1),
+        Constraint::Length(1),
+    ])
+    .areas(inner);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("› ", accent().add_modifier(Modifier::BOLD)),
+            Span::raw(prompt.input.clone()),
+            Span::styled("█", accent()),
+        ])),
+        input_area,
+    );
+
+    let items: Vec<ListItem> = prompt
+        .suggestions
+        .iter()
+        .map(|row| {
+            ListItem::new(Line::from(vec![
+                Span::raw(row.label.clone()),
+                Span::styled(format!("  {}", row.detail), dim()),
+            ]))
+        })
+        .collect();
+    let mut state = ListState::default();
+    if !items.is_empty() {
+        state.select(Some(prompt.suggestion_index.min(items.len() - 1)));
+    }
+    let list = if items.is_empty() {
+        empty_list("no matching commands")
+    } else {
+        List::new(items)
+            .highlight_symbol("▸ ")
+            .highlight_style(selection_style(true))
+    };
+    frame.render_stateful_widget(list, list_area, &mut state);
+    frame.render_widget(
+        Paragraph::new(Span::styled("↑↓ choose · Tab complete · Enter run", dim())),
+        hint_area,
+    );
 }

@@ -55,14 +55,24 @@ pub fn flatten_folders(
 /// The root-level folder the feed is built from, if this root has one.
 ///
 /// Matched case-insensitively: `Feed` is what the app's own notes roots use,
-/// but a folder someone opened with `type-tui ~/notes` may spell it `feed` —
-/// and a folder with no feed at all is the ordinary case, which is why this
-/// returns an `Option` instead of assuming the name.
+/// but a folder someone opened with `type-tui ~/notes` may spell it `feed`.
+/// A direct child wins; `system/Feed` is the forward-compatible fallback for
+/// the planned system-folder container. Keeping that lookup here means the
+/// rest of the TUI only ever deals in resolved root-relative paths.
 pub fn find_feed_folder(root: &FolderNode) -> Option<String> {
     root.children
         .iter()
         .find(|child| child.name.eq_ignore_ascii_case(FEED_FOLDER))
         .map(|child| child.path.clone())
+        .or_else(|| {
+            root.children
+                .iter()
+                .find(|child| child.name.eq_ignore_ascii_case("system"))?
+                .children
+                .iter()
+                .find(|child| child.name.eq_ignore_ascii_case(FEED_FOLDER))
+                .map(|child| child.path.clone())
+        })
 }
 
 fn push_folder_rows(
@@ -762,6 +772,20 @@ mod folder_tests {
         assert_eq!(find_feed_folder(&tree()).as_deref(), Some("Feed"));
         let lowercase = folder("Notes", "", vec![folder("feed", "feed", Vec::new())]);
         assert_eq!(find_feed_folder(&lowercase).as_deref(), Some("feed"));
+    }
+
+    #[test]
+    fn feed_can_move_under_the_future_system_container() {
+        let nested = folder(
+            "Notes",
+            "",
+            vec![folder(
+                "system",
+                "system",
+                vec![folder("feed", "system/feed", Vec::new())],
+            )],
+        );
+        assert_eq!(find_feed_folder(&nested).as_deref(), Some("system/feed"));
     }
 
     #[test]

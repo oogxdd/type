@@ -12,9 +12,10 @@ list in the middle, the editor on the right. The focused pane is the one with
 the accent border. The left pane switches between the **Feed** (notes grouped by
 date — Today / Yesterday / This week / Last week / Month → Week → Day, the same
 buckets as the desktop app) and the **Folders** tree, whose first row is the
-open folder itself. Vim-like keys, a `:` command line, background git sync, and
-live auto-preview: moving `j`/`k` in the note list shows each note's body in the
-editor as you scroll, before you commit to opening it.
+open folder itself. Vim-like keys, a shared `/` / Cmd+K command palette, a `:`
+command line, background git sync, and live auto-preview: moving `j`/`k` in the
+note list shows each note's body in the editor as you scroll, before you commit
+to opening it.
 
 ## Which folder it opens
 
@@ -58,17 +59,19 @@ The frame's title always shows which folder is open.
 | `Enter` | open the folder / note (focus the editor) |
 | `g` / `G` | jump to first / last |
 | `o` | new note in the current folder (list pane) |
+| `/` or `Ctrl+K` (`Cmd+K`) | open the searchable command palette |
 | `:` | command line |
 
 `Cmd` only reaches a terminal application through the kitty keyboard protocol
 (Kitty, WezTerm, Ghostty); macOS Terminal.app and iTerm keep it for themselves,
-which is why `Ctrl+T` is the binding to remember. `:panels` does the same thing
-for a terminal that binds all three chords itself.
+which is why the Ctrl variants are the bindings to remember. `:panels` does the
+same thing for a terminal that binds all three panel chords itself.
 
 In the editor, normal mode supports `h j k l w b e 0 $ { }`, `gg` / `G`,
 `i a I A o O`, `x`, `D`, `C`, `dd` `dw` `db` `d$` `d0`, `yy` `yw`, `p`, `u` /
-`Ctrl+r`, `v` for visual mode, counts (`5j`, `3dd`), `/pattern` with `n` / `N`,
-and `Ctrl+d` / `Ctrl+u` to scroll. `Esc` in normal mode leaves the editor pane.
+`Ctrl+r`, `v` for visual mode, counts (`5j`, `3dd`), `search <pattern>` from the
+palette with `n` / `N` for later matches, and `Ctrl+d` / `Ctrl+u` to scroll.
+`Esc` in normal mode leaves the editor pane.
 
 Deliberately absent: registers, marks, macros, text objects (`ciw`), `.` repeat.
 Those need a real parser and are not what this app is for.
@@ -83,6 +86,9 @@ Those need a real parser and are not what this app is for.
 | `:feed` / `:folders` | switch the left panel to the Feed / folder tree |
 | `:panels` | hide / show the left panes (the `Ctrl+T` toggle) |
 | `:mv <folder>` | move the open note; `Tab` completes folders fuzzily |
+| `mark:archive` / `mark:unarchive` | set or clear the open note's archived marker |
+| `mark:reviewed` / `mark:unreviewed` | set or clear its reviewed marker |
+| `search <pattern>` | search inside the open note; `n` / `N` repeat |
 | `:d` | delete the open note |
 | `:connect <url> [branch]` | point this notes root at a git remote |
 | `:sync` | pull, then push |

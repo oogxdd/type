@@ -139,7 +139,18 @@ SCREEN="$(screen)"
 echo "$SCREEN" | grep -q 'panelshidden' || fail "Ctrl+T did not hide the panels"
 pass "Ctrl+T hides the navigation"
 
-echo "8. an arbitrary folder opens with no Feed and nothing written into it"
+echo "8. slash palette discovers and runs mark:archive"
+# Step 6 left a selected note in Feed, so the marker command has a target as
+# soon as the app opens; no tree-navigation assumptions leak into this check.
+drive 1 '/mark:archive\r' 2 ':q!\r'
+MARKED_FILE="$(grep -rl '^archived_ms:' "$ROOT" --include='*.md' | head -n 1)"
+[ -n "$MARKED_FILE" ] || fail "palette did not set archived marker"
+SCREEN="$(screen)"
+echo "$SCREEN" | grep -q 'Marknotearchived' || fail "slash palette row did not render"
+echo "$SCREEN" | grep -q 'markedarchived' || fail "slash palette command did not run"
+pass "slash palette renders and dispatches shared commands"
+
+echo "9. an arbitrary folder opens with no Feed and nothing written into it"
 WIKI="$WORK/wiki"
 mkdir -p "$WIKI/projects"
 printf -- '# Inbox\n\nloose note\n' > "$WIKI/inbox.md"

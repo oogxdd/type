@@ -1,8 +1,15 @@
-//! The `:` command line.
+//! Commands shared by the vim `:` line and the discoverable command palette.
 //!
-//! This is the TUI's answer to the desktop command palette, folded into vim's
-//! command line so there is one prompt instead of two. `:mv` mirrors the
-//! palette's move-mode, including fuzzy folder completion on Tab.
+//! There is deliberately one parser and one catalog. `:` stays fast for users
+//! who already know a command, while `/` and Cmd/Ctrl+K render the catalog with
+//! labels, fuzzy filtering, and folder-aware `mv` suggestions.
+
+/// A feed marker changed by a `mark:*` command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Marker {
+    Archived,
+    Reviewed,
+}
 
 /// A parsed command line. Unknown input is preserved so the status bar can
 /// echo it back rather than failing silently.
@@ -19,6 +26,10 @@ pub enum Command {
     New(Option<String>),
     /// `:d` — delete the open note.
     Delete,
+    /// `mark:archive`, `mark:reviewed`, and their explicit inverse forms.
+    SetMarker(Marker, bool),
+    /// `search <pattern>` — set the editor's search pattern and jump forward.
+    Search(String),
     /// `:open [path]` — browse any folder; without a path, go back to the
     /// active profile's notes root.
     Open(Option<String>),
@@ -42,6 +53,133 @@ pub enum Command {
     Empty,
     Unknown(String),
 }
+
+/// One row in the Cmd/Ctrl+K and `/` palette.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaletteSuggestion {
+    /// Text dispatched through [`parse`] when the row is accepted. A trailing
+    /// space means the command still needs an argument, so accepting it keeps
+    /// the palette open and moves into that command's argument mode.
+    pub input: String,
+    pub label: String,
+    pub detail: String,
+}
+
+struct CatalogEntry {
+    input: &'static str,
+    label: &'static str,
+    keywords: &'static str,
+}
+
+/// Discoverable commands. Their execution still goes through [`parse`], so
+/// the palette and `:` line cannot drift into subtly different behaviors.
+const CATALOG: &[CatalogEntry] = &[
+    CatalogEntry {
+        input: "mv ",
+        label: "Move note to folder…",
+        keywords: "move file folder destination",
+    },
+    CatalogEntry {
+        input: "mark:archive",
+        label: "Mark note archived",
+        keywords: "archive hide marker",
+    },
+    CatalogEntry {
+        input: "mark:unarchive",
+        label: "Mark note unarchived",
+        keywords: "restore archive marker",
+    },
+    CatalogEntry {
+        input: "mark:reviewed",
+        label: "Mark note reviewed",
+        keywords: "review done marker",
+    },
+    CatalogEntry {
+        input: "mark:unreviewed",
+        label: "Mark note unreviewed",
+        keywords: "review pending marker",
+    },
+    CatalogEntry {
+        input: "new",
+        label: "Create note",
+        keywords: "add write note",
+    },
+    CatalogEntry {
+        input: "search ",
+        label: "Search in note…",
+        keywords: "find pattern regex",
+    },
+    CatalogEntry {
+        input: "feed",
+        label: "Open Feed",
+        keywords: "navigate inbox",
+    },
+    CatalogEntry {
+        input: "folders",
+        label: "Open folders",
+        keywords: "navigate tree knowledge",
+    },
+    CatalogEntry {
+        input: "panels",
+        label: "Toggle navigation panels",
+        keywords: "hide show focus zen",
+    },
+    CatalogEntry {
+        input: "write",
+        label: "Save note",
+        keywords: "write persist",
+    },
+    CatalogEntry {
+        input: "delete",
+        label: "Delete note",
+        keywords: "remove trash",
+    },
+    CatalogEntry {
+        input: "open ",
+        label: "Open working folder…",
+        keywords: "cd root browse",
+    },
+    CatalogEntry {
+        input: "sync",
+        label: "Pull, then push",
+        keywords: "git synchronize",
+    },
+    CatalogEntry {
+        input: "pull",
+        label: "Pull changes",
+        keywords: "git download",
+    },
+    CatalogEntry {
+        input: "push",
+        label: "Push changes",
+        keywords: "git upload",
+    },
+    CatalogEntry {
+        input: "status",
+        label: "Show git status",
+        keywords: "git changes",
+    },
+    CatalogEntry {
+        input: "key",
+        label: "Show SSH public key",
+        keywords: "git connect ssh",
+    },
+    CatalogEntry {
+        input: "help",
+        label: "Show key reminder",
+        keywords: "shortcuts keys",
+    },
+    CatalogEntry {
+        input: "quit",
+        label: "Save and quit",
+        keywords: "exit close",
+    },
+    CatalogEntry {
+        input: "q!",
+        label: "Quit without saving",
+        keywords: "exit force discard",
+    },
+];
 
 pub fn parse(input: &str) -> Command {
     let trimmed = input.trim();
@@ -67,6 +205,11 @@ pub fn parse(input: &str) -> Command {
             }
         }
         "d" | "delete" => Command::Delete,
+        "mark:archive" => Command::SetMarker(Marker::Archived, true),
+        "mark:unarchive" => Command::SetMarker(Marker::Archived, false),
+        "mark:reviewed" => Command::SetMarker(Marker::Reviewed, true),
+        "mark:unreviewed" => Command::SetMarker(Marker::Reviewed, false),
+        "search" | "find" => Command::Search(rest.to_string()),
         "open" | "o" | "cd" => {
             if rest.is_empty() {
                 Command::Open(None)
@@ -86,6 +229,100 @@ pub fn parse(input: &str) -> Command {
         "h" | "help" => Command::Help,
         _ => Command::Unknown(head.to_string()),
     }
+}
+
+/// Fuzzy command suggestions for the palette.
+///
+/// `mv` is a small mode of its own: once the prefix is present, rows are real
+/// root-relative folder paths from the current tree. The command never knows
+/// where system folders live, which keeps it valid if `Feed` later moves under
+/// a `system/` directory.
+pub fn palette_suggestions(query: &str, folders: &[String]) -> Vec<PaletteSuggestion> {
+    let query = query.trim_start_matches([':', '/']);
+    if let Some(argument) = query
+        .strip_prefix("mv ")
+        .or_else(|| query.strip_prefix("move "))
+    {
+        return move_suggestions(argument, folders);
+    }
+
+    let needle = query.trim().to_lowercase();
+    let mut scored: Vec<((u8, usize, usize), &CatalogEntry)> = CATALOG
+        .iter()
+        .filter_map(|entry| {
+            let searchable =
+                format!("{} {} {}", entry.input, entry.label, entry.keywords).to_lowercase();
+            fuzzy_score(&needle, &searchable).map(|score| (score, entry))
+        })
+        .collect();
+    scored.sort_by(|a, b| a.0.cmp(&b.0));
+    scored
+        .into_iter()
+        .map(|(_, entry)| PaletteSuggestion {
+            input: entry.input.to_string(),
+            label: entry.label.to_string(),
+            detail: entry.input.trim().to_string(),
+        })
+        .collect()
+}
+
+fn move_suggestions(argument: &str, folders: &[String]) -> Vec<PaletteSuggestion> {
+    let argument = argument.trim();
+    let matches = complete_folders(argument, folders);
+    let exact = folders.iter().any(|folder| folder == argument);
+    let mut rows = Vec::new();
+
+    if !argument.is_empty() {
+        rows.push(PaletteSuggestion {
+            input: format!("mv {argument}"),
+            label: if exact {
+                format!("Move note to {argument}")
+            } else {
+                format!("Create {argument} and move note")
+            },
+            detail: if exact {
+                "folder".into()
+            } else {
+                "new folder".into()
+            },
+        });
+    }
+
+    for folder in matches {
+        if folder == argument {
+            continue;
+        }
+        rows.push(PaletteSuggestion {
+            input: format!("mv {folder}"),
+            label: format!("Move note to {folder}"),
+            detail: folder,
+        });
+    }
+    rows
+}
+
+/// Lower is better: prefix, substring, then subsequence. The second and third
+/// fields keep tighter and shorter matches ahead of loose coincidences.
+fn fuzzy_score(needle: &str, haystack: &str) -> Option<(u8, usize, usize)> {
+    if needle.is_empty() {
+        return Some((0, 0, haystack.len()));
+    }
+    if haystack.starts_with(needle) {
+        return Some((0, 0, haystack.len()));
+    }
+    if let Some(index) = haystack.find(needle) {
+        return Some((1, index, haystack.len()));
+    }
+
+    let mut chars = haystack.char_indices();
+    let mut first = None;
+    let mut last = 0;
+    for wanted in needle.chars() {
+        let (index, _) = chars.find(|(_, candidate)| *candidate == wanted)?;
+        first.get_or_insert(index);
+        last = index;
+    }
+    Some((2, last.saturating_sub(first.unwrap_or(0)), haystack.len()))
 }
 
 /// Rank folder paths against a query for `:mv` completion.
@@ -121,7 +358,10 @@ pub fn complete_folders(query: &str, folders: &[String]) -> Vec<String> {
         .collect();
 
     scored.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(b.2)));
-    scored.into_iter().map(|(_, _, path)| path.clone()).collect()
+    scored
+        .into_iter()
+        .map(|(_, _, path)| path.clone())
+        .collect()
 }
 
 /// Whether every character of `needle` appears in `haystack` in order.
@@ -140,9 +380,21 @@ mod tests {
     fn parses_bare_and_argument_commands() {
         assert_eq!(parse("w"), Command::Write);
         assert_eq!(parse("  sync  "), Command::Sync);
-        assert_eq!(parse("mv personal/work"), Command::Move("personal/work".into()));
+        assert_eq!(
+            parse("mv personal/work"),
+            Command::Move("personal/work".into())
+        );
         assert_eq!(parse("new"), Command::New(None));
         assert_eq!(parse("new Feed"), Command::New(Some("Feed".into())));
+        assert_eq!(
+            parse("mark:archive"),
+            Command::SetMarker(Marker::Archived, true)
+        );
+        assert_eq!(
+            parse("mark:unreviewed"),
+            Command::SetMarker(Marker::Reviewed, false)
+        );
+        assert_eq!(parse("search roadmap"), Command::Search("roadmap".into()));
         assert_eq!(parse("nope"), Command::Unknown("nope".into()));
         assert_eq!(parse("   "), Command::Empty);
     }
@@ -151,7 +403,10 @@ mod tests {
     fn open_takes_an_optional_folder() {
         assert_eq!(parse("open"), Command::Open(None));
         assert_eq!(parse("open ~/notes"), Command::Open(Some("~/notes".into())));
-        assert_eq!(parse("cd /tmp/wiki"), Command::Open(Some("/tmp/wiki".into())));
+        assert_eq!(
+            parse("cd /tmp/wiki"),
+            Command::Open(Some("/tmp/wiki".into()))
+        );
     }
 
     #[test]
@@ -186,5 +441,31 @@ mod tests {
     fn empty_query_lists_everything_sorted() {
         let folders = vec!["b".to_string(), "a".to_string()];
         assert_eq!(complete_folders("", &folders), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn palette_finds_commands_by_name_label_and_keyword() {
+        let rows = palette_suggestions("archive", &[]);
+        assert_eq!(rows[0].input, "mark:archive");
+
+        let rows = palette_suggestions("destination", &[]);
+        assert_eq!(rows[0].input, "mv ");
+    }
+
+    #[test]
+    fn move_mode_suggests_real_paths_and_an_explicit_create_action() {
+        let folders = vec!["projects/type/tui".into(), "personal".into()];
+        let rows = palette_suggestions("mv proj", &folders);
+        assert_eq!(rows[0].input, "mv proj");
+        assert_eq!(rows[0].detail, "new folder");
+        assert_eq!(rows[1].input, "mv projects/type/tui");
+    }
+
+    #[test]
+    fn exact_move_path_is_not_duplicated() {
+        let folders = vec!["projects/type/tui".into()];
+        let rows = palette_suggestions("mv projects/type/tui", &folders);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].detail, "folder");
     }
 }

@@ -42,7 +42,7 @@ pub enum VimAction {
     Ignored,
     /// `:` — open the command line.
     EnterCommand,
-    /// `/` — open the search prompt.
+    /// `/` — open the command palette (intercepted globally by App).
     EnterSearch,
     /// `n` / `N` — jump to the next/previous search hit.
     SearchNext(bool),

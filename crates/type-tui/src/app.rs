@@ -4,7 +4,7 @@
 //! date-grouped tree, or the folder tree — `Tab` flips between them), that
 //! selection's notes in the middle, the editor on the right. `Ctrl+W` moves
 //! focus between them, `Ctrl+T` hides the two left panes so the editor has the
-//! whole frame, and `:` opens the command line from anywhere.
+//! whole frame, and `/` or Cmd/Ctrl+K opens the command palette from anywhere.
 //!
 //! The editor follows the note list: moving `j`/`k` previews each note's body
 //! without opening it; `Enter` drops into the editor for real.
@@ -30,7 +30,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use type_core::{CreateNoteArgs, FolderNode, GitPushArgs, GitSyncArgs, NoteFileNameFormat};
 
 use crate::{
-    command::{self, Command},
+    command::{self, Command, Marker, PaletteSuggestion},
     core::Core,
     editor::Editor,
     model::{self, FeedBucket, FeedRow, FolderRow, NoteRow},
@@ -56,8 +56,8 @@ pub enum NavMode {
 pub enum PromptKind {
     /// `:` — a command line.
     Command,
-    /// `/` — an in-buffer search.
-    Search,
+    /// The discoverable command palette opened by `/` or Cmd/Ctrl+K.
+    Palette,
 }
 
 /// The active prompt overlay, if any.
@@ -67,6 +67,9 @@ pub struct Prompt {
     /// Folder completions for `:mv`, cycled with Tab.
     pub completions: Vec<String>,
     pub completion_index: usize,
+    /// Filtered command rows for [`PromptKind::Palette`].
+    pub suggestions: Vec<PaletteSuggestion>,
+    pub suggestion_index: usize,
 }
 
 /// A git operation queued by a command, waiting for the event loop to spawn it
@@ -282,7 +285,7 @@ impl EditorState {
 /// The one-line key reminder, shown at startup and by `:h`. `{tab}` is where
 /// the Feed/Folders hint goes in a root that has a Feed to switch to.
 const HELP_LINE: &str =
-    "j/k move · →/← open/close · Enter edit · {tab}Ctrl+W pane · Ctrl+T panels · : commands";
+    "j/k move · →/← open/close · Enter edit · {tab}Ctrl+W pane · Ctrl+T panels · / commands";
 
 /// A modifier + letter chord, accepting any of `modifiers`.
 ///
@@ -301,6 +304,8 @@ const PANE_CHORD: KeyModifiers = KeyModifiers::CONTROL.union(KeyModifiers::SUPER
 /// terminal that forwards neither `Cmd` nor a free `Ctrl+T` usually forwards
 /// `Alt` (macOS: Option-as-Meta).
 const PANELS_CHORD: KeyModifiers = PANE_CHORD.union(KeyModifiers::ALT);
+/// `Ctrl+K` / `Cmd+K` — open the discoverable command palette.
+const PALETTE_CHORD: KeyModifiers = KeyModifiers::CONTROL.union(KeyModifiers::SUPER);
 
 /// Placeholder tree used for the split second between constructing `App` and
 /// loading the real root.
@@ -672,12 +677,27 @@ impl App {
 
         // Global chords, checked before the focused pane sees the key so they
         // behave the same everywhere — including inside insert mode.
+        if is_chord(&key, 'k', PALETTE_CHORD) {
+            self.open_palette();
+            return;
+        }
         if is_chord(&key, 'w', PANE_CHORD) {
             self.cycle_focus();
             return;
         }
         if is_chord(&key, 't', PANELS_CHORD) {
             self.toggle_panels();
+            return;
+        }
+
+        // Like Outl, bare `/` is the discoverable command surface in normal
+        // navigation. Insert mode keeps it literal so URLs and paths remain
+        // pleasant to type; Cmd/Ctrl+K still opens the palette from there.
+        let slash_opens_palette = key.code == KeyCode::Char('/')
+            && key.modifiers.is_empty()
+            && !(self.focus == Pane::Editor && self.ed.vim.mode == Mode::Insert);
+        if slash_opens_palette {
+            self.open_palette();
             return;
         }
 
@@ -852,7 +872,7 @@ impl App {
         match action {
             VimAction::Edited => self.ed.editor.touch(),
             VimAction::EnterCommand => self.open_prompt(PromptKind::Command),
-            VimAction::EnterSearch => self.open_prompt(PromptKind::Search),
+            VimAction::EnterSearch => self.open_palette(),
             VimAction::SearchNext(forward) => {
                 let found = if forward {
                     self.ed.editor.area.search_forward(false)
@@ -880,10 +900,25 @@ impl App {
             input: String::new(),
             completions: Vec::new(),
             completion_index: 0,
+            suggestions: Vec::new(),
+            suggestion_index: 0,
         });
     }
 
+    fn open_palette(&mut self) {
+        self.open_prompt(PromptKind::Palette);
+        self.refresh_palette();
+    }
+
     fn prompt_key(&mut self, key: KeyEvent) {
+        if self
+            .prompt
+            .as_ref()
+            .is_some_and(|prompt| prompt.kind == PromptKind::Palette)
+        {
+            self.palette_key(key);
+            return;
+        }
         let Some(prompt) = self.prompt.as_mut() else {
             return;
         };
@@ -904,11 +939,98 @@ impl App {
                 };
                 match prompt.kind {
                     PromptKind::Command => self.run_command(&prompt.input),
-                    PromptKind::Search => self.run_search(&prompt.input),
+                    PromptKind::Palette => unreachable!("palette keys route separately"),
                 }
             }
             _ => {}
         }
+    }
+
+    fn palette_key(&mut self, key: KeyEvent) {
+        if is_chord(&key, 'k', PALETTE_CHORD) {
+            self.prompt = None;
+            return;
+        }
+
+        match key.code {
+            KeyCode::Esc => self.prompt = None,
+            KeyCode::Up | KeyCode::BackTab => {
+                if let Some(prompt) = self.prompt.as_mut() {
+                    prompt.suggestion_index = prompt.suggestion_index.saturating_sub(1);
+                }
+            }
+            KeyCode::Down => {
+                if let Some(prompt) = self.prompt.as_mut() {
+                    prompt.suggestion_index = (prompt.suggestion_index + 1)
+                        .min(prompt.suggestions.len().saturating_sub(1));
+                }
+            }
+            KeyCode::Backspace => {
+                if let Some(prompt) = self.prompt.as_mut() {
+                    prompt.input.pop();
+                }
+                self.refresh_palette();
+            }
+            KeyCode::Char(ch)
+                if !key
+                    .modifiers
+                    .intersects(KeyModifiers::CONTROL.union(KeyModifiers::SUPER)) =>
+            {
+                if let Some(prompt) = self.prompt.as_mut() {
+                    prompt.input.push(ch);
+                }
+                self.refresh_palette();
+            }
+            // Tab completes the highlighted row into the input. Enter then
+            // executes it; for argument-taking commands it simply enters the
+            // mode (`mv ` / `search `) and keeps the palette open.
+            KeyCode::Tab => {
+                let selected = self.prompt.as_ref().and_then(|prompt| {
+                    prompt
+                        .suggestions
+                        .get(prompt.suggestion_index)
+                        .cloned()
+                });
+                if let (Some(prompt), Some(selected)) = (self.prompt.as_mut(), selected) {
+                    prompt.input = selected.input;
+                }
+                self.refresh_palette();
+            }
+            KeyCode::Enter => {
+                let selected = self.prompt.as_ref().and_then(|prompt| {
+                    prompt
+                        .suggestions
+                        .get(prompt.suggestion_index)
+                        .map(|row| row.input.clone())
+                        .or_else(|| (!prompt.input.trim().is_empty()).then(|| prompt.input.clone()))
+                });
+                let Some(input) = selected else {
+                    return;
+                };
+                if input.ends_with(' ') {
+                    if let Some(prompt) = self.prompt.as_mut() {
+                        prompt.input = input;
+                    }
+                    self.refresh_palette();
+                } else {
+                    self.prompt = None;
+                    self.run_command(&input);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn refresh_palette(&mut self) {
+        let Some(prompt) = self.prompt.as_mut() else {
+            return;
+        };
+        let mut folders = Vec::new();
+        model::collect_folder_paths(&self.nav.tree, &mut folders);
+        prompt.suggestions = command::palette_suggestions(&prompt.input, &folders);
+        prompt.suggestion_index = prompt
+            .suggestion_index
+            .min(prompt.suggestions.len().saturating_sub(1));
     }
 
     /// Tab completion for `:mv`. Cycles through ranked folders, replacing the
@@ -943,6 +1065,10 @@ impl App {
     }
 
     fn run_search(&mut self, pattern: &str) {
+        if pattern.is_empty() {
+            self.status = "usage: search <pattern>".to_string();
+            return;
+        }
         match self.ed.editor.area.set_search_pattern(pattern) {
             Ok(()) => {
                 if !self.ed.editor.area.search_forward(false) {
@@ -982,6 +1108,8 @@ impl App {
             Command::Move(destination) => self.move_note(&destination),
             Command::New(folder) => self.create_note(folder),
             Command::Delete => self.delete_note(),
+            Command::SetMarker(marker, enabled) => self.set_note_marker(marker, enabled),
+            Command::Search(pattern) => self.run_search(&pattern),
             Command::Open(path) => self.open_root(path),
             Command::Connect(url) => self.git_connect(&url),
             Command::Sync => self.git_sync(),
@@ -1028,6 +1156,37 @@ impl App {
                 self.refresh_current();
             }
             Err(err) => self.status = format!("move: {err}"),
+        }
+    }
+
+    fn set_note_marker(&mut self, marker: Marker, enabled: bool) {
+        self.flush_editor();
+        let Some(path) = self.nav.target_note(self.ed.editor.path.as_deref()) else {
+            self.status = "no note selected".to_string();
+            return;
+        };
+        let (archived, reviewed, label) = match marker {
+            Marker::Archived => (
+                Some(enabled),
+                None,
+                if enabled { "archived" } else { "unarchived" },
+            ),
+            Marker::Reviewed => (
+                None,
+                Some(enabled),
+                if enabled { "reviewed" } else { "unreviewed" },
+            ),
+        };
+        match self
+            .core
+            .notes()
+            .and_then(|notes| notes.update_note_markers(&path, archived, reviewed))
+        {
+            Ok(()) => {
+                self.status = format!("marked {label}");
+                self.refresh_current();
+            }
+            Err(err) => self.status = format!("mark: {err}"),
         }
     }
 

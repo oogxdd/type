@@ -2,7 +2,8 @@
 //!
 //! Three panes in one frame (navigation / note list / editor), a left panel that
 //! toggles between the Feed's date-grouped tree and the folder tree, live
-//! auto-preview as you scroll, vim-like keys, `:` commands, and git sync — all
+//! auto-preview as you scroll, vim-like keys, a `/` / Cmd+K command palette,
+//! `:` commands, and git sync — all
 //! driven through the same `type-core` services the desktop app and the mobile
 //! app use. Nothing about the note format lives here.
 //!
