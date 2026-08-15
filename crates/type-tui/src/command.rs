@@ -11,6 +11,35 @@ pub enum Marker {
     Reviewed,
 }
 
+/// The three chrome experiments the user can switch between at runtime.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UiStyle {
+    /// One parent frame; borderless panels separated by vertical rules.
+    Frame,
+    /// Three independent rounded panel containers; no parent frame.
+    Panes,
+    /// Borderless navigation rails feeding a contained writing surface.
+    Focus,
+}
+
+impl UiStyle {
+    pub fn next(self) -> Self {
+        match self {
+            Self::Frame => Self::Panes,
+            Self::Panes => Self::Focus,
+            Self::Focus => Self::Frame,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Frame => "frame",
+            Self::Panes => "panes",
+            Self::Focus => "focus",
+        }
+    }
+}
+
 /// A parsed command line. Unknown input is preserved so the status bar can
 /// echo it back rather than failing silently.
 #[derive(Debug, PartialEq, Eq)]
@@ -35,6 +64,10 @@ pub enum Command {
     Open(Option<String>),
     /// `:panels` — the `Ctrl+T` toggle, for terminals that eat the chord.
     Panels,
+    /// Switch the chrome experiment immediately.
+    SetUiStyle(UiStyle),
+    /// Cycle frame → panes → focus without remembering a name.
+    NextUiStyle,
     /// `:connect <url>` — point this notes root at a git remote, initialising
     /// the repo if needed. Without it there is nothing for `:sync` to talk to.
     Connect(String),
@@ -123,6 +156,26 @@ const CATALOG: &[CatalogEntry] = &[
         input: "panels",
         label: "Toggle navigation panels",
         keywords: "hide show focus zen",
+    },
+    CatalogEntry {
+        input: "ui:next",
+        label: "Try next UI layout",
+        keywords: "appearance experiment chrome cycle",
+    },
+    CatalogEntry {
+        input: "ui:frame",
+        label: "UI: shared outer frame",
+        keywords: "appearance container dividers layout",
+    },
+    CatalogEntry {
+        input: "ui:panes",
+        label: "UI: separate pane cards",
+        keywords: "appearance containers cards layout",
+    },
+    CatalogEntry {
+        input: "ui:focus",
+        label: "UI: writing-focused hybrid",
+        keywords: "appearance custom editor rail layout",
     },
     CatalogEntry {
         input: "write",
@@ -218,6 +271,10 @@ pub fn parse(input: &str) -> Command {
             }
         }
         "panels" | "t" => Command::Panels,
+        "ui" | "ui:next" => Command::NextUiStyle,
+        "ui:frame" => Command::SetUiStyle(UiStyle::Frame),
+        "ui:panes" => Command::SetUiStyle(UiStyle::Panes),
+        "ui:focus" => Command::SetUiStyle(UiStyle::Focus),
         "connect" => Command::Connect(rest.to_string()),
         "sync" => Command::Sync,
         "pull" => Command::Pull,
@@ -395,6 +452,8 @@ mod tests {
             Command::SetMarker(Marker::Reviewed, false)
         );
         assert_eq!(parse("search roadmap"), Command::Search("roadmap".into()));
+        assert_eq!(parse("ui"), Command::NextUiStyle);
+        assert_eq!(parse("ui:focus"), Command::SetUiStyle(UiStyle::Focus));
         assert_eq!(parse("nope"), Command::Unknown("nope".into()));
         assert_eq!(parse("   "), Command::Empty);
     }

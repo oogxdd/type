@@ -30,7 +30,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use type_core::{CreateNoteArgs, FolderNode, GitPushArgs, GitSyncArgs, NoteFileNameFormat};
 
 use crate::{
-    command::{self, Command, Marker, PaletteSuggestion},
+    command::{self, Command, Marker, PaletteSuggestion, UiStyle},
     core::Core,
     editor::Editor,
     model::{self, FeedBucket, FeedRow, FolderRow, NoteRow},
@@ -338,6 +338,9 @@ pub struct App {
     pub should_quit: bool,
     /// `Ctrl+T`: the two left panes are hidden and the editor has the frame.
     pub panels_hidden: bool,
+    /// Runtime-selectable chrome experiment; the data panes do not care which
+    /// visual container strategy draws them.
+    pub ui_style: UiStyle,
     /// Where focus goes when the panes come back.
     focus_before_hide: Pane,
     /// A git operation queued by a command, drained by the event loop.
@@ -359,6 +362,7 @@ impl App {
             root_label: String::new(),
             should_quit: false,
             panels_hidden: false,
+            ui_style: UiStyle::Frame,
             focus_before_hide: Pane::Folders,
             pending_git: None,
             git_in_flight: 0,
@@ -1118,6 +1122,8 @@ impl App {
             Command::Status => self.git_status(),
             Command::SshKey => self.ssh_key(),
             Command::Panels => self.toggle_panels(),
+            Command::SetUiStyle(style) => self.set_ui_style(style),
+            Command::NextUiStyle => self.set_ui_style(self.ui_style.next()),
             Command::Feed => {
                 self.show_panels();
                 self.set_nav_mode(NavMode::Feed);
@@ -1157,6 +1163,11 @@ impl App {
             }
             Err(err) => self.status = format!("move: {err}"),
         }
+    }
+
+    fn set_ui_style(&mut self, style: UiStyle) {
+        self.ui_style = style;
+        self.status = format!("UI layout → {}", style.label());
     }
 
     fn set_note_marker(&mut self, marker: Marker, enabled: bool) {

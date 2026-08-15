@@ -7,15 +7,15 @@ alongside the Tauri desktop commands and the UniFFI mobile exports.
 cargo run -p type-tui
 ```
 
-One rounded frame holds three bordered panes: navigation on the left, the note
-list in the middle, the editor on the right. The focused pane is the one with
-the accent border. The left pane switches between the **Feed** (notes grouped by
-date — Today / Yesterday / This week / Last week / Month → Week → Day, the same
-buckets as the desktop app) and the **Folders** tree, whose first row is the
-open folder itself. Vim-like keys, a shared `/` / Cmd+K command palette, a `:`
-command line, background git sync, and live auto-preview: moving `j`/`k` in the
-note list shows each note's body in the editor as you scroll, before you commit
-to opening it.
+Three panes show navigation on the left, the note list in the middle, and the
+editor on the right. Their chrome is an experiment you can switch live: a
+shared outer frame, three separate pane cards, or a writing-focused hybrid.
+The left pane switches between the **Feed** (notes grouped by date — Today /
+Yesterday / This week / Last week / Month → Week → Day, the same buckets as the
+desktop app) and the **Folders** tree, whose first row is the open folder itself.
+Vim-like keys, a shared `/` / Cmd+K command palette, a `:` command line,
+background git sync, and live auto-preview are common to every layout: moving
+`j`/`k` in the note list shows each note's body before you commit to opening it.
 
 ## Which folder it opens
 
@@ -44,7 +44,20 @@ by selecting it. `:open` with no argument goes back to the profile's notes
 root. Git sync stays with the profile root and is declined while a folder is
 open, since the remote, branch and SSH key all live in the profile.
 
-The frame's title always shows which folder is open.
+The open root is always shown either in the shared frame or the status line.
+
+## Trying the UI layouts
+
+Run `ui:next` from the palette (or `:ui`) to cycle these without restarting:
+
+- `ui:frame` — one rounded parent container; the panels are borderless and
+  separated by vertical rules. The vim-like status bar sits below it.
+- `ui:panes` — three independent rounded pane containers with no parent.
+- `ui:focus` — borderless navigation rails plus one padded editor container;
+  this is the deliberately custom, writing-first option.
+
+All three use exactly the same state and pane functions. Choosing one later is
+a small default/removal change, not a rewrite, and switching cannot touch notes.
 
 ## Keys
 
@@ -85,6 +98,8 @@ Those need a real parser and are not what this app is for.
 | `:open [folder]` | browse any folder; without one, return to the notes root |
 | `:feed` / `:folders` | switch the left panel to the Feed / folder tree |
 | `:panels` | hide / show the left panes (the `Ctrl+T` toggle) |
+| `:ui` / `ui:next` | cycle the three chrome experiments |
+| `ui:frame` / `ui:panes` / `ui:focus` | switch directly to one layout |
 | `:mv <folder>` | move the open note; `Tab` completes folders fuzzily |
 | `mark:archive` / `mark:unarchive` | set or clear the open note's archived marker |
 | `mark:reviewed` / `mark:unreviewed` | set or clear its reviewed marker |

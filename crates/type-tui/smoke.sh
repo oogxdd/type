@@ -150,7 +150,15 @@ echo "$SCREEN" | grep -q 'Marknotearchived' || fail "slash palette row did not r
 echo "$SCREEN" | grep -q 'markedarchived' || fail "slash palette command did not run"
 pass "slash palette renders and dispatches shared commands"
 
-echo "9. an arbitrary folder opens with no Feed and nothing written into it"
+echo "9. all three UI experiments switch without restarting"
+drive 1 ':ui:panes\r' 1 ':ui:focus\r' 1 ':ui:frame\r' 2 ':q!\r'
+SCREEN="$(screen)"
+echo "$SCREEN" | grep -q 'UIlayout→panes' || fail "pane-card layout did not activate"
+echo "$SCREEN" | grep -q 'UIlayout→focus' || fail "writing-focused layout did not activate"
+echo "$SCREEN" | grep -q 'UIlayout→frame' || fail "shared-frame layout did not activate"
+pass "frame, panes, and focus layouts render"
+
+echo "10. an arbitrary folder opens with no Feed and nothing written into it"
 WIKI="$WORK/wiki"
 mkdir -p "$WIKI/projects"
 printf -- '# Inbox\n\nloose note\n' > "$WIKI/inbox.md"

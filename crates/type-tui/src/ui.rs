@@ -1,10 +1,9 @@
 //! Rendering. Pure presentation.
 //!
-//! The whole app lives inside one rounded frame: a title bar naming the open
-//! root, three bordered panes (navigation / notes / editor), and a status line
-//! along the bottom. The focused pane is the one with the accent border, which
-//! is the only chrome that changes as you move around — everything else stays
-//! put, so the layout never shifts under you.
+//! The same three data panes can be rendered with three chrome experiments:
+//! one shared frame with rule-separated panels, three independent pane cards,
+//! or a writing-focused hybrid. The status line always sits below the
+//! workspace, so switching styles changes no behavior or note state.
 //!
 //! Each draw function receives the smallest sub-model it needs: the left and
 //! middle panes get [`NavState`], the editor pane gets [`EditorState`], and
@@ -14,12 +13,15 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Clear, List, ListItem, ListState, Padding, Paragraph},
+    widgets::{
+        Block, BorderType, Borders, Clear, List, ListItem, ListState, Padding, Paragraph,
+    },
     Frame,
 };
 
 use crate::{
     app::{App, EditorState, NavMode, NavState, Pane, PromptKind},
+    command::UiStyle,
     model,
 };
 
@@ -30,33 +32,13 @@ const MUTED: Color = Color::DarkGray;
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
-    let shell = shell_block(app);
-    let inner = shell.inner(area);
-    frame.render_widget(shell, area);
+    let [workspace, status] =
+        Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).areas(area);
 
-    let [body, status] =
-        Layout::vertical([Constraint::Min(3), Constraint::Length(1)]).areas(inner);
-
-    let focus = app.focus;
-    if app.panels_hidden {
-        // Ctrl+T: the editor gets the whole frame.
-        draw_editor(frame, &mut app.ed, focus == Pane::Editor, false, body);
-    } else {
-        let [left, middle, right] = Layout::horizontal([
-            Constraint::Percentage(26),
-            Constraint::Percentage(27),
-            Constraint::Min(24),
-        ])
-        .areas(body);
-        draw_left(frame, &app.nav, focus == Pane::Folders, left);
-        draw_middle(frame, &app.nav, focus == Pane::Notes, middle);
-        draw_editor(
-            frame,
-            &mut app.ed,
-            focus == Pane::Editor,
-            focus == Pane::Notes,
-            right,
-        );
+    match app.ui_style {
+        UiStyle::Frame => draw_frame_workspace(frame, app, workspace),
+        UiStyle::Panes => draw_panes_workspace(frame, app, workspace),
+        UiStyle::Focus => draw_focus_workspace(frame, app, workspace),
     }
     draw_status(frame, app, status);
     if app
@@ -66,6 +48,91 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     {
         draw_palette(frame, app, area);
     }
+}
+
+/// Experiment A: one parent container, with the panels themselves reduced to
+/// titles, whitespace, and two vertical rules.
+fn draw_frame_workspace(frame: &mut Frame, app: &mut App, area: Rect) {
+    let shell = workspace_frame(app);
+    let body = shell.inner(area);
+    frame.render_widget(shell, area);
+    if app.panels_hidden {
+        draw_editor(frame, &mut app.ed, true, false, PaneChrome::Open, body);
+        return;
+    }
+    let [left, middle, right] = standard_columns(body);
+    draw_left(frame, &app.nav, app.focus == Pane::Folders, PaneChrome::Divided, left);
+    draw_middle(frame, &app.nav, app.focus == Pane::Notes, PaneChrome::Divided, middle);
+    draw_editor(
+        frame,
+        &mut app.ed,
+        app.focus == Pane::Editor,
+        app.focus == Pane::Notes,
+        PaneChrome::Open,
+        right,
+    );
+}
+
+/// Experiment B: no parent container. Each pane is its own card, with one cell
+/// of breathing room between cards.
+fn draw_panes_workspace(frame: &mut Frame, app: &mut App, area: Rect) {
+    if app.panels_hidden {
+        draw_editor(frame, &mut app.ed, true, false, PaneChrome::Boxed, area);
+        return;
+    }
+    let [left, _, middle, _, right] = Layout::horizontal([
+        Constraint::Percentage(25),
+        Constraint::Length(1),
+        Constraint::Percentage(27),
+        Constraint::Length(1),
+        Constraint::Min(24),
+    ])
+    .areas(area);
+    draw_left(frame, &app.nav, app.focus == Pane::Folders, PaneChrome::Boxed, left);
+    draw_middle(frame, &app.nav, app.focus == Pane::Notes, PaneChrome::Boxed, middle);
+    draw_editor(
+        frame,
+        &mut app.ed,
+        app.focus == Pane::Editor,
+        app.focus == Pane::Notes,
+        PaneChrome::Boxed,
+        right,
+    );
+}
+
+/// Experiment C: navigation reads as two light rails, while the editor is a
+/// padded writing surface. It is intentionally asymmetric rather than a third
+/// variation on "which boxes have borders".
+fn draw_focus_workspace(frame: &mut Frame, app: &mut App, area: Rect) {
+    if app.panels_hidden {
+        draw_editor(frame, &mut app.ed, true, false, PaneChrome::Writing, area);
+        return;
+    }
+    let [left, middle, right] = Layout::horizontal([
+        Constraint::Percentage(21),
+        Constraint::Percentage(24),
+        Constraint::Min(30),
+    ])
+    .areas(area);
+    draw_left(frame, &app.nav, app.focus == Pane::Folders, PaneChrome::Divided, left);
+    draw_middle(frame, &app.nav, app.focus == Pane::Notes, PaneChrome::Divided, middle);
+    draw_editor(
+        frame,
+        &mut app.ed,
+        app.focus == Pane::Editor,
+        app.focus == Pane::Notes,
+        PaneChrome::Writing,
+        right,
+    );
+}
+
+fn standard_columns(area: Rect) -> [Rect; 3] {
+    Layout::horizontal([
+        Constraint::Percentage(26),
+        Constraint::Percentage(27),
+        Constraint::Min(24),
+    ])
+    .areas(area)
 }
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
@@ -78,14 +145,32 @@ fn accent() -> Style {
     Style::default().fg(ACCENT)
 }
 
-/// The pane frame. Its border is the focus indicator, so every pane is drawn
-/// the same way and only the colour differs.
-fn pane_block(title: Line<'static>, focused: bool) -> Block<'static> {
-    Block::bordered()
-        .border_type(BorderType::Rounded)
+#[derive(Clone, Copy)]
+enum PaneChrome {
+    Boxed,
+    Divided,
+    Open,
+    Writing,
+}
+
+/// Build the same semantic pane with whichever chrome experiment is active.
+/// Focus is always visible in the title and row highlight, even in modes that
+/// intentionally have no focus-colored border.
+fn pane_block(title: Line<'static>, focused: bool, chrome: PaneChrome) -> Block<'static> {
+    let block = match chrome {
+        PaneChrome::Boxed | PaneChrome::Writing => {
+            Block::bordered().border_type(BorderType::Rounded)
+        }
+        PaneChrome::Divided => Block::new().borders(Borders::RIGHT),
+        PaneChrome::Open => Block::new(),
+    };
+    block
         .border_style(if focused { accent() } else { dim() })
         .title_top(title)
-        .padding(Padding::horizontal(1))
+        .padding(match chrome {
+            PaneChrome::Writing => Padding::horizontal(2),
+            _ => Padding::horizontal(1),
+        })
 }
 
 fn pane_title(label: String, focused: bool) -> Line<'static> {
@@ -165,9 +250,9 @@ fn draw_list(
     frame.render_stateful_widget(list, area, &mut state);
 }
 
-// ── The frame around everything ────────────────────────────────────────────
+// ── Optional parent frame ──────────────────────────────────────────────────
 
-fn shell_block(app: &App) -> Block<'static> {
+fn workspace_frame(app: &App) -> Block<'static> {
     let mut right = Vec::new();
     if app.panels_hidden {
         right.push(Span::styled(" panels hidden ", dim()));
@@ -190,20 +275,19 @@ fn shell_block(app: &App) -> Block<'static> {
             Span::styled(" type ", accent().add_modifier(Modifier::BOLD)),
         ]))
         .title_top(Line::from(right).right_aligned())
-        .title_bottom(
-            Line::from(vec![Span::styled(
-                " ^w pane · ^t panels · / commands ",
-                dim(),
-            )])
-            .right_aligned(),
-        )
-        .padding(Padding::new(1, 1, 0, 0))
+        .padding(Padding::horizontal(1))
 }
 
 // ── Left pane: feed / folders ──────────────────────────────────────────────
 
-fn draw_left(frame: &mut Frame, nav: &NavState, focused: bool, area: Rect) {
-    let block = pane_block(nav_tabs(nav, focused), focused);
+fn draw_left(
+    frame: &mut Frame,
+    nav: &NavState,
+    focused: bool,
+    chrome: PaneChrome,
+    area: Rect,
+) {
+    let block = pane_block(nav_tabs(nav, focused), focused, chrome);
     let body = block.inner(area);
     frame.render_widget(block, area);
 
@@ -316,8 +400,14 @@ fn feed_item_rows(rows: &[model::FeedRow]) -> Vec<ListItem<'static>> {
 
 // ── Middle pane: note list ─────────────────────────────────────────────────
 
-fn draw_middle(frame: &mut Frame, nav: &NavState, focused: bool, area: Rect) {
-    let block = pane_block(pane_title(middle_title(nav), focused), focused).title_top(
+fn draw_middle(
+    frame: &mut Frame,
+    nav: &NavState,
+    focused: bool,
+    chrome: PaneChrome,
+    area: Rect,
+) {
+    let block = pane_block(pane_title(middle_title(nav), focused), focused, chrome).title_top(
         Line::from(vec![Span::styled(
             if nav.notes.is_empty() {
                 String::new()
@@ -375,13 +465,14 @@ fn draw_editor(
     ed: &mut EditorState,
     focused: bool,
     list_focused: bool,
+    chrome: PaneChrome,
     area: Rect,
 ) {
     let title = match &ed.editor.path {
         Some(path) => model::file_stem(path).to_string(),
         None => "—".to_string(),
     };
-    let mut block = pane_block(pane_title(title, focused), focused);
+    let mut block = pane_block(pane_title(title, focused), focused, chrome);
     if ed.editor.path.is_some() {
         let marker = if ed.editor.is_dirty() {
             Span::styled(" ● unsaved ", Style::default().fg(Color::Yellow))
@@ -469,19 +560,32 @@ fn draw_status(frame: &mut Frame, app: &App, area: Rect) {
     ];
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 
-    // Half-typed vim sequences sit on the right so a pending `d` or `12` is
-    // visible without pushing the status message around.
+    // Context lives on the right in every chrome mode. This is where the
+    // root remains visible in the no-parent `panes` and `focus` experiments.
     let pending = app.ed.vim.pending_hint();
+    let mut right = Vec::new();
     if !pending.is_empty() {
-        frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                pending,
-                Style::default().fg(Color::Yellow),
-            )))
-            .alignment(Alignment::Right),
-            area,
-        );
+        right.push(Span::styled(
+            format!("{pending}  "),
+            Style::default().fg(Color::Yellow),
+        ));
     }
+    if app.git_busy() {
+        right.push(Span::styled("⟳ git  ", Style::default().fg(Color::Yellow)));
+    }
+    if app.panels_hidden {
+        right.push(Span::styled("panels hidden  ", dim()));
+    }
+    right.push(Span::styled(format!("{}  ", app.ui_style.label()), accent()));
+    // The shared-frame layout already names the root in its top border. Not
+    // repeating it here leaves enough room for the startup key reminder.
+    if app.ui_style != UiStyle::Frame {
+        right.push(Span::styled(display_root(&app.root_label), dim()));
+    }
+    frame.render_widget(
+        Paragraph::new(Line::from(right)).alignment(Alignment::Right),
+        area,
+    );
 }
 
 /// Discoverable command surface shared by `/` and Cmd/Ctrl+K. It deliberately
