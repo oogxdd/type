@@ -7,17 +7,24 @@ alongside the Tauri desktop commands and the UniFFI mobile exports.
 cargo run -p type-tui
 ```
 
-Three panes show navigation on the left, the note list in the middle, and the
-editor on the right. The default is a writing-focused hybrid: slim navigation
-rails, distinct one-line panel headers, and an open editor with no enclosing
-container. A divider separates the workspace from the vim-like lane. Two older
+Navigation is on the left and the editor on the right, with the note list either
+in a panel of its own between them (the default) or nested inside the navigation
+tree — `nav:toggle`, the terminal counterpart of the desktop's nested notes list.
+The chrome is a writing-focused hybrid: one continuous header band across the
+workspace, slim vertical rules that run into the rule above the status line, and
+an open editor with vim-style line numbers and no enclosing container. Two older
 chrome experiments can still be switched live for comparison.
-The left pane switches between the **Feed** (notes grouped by date — Today /
-Yesterday / This week / Last week / Month → Week → Day, the same buckets as the
-desktop app) and the **Folders** tree, whose first row is the open folder itself.
-Vim-like keys, a shared `/` / Cmd+K command palette, a `:` command line,
+
+The navigation panel switches between the **Feed** (notes grouped by date —
+Today / Yesterday / This week / Last week / Month → Week → Day, the same buckets
+as the desktop app) and the **Folders** tree, whose first row is the open folder
+itself. Vim-like keys, a shared `/` / Cmd+K command palette, a `:` command line,
 background git sync, and live auto-preview are common to every layout: moving
-`j`/`k` in the note list shows each note's body before you commit to opening it.
+`j`/`k` over notes shows each one's body before you commit to opening it.
+
+The status line is one row and carries only what nothing else on screen shows:
+the pane that has the keys, the last message, a pending vim count, `⟳ git` while
+a sync runs, and the open root.
 
 ## Which folder it opens
 
@@ -55,33 +62,52 @@ bodies go through the shared core.
 
 The open root is always shown either in the shared frame or the status line.
 
+## Two panels or one
+
+`nav:split` (the default) gives the note list a panel of its own: containers on
+the left, the selected container's notes beside them, the editor on the right.
+`nav:nested` collapses those two into a single rail — about a quarter of the
+width — with each note drawn inside the folder, or in the Feed the date bucket,
+it belongs to.
+`nav:toggle` flips between them, and switching either way keeps your place: the
+container you were in is opened so its notes are visible, and the cursor lands
+back on whichever note was selected.
+
+In the nested layout the navigation panel owns the notes, so the keys shift with
+it: `Ctrl+W` has two stops instead of three, `Enter` opens the row under the
+cursor (a note into the editor, a container open or shut) rather than hopping to
+a note pane, `→` on a note opens it, and `o` creates a note in the folder the
+cursor is inside.
+
 ## Trying the UI layouts
 
-The writing layout is the default. Run `ui:next` from the palette (or `:ui`) to
-cycle these without restarting:
+Independently of the above, `ui:next` (or `:ui`) cycles the chrome without
+restarting:
 
+- `ui:focus` — one continuous header band, light vertical rules that join the
+  status rule below them, and an open padded editor surface. The default.
 - `ui:frame` — one rounded parent container; the panels are borderless and
-  separated by vertical rules. The vim-like status bar sits below it.
-- `ui:panes` — three independent rounded pane containers with no parent.
-- `ui:focus` — panel header bands, light vertical rules, and an open padded
-  editor surface; this is the default writing-first option.
+  separated by rules that span the container border to border. It closes itself,
+  so there is no extra rule between it and the status line.
+- `ui:panes` — independent rounded pane containers with no parent.
 
-All three use exactly the same state and pane functions. Choosing one later is
-a small default/removal change, not a rewrite, and switching cannot touch notes.
+All three use exactly the same state and pane functions, and render both note
+layouts. Choosing one later is a small default/removal change, not a rewrite,
+and switching cannot touch notes.
 
 ## Keys
 
 | | |
 |---|---|
-| `Ctrl+W` | move focus to the next pane — one press, one hop |
-| `Ctrl+T` (`Cmd+T`, `Alt+T`) | hide / show both left panes, giving the editor the frame |
-| `Tab` | in the left pane: switch between Feed and Folders |
-| `j` / `k` | move down / up in any pane (the editor previews the note under the list cursor) |
-| `→` / `l` | in the tree: expand, then step into the first child, then hand over to the note list; in the list: open the note |
-| `←` / `h` | in the tree: collapse, else jump out to the parent row; in the list: back to the tree |
-| `Enter` | open the folder / note (focus the editor) |
+| `Ctrl+W` | move focus to the next pane — one press, one hop (two stops when nested) |
+| `Ctrl+T` (`Cmd+T`, `Alt+T`) | hide / show the navigation, giving the editor the frame |
+| `Tab` | in the navigation panel: switch between Feed and Folders |
+| `j` / `k` | move down / up in any pane (the editor previews the note under the cursor) |
+| `→` / `l` | in the tree: expand, then step into the first child, then hand over to the notes (nested: open the note); in the note list: open the note |
+| `←` / `h` | in the tree: collapse, else jump out to the parent row; in the note list: back to the tree |
+| `Enter` | open the folder / note; nested, on a container: open or shut it |
 | `g` / `G` | jump to first / last |
-| `o` | new note in the current folder (list pane) |
+| `o` | new note in the current folder (the note pane, or the tree when nested) |
 | `m` | toggle editable Markdown source / rendered Markdown reader |
 | `/` or `Ctrl+K` (`Cmd+K`) | open the searchable command palette |
 | `:` | command line |
@@ -113,7 +139,9 @@ source, while `i` returns to source directly in insert mode.
 | `:new [folder]` | create a note and start typing |
 | `:open [folder]` | browse any folder; without one, return to the notes root |
 | `:feed` / `:folders` | switch the left panel to the Feed / folder tree |
-| `:panels` | hide / show the left panes (the `Ctrl+T` toggle) |
+| `:panels` | hide / show the navigation (the `Ctrl+T` toggle) |
+| `nav:toggle` / `:nav` | move the note list into the tree, or back into its own panel |
+| `nav:nested` / `nav:split` | switch directly to one note layout |
 | `:view` / `:view:toggle` | toggle source / rendered Markdown |
 | `:md` / `:view:markdown` | open rendered Markdown |
 | `:source` / `:view:source` | return to editable source |
@@ -168,6 +196,15 @@ One case the desktop does not have: `:new` creates the file eagerly, where the
 desktop creates lazily on the first keystroke. `Editor::created_here` is how an
 abandoned new note still gets cleaned up. See the comments in `src/editor.rs`.
 
+One more piece of policy lives in `main.rs`: **the event loop only repaints when
+something changed.** It used to draw on every 50ms tick, and
+`CrosstermBackend::draw` emits colour and attribute resets even when no cell
+differs — so an idle app produced a steady stream of escape sequences, which
+terminals read as a job doing work. That is what put a spinner on the iTerm2 tab
+for as long as `type-tui` was open. An idle session now writes nothing at all;
+key events, resizes, finished git work and the debounced save each mark the
+screen dirty.
+
 The other line this crate draws is around **folders it did not create**. The
 core's `FilesystemNotesRepository::new` guarantees the system folders exist,
 which is what a notes root wants; `::without_system_folders` (added for this
@@ -183,10 +220,17 @@ mDNS, reqwest and zip from the tree.
 ## Tests
 
 ```sh
-cargo test -p type-tui        # command parsing, folder completion, auto-rename
+cargo test -p type-tui        # parsing, completion, auto-rename, nesting, chrome
 sh crates/type-tui/smoke.sh   # drives the real binary through a pty
 sh crates/type-tui/smoke-sync.sh   # two devices over one bare repo
 ```
+
+`src/test_support.rs` builds a throwaway folder and drives the real `App` over
+it, which is how the nested-navigation and chrome-geometry tests assert against
+actual rendered cells (`ratatui::backend::TestBackend`) rather than against
+intentions. Note that a screen assertion is only reliable *there*: the pty smoke
+test sees ratatui's diff output, which skips unchanged cells, so a literal string
+can arrive fragmented — those steps assert behavior instead.
 
 The smoke tests exist because the interesting bugs here are in the event loop and
 the note lifecycle, which unit tests cannot reach — the `created_here` bug above

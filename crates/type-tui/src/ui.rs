@@ -18,12 +18,16 @@
 //!     painted as a background patch after everything else, so it also covers
 //!     the cells the vertical rules occupy instead of leaving an unstyled gap at
 //!     each one.
-//!   * a vertical rule runs the full height of the workspace and **joins** the
-//!     horizontal rule below it with `┴`, rather than stopping a hair above it.
+//!   * a vertical rule runs the full height of whatever contains it and **joins**
+//!     the horizontal line it meets — `┴` into the rule above the status line,
+//!     `┬`/`┴` into the shared frame's own borders. A bare `│` above a bare `─`
+//!     leaves the top half of a cell empty, which reads as a gap between two
+//!     lines that are meant to touch.
 
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
+    symbols,
     text::{Line, Span},
     widgets::{
         Block, BorderType, Borders, Clear, List, ListItem, ListState, Padding, Paragraph, Wrap,
@@ -56,11 +60,19 @@ const HEADER_META_FG: Color = Color::Indexed(243);
 /// Narrowest editor worth keeping; the navigation columns give up width first.
 const MIN_EDITOR_WIDTH: u16 = 24;
 
+/// The navigation panel's share of the width once the notes are nested in it.
+///
+/// It carries note titles now, so it is a little wider than a folders-only
+/// column — but only a little. Handing it both split shares added up to nearly
+/// half the screen, which is a note list that has taken over rather than a
+/// navigation rail.
+const NESTED_NAV_PERCENT: u16 = 25;
+
 /// Rows below the workspace rule that belong to the status line.
 ///
-/// The line itself is one row. It gets a three-row lane so it sits optically
-/// centered in that lane instead of pressed against the rule directly above it.
-const STATUS_LANE_HEIGHT: u16 = 3;
+/// One line of text, one row of chrome. Padding it out only took height away
+/// from the notes and the editor, which is what the screen is actually for.
+const STATUS_LANE_HEIGHT: u16 = 1;
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
@@ -107,10 +119,10 @@ struct Columns {
 
 /// Split a workspace into navigation / notes / editor.
 ///
-/// `nav_pct` and `notes_pct` are width percentages. In [`NavLayout::Nested`] the
-/// note list has no column of its own, so its share goes to the navigation panel
-/// that now contains it — which is the point of that layout: one panel wide
-/// enough to read note titles in, instead of two narrow ones.
+/// `nav_pct` and `notes_pct` are the split layout's width percentages. In
+/// [`NavLayout::Nested`] the note list has no column of its own, and the panel
+/// that absorbs it keeps a rail's width — [`NESTED_NAV_PERCENT`] — rather than
+/// both shares added together.
 fn split_columns(
     area: Rect,
     layout: NavLayout,
@@ -137,7 +149,7 @@ fn split_columns(
         }
         NavLayout::Nested => {
             let [nav, gap, editor] = Layout::horizontal([
-                Constraint::Percentage(nav_pct + notes_pct),
+                Constraint::Percentage(NESTED_NAV_PERCENT),
                 Constraint::Length(gutter),
                 Constraint::Min(MIN_EDITOR_WIDTH),
             ])
@@ -175,12 +187,12 @@ fn draw_frame_workspace(frame: &mut Frame, app: &mut App, area: Rect) -> Vec<u16
         draw_editor(frame, &mut app.ed, true, false, PaneChrome::Open, body);
         return Vec::new();
     }
-    let columns = split_columns(body, app.nav.layout, 26, 27, 0);
+    let columns = split_columns(body, app.nav.layout, 26, 27, 1);
     draw_nav(
         frame,
         &app.nav,
         app.focus == Pane::Folders,
-        PaneChrome::Divided,
+        PaneChrome::Open,
         columns.nav,
     );
     if let Some(notes) = columns.notes {
@@ -188,7 +200,7 @@ fn draw_frame_workspace(frame: &mut Frame, app: &mut App, area: Rect) -> Vec<u16
             frame,
             &app.nav,
             app.focus == Pane::Notes,
-            PaneChrome::Divided,
+            PaneChrome::Open,
             notes,
         );
     }
@@ -200,8 +212,14 @@ fn draw_frame_workspace(frame: &mut Frame, app: &mut App, area: Rect) -> Vec<u16
         PaneChrome::Open,
         columns.editor,
     );
-    // The panels' own right borders are the rules here, and the frame's bottom
-    // border already closes them.
+    // The rules span the container, borders included, rather than the body it
+    // encloses: a rule that stopped at the body left a gap at the top and the
+    // bottom, so the panels read as floating inside the frame instead of
+    // dividing it.
+    for gutter in &columns.gutters {
+        draw_container_rule(frame, gutter.x, area);
+    }
+    // The frame closes itself, so the status line needs no junctions below.
     Vec::new()
 }
 
@@ -284,8 +302,9 @@ fn accent() -> Style {
 
 #[derive(Clone, Copy)]
 enum PaneChrome {
+    /// A rounded container of its own.
     Boxed,
-    Divided,
+    /// No container at all: a title row and the body, nothing around them.
     Open,
 }
 
@@ -295,7 +314,6 @@ enum PaneChrome {
 fn pane_block(title: Line<'static>, focused: bool, chrome: PaneChrome) -> Block<'static> {
     let block = match chrome {
         PaneChrome::Boxed => Block::bordered().border_type(BorderType::Rounded),
-        PaneChrome::Divided => Block::new().borders(Borders::RIGHT),
         PaneChrome::Open => Block::new(),
     };
     block
@@ -372,6 +390,36 @@ fn draw_vertical_rule(frame: &mut Frame, area: Rect) {
         Block::new().borders(Borders::LEFT).border_style(dim()),
         area,
     );
+}
+
+/// A rule down column `x` spanning a bordered container, `┬`/`┴` into its top and
+/// bottom borders so the three lines meet.
+///
+/// The junctions are only written where that border cell is still plain `─`. The
+/// frame puts its titles on the top border row, and overwriting a character of
+/// the notes-root path with a junction would be a worse trade than a rule that
+/// starts one row down.
+fn draw_container_rule(frame: &mut Frame, x: u16, container: Rect) {
+    let buffer = frame.buffer_mut();
+    if !buffer.area.contains((x, container.y).into()) {
+        return;
+    }
+    let bottom = container.y + container.height.saturating_sub(1);
+    for y in container.y..=bottom {
+        let cell = &mut buffer[(x, y)];
+        let junction = y == container.y || y == bottom;
+        if junction && cell.symbol() != symbols::line::HORIZONTAL {
+            continue;
+        }
+        cell.set_symbol(if !junction {
+            symbols::line::VERTICAL
+        } else if y == container.y {
+            symbols::line::HORIZONTAL_DOWN
+        } else {
+            symbols::line::HORIZONTAL_UP
+        });
+        cell.set_style(dim());
+    }
 }
 
 fn focus_body(area: Rect, horizontal_padding: u16) -> Rect {
@@ -1058,12 +1106,13 @@ mod tests {
             .collect()
     }
 
-    /// Where `draw` puts each band, for a terminal of [`HEIGHT`] rows.
+    /// Where `draw` puts each band, for a terminal of [`HEIGHT`] rows:
+    /// the workspace's last row, the rule row if the style draws one, and the
+    /// status line.
     fn bands(style: UiStyle) -> (u16, Option<u16>, u16) {
         let rule = u16::from(style != UiStyle::Frame);
         let workspace_height = HEIGHT - rule - STATUS_LANE_HEIGHT;
         let rule_y = (rule == 1).then_some(workspace_height);
-        // The status line is centered in its lane.
         (
             workspace_height - 1,
             rule_y,
@@ -1137,29 +1186,72 @@ mod tests {
         let (frame_bottom, rule_y, _) = bands(UiStyle::Frame);
         assert!(rule_y.is_none(), "the frame layout reserves no rule row");
         assert!(row(&buffer, frame_bottom).contains('╯'), "frame not closed");
+        let below = row(&buffer, frame_bottom + 1);
         assert!(
-            row(&buffer, frame_bottom + 1).trim().is_empty(),
-            "found a rule directly under the frame"
+            below.contains("NAV") && !below.starts_with("──"),
+            "expected the status line directly under the frame, got {below:?}"
         );
     }
 
     #[test]
-    fn the_status_line_is_centered_in_its_lane() {
+    fn the_shared_frame_rules_span_it_from_border_to_border() {
+        // Rules drawn inside the frame's *body* left a gap at the top and the
+        // bottom, so the panels floated in the container instead of dividing it.
+        let fixture = Fixture::new();
+        let mut app = fixture.app();
+        app.ui_style = UiStyle::Frame;
+        let buffer = render(&mut app);
+        let (frame_bottom, _, _) = bands(UiStyle::Frame);
+
+        let tops: Vec<u16> = (0..WIDTH)
+            .filter(|&x| buffer[(x, 0)].symbol() == "┬")
+            .collect();
+        assert_eq!(
+            tops.len(),
+            2,
+            "expected a junction per rule in the top border"
+        );
+        for x in tops {
+            assert_eq!(buffer[(x, frame_bottom)].symbol(), "┴");
+            for y in 1..frame_bottom {
+                assert_eq!(buffer[(x, y)].symbol(), "│", "rule breaks at row {y}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_status_line_is_a_single_row() {
+        // One line of text, one row of chrome: padding it out only took height
+        // away from the notes and the editor.
+        assert_eq!(STATUS_LANE_HEIGHT, 1);
         let fixture = Fixture::new();
         let mut app = fixture.app();
         app.ui_style = UiStyle::Focus;
         let buffer = render(&mut app);
         let (_, _, status_y) = bands(UiStyle::Focus);
-        assert!(
-            row(&buffer, status_y).contains("NAV"),
-            "status line is not on the row we centered it on"
-        );
-        for blank in [status_y - 1, status_y + 1] {
-            assert!(
-                row(&buffer, blank).trim().is_empty(),
-                "row {blank} should be the status line's breathing room"
-            );
+        assert_eq!(status_y, HEIGHT - 1, "the status line is the last row");
+        assert!(row(&buffer, status_y).contains("NAV"));
+    }
+
+    #[test]
+    fn nesting_keeps_the_navigation_panel_to_a_rail() {
+        // Absorbing the note list must not hand it both split shares — that came
+        // to nearly half the screen.
+        let fixture = Fixture::new();
+        let mut split = fixture.app();
+        let mut nested = fixture.nested_app();
+        for app in [&mut split, &mut nested] {
+            app.ui_style = UiStyle::Focus;
         }
+        let rule_x = |buffer: &Buffer, y: u16| (0..WIDTH).find(|&x| buffer[(x, y)].symbol() == "│");
+        let (last_row, _, _) = bands(UiStyle::Focus);
+        let split_nav = rule_x(&render(&mut split), last_row).expect("a rule");
+        let nested_nav = rule_x(&render(&mut nested), last_row).expect("a rule");
+        assert!(
+            nested_nav > split_nav && nested_nav <= WIDTH / 3,
+            "nested nav is {nested_nav} columns wide (split: {split_nav}, cap: {})",
+            WIDTH / 3
+        );
     }
 
     #[test]
