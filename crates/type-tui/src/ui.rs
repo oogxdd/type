@@ -219,6 +219,7 @@ fn draw_frame_workspace(frame: &mut Frame, app: &mut App, area: Rect) -> Vec<u16
     for gutter in &columns.gutters {
         draw_container_rule(frame, gutter.x, area);
     }
+    square_bottom_corners(frame, area);
     // The frame closes itself, so the status line needs no junctions below.
     Vec::new()
 }
@@ -419,6 +420,27 @@ fn draw_container_rule(frame: &mut Frame, x: u16, container: Rect) {
             symbols::line::HORIZONTAL_UP
         });
         cell.set_style(dim());
+    }
+}
+
+/// Square off a container's bottom corners so the line that closes it reaches
+/// both edges of the terminal.
+///
+/// `╰` and `╯` only ink half of their cell — the stroke turns upward at the
+/// middle — so the container's closing line, which is also the line separating
+/// the workspace from the status bar, stops one cell short at each end. `┴` inks
+/// the full cell width and still meets the side borders coming down into it.
+fn square_bottom_corners(frame: &mut Frame, container: Rect) {
+    if container.width == 0 || container.height == 0 {
+        return;
+    }
+    let y = container.y + container.height - 1;
+    let right = container.x + container.width - 1;
+    let buffer = frame.buffer_mut();
+    for x in [container.x, right] {
+        if buffer.area.contains((x, y).into()) {
+            buffer[(x, y)].set_symbol(symbols::line::HORIZONTAL_UP);
+        }
     }
 }
 
@@ -1185,11 +1207,27 @@ mod tests {
         let buffer = render(&mut app);
         let (frame_bottom, rule_y, _) = bands(UiStyle::Frame);
         assert!(rule_y.is_none(), "the frame layout reserves no rule row");
-        assert!(row(&buffer, frame_bottom).contains('╯'), "frame not closed");
         let below = row(&buffer, frame_bottom + 1);
         assert!(
             below.contains("NAV") && !below.starts_with("──"),
             "expected the status line directly under the frame, got {below:?}"
+        );
+    }
+
+    #[test]
+    fn the_frame_closes_with_a_line_that_reaches_both_edges() {
+        // `╰` and `╯` ink only half their cell, so the line that separates the
+        // workspace from the status bar stopped one cell short at each end.
+        let fixture = Fixture::new();
+        let mut app = fixture.app();
+        app.ui_style = UiStyle::Frame;
+        let buffer = render(&mut app);
+        let (frame_bottom, _, _) = bands(UiStyle::Frame);
+        let closing = row(&buffer, frame_bottom);
+        assert_eq!(closing.chars().count(), WIDTH as usize);
+        assert!(
+            closing.chars().all(|cell| cell == '─' || cell == '┴'),
+            "the closing line has cells that do not ink the full width: {closing:?}"
         );
     }
 
