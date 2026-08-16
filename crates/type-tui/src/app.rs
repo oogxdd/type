@@ -24,16 +24,19 @@
 //! back through a channel as an [`AsyncOutcome`] and lands in
 //! [`App::apply_async`]. See `ASYNC.md` for a walkthrough of that path.
 
-use std::{collections::HashSet, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+};
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use type_core::{CreateNoteArgs, FolderNode, GitPushArgs, GitSyncArgs, NoteFileNameFormat};
 
 use crate::{
-    command::{self, Command, Marker, PaletteSuggestion, UiStyle},
+    command::{self, Command, Marker, NavLayout, PaletteSuggestion, UiStyle},
     core::Core,
     editor::Editor,
-    model::{self, FeedBucket, FeedRow, FolderRow, NoteRow},
+    model::{self, FeedBucket, FeedRow, FolderRow, NavRow, NoteRow},
     vim::{Mode, Vim, VimAction},
 };
 
@@ -161,10 +164,15 @@ pub struct NavState {
     pub active_feed_id: Option<String>,
     pub notes: Vec<NoteRow>,
     pub note_cursor: usize,
+    /// Whether notes get a panel of their own or nest inside the tree.
+    pub layout: NavLayout,
+    /// The single panel's rows in [`NavLayout::Nested`]: containers with their
+    /// notes interleaved. Empty (and unused) in [`NavLayout::Split`].
+    pub nav_rows: Vec<NavRow>,
 }
 
 impl NavState {
-    pub fn new(tree: FolderNode, root_name: String) -> Self {
+    pub fn new(tree: FolderNode, root_name: String, layout: NavLayout) -> Self {
         Self {
             tree,
             root_name,
@@ -180,15 +188,25 @@ impl NavState {
             active_feed_id: None,
             notes: Vec::new(),
             note_cursor: 0,
+            layout,
+            nav_rows: Vec::new(),
         }
     }
 
-    /// Number of visible rows in the left panel for the active nav mode.
+    /// Number of visible rows in the left panel for the active layout and mode.
     pub fn left_len(&self) -> usize {
-        match self.nav_mode {
-            NavMode::Folders => self.folder_rows.len(),
-            NavMode::Feed => self.feed_rows.len(),
+        match self.layout {
+            NavLayout::Nested => self.nav_rows.len(),
+            NavLayout::Split => match self.nav_mode {
+                NavMode::Folders => self.folder_rows.len(),
+                NavMode::Feed => self.feed_rows.len(),
+            },
         }
+    }
+
+    /// The row the navigation cursor is on, in the nested layout.
+    pub fn nested_cursor_row(&self) -> Option<&NavRow> {
+        self.nav_rows.get(self.folder_cursor)
     }
 
     pub fn clamp_left_cursor(&mut self) {
@@ -198,41 +216,53 @@ impl NavState {
         }
     }
 
-    /// Rebuild the rows the left panel is currently drawing.
+    /// Rebuild the container rows the navigation panel is built from.
+    ///
+    /// The nested layout's [`NavRow`]s are derived from these *plus* the notes
+    /// inside them, which needs the core — so [`App::rebuild_nav`] is the entry
+    /// point callers should use, and it is also where the cursor is clamped.
     pub fn rebuild_left_rows(&mut self) {
         match self.nav_mode {
             NavMode::Folders => self.rebuild_folder_rows(),
             NavMode::Feed => {
-                self.feed_rows = model::flatten_feed(&self.feed_buckets, &self.feed_expanded);
-                self.clamp_left_cursor();
+                self.feed_rows = model::flatten_feed(&self.feed_buckets, &self.feed_expanded)
             }
         }
     }
 
     pub fn rebuild_folder_rows(&mut self) {
         self.folder_rows = model::flatten_folders(&self.tree, &self.expanded, &self.root_name);
-        if self.folder_cursor >= self.folder_rows.len() {
-            self.folder_cursor = self.folder_rows.len().saturating_sub(1);
-        }
     }
 
-    /// Toggle a feed bucket's expansion state.
-    pub fn toggle_feed_expanded(&mut self, expand: bool) {
-        let Some(row) = self.feed_rows.get(self.folder_cursor) else {
-            return;
+    /// Expand or collapse a container by its folder path / feed bucket id.
+    fn set_expanded(&mut self, id: &str, expand: bool) {
+        let set = match self.nav_mode {
+            NavMode::Folders => &mut self.expanded,
+            NavMode::Feed => &mut self.feed_expanded,
         };
-        let id = row.id.clone();
         if expand {
-            self.feed_expanded.insert(id);
+            set.insert(id.to_string());
         } else {
-            self.feed_expanded.remove(&id);
+            set.remove(id);
         }
-        self.rebuild_left_rows();
     }
 
     /// Whether the row under the cursor can be opened up, and whether it
     /// already is — the two facts arrow-key tree navigation runs on.
+    ///
+    /// A nested note row reports `(false, false)`: there is nothing to open on
+    /// it, which is what routes `→` into "open this note" instead.
     fn cursor_row_shape(&self) -> Option<(bool, bool)> {
+        if self.layout == NavLayout::Nested {
+            return self.nested_cursor_row().map(|row| match &row.kind {
+                model::NavRowKind::Container {
+                    expandable,
+                    expanded,
+                    ..
+                } => (*expandable, *expanded),
+                model::NavRowKind::Note { .. } => (false, false),
+            });
+        }
         match self.nav_mode {
             NavMode::Folders => self
                 .folder_rows
@@ -245,7 +275,31 @@ impl NavState {
         }
     }
 
+    /// The container path / bucket id of the row under the cursor, for the rows
+    /// that have one.
+    fn cursor_container_id(&self) -> Option<String> {
+        if self.layout == NavLayout::Nested {
+            return self
+                .nested_cursor_row()
+                .and_then(|row| row.container_id())
+                .map(str::to_string);
+        }
+        match self.nav_mode {
+            NavMode::Folders => self
+                .folder_rows
+                .get(self.folder_cursor)
+                .map(|row| row.path.clone()),
+            NavMode::Feed => self
+                .feed_rows
+                .get(self.folder_cursor)
+                .map(|row| row.id.clone()),
+        }
+    }
+
     fn row_depth(&self, index: usize) -> Option<usize> {
+        if self.layout == NavLayout::Nested {
+            return self.nav_rows.get(index).map(|row| row.depth);
+        }
         match self.nav_mode {
             NavMode::Folders => self.folder_rows.get(index).map(|row| row.depth),
             NavMode::Feed => self.feed_rows.get(index).map(|row| row.depth),
@@ -265,11 +319,21 @@ impl NavState {
             .find(|&i| self.row_depth(i).is_some_and(|other| other < depth))
     }
 
-    /// The note a command acts on: the open one, else the list selection.
+    /// The note the navigation cursor is on. In the nested layout the cursor may
+    /// be sitting on a container instead, in which case there is none.
+    pub fn cursor_note_path(&self) -> Option<String> {
+        match self.layout {
+            NavLayout::Nested => self
+                .nested_cursor_row()
+                .and_then(|row| row.note_path())
+                .map(str::to_string),
+            NavLayout::Split => self.notes.get(self.note_cursor).map(|row| row.path.clone()),
+        }
+    }
+
+    /// The note a command acts on: the selected one, else whatever is open.
     pub fn target_note(&self, editor_path: Option<&str>) -> Option<String> {
-        self.notes
-            .get(self.note_cursor)
-            .map(|row| row.path.clone())
+        self.cursor_note_path()
             .or_else(|| editor_path.map(str::to_string))
     }
 }
@@ -324,10 +388,15 @@ impl EditorState {
 
 // ── App ────────────────────────────────────────────────────────────────────
 
-/// The one-line key reminder, shown at startup and by `:h`. `{tab}` is where
-/// the Feed/Folders hint goes in a root that has a Feed to switch to.
+/// The one-line key reminder `:h` prints. `{tab}` is where the Feed/Folders hint
+/// goes in a root that has a Feed to switch to.
 const HELP_LINE: &str =
     "j/k move · →/← open/close · Enter edit · {tab}Ctrl+W pane · m markdown · / commands";
+
+/// What the status line says on launch. Deliberately not [`HELP_LINE`]: the
+/// status line is read all the time, so it opens with the one key that leads to
+/// everything else rather than with a wall of reminders.
+const READY_LINE: &str = "/ commands · :h keys";
 
 /// A modifier + letter chord, accepting any of `modifiers`.
 ///
@@ -396,7 +465,7 @@ impl App {
     pub fn new(core: Core) -> Result<Self, String> {
         let mut app = Self {
             core,
-            nav: NavState::new(empty_tree(), String::new()),
+            nav: NavState::new(empty_tree(), String::new(), NavLayout::Split),
             ed: EditorState::new(),
             focus: Pane::Folders,
             prompt: None,
@@ -423,7 +492,9 @@ impl App {
         self.root_label = root.display().to_string();
         self.ed.editor.close();
         self.ed.reset_reader_scroll();
-        self.nav = NavState::new(tree, root_display_name(&root));
+        // The layout is a preference, not a property of the root: `:open` must
+        // not silently drop the user back into the split panels.
+        self.nav = NavState::new(tree, root_display_name(&root), self.nav.layout);
         self.nav.feed_path = model::find_feed_folder(&self.nav.tree);
 
         // Feed is the default view where there is one: it is where new notes
@@ -434,19 +505,17 @@ impl App {
             self.select_first_feed();
         }
         // No feed folder, or one with nothing in it: navigate plain folders.
-        if self.nav.feed_rows.is_empty() {
+        if self.nav.left_len() == 0 {
             self.nav.nav_mode = NavMode::Folders;
-            self.nav.rebuild_left_rows();
+            self.rebuild_nav();
             if let Some(feed) = self.nav.feed_path.clone() {
-                if let Some(index) = self.nav.folder_rows.iter().position(|row| row.path == feed) {
-                    self.nav.folder_cursor = index;
-                }
+                self.focus_container(&feed);
             }
             self.select_left();
         }
         self.focus = Pane::Folders;
         self.preview_selected_note();
-        self.status = self.help_line();
+        self.status = READY_LINE.to_string();
         Ok(())
     }
 
@@ -486,6 +555,81 @@ impl App {
         }
     }
 
+    // ── Navigation rows ────────────────────────────────────────────────────
+
+    /// Rebuild the navigation panel: its container rows always, and in the
+    /// nested layout the interleaved note rows too.
+    ///
+    /// Every structural change goes through here rather than through
+    /// `NavState::rebuild_left_rows`, because building nested rows needs note
+    /// titles — which means the core — and because the cursor has to be clamped
+    /// against whichever row set is now on screen.
+    pub fn rebuild_nav(&mut self) {
+        self.nav.rebuild_left_rows();
+        if self.nav.layout == NavLayout::Nested {
+            self.nav.nav_rows = match self.nav.nav_mode {
+                // Feed buckets already carry their notes, so this needs no I/O.
+                NavMode::Feed => model::nest_feed(&self.nav.feed_buckets, &self.nav.feed_expanded),
+                NavMode::Folders => {
+                    let notes = self.expanded_folder_notes();
+                    model::nest_folders(
+                        &self.nav.tree,
+                        &self.nav.expanded,
+                        &self.nav.root_name,
+                        &notes,
+                    )
+                }
+            };
+        } else {
+            self.nav.nav_rows.clear();
+        }
+        self.nav.clamp_left_cursor();
+    }
+
+    /// Note rows for every expanded folder, in one bulk preview call.
+    ///
+    /// Collapsed folders are skipped: their notes are not on screen, so paying
+    /// to read them would make expanding the root of a large tree slow for
+    /// nothing.
+    fn expanded_folder_notes(&mut self) -> HashMap<String, Vec<NoteRow>> {
+        let mut paths = Vec::new();
+        model::expanded_folder_note_paths(&self.nav.tree, &self.nav.expanded, &mut paths);
+        if paths.is_empty() {
+            return HashMap::new();
+        }
+        match self
+            .core
+            .notes()
+            .and_then(|notes| notes.list_note_previews(paths))
+        {
+            Ok(previews) => model::group_notes_by_folder(model::note_rows(previews)),
+            Err(err) => {
+                self.status = format!("previews: {err}");
+                HashMap::new()
+            }
+        }
+    }
+
+    /// Move the navigation cursor onto a container row, whatever layout is
+    /// active. Returns whether the row was found.
+    fn focus_container(&mut self, id: &str) -> bool {
+        let index = match self.nav.layout {
+            NavLayout::Nested => self
+                .nav
+                .nav_rows
+                .iter()
+                .position(|row| row.container_id() == Some(id)),
+            NavLayout::Split => match self.nav.nav_mode {
+                NavMode::Folders => self.nav.folder_rows.iter().position(|row| row.path == id),
+                NavMode::Feed => self.nav.feed_rows.iter().position(|row| row.id == id),
+            },
+        };
+        if let Some(index) = index {
+            self.nav.folder_cursor = index;
+        }
+        index.is_some()
+    }
+
     // ── Data loading ───────────────────────────────────────────────────────
 
     pub fn refresh_tree(&mut self) {
@@ -500,7 +644,7 @@ impl App {
                     self.nav.nav_mode = NavMode::Folders;
                     self.nav.folder_cursor = 0;
                 }
-                self.nav.rebuild_left_rows();
+                self.rebuild_nav();
             }
             Err(err) => self.status = format!("tree: {err}"),
         }
@@ -557,7 +701,7 @@ impl App {
     pub fn reload_feed(&mut self) {
         let Some(feed) = self.nav.feed_path.clone() else {
             self.nav.feed_buckets.clear();
-            self.nav.rebuild_left_rows();
+            self.rebuild_nav();
             return;
         };
         let paths: Vec<String> = model::find_folder(&self.nav.tree, &feed)
@@ -575,7 +719,7 @@ impl App {
             }
         };
         self.nav.feed_buckets = model::build_feed_tree(rows);
-        self.nav.rebuild_left_rows();
+        self.rebuild_nav();
     }
 
     /// Re-read the middle-pane notes for the active feed bucket, if any.
@@ -602,11 +746,43 @@ impl App {
         self.reload_feed_selection();
     }
 
-    /// j/k in the left panel, generic over nav mode.
+    /// j/k in the navigation panel, generic over layout and nav mode.
     fn select_left(&mut self) {
+        if self.nav.layout == NavLayout::Nested {
+            self.select_nested_at_cursor();
+            return;
+        }
         match self.nav.nav_mode {
             NavMode::Folders => self.select_folder_at_cursor(),
             NavMode::Feed => self.select_feed_at_cursor(),
+        }
+    }
+
+    /// Keep the container context in step with the nested cursor.
+    ///
+    /// Nothing is loaded here — the notes are already on the rows — but
+    /// `open_folder` still has to track where the cursor is, because that is
+    /// what `o` and `:new` create into.
+    fn select_nested_at_cursor(&mut self) {
+        let Some(row) = self.nav.nested_cursor_row() else {
+            return;
+        };
+        match &row.kind {
+            model::NavRowKind::Container { id, .. } => {
+                let id = id.clone();
+                match self.nav.nav_mode {
+                    NavMode::Folders => self.nav.open_folder = Some(id),
+                    NavMode::Feed => {
+                        self.nav.active_feed_id = Some(id);
+                        self.nav.open_folder = self.nav.feed_path.clone();
+                    }
+                }
+            }
+            // A note names its own folder, which is the one a sibling should be
+            // created in — and in the Feed that is the Feed folder either way.
+            model::NavRowKind::Note { path, .. } => {
+                self.nav.open_folder = Some(model::note_parent_folder(path));
+            }
         }
     }
 
@@ -642,8 +818,8 @@ impl App {
         self.nav.folder_cursor = 0;
         match mode {
             NavMode::Folders => {
-                self.nav.rebuild_folder_rows();
-                self.select_folder_at_cursor();
+                self.rebuild_nav();
+                self.select_left();
             }
             NavMode::Feed => {
                 self.reload_feed();
@@ -654,13 +830,12 @@ impl App {
 
     // ── Editor ─────────────────────────────────────────────────────────────
 
-    /// Flush the open note, then load the note under the list cursor.
+    /// Flush the open note, then load the selected one for editing.
     fn open_selected_note(&mut self) {
         self.flush_editor();
-        let Some(row) = self.nav.notes.get(self.nav.note_cursor) else {
+        let Some(path) = self.nav.cursor_note_path() else {
             return;
         };
-        let path = row.path.clone();
         match self.core.read_note(&path) {
             Ok(body) => {
                 self.ed.editor.open(path, body);
@@ -672,13 +847,13 @@ impl App {
         }
     }
 
-    /// Show the note under the list cursor without claiming focus for editing.
+    /// Show the selected note without claiming focus for editing. In the nested
+    /// layout the cursor may be on a container, which previews nothing.
     fn preview_selected_note(&mut self) {
         self.flush_editor();
-        let Some(row) = self.nav.notes.get(self.nav.note_cursor).cloned() else {
+        let Some(path) = self.nav.cursor_note_path() else {
             return;
         };
-        let path = row.path;
         if self.ed.editor.path.as_deref() == Some(path.as_str()) {
             return;
         }
@@ -707,12 +882,18 @@ impl App {
         }
     }
 
-    /// Called once per event-loop tick: writes the buffer when it has been
-    /// idle for the debounce interval.
-    pub fn tick(&mut self) {
-        if self.ed.editor.debounce_elapsed() {
-            self.flush_editor();
+    /// Called once per event-loop tick: writes the buffer when it has been idle
+    /// for the debounce interval.
+    ///
+    /// Returns whether anything happened, so the event loop knows the screen
+    /// needs redrawing — an idle app must not repaint, or the terminal reads the
+    /// constant output as a busy job and shows a spinner on the tab.
+    pub fn tick(&mut self) -> bool {
+        if !self.ed.editor.debounce_elapsed() {
+            return false;
         }
+        self.flush_editor();
+        true
     }
 
     // ── Key dispatch ───────────────────────────────────────────────────────
@@ -776,10 +957,13 @@ impl App {
             self.status = "panels are hidden — Ctrl+T brings them back".to_string();
             return;
         }
-        self.focus = match self.focus {
-            Pane::Folders => Pane::Notes,
-            Pane::Notes => Pane::Editor,
-            Pane::Editor => Pane::Folders,
+        // The nested layout has no note pane to stop at, so one press flips
+        // between the navigation panel and the editor.
+        self.focus = match (self.focus, self.nav.layout) {
+            (Pane::Folders, NavLayout::Nested) => Pane::Editor,
+            (Pane::Folders, NavLayout::Split) => Pane::Notes,
+            (Pane::Notes, _) => Pane::Editor,
+            (Pane::Editor, _) => Pane::Folders,
         };
     }
 
@@ -837,14 +1021,30 @@ impl App {
             }
             KeyCode::Char('l') | KeyCode::Right | KeyCode::Char(' ') => self.expand_or_descend(),
             KeyCode::Char('h') | KeyCode::Left => self.collapse_or_ascend(),
-            KeyCode::Enter => {
-                self.select_left();
-                self.focus = Pane::Notes;
-                self.preview_selected_note();
-            }
+            KeyCode::Enter => self.enter_left(),
+            // Nested has no note pane to press `o` in, so the navigation panel
+            // takes over creating notes in the folder the cursor is inside.
+            KeyCode::Char('o') if self.nav.layout == NavLayout::Nested => self.create_note(None),
             KeyCode::Char(':') => self.open_prompt(PromptKind::Command),
             _ => {}
         }
+    }
+
+    /// `Enter` in the navigation panel. Split hands over to the note pane;
+    /// nested opens the row — a note into the editor, a container open or shut.
+    fn enter_left(&mut self) {
+        if self.nav.layout == NavLayout::Nested {
+            if self.nav.cursor_note_path().is_some() {
+                self.open_selected_note();
+            } else {
+                let expanded = matches!(self.nav.cursor_row_shape(), Some((_, true)));
+                self.toggle_left_expand(!expanded);
+            }
+            return;
+        }
+        self.select_left();
+        self.focus = Pane::Notes;
+        self.preview_selected_note();
     }
 
     /// `→` / `l`: open the row under the cursor, one step at a time — expand a
@@ -859,10 +1059,15 @@ impl App {
                 self.select_left();
                 self.preview_selected_note();
             }
-            Some((false, _)) => {
-                self.focus = Pane::Notes;
-                self.preview_selected_note();
-            }
+            // Nothing left to open: in the split layout the notes are next door,
+            // in the nested one the row under the cursor already *is* a note.
+            Some((false, _)) => match self.nav.layout {
+                NavLayout::Nested => self.open_selected_note(),
+                NavLayout::Split => {
+                    self.focus = Pane::Notes;
+                    self.preview_selected_note();
+                }
+            },
             None => {}
         }
     }
@@ -884,20 +1089,16 @@ impl App {
     }
 
     fn toggle_left_expand(&mut self, expand: bool) {
-        match self.nav.nav_mode {
-            NavMode::Folders => {
-                let Some(row) = self.nav.folder_rows.get(self.nav.folder_cursor) else {
-                    return;
-                };
-                let path = row.path.clone();
-                if expand {
-                    self.nav.expanded.insert(path);
-                } else {
-                    self.nav.expanded.remove(&path);
-                }
-                self.nav.rebuild_left_rows();
-            }
-            NavMode::Feed => self.nav.toggle_feed_expanded(expand),
+        let Some(id) = self.nav.cursor_container_id() else {
+            return;
+        };
+        self.nav.set_expanded(&id, expand);
+        self.rebuild_nav();
+        // Collapsing can swallow the row the cursor was on, clamping it onto a
+        // different container. Only then is the context stale — re-selecting
+        // unconditionally would also reset the note cursor on a harmless expand.
+        if self.nav.cursor_container_id().as_deref() != Some(id.as_str()) {
+            self.select_left();
         }
     }
 
@@ -1207,6 +1408,14 @@ impl App {
             Command::Panels => self.toggle_panels(),
             Command::SetUiStyle(style) => self.set_ui_style(style),
             Command::NextUiStyle => self.set_ui_style(self.ui_style.next()),
+            Command::SetNavLayout(layout) => {
+                self.show_panels();
+                self.set_nav_layout(layout);
+            }
+            Command::NextNavLayout => {
+                self.show_panels();
+                self.set_nav_layout(self.nav.layout.next());
+            }
             Command::ViewMarkdown => self.set_editor_view(EditorView::Markdown),
             Command::ViewSource => self.set_editor_view(EditorView::Source),
             Command::ToggleMarkdownView => self.toggle_editor_view(),
@@ -1254,6 +1463,75 @@ impl App {
     fn set_ui_style(&mut self, style: UiStyle) {
         self.ui_style = style;
         self.status = format!("UI layout → {}", style.label());
+    }
+
+    /// Move the note list into the tree, or back out into its own panel.
+    ///
+    /// Switching keeps your place: the container you were in is expanded on the
+    /// way in so its notes are visible, and the cursor lands back on whichever
+    /// note was open.
+    pub fn set_nav_layout(&mut self, layout: NavLayout) {
+        if self.nav.layout == layout {
+            self.status = format!("notes are already {}", layout.label());
+            return;
+        }
+        let container = match self.nav.nav_mode {
+            NavMode::Folders => self.nav.open_folder.clone(),
+            NavMode::Feed => self.nav.active_feed_id.clone(),
+        };
+        let open_note = self
+            .nav
+            .cursor_note_path()
+            .or_else(|| self.ed.editor.path.clone());
+
+        self.nav.layout = layout;
+        if layout == NavLayout::Nested {
+            if self.focus == Pane::Notes {
+                self.focus = Pane::Folders;
+            }
+            if let Some(container) = &container {
+                self.nav.set_expanded(container, true);
+            }
+        }
+        self.rebuild_nav();
+
+        // Prefer the note, fall back to its container: in the split layout only
+        // containers have rows, so `focus_container` is the one that can land.
+        let landed = match (layout, &open_note) {
+            (NavLayout::Nested, Some(path)) => self.focus_note(path),
+            _ => false,
+        };
+        if !landed {
+            if let Some(container) = &container {
+                self.focus_container(container);
+            }
+        }
+        self.select_left();
+        if layout == NavLayout::Split {
+            // `select_left` reloaded the note pane and put its cursor back at
+            // the top, so the note has to be found again in the list it now has.
+            if let Some(index) = open_note
+                .as_ref()
+                .and_then(|path| self.nav.notes.iter().position(|row| &row.path == path))
+            {
+                self.nav.note_cursor = index;
+            }
+            self.preview_selected_note();
+        }
+        self.status = format!("notes → {}", layout.label());
+    }
+
+    /// Move the nested cursor onto a note row. Returns whether it was on screen.
+    fn focus_note(&mut self, path: &str) -> bool {
+        let index = self
+            .nav
+            .nav_rows
+            .iter()
+            .position(|row| row.note_path() == Some(path));
+        if let Some(index) = index {
+            self.nav.folder_cursor = index;
+        }
+        index.is_some()
     }
 
     fn set_editor_view(&mut self, view: EditorView) {
@@ -1598,4 +1876,159 @@ fn do_connect(core: &Core, argument: &str) -> Result<String, String> {
             status.current_branch.unwrap_or_else(|| "?".into())
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::Fixture;
+
+    fn press(app: &mut App, code: KeyCode) {
+        app.on_key(KeyEvent::new(code, KeyModifiers::NONE));
+    }
+
+    /// The navigation panel as it reads on screen: indent plus label.
+    fn rows(app: &App) -> Vec<String> {
+        app.nav
+            .nav_rows
+            .iter()
+            .map(|row| format!("{}{}", "  ".repeat(row.depth), row.label))
+            .collect()
+    }
+
+    /// Put the nested cursor on a row by note path, expanding nothing.
+    fn goto_note(app: &mut App, path: &str) {
+        let index = app
+            .nav
+            .nav_rows
+            .iter()
+            .position(|row| row.note_path() == Some(path))
+            .unwrap_or_else(|| panic!("{path} is not on screen: {:?}", rows(app)));
+        app.nav.folder_cursor = index;
+        app.select_left();
+    }
+
+    #[test]
+    fn nesting_puts_the_feed_notes_inside_their_bucket() {
+        let fixture = Fixture::new();
+        let mut app = fixture.nested_app();
+        // The bucket that was open in the split layout is expanded on the way in,
+        // so the notes are there immediately rather than after a keystroke.
+        assert_eq!(
+            rows(&app),
+            vec!["Today", "  alpha note", "  beta note", "  gamma note"]
+        );
+
+        // `←` on a note steps out to the bucket that owns it, and again collapses
+        // that bucket — the same two-step the split layout's tree has.
+        press(&mut app, KeyCode::Left);
+        assert_eq!(app.nav.cursor_container_id().as_deref(), Some("feed:today"));
+        press(&mut app, KeyCode::Left);
+        assert_eq!(rows(&app), vec!["Today"]);
+    }
+
+    #[test]
+    fn nesting_reaches_notes_in_ordinary_folders_too() {
+        let fixture = Fixture::new();
+        let mut app = fixture.nested_app();
+        app.set_nav_mode(NavMode::Folders);
+        app.nav.expanded.insert("projects".to_string());
+        app.nav.expanded.insert("projects/beta".to_string());
+        app.rebuild_nav();
+        // Folders first, then the folder's own notes — the desktop's nesting order.
+        assert_eq!(
+            rows(&app).last().map(String::as_str),
+            Some("      beta plan")
+        );
+    }
+
+    #[test]
+    fn the_nested_cursor_opens_the_note_it_is_on() {
+        let fixture = Fixture::new();
+        let mut app = fixture.nested_app();
+        assert_eq!(app.nav.cursor_note_path().as_deref(), Some("Feed/alpha.md"));
+        // Nothing left to expand on a note row, so `→` means "open this".
+        press(&mut app, KeyCode::Right);
+        assert_eq!(app.ed.editor.path.as_deref(), Some("Feed/alpha.md"));
+        assert!(app.focus == Pane::Editor);
+    }
+
+    #[test]
+    fn right_still_expands_a_nested_container() {
+        let fixture = Fixture::new();
+        let mut app = fixture.nested_app();
+        press(&mut app, KeyCode::Left);
+        press(&mut app, KeyCode::Left);
+        assert_eq!(rows(&app), vec!["Today"]);
+        press(&mut app, KeyCode::Right);
+        assert_eq!(rows(&app).len(), 4);
+    }
+
+    #[test]
+    fn enter_toggles_a_nested_container_instead_of_hopping_panes() {
+        let fixture = Fixture::new();
+        let mut app = fixture.nested_app();
+        press(&mut app, KeyCode::Left);
+        // There is no note pane to move to, so Enter has to act on the row.
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(rows(&app), vec!["Today"]);
+        assert!(app.focus == Pane::Folders);
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(rows(&app).len(), 4);
+    }
+
+    #[test]
+    fn nested_focus_cycles_between_navigation_and_editor() {
+        let fixture = Fixture::new();
+        let mut app = fixture.nested_app();
+        assert!(app.focus == Pane::Folders);
+        app.cycle_focus();
+        assert!(
+            app.focus == Pane::Editor,
+            "nested has no note pane to stop at"
+        );
+        app.cycle_focus();
+        assert!(app.focus == Pane::Folders);
+    }
+
+    #[test]
+    fn switching_layouts_keeps_your_place() {
+        let fixture = Fixture::new();
+        let mut app = fixture.app();
+        // Split: select the second note in the bucket.
+        app.focus = Pane::Notes;
+        press(&mut app, KeyCode::Char('j'));
+        let selected = app.nav.cursor_note_path().expect("a selected note");
+        assert_eq!(selected, "Feed/beta.md");
+
+        app.set_nav_layout(NavLayout::Nested);
+        assert_eq!(
+            app.nav.cursor_note_path().as_deref(),
+            Some(selected.as_str())
+        );
+
+        app.set_nav_layout(NavLayout::Split);
+        assert_eq!(
+            app.nav.cursor_note_path().as_deref(),
+            Some(selected.as_str())
+        );
+    }
+
+    #[test]
+    fn a_nested_note_creates_its_sibling_in_its_own_folder() {
+        let fixture = Fixture::new();
+        let mut app = fixture.nested_app();
+        app.set_nav_mode(NavMode::Folders);
+        app.nav.expanded.insert("projects".to_string());
+        app.nav.expanded.insert("projects/beta".to_string());
+        app.rebuild_nav();
+        goto_note(&mut app, "projects/beta/plan.md");
+
+        press(&mut app, KeyCode::Char('o'));
+        let created = app.ed.editor.path.clone().expect("a created note");
+        assert!(
+            created.starts_with("projects/beta/"),
+            "created in the wrong folder: {created}"
+        );
+    }
 }

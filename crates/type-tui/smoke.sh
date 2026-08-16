@@ -113,7 +113,8 @@ echo "4. panes render and :status answers"
 drive 1 ':status\r' 2 ':q!\r'
 SCREEN="$(screen)"
 echo "$SCREEN" | grep -qE 'Feed|Folders' || fail "nav pane missing"
-echo "$SCREEN" | grep -q 'NORMAL' || fail "status bar missing"
+# The mode chip names the pane that has the keys; the app opens on the tree.
+echo "$SCREEN" | grep -q 'NAV' || fail "status bar missing"
 echo "$SCREEN" | grep -q 'nogitrepo' || fail ":status did not report git state"
 pass "nav + status bar + git status"
 
@@ -190,6 +191,23 @@ cmp -s "$WORK/career-before.md" "$WIKI/career-timeline.md" \
 [ ! -d "$WIKI/Archieve" ] || fail "opening a folder created Archieve/ in it"
 [ ! -d "$WIKI/Recordings" ] || fail "opening a folder created Recordings/ in it"
 pass "custom folder renders read-only without being converted into a notes root"
+
+echo "11. nav:nested moves the notes into the navigation panel"
+# Asserted through behavior rather than the screen: `o` creates a note from the
+# navigation panel *only* in the nested layout, where that panel owns the notes.
+# This is the same trick step 6 uses, and for the same reason — a status message
+# is only reliable on screen when enough neighbouring cells changed with it.
+drive 1 ':nav:nested\r' 1 'o' 1 'made in the nested tree' 1 '\033' 1 ':wq\r'
+grep -rq 'made in the nested tree' "$ROOT" \
+    || fail "o did not create a note from the nested navigation panel"
+pass "nested layout: the navigation panel owns the notes"
+
+echo "12. nav:split hands them back to their own panel"
+BEFORE="$(find "$ROOT" -name '*.md' | wc -l)"
+drive 1 ':nav:nested\r' 1 ':nav:split\r' 1 'o' 2 ':q!\r'
+AFTER="$(find "$ROOT" -name '*.md' | wc -l)"
+[ "$BEFORE" -eq "$AFTER" ] || fail "the tree still created a note in the split layout"
+pass "split layout: the tree leaves note creation to the note pane"
 
 echo
 echo "all smoke tests passed"

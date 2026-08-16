@@ -4,7 +4,7 @@
 //! `Recordings` storage folder. All we add here is presentation state: which
 //! folders are expanded, and how a note's preview text and badges are derived.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use type_core::{FolderNode, NotePreviewEntry, FEED_FOLDER};
 
@@ -96,6 +96,194 @@ fn push_folder_rows(
     }
 }
 
+// ── Nested navigation rows ────────────────────────────────────────────────
+//
+// `NavLayout::Nested` collapses the two navigation panels into one, so a row can
+// be either a container (a folder, or one of the Feed's synthetic date buckets)
+// or a note living inside one. The two flat row types above stay as the
+// container model — the nested rows are derived from them plus the notes.
+
+/// One row of the single navigation panel in [`crate::command::NavLayout::Nested`].
+pub struct NavRow {
+    pub label: String,
+    pub depth: usize,
+    pub kind: NavRowKind,
+}
+
+pub enum NavRowKind {
+    /// A folder (`id` is its root-relative path) or a feed bucket (`id` is its
+    /// bucket id) — whatever the active nav mode navigates.
+    Container {
+        id: String,
+        expanded: bool,
+        /// Whether there is anything to reveal. Unlike the split layout this
+        /// counts the container's *notes* too: a Feed day bucket has no child
+        /// buckets, but opening it is the whole point in this layout.
+        expandable: bool,
+        /// Notes beneath, shown as a count suffix; `0` hides it.
+        count: usize,
+        /// The Feed's relative buckets are set in bold, as in the split layout.
+        emphasised: bool,
+    },
+    Note {
+        path: String,
+        is_audio: bool,
+    },
+}
+
+impl NavRow {
+    /// The note this row opens, or `None` for a container row.
+    pub fn note_path(&self) -> Option<&str> {
+        match &self.kind {
+            NavRowKind::Note { path, .. } => Some(path),
+            NavRowKind::Container { .. } => None,
+        }
+    }
+
+    /// The folder path / bucket id this row selects, or `None` for a note row.
+    pub fn container_id(&self) -> Option<&str> {
+        match &self.kind {
+            NavRowKind::Container { id, .. } => Some(id),
+            NavRowKind::Note { .. } => None,
+        }
+    }
+}
+
+/// Nest each folder's notes under it, after its subfolders — the order the
+/// desktop's nested notes list uses.
+///
+/// `notes` only has to cover the folders that are actually expanded; a collapsed
+/// folder contributes nothing but its own row and count.
+pub fn nest_folders(
+    root: &FolderNode,
+    expanded: &HashSet<String>,
+    root_name: &str,
+    notes: &HashMap<String, Vec<NoteRow>>,
+) -> Vec<NavRow> {
+    let mut rows = Vec::new();
+    push_nested_folder(root, expanded, root_name, notes, 0, &mut rows);
+    rows
+}
+
+fn push_nested_folder(
+    node: &FolderNode,
+    expanded: &HashSet<String>,
+    label: &str,
+    notes: &HashMap<String, Vec<NoteRow>>,
+    depth: usize,
+    rows: &mut Vec<NavRow>,
+) {
+    let is_expanded = expanded.contains(&node.path);
+    rows.push(NavRow {
+        label: label.to_string(),
+        depth,
+        kind: NavRowKind::Container {
+            id: node.path.clone(),
+            expanded: is_expanded,
+            expandable: !node.children.is_empty() || !node.notes.is_empty(),
+            count: node.notes.len(),
+            emphasised: false,
+        },
+    });
+    if !is_expanded {
+        return;
+    }
+    for child in &node.children {
+        push_nested_folder(child, expanded, &child.name, notes, depth + 1, rows);
+    }
+    for note in notes.get(&node.path).into_iter().flatten() {
+        rows.push(note_nav_row(note, depth + 1));
+    }
+}
+
+/// Nest the Feed's notes inside their date buckets. Every note is already loaded
+/// on the bucket tree, so unlike folders this needs no extra fetch.
+pub fn nest_feed(buckets: &[FeedBucket], expanded: &HashSet<String>) -> Vec<NavRow> {
+    let mut rows = Vec::new();
+    for bucket in buckets {
+        push_nested_bucket(bucket, expanded, 0, &mut rows);
+    }
+    rows
+}
+
+fn push_nested_bucket(
+    bucket: &FeedBucket,
+    expanded: &HashSet<String>,
+    depth: usize,
+    rows: &mut Vec<NavRow>,
+) {
+    let is_expanded = expanded.contains(&bucket.id);
+    rows.push(NavRow {
+        label: bucket.label.clone(),
+        depth,
+        kind: NavRowKind::Container {
+            id: bucket.id.clone(),
+            expanded: is_expanded,
+            expandable: !bucket.children.is_empty() || !bucket.notes.is_empty(),
+            count: bucket.note_count(),
+            emphasised: matches!(bucket.kind, FeedKind::Special(_)),
+        },
+    });
+    if !is_expanded {
+        return;
+    }
+    for child in &bucket.children {
+        push_nested_bucket(child, expanded, depth + 1, rows);
+    }
+    for note in &bucket.notes {
+        rows.push(note_nav_row(note, depth + 1));
+    }
+}
+
+fn note_nav_row(note: &NoteRow, depth: usize) -> NavRow {
+    NavRow {
+        label: note.title.clone(),
+        depth,
+        kind: NavRowKind::Note {
+            path: note.path.clone(),
+            is_audio: note.is_audio,
+        },
+    }
+}
+
+/// Every note path inside a folder the user has expanded — what the nested
+/// layout needs previews for, and nothing more.
+pub fn expanded_folder_note_paths(
+    node: &FolderNode,
+    expanded: &HashSet<String>,
+    out: &mut Vec<String>,
+) {
+    if !expanded.contains(&node.path) {
+        return;
+    }
+    out.extend(node.notes.iter().map(|note| note.path.clone()));
+    for child in &node.children {
+        expanded_folder_note_paths(child, expanded, out);
+    }
+}
+
+/// The folder a root-relative note path sits in. Root-level notes report
+/// [`ROOT_PATH`], which is how the tree names the opened folder itself.
+pub fn note_parent_folder(path: &str) -> String {
+    match path.rsplit_once('/') {
+        Some((parent, _)) => parent.to_string(),
+        None => ROOT_PATH.to_string(),
+    }
+}
+
+/// Group note rows by the folder they live in, preserving the newest-first order
+/// [`note_rows`] established.
+pub fn group_notes_by_folder(rows: Vec<NoteRow>) -> HashMap<String, Vec<NoteRow>> {
+    let mut grouped: HashMap<String, Vec<NoteRow>> = HashMap::new();
+    for row in rows {
+        grouped
+            .entry(note_parent_folder(&row.path))
+            .or_default()
+            .push(row);
+    }
+    grouped
+}
+
 /// Depth-first lookup of a folder by its root-relative path.
 pub fn find_folder<'a>(root: &'a FolderNode, path: &str) -> Option<&'a FolderNode> {
     if root.path == path {
@@ -159,7 +347,11 @@ pub fn note_rows(previews: Vec<NotePreviewEntry>) -> Vec<NoteRow> {
         .collect();
     // Newest first. Notes without any timestamp sink to the bottom rather than
     // jumping to the top, which is what `None` would do under a naive sort.
-    rows.sort_by(|a, b| b.feed_ts().unwrap_or(i64::MIN).cmp(&a.feed_ts().unwrap_or(i64::MIN)));
+    rows.sort_by(|a, b| {
+        b.feed_ts()
+            .unwrap_or(i64::MIN)
+            .cmp(&a.feed_ts().unwrap_or(i64::MIN))
+    });
     rows
 }
 
@@ -296,7 +488,12 @@ pub fn flatten_feed(buckets: &[FeedBucket], expanded: &HashSet<String>) -> Vec<F
     rows
 }
 
-fn push_feed_rows(bucket: &FeedBucket, expanded: &HashSet<String>, depth: usize, rows: &mut Vec<FeedRow>) {
+fn push_feed_rows(
+    bucket: &FeedBucket,
+    expanded: &HashSet<String>,
+    depth: usize,
+    rows: &mut Vec<FeedRow>,
+) {
     let is_expanded = expanded.contains(&bucket.id);
     rows.push(FeedRow {
         id: bucket.id.clone(),
@@ -444,14 +641,14 @@ struct Builder {
 
 struct FeedTreeBuilder {
     nodes: Vec<Builder>,
-    by_id: std::collections::HashMap<String, usize>,
+    by_id: HashMap<String, usize>,
 }
 
 impl FeedTreeBuilder {
     fn new() -> Self {
         let mut s = Self {
             nodes: Vec::new(),
-            by_id: std::collections::HashMap::new(),
+            by_id: HashMap::new(),
         };
         s.nodes.push(Builder {
             id: "feed:root".into(),
@@ -667,7 +864,8 @@ impl FeedTreeBuilder {
             month.to_string(),
         ];
         let month_id = feed_id(&month_segs);
-        let month_node = self.ensure_child(q_node, month_id, month_label, FeedKind::Month, month_rank);
+        let month_node =
+            self.ensure_child(q_node, month_id, month_label, FeedKind::Month, month_rank);
         (month_node, month_segs)
     }
 
@@ -896,7 +1094,10 @@ mod feed_tests {
         let mut expanded = HashSet::new();
         expanded.insert(top.id.clone());
         let rows = flatten_feed(&buckets, &expanded);
-        assert!(rows.iter().any(|r| r.depth == 1), "expanding must reveal children");
+        assert!(
+            rows.iter().any(|r| r.depth == 1),
+            "expanding must reveal children"
+        );
     }
 
     #[test]
@@ -906,7 +1107,12 @@ mod feed_tests {
         let now = now_ms();
         let buckets = build_feed_tree(vec![note("Feed/last-year.md", now - DAY_MS * 400)]);
         assert!(!buckets.is_empty());
-        assert_eq!(buckets[0].kind, FeedKind::Year, "expected a Year bucket, got {:?}", labels(&buckets));
+        assert_eq!(
+            buckets[0].kind,
+            FeedKind::Year,
+            "expected a Year bucket, got {:?}",
+            labels(&buckets)
+        );
         assert_eq!(buckets[0].note_count(), 1);
     }
 }

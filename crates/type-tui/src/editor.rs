@@ -14,6 +14,7 @@
 
 use std::time::{Duration, Instant};
 
+use ratatui::style::{Color, Style};
 use tui_textarea::{TextArea, WrapMode};
 use type_core::slug_from_content;
 
@@ -22,6 +23,20 @@ use crate::core::Core;
 /// Same debounce the desktop editor uses. Keep them in sync: it is the interval
 /// that decides how much work a crash can lose.
 pub const DEBOUNCE: Duration = Duration::from_millis(400);
+
+/// Vim-style line numbers down the editor's left gutter.
+///
+/// Setting a style is what turns them on in `tui-textarea-2`; the widget then
+/// right-aligns the numbers and reserves the gutter out of the soft-wrap width,
+/// so wrapped paragraphs stay inside the text column.
+fn configure(area: &mut TextArea<'static>) {
+    // The reason this crate uses the `tui-textarea-2` fork at all: notes are
+    // markdown paragraphs stored as single long lines, and the original widget
+    // scrolls them horizontally instead of wrapping.
+    area.set_wrap_mode(WrapMode::WordOrGlyph);
+    area.set_max_histories(500);
+    area.set_line_number_style(Style::default().fg(Color::DarkGray));
+}
 
 /// What a flush actually did, so the caller can refresh the list and selection.
 #[derive(Default)]
@@ -51,11 +66,7 @@ pub struct Editor {
 impl Editor {
     pub fn new() -> Self {
         let mut area = TextArea::default();
-        // The reason this crate uses the `tui-textarea-2` fork at all: notes are
-        // markdown paragraphs stored as single long lines, and the original
-        // widget scrolls them horizontally instead of wrapping.
-        area.set_wrap_mode(WrapMode::WordOrGlyph);
-        area.set_max_histories(500);
+        configure(&mut area);
         Self {
             area,
             path: None,
@@ -71,8 +82,7 @@ impl Editor {
         // conventional trailing newline survives a real edit/save round trip.
         let lines: Vec<String> = body.split('\n').map(str::to_string).collect();
         let mut area = TextArea::new(lines);
-        area.set_wrap_mode(WrapMode::WordOrGlyph);
-        area.set_max_histories(500);
+        configure(&mut area);
         self.area = area;
         self.path = Some(path);
         self.dirty_since = None;
@@ -98,7 +108,7 @@ impl Editor {
     /// Drop the buffer without touching disk (used after a delete).
     pub fn close(&mut self) {
         self.area = TextArea::default();
-        self.area.set_wrap_mode(WrapMode::WordOrGlyph);
+        configure(&mut self.area);
         self.path = None;
         self.dirty_since = None;
         self.created_here = false;

@@ -40,6 +40,37 @@ impl UiStyle {
     }
 }
 
+/// Where the note list lives — the terminal counterpart of the desktop's
+/// `notesListMode`.
+///
+/// This is orthogonal to [`UiStyle`]: it changes how many navigation columns
+/// there are, not how they are framed, so every chrome experiment renders both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavLayout {
+    /// Two navigation panels: containers on the left, the selected container's
+    /// notes beside them.
+    Split,
+    /// One navigation panel: each note is drawn inside the folder — or, in the
+    /// Feed, the date bucket — it belongs to.
+    Nested,
+}
+
+impl NavLayout {
+    pub fn next(self) -> Self {
+        match self {
+            Self::Split => Self::Nested,
+            Self::Nested => Self::Split,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Split => "split",
+            Self::Nested => "nested",
+        }
+    }
+}
+
 /// A parsed command line. Unknown input is preserved so the status bar can
 /// echo it back rather than failing silently.
 #[derive(Debug, PartialEq, Eq)]
@@ -68,6 +99,10 @@ pub enum Command {
     SetUiStyle(UiStyle),
     /// Cycle frame → panes → focus without remembering a name.
     NextUiStyle,
+    /// Put the note list in its own panel, or nest it inside the tree.
+    SetNavLayout(NavLayout),
+    /// Flip between the two without remembering a name.
+    NextNavLayout,
     /// Show the open note as rendered Markdown (read-only).
     ViewMarkdown,
     /// Return the open note to its editable Markdown source.
@@ -270,6 +305,27 @@ const CATALOG: &[CatalogEntry] = &[
         icon: "✎",
     },
     CatalogEntry {
+        input: "nav:toggle",
+        label: "Toggle nested / split notes",
+        keywords: "panel panes one two nested list desktop layout notes",
+        group: PaletteGroup::View,
+        icon: "◨",
+    },
+    CatalogEntry {
+        input: "nav:nested",
+        label: "Notes inside their folder",
+        keywords: "one panel nested tree inline notes layout",
+        group: PaletteGroup::View,
+        icon: "◧",
+    },
+    CatalogEntry {
+        input: "nav:split",
+        label: "Notes in their own panel",
+        keywords: "two panels split list column notes layout",
+        group: PaletteGroup::View,
+        icon: "◨",
+    },
+    CatalogEntry {
         input: "write",
         label: "Save note",
         keywords: "write persist",
@@ -392,6 +448,9 @@ pub fn parse(input: &str) -> Command {
             }
         }
         "panels" | "t" => Command::Panels,
+        "nav" | "nav:toggle" => Command::NextNavLayout,
+        "nav:nested" | "nested" => Command::SetNavLayout(NavLayout::Nested),
+        "nav:split" | "split" => Command::SetNavLayout(NavLayout::Split),
         "ui" | "ui:next" => Command::NextUiStyle,
         "ui:frame" => Command::SetUiStyle(UiStyle::Frame),
         "ui:panes" => Command::SetUiStyle(UiStyle::Panes),
@@ -474,13 +533,16 @@ pub fn palette_suggestions(query: &str, folders: &[String]) -> Vec<PaletteSugges
 fn catalog_order(input: &str) -> usize {
     match input {
         "new" | "feed" | "view:toggle" | "sync" | "help" => 0,
-        "write" | "folders" | "view:markdown" | "pull" | "quit" => 1,
-        "mv " | "open " | "view:source" | "push" | "q!" => 2,
-        "delete" | "search " | "panels" | "status" => 3,
-        "mark:archive" | "ui:focus" | "connect " => 4,
-        "mark:unarchive" | "ui:next" | "key" => 5,
-        "mark:reviewed" | "ui:panes" => 6,
-        "mark:unreviewed" | "ui:frame" => 7,
+        "write" | "folders" | "nav:toggle" | "pull" | "quit" => 1,
+        "mv " | "open " | "nav:nested" | "push" | "q!" => 2,
+        "delete" | "search " | "nav:split" | "status" => 3,
+        "mark:archive" | "view:markdown" | "connect " => 4,
+        "mark:unarchive" | "view:source" | "key" => 5,
+        "mark:reviewed" | "panels" => 6,
+        "mark:unreviewed" | "ui:focus" => 7,
+        "ui:next" => 8,
+        "ui:panes" => 9,
+        "ui:frame" => 10,
         _ => usize::MAX,
     }
 }

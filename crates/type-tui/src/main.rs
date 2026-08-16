@@ -20,6 +20,8 @@ mod command;
 mod core;
 mod editor;
 mod model;
+#[cfg(test)]
+mod test_support;
 mod ui;
 mod vim;
 
@@ -136,16 +138,35 @@ fn event_loop(
     tx: tokio::sync::mpsc::Sender<AsyncOutcome>,
     mut rx: tokio::sync::mpsc::Receiver<AsyncOutcome>,
 ) -> Result<(), String> {
+    // Only repaint when something actually changed.
+    //
+    // This is not a micro-optimisation. `CrosstermBackend::draw` writes colour
+    // and attribute resets on every call even when no cell differs, so drawing
+    // unconditionally means a stream of escape sequences twenty times a second
+    // for an app that is sitting still. Terminals read that as a job producing
+    // output and light up their activity indicator — iTerm2 shows a spinner on
+    // the tab for as long as the app is open. An idle `type-tui` now writes
+    // nothing at all.
+    let mut dirty = true;
     loop {
-        terminal
-            .draw(|frame| ui::draw(frame, app))
-            .map_err(|err| err.to_string())?;
+        if dirty {
+            terminal
+                .draw(|frame| ui::draw(frame, app))
+                .map_err(|err| err.to_string())?;
+            dirty = false;
+        }
 
         if event::poll(POLL_INTERVAL).map_err(|err| err.to_string())? {
             match event::read().map_err(|err| err.to_string())? {
                 // Windows sends both Press and Release; only act on Press or
                 // every keystroke would register twice.
-                Event::Key(key) if key.kind == KeyEventKind::Press => app.on_key(key),
+                Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    app.on_key(key);
+                    dirty = true;
+                }
+                // The layout is computed from the frame size, so a resize needs
+                // a repaint even though no state changed.
+                Event::Resize(..) => dirty = true,
                 _ => {}
             }
         }
@@ -162,16 +183,19 @@ fn event_loop(
                 let outcome = run_git_task(&core, task);
                 let _ = tx.blocking_send(outcome);
             });
+            // The `⟳ git` indicator just came on.
+            dirty = true;
         }
 
         // Apply finished background work. `try_recv` never blocks: keys keep
         // flowing while a git operation is still running.
         while let Ok(outcome) = rx.try_recv() {
             app.apply_async(outcome);
+            dirty = true;
         }
 
         // Fires the debounced write once the buffer has gone quiet.
-        app.tick();
+        dirty |= app.tick();
 
         if app.should_quit {
             // Last chance to persist: `:q` already flushed, but a quit through
