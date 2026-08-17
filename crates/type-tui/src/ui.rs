@@ -90,9 +90,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         UiStyle::Frame => draw_frame_workspace(frame, app, workspace),
         UiStyle::Panes => draw_panes_workspace(frame, app, workspace),
         UiStyle::Focus => draw_focus_workspace(frame, app, workspace),
+        UiStyle::Rails => draw_rails_workspace(frame, app, workspace),
     };
     if rule.height > 0 {
-        draw_status_rule(frame, rule, &joins);
+        draw_status_rule(frame, rule, &joins, app.ui_style);
     }
     draw_status(frame, app, status);
     if app
@@ -290,6 +291,129 @@ fn draw_focus_workspace(frame: &mut Frame, app: &mut App, area: Rect) -> Vec<u16
     columns.gutters.iter().map(|gutter| gutter.x).collect()
 }
 
+/// Experiment D: no borders anywhere. Every panel is marked by a vertical rail
+/// at its left edge — bright for the focused one, faint otherwise — so colour
+/// carries the structure that box-drawing used to. The Feed is drawn as a
+/// timeline, because that is what it is.
+fn draw_rails_workspace(frame: &mut Frame, app: &mut App, area: Rect) -> Vec<u16> {
+    if app.panels_hidden {
+        draw_rails_editor(frame, &mut app.ed, true, false, area);
+        return Vec::new();
+    }
+    // No gutter: each panel owns the rail on its own left edge, which is what
+    // makes the rail a focus indicator rather than a shared divider.
+    let columns = split_columns(area, app.nav.layout, 21, 25, 0);
+    draw_rails_nav(frame, &app.nav, app.focus == Pane::Folders, columns.nav);
+    if let Some(notes) = columns.notes {
+        draw_rails_notes(frame, &app.nav, app.focus == Pane::Notes, notes);
+    }
+    draw_rails_editor(
+        frame,
+        &mut app.ed,
+        app.focus == Pane::Editor,
+        app.focus == Pane::Notes,
+        columns.editor,
+    );
+    Vec::new()
+}
+
+/// Split a panel into its focus rail and the content beside it.
+fn rail_and_body(area: Rect) -> [Rect; 2] {
+    Layout::horizontal([Constraint::Length(1), Constraint::Min(0)]).areas(area)
+}
+
+/// The rail itself: a solid block for the focused panel, a hairline for the rest.
+fn draw_focus_rail(frame: &mut Frame, area: Rect, focused: bool) {
+    let (glyph, style) = if focused {
+        ("▌", accent())
+    } else {
+        ("▏", dim())
+    };
+    let rail: Vec<Line> = (0..area.height)
+        .map(|_| Line::from(Span::styled(glyph, style)))
+        .collect();
+    frame.render_widget(Paragraph::new(rail), area);
+}
+
+fn draw_rails_nav(frame: &mut Frame, nav: &NavState, focused: bool, area: Rect) {
+    let [rail, panel] = rail_and_body(area);
+    draw_focus_rail(frame, rail, focused);
+    let [header, body] = focus_pane_areas(panel);
+    draw_panel_header(frame, header, rails_nav_tabs(nav, focused), None);
+    draw_list(
+        frame,
+        nav_items(nav, RowStyle::Timeline),
+        nav_empty_label(nav),
+        nav.folder_cursor,
+        focused,
+        Highlight::Weight,
+        focus_body(body, 1),
+    );
+}
+
+fn draw_rails_notes(frame: &mut Frame, nav: &NavState, focused: bool, area: Rect) {
+    let [rail, panel] = rail_and_body(area);
+    draw_focus_rail(frame, rail, focused);
+    let [header, body] = focus_pane_areas(panel);
+    draw_panel_header(
+        frame,
+        header,
+        rails_title(notes_title(nav), focused),
+        note_count(nav),
+    );
+    draw_note_list(frame, nav, focused, Highlight::Weight, focus_body(body, 1));
+}
+
+fn draw_rails_editor(
+    frame: &mut Frame,
+    ed: &mut EditorState,
+    focused: bool,
+    list_focused: bool,
+    area: Rect,
+) {
+    let [rail, panel] = rail_and_body(area);
+    draw_focus_rail(frame, rail, focused);
+    let [header, body] = focus_pane_areas(panel);
+    draw_panel_header(
+        frame,
+        header,
+        rails_title(editor_title(ed), focused),
+        editor_header_status(ed, focused, list_focused),
+    );
+    draw_editor_body(frame, ed, focused, focus_body(body, 1));
+}
+
+/// Panel names in this style are set in small caps: the active one shouts in
+/// upper case, everything else stays lower case and quiet. That is the whole
+/// hierarchy — no band, no border, no second colour for the background.
+fn rails_title(label: String, focused: bool) -> Line<'static> {
+    Line::from(vec![
+        Span::raw(" "),
+        Span::styled(label, header_label_style(focused)),
+        Span::raw(" "),
+    ])
+}
+
+fn rails_nav_tabs(nav: &NavState, focused: bool) -> Line<'static> {
+    let mut spans = vec![Span::raw(" ")];
+    let tab = |label: &str, active: bool| {
+        if active {
+            Span::styled(label.to_uppercase(), header_label_style(focused))
+        } else {
+            Span::styled(label.to_lowercase(), header_meta())
+        }
+    };
+    if nav.feed_path.is_some() {
+        spans.push(tab("Feed", nav.nav_mode == NavMode::Feed));
+        spans.push(Span::raw("   "));
+        spans.push(tab("Folders", nav.nav_mode == NavMode::Folders));
+    } else {
+        spans.push(tab("Folders", true));
+    }
+    spans.push(Span::raw(" "));
+    Line::from(spans)
+}
+
 // ── Shared helpers ─────────────────────────────────────────────────────────
 
 fn dim() -> Style {
@@ -298,6 +422,27 @@ fn dim() -> Style {
 
 fn accent() -> Style {
     Style::default().fg(ACCENT)
+}
+
+/// How list rows are drawn.
+///
+/// The Feed *is* a timeline — dated buckets with notes hanging off them — so
+/// [`RowStyle::Timeline`] draws it as one, with `●`/`○` for an open or shut
+/// bucket and `├`/`└` closing each branch. Folders are not chronological, so they
+/// keep disclosure triangles in either style.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RowStyle {
+    Disclosure,
+    Timeline,
+}
+
+/// How the cursor row is marked. The rails style already carries focus in its
+/// rail, so marking the row with a second bar beside it would be one bar too
+/// many — it uses weight and colour instead.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Highlight {
+    Bar,
+    Weight,
 }
 
 #[derive(Clone, Copy)]
@@ -431,11 +576,11 @@ fn focus_body(area: Rect, horizontal_padding: u16) -> Rect {
 // ── Navigation panel ───────────────────────────────────────────────────────
 
 /// The rows the navigation panel draws, for whichever layout and nav mode.
-fn nav_items(nav: &NavState) -> Vec<ListItem<'static>> {
+fn nav_items(nav: &NavState, row_style: RowStyle) -> Vec<ListItem<'static>> {
     match (nav.layout, nav.nav_mode) {
-        (NavLayout::Nested, _) => nested_item_rows(&nav.nav_rows),
+        (NavLayout::Nested, _) => nested_item_rows(&nav.nav_rows, row_style),
         (NavLayout::Split, NavMode::Folders) => folder_item_rows(&nav.folder_rows),
-        (NavLayout::Split, NavMode::Feed) => feed_item_rows(&nav.feed_rows),
+        (NavLayout::Split, NavMode::Feed) => feed_item_rows(&nav.feed_rows, row_style),
     }
 }
 
@@ -452,10 +597,11 @@ fn draw_nav(frame: &mut Frame, nav: &NavState, focused: bool, chrome: PaneChrome
     frame.render_widget(block, area);
     draw_list(
         frame,
-        nav_items(nav),
+        nav_items(nav, RowStyle::Disclosure),
         nav_empty_label(nav),
         nav.folder_cursor,
         focused,
+        Highlight::Bar,
         body,
     );
 }
@@ -465,10 +611,11 @@ fn draw_focus_nav(frame: &mut Frame, nav: &NavState, focused: bool, area: Rect) 
     draw_panel_header(frame, header, nav_tabs(nav, focused), None);
     draw_list(
         frame,
-        nav_items(nav),
+        nav_items(nav, RowStyle::Disclosure),
         nav_empty_label(nav),
         nav.folder_cursor,
         focused,
+        Highlight::Bar,
         focus_body(body, 1),
     );
 }
@@ -522,16 +669,13 @@ fn folder_item_rows(rows: &[model::FolderRow]) -> Vec<ListItem<'static>> {
         .collect()
 }
 
-fn feed_item_rows(rows: &[model::FeedRow]) -> Vec<ListItem<'static>> {
+fn feed_item_rows(rows: &[model::FeedRow], row_style: RowStyle) -> Vec<ListItem<'static>> {
     rows.iter()
         .map(|row| {
             let mut spans = vec![
-                Span::raw("  ".repeat(row.depth)),
-                Span::styled(tree_marker(row.has_children, row.expanded), dim()),
-                Span::styled(
-                    row.label.clone(),
-                    bucket_label_style(matches!(row.kind, model::FeedKind::Special(_))),
-                ),
+                row_indent(row_style, row.depth),
+                bucket_marker(row_style, row.has_children, row.expanded),
+                Span::styled(row.label.clone(), bucket_label_style(&row.kind)),
             ];
             if row.count > 0 {
                 spans.push(Span::styled(format!("  {}", row.count), dim()));
@@ -542,29 +686,39 @@ fn feed_item_rows(rows: &[model::FeedRow]) -> Vec<ListItem<'static>> {
 }
 
 /// The nested layout's rows: containers and the notes inside them, one list.
-fn nested_item_rows(rows: &[model::NavRow]) -> Vec<ListItem<'static>> {
+fn nested_item_rows(rows: &[model::NavRow], row_style: RowStyle) -> Vec<ListItem<'static>> {
     rows.iter()
         .map(|row| {
-            let mut spans = vec![Span::raw("  ".repeat(row.depth))];
+            let mut spans = vec![row_indent(row_style, row.depth)];
             match &row.kind {
                 model::NavRowKind::Container {
                     expanded,
                     expandable,
                     count,
-                    emphasised,
+                    feed_kind,
                     ..
                 } => {
-                    spans.push(Span::styled(tree_marker(*expandable, *expanded), dim()));
-                    spans.push(Span::styled(
-                        row.label.clone(),
-                        bucket_label_style(*emphasised),
-                    ));
+                    match feed_kind {
+                        Some(kind) => {
+                            spans.push(bucket_marker(row_style, *expandable, *expanded));
+                            spans.push(Span::styled(row.label.clone(), bucket_label_style(kind)));
+                        }
+                        // A folder is not a point in time, so it keeps its
+                        // triangle whichever style is drawing.
+                        None => {
+                            spans.push(Span::styled(tree_marker(*expandable, *expanded), dim()));
+                            spans.push(Span::raw(row.label.clone()));
+                        }
+                    }
                     if *count > 0 {
                         spans.push(Span::styled(format!("  {count}"), dim()));
                     }
                 }
-                model::NavRowKind::Note { is_audio, .. } => {
-                    spans.push(note_marker(*is_audio));
+                model::NavRowKind::Note { is_audio, last, .. } => {
+                    spans.push(note_marker(row_style, *last));
+                    if *is_audio {
+                        spans.push(audio_badge());
+                    }
                     spans.push(Span::raw(row.label.clone()));
                 }
             }
@@ -573,20 +727,71 @@ fn nested_item_rows(rows: &[model::NavRow]) -> Vec<ListItem<'static>> {
         .collect()
 }
 
-fn bucket_label_style(emphasised: bool) -> Style {
-    if emphasised {
-        Style::default().add_modifier(Modifier::BOLD)
-    } else {
-        Style::default()
+fn row_indent(row_style: RowStyle, depth: usize) -> Span<'static> {
+    match row_style {
+        RowStyle::Disclosure => Span::raw("  ".repeat(depth)),
+        RowStyle::Timeline => timeline_indent(depth),
     }
 }
 
-fn note_marker(is_audio: bool) -> Span<'static> {
-    if is_audio {
-        Span::styled("♪ ", Style::default().fg(Color::Magenta))
-    } else {
-        Span::styled("· ", dim())
+/// A feed bucket's marker. The timeline reads open/shut as filled/hollow, which
+/// leaves the triangle free to mean "folder" and nothing else.
+fn bucket_marker(row_style: RowStyle, expandable: bool, expanded: bool) -> Span<'static> {
+    if row_style == RowStyle::Disclosure {
+        return Span::styled(tree_marker(expandable, expanded), dim());
     }
+    // Hollow means "there is more inside, and it is shut". Filled means "you are
+    // seeing all of it" — which is equally true of an open bucket and of a leaf,
+    // so both get the solid point.
+    Span::styled(
+        match (expandable, expanded) {
+            (true, false) => "○ ",
+            _ => "● ",
+        },
+        dim(),
+    )
+}
+
+/// Indent for a timeline row. The innermost level becomes the rail that ties the
+/// row back to the bucket above it — that connector is the difference between a
+/// timeline and an indented list.
+fn timeline_indent(depth: usize) -> Span<'static> {
+    if depth == 0 {
+        return Span::raw(String::new());
+    }
+    Span::styled(format!("{}│ ", "  ".repeat(depth - 1)), dim())
+}
+
+/// Buckets are coloured by how recent they are: today is the accent, yesterday
+/// still warm, the calendar past plain, undated notes faded out. It is the one
+/// piece of hierarchy the feed can derive from its own meaning.
+fn bucket_label_style(kind: &model::FeedKind) -> Style {
+    use model::{FeedKind, SpecialBucket};
+    match kind {
+        FeedKind::Special(SpecialBucket::Today) => {
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+        }
+        FeedKind::Special(SpecialBucket::Yesterday) => Style::default().fg(ACCENT),
+        FeedKind::Special(SpecialBucket::ThisWeek | SpecialBucket::LastWeek) => {
+            Style::default().add_modifier(Modifier::BOLD)
+        }
+        FeedKind::Special(SpecialBucket::Undated) => dim(),
+        _ => Style::default(),
+    }
+}
+
+/// A note's marker. In the timeline it closes its bucket's branch, which is the
+/// `└` you would see at the end of a `git log --graph` run.
+fn note_marker(row_style: RowStyle, last: bool) -> Span<'static> {
+    match (row_style, last) {
+        (RowStyle::Disclosure, _) => Span::styled("· ", dim()),
+        (RowStyle::Timeline, false) => Span::styled("├ ", dim()),
+        (RowStyle::Timeline, true) => Span::styled("└ ", dim()),
+    }
+}
+
+fn audio_badge() -> Span<'static> {
+    Span::styled("♪ ", Style::default().fg(Color::Magenta))
 }
 
 // ── Note list panel (split layout only) ────────────────────────────────────
@@ -598,7 +803,7 @@ fn draw_notes(frame: &mut Frame, nav: &NavState, focused: bool, chrome: PaneChro
     }
     let body = block.inner(area);
     frame.render_widget(block, area);
-    draw_note_list(frame, nav, focused, body);
+    draw_note_list(frame, nav, focused, Highlight::Bar, body);
 }
 
 fn draw_focus_notes(frame: &mut Frame, nav: &NavState, focused: bool, area: Rect) {
@@ -609,7 +814,7 @@ fn draw_focus_notes(frame: &mut Frame, nav: &NavState, focused: bool, area: Rect
         pane_title(notes_title(nav), focused),
         note_count(nav),
     );
-    draw_note_list(frame, nav, focused, focus_body(body, 1));
+    draw_note_list(frame, nav, focused, Highlight::Bar, focus_body(body, 1));
 }
 
 fn note_count(nav: &NavState) -> Option<Line<'static>> {
@@ -621,21 +826,35 @@ fn note_count(nav: &NavState) -> Option<Line<'static>> {
     })
 }
 
-fn draw_note_list(frame: &mut Frame, nav: &NavState, focused: bool, area: Rect) {
+fn draw_note_list(
+    frame: &mut Frame,
+    nav: &NavState,
+    focused: bool,
+    highlight: Highlight,
+    area: Rect,
+) {
     let items: Vec<ListItem> = nav
         .notes
         .iter()
         .map(|row| {
             let mut spans = Vec::new();
             if row.is_audio {
-                spans.push(note_marker(true));
+                spans.push(audio_badge());
             }
             spans.push(Span::raw(row.title.clone()));
             ListItem::new(Line::from(spans))
         })
         .collect();
 
-    draw_list(frame, items, "no notes", nav.note_cursor, focused, area);
+    draw_list(
+        frame,
+        items,
+        "no notes",
+        nav.note_cursor,
+        focused,
+        highlight,
+        area,
+    );
 }
 
 fn notes_title(nav: &NavState) -> String {
@@ -663,14 +882,17 @@ fn empty_list(label: &'static str) -> List<'static> {
     List::new(vec![ListItem::new(Span::styled(label, dim()))])
 }
 
-fn selection_style(focused: bool) -> Style {
-    if focused {
-        Style::default()
+fn selection_style(focused: bool, highlight: Highlight) -> Style {
+    match (highlight, focused) {
+        // A filled row plus a bar in the gutter: unmissable, and heavy.
+        (Highlight::Bar, true) => Style::default()
             .bg(MUTED)
             .fg(Color::White)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().add_modifier(Modifier::BOLD)
+            .add_modifier(Modifier::BOLD),
+        // The rail already says which panel is live, so the row only has to say
+        // which line it is — colour and weight do that without a second block.
+        (Highlight::Weight, true) => Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        (_, false) => Style::default().add_modifier(Modifier::BOLD),
     }
 }
 
@@ -682,6 +904,7 @@ fn draw_list(
     empty: &'static str,
     cursor: usize,
     focused: bool,
+    highlight: Highlight,
     area: Rect,
 ) {
     let is_empty = items.is_empty();
@@ -689,8 +912,12 @@ fn draw_list(
         empty_list(empty)
     } else {
         List::new(items)
-            .highlight_style(selection_style(focused))
-            .highlight_symbol(if focused { "▌" } else { "▏" })
+            .highlight_style(selection_style(focused, highlight))
+            .highlight_symbol(match highlight {
+                Highlight::Bar if focused => "▌",
+                Highlight::Bar => "▏",
+                Highlight::Weight => "",
+            })
     };
     let mut state = ListState::default();
     if !is_empty {
@@ -855,8 +1082,15 @@ fn draw_editor_body(frame: &mut Frame, ed: &mut EditorState, focused: bool, body
 /// Where a pane rule comes down to meet it the two are joined with `┴`: a bare
 /// `│` above a bare `─` leaves the top half of the rule's cell empty, which
 /// reads as a gap between two lines that are meant to touch.
-fn draw_status_rule(frame: &mut Frame, area: Rect, joins: &[u16]) {
-    let mut cells = vec!['─'; area.width as usize];
+fn draw_status_rule(frame: &mut Frame, area: Rect, joins: &[u16], style: UiStyle) {
+    // A heavier floor suits a chrome that has no other lines in it; the styles
+    // built out of light box-drawing keep the light weight.
+    let horizontal = if style == UiStyle::Rails {
+        '━'
+    } else {
+        '─'
+    };
+    let mut cells = vec![horizontal; area.width as usize];
     for x in joins {
         if let Some(cell) = x
             .checked_sub(area.x)
@@ -1057,7 +1291,7 @@ fn draw_palette(frame: &mut Frame, app: &App, area: Rect) {
             Span::styled(format!("   {}", row.detail), dim()),
         ]);
         lines.push(if index == prompt.suggestion_index {
-            line.style(selection_style(true))
+            line.style(selection_style(true, Highlight::Bar))
         } else {
             line
         });
@@ -1268,6 +1502,107 @@ mod tests {
                 "{repeated:?} is already visible elsewhere: {status:?}"
             );
         }
+    }
+
+    #[test]
+    fn the_rails_style_marks_the_focused_panel_and_nothing_else() {
+        // Colour carries the structure here: no borders at all, and the only
+        // thing saying which panel is live is its rail.
+        let fixture = Fixture::new();
+        let mut app = fixture.app();
+        app.ui_style = UiStyle::Rails;
+        let buffer = render(&mut app);
+        let rails: Vec<(u16, &str)> = (0..WIDTH)
+            .filter_map(|x| {
+                let symbol = buffer[(x, 1)].symbol();
+                matches!(symbol, "▌" | "▏").then_some((x, symbol))
+            })
+            .collect();
+        assert_eq!(rails.len(), 3, "one rail per panel, got {rails:?}");
+        // The app opens focused on the navigation panel, which owns column 0.
+        assert_eq!(rails[0], (0, "▌"));
+        assert!(
+            rails[1..].iter().all(|(_, symbol)| *symbol == "▏"),
+            "only the focused panel gets the solid rail: {rails:?}"
+        );
+        for y in 0..HEIGHT {
+            let line = row(&buffer, y);
+            assert!(
+                !line.contains('╭') && !line.contains('╰'),
+                "row {y} still has a border: {line:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_rails_style_draws_the_feed_as_a_timeline() {
+        let fixture = Fixture::new();
+        let mut app = fixture.nested_app();
+        app.ui_style = UiStyle::Rails;
+        let buffer = render(&mut app);
+        let lines: Vec<String> = (0..HEIGHT).map(|y| row(&buffer, y)).collect();
+
+        let bucket = lines
+            .iter()
+            .find(|line| line.contains("Today"))
+            .expect("a Today bucket");
+        assert!(
+            bucket.contains('●'),
+            "an open bucket is a filled point: {bucket:?}"
+        );
+
+        // Every note hangs off the bucket, and the last one closes the branch.
+        let branch = lines
+            .iter()
+            .find(|line| line.contains("alpha note"))
+            .expect("the first note");
+        let closing = lines
+            .iter()
+            .find(|line| line.contains("gamma note"))
+            .expect("the last note");
+        assert!(
+            branch.contains("│ ├"),
+            "expected a connected branch: {branch:?}"
+        );
+        assert!(
+            closing.contains("│ └"),
+            "expected a closed branch: {closing:?}"
+        );
+    }
+
+    #[test]
+    fn folders_keep_their_triangles_in_the_timeline() {
+        // A folder is not a point in time, so the timeline's vocabulary does not
+        // apply to it.
+        let fixture = Fixture::new();
+        let mut app = fixture.nested_app();
+        app.set_nav_mode(NavMode::Folders);
+        app.ui_style = UiStyle::Rails;
+        let buffer = render(&mut app);
+        let lines: Vec<String> = (0..HEIGHT).map(|y| row(&buffer, y)).collect();
+        let folder = lines
+            .iter()
+            .find(|line| line.contains("Feed"))
+            .expect("the Feed folder row");
+        assert!(
+            folder.contains('▾') || folder.contains('▸'),
+            "folders keep disclosure triangles: {folder:?}"
+        );
+    }
+
+    #[test]
+    fn the_rails_status_rule_is_heavy_and_full_width() {
+        let fixture = Fixture::new();
+        let mut app = fixture.app();
+        app.ui_style = UiStyle::Rails;
+        let buffer = render(&mut app);
+        let (_, rule_y, _) = bands(UiStyle::Rails);
+        let rule = row(&buffer, rule_y.expect("rails draws a rule"));
+        assert_eq!(rule.chars().count(), WIDTH as usize);
+        assert!(
+            rule.chars().all(|cell| cell == '━'),
+            "a chrome with no other lines gets a heavier floor: {rule:?}"
+        );
     }
 
     #[test]

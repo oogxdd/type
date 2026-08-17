@@ -10,10 +10,11 @@ cargo run -p type-tui
 Navigation is on the left and the editor on the right, with the note list either
 in a panel of its own between them (the default) or nested inside the navigation
 tree — `nav:toggle`, the terminal counterpart of the desktop's nested notes list.
-The chrome is a writing-focused hybrid: one continuous header band across the
-workspace, slim vertical rules that run into the rule above the status line, and
-an open editor with vim-style line numbers and no enclosing container. Two older
-chrome experiments can still be switched live for comparison.
+The chrome is switchable: the default is a writing-focused hybrid with one
+continuous header band, slim vertical rules that run into the rule above the
+status line, and an open editor with vim-style line numbers. `ui:rails` drops
+borders entirely and lets colour carry the structure, drawing the Feed as a
+timeline. Two older experiments remain for comparison.
 
 The navigation panel switches between the **Feed** (notes grouped by date —
 Today / Yesterday / This week / Last week / Month → Week → Day, the same buckets
@@ -84,6 +85,12 @@ cursor is inside.
 Independently of the above, `ui:next` (or `:ui`) cycles the chrome without
 restarting:
 
+- `ui:rails` — no borders anywhere. Each panel is marked by a vertical rail at
+  its left edge (solid accent for the focused one, a hairline for the rest), tabs
+  are set in small caps, and the Feed is drawn as the timeline it actually is:
+  `●` an open bucket, `○` a shut one, `├`/`└` closing each note branch, and dates
+  coloured by recency. Folders keep disclosure triangles — a folder is not a
+  point in time. The floor under the status line is a heavier `━`.
 - `ui:focus` — one continuous header band, light vertical rules that join the
   status rule below them, and an open padded editor surface. The default.
 - `ui:frame` — one rounded parent container; the panels are borderless and
@@ -91,7 +98,7 @@ restarting:
   so there is no extra rule between it and the status line.
 - `ui:panes` — independent rounded pane containers with no parent.
 
-All three use exactly the same state and pane functions, and render both note
+They all use exactly the same state and pane functions, and render both note
 layouts. Choosing one later is a small default/removal change, not a rewrite,
 and switching cannot touch notes.
 
@@ -145,8 +152,8 @@ source, while `i` returns to source directly in insert mode.
 | `:view` / `:view:toggle` | toggle source / rendered Markdown |
 | `:md` / `:view:markdown` | open rendered Markdown |
 | `:source` / `:view:source` | return to editable source |
-| `:ui` / `ui:next` | cycle the three chrome experiments |
-| `ui:frame` / `ui:panes` / `ui:focus` | switch directly to one layout |
+| `:ui` / `ui:next` | cycle the chrome experiments |
+| `ui:rails` / `ui:focus` / `ui:frame` / `ui:panes` | switch directly to one layout |
 | `:mv <folder>` | move the open note; `Tab` completes folders fuzzily |
 | `mark:archive` / `mark:unarchive` | set or clear the open note's archived marker |
 | `mark:reviewed` / `mark:unreviewed` | set or clear its reviewed marker |

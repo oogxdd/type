@@ -11,7 +11,7 @@ pub enum Marker {
     Reviewed,
 }
 
-/// The three chrome experiments the user can switch between at runtime.
+/// The chrome experiments the user can switch between at runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UiStyle {
     /// One parent frame; borderless panels separated by vertical rules.
@@ -20,6 +20,9 @@ pub enum UiStyle {
     Panes,
     /// Dedicated panel headers and a completely open writing surface.
     Focus,
+    /// No borders at all: colour carries the structure. Each panel is marked by
+    /// a vertical rail, and the Feed is drawn as the timeline it actually is.
+    Rails,
 }
 
 impl UiStyle {
@@ -27,7 +30,8 @@ impl UiStyle {
         match self {
             Self::Frame => Self::Panes,
             Self::Panes => Self::Focus,
-            Self::Focus => Self::Frame,
+            Self::Focus => Self::Rails,
+            Self::Rails => Self::Frame,
         }
     }
 
@@ -36,6 +40,7 @@ impl UiStyle {
             Self::Frame => "frame",
             Self::Panes => "panes",
             Self::Focus => "writing",
+            Self::Rails => "rails",
         }
     }
 }
@@ -97,7 +102,7 @@ pub enum Command {
     Panels,
     /// Switch the chrome experiment immediately.
     SetUiStyle(UiStyle),
-    /// Cycle frame → panes → focus without remembering a name.
+    /// Cycle through the chrome experiments without remembering a name.
     NextUiStyle,
     /// Put the note list in its own panel, or nest it inside the tree.
     SetNavLayout(NavLayout),
@@ -284,6 +289,13 @@ const CATALOG: &[CatalogEntry] = &[
         icon: "◌",
     },
     CatalogEntry {
+        input: "ui:rails",
+        label: "UI: rails and timeline",
+        keywords: "appearance colour accent rail timeline feed graph layout",
+        group: PaletteGroup::View,
+        icon: "▐",
+    },
+    CatalogEntry {
         input: "ui:frame",
         label: "UI: shared outer frame",
         keywords: "appearance container dividers layout",
@@ -455,6 +467,7 @@ pub fn parse(input: &str) -> Command {
         "ui:frame" => Command::SetUiStyle(UiStyle::Frame),
         "ui:panes" => Command::SetUiStyle(UiStyle::Panes),
         "ui:focus" => Command::SetUiStyle(UiStyle::Focus),
+        "ui:rails" => Command::SetUiStyle(UiStyle::Rails),
         "view" | "view:toggle" => Command::ToggleMarkdownView,
         "markdown" | "md" | "preview" | "view:markdown" => Command::ViewMarkdown,
         "source" | "view:source" => Command::ViewSource,
@@ -539,10 +552,11 @@ fn catalog_order(input: &str) -> usize {
         "mark:archive" | "view:markdown" | "connect " => 4,
         "mark:unarchive" | "view:source" | "key" => 5,
         "mark:reviewed" | "panels" => 6,
-        "mark:unreviewed" | "ui:focus" => 7,
-        "ui:next" => 8,
-        "ui:panes" => 9,
-        "ui:frame" => 10,
+        "mark:unreviewed" | "ui:rails" => 7,
+        "ui:focus" => 8,
+        "ui:next" => 9,
+        "ui:panes" => 10,
+        "ui:frame" => 11,
         _ => usize::MAX,
     }
 }

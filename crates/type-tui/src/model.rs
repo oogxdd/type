@@ -122,12 +122,19 @@ pub enum NavRowKind {
         expandable: bool,
         /// Notes beneath, shown as a count suffix; `0` hides it.
         count: usize,
-        /// The Feed's relative buckets are set in bold, as in the split layout.
-        emphasised: bool,
+        /// Which kind of feed bucket this is, or `None` for a folder.
+        ///
+        /// Carried through so a renderer can key off *what the row means* —
+        /// emphasising the relative buckets, colouring by recency — instead of
+        /// being handed a pre-baked `bold: bool`.
+        feed_kind: Option<FeedKind>,
     },
     Note {
         path: String,
         is_audio: bool,
+        /// Last note of its container, which is what a timeline renderer needs
+        /// to close the branch with `└` instead of `├`.
+        last: bool,
     },
 }
 
@@ -182,7 +189,7 @@ fn push_nested_folder(
             expanded: is_expanded,
             expandable: !node.children.is_empty() || !node.notes.is_empty(),
             count: node.notes.len(),
-            emphasised: false,
+            feed_kind: None,
         },
     });
     if !is_expanded {
@@ -191,9 +198,11 @@ fn push_nested_folder(
     for child in &node.children {
         push_nested_folder(child, expanded, &child.name, notes, depth + 1, rows);
     }
-    for note in notes.get(&node.path).into_iter().flatten() {
-        rows.push(note_nav_row(note, depth + 1));
-    }
+    push_note_rows(
+        notes.get(&node.path).map(Vec::as_slice).unwrap_or(&[]),
+        depth + 1,
+        rows,
+    );
 }
 
 /// Nest the Feed's notes inside their date buckets. Every note is already loaded
@@ -221,7 +230,7 @@ fn push_nested_bucket(
             expanded: is_expanded,
             expandable: !bucket.children.is_empty() || !bucket.notes.is_empty(),
             count: bucket.note_count(),
-            emphasised: matches!(bucket.kind, FeedKind::Special(_)),
+            feed_kind: Some(bucket.kind.clone()),
         },
     });
     if !is_expanded {
@@ -230,19 +239,21 @@ fn push_nested_bucket(
     for child in &bucket.children {
         push_nested_bucket(child, expanded, depth + 1, rows);
     }
-    for note in &bucket.notes {
-        rows.push(note_nav_row(note, depth + 1));
-    }
+    push_note_rows(&bucket.notes, depth + 1, rows);
 }
 
-fn note_nav_row(note: &NoteRow, depth: usize) -> NavRow {
-    NavRow {
-        label: note.title.clone(),
-        depth,
-        kind: NavRowKind::Note {
-            path: note.path.clone(),
-            is_audio: note.is_audio,
-        },
+fn push_note_rows(notes: &[NoteRow], depth: usize, rows: &mut Vec<NavRow>) {
+    let last_index = notes.len().saturating_sub(1);
+    for (index, note) in notes.iter().enumerate() {
+        rows.push(NavRow {
+            label: note.title.clone(),
+            depth,
+            kind: NavRowKind::Note {
+                path: note.path.clone(),
+                is_audio: note.is_audio,
+                last: index == last_index,
+            },
+        });
     }
 }
 
