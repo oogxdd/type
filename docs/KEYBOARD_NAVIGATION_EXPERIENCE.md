@@ -208,6 +208,26 @@ an application safely override it. Keep the semantic command named **Toggle
 navigation/content focus**, make its binding configurable, and use `Cmd+W` only
 in a native shell or another environment where interception is reliable.
 
+## Modal navigation inside editable content
+
+For products whose content pane contains substantial text, the editor may use
+the same Vim-style modal model instead of becoming a keyboard-navigation dead
+end:
+
+- entering or returning focus to the editor starts in **Normal** mode;
+- `i` enters **Insert** mode at the cursor and `a` enters after the cursor;
+- `Escape` returns to Normal mode;
+- `v` enters or leaves **Visual** selection mode;
+- `h/j/k/l` move in Normal and extend the selection in Visual;
+- `Ctrl+j` / `Ctrl+k` make larger vertical jumps;
+- printable input, paste, and destructive editing are blocked outside Insert;
+- a persistent, unobtrusive mode label makes the current mode unambiguous;
+- pane-level shortcuts such as `Cmd+W` continue to work in every editor mode.
+
+Modal keys must be handled before global pane shortcuts. In particular,
+`Ctrl+j/k` inside the focused editor belongs to the editor, while the same keys
+outside it may retain an application-level meaning.
+
 ## Review workflow
 
 The common loop should be fast enough to repeat hundreds of times:
@@ -357,4 +377,3 @@ The following can be pasted above this document when assigning a new project:
 > or internal folders as move destinations. If the platform reserves one of the
 > specified shortcuts, preserve the semantic command and propose the closest
 > configurable binding before changing the interaction model.
-

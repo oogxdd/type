@@ -8,6 +8,10 @@ const emitTreeInvalidated = () => {
   window.dispatchEvent(new CustomEvent("notes-tree-invalidated"));
 };
 
+const emitNotePreviewsInvalidated = () => {
+  window.dispatchEvent(new CustomEvent("note-previews-invalidated"));
+};
+
 export function useNoteEditor(
   activeNote: string | null,
   noteFileNameFormat: NoteFileNameFormat
@@ -39,6 +43,9 @@ export function useNoteEditor(
       setSaveError(null);
       try {
         await writeNote(targetNote, content);
+        // Preview refresh is intentionally asynchronous: typing and saving do
+        // not wait for the navigation title to be recomputed.
+        emitNotePreviewsInvalidated();
         if (activeNoteRef.current === targetNote && noteContentRef.current === content) {
           setNoteDirty(false);
           noteDirtyRef.current = false;

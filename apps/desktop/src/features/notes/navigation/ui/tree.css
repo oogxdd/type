@@ -521,6 +521,15 @@
   flex: 0 0 14px;
 }
 
+/* Feed note rows reserve the same disclosure column as their date buckets.
+   Without this override the generic 20px folder spacer adds 6px of accidental
+   indentation, so note labels drift away from the date-tree grid. */
+.tree-pane .feed-navigation-tree .nav-note-row .icon-spacer {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+
 .tree-pane .feed-navigation-tree .feed-bucket-row .tree-toggle {
   padding: 0;
   opacity: 0.72;

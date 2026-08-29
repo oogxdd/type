@@ -55,7 +55,7 @@ export function NavNoteRow({
     paddingLeft: 12 + depth * indentationWidth,
   } as React.CSSProperties;
   const guideBaseLeft = 12 + indentationWidth / 2;
-  const title = preview?.title || "";
+  const title = preview ? preview.title || "Empty note" : "New note";
 
   return (
     <div

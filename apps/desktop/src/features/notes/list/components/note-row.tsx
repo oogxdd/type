@@ -28,6 +28,7 @@ export function NoteRow({
     transform: !isDragging ? DndCSS.Transform.toString(transform) : undefined,
     transition: !isDragging ? transition : undefined,
   };
+  const displayTitle = preview ? preview.title || "Empty note" : "New note";
 
   return (
     <div
@@ -47,7 +48,7 @@ export function NoteRow({
           ) : preview?.isHandwriting ? (
             <PenLine size={12} className="note-row-recording-icon" />
           ) : null}
-          <div className="note-row-title">{preview?.title || ""}</div>
+          <div className="note-row-title">{displayTitle}</div>
           {preview?.isArchived ? (
             <span className="note-row-marker note-row-marker-archived">Archived</span>
           ) : null}

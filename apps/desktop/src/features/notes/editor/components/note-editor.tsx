@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
+import { TextSelection } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import { joinFrontmatter, splitFrontmatter } from "@typenotes/shared/frontmatter";
@@ -13,6 +15,44 @@ import { htmlToMarkdown, markdownToHtml } from "../lib/markdown-editor";
 type NoteEditorProps = {
   markdown: string;
   onChange: (markdown: string) => void;
+};
+
+type VimMode = "normal" | "insert" | "visual";
+
+const VIM_JUMP_LINES = 10;
+
+const clampDocumentPosition = (view: EditorView, position: number) =>
+  Math.max(1, Math.min(view.state.doc.content.size, position));
+
+const getVerticalPosition = (
+  view: EditorView,
+  position: number,
+  direction: -1 | 1,
+  lineCount: number
+) => {
+  try {
+    const coords = view.coordsAtPos(position);
+    const measuredLineHeight = coords.bottom - coords.top;
+    const computedLineHeight = Number.parseFloat(
+      window.getComputedStyle(view.dom).lineHeight
+    );
+    const lineHeight =
+      measuredLineHeight > 0
+        ? measuredLineHeight
+        : Number.isFinite(computedLineHeight)
+          ? computedLineHeight
+          : 24;
+    const target = view.posAtCoords({
+      left: coords.left,
+      top: (coords.top + coords.bottom) / 2 + direction * lineHeight * lineCount,
+    });
+    if (target) {
+      return clampDocumentPosition(view, target.pos);
+    }
+  } catch {
+    // Geometry can be unavailable during a document/layout transition.
+  }
+  return direction < 0 ? 1 : view.state.doc.content.size;
 };
 
 const toolbarButton =
@@ -29,12 +69,123 @@ const splitEditorMarkdown = (markdown: string) => {
 };
 
 export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
+  const [vimMode, setVimModeState] = useState<VimMode>("normal");
+  const vimModeRef = useRef<VimMode>("normal");
+  const visualAnchorRef = useRef<number | null>(null);
   const isSyncing = useRef(false);
   const latestMarkdown = useRef(markdown);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const initialContentRef = useRef(splitEditorMarkdown(markdown));
   const frontmatterRef = useRef<string | null>(initialContentRef.current.frontmatterBlock);
   const backmatterRef = useRef<string | null>(initialContentRef.current.backmatterBlock);
+
+  const setVimMode = useCallback((mode: VimMode) => {
+    vimModeRef.current = mode;
+    visualAnchorRef.current = null;
+    setVimModeState(mode);
+  }, []);
+
+  const moveVimSelection = useCallback(
+    (view: EditorView, targetPosition: number) => {
+      const target = clampDocumentPosition(view, targetPosition);
+      const normalizedHead = TextSelection.near(
+        view.state.doc.resolve(target)
+      ).head;
+      const selection =
+        vimModeRef.current === "visual"
+          ? TextSelection.create(
+              view.state.doc,
+              visualAnchorRef.current ?? view.state.selection.anchor,
+              normalizedHead
+            )
+          : TextSelection.near(view.state.doc.resolve(normalizedHead));
+      view.dispatch(view.state.tr.setSelection(selection).scrollIntoView());
+    },
+    []
+  );
+
+  const handleVimKeyDown = useCallback(
+    (view: EditorView, event: KeyboardEvent) => {
+      const mode = vimModeRef.current;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        const head = view.state.selection.head;
+        setVimMode("normal");
+        moveVimSelection(view, head);
+        return true;
+      }
+      if (mode === "insert") {
+        return false;
+      }
+      if (event.metaKey || event.altKey) {
+        return false;
+      }
+
+      const key = event.key.toLowerCase();
+      const direction = key === "j" ? 1 : key === "k" ? -1 : null;
+      if (direction) {
+        event.preventDefault();
+        event.stopPropagation();
+        const lineCount = event.ctrlKey ? VIM_JUMP_LINES : 1;
+        moveVimSelection(
+          view,
+          getVerticalPosition(view, view.state.selection.head, direction, lineCount)
+        );
+        return true;
+      }
+      if (event.ctrlKey) {
+        return false;
+      }
+      if (key === "h" || key === "l") {
+        event.preventDefault();
+        event.stopPropagation();
+        moveVimSelection(
+          view,
+          view.state.selection.head + (key === "h" ? -1 : 1)
+        );
+        return true;
+      }
+      if (key === "v") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (mode === "visual") {
+          const head = view.state.selection.head;
+          setVimMode("normal");
+          moveVimSelection(view, head);
+        } else {
+          visualAnchorRef.current = view.state.selection.head;
+          vimModeRef.current = "visual";
+          setVimModeState("visual");
+        }
+        return true;
+      }
+      if (key === "i" || key === "a") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (key === "a") {
+          moveVimSelection(view, view.state.selection.head + 1);
+        }
+        setVimMode("insert");
+        return true;
+      }
+
+      // Normal/Visual modes are navigation-only. Block printable text and
+      // destructive editing until the user explicitly enters Insert mode.
+      if (
+        event.key.length === 1 ||
+        event.key === "Enter" ||
+        event.key === "Backspace" ||
+        event.key === "Delete"
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+      }
+      return false;
+    },
+    [moveVimSelection, setVimMode]
+  );
 
   const keepCaretBreathingRoom = (currentEditor: NonNullable<ReturnType<typeof useEditor>>) => {
     const scrollEl = scrollRef.current;
@@ -78,8 +229,13 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
     editorProps: {
       attributes: {
         class: "tiptap-content",
+        "aria-label": "Note editor",
       },
+      handleKeyDown: handleVimKeyDown,
+      handleTextInput: () => vimModeRef.current !== "insert",
+      handlePaste: () => vimModeRef.current !== "insert",
     },
+    onFocus: () => setVimMode("normal"),
     onUpdate: ({ editor: currentEditor }) => {
       if (isSyncing.current) {
         return;
@@ -126,7 +282,7 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
   }
 
   return (
-    <div className="tiptap-editor">
+    <div className="tiptap-editor" data-vim-mode={vimMode}>
       <div className="tiptap-toolbar">
         <button
           type="button"
@@ -192,6 +348,9 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
         }}
       >
         <EditorContent editor={editor} />
+      </div>
+      <div className="vim-mode-indicator" aria-live="polite">
+        {vimMode.toUpperCase()}
       </div>
     </div>
   );
