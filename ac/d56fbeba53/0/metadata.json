@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "acd56fbeba53",
+  "session_id": "01a04de5-9a1c-77a3-bdfd-f8d1fe1f4ea0",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-29T20:51:03.453186Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/desktop/src/app/app.css",
+    "apps/desktop/src/features/notes/editor/components/note-editor.tsx",
+    "apps/desktop/src/features/notes/editor/hooks/use-note-editor.ts",
+    "apps/desktop/src/features/notes/list/components/note-row.tsx",
+    "apps/desktop/src/features/notes/navigation/ui/nav-note-row.tsx",
+    "apps/desktop/src/features/notes/navigation/ui/tree.css",
+    "docs/KEYBOARD_NAVIGATION_EXPERIENCE.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "4dea6348d005",
+  "checkpoint_transcript_start": 481,
+  "transcript_lines_at_start": 481,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-29T20:51:02.107936Z",
+    "agent_lines": 27,
+    "human_added": 206,
+    "human_modified": 5,
+    "human_removed": 0,
+    "total_committed": 238,
+    "agent_percentage": 11.344537815126051
+  }
+}
