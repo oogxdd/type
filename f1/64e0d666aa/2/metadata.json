@@ -1,9 +1,11 @@
 {
   "cli_version": "0.4.9",
   "checkpoint_id": "f164e0d666aa",
+  "session_id": "01a04fa3-4816-7d03-8874-2f8219c93b0a",
   "strategy": "manual-commit",
+  "created_at": "2026-08-29T22:33:20.201307Z",
   "branch": "main",
-  "checkpoints_count": 4,
+  "checkpoints_count": 1,
   "files_touched": [
     "apps/desktop/src/app/app.css",
     "apps/desktop/src/app/state/appearance-store.test.ts",
@@ -23,34 +25,22 @@
     "apps/desktop/src/shared/ui/sidebar.tsx",
     "docs/KEYBOARD_NAVIGATION_EXPERIENCE.md"
   ],
-  "sessions": [
-    {
-      "metadata": "/f1/64e0d666aa/0/metadata.json",
-      "transcript": "/f1/64e0d666aa/0/full.jsonl",
-      "context": "",
-      "content_hash": "/f1/64e0d666aa/0/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/f1/64e0d666aa/1/metadata.json",
-      "transcript": "/f1/64e0d666aa/1/full.jsonl",
-      "context": "",
-      "content_hash": "/f1/64e0d666aa/1/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/f1/64e0d666aa/2/metadata.json",
-      "transcript": "/f1/64e0d666aa/2/full.jsonl",
-      "context": "",
-      "content_hash": "/f1/64e0d666aa/2/content_hash.txt",
-      "prompt": ""
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "d171436e298d",
   "token_usage": {
     "input_tokens": 0,
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
     "output_tokens": 0,
     "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-29T22:33:19.99987Z",
+    "agent_lines": 385,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 385,
+    "agent_percentage": 100
   }
 }
