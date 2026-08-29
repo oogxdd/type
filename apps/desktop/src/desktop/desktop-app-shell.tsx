@@ -19,11 +19,15 @@ import {
 } from "@dnd-kit/core";
 import { snapCenterToCursor } from "@dnd-kit/modifiers";
 import { useShallow } from "zustand/react/shallow";
+import { ListFilter } from "lucide-react";
 
 import { useTreeInteractions } from "@/app/hooks/use-tree-interactions";
 import { useSelection } from "@/app/state/selection-store";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
-import { useAppearance } from "@/app/state/appearance-store";
+import {
+  DESIGN_FONT_OPTIONS,
+  useAppearance,
+} from "@/app/state/appearance-store";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
@@ -40,6 +44,12 @@ import { indentationWidth } from "@/shared/constants";
 import { focusNoScroll } from "@/shared/lib/dom";
 import type { AppMode } from "@typenotes/shared/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/shared/ui/popover";
+import type { FeedNoteFilter } from "@/features/notes/navigation/model/feed-tree-model";
 import { AppSidebar } from "./app-sidebar";
 import { DesktopMiddlePane } from "./middle-pane";
 import { DesktopRightPane } from "./right-pane";
@@ -54,6 +64,14 @@ type DesktopAppShellProps = {
   onOpenPinnedFolder: (path: string) => void;
 };
 
+const FEED_FILTER_OPTIONS: Array<{ value: FeedNoteFilter; label: string }> = [
+  { value: "all", label: "All notes" },
+  { value: "active", label: "Active" },
+  { value: "reviewed", label: "Reviewed" },
+  { value: "unreviewed", label: "Unreviewed" },
+  { value: "archived", label: "Archived" },
+];
+
 export function DesktopAppShell({
   appMode,
   onAppModeChange,
@@ -64,6 +82,8 @@ export function DesktopAppShell({
 }: DesktopAppShellProps) {
   const theme = useAppearance((state) => state.theme);
   const editorFontSize = useAppearance((state) => state.editorFontSize);
+  const designFont = useAppearance((state) => state.designFont);
+  const designPalettes = useAppearance((state) => state.designPalettes);
   const {
     recordingSupported,
     isRecordingAudio,
@@ -110,9 +130,12 @@ export function DesktopAppShell({
     cancelRenameFolder,
     createNewNote,
     shouldNestNotesInNavigation,
+    feedNoteFilter,
+    setFeedNoteFilter,
   } = useNotesTree();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [feedFilterOpen, setFeedFilterOpen] = useState(false);
   const [threePaneLayout, setThreePaneLayout] = useState<Record<string, number>>({
     nav: 22,
     middle: 25,
@@ -176,6 +199,8 @@ export function DesktopAppShell({
       // command surface stable but make it a no-op.
       lockAppNow,
       activeNavigationTab,
+      openFeedTab,
+      openFoldersTab,
       notes: middlePaneNotes,
       foldersPanelRef,
       middlePaneRef,
@@ -186,8 +211,26 @@ export function DesktopAppShell({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
   const appStyle = useMemo(
-    () => ({ "--editor-font-size": `${editorFontSize}px` }) as CSSProperties,
-    [editorFontSize]
+    () => {
+      const fontFamily =
+        DESIGN_FONT_OPTIONS.find((option) => option.id === designFont)?.family ??
+        DESIGN_FONT_OPTIONS[0].family;
+      return {
+        "--editor-font-size": `${editorFontSize}px`,
+        "--design-font": fontFamily,
+        "--design-light-bg": designPalettes.light.background,
+        "--design-light-text": designPalettes.light.text,
+        "--design-light-muted": designPalettes.light.muted,
+        "--design-light-border": designPalettes.light.border,
+        "--design-light-selection": designPalettes.light.selection,
+        "--design-dark-bg": designPalettes.dark.background,
+        "--design-dark-text": designPalettes.dark.text,
+        "--design-dark-muted": designPalettes.dark.muted,
+        "--design-dark-border": designPalettes.dark.border,
+        "--design-dark-selection": designPalettes.dark.selection,
+      } as CSSProperties;
+    },
+    [designFont, designPalettes, editorFontSize]
   );
   const leftPane = (
     <div className="pane-with-drag">
@@ -219,7 +262,7 @@ export function DesktopAppShell({
           }}
           className="h-full min-h-0 flex-1"
         >
-          <div className="pane-section-title pane-tabs-wrap">
+          <div className="pane-section-title pane-tabs-wrap pane-tabs-header">
             <TabsList className="folders-tabs-list">
               <TabsTrigger value="feed" className="folders-tab-trigger">
                 Feed
@@ -228,6 +271,45 @@ export function DesktopAppShell({
                 Folders
               </TabsTrigger>
             </TabsList>
+            <Popover open={feedFilterOpen} onOpenChange={setFeedFilterOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="feed-filter-trigger"
+                  data-active={feedNoteFilter !== "all"}
+                  aria-label="Filter Feed notes"
+                  title="Filter Feed notes"
+                >
+                  <ListFilter aria-hidden="true" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                sideOffset={6}
+                className="feed-filter-popover"
+              >
+                <div className="feed-filter-popover-title">Show</div>
+                <div className="feed-filter-options" role="radiogroup" aria-label="Feed filter">
+                  {FEED_FILTER_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={feedNoteFilter === option.value}
+                      className="feed-filter-option"
+                      data-selected={feedNoteFilter === option.value}
+                      onClick={() => {
+                        setFeedNoteFilter(option.value);
+                        setFeedFilterOpen(false);
+                      }}
+                    >
+                      <span>{option.label}</span>
+                      <span className="feed-filter-option-mark" aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
           <TabsContent value="feed" className="folders-tab-content min-h-0">
             <FeedPanel

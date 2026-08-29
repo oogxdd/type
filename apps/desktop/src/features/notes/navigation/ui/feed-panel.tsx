@@ -31,6 +31,7 @@ export function FeedPanel({
   const {
     feedTreeData,
     feedNodeById,
+    feedNoteFilter,
     activeFeedGroup,
     setActiveFeedGroup,
     expanded,
@@ -169,58 +170,64 @@ export function FeedPanel({
     ]
   );
 
-  if (feedTreeData.length === 0) {
-    return (
-      <div className="empty">
-        {feedLoading ? "Loading feed..." : "No feed notes yet."}
-      </div>
-    );
-  }
-
   return (
-    <div
-      className="nav-scroll-area"
-      ref={paneBodyRef}
-      tabIndex={0}
-      onKeyDown={onPaneKeyDown}
-      onClick={(event) => {
-        if (onPaneClick) {
-          onPaneClick();
-        }
-        if (event.target === event.currentTarget) {
-          selectFeedGroup(activeFeedGroup || feedTreeData[0].id);
-        }
-      }}
-    >
-      <div className="pane-body tree-root feed-navigation-tree">
-        {feedTreeData.map((node) => (
-          <TreeNode
-            key={node.id}
-            node={node}
-            depth={0}
-            selectedIds={activeFeedGroup ? new Set([activeFeedGroup]) : new Set()}
-            selectedNoteIds={selectedNotes}
-            showNotesAsChildren={shouldNestNotesInNavigation}
-            edgeSnap={null}
-            expanded={expanded}
-            feedMode
-            onSelect={(event, id) => {
-              event.stopPropagation();
-              selectFeedGroup(id);
-            }}
-            onToggle={handleToggle}
-            onNoteSelect={handleNoteSelect}
-            onNoteContextMenu={handleNoteContextMenu}
-            notePreviews={allNotePreviews}
-            onContextMenu={(event, id) => {
-              event.preventDefault();
-              event.stopPropagation();
-              selectFeedGroup(id);
-            }}
-            indentationWidth={18}
-            draggable={false}
-          />
-        ))}
+    <div className="feed-panel-layout">
+      <div
+        className="nav-scroll-area focus:outline-none"
+        ref={paneBodyRef}
+        tabIndex={0}
+        onKeyDown={onPaneKeyDown}
+        onClick={(event) => {
+          if (onPaneClick) {
+            onPaneClick();
+          }
+          if (event.target === event.currentTarget && feedTreeData[0]) {
+            selectFeedGroup(activeFeedGroup || feedTreeData[0].id);
+          }
+        }}
+      >
+        {feedTreeData.length === 0 ? (
+          <div className="empty">
+            {feedLoading
+              ? "Loading feed..."
+              : feedNoteFilter === "all"
+                ? "No feed notes yet."
+                : `No ${feedNoteFilter} notes.`}
+          </div>
+        ) : (
+          <div className="pane-body tree-root feed-navigation-tree">
+            {feedTreeData.map((node) => (
+              <TreeNode
+                key={node.id}
+                node={node}
+                depth={0}
+                selectedIds={
+                  activeFeedGroup ? new Set([activeFeedGroup]) : new Set()
+                }
+                selectedNoteIds={selectedNotes}
+                showNotesAsChildren={shouldNestNotesInNavigation}
+                edgeSnap={null}
+                expanded={expanded}
+                feedMode
+                onSelect={(event, id) => {
+                  event.stopPropagation();
+                  selectFeedGroup(id);
+                }}
+                onToggle={handleToggle}
+                onNoteSelect={handleNoteSelect}
+                onNoteContextMenu={handleNoteContextMenu}
+                notePreviews={allNotePreviews}
+                onContextMenu={(event, id) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  selectFeedGroup(id);
+                }}
+                indentationWidth={18}
+                draggable={false}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

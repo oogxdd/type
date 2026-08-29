@@ -13,7 +13,10 @@ import { useSelection } from "@/app/state/selection-store";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@typenotes/shared/types";
 import type { NotePreview } from "@typenotes/shared/format";
 import type { TreeItem, FlattenedItem } from "@/features/notes/navigation/model/types";
-import type { FeedTreeNode } from "@/features/notes/navigation/model/feed-tree-model";
+import type {
+  FeedNoteFilter,
+  FeedTreeNode,
+} from "@/features/notes/navigation/model/feed-tree-model";
 import { useNotesTreeState } from "./use-notes-tree-state";
 import { useNotesTreeActions } from "./use-notes-tree-actions";
 
@@ -35,6 +38,8 @@ type NotesTreeContextValue = {
   feedVisibleNavigationItems: VisibleNavigationItem[];
   feedTreeData: FeedTreeNode[];
   feedNodeById: Map<string, FeedTreeNode>;
+  feedNoteFilter: FeedNoteFilter;
+  setFeedNoteFilter: Dispatch<SetStateAction<FeedNoteFilter>>;
   activeFeedGroup: string;
   setActiveFeedGroup: Dispatch<SetStateAction<string>>;
   activeFeedNode: FeedTreeNode | null;

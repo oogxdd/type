@@ -89,7 +89,7 @@ export function FoldersPanel({
               paneBodyRef.current = node;
             }
           }}
-          className={`pane-body tree-root${isOver ? " drop-inside" : ""}`}
+          className={`pane-body tree-root focus:outline-none${isOver ? " drop-inside" : ""}`}
           tabIndex={0}
           onKeyDownCapture={onPaneKeyDown}
           onClick={(event) => {

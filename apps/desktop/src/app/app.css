@@ -6,6 +6,19 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* DESIGN ATOMS — edit these values to retheme the desktop UI. */
+  --design-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --design-light-bg: #fafafa;
+  --design-light-text: #292421;
+  --design-light-muted: rgba(41, 36, 33, 0.62);
+  --design-light-border: rgba(41, 36, 33, 0.1);
+  --design-light-selection: rgba(41, 36, 33, 0.065);
+  --design-dark-bg: #0b0a09;
+  --design-dark-text: oklch(82% 0.006 67.8);
+  --design-dark-muted: oklch(57% 0.008 67.8);
+  --design-dark-border: rgba(255, 255, 255, 0.1);
+  --design-dark-selection: rgba(255, 255, 255, 0.075);
+
   font-family: "Avenir Next", "SF Pro Text", "Segoe UI", "Noto Sans", Arial, sans-serif;
   font-size: 14px;
   line-height: 1.35;
@@ -1791,42 +1804,42 @@ body {
    restrained hierarchy of a personal email. Kept at the end so these rules
    form one easy-to-remove presentation layer over the existing app. */
 .app {
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: var(--design-font);
   letter-spacing: -0.01em;
 }
 
 .app.theme-light {
-  --ui-bg: #fafafa;
-  --ui-pane: #fafafa;
-  --ui-border: rgba(41, 36, 33, 0.1);
+  --ui-bg: var(--design-light-bg);
+  --ui-pane: var(--design-light-bg);
+  --ui-border: var(--design-light-border);
   --ui-border-strong: rgba(41, 36, 33, 0.24);
-  --ui-text: #292421;
-  --ui-muted: rgba(41, 36, 33, 0.62);
-  --ui-select: rgba(41, 36, 33, 0.055);
-  --ui-accent: #292421;
-  --background: #fafafa;
-  --foreground: #292421;
-  --card: #fffdfa;
-  --card-foreground: #292421;
-  --popover: #fffdfa;
-  --popover-foreground: #292421;
-  --primary: #292421;
+  --ui-text: var(--design-light-text);
+  --ui-muted: var(--design-light-muted);
+  --ui-select: var(--design-light-selection);
+  --ui-accent: var(--design-light-text);
+  --background: var(--design-light-bg);
+  --foreground: var(--design-light-text);
+  --card: var(--design-light-bg);
+  --card-foreground: var(--design-light-text);
+  --popover: var(--design-light-bg);
+  --popover-foreground: var(--design-light-text);
+  --primary: var(--design-light-text);
   --primary-foreground: #f5eee6;
   --secondary: rgba(255, 255, 255, 0.75);
-  --secondary-foreground: #292421;
+  --secondary-foreground: var(--design-light-text);
   --muted: rgba(255, 255, 255, 0.65);
-  --muted-foreground: rgba(41, 36, 33, 0.68);
+  --muted-foreground: var(--design-light-muted);
   --accent: rgba(255, 255, 255, 0.75);
-  --accent-foreground: #292421;
-  --border: rgba(41, 36, 33, 0.1);
-  --input: rgba(41, 36, 33, 0.12);
+  --accent-foreground: var(--design-light-text);
+  --border: var(--design-light-border);
+  --input: var(--design-light-border);
   --ring: rgba(41, 36, 33, 0.22);
-  --sidebar: #fafafa;
-  --sidebar-foreground: #292421;
-  --sidebar-accent: rgba(41, 36, 33, 0.055);
-  --sidebar-accent-foreground: #292421;
-  --sidebar-border: rgba(41, 36, 33, 0.1);
-  background: #fafafa;
+  --sidebar: var(--design-light-bg);
+  --sidebar-foreground: var(--design-light-text);
+  --sidebar-accent: var(--design-light-selection);
+  --sidebar-accent-foreground: var(--design-light-text);
+  --sidebar-border: var(--design-light-border);
+  background: var(--design-light-bg);
 }
 
 .app.theme-light .pane,
@@ -1835,25 +1848,25 @@ body {
 .app.theme-light .editor-pane,
 .app.theme-light .notes-pane .pane-body,
 .app.theme-light .editor-body {
-  background: #fafafa;
+  background: var(--design-light-bg);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 
 .app.theme-light .nav-pane {
-  border-right-color: rgba(41, 36, 33, 0.1);
+  border-right-color: var(--design-light-border);
 }
 
 .app.theme-light .app-resize-handle::before,
 .app.theme-light .app-resize-handle-editor::before {
   width: 1px;
-  background: rgba(41, 36, 33, 0.1);
+  background: var(--design-light-border);
 }
 
 .app.theme-light .app-resize-handle:hover::before,
 .app.theme-light .app-resize-handle-editor:hover::before {
   width: 1px;
-  background: rgba(41, 36, 33, 0.22);
+  background: color-mix(in srgb, var(--design-light-border) 55%, var(--design-light-text));
 }
 
 .app.theme-light .app-sidebar-header {
@@ -1927,9 +1940,14 @@ body {
   background: rgba(41, 36, 33, 0.035);
 }
 
-.app.theme-light .tree-pane .item-row.selected,
+.app.theme-light .tree-pane .item-row.selected {
+  border-radius: 0;
+  background: var(--design-light-selection);
+  box-shadow: inset 2px 0 0 var(--design-light-text);
+}
+
 .app.theme-light .note-row.selected {
-  background: rgba(41, 36, 33, 0.065);
+  background: var(--design-light-selection);
   box-shadow: none;
 }
 
@@ -1971,35 +1989,9 @@ body {
 }
 
 .editor-top-row {
-  min-height: auto;
-  padding: calc(30px + var(--left-panels-drag-height)) clamp(22px, 5vw, 64px) 22px;
+  min-height: calc(12px + var(--left-panels-drag-height));
+  padding: calc(8px + var(--left-panels-drag-height)) clamp(22px, 5vw, 64px) 0;
   align-items: flex-start;
-}
-
-.editor-message-header {
-  display: grid;
-  grid-template-columns: 4.6rem minmax(0, 1fr);
-  column-gap: 16px;
-  row-gap: 4px;
-  flex: 1;
-  min-width: 0;
-  max-width: 40rem;
-  color: #292421;
-  font-size: clamp(14px, 1.1vw, 16px);
-  line-height: 1.36;
-}
-
-.editor-message-header > span {
-  color: rgba(41, 36, 33, 0.62);
-  text-align: right;
-}
-
-.editor-message-header > strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 400;
 }
 
 .editor-lens-menu-area {
@@ -2023,15 +2015,15 @@ body {
   width: min(100%, calc(40rem + clamp(44px, 10vw, 128px)));
   margin: 0;
   padding: 14px clamp(22px, 5vw, 64px) 16px;
-  color: #292421;
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color: var(--design-light-text);
+  font-family: var(--design-font);
   font-size: clamp(var(--editor-font-size, 14px), 1.1vw, 16px);
   line-height: 1.52;
 }
 
 .app.theme-light .tiptap-content p.is-editor-empty:first-child::before {
   color: rgba(41, 36, 33, 0.45);
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: var(--design-font);
 }
 
 .app.theme-light .tiptap-content blockquote {
@@ -2048,10 +2040,6 @@ body {
   padding-inline: clamp(56px, 20vw, 380px) clamp(22px, 5vw, 64px);
 }
 
-.app.sidebar-collapsed .editor-message-header {
-  max-width: 40rem;
-}
-
 .app.sidebar-collapsed.theme-light .tiptap-content {
   width: 100%;
   max-width: none;
@@ -2060,15 +2048,30 @@ body {
 }
 
 .app.theme-dark {
-  --ui-bg: #0b0a09;
-  --ui-pane: #0b0a09;
-  --ui-border: rgba(255, 255, 255, 0.1);
+  --ui-bg: var(--design-dark-bg);
+  --ui-pane: var(--design-dark-bg);
+  --ui-border: var(--design-dark-border);
   --ui-border-strong: rgba(255, 255, 255, 0.18);
-  --ui-text: oklch(82% 0.006 67.8);
-  --ui-muted: oklch(57% 0.008 67.8);
-  --ui-select: rgba(255, 255, 255, 0.075);
-  --ui-accent: oklch(82% 0.006 67.8);
-  background: #0b0a09;
+  --ui-text: var(--design-dark-text);
+  --ui-muted: var(--design-dark-muted);
+  --ui-select: var(--design-dark-selection);
+  --ui-accent: var(--design-dark-text);
+  --background: var(--design-dark-bg);
+  --foreground: var(--design-dark-text);
+  --card: var(--design-dark-bg);
+  --card-foreground: var(--design-dark-text);
+  --popover: var(--design-dark-bg);
+  --popover-foreground: var(--design-dark-text);
+  --primary: var(--design-dark-text);
+  --muted-foreground: var(--design-dark-muted);
+  --border: var(--design-dark-border);
+  --input: var(--design-dark-border);
+  --sidebar: var(--design-dark-bg);
+  --sidebar-foreground: var(--design-dark-text);
+  --sidebar-accent: var(--design-dark-selection);
+  --sidebar-accent-foreground: var(--design-dark-text);
+  --sidebar-border: var(--design-dark-border);
+  background: var(--design-dark-bg);
 }
 
 .app.theme-dark .pane,
@@ -2078,13 +2081,25 @@ body {
 .app.theme-dark .notes-pane .pane-body,
 .app.theme-dark .editor-body,
 .app.theme-dark .tiptap-editor {
-  background: #0b0a09;
+  background: var(--design-dark-bg);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 
 .app.theme-dark .nav-pane {
-  border-right-color: rgba(255, 255, 255, 0.1);
+  border-right-color: var(--design-dark-border);
+}
+
+.app.theme-dark .app-resize-handle::before,
+.app.theme-dark .app-resize-handle-editor::before {
+  width: 1px;
+  background: var(--design-dark-border);
+}
+
+.app.theme-dark .app-resize-handle:hover::before,
+.app.theme-dark .app-resize-handle-editor:hover::before {
+  width: 1px;
+  background: color-mix(in srgb, var(--design-dark-border) 55%, var(--design-dark-text));
 }
 
 .app.theme-dark .tree-pane .item-row,
@@ -2093,48 +2108,160 @@ body {
   border-radius: 7px;
 }
 
-.app.theme-dark .tree-pane .item-row.selected,
+.app.theme-dark .tree-pane .item-row.selected {
+  border-radius: 0;
+  background: var(--design-dark-selection);
+  box-shadow: inset 2px 0 0 var(--design-dark-text);
+}
+
 .app.theme-dark .note-row.selected {
-  background: rgba(255, 255, 255, 0.075);
+  background: var(--design-dark-selection);
   box-shadow: none;
-}
-
-.app.theme-dark .editor-message-header {
-  color: oklch(82% 0.006 67.8);
-}
-
-.app.theme-dark .editor-message-header > span {
-  color: oklch(57% 0.008 67.8);
 }
 
 .app.theme-dark .tiptap-content {
   padding: 14px clamp(22px, 5vw, 64px) 16px;
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: var(--design-font);
   font-size: clamp(var(--editor-font-size, 14px), 1.1vw, 16px);
   line-height: 1.52;
 }
 
 @media (max-width: 760px) {
   .editor-top-row {
-    padding: 24px 18px 14px;
-  }
-
-  .editor-message-header {
-    grid-template-columns: 1fr;
-    row-gap: 2px;
-    font-size: 14px;
-  }
-
-  .editor-message-header > span {
-    display: none;
-  }
-
-  .editor-message-header > strong:nth-of-type(n + 2) {
-    color: var(--ui-muted);
+    padding: 8px 18px 0;
   }
 
   .app.theme-light .tiptap-content,
   .app.theme-dark .tiptap-content {
     padding-inline: 18px;
+  }
+}
+
+/* Settings use dedicated classes because the unlayered `.pane-body` rule wins
+   over Tailwind spacing utilities in this stylesheet. */
+.settings-nav-pane {
+  border-right: 0;
+}
+
+.app.theme-light {
+  --settings-pane-top: 18px;
+}
+
+.app.theme-dark {
+  --settings-pane-top: 10px;
+}
+
+.settings-nav-pane .settings-nav-body {
+  display: block;
+  padding: calc(var(--settings-pane-top) + var(--left-panels-drag-height)) 0 12px;
+  background: var(--ui-pane);
+}
+
+.settings-nav-list {
+  display: grid;
+  gap: 1px;
+}
+
+.settings-nav-row {
+  position: relative;
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: 0;
+  padding: 7px 14px;
+  background: transparent;
+  color: var(--ui-text);
+  font-family: var(--design-font);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.settings-nav-row:hover {
+  background: color-mix(in srgb, var(--ui-text) 3.5%, transparent);
+}
+
+.settings-nav-row.is-selected {
+  background: var(--ui-select);
+  font-weight: 500;
+}
+
+.settings-nav-row.is-selected::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--ui-text);
+}
+
+.settings-nav-row:focus-visible {
+  outline: 2px solid var(--ui-border-strong);
+  outline-offset: -2px;
+}
+
+.settings-detail-pane .settings-detail-body {
+  padding: calc(var(--settings-pane-top) + var(--left-panels-drag-height)) 28px 28px;
+  background: var(--ui-pane);
+}
+
+.app .tree-pane .item-row.nav-note-row {
+  margin: 0;
+}
+
+@media (max-width: 1320px) {
+  .settings-detail-pane .settings-detail-body {
+    padding: calc(var(--settings-pane-top) + var(--left-panels-drag-height)) 22px 24px;
+  }
+}
+
+.settings-color-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-color-field {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: var(--ui-text);
+  font-size: 13px;
+}
+
+.settings-color-control {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-color-control input[type="color"] {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  padding: 2px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.settings-color-control code {
+  color: var(--ui-muted);
+  font-size: 11px;
+}
+
+@media (max-width: 900px) {
+  .settings-color-grid {
+    grid-template-columns: 1fr;
   }
 }

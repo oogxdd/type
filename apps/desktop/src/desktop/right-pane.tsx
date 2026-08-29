@@ -83,14 +83,6 @@ export function DesktopRightPane({
           ) : (
             <div className="editor-single">
               <div className="editor-top-row">
-                <div className="editor-message-header" aria-label="Note details">
-                  <span>From:</span>
-                  <strong>Type, local@notes</strong>
-                  <span>Date:</span>
-                  <strong>{activeNotePreview?.dateLabel || "Draft"}</strong>
-                  <span>Subject:</span>
-                  <strong>{activeNotePreview?.title || "New note"}</strong>
-                </div>
                 {canOpenLens ? (
                   <div className="editor-lens-menu-area">
                     <DropdownMenu open={isLensMenuOpen} onOpenChange={setIsLensMenuOpen}>

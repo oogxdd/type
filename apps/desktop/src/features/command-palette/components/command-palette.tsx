@@ -66,15 +66,17 @@ export function CommandPalette({
     >
       <CommandInput
         placeholder={
-          moveMode ? "mv <folder> — Tab to drill in, Enter to move" : "Type a command or search…"
+          moveMode
+            ? "mv <folder> — Right/Tab to drill in, Enter to move"
+            : "Type a command or search…"
         }
         value={inputValue}
         onValueChange={setInputValue}
         onKeyDown={(event) => {
-          if (!moveMode || event.key !== "Tab") {
+          if (!moveMode || (event.key !== "Tab" && event.key !== "ArrowRight")) {
             return;
           }
-          // Tab completes the highlighted folder so you can keep navigating.
+          // Complete the highlighted folder so you can browse its children.
           event.preventDefault();
           const active = document.querySelector<HTMLElement>(
             '[cmdk-item][aria-selected="true"][data-folder-path]'

@@ -19,7 +19,7 @@ type UsePaneShortcutsArgs = {
 
 /**
  * Desktop global keyboard shortcuts and pane focus management:
- * cmd/ctrl + T (toggle sidebar), W (cycle left panes), K/J (cycle all panes),
+ * cmd/ctrl + T (toggle sidebar), W (toggle navigation/editor), K/J (cycle all panes),
  * N (new note), Backspace (delete), +/-/0 (editor font size), shift+L (lock).
  * Tracks the last-focused left pane so toggling the sidebar can restore it.
  */
@@ -157,21 +157,17 @@ export function usePaneShortcuts({
       if (code === "KeyW") {
         if (sidebarCollapsed) {
           setSidebarCollapsed(false);
-          requestAnimationFrame(() =>
-            focusPane(hasMiddlePane ? lastLeftPaneFocusRef.current : "folders")
-          );
-          return;
-        }
-        if (!hasMiddlePane) {
           lastLeftPaneFocusRef.current = "folders";
-          focusPane("folders");
+          requestAnimationFrame(() => focusPane("folders"));
           return;
         }
         const currentPane = getFocusedPane();
-        const targetPane: "folders" | "middle" =
-          currentPane === "folders" ? "middle" : "folders";
-        lastLeftPaneFocusRef.current = targetPane;
-        focusPane(targetPane);
+        if (currentPane === "right") {
+          lastLeftPaneFocusRef.current = "folders";
+          focusPane("folders");
+        } else {
+          focusPane("right");
+        }
         return;
       }
 

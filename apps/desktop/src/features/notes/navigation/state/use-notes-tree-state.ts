@@ -18,6 +18,7 @@ import {
   collectFeedNotes,
   findFeedNode,
   getFirstFeedGroupId,
+  type FeedNoteFilter,
   type FeedTreeNode,
 } from "@/features/notes/navigation/model/feed-tree-model";
 import {
@@ -50,6 +51,8 @@ export type NotesTreeState = {
   feedVisibleNavigationItems: VisibleNavigationItem[];
   feedTreeData: FeedTreeNode[];
   feedNodeById: Map<string, FeedTreeNode>;
+  feedNoteFilter: FeedNoteFilter;
+  setFeedNoteFilter: React.Dispatch<React.SetStateAction<FeedNoteFilter>>;
   activeFeedGroup: string;
   setActiveFeedGroup: React.Dispatch<React.SetStateAction<string>>;
   activeFeedNode: FeedTreeNode | null;
@@ -76,10 +79,17 @@ export function useNotesTreeState({
   const [tree, setTree] = useState<FolderNode | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set([""]));
   const [activeFeedGroup, setActiveFeedGroup] = useState("");
+  const [feedNoteFilter, setFeedNoteFilter] = useState<FeedNoteFilter>(() =>
+    hideArchivedFeedNotes ? "active" : "all"
+  );
   const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
   const shouldNestNotesInNavigation = notesListMode === "nested";
+
+  useEffect(() => {
+    setFeedNoteFilter(hideArchivedFeedNotes ? "active" : "all");
+  }, [hideArchivedFeedNotes]);
 
   const refreshTree = useCallback(async () => {
     const data = await api.getTree();
@@ -147,8 +157,8 @@ export function useNotesTreeState({
     [allNotePreviews, notes]
   );
   const feedTree = useMemo(
-    () => buildFeedTree(feedSourceNotes, allNotePreviews, hideArchivedFeedNotes),
-    [allNotePreviews, feedSourceNotes, hideArchivedFeedNotes]
+    () => buildFeedTree(feedSourceNotes, allNotePreviews, feedNoteFilter),
+    [allNotePreviews, feedNoteFilter, feedSourceNotes]
   );
   const feedTreeData = feedTree.treeData;
   const feedNodeById = feedTree.nodeById;
@@ -224,6 +234,8 @@ export function useNotesTreeState({
     feedVisibleNavigationItems,
     feedTreeData,
     feedNodeById,
+    feedNoteFilter,
+    setFeedNoteFilter,
     activeFeedGroup,
     setActiveFeedGroup,
     activeFeedNode,

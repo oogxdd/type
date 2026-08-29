@@ -91,6 +91,40 @@ afterEach(() => {
 });
 
 describe("buildFeedTree relative buckets", () => {
+  it("filters notes by archived and reviewed flags", () => {
+    const notes = [note("active.md"), note("reviewed.md"), note("archived.md")];
+    const previews: Record<string, NotePreview> = {
+      "active.md": preview(NOW),
+      "reviewed.md": {
+        ...preview(NOW),
+        isReviewed: true,
+        reviewedMs: NOW.getTime(),
+      },
+      "archived.md": {
+        ...preview(NOW),
+        isArchived: true,
+        archivedMs: NOW.getTime(),
+      },
+    };
+
+    const pathsFor = (
+      filter: "active" | "reviewed" | "unreviewed" | "archived"
+    ) =>
+      walkFeed(buildFeedTree(notes, previews, filter).treeData).flatMap((node) =>
+        node.notes.map((entry) => entry.path)
+      );
+
+    expect(pathsFor("active")).toEqual(
+      expect.arrayContaining(["active.md", "reviewed.md"])
+    );
+    expect(pathsFor("active")).not.toContain("archived.md");
+    expect(pathsFor("reviewed")).toEqual(["reviewed.md"]);
+    expect(pathsFor("unreviewed")).toEqual(
+      expect.arrayContaining(["active.md", "archived.md"])
+    );
+    expect(pathsFor("archived")).toEqual(["archived.md"]);
+  });
+
   it("splits the last two weeks into Today, Yesterday, This week, and Last week", () => {
     const { treeData } = buildTree({
       "dec-31.md": new Date(2026, 11, 31, 8),

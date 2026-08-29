@@ -5,7 +5,10 @@ import {
   MAX_EDITOR_FONT_SIZE,
   MIN_EDITOR_FONT_SIZE,
 } from "@/shared/constants";
-import { useAppearance } from "./appearance-store";
+import {
+  DEFAULT_DESIGN_PALETTES,
+  useAppearance,
+} from "./appearance-store";
 
 describe("appearance store", () => {
   beforeEach(() => {
@@ -13,6 +16,11 @@ describe("appearance store", () => {
       theme: "dark",
       notesListMode: "separate",
       editorFontSize: DEFAULT_EDITOR_FONT_SIZE,
+      designFont: "helvetica",
+      designPalettes: {
+        light: { ...DEFAULT_DESIGN_PALETTES.light },
+        dark: { ...DEFAULT_DESIGN_PALETTES.dark },
+      },
     });
   });
 
@@ -38,5 +46,26 @@ describe("appearance store", () => {
     useAppearance.setState({ editorFontSize: MAX_EDITOR_FONT_SIZE });
     useAppearance.getState().resetEditorFontSize();
     expect(useAppearance.getState().editorFontSize).toBe(DEFAULT_EDITOR_FONT_SIZE);
+  });
+
+  it("updates and resets colors without mutating the other theme", () => {
+    useAppearance.getState().setDesignColor("light", "background", "#ABCDEF");
+
+    expect(useAppearance.getState().designPalettes.light.background).toBe("#abcdef");
+    expect(useAppearance.getState().designPalettes.dark).toEqual(
+      DEFAULT_DESIGN_PALETTES.dark
+    );
+
+    useAppearance.getState().resetDesignPalette("light");
+    expect(useAppearance.getState().designPalettes.light).toEqual(
+      DEFAULT_DESIGN_PALETTES.light
+    );
+  });
+
+  it("ignores invalid custom colors", () => {
+    useAppearance.getState().setDesignColor("dark", "text", "not-a-color");
+    expect(useAppearance.getState().designPalettes.dark.text).toBe(
+      DEFAULT_DESIGN_PALETTES.dark.text
+    );
   });
 });

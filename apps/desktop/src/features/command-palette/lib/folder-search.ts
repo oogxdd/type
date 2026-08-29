@@ -22,6 +22,27 @@ export type ParsedMoveCommand = {
   query: string;
 };
 
+// These are navigation/storage roots rather than user-created destinations.
+// Keep the aliases here because older notes roots can still contain the legacy
+// names, while "Folders" is the navigation pane's synthetic root label.
+const RESERVED_ROOT_NAMES = new Set([
+  "feed",
+  "archieve",
+  "archive",
+  "folders",
+  "unsorted",
+  "recordings",
+  "_recordings",
+  "attachments",
+]);
+
+/** Whether a path is a user folder that can be offered as an `mv` target. */
+export function isMoveDestination(path: string): boolean {
+  const normalized = path.replace(/^\/+/, "").replace(/\/+$/, "");
+  const root = normalized.split("/", 1)[0]?.toLowerCase();
+  return Boolean(root) && !RESERVED_ROOT_NAMES.has(root);
+}
+
 /**
  * Detect the `mv `/`move ` terminal command. Returns null when the input is not
  * (yet) a move command, so the palette falls back to its normal command list.
@@ -106,23 +127,27 @@ export function buildFolderSuggestions(
   allPaths: string[],
   query: string
 ): FolderSuggestion[] {
+  const destinationPaths = allPaths.filter(isMoveDestination);
   const raw = query.replace(/^\/+/, "");
 
   if (raw === "") {
-    return directChildren(allPaths, "").map(toSuggestion).sort(byPath).slice(0, MAX_SUGGESTIONS);
+    return directChildren(destinationPaths, "")
+      .map(toSuggestion)
+      .sort(byPath)
+      .slice(0, MAX_SUGGESTIONS);
   }
 
   if (raw.includes("/")) {
     const splitAt = raw.lastIndexOf("/");
     const dirPart = raw.slice(0, splitAt);
     const namePart = raw.slice(splitAt + 1).toLowerCase();
-    const resolvedDir = allPaths.find(
+    const resolvedDir = destinationPaths.find(
       (path) => path.toLowerCase() === dirPart.toLowerCase()
     );
     if (!resolvedDir) {
       return [];
     }
-    const children = directChildren(allPaths, resolvedDir);
+    const children = directChildren(destinationPaths, resolvedDir);
     const filtered =
       namePart === ""
         ? children
@@ -131,7 +156,7 @@ export function buildFolderSuggestions(
   }
 
   const q = raw.toLowerCase();
-  return allPaths
+  return destinationPaths
     .map((path) => ({
       path,
       score: scoreName(lastSegment(path).toLowerCase(), path.toLowerCase(), q),

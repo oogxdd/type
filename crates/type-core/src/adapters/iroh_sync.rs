@@ -257,11 +257,15 @@ pub fn start_iroh_sync_server(
 
     // A relay address makes the QR useful across networks. Offline startup is
     // still allowed: the ticket can retain direct addresses for LAN testing.
+    //
+    // `tokio::time::timeout(...)` must be constructed *inside* the async block
+    // below, not passed as a bare argument to `block_on` — argument evaluation
+    // happens on the calling thread before `block_on` enters the runtime, so a
+    // bare-argument `Timeout` panics with "there is no reactor running".
     runtime
-        .block_on(tokio::time::timeout(
-            IROH_ONLINE_TIMEOUT,
-            router.endpoint().online(),
-        ))
+        .block_on(async {
+            tokio::time::timeout(IROH_ONLINE_TIMEOUT, router.endpoint().online()).await
+        })
         .map_err(|_| "Iroh did not discover a relay or direct address in time.".to_string())?;
     let ticket = EndpointTicket::new(router.endpoint().addr()).to_string();
     let endpoint_id = router.endpoint().id().to_string();

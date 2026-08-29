@@ -1,7 +1,17 @@
 import { useShallow } from "zustand/react/shallow";
 
-import { useAppearance } from "@/app/state/appearance-store";
+import {
+  DESIGN_FONT_OPTIONS,
+  type DesignColorId,
+  type DesignFontId,
+  useAppearance,
+} from "@/app/state/appearance-store";
+import {
+  MAX_EDITOR_FONT_SIZE,
+  MIN_EDITOR_FONT_SIZE,
+} from "@/shared/constants";
 import type { NotesListMode, ThemeMode } from "@typenotes/shared/types";
+import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
 import {
   SettingsCard,
@@ -9,6 +19,14 @@ import {
   SettingsSection,
   SettingsSelect,
 } from "../settings-ui";
+
+const COLOR_FIELDS: Array<{ id: DesignColorId; label: string }> = [
+  { id: "background", label: "Background" },
+  { id: "text", label: "Text" },
+  { id: "muted", label: "Muted text" },
+  { id: "border", label: "Dividers" },
+  { id: "selection", label: "Selection" },
+];
 
 export function SettingsAppearanceSection() {
   const {
@@ -18,6 +36,13 @@ export function SettingsAppearanceSection() {
     setNotesListMode,
     hideArchivedFeedNotes,
     setHideArchivedFeedNotes,
+    editorFontSize,
+    setEditorFontSize,
+    designFont,
+    setDesignFont,
+    designPalettes,
+    setDesignColor,
+    resetDesignPalette,
   } = useAppearance(
     useShallow((state) => ({
       theme: state.theme,
@@ -26,8 +51,17 @@ export function SettingsAppearanceSection() {
       setNotesListMode: state.setNotesListMode,
       hideArchivedFeedNotes: state.hideArchivedFeedNotes,
       setHideArchivedFeedNotes: state.setHideArchivedFeedNotes,
+      editorFontSize: state.editorFontSize,
+      setEditorFontSize: state.setEditorFontSize,
+      designFont: state.designFont,
+      setDesignFont: state.setDesignFont,
+      designPalettes: state.designPalettes,
+      setDesignColor: state.setDesignColor,
+      resetDesignPalette: state.resetDesignPalette,
     }))
   );
+
+  const activePalette = designPalettes[theme];
 
   return (
     <SettingsSection title="Appearance" description="Theme and navigation layout.">
@@ -41,6 +75,68 @@ export function SettingsAppearanceSection() {
             <option value="light">Light</option>
           </SettingsSelect>
         </SettingsField>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Typography"
+        description="Used throughout the desktop interface and note editor."
+      >
+        <SettingsField label="Font family">
+          <SettingsSelect
+            value={designFont}
+            onChange={(event) => setDesignFont(event.target.value as DesignFontId)}
+          >
+            {DESIGN_FONT_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </SettingsSelect>
+        </SettingsField>
+
+        <SettingsField label={`Editor text size — ${editorFontSize}px`}>
+          <input
+            type="range"
+            min={MIN_EDITOR_FONT_SIZE}
+            max={MAX_EDITOR_FONT_SIZE}
+            step={1}
+            value={editorFontSize}
+            onChange={(event) => setEditorFontSize(Number(event.target.value))}
+            className="w-full accent-foreground"
+          />
+        </SettingsField>
+      </SettingsCard>
+
+      <SettingsCard
+        title={`${theme === "light" ? "Light" : "Dark"} palette`}
+        description="These colors apply immediately to the active theme."
+      >
+        <div className="settings-color-grid">
+          {COLOR_FIELDS.map((field) => (
+            <label className="settings-color-field" key={field.id}>
+              <span>{field.label}</span>
+              <span className="settings-color-control">
+                <input
+                  type="color"
+                  value={activePalette[field.id]}
+                  onChange={(event) =>
+                    setDesignColor(theme, field.id, event.target.value)
+                  }
+                  aria-label={`${field.label} color`}
+                />
+                <code>{activePalette[field.id]}</code>
+              </span>
+            </label>
+          ))}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => resetDesignPalette(theme)}
+        >
+          Reset {theme} palette
+        </Button>
       </SettingsCard>
 
       <SettingsCard title="Notes list">

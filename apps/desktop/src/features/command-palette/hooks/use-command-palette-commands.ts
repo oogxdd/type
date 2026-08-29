@@ -24,6 +24,7 @@ import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import {
   buildFolderSuggestions,
   folderExists,
+  isMoveDestination,
   parseMoveCommand,
   type FolderSuggestion,
 } from "../lib/folder-search";
@@ -165,7 +166,12 @@ export function useCommandPaletteCommands({
     const rows: MoveRow[] = [];
 
     // "Move into this folder" when we've drilled into an existing directory.
-    if (endsWithSlash && core && folderExists(allFolderPaths, core)) {
+    if (
+      endsWithSlash &&
+      core &&
+      isMoveDestination(core) &&
+      folderExists(allFolderPaths, core)
+    ) {
       rows.push({
         kind: "folder",
         path: core,
@@ -175,7 +181,7 @@ export function useCommandPaletteCommands({
     }
 
     // "Create & move" when the typed path is not an existing folder.
-    if (core && !folderExists(allFolderPaths, core)) {
+    if (core && isMoveDestination(core) && !folderExists(allFolderPaths, core)) {
       rows.push({
         kind: "create",
         path: core,

@@ -58,6 +58,28 @@ export type FeedTreeBuildResult = {
   nodeById: Map<string, FeedTreeNode>;
 };
 
+export type FeedNoteFilter =
+  | "all"
+  | "active"
+  | "reviewed"
+  | "unreviewed"
+  | "archived";
+
+const matchesFeedFilter = (preview: NotePreview, filter: FeedNoteFilter) => {
+  switch (filter) {
+    case "active":
+      return !preview.isArchived;
+    case "reviewed":
+      return preview.isReviewed;
+    case "unreviewed":
+      return !preview.isReviewed;
+    case "archived":
+      return preview.isArchived;
+    default:
+      return true;
+  }
+};
+
 type FeedNodeBuilder = {
   id: string;
   name: string;
@@ -671,10 +693,13 @@ const addDatedNote = (
 export function buildFeedTree(
   notes: NoteEntry[],
   previews: Record<string, NotePreview>,
-  hideArchivedNotes: boolean
+  filter: FeedNoteFilter | boolean
 ): FeedTreeBuildResult {
   const now = new Date();
   const bounds = getFeedBoundaries(now);
+  // The boolean form keeps compatibility with the old "hide archived" setting.
+  const resolvedFilter =
+    typeof filter === "boolean" ? (filter ? "active" : "all") : filter;
   const root = createBuilder("feed:root", "Feed", "special", null, 0);
 
   notes.forEach((note) => {
@@ -682,7 +707,7 @@ export function buildFeedTree(
     if (!preview) {
       return;
     }
-    if (hideArchivedNotes && preview.isArchived) {
+    if (!matchesFeedFilter(preview, resolvedFilter)) {
       return;
     }
     const timestampMs = getFeedTimestamp(preview);

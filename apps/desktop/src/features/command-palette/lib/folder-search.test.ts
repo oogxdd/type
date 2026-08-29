@@ -3,12 +3,19 @@ import { describe, expect, it } from "vitest";
 import {
   buildFolderSuggestions,
   folderExists,
+  isMoveDestination,
   parseMoveCommand,
 } from "./folder-search";
 
 const FOLDERS = [
   "Feed",
   "Archieve",
+  "Archive",
+  "Folders",
+  "Recordings",
+  "Attachments",
+  "Unsorted",
+  "_Recordings",
   "Personal",
   "Personal/Body",
   "Personal/Body/Health",
@@ -42,11 +49,15 @@ describe("parseMoveCommand", () => {
 describe("buildFolderSuggestions", () => {
   it("lists root-level folders for an empty query", () => {
     expect(paths(buildFolderSuggestions(FOLDERS, ""))).toEqual([
-      "Archieve",
-      "Feed",
       "Personal",
       "Projects",
     ]);
+  });
+
+  it("never offers navigation, storage, or legacy system roots", () => {
+    expect(paths(buildFolderSuggestions(FOLDERS, "archive"))).toEqual([]);
+    expect(paths(buildFolderSuggestions(FOLDERS, "folders"))).toEqual([]);
+    expect(paths(buildFolderSuggestions(FOLDERS, "record"))).toEqual([]);
   });
 
   it("fuzzy-matches every folder by name", () => {
@@ -90,6 +101,23 @@ describe("buildFolderSuggestions", () => {
       "Personal/Body",
       "Personal/Mental",
     ]);
+  });
+});
+
+describe("isMoveDestination", () => {
+  it("rejects system roots and anything nested beneath them", () => {
+    expect(isMoveDestination("Feed")).toBe(false);
+    expect(isMoveDestination("Feed/")).toBe(false);
+    expect(isMoveDestination("Archieve/Old")).toBe(false);
+    expect(isMoveDestination("archive")).toBe(false);
+    expect(isMoveDestination("Folders")).toBe(false);
+    expect(isMoveDestination("Recordings/2026")).toBe(false);
+    expect(isMoveDestination("Attachments")).toBe(false);
+  });
+
+  it("allows ordinary user folders", () => {
+    expect(isMoveDestination("Projects")).toBe(true);
+    expect(isMoveDestination("Personal/Body")).toBe(true);
   });
 });
 
