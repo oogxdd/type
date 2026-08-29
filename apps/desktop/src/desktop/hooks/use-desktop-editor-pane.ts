@@ -23,6 +23,7 @@ export function useDesktopEditorPane() {
   const [isLensMenuOpen, setIsLensMenuOpen] = useState(false);
   const {
     noteContent,
+    loadedNotePath,
     draftNoteContent,
     handleEditorChange: updateEditorContent,
     flushSave,
@@ -167,6 +168,7 @@ export function useDesktopEditorPane() {
 
   return {
     activeNote,
+    loadedNotePath,
     selectedNotePaths,
     activeNotePreview,
     editorMarkdown,

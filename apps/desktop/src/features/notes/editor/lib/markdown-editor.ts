@@ -23,7 +23,11 @@ const stripEmptyLineTokens = (markdown: string) =>
 
 const expandExtraBlankLines = (markdown: string) =>
   markdown.replace(/\n{3,}/g, (match) => {
-    const extraBlankLines = Math.max(0, match.length - 2);
+    // Turndown separates every paragraph with two newlines. An empty editor
+    // paragraph therefore adds another *pair* ("a\n\n\n\nb"), not one token
+    // per newline. Counting individual newlines here made every empty
+    // paragraph multiply whenever a note was reopened.
+    const extraBlankLines = Math.floor(Math.max(0, match.length - 2) / 2);
     if (extraBlankLines === 0) {
       return match;
     }

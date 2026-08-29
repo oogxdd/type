@@ -36,6 +36,7 @@ export function DesktopRightPane({
 }: DesktopRightPaneProps) {
   const {
     activeNote,
+    loadedNotePath,
     selectedNotePaths,
     activeNotePreview,
     editorMarkdown,
@@ -107,6 +108,7 @@ export function DesktopRightPane({
               <RecordingNoteHeader notePath={activeNote} preview={activeNotePreview} />
               <HandwritingNoteHeader notePath={activeNote} preview={activeNotePreview} />
               <NoteEditor
+                documentKey={loadedNotePath}
                 markdown={editorMarkdown}
                 onChange={handleEditorChange}
               />

@@ -11,27 +11,72 @@ import {
   splitLensBackmatterBlock,
 } from "@typenotes/shared/lens-backmatter";
 import { htmlToMarkdown, markdownToHtml } from "../lib/markdown-editor";
+import { useAppearance } from "@/app/state/appearance-store";
 
 type NoteEditorProps = {
+  documentKey: string | null;
   markdown: string;
   onChange: (markdown: string) => void;
 };
 
 type VimMode = "normal" | "insert" | "visual";
 
+type VimCursorRect = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
 const VIM_JUMP_LINES = 10;
 
 const clampDocumentPosition = (view: EditorView, position: number) =>
   Math.max(1, Math.min(view.state.doc.content.size, position));
 
+const getEmptyParagraphVerticalPosition = (
+  view: EditorView,
+  position: number,
+  direction: -1 | 1
+) => {
+  try {
+    const resolved = view.state.doc.resolve(position);
+    if (!view.endOfTextblock(direction > 0 ? "down" : "up")) {
+      return null;
+    }
+    const boundary = direction > 0 ? resolved.after() : resolved.before();
+    const adjacent = TextSelection.near(
+      view.state.doc.resolve(boundary),
+      direction
+    );
+
+    // Coordinate-based movement can skip an empty paragraph because it has no
+    // glyph to hit-test. Use the document structure when either side of the
+    // move is empty, while retaining visual-line movement for normal/wrapped
+    // text.
+    if (
+      resolved.parent.content.size === 0 ||
+      adjacent.$head.parent.content.size === 0
+    ) {
+      return adjacent.head;
+    }
+  } catch {
+    // Fall through to geometry-based movement at unusual nested boundaries.
+  }
+  return null;
+};
+
 const getVerticalPosition = (
   view: EditorView,
   position: number,
   direction: -1 | 1,
-  lineCount: number
+  lineCount: number,
+  goalLeft: number
 ) => {
   try {
-    const coords = view.coordsAtPos(position);
+    // side=1 is important at the first character of a line/block. Without it,
+    // ProseMirror may measure the same document position as the end of the
+    // previous line, which makes `k` jump to that line's final character.
+    const coords = view.coordsAtPos(position, 1);
     const measuredLineHeight = coords.bottom - coords.top;
     const computedLineHeight = Number.parseFloat(
       window.getComputedStyle(view.dom).lineHeight
@@ -42,12 +87,40 @@ const getVerticalPosition = (
         : Number.isFinite(computedLineHeight)
           ? computedLineHeight
           : 24;
-    const target = view.posAtCoords({
-      left: coords.left,
-      top: (coords.top + coords.bottom) / 2 + direction * lineHeight * lineCount,
-    });
-    if (target) {
-      return clampDocumentPosition(view, target.pos);
+    const startCenter = (coords.top + coords.bottom) / 2;
+    const scanStep = Math.max(3, lineHeight / 4);
+    const maxDistance = lineHeight * (lineCount * 4 + 4);
+    let lastLineCenter = startCenter;
+    let linesMoved = 0;
+    let lastPosition: number | null = null;
+
+    // Scan through layout space instead of assuming adjacent text blocks have
+    // no margin. This avoids resolving a point in the gap between paragraphs
+    // to the end of the previous line.
+    for (let distance = scanStep; distance <= maxDistance; distance += scanStep) {
+      const target = view.posAtCoords({
+        left: goalLeft,
+        top: startCenter + direction * distance,
+      });
+      if (!target) {
+        continue;
+      }
+      const targetCoords = view.coordsAtPos(target.pos, 1);
+      const targetCenter = (targetCoords.top + targetCoords.bottom) / 2;
+      const crossedLine =
+        direction * (targetCenter - lastLineCenter) > Math.max(3, lineHeight * 0.35);
+      if (!crossedLine) {
+        continue;
+      }
+      linesMoved += 1;
+      lastLineCenter = targetCenter;
+      lastPosition = clampDocumentPosition(view, target.pos);
+      if (linesMoved >= lineCount) {
+        return lastPosition;
+      }
+    }
+    if (lastPosition !== null) {
+      return lastPosition;
     }
   } catch {
     // Geometry can be unavailable during a document/layout transition.
@@ -68,10 +141,17 @@ const splitEditorMarkdown = (markdown: string) => {
   };
 };
 
-export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
+export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps) {
+  const showVimModeIndicator = useAppearance(
+    (state) => state.showVimModeIndicator
+  );
   const [vimMode, setVimModeState] = useState<VimMode>("normal");
+  const [vimCursorRect, setVimCursorRect] = useState<VimCursorRect | null>(null);
   const vimModeRef = useRef<VimMode>("normal");
   const visualAnchorRef = useRef<number | null>(null);
+  const verticalGoalLeftRef = useRef<number | null>(null);
+  const isVerticalMotionRef = useRef(false);
+  const lastDocumentKeyRef = useRef<string | null>(null);
   const isSyncing = useRef(false);
   const latestMarkdown = useRef(markdown);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -83,6 +163,44 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
     vimModeRef.current = mode;
     visualAnchorRef.current = null;
     setVimModeState(mode);
+  }, []);
+
+  const updateVimCursor = useCallback((view: EditorView) => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement || !view.hasFocus()) {
+      setVimCursorRect(null);
+      return;
+    }
+    try {
+      const position = view.state.selection.head;
+      const coords = view.coordsAtPos(position, 1);
+      const nextPosition = Math.min(view.state.doc.content.size, position + 1);
+      const nextCoords = view.coordsAtPos(nextPosition, -1);
+      const computedStyle = window.getComputedStyle(view.dom);
+      const fontSize = Number.parseFloat(computedStyle.fontSize) || 16;
+      const measuredWidth =
+        Math.abs(nextCoords.top - coords.top) < 2
+          ? nextCoords.left - coords.left
+          : 0;
+      const scrollRect = scrollElement.getBoundingClientRect();
+      const nextRect = {
+        left: coords.left - scrollRect.left + scrollElement.scrollLeft,
+        top: coords.top - scrollRect.top + scrollElement.scrollTop,
+        width: Math.max(7, Math.min(fontSize * 1.2, measuredWidth || fontSize * 0.62)),
+        height: Math.max(14, coords.bottom - coords.top),
+      };
+      setVimCursorRect((current) =>
+        current &&
+        Math.abs(current.left - nextRect.left) < 0.5 &&
+        Math.abs(current.top - nextRect.top) < 0.5 &&
+        Math.abs(current.width - nextRect.width) < 0.5 &&
+        Math.abs(current.height - nextRect.height) < 0.5
+          ? current
+          : nextRect
+      );
+    } catch {
+      setVimCursorRect(null);
+    }
   }, []);
 
   const moveVimSelection = useCallback(
@@ -111,6 +229,7 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
         event.preventDefault();
         event.stopPropagation();
         const head = view.state.selection.head;
+        verticalGoalLeftRef.current = null;
         setVimMode("normal");
         moveVimSelection(view, head);
         return true;
@@ -122,33 +241,56 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
         return false;
       }
 
-      const key = event.key.toLowerCase();
-      const direction = key === "j" ? 1 : key === "k" ? -1 : null;
+      const code = event.code;
+      const direction = code === "KeyJ" ? 1 : code === "KeyK" ? -1 : null;
       if (direction) {
         event.preventDefault();
         event.stopPropagation();
         const lineCount = event.ctrlKey ? VIM_JUMP_LINES : 1;
+        const currentCoords = view.coordsAtPos(view.state.selection.head, 1);
+        const goalLeft =
+          verticalGoalLeftRef.current ?? currentCoords.left + 1;
+        verticalGoalLeftRef.current = goalLeft;
+        isVerticalMotionRef.current = true;
+        const emptyParagraphTarget =
+          lineCount === 1
+            ? getEmptyParagraphVerticalPosition(
+                view,
+                view.state.selection.head,
+                direction
+              )
+            : null;
         moveVimSelection(
           view,
-          getVerticalPosition(view, view.state.selection.head, direction, lineCount)
+          emptyParagraphTarget ??
+            getVerticalPosition(
+              view,
+              view.state.selection.head,
+              direction,
+              lineCount,
+              goalLeft
+            )
         );
+        isVerticalMotionRef.current = false;
         return true;
       }
       if (event.ctrlKey) {
         return false;
       }
-      if (key === "h" || key === "l") {
+      if (code === "KeyH" || code === "KeyL") {
         event.preventDefault();
         event.stopPropagation();
+        verticalGoalLeftRef.current = null;
         moveVimSelection(
           view,
-          view.state.selection.head + (key === "h" ? -1 : 1)
+          view.state.selection.head + (code === "KeyH" ? -1 : 1)
         );
         return true;
       }
-      if (key === "v") {
+      if (code === "KeyV") {
         event.preventDefault();
         event.stopPropagation();
+        verticalGoalLeftRef.current = null;
         if (mode === "visual") {
           const head = view.state.selection.head;
           setVimMode("normal");
@@ -160,10 +302,11 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
         }
         return true;
       }
-      if (key === "i" || key === "a") {
+      if (code === "KeyI" || code === "KeyA") {
         event.preventDefault();
         event.stopPropagation();
-        if (key === "a") {
+        verticalGoalLeftRef.current = null;
+        if (code === "KeyA") {
           moveVimSelection(view, view.state.selection.head + 1);
         }
         setVimMode("insert");
@@ -235,7 +378,17 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
       handleTextInput: () => vimModeRef.current !== "insert",
       handlePaste: () => vimModeRef.current !== "insert",
     },
-    onFocus: () => setVimMode("normal"),
+    onFocus: ({ editor: currentEditor }) => {
+      setVimMode("normal");
+      requestAnimationFrame(() => updateVimCursor(currentEditor.view));
+    },
+    onBlur: () => setVimCursorRect(null),
+    onSelectionUpdate: ({ editor: currentEditor }) => {
+      if (!isVerticalMotionRef.current) {
+        verticalGoalLeftRef.current = null;
+      }
+      updateVimCursor(currentEditor.view);
+    },
     onUpdate: ({ editor: currentEditor }) => {
       if (isSyncing.current) {
         return;
@@ -272,6 +425,41 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
     isSyncing.current = false;
     latestMarkdown.current = markdown;
   }, [editor, markdown]);
+
+  useEffect(() => {
+    if (!editor || !documentKey || documentKey === lastDocumentKeyRef.current) {
+      return;
+    }
+    lastDocumentKeyRef.current = documentKey;
+
+    // Promoting a focused draft to a persisted note is not navigation: keep
+    // the insertion point so background note creation never interrupts typing.
+    if (editor.view.hasFocus() && vimModeRef.current === "insert") {
+      return;
+    }
+
+    verticalGoalLeftRef.current = null;
+    setVimMode("normal");
+    editor.view.dispatch(
+      editor.view.state.tr
+        .setSelection(TextSelection.atStart(editor.view.state.doc))
+        .scrollIntoView()
+    );
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+      scrollRef.current.scrollLeft = 0;
+    }
+    requestAnimationFrame(() => updateVimCursor(editor.view));
+  }, [documentKey, editor, setVimMode, updateVimCursor]);
+
+  useEffect(() => {
+    if (!editor || !scrollRef.current) {
+      return;
+    }
+    const observer = new ResizeObserver(() => updateVimCursor(editor.view));
+    observer.observe(scrollRef.current);
+    return () => observer.disconnect();
+  }, [editor, updateVimCursor]);
 
   if (!editor) {
     return (
@@ -348,10 +536,19 @@ export function NoteEditor({ markdown, onChange }: NoteEditorProps) {
         }}
       >
         <EditorContent editor={editor} />
+        {vimMode !== "insert" && vimCursorRect ? (
+          <span
+            className="vim-block-cursor"
+            aria-hidden="true"
+            style={vimCursorRect}
+          />
+        ) : null}
       </div>
-      <div className="vim-mode-indicator" aria-live="polite">
-        {vimMode.toUpperCase()}
-      </div>
+      {showVimModeIndicator ? (
+        <div className="vim-mode-indicator" aria-live="polite">
+          {vimMode.toUpperCase()}
+        </div>
+      ) : null}
     </div>
   );
 }

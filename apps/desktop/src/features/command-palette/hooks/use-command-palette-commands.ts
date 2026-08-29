@@ -106,7 +106,7 @@ export function useCommandPaletteCommands({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+      if ((event.metaKey || event.ctrlKey) && event.code === "KeyK") {
         event.preventDefault();
         setOpen((prev) => !prev);
       }

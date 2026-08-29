@@ -34,6 +34,7 @@
   --ui-muted: #66717c;
   --ui-select: #f2f5f7;
   --ui-accent: #1f6feb;
+  --vim-visual-blue: #4b8fff;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);
@@ -998,6 +999,7 @@ body {
 }
 
 .tiptap-scroll {
+  position: relative;
   flex: 1;
   min-height: 0;
   height: auto;
@@ -1039,6 +1041,44 @@ body {
   line-height: 1;
   pointer-events: none;
   user-select: none;
+}
+
+.vim-block-cursor {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  /* A white difference layer produces a filled Vim-style cursor in both
+     themes while inverting the focused glyph, like a terminal cursor. */
+  mix-blend-mode: difference;
+  pointer-events: none;
+}
+
+.tiptap-editor[data-vim-mode="visual"] .vim-block-cursor {
+  background: var(--vim-visual-blue);
+  mix-blend-mode: screen;
+}
+
+.app.theme-light
+  .tiptap-editor[data-vim-mode="visual"]
+  .vim-block-cursor {
+  mix-blend-mode: multiply;
+}
+
+.tiptap-editor[data-vim-mode="normal"] .tiptap-content,
+.tiptap-editor[data-vim-mode="visual"] .tiptap-content {
+  caret-color: transparent;
+}
+
+.tiptap-editor[data-vim-mode="insert"] .tiptap-content {
+  caret-color: var(--ui-text);
+}
+
+.tiptap-editor[data-vim-mode="visual"] .tiptap-content::selection,
+.tiptap-editor[data-vim-mode="visual"] .tiptap-content ::selection {
+  background: color-mix(in srgb, var(--vim-visual-blue) 42%, transparent);
 }
 
 .tiptap-editor[data-vim-mode="insert"] .vim-mode-indicator {

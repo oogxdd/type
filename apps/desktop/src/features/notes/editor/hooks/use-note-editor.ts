@@ -17,6 +17,7 @@ export function useNoteEditor(
   noteFileNameFormat: NoteFileNameFormat
 ) {
   const [noteContent, setNoteContent] = useState("");
+  const [loadedNotePath, setLoadedNotePath] = useState<string | null>(null);
   const [draftNoteContent, setDraftNoteContent] = useState("");
   const [noteDirty, setNoteDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -68,6 +69,7 @@ export function useNoteEditor(
     const previousContent = noteContentRef.current;
     const previousDirty = noteDirtyRef.current;
     activeNoteRef.current = activeNote;
+    setLoadedNotePath(null);
 
     const run = async () => {
       if (previousNote && previousNote !== activeNote) {
@@ -109,6 +111,7 @@ export function useNoteEditor(
       const content = await readNote(activeNote);
       if (!cancelled) {
         setNoteContent(content);
+        setLoadedNotePath(activeNote);
         setNoteDirty(false);
         setSaveError(null);
         noteContentRef.current = content;
@@ -203,6 +206,7 @@ export function useNoteEditor(
 
   return {
     noteContent,
+    loadedNotePath,
     draftNoteContent,
     noteDirty,
     isSaving,

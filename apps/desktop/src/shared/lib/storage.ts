@@ -65,6 +65,16 @@ export const getInitialHideArchivedFeedNotes = (): boolean => {
   return true;
 };
 
+export const getInitialShowVimModeIndicator = (): boolean => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  const stored = window.localStorage.getItem(
+    "notes-viewer-show-vim-mode-indicator"
+  );
+  return stored === "true";
+};
+
 export const getStoredSyncValue = (key: string, fallback: string) => {
   if (typeof window === "undefined") {
     return fallback;

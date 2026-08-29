@@ -11,6 +11,7 @@ import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 
 type EditorContextValue = {
   noteContent: string;
+  loadedNotePath: string | null;
   draftNoteContent: string;
   isNoteSaving: boolean;
   noteSaveError: string | null;
@@ -35,6 +36,7 @@ export function EditorProvider({
 
   const {
     noteContent,
+    loadedNotePath,
     draftNoteContent,
     isSaving: isNoteSaving,
     saveError: noteSaveError,
@@ -60,6 +62,7 @@ export function EditorProvider({
     <EditorContext.Provider
       value={{
         noteContent,
+        loadedNotePath,
         draftNoteContent,
         isNoteSaving,
         noteSaveError,

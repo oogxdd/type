@@ -164,6 +164,11 @@ jumping unpredictably to the first row.
 
 Shortcuts are scoped. Vim keys apply only while navigation owns focus and must
 not steal input from text fields, selectors, dialogs, or editable content.
+Letter shortcuts are bound to physical key positions rather than the character
+produced by the active layout. For example, the `J` position navigates down
+whether the OS layout produces `j` (English) or `о` (Russian); the same rule
+applies to modal editor keys and modified shortcuts such as `Cmd+W` and
+`Cmd+K`.
 
 | Key | Navigation behavior |
 |---|---|
@@ -221,7 +226,14 @@ end:
 - `h/j/k/l` move in Normal and extend the selection in Visual;
 - `Ctrl+j` / `Ctrl+k` make larger vertical jumps;
 - printable input, paste, and destructive editing are blocked outside Insert;
-- a persistent, unobtrusive mode label makes the current mode unambiguous;
+- Normal uses a filled, character-sized terminal block that inverts the glyph,
+  Visual uses a filled blue block plus blue selection, and Insert uses a
+  blinking vertical caret;
+- opening a different item places the Normal-mode cursor on its first text
+  symbol and scrolls to the beginning; refocusing the same item preserves the
+  user's position;
+- an optional mode label can reinforce the cursor, but should be hidden by
+  default and exposed as an appearance setting;
 - pane-level shortcuts such as `Cmd+W` continue to work in every editor mode.
 
 Modal keys must be handled before global pane shortcuts. In particular,

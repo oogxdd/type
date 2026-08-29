@@ -104,12 +104,12 @@ export function SettingsMiddlePane({
             return;
           }
 
-          const key = event.key.toLowerCase();
+          const code = event.code;
           const isPlainKey = !event.metaKey && !event.ctrlKey && !event.altKey;
           const direction =
-            event.key === "ArrowUp" || (isPlainKey && key === "k")
+            event.key === "ArrowUp" || (isPlainKey && code === "KeyK")
               ? -1
-              : event.key === "ArrowDown" || (isPlainKey && key === "j")
+              : event.key === "ArrowDown" || (isPlainKey && code === "KeyJ")
                 ? 1
                 : null;
 
@@ -126,7 +126,9 @@ export function SettingsMiddlePane({
 
           if (
             isPlainKey &&
-            (event.key === "Enter" || event.key === "ArrowRight" || key === "l")
+            (event.key === "Enter" ||
+              event.key === "ArrowRight" ||
+              code === "KeyL")
           ) {
             event.preventDefault();
             rightPaneRef.current?.focus({ preventScroll: true });

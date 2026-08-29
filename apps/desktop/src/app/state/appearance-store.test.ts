@@ -16,6 +16,7 @@ describe("appearance store", () => {
       theme: "dark",
       notesListMode: "separate",
       editorFontSize: DEFAULT_EDITOR_FONT_SIZE,
+      showVimModeIndicator: false,
       designFont: "helvetica",
       designPalettes: {
         light: { ...DEFAULT_DESIGN_PALETTES.light },
@@ -46,6 +47,11 @@ describe("appearance store", () => {
     useAppearance.setState({ editorFontSize: MAX_EDITOR_FONT_SIZE });
     useAppearance.getState().resetEditorFontSize();
     expect(useAppearance.getState().editorFontSize).toBe(DEFAULT_EDITOR_FONT_SIZE);
+  });
+
+  it("toggles the optional Vim mode label", () => {
+    useAppearance.getState().setShowVimModeIndicator(true);
+    expect(useAppearance.getState().showVimModeIndicator).toBe(true);
   });
 
   it("updates and resets colors without mutating the other theme", () => {

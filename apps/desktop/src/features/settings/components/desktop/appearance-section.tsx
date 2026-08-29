@@ -38,6 +38,8 @@ export function SettingsAppearanceSection() {
     setHideArchivedFeedNotes,
     editorFontSize,
     setEditorFontSize,
+    showVimModeIndicator,
+    setShowVimModeIndicator,
     designFont,
     setDesignFont,
     designPalettes,
@@ -53,6 +55,8 @@ export function SettingsAppearanceSection() {
       setHideArchivedFeedNotes: state.setHideArchivedFeedNotes,
       editorFontSize: state.editorFontSize,
       setEditorFontSize: state.setEditorFontSize,
+      showVimModeIndicator: state.showVimModeIndicator,
+      setShowVimModeIndicator: state.setShowVimModeIndicator,
       designFont: state.designFont,
       setDesignFont: state.setDesignFont,
       designPalettes: state.designPalettes,
@@ -75,6 +79,27 @@ export function SettingsAppearanceSection() {
             <option value="light">Light</option>
           </SettingsSelect>
         </SettingsField>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Editor navigation"
+        description="The editor always keeps Vim-style Normal, Insert, and Visual modes."
+      >
+        <label className="flex items-start gap-3 rounded-md border border-border/50 bg-background/40 p-3 text-sm">
+          <Checkbox
+            checked={showVimModeIndicator}
+            onCheckedChange={(checked) =>
+              setShowVimModeIndicator(Boolean(checked))
+            }
+            className="mt-0.5"
+          />
+          <span className="grid gap-1">
+            <span className="font-medium text-foreground">Show mode label</span>
+            <span className="text-xs leading-relaxed text-muted-foreground">
+              Display NORMAL, INSERT, or VISUAL in the editor corner.
+            </span>
+          </span>
+        </label>
       </SettingsCard>
 
       <SettingsCard

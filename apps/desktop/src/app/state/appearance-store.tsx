@@ -11,6 +11,7 @@ import {
   getInitialEditorFontSize,
   getInitialHideArchivedFeedNotes,
   getInitialNotesListMode,
+  getInitialShowVimModeIndicator,
   getInitialTheme,
 } from "@/shared/lib/storage";
 import type { NotesListMode, ThemeMode } from "@typenotes/shared/types";
@@ -121,12 +122,14 @@ type AppearanceState = {
   notesListMode: NotesListMode;
   hideArchivedFeedNotes: boolean;
   editorFontSize: number;
+  showVimModeIndicator: boolean;
   designFont: DesignFontId;
   designPalettes: Record<ThemeMode, DesignPalette>;
   setTheme: (theme: ThemeMode) => void;
   setNotesListMode: (mode: NotesListMode) => void;
   setHideArchivedFeedNotes: (hidden: boolean) => void;
   setEditorFontSize: (size: number) => void;
+  setShowVimModeIndicator: (visible: boolean) => void;
   increaseEditorFontSize: () => void;
   decreaseEditorFontSize: () => void;
   resetEditorFontSize: () => void;
@@ -140,6 +143,7 @@ export const useAppearance = create<AppearanceState>((set) => ({
   notesListMode: getInitialNotesListMode(),
   hideArchivedFeedNotes: getInitialHideArchivedFeedNotes(),
   editorFontSize: getInitialEditorFontSize(),
+  showVimModeIndicator: getInitialShowVimModeIndicator(),
   designFont: initialDesignSettings.designFont,
   designPalettes: initialDesignSettings.designPalettes,
   setTheme: (theme) => set({ theme }),
@@ -152,6 +156,8 @@ export const useAppearance = create<AppearanceState>((set) => ({
         Math.max(MIN_EDITOR_FONT_SIZE, editorFontSize)
       ),
     }),
+  setShowVimModeIndicator: (showVimModeIndicator) =>
+    set({ showVimModeIndicator }),
   increaseEditorFontSize: () =>
     set((state) => ({
       editorFontSize: Math.min(MAX_EDITOR_FONT_SIZE, state.editorFontSize + 1),
@@ -208,6 +214,15 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
         window.localStorage.setItem(
           "notes-viewer-editor-font-size",
           String(state.editorFontSize)
+        );
+      }
+      if (
+        !previous ||
+        state.showVimModeIndicator !== previous.showVimModeIndicator
+      ) {
+        window.localStorage.setItem(
+          "notes-viewer-show-vim-mode-indicator",
+          String(state.showVimModeIndicator)
         );
       }
       if (

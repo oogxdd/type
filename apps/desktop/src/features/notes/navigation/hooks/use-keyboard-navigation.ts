@@ -165,20 +165,20 @@ export function useKeyboardNavigation({
         }
         return;
       }
-      const key = event.key.toLowerCase();
+      const code = event.code;
       const isPlainKey = !event.metaKey && !event.ctrlKey && !event.altKey;
       const navigationKey: NavigationKey | null =
-        event.key === "ArrowUp" || (isPlainKey && key === "k")
+        event.key === "ArrowUp" || (isPlainKey && code === "KeyK")
           ? "ArrowUp"
-          : event.key === "ArrowDown" || (isPlainKey && key === "j")
+          : event.key === "ArrowDown" || (isPlainKey && code === "KeyJ")
             ? "ArrowDown"
             : event.key === "ArrowLeft"
               ? "ArrowLeft"
               : event.key === "ArrowRight"
                 ? "ArrowRight"
                 : null;
-      const isVimCollapse = isPlainKey && key === "h";
-      const isVimExpand = isPlainKey && key === "l";
+      const isVimCollapse = isPlainKey && code === "KeyH";
+      const isVimExpand = isPlainKey && code === "KeyL";
       const isEnter = isPlainKey && event.key === "Enter";
       if (!navigationKey && !isVimCollapse && !isVimExpand && !isEnter) return;
 
