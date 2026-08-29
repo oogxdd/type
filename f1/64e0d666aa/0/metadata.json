@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "f164e0d666aa",
+  "session_id": "01a04de5-9a1c-77a3-bdfd-f8d1fe1f4ea0",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-29T22:33:16.52735Z",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/desktop/src/app/app.css",
+    "apps/desktop/src/app/state/appearance-store.test.ts",
+    "apps/desktop/src/app/state/appearance-store.tsx",
+    "apps/desktop/src/desktop/hooks/use-desktop-editor-pane.ts",
+    "apps/desktop/src/desktop/right-pane.tsx",
+    "apps/desktop/src/features/command-palette/hooks/use-command-palette-commands.ts",
+    "apps/desktop/src/features/notes/editor/components/note-editor.tsx",
+    "apps/desktop/src/features/notes/editor/hooks/editor-context.tsx",
+    "apps/desktop/src/features/notes/editor/hooks/use-note-editor.ts",
+    "apps/desktop/src/features/notes/navigation/hooks/use-keyboard-navigation.ts",
+    "apps/desktop/src/features/settings/components/desktop/appearance-section.tsx",
+    "apps/desktop/src/features/settings/components/desktop/settings-panel.tsx",
+    "apps/desktop/src/shared/lib/storage.ts",
+    "apps/desktop/src/shared/ui/sidebar.tsx",
+    "docs/KEYBOARD_NAVIGATION_EXPERIENCE.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "61be5f5fe08b",
+  "checkpoint_transcript_start": 697,
+  "transcript_lines_at_start": 697,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-29T22:33:10.457432Z",
+    "agent_lines": 77,
+    "human_added": 274,
+    "human_modified": 17,
+    "human_removed": 0,
+    "total_committed": 368,
+    "agent_percentage": 20.92391304347826
+  }
+}
