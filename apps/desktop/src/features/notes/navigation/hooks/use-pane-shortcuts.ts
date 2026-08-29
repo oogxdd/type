@@ -81,7 +81,13 @@ export function usePaneShortcuts({
           focusNoScroll(foldersPanelRef.current);
           return;
         }
-        focusNoScroll(middlePaneRef.current);
+        const settingsSection =
+          appMode === "settings"
+            ? middlePaneRef.current?.querySelector<HTMLElement>(
+                ".settings-nav-row.is-selected"
+              )
+            : null;
+        focusNoScroll(settingsSection || middlePaneRef.current);
         return;
       }
       const editorElement =
@@ -155,16 +161,18 @@ export function usePaneShortcuts({
         return;
       }
       if (code === "KeyW") {
-        if (sidebarCollapsed) {
+        const navigationPane: "folders" | "middle" =
+          appMode === "settings" ? "middle" : "folders";
+        if (sidebarCollapsed && navigationPane === "folders") {
           setSidebarCollapsed(false);
-          lastLeftPaneFocusRef.current = "folders";
-          requestAnimationFrame(() => focusPane("folders"));
+          lastLeftPaneFocusRef.current = navigationPane;
+          requestAnimationFrame(() => focusPane(navigationPane));
           return;
         }
         const currentPane = getFocusedPane();
         if (currentPane === "right") {
-          lastLeftPaneFocusRef.current = "folders";
-          focusPane("folders");
+          lastLeftPaneFocusRef.current = navigationPane;
+          focusPane(navigationPane);
         } else {
           focusPane("right");
         }

@@ -31,3 +31,16 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "recordings", title: "Recordings" },
   ...SECURITY_SETTINGS_SECTIONS,
 ];
+
+export function getAdjacentSettingsSectionId(
+  activeId: SettingsSectionId,
+  direction: -1 | 1
+): SettingsSectionId {
+  const currentIndex = SETTINGS_SECTIONS.findIndex((section) => section.id === activeId);
+  const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+  const nextIndex = Math.max(
+    0,
+    Math.min(SETTINGS_SECTIONS.length - 1, safeIndex + direction)
+  );
+  return SETTINGS_SECTIONS[nextIndex]?.id ?? SETTINGS_SECTIONS[0].id;
+}

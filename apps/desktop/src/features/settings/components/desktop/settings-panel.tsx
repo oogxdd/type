@@ -2,6 +2,7 @@ import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { cn } from "@/shared/lib/utils";
 import {
+  getAdjacentSettingsSectionId,
   SETTINGS_SECTIONS,
   type SettingsSection,
   type SettingsSectionId,
@@ -37,6 +38,8 @@ function SettingsRow({
   return (
     <button
       type="button"
+      data-settings-section={section.id}
+      aria-current={isSelected ? "page" : undefined}
       className={cn(
         "settings-nav-row",
         isSelected && "is-selected",
@@ -78,6 +81,16 @@ export function SettingsMiddlePane({
   middlePaneRef: React.RefObject<HTMLDivElement | null>;
   onPaneClick: () => void;
 }) {
+  const { rightPaneRef } = useEditor();
+
+  const focusSectionRow = (sectionId: SettingsSectionId) => {
+    requestAnimationFrame(() => {
+      middlePaneRef.current
+        ?.querySelector<HTMLElement>(`[data-settings-section="${sectionId}"]`)
+        ?.focus({ preventScroll: true });
+    });
+  };
+
   return (
     <div className="pane settings-nav-pane h-full min-h-0 min-w-0">
       <div className="pane-drag-region" data-tauri-drag-region aria-hidden />
@@ -85,6 +98,40 @@ export function SettingsMiddlePane({
         className="pane-body settings-nav-body"
         ref={middlePaneRef}
         tabIndex={0}
+        onKeyDown={(event) => {
+          const target = event.target as HTMLElement | null;
+          if (target?.matches("input, textarea, select, [contenteditable='true']")) {
+            return;
+          }
+
+          const key = event.key.toLowerCase();
+          const isPlainKey = !event.metaKey && !event.ctrlKey && !event.altKey;
+          const direction =
+            event.key === "ArrowUp" || (isPlainKey && key === "k")
+              ? -1
+              : event.key === "ArrowDown" || (isPlainKey && key === "j")
+                ? 1
+                : null;
+
+          if (direction) {
+            event.preventDefault();
+            const nextSection = getAdjacentSettingsSectionId(
+              activeSection as SettingsSectionId,
+              direction
+            );
+            onSectionChange(nextSection);
+            focusSectionRow(nextSection);
+            return;
+          }
+
+          if (
+            isPlainKey &&
+            (event.key === "Enter" || event.key === "ArrowRight" || key === "l")
+          ) {
+            event.preventDefault();
+            rightPaneRef.current?.focus({ preventScroll: true });
+          }
+        }}
         onClick={(event) => {
           if (shouldIgnorePaneFocusClick(event.target)) {
             return;
@@ -98,7 +145,10 @@ export function SettingsMiddlePane({
               key={section.id}
               section={section}
               isSelected={activeSection === section.id}
-              onSelect={() => onSectionChange(section.id)}
+              onSelect={() => {
+                onSectionChange(section.id);
+                focusSectionRow(section.id);
+              }}
             />
           ))}
         </nav>
