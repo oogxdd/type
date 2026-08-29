@@ -1,0 +1,47 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "6538f738edfd",
+  "session_id": "01a04e03-5258-71b1-b7c9-32f8b1dc9c37",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-29T19:17:39.019488Z",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/desktop/src/app/app.css",
+    "apps/desktop/src/desktop/desktop-app-shell.tsx",
+    "apps/desktop/src/desktop/right-pane.tsx",
+    "apps/desktop/src/features/command-palette/components/command-palette.tsx",
+    "apps/desktop/src/features/command-palette/hooks/use-command-palette-commands.ts",
+    "apps/desktop/src/features/command-palette/lib/folder-search.test.ts",
+    "apps/desktop/src/features/command-palette/lib/folder-search.ts",
+    "apps/desktop/src/features/notes/navigation/hooks/use-keyboard-navigation.ts",
+    "apps/desktop/src/features/notes/navigation/hooks/use-pane-shortcuts.ts",
+    "apps/desktop/src/features/notes/navigation/model/feed-tree-model.test.ts",
+    "apps/desktop/src/features/notes/navigation/model/feed-tree-model.ts",
+    "apps/desktop/src/features/notes/navigation/state/notes-tree-context.tsx",
+    "apps/desktop/src/features/notes/navigation/state/use-notes-tree-state.ts",
+    "apps/desktop/src/features/notes/navigation/ui/feed-panel.tsx",
+    "apps/desktop/src/features/notes/navigation/ui/folders-panel.tsx",
+    "apps/desktop/src/features/notes/navigation/ui/tree.css",
+    "apps/desktop/src/features/settings/components/desktop/settings-panel.tsx",
+    "crates/type-core/src/adapters/iroh_sync.rs"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "2fca99436839",
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-29T19:17:38.02875Z",
+    "agent_lines": 403,
+    "human_added": 971,
+    "human_modified": 143,
+    "human_removed": 0,
+    "total_committed": 1517,
+    "agent_percentage": 26.565589980224125
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "6538f738edfd",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/desktop/src/app/app.css",
+    "apps/desktop/src/desktop/desktop-app-shell.tsx",
+    "apps/desktop/src/desktop/right-pane.tsx",
+    "apps/desktop/src/features/command-palette/components/command-palette.tsx",
+    "apps/desktop/src/features/command-palette/hooks/use-command-palette-commands.ts",
+    "apps/desktop/src/features/command-palette/lib/folder-search.test.ts",
+    "apps/desktop/src/features/command-palette/lib/folder-search.ts",
+    "apps/desktop/src/features/notes/navigation/hooks/use-keyboard-navigation.ts",
+    "apps/desktop/src/features/notes/navigation/hooks/use-pane-shortcuts.ts",
+    "apps/desktop/src/features/notes/navigation/model/feed-tree-model.test.ts",
+    "apps/desktop/src/features/notes/navigation/model/feed-tree-model.ts",
+    "apps/desktop/src/features/notes/navigation/state/notes-tree-context.tsx",
+    "apps/desktop/src/features/notes/navigation/state/use-notes-tree-state.ts",
+    "apps/desktop/src/features/notes/navigation/ui/feed-panel.tsx",
+    "apps/desktop/src/features/notes/navigation/ui/folders-panel.tsx",
+    "apps/desktop/src/features/notes/navigation/ui/tree.css",
+    "apps/desktop/src/features/settings/components/desktop/settings-panel.tsx",
+    "crates/type-core/src/adapters/iroh_sync.rs"
+  ],
+  "sessions": [
+    {
+      "metadata": "/65/38f738edfd/0/metadata.json",
+      "transcript": "/65/38f738edfd/0/full.jsonl",
+      "context": "",
+      "content_hash": "/65/38f738edfd/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
