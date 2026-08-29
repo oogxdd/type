@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "c150ab262a6c",
+  "strategy": "manual-commit",
+  "branch": "feature/icloud-folder-sync",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "apps/desktop/src/app/app-shell.tsx",
+    "apps/desktop/src/features/extensions/registry.ts",
+    "apps/desktop/src/features/notes/editor/hooks/use-note-editor.ts",
+    "apps/desktop/src/features/settings/components/desktop/profile-section.tsx",
+    "apps/desktop/src/features/settings/components/desktop/settings-panel.tsx",
+    "apps/desktop/src/features/settings/lib/sections.ts",
+    "apps/desktop/src/shared/lib/notes.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/c1/50ab262a6c/0/metadata.json",
+      "transcript": "/c1/50ab262a6c/0/full.jsonl",
+      "context": "",
+      "content_hash": "/c1/50ab262a6c/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
