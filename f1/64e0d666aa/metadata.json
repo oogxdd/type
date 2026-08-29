@@ -3,7 +3,7 @@
   "checkpoint_id": "f164e0d666aa",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 2,
+  "checkpoints_count": 3,
   "files_touched": [
     "apps/desktop/src/app/app.css",
     "apps/desktop/src/app/state/appearance-store.test.ts",
@@ -27,6 +27,13 @@
       "transcript": "/f1/64e0d666aa/0/full.jsonl",
       "context": "",
       "content_hash": "/f1/64e0d666aa/0/content_hash.txt",
+      "prompt": ""
+    },
+    {
+      "metadata": "/f1/64e0d666aa/1/metadata.json",
+      "transcript": "/f1/64e0d666aa/1/full.jsonl",
+      "context": "",
+      "content_hash": "/f1/64e0d666aa/1/content_hash.txt",
       "prompt": ""
     }
   ],
