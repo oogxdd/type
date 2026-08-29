@@ -1,7 +1,11 @@
+import { homeDir } from "@tauri-apps/api/path";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useState } from "react";
+import { APP_EXTENSIONS } from "@/features/extensions/registry";
+import { CLOUD_SYNC_PROVIDERS } from "@/features/profiles/lib/cloud-sync-providers";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useSshKey } from "@/features/sync/hooks/use-ssh-key";
+import { emitTreeInvalidated } from "@/shared/lib/notes";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { GitSettingsCard } from "./git-settings-card";
@@ -46,12 +50,12 @@ export function SettingsProfileSection() {
   const { sshPublicKey, sshBusy, sshError, generateSshKey, deleteSshKey } =
     useSshKey();
 
-  const chooseWorkingDirectory = async () => {
+  const chooseWorkingDirectory = async (defaultPath?: string) => {
     try {
       const selected = await open({
         directory: true,
         multiple: false,
-        defaultPath: notesRootInput || activeProfileNotesRoot || undefined,
+        defaultPath: defaultPath || notesRootInput || activeProfileNotesRoot || undefined,
         title: "Select profile notes folder",
       });
       if (typeof selected === "string" && selected.trim()) {
@@ -59,6 +63,20 @@ export function SettingsProfileSection() {
       }
     } catch (error) {
       console.error("Failed to pick working directory", error);
+    }
+  };
+
+  const chooseCloudSyncFolder = async (providerId: string) => {
+    const provider = CLOUD_SYNC_PROVIDERS.find((entry) => entry.id === providerId);
+    if (!provider) {
+      return;
+    }
+    try {
+      const home = await homeDir();
+      await chooseWorkingDirectory(provider.defaultPath(home));
+    } catch (error) {
+      console.error("Failed to resolve home directory", error);
+      await chooseWorkingDirectory();
     }
   };
 
@@ -97,64 +115,68 @@ export function SettingsProfileSection() {
         {profilesError ? <SettingsErrorText>{profilesError}</SettingsErrorText> : null}
       </SettingsCard>
 
-      <GitSettingsCard
-        gitSettings={syncSettings}
-        activeProfileId={activeProfileId}
-        busy={profilesBusy}
-        onApply={(next) => updateSyncSettings(next)}
-      />
+      {APP_EXTENSIONS.sync ? (
+        <>
+          <GitSettingsCard
+            gitSettings={syncSettings}
+            activeProfileId={activeProfileId}
+            busy={profilesBusy}
+            onApply={(next) => updateSyncSettings(next)}
+          />
 
-      <SettingsCard title="SSH key">
-        {sshPublicKey ? (
-          <>
-            <SettingsField label="Public key">
-              <code className="block break-all rounded bg-muted/50 p-2 text-xs text-foreground select-all">
-                {sshPublicKey}
-              </code>
-            </SettingsField>
-            <SettingsHelpText>
-              Add this key to <code>~/.ssh/authorized_keys</code> on your server.
-            </SettingsHelpText>
-            <SettingsActionRow>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void navigator.clipboard.writeText(sshPublicKey)}
-              >
-                Copy
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                disabled={sshBusy}
-                onClick={() => void deleteSshKey()}
-              >
-                Delete key
-              </Button>
-            </SettingsActionRow>
-          </>
-        ) : (
-          <>
-            <SettingsHelpText>
-              Generate an Ed25519 keypair for SSH-based git sync.
-            </SettingsHelpText>
-            <SettingsActionRow>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={sshBusy}
-                onClick={() => void generateSshKey()}
-              >
-                {sshBusy ? "Generating..." : "Generate SSH key"}
-              </Button>
-            </SettingsActionRow>
-          </>
-        )}
-        {sshError ? <SettingsErrorText>{sshError}</SettingsErrorText> : null}
-      </SettingsCard>
+          <SettingsCard title="SSH key">
+            {sshPublicKey ? (
+              <>
+                <SettingsField label="Public key">
+                  <code className="block break-all rounded bg-muted/50 p-2 text-xs text-foreground select-all">
+                    {sshPublicKey}
+                  </code>
+                </SettingsField>
+                <SettingsHelpText>
+                  Add this key to <code>~/.ssh/authorized_keys</code> on your server.
+                </SettingsHelpText>
+                <SettingsActionRow>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void navigator.clipboard.writeText(sshPublicKey)}
+                  >
+                    Copy
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    disabled={sshBusy}
+                    onClick={() => void deleteSshKey()}
+                  >
+                    Delete key
+                  </Button>
+                </SettingsActionRow>
+              </>
+            ) : (
+              <>
+                <SettingsHelpText>
+                  Generate an Ed25519 keypair for SSH-based git sync.
+                </SettingsHelpText>
+                <SettingsActionRow>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={sshBusy}
+                    onClick={() => void generateSshKey()}
+                  >
+                    {sshBusy ? "Generating..." : "Generate SSH key"}
+                  </Button>
+                </SettingsActionRow>
+              </>
+            )}
+            {sshError ? <SettingsErrorText>{sshError}</SettingsErrorText> : null}
+          </SettingsCard>
+        </>
+      ) : null}
 
       <SettingsCard title="Notes folder">
         <SettingsField label="Working directory">
@@ -189,7 +211,37 @@ export function SettingsProfileSection() {
             >
               Apply
             </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => emitTreeInvalidated()}
+              title="Reload the notes folder, e.g. after a cloud sync finishes in the background"
+            >
+              Refresh
+            </Button>
           </div>
+        </SettingsField>
+        <SettingsField label="Sync via a cloud drive">
+          <div className="flex flex-wrap items-center gap-2">
+            {CLOUD_SYNC_PROVIDERS.map((provider) => (
+              <Button
+                key={provider.id}
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={!activeProfileId || profilesBusy}
+                onClick={() => void chooseCloudSyncFolder(provider.id)}
+              >
+                Use {provider.label}
+              </Button>
+            ))}
+          </div>
+          <SettingsHelpText>
+            Pick a folder inside {CLOUD_SYNC_PROVIDERS.map((p) => p.label).join(" / ")} and it
+            syncs automatically in the background. There is no conflict resolution — editing the
+            same note on two devices at the same time can lose one edit.
+          </SettingsHelpText>
         </SettingsField>
       </SettingsCard>
 

@@ -64,7 +64,7 @@ function SettingsDetail({
   if (sectionId === "general") return <SettingsGeneralSection onOpenTrash={onOpenTrash} />;
   if (sectionId === "profile") return <SettingsProfileSection />;
   if (sectionId === "import") return <SettingsImportSection />;
-  if (sectionId === "sync") return <SettingsSyncSection />;
+  if (sectionId === "sync" && APP_EXTENSIONS.sync) return <SettingsSyncSection />;
   if (sectionId === "updates") return <SettingsUpdatesSection />;
   if (sectionId === "appearance") return <SettingsAppearanceSection />;
   if (sectionId === "transcription") return <SettingsTranscriptionSection />;

@@ -1,4 +1,4 @@
-export type ExtensionId = "security" | "multiLens";
+export type ExtensionId = "security" | "multiLens" | "sync";
 
 /**
  * Optional surfaces stay implemented, but the core app should not depend on
@@ -7,6 +7,7 @@ export type ExtensionId = "security" | "multiLens";
 export const APP_EXTENSIONS = {
   security: false,
   multiLens: false,
+  sync: false,
 } as const satisfies Record<ExtensionId, boolean>;
 
 export const isExtensionEnabled = (id: ExtensionId) => APP_EXTENSIONS[id];

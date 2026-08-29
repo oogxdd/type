@@ -20,11 +20,15 @@ const SECURITY_SETTINGS_SECTIONS: SettingsSection[] = APP_EXTENSIONS.security
   ? [{ id: "security", title: "Security" }]
   : [];
 
+const SYNC_SETTINGS_SECTIONS: SettingsSection[] = APP_EXTENSIONS.sync
+  ? [{ id: "sync", title: "Sync" }]
+  : [];
+
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "general", title: "General" },
   { id: "profile", title: "Profile" },
   { id: "import", title: "Import" },
-  { id: "sync", title: "Sync" },
+  ...SYNC_SETTINGS_SECTIONS,
   { id: "updates", title: "Updates" },
   { id: "appearance", title: "Appearance" },
   { id: "transcription", title: "Transcription" },

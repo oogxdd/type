@@ -1,6 +1,10 @@
 // Browser-only note helpers. The pure tree walkers (getNoteParentPath,
 // collectAllNotes, collectFolderPaths) live in @typenotes/shared/notes.
 
+export const emitTreeInvalidated = () => {
+  window.dispatchEvent(new CustomEvent("notes-tree-invalidated"));
+};
+
 export const yieldToUi = () =>
   new Promise<void>((resolve) => {
     window.requestAnimationFrame(() => resolve());
