@@ -1786,3 +1786,355 @@ body {
   font-size: 12px;
   color: #b23838;
 }
+
+/* The Network-inspired desktop skin: warm paper, ink-brown type, and the
+   restrained hierarchy of a personal email. Kept at the end so these rules
+   form one easy-to-remove presentation layer over the existing app. */
+.app {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.app.theme-light {
+  --ui-bg: #fafafa;
+  --ui-pane: #fafafa;
+  --ui-border: rgba(41, 36, 33, 0.1);
+  --ui-border-strong: rgba(41, 36, 33, 0.24);
+  --ui-text: #292421;
+  --ui-muted: rgba(41, 36, 33, 0.62);
+  --ui-select: rgba(41, 36, 33, 0.055);
+  --ui-accent: #292421;
+  --background: #fafafa;
+  --foreground: #292421;
+  --card: #fffdfa;
+  --card-foreground: #292421;
+  --popover: #fffdfa;
+  --popover-foreground: #292421;
+  --primary: #292421;
+  --primary-foreground: #f5eee6;
+  --secondary: rgba(255, 255, 255, 0.75);
+  --secondary-foreground: #292421;
+  --muted: rgba(255, 255, 255, 0.65);
+  --muted-foreground: rgba(41, 36, 33, 0.68);
+  --accent: rgba(255, 255, 255, 0.75);
+  --accent-foreground: #292421;
+  --border: rgba(41, 36, 33, 0.1);
+  --input: rgba(41, 36, 33, 0.12);
+  --ring: rgba(41, 36, 33, 0.22);
+  --sidebar: #fafafa;
+  --sidebar-foreground: #292421;
+  --sidebar-accent: rgba(41, 36, 33, 0.055);
+  --sidebar-accent-foreground: #292421;
+  --sidebar-border: rgba(41, 36, 33, 0.1);
+  background: #fafafa;
+}
+
+.app.theme-light .pane,
+.app.theme-light .nav-pane,
+.app.theme-light .notes-pane,
+.app.theme-light .editor-pane,
+.app.theme-light .notes-pane .pane-body,
+.app.theme-light .editor-body {
+  background: #fafafa;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.app.theme-light .nav-pane {
+  border-right-color: rgba(41, 36, 33, 0.1);
+}
+
+.app.theme-light .app-resize-handle::before,
+.app.theme-light .app-resize-handle-editor::before {
+  width: 1px;
+  background: rgba(41, 36, 33, 0.1);
+}
+
+.app.theme-light .app-resize-handle:hover::before,
+.app.theme-light .app-resize-handle-editor:hover::before {
+  width: 1px;
+  background: rgba(41, 36, 33, 0.22);
+}
+
+.app.theme-light .app-sidebar-header {
+  padding: calc(18px + var(--left-panels-drag-height)) 14px 14px;
+}
+
+.app.theme-light .app-sidebar-header [data-sidebar="menu-item"] {
+  gap: 6px;
+}
+
+.app.theme-light .app-sidebar-header [data-sidebar="menu-button"],
+.app.theme-light .app-sidebar-header button,
+.app.theme-light .app-sidebar-content > [data-sidebar="group"]:last-child [data-sidebar="menu-button"] {
+  border: 0;
+  border-radius: 999px;
+  background: rgba(41, 36, 33, 0.05);
+  color: rgba(41, 36, 33, 0.72);
+  box-shadow: none;
+}
+
+.app.theme-light .app-sidebar-header [data-sidebar="menu-button"]:hover,
+.app.theme-light .app-sidebar-header button:hover,
+.app.theme-light .app-sidebar-content > [data-sidebar="group"]:last-child [data-sidebar="menu-button"]:hover {
+  background: rgba(41, 36, 33, 0.09);
+  color: #292421;
+}
+
+.app.theme-light .app-sidebar-content > [data-sidebar="group"]:last-child {
+  padding: 12px 14px 16px;
+}
+
+.app.theme-light .pane-tabs-wrap {
+  padding: 12px 14px 10px;
+}
+
+.app.theme-light .folders-tabs-list {
+  gap: 18px;
+}
+
+.app.theme-light .folders-tab-trigger {
+  color: rgba(41, 36, 33, 0.5);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.app.theme-light .folders-tab-trigger[data-state="active"] {
+  color: #292421;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.app.theme-light .sidebar-folders-section .nav-scroll-area {
+  padding-inline: 8px;
+}
+
+.app.theme-light .tree-pane .item-row,
+.app.theme-light .note-row {
+  min-height: 34px;
+  margin: 1px 4px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  box-shadow: none;
+  transition: background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.app.theme-light .tree-pane .item-row:hover,
+.app.theme-light .note-row:hover {
+  background: rgba(41, 36, 33, 0.035);
+}
+
+.app.theme-light .tree-pane .item-row.selected,
+.app.theme-light .note-row.selected {
+  background: rgba(41, 36, 33, 0.065);
+  box-shadow: none;
+}
+
+.app.theme-light .tree-pane .item-row.selected .item-label,
+.app.theme-light .note-row-title {
+  font-weight: 400;
+}
+
+.app.theme-light .tree-pane .item-label,
+.app.theme-light .note-row-title {
+  color: #292421;
+  font-size: 13px;
+}
+
+.app.theme-light .tree-pane .folder-glyph,
+.app.theme-light .tree-pane .nav-note-glyph,
+.app.theme-light .tree-pane .nav-note-recording-icon,
+.app.theme-light .note-row-recording-icon {
+  color: rgba(41, 36, 33, 0.5);
+}
+
+.app.theme-light .tree-pane .note-count,
+.app.theme-light .note-row-date,
+.app.theme-light .note-row-snippet {
+  color: rgba(41, 36, 33, 0.55);
+  font-weight: 400;
+}
+
+.app.theme-light .notes-pane .pane-body {
+  padding: calc(12px + var(--left-panels-drag-height)) 8px 12px;
+}
+
+.app.theme-light .note-row {
+  padding: 9px 10px;
+}
+
+.app.theme-light .note-row-subline {
+  margin-top: 3px;
+}
+
+.editor-top-row {
+  min-height: auto;
+  padding: calc(30px + var(--left-panels-drag-height)) clamp(22px, 5vw, 64px) 22px;
+  align-items: flex-start;
+}
+
+.editor-message-header {
+  display: grid;
+  grid-template-columns: 4.6rem minmax(0, 1fr);
+  column-gap: 16px;
+  row-gap: 4px;
+  flex: 1;
+  min-width: 0;
+  max-width: 40rem;
+  color: #292421;
+  font-size: clamp(14px, 1.1vw, 16px);
+  line-height: 1.36;
+}
+
+.editor-message-header > span {
+  color: rgba(41, 36, 33, 0.62);
+  text-align: right;
+}
+
+.editor-message-header > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+}
+
+.editor-lens-menu-area {
+  margin-left: auto;
+}
+
+.app.theme-light .editor-lens-menu-trigger {
+  border: 0;
+  border-radius: 999px;
+  background: rgba(41, 36, 33, 0.05);
+  color: rgba(41, 36, 33, 0.62);
+}
+
+.app.theme-light .editor-lens-menu-trigger:hover {
+  border: 0;
+  background: rgba(41, 36, 33, 0.09);
+  color: #292421;
+}
+
+.app.theme-light .tiptap-content {
+  width: min(100%, calc(40rem + clamp(44px, 10vw, 128px)));
+  margin: 0;
+  padding: 14px clamp(22px, 5vw, 64px) 16px;
+  color: #292421;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: clamp(var(--editor-font-size, 14px), 1.1vw, 16px);
+  line-height: 1.52;
+}
+
+.app.theme-light .tiptap-content p.is-editor-empty:first-child::before {
+  color: rgba(41, 36, 33, 0.45);
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.app.theme-light .tiptap-content blockquote {
+  border-left-color: rgba(41, 36, 33, 0.2);
+  color: rgba(41, 36, 33, 0.68);
+}
+
+.app.theme-light .tiptap-content code,
+.app.theme-light .tiptap-content pre {
+  background: rgba(41, 36, 33, 0.06);
+}
+
+.app.sidebar-collapsed .editor-top-row {
+  padding-inline: clamp(56px, 20vw, 380px) clamp(22px, 5vw, 64px);
+}
+
+.app.sidebar-collapsed .editor-message-header {
+  max-width: 40rem;
+}
+
+.app.sidebar-collapsed.theme-light .tiptap-content {
+  width: 100%;
+  max-width: none;
+  padding-left: clamp(56px, 20vw, 380px);
+  padding-right: clamp(56px, 20vw, 380px);
+}
+
+.app.theme-dark {
+  --ui-bg: #0b0a09;
+  --ui-pane: #0b0a09;
+  --ui-border: rgba(255, 255, 255, 0.1);
+  --ui-border-strong: rgba(255, 255, 255, 0.18);
+  --ui-text: oklch(82% 0.006 67.8);
+  --ui-muted: oklch(57% 0.008 67.8);
+  --ui-select: rgba(255, 255, 255, 0.075);
+  --ui-accent: oklch(82% 0.006 67.8);
+  background: #0b0a09;
+}
+
+.app.theme-dark .pane,
+.app.theme-dark .nav-pane,
+.app.theme-dark .notes-pane,
+.app.theme-dark .editor-pane,
+.app.theme-dark .notes-pane .pane-body,
+.app.theme-dark .editor-body,
+.app.theme-dark .tiptap-editor {
+  background: #0b0a09;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.app.theme-dark .nav-pane {
+  border-right-color: rgba(255, 255, 255, 0.1);
+}
+
+.app.theme-dark .tree-pane .item-row,
+.app.theme-dark .note-row {
+  margin: 1px 4px;
+  border-radius: 7px;
+}
+
+.app.theme-dark .tree-pane .item-row.selected,
+.app.theme-dark .note-row.selected {
+  background: rgba(255, 255, 255, 0.075);
+  box-shadow: none;
+}
+
+.app.theme-dark .editor-message-header {
+  color: oklch(82% 0.006 67.8);
+}
+
+.app.theme-dark .editor-message-header > span {
+  color: oklch(57% 0.008 67.8);
+}
+
+.app.theme-dark .tiptap-content {
+  padding: 14px clamp(22px, 5vw, 64px) 16px;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: clamp(var(--editor-font-size, 14px), 1.1vw, 16px);
+  line-height: 1.52;
+}
+
+@media (max-width: 760px) {
+  .editor-top-row {
+    padding: 24px 18px 14px;
+  }
+
+  .editor-message-header {
+    grid-template-columns: 1fr;
+    row-gap: 2px;
+    font-size: 14px;
+  }
+
+  .editor-message-header > span {
+    display: none;
+  }
+
+  .editor-message-header > strong:nth-of-type(n + 2) {
+    color: var(--ui-muted);
+  }
+
+  .app.theme-light .tiptap-content,
+  .app.theme-dark .tiptap-content {
+    padding-inline: 18px;
+  }
+}
