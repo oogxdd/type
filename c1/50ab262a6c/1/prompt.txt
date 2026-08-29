@@ -1,0 +1,87 @@
+привет. короче. я устал вот мануально синкаться. не хочу вот этот вот iroh/git/p2p sync. хочу просто чтобы была папка в icloud которуя я выбирал и синк сам происходил в ней. подумай что надо сделать для этого (код git/iroh/etc можешь полностью не удалять но пока будет просто синк)
+
+без encryption
+
+без conflict resolution
+
+
+simple
+
+---
+
+<task-notification>
+<task-id>ad058e590d3153192</task-id>
+<tool-use-id>toolu_017agv7zwEQ1dZczGNx1ZcZs</tool-use-id>
+<output-file>/private/tmp/claude-501/-Volumes-KINGSTON-Projects-type-app/ccebe38a-5d32-49f1-8e06-bc4cb4cf9e24/tasks/ad058e590d3153192.output</output-file>
+<status>completed</status>
+<summary>Agent "Explore profiles/notes_root folder picking" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>I have everything I need. Here is the structured report.
+
+## 1. `notes_root` set/change flow (`crates/type-core/src/adapters/profiles/`)
+
+- **Storage**: profiles are persisted as JSON (`NotesProfilesFile` in `mod.rs:130-200`), each entry (`NotesProfileEntry`) has `id`, `name`, `description`, `notes_root` (an absolute path string).
+- **Creation**: `create_profile_state` (`state.rs:469-503`) — slugifies the name into an id, computes a default root via `profile_root_for_id` (inside app-data `profiles/&lt;id&gt;/notes`), creates the dir, pushes the entry, writes state. No folder choice at creation time — always app-data-relative.
+- **Changing the root** ("move folder") already exists: `set_profile_notes_root_state` (`state.rs:572-598`), exposed through the `ProfilesGateway` trait as `set_notes_root` (`mod.rs:64-66`), wired to Tauri command `set_profile_notes_root` (`apps/desktop/src-tauri/src/commands/profiles.rs:40-49`).
+  - Validates the new path via `normalize_notes_root_path` (`state.rs:559-569`): non-empty, must be **absolute** — no other restriction (any filesystem path is accepted, including outside app data, e.g. Dropbox/iCloud folders already work today with this validator).
+  - Moves existing content: `move_dir_contents` (`state.rs:47-81`) — tries `fs::rename`, falls back to recursive copy + delete of source; errors if destination already exists and is non-empty.
+  - Calls `ensure_system_folders` (`crates/type-core/src/adapters/notes/tree.rs:138`) to recreate the app's expected subfolders/settings files at the new root.
+  - No encryption, no conflict handling — just a straightforward move.
+- **Normalization on load**: `push_normalized_profile`/`normalize_profiles_state` (`state.rs:199-241, 346-381`) also re-anchors "stale container" paths (iOS re-provisioning UUID rebasing, `rebase_stale_container_path`) and auto-creates missing dirs — this logic is iOS/container-focused, not iCloud-related, but shows the precedent for path re-anchoring.
+
+**Conclusion**: The "point notes_root at an arbitrary folder (e.g. inside iCloud Drive)" mechanism **already exists end-to-end** in core — `set_profile_notes_root_state`/`normalize_notes_root_path` place no restriction preventing a CloudDocs path. No backend work needed for the core move; only UI/UX (a friendlier "iCloud Drive" picker default and copy) is missing.
+
+## 2. Frontend profile creation / folder picking (`apps/desktop/src/features/`)
+
+- `apps/desktop/src/features/settings/components/desktop/profile-section.tsx`:
+  - Uses `@tauri-apps/plugin-dialog`'s `open()` for a **native folder picker** already wired up: `chooseWorkingDirectory` (lines 49-63) calls `open({ directory: true, multiple: false, defaultPath, title: "Select profile notes folder" })`.
+  - "Notes folder" card (lines 159-194): text `Input` + "Browse" button (native picker) + "Apply" button that calls `setProfileNotesRoot(activeProfileId, notesRootInput)` from `useProfiles()` (`apps/desktop/src/features/profiles/hooks/profiles-context.tsx`, invoking the Tauri command above).
+  - Profile creation itself ("Manage profiles" → `ProfileManagerDialog`) only takes a name/description — the new profile's root is always the default app-data path; the user must afterwards use "Browse"+"Apply" to relocate it to iCloud/Dropbox/etc.
+- This settings screen is reached via Settings → "Profile" section (`SETTINGS_SECTIONS` in `apps/desktop/src/features/settings/lib/sections.ts`), rendered by `settings-panel.tsx`. No dedicated onboarding wizard step for folder choice was found tied to this section — it's purely a settings-page flow.
+
+**Conclusion**: Point 2 is essentially done. A user can already: Settings → Profile → Browse → pick any folder (including a `~/Library/Mobile Documents/com~apple~CloudDocs/...` folder in the Finder dialog) → Apply. Adding the requested feature is mostly copy/labeling (e.g. a shortcut button "Use iCloud Drive folder" that defaults the dialog to `~/Library/Mobile Documents/com~apple~CloudDocs/`), not new plumbing.
+
+## 3. Existing iCloud/CloudDocs support
+
+- `grep -rni "icloud\|clouddocs\|mobile documents"` across `.rs/.ts/.tsx` returned **zero matches** — nothing iCloud-aware exists today (no special-casing, no default path, no detection of whether iCloud Drive is enabled).
+- As shown in §1/§2, arbitrary folders (Dropbox, iCloud Drive, network mounts) already work as `notes_root` since validation only checks "absolute path", so this is a pure UI/default-path/label addition, not a new capability.
+
+## 4. Mobile equivalent (`apps/mobile`)
+
+- `apps/mobile/src/screens/settings-screen.tsx` (`SettingsWorkingFoldersScreen`, lines 134-204) and `apps/mobile/src/state/settings-store.ts` (`setNotesRoot`, lines 107-110) mirror the desktop "move folder" flow, calling the same core `setProfileNotesRoot` use case.
+- **However there is no native folder/document picker on mobile** — the "Folder location" field is a plain text `SettingsFieldRow` where the user must type an absolute path (line 191-195: `placeholder="Absolute path"`). No `expo-document-picker`/`UIDocumentPickerViewController` integration was found.
+- Mobile notes generally live in the app's sandboxed Documents directory (per the screen's own footer text, line 151: "The app's Documents directory is visible in the Files app..."), i.e., mobile relies on iOS's Files-app visibility of the sandbox rather than pointing into `~/Library/Mobile Documents/...` directly.
+- **Conclusion**: your instinct is right — the iCloud-folder-picker approach is realistically **desktop-only** for now. Mobile could theoretically type in an iCloud container path manually, but there's no picker UX, and it's untested/unsupported. Mobile would continue to rely on git sync or the existing local-sync-server/QR-pairing mechanism (`apps/mobile` sync code, not investigated further here) rather than iCloud folder pointing.
+
+## 5. Sync UI gating pattern (how to hide without deleting)
+
+- Extension flags live in `apps/desktop/src/features/extensions/registry.ts`:
+  ```ts
+  export type ExtensionId = "security" | "multiLens";
+  export const APP_EXTENSIONS = { security: false, multiLens: false } as const;
+  export const isExtensionEnabled = (id: ExtensionId) =&gt; APP_EXTENSIONS[id];
+  ```
+  This is exactly the pattern used to keep the "Security" settings tab compiled but hidden: `apps/desktop/src/features/settings/lib/sections.ts:18-20` conditionally includes the section only `if APP_EXTENSIONS.security`, and `settings-panel.tsx:72` gates the renderer the same way (`if (sectionId === "security" &amp;&amp; APP_EXTENSIONS.security) ...`).
+- To hide git/local-sync UI the same way without deleting code:
+  1. Add `sync: false` to `ExtensionId`/`APP_EXTENSIONS` in `registry.ts`.
+  2. In `sections.ts`, wrap the `{ id: "sync", title: "Sync" }` entry (currently unconditional, line ~27) the same way `SECURITY_SETTINGS_SECTIONS` is built, so it's omitted from `SETTINGS_SECTIONS` when the flag is off.
+  3. In `settings-panel.tsx:67`, add `&amp;&amp; APP_EXTENSIONS.sync` to the `sectionId === "sync"` branch.
+  4. `GitSyncProvider` (`apps/desktop/src/features/sync/hooks/git-sync-context.tsx`) is mounted unconditionally in `apps/desktop/src/app/providers.tsx:75-87` — this can stay mounted (state/hooks harmless if unused) or also be flag-gated if it does background work (worth checking `use-git-sync-workflows.ts`/`local-sync-server-card.tsx` for background timers/servers that should not start when the feature is hidden — not fully audited here, flag it for follow-up).
+  5. `GitSettingsCard` is also rendered inside `profile-section.tsx:100-105` (separate from the "Sync" tab) — that usage should be gated too if the intent is to fully hide git-sync UI, not just the Sync tab.
+
+## 6. File-watching / concurrency assumptions
+
+- **No filesystem watcher exists anywhere in the codebase**: `grep` for `notify::`/`RecommendedWatcher`/`use notify` across all `.rs` files returned nothing, and there's no `notify` crate dependency in any `Cargo.toml`. `crates/type-core/src/adapters/notes/mod.rs` and `application/notes.rs` have no watch/debounce logic for external changes — only for autosave.
+- **Tree refresh is purely event-driven / on-demand**, not polling:
+  - `apps/desktop/src/features/notes/navigation/state/use-notes-tree-state.ts:202-216`: tree rebuilds on `activeProfileId`/`activeProfileNotesRoot` change, and on a custom `window` event `"notes-tree-invalidated"`.
+  - `notes-tree-context.tsx:90-101`: also refreshes on a Tauri-emitted `"local-sync-push-received"` event, explicitly documented as needed because "a phone pushing over local sync changes the notes on disk behind the frontend's back."
+  - There is **no equivalent event/trigger for arbitrary external filesystem changes** (e.g., iCloud daemon syncing down changes from another Mac). This means changes made outside the app (including by iCloud sync) will **not** appear in the tree or open note until the user manually triggers something that causes a refresh (switching profiles, or an explicit "notes-tree-invalidated" dispatch if one exists elsewhere — worth grepping call sites of that event separately).
+  - Note content itself: `apps/desktop/src/features/notes/editor/hooks/use-note-editor.ts` reads a note into memory once when opened (`readNote(activeNote)`, ~line 102) and autosaves via a 400ms debounced `setTimeout` (lines 118-134) that unconditionally writes the in-memory buffer back — there is no re-read-before-write / conflict/staleness check. If iCloud updates the file on disk while the note is open and dirty in the editor, the next autosave will **silently overwrite** the iCloud-synced version (classic last-writer-wins clobber).
+
+**Implication for the iCloud-folder feature**: since there's no watcher, "iCloud synced changes appearing automatically without manual refresh" is **not supported today** — this would need either (a) adding a lightweight watcher (e.g. `notify` crate) that fires the same kind of invalidation event already used for local-sync pushes, or (b) accepting that users must switch profiles/restart/manually refresh to see externally-synced changes, and documenting the last-writer-wins risk if a note is open on two devices simultaneously.</result>
+<usage><subagent_tokens>48266</subagent_tokens><tool_uses>28</tool_uses><duration_ms>106772</duration_ms></usage>
+</task-notification>
+
+---
+
+can you commit and push (as a branch)
