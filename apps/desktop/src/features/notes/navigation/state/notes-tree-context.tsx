@@ -81,6 +81,12 @@ export function NotesTreeProvider({ children }: { children: ReactNode }) {
   const actions = useNotesTreeActions({
     tree: state.tree,
     refreshTree: state.refreshTree,
+    visibleNavigationItems: state.visibleNavigationItems,
+    feedVisibleNavigationItems: state.feedVisibleNavigationItems,
+    feedNoteFilter: state.feedNoteFilter,
+    notes: state.notes,
+    feedNotes: state.feedNotes,
+    setActiveFeedGroup: state.setActiveFeedGroup,
     renamingFolder: state.renamingFolder,
     setRenamingFolder: state.setRenamingFolder,
     renameValue: state.renameValue,

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { NavigationNode } from "./types";
 import {
   buildVisibleNavigationItems,
+  findPostDeletionNavigationTarget,
   navigateVisibleItems,
   type NavigateVisibleItemsDeps,
   type NavigationKey,
@@ -57,6 +58,38 @@ describe("buildVisibleNavigationItems", () => {
   it("does not descend into an expanded folder with no visible rows", () => {
     const items = buildVisibleNavigationItems(tree, new Set(["work"]), false);
     expect(items.map((item) => item.id)).toEqual(["personal", "work"]);
+  });
+});
+
+describe("findPostDeletionNavigationTarget", () => {
+  const items = buildVisibleNavigationItems(
+    tree,
+    new Set(["personal", "personal/journal"]),
+    true
+  );
+
+  it("selects the row that takes the deleted row's place", () => {
+    expect(
+      findPostDeletionNavigationTarget(
+        items,
+        new Set(["personal/todo.md"])
+      )?.id
+    ).toBe("personal/journal");
+  });
+
+  it("falls back to the previous row when deleting the final row", () => {
+    expect(
+      findPostDeletionNavigationTarget(items, new Set(["work"]))?.id
+    ).toBe("personal/journal/a.md");
+  });
+
+  it("handles deletion of multiple visible rows", () => {
+    expect(
+      findPostDeletionNavigationTarget(
+        items,
+        new Set(["personal/todo.md", "personal/journal"])
+      )?.id
+    ).toBe("personal/journal/a.md");
   });
 });
 

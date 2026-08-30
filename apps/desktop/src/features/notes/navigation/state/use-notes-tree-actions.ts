@@ -15,11 +15,23 @@ import { confirmAction, focusNoScroll } from "@/shared/lib/dom";
 import { getNoteParentPath } from "@typenotes/shared/notes";
 import { applyFolderRenameToSelection, collectNotesForFlattening } from "../model/notes-tree-model";
 import { findNode } from "@/features/notes/navigation/model/tree-ops";
-import type { FolderNode } from "@typenotes/shared/types";
+import { findPostDeletionNavigationTarget } from "../model/visible-navigation";
+import type { FeedNoteFilter } from "../model/feed-tree-model";
+import type {
+  FolderNode,
+  NoteEntry,
+  VisibleNavigationItem,
+} from "@typenotes/shared/types";
 
 type UseNotesTreeActionsArgs = {
   tree: FolderNode | null;
   refreshTree: () => Promise<void>;
+  visibleNavigationItems: VisibleNavigationItem[];
+  feedVisibleNavigationItems: VisibleNavigationItem[];
+  feedNoteFilter: FeedNoteFilter;
+  notes: NoteEntry[];
+  feedNotes: NoteEntry[];
+  setActiveFeedGroup: (id: string) => void;
   renamingFolder: string | null;
   setRenamingFolder: (path: string | null) => void;
   renameValue: string;
@@ -29,6 +41,12 @@ type UseNotesTreeActionsArgs = {
 export function useNotesTreeActions({
   tree,
   refreshTree,
+  visibleNavigationItems,
+  feedVisibleNavigationItems,
+  feedNoteFilter,
+  notes,
+  feedNotes,
+  setActiveFeedGroup,
   renamingFolder,
   setRenamingFolder,
   renameValue,
@@ -44,7 +62,6 @@ export function useNotesTreeActions({
     setActiveFolder,
     setSelectedNotes,
     setLastSelectedNote,
-    activeNote,
     setActiveNote,
     selectFolder,
     selectNote,
@@ -57,7 +74,6 @@ export function useNotesTreeActions({
       setActiveFolder: state.setActiveFolder,
       setSelectedNotes: state.setSelectedNotes,
       setLastSelectedNote: state.setLastSelectedNote,
-      activeNote: state.activeNote,
       setActiveNote: state.setActiveNote,
       selectFolder: state.selectFolder,
       selectNote: state.selectNote,
@@ -107,6 +123,49 @@ export function useNotesTreeActions({
       selectNote,
       syncSettings.noteFileNameFormat,
       tree,
+    ]
+  );
+
+  const selectPostDeletionTarget = useCallback(
+    (target: VisibleNavigationItem | null, fromFeed: boolean) => {
+      if (!target) {
+        setSelectedFolders(new Set());
+        setLastSelectedFolder("");
+        setActiveFolder("");
+        setSelectedNotes(new Set());
+        setLastSelectedNote("");
+        setActiveNote(null);
+        clearNote();
+        return;
+      }
+      if (target.type === "folder") {
+        if (fromFeed) {
+          setActiveFeedGroup(target.id);
+          selectFolder(FEED_FOLDER_PATH);
+        } else {
+          selectFolder(target.id);
+        }
+        clearNote();
+        return;
+      }
+      if (fromFeed) {
+        setActiveFeedGroup(target.parentId);
+        selectNote(target.id, FEED_FOLDER_PATH);
+      } else {
+        selectNote(target.id, target.parentId);
+      }
+    },
+    [
+      clearNote,
+      selectFolder,
+      selectNote,
+      setActiveFeedGroup,
+      setActiveFolder,
+      setActiveNote,
+      setLastSelectedFolder,
+      setLastSelectedNote,
+      setSelectedFolders,
+      setSelectedNotes,
     ]
   );
 
@@ -167,12 +226,22 @@ export function useNotesTreeActions({
       }
       const confirmed = await confirmAction(`Delete ${paths.length} folder(s)?`);
       if (!confirmed) return;
+      const removedIds = new Set(
+        visibleNavigationItems
+          .filter((item) =>
+            paths.some((path) => item.id === path || item.id.startsWith(`${path}/`))
+          )
+          .map((item) => item.id)
+      );
+      const nextTarget = findPostDeletionNavigationTarget(
+        visibleNavigationItems,
+        removedIds
+      );
       await api.deleteItems(paths);
-      setSelectedFolders(new Set());
-      if (paths.includes(activeFolder)) setActiveFolder("");
       await refreshTree();
+      selectPostDeletionTarget(nextTarget, false);
     },
-    [activeFolder, refreshTree, setActiveFolder, setSelectedFolders]
+    [refreshTree, selectPostDeletionTarget, visibleNavigationItems]
   );
 
   const deleteNotes = useCallback(
@@ -180,28 +249,72 @@ export function useNotesTreeActions({
       if (paths.length === 0) return false;
       const confirmed = await confirmAction(`Delete ${paths.length} note(s)?`);
       if (!confirmed) return false;
+      const fromFeed = activeFolder === FEED_FOLDER_PATH;
+      const nestedNavigationItems = fromFeed
+        ? feedVisibleNavigationItems
+        : visibleNavigationItems;
+      const navigationItems = nestedNavigationItems.some((item) =>
+        paths.includes(item.id)
+      )
+        ? nestedNavigationItems
+        : (fromFeed ? feedNotes : notes).map((note) => ({
+            type: "note" as const,
+            id: note.path,
+            parentId: fromFeed ? FEED_FOLDER_PATH : activeFolder,
+          }));
+      const nextTarget = findPostDeletionNavigationTarget(
+        navigationItems,
+        new Set(paths)
+      );
       await api.deleteItems(paths);
-      setSelectedNotes(new Set());
-      setLastSelectedNote("");
-      if (paths.includes(activeNote || "")) {
-        setActiveNote(null);
-        clearNote();
-      }
       await refreshTree();
+      selectPostDeletionTarget(nextTarget, fromFeed);
       return true;
     },
-    [activeNote, clearNote, refreshTree, setActiveNote, setLastSelectedNote, setSelectedNotes]
+    [
+      activeFolder,
+      feedNotes,
+      feedVisibleNavigationItems,
+      notes,
+      refreshTree,
+      selectPostDeletionTarget,
+      visibleNavigationItems,
+    ]
   );
 
   const moveNotesToArchive = useCallback(
     async (paths: string[]) => {
       if (paths.length === 0) return;
+      const fromFeed = activeFolder === FEED_FOLDER_PATH;
+      const nestedNavigationItems = fromFeed
+        ? feedVisibleNavigationItems
+        : visibleNavigationItems;
+      const navigationItems = nestedNavigationItems.some((item) =>
+        paths.includes(item.id)
+      )
+        ? nestedNavigationItems
+        : (fromFeed ? feedNotes : notes).map((note) => ({
+            type: "note" as const,
+            id: note.path,
+            parentId: fromFeed ? FEED_FOLDER_PATH : activeFolder,
+          }));
+      const nextTarget = findPostDeletionNavigationTarget(
+        navigationItems,
+        new Set(paths)
+      );
       await api.moveItems(paths, ARCHIEVE_FOLDER_PATH);
-      selectFolder(ARCHIEVE_FOLDER_PATH);
-      clearNote();
       await refreshTree();
+      selectPostDeletionTarget(nextTarget, fromFeed);
     },
-    [clearNote, refreshTree, selectFolder]
+    [
+      activeFolder,
+      feedNotes,
+      feedVisibleNavigationItems,
+      notes,
+      refreshTree,
+      selectPostDeletionTarget,
+      visibleNavigationItems,
+    ]
   );
 
   const moveNotesToFolder = useCallback(
@@ -210,12 +323,32 @@ export function useNotesTreeActions({
       if (paths.length === 0 || !normalizedDestination) {
         return;
       }
+      const movesOutOfFeed =
+        activeFolder === FEED_FOLDER_PATH &&
+        normalizedDestination !== FEED_FOLDER_PATH;
+      const nextTarget = movesOutOfFeed
+        ? findPostDeletionNavigationTarget(
+            feedVisibleNavigationItems,
+            new Set(paths)
+          )
+        : null;
       await api.moveItems(paths, normalizedDestination);
+      await refreshTree();
+      if (movesOutOfFeed) {
+        selectPostDeletionTarget(nextTarget, true);
+        return;
+      }
       selectFolder(normalizedDestination);
       clearNote();
-      await refreshTree();
     },
-    [clearNote, refreshTree, selectFolder]
+    [
+      activeFolder,
+      clearNote,
+      feedVisibleNavigationItems,
+      refreshTree,
+      selectFolder,
+      selectPostDeletionTarget,
+    ]
   );
 
   const updateNoteMarkers = useCallback(
@@ -227,6 +360,16 @@ export function useNotesTreeActions({
       if (uniquePaths.length === 0) {
         return;
       }
+      const removesNotesFromCurrentFeed =
+        activeFolder === FEED_FOLDER_PATH &&
+        feedNoteFilter === "active" &&
+        markers.archived === true;
+      const nextTarget = removesNotesFromCurrentFeed
+        ? findPostDeletionNavigationTarget(
+            feedVisibleNavigationItems,
+            new Set(uniquePaths)
+          )
+        : null;
       await Promise.all(
         uniquePaths.map((path) =>
           api.updateNoteMarkers({
@@ -237,8 +380,16 @@ export function useNotesTreeActions({
         )
       );
       window.dispatchEvent(new CustomEvent("note-previews-invalidated"));
+      if (removesNotesFromCurrentFeed) {
+        selectPostDeletionTarget(nextTarget, true);
+      }
     },
-    []
+    [
+      activeFolder,
+      feedNoteFilter,
+      feedVisibleNavigationItems,
+      selectPostDeletionTarget,
+    ]
   );
 
   const flattenIntoFeed = useCallback(

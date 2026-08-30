@@ -44,6 +44,25 @@ export function buildVisibleNavigationItems(
 
 export type NavigationKey = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
 
+export function findPostDeletionNavigationTarget(
+  items: VisibleNavigationItem[],
+  removedIds: ReadonlySet<string>
+): VisibleNavigationItem | null {
+  const firstRemovedIndex = items.findIndex((item) => removedIds.has(item.id));
+  if (firstRemovedIndex < 0) {
+    return null;
+  }
+
+  const remainingItems = items.filter((item) => !removedIds.has(item.id));
+  if (remainingItems.length === 0) {
+    return null;
+  }
+
+  // Keep the same row index after deletion. At the bottom edge this naturally
+  // falls back to the preceding row.
+  return remainingItems[Math.min(firstRemovedIndex, remainingItems.length - 1)];
+}
+
 export type NavigateVisibleItemsDeps = {
   items: VisibleNavigationItem[];
   /**
