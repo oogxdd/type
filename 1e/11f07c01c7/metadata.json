@@ -3,7 +3,7 @@
   "checkpoint_id": "1e11f07c01c7",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 4,
+  "checkpoints_count": 5,
   "files_touched": [
     "apps/desktop/src/features/notes/navigation/model/visible-navigation.test.ts",
     "apps/desktop/src/features/notes/navigation/model/visible-navigation.ts",
@@ -30,6 +30,13 @@
       "transcript": "/1e/11f07c01c7/2/full.jsonl",
       "context": "",
       "content_hash": "/1e/11f07c01c7/2/content_hash.txt",
+      "prompt": ""
+    },
+    {
+      "metadata": "/1e/11f07c01c7/3/metadata.json",
+      "transcript": "/1e/11f07c01c7/3/full.jsonl",
+      "context": "",
+      "content_hash": "/1e/11f07c01c7/3/content_hash.txt",
       "prompt": ""
     }
   ],
