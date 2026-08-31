@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Ad-hoc export, for installing a Release build straight onto a registered
+  device without TestFlight. "release-testing" is Xcode 15+'s name for the
+  method previously called "ad-hoc"; the device's UDID must already be
+  registered in the Apple Developer account, or export fails while building
+  the provisioning profile.
+
+  Use with: xcodebuild -exportArchive -exportOptionsPlist ../ExportOptionsAdHoc.plist
+  The App Store path stays in ExportOptions.plist.
+-->
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>release-testing</string>
+	<key>teamID</key>
+	<string>Y377P5XKGJ</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>destination</key>
+	<string>export</string>
+	<key>compileBitcode</key>
+	<false/>
+	<key>stripSwiftSymbols</key>
+	<true/>
+	<key>thinning</key>
+	<string>&lt;none&gt;</string>
+</dict>
+</plist>
