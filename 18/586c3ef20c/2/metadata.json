@@ -1,0 +1,50 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "18586c3ef20c",
+  "session_id": "01a05383-1402-7360-8fa4-007096c731d6",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-31T21:04:22.04703Z",
+  "branch": "mobile/capture-swipe-and-note-organization",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/mobile/src/lib/capture-gesture.test.ts",
+    "apps/mobile/src/lib/capture-gesture.ts",
+    "apps/mobile/src/state/notes-store.test.ts",
+    "apps/mobile/src/ui/note-actions-sheet.tsx",
+    "apps/mobile/README.md",
+    "apps/mobile/src/lib/folder-tree.test.ts",
+    "apps/mobile/src/state/sync-store.ts",
+    "apps/mobile/src/screens/menu-screen.tsx",
+    "AGENTS.md",
+    "apps/mobile/src/App.tsx",
+    "apps/mobile/src/lib/feed.test.ts",
+    "apps/mobile/src/lib/feed.ts",
+    "apps/mobile/src/screens/capture-screen.tsx",
+    "apps/mobile/src/state/notes-store.ts",
+    "apps/mobile/src/ui/note-organizer.tsx",
+    "apps/mobile/src/lib/folder-tree.ts",
+    "apps/mobile/src/screens/feed-screen.tsx",
+    "apps/mobile/src/ui/folder-picker.tsx",
+    "packages/shared/src/note-filter.ts",
+    "apps/mobile/src/screens/folder-screen.tsx",
+    "apps/desktop/src/features/notes/navigation/model/feed-tree-model.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "1108bb451fd2",
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-31T21:04:21.9271Z",
+    "agent_lines": 2337,
+    "human_added": 493,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 2830,
+    "agent_percentage": 82.57950530035336
+  }
+}
