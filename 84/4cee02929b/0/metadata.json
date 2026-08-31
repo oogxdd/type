@@ -1,0 +1,35 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "844cee02929b",
+  "session_id": "01a04de5-9a1c-77a3-bdfd-f8d1fe1f4ea0",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-31T23:41:58.667163Z",
+  "branch": "mobile/adhoc-export-and-version-0.2.6",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/mobile/OTA_INSTALL.md",
+    "apps/mobile/package.json",
+    "apps/mobile/scripts/ota.mjs",
+    "apps/mobile/LOCAL_TESTFLIGHT.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "61be5f5fe08b",
+  "checkpoint_transcript_start": 1220,
+  "transcript_lines_at_start": 1220,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-31T23:41:52.6173Z",
+    "agent_lines": 0,
+    "human_added": 381,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 381,
+    "agent_percentage": 0
+  }
+}
