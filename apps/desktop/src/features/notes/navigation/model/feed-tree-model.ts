@@ -1,5 +1,14 @@
 import type { NoteEntry } from "@typenotes/shared/types";
 import type { NotePreview } from "@typenotes/shared/format";
+// The predicate lives in @typenotes/shared so the mobile feed filters by the
+// same rules; re-exported here because this module is where the desktop's
+// filter type has always been imported from.
+import {
+  matchesFeedFilter,
+  type FeedNoteFilter,
+} from "@typenotes/shared/note-filter";
+
+export type { FeedNoteFilter };
 
 // Feed is not the folder tree. It is a synthetic hierarchy built from note
 // timestamps so the navigation UI can browse recent work by time bucket.
@@ -56,28 +65,6 @@ export type FeedTreeNode = {
 export type FeedTreeBuildResult = {
   treeData: FeedTreeNode[];
   nodeById: Map<string, FeedTreeNode>;
-};
-
-export type FeedNoteFilter =
-  | "all"
-  | "active"
-  | "reviewed"
-  | "unreviewed"
-  | "archived";
-
-const matchesFeedFilter = (preview: NotePreview, filter: FeedNoteFilter) => {
-  switch (filter) {
-    case "active":
-      return !preview.isArchived;
-    case "reviewed":
-      return preview.isReviewed;
-    case "unreviewed":
-      return !preview.isReviewed;
-    case "archived":
-      return preview.isArchived;
-    default:
-      return true;
-  }
 };
 
 type FeedNodeBuilder = {

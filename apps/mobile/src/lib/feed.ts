@@ -1,12 +1,21 @@
 // Pure helpers for turning the core's tree + previews into list rows.
 
-import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { isSystemFolder } from "@typenotes/shared/constants";
 import { parseNotePreview, type NotePreview } from "@typenotes/shared/format";
-import type { FolderNode, NotePreviewEntry } from "@typenotes/shared/types";
+import type {
+  FolderNode,
+  NoteEntry,
+  NotePreviewEntry,
+} from "@typenotes/shared/types";
 
 export type NoteRow = {
   path: string;
   preview: NotePreview;
+  /**
+   * The body has not been read yet, so `preview` is a stand-in built from the
+   * file name. Rows never disappear just because their preview is missing.
+   */
+  pending: boolean;
 };
 
 export const findFolder = (
@@ -29,14 +38,35 @@ export const findFolder = (
 };
 
 /**
- * Subfolders the user can browse into. Feed is not listed (it has its own
- * tab / screen), and dot-folders (`.type` settings, `.git`, …) are hidden
- * service directories.
+ * Subfolders the user can browse into.
+ *
+ * Both system folders are excluded — Feed and Archieve each have their own
+ * pinned entry, exactly as on the desktop, whose folders panel filters them
+ * with this same `isSystemFolder`. Listing Archieve as an ordinary folder was
+ * the most visible way the mobile folder list disagreed with the desktop over
+ * identical data. Dot-folders (`.type`, `.git`, …) are service directories.
  */
 export const browsableFolders = (folder: FolderNode | null): FolderNode[] =>
   (folder?.children ?? []).filter(
-    (child) => child.path !== FEED_FOLDER_PATH && !child.name.startsWith(".")
+    (child) => !isSystemFolder(child.path) && !child.name.startsWith(".")
   );
+
+/**
+ * Notes in this folder and every folder under it.
+ *
+ * A count of direct children only makes a folder that holds nothing but
+ * subfolders read as empty, which is not what the desktop shows.
+ */
+export const folderNoteCount = (folder: FolderNode | null): number => {
+  if (!folder) {
+    return 0;
+  }
+  let total = folder.notes.length;
+  for (const child of folder.children) {
+    total += folderNoteCount(child);
+  }
+  return total;
+};
 
 export const previewsByPath = (
   entries: NotePreviewEntry[]
@@ -54,32 +84,111 @@ export const previewsByPath = (
 const rowTimestamp = (row: NoteRow) =>
   row.preview.createdMs ?? row.preview.updatedMs ?? 0;
 
+// New note file names carry a sortable prefix (see the filename lifecycle in
+// AGENTS.md): a UTC timestamp, a uuid v7, or a uuid v7 prefix. None of that is
+// a title, so strip it before showing a file name to anyone.
+const UTC_SLUG_PREFIX = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-/;
+const UUID_PREFIX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-?/i;
+const UUID_SHORT_PREFIX = /^[0-9a-f]{8}-/i;
+
+const titleFromFileName = (name: string): string => {
+  const base = name.replace(/\.md$/i, "");
+  const stripped = base
+    .replace(UTC_SLUG_PREFIX, "")
+    .replace(UUID_PREFIX, "")
+    .replace(UUID_SHORT_PREFIX, "")
+    .replace(/-+/g, " ")
+    .trim();
+  return stripped || base;
+};
+
 /**
- * Rows for one folder, newest first (by front-matter created/updated
- * timestamps, matching the desktop feed's ordering).
+ * A stand-in for a note whose body has not been fetched yet.
+ *
+ * Skipping such notes made them vanish from the list — a note that arrived
+ * with a sync stayed invisible until a pull-to-refresh, and any single failed
+ * preview fetch silently hid a note. A row built from the file name is a much
+ * smaller lie than no row at all.
  */
-export const folderNoteRows = (
+const placeholderPreview = (note: NoteEntry): NotePreview => ({
+  title: titleFromFileName(note.name),
+  dateLabel: "",
+  secondLine: "",
+  createdMs: null,
+  updatedMs: null,
+  archivedMs: null,
+  reviewedMs: null,
+  isArchived: false,
+  isReviewed: false,
+  isRecording: false,
+  isHandwriting: false,
+  recordingAudioPath: null,
+  handwritingAttachmentPath: null,
+  transcriptionStatus: null,
+  ocrStatus: null,
+});
+
+export type NoteRowOptions = {
+  hideArchived?: boolean;
+  /** Drop rows the current feed filter excludes. */
+  keep?: (preview: NotePreview) => boolean;
+};
+
+const buildRows = (
   folder: FolderNode | null,
   previews: Map<string, NotePreview>,
-  options: { hideArchived?: boolean } = {}
+  options: NoteRowOptions
 ): NoteRow[] => {
   if (!folder) {
     return [];
   }
   const rows: NoteRow[] = [];
   for (const note of folder.notes) {
-    const preview = previews.get(note.path);
-    if (!preview) {
-      continue;
-    }
+    const loaded = previews.get(note.path);
+    const preview = loaded ?? placeholderPreview(note);
     if (options.hideArchived && preview.isArchived) {
       continue;
     }
-    rows.push({ path: note.path, preview });
+    // A placeholder knows nothing about markers, so never let a filter hide a
+    // note on the strength of a guess.
+    if (loaded && options.keep && !options.keep(preview)) {
+      continue;
+    }
+    rows.push({ path: note.path, preview, pending: !loaded });
   }
+  return rows;
+};
+
+/**
+ * Feed rows, newest first by front-matter timestamps.
+ *
+ * Feed keeps no `.notes-order.json` and the core returns it sorted by file
+ * name, so the ordering the user sees has to be recomputed here — the same
+ * thing the desktop does with its own previews.
+ */
+export const feedNoteRows = (
+  folder: FolderNode | null,
+  previews: Map<string, NotePreview>,
+  options: NoteRowOptions = {}
+): NoteRow[] => {
+  const rows = buildRows(folder, previews, options);
   rows.sort((a, b) => rowTimestamp(b) - rowTimestamp(a));
   return rows;
 };
+
+/**
+ * Rows for an ordinary folder, in the order the core returned them.
+ *
+ * That order is the folder's `.notes-order.json` — what the user arranged by
+ * dragging on the desktop. Re-sorting by timestamp here (which this function
+ * used to do for every folder, Feed or not) threw that away, and was the
+ * reason a folder looked different on the phone than on the desktop.
+ */
+export const folderNoteRows = (
+  folder: FolderNode | null,
+  previews: Map<string, NotePreview>,
+  options: NoteRowOptions = {}
+): NoteRow[] => buildRows(folder, previews, options);
 
 export type NoteRowSection = {
   title: string;

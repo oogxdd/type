@@ -57,9 +57,11 @@ const RootStack = () => {
         contentStyle: { backgroundColor: theme.colors.background },
         // Swipe back from anywhere on the screen, not just the left edge —
         // still the native UIKit pop transition, driven natively by
-        // react-native-screens' pan recognizer. It doesn't steal taps (a pan
-        // needs clear horizontal movement before it claims the touch), and
-        // the capture/menu gestures fail quickly for the other axis.
+        // react-native-screens' pan recognizer. Ordinary pushed screens have
+        // no gestures of their own, so this is free there. Capture opts out
+        // (see below): its whole surface is a gesture target, and a
+        // full-screen pop recognizer racing every touch is what forced the
+        // capture pans to be tuned until they stopped recognizing anything.
         fullScreenGestureEnabled: true,
         // Chevron-only back everywhere: Sync has more than one entry point,
         // so naming the previous screen in the label would be noise.
@@ -76,6 +78,10 @@ const RootStack = () => {
         component={CaptureScreen}
         options={({ route }) => ({
           headerShown: false,
+          // Edge-only back here. Capture's own pans own the rest of the
+          // screen, and they reserve exactly this strip via
+          // hitSlop({ left: -BACK_SWIPE_GUTTER }), so the two never overlap.
+          fullScreenGestureEnabled: false,
           // A gesture-driven preview already played this push when instant
           // is set; attach the real screen underneath without replaying it.
           animation: route.params?.instant ? "none" : "default",

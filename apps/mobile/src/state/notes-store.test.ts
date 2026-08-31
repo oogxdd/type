@@ -10,6 +10,7 @@ import { createMockCore } from "@typenotes/mobile-core/mock-core";
 import { setRawCore, type RawCore } from "@typenotes/mobile-core/raw-core";
 
 import { useNotesStore } from "./notes-store";
+import { findFolder, folderNoteCount } from "../lib/feed";
 
 /** Wraps the in-memory core so the test can see which paths were asked for. */
 const trackPreviewCalls = (core: RawCore) => {
@@ -49,6 +50,7 @@ describe("notes store", () => {
 
     expect(previewCalls).toHaveLength(1);
     expect(previewCalls[0].length).toBe(2);
+    expect(useNotesStore.getState().previews.size).toBe(2);
   });
 
   it("asks for only the filed note's preview when a page is filed", async () => {
@@ -69,6 +71,73 @@ describe("notes store", () => {
     const { tree, previews } = useNotesStore.getState();
     expect(tree).not.toBeNull();
     expect(previews.get(filed)?.title).toBe("the page just filed");
+  });
+
+  it("asks for previews in bounded batches", async () => {
+    // One giant list_note_previews call builds the whole decrypted corpus as a
+    // single JSON string on both sides of the FFI bridge.
+    for (let index = 0; index < 250; index += 1) {
+      await createNote(core, `note ${index}`);
+    }
+    previewCalls.length = 0;
+
+    await useNotesStore.getState().refresh();
+
+    expect(previewCalls.length).toBeGreaterThan(1);
+    for (const call of previewCalls) {
+      expect(call.length).toBeLessThanOrEqual(200);
+    }
+    const asked = previewCalls.flat();
+    expect(new Set(asked).size).toBe(250);
+    expect(useNotesStore.getState().previews.size).toBe(250);
+  });
+
+  it("moves notes into a folder it creates on the way", async () => {
+    // There is no create-folder command anywhere in the core: a new folder
+    // comes into existence because something was moved into its path.
+    const first = await createNote(core, "first");
+    const second = await createNote(core, "second");
+    await useNotesStore.getState().refresh();
+    previewCalls.length = 0;
+
+    await useNotesStore.getState().moveNotes([first, second], "Work/Q3");
+
+    const { tree, previews } = useNotesStore.getState();
+    expect(folderNoteCount(findFolder(tree, "Work/Q3"))).toBe(2);
+    expect(previews.has(first)).toBe(false);
+    const moved = findFolder(tree, "Work/Q3")!.notes.map((note) => note.path);
+    for (const path of moved) {
+      expect(previews.get(path)).toBeDefined();
+    }
+    // Only the two notes whose path changed were re-read.
+    expect(previewCalls.flat().sort()).toEqual([...moved].sort());
+  });
+
+  it("drops previews for deleted notes without re-reading the rest", async () => {
+    const keep = await createNote(core, "keep me");
+    const drop = await createNote(core, "drop me");
+    await useNotesStore.getState().refresh();
+    previewCalls.length = 0;
+
+    await useNotesStore.getState().deleteNotes([drop]);
+
+    const { previews } = useNotesStore.getState();
+    expect(previews.has(drop)).toBe(false);
+    expect(previews.get(keep)?.title).toBe("keep me");
+    expect(previewCalls).toEqual([]);
+  });
+
+  it("archives a note in place and re-reads only that note", async () => {
+    const other = await createNote(core, "untouched");
+    const target = await createNote(core, "to archive");
+    await useNotesStore.getState().refresh();
+    previewCalls.length = 0;
+
+    await useNotesStore.getState().setArchived(target, true);
+
+    expect(previewCalls).toEqual([[target]]);
+    expect(useNotesStore.getState().previews.get(target)?.isArchived).toBe(true);
+    expect(useNotesStore.getState().previews.get(other)?.isArchived).toBe(false);
   });
 
   it("keeps previews already in the cache", async () => {

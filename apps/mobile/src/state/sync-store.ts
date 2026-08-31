@@ -226,6 +226,23 @@ export const useSyncStore = create<SyncState>((set, get) => {
     throw new Error(message);
   };
 
+  /**
+   * The current HEAD, or null when it can't be read.
+   *
+   * Used as the "did the pull actually bring anything" signal: `git_pull`
+   * returns a status, not a changed-file list, and reloading every note
+   * preview after a pull that fast-forwarded nothing is the single most
+   * expensive thing the app can do — it runs 1.5s after every captured page.
+   */
+  const headCommitId = async (): Promise<string | null> => {
+    try {
+      const [head] = await core.getGitHistory({ limit: 1 });
+      return head?.id ?? null;
+    } catch {
+      return null;
+    }
+  };
+
   const scheduleAutoSyncAttempt = (reason: string, delayMs: number) => {
     if (autoSyncTimer) {
       clearTimeout(autoSyncTimer);
@@ -384,6 +401,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
       if (isBusy("pull")) {
         return;
       }
+      const headBefore = await headCommitId();
       await run("pull", async () => {
         const savedConnection = savedGitConnection();
         const connection = await prepareIrohConnection(savedConnection);
@@ -405,9 +423,16 @@ export const useSyncStore = create<SyncState>((set, get) => {
           throw error;
         });
       });
-      // Remote edits may have changed the notes on disk.
-      await useNotesStore.getState().refresh();
-      logSync("pull: notes refreshed after remote changes");
+      // Remote edits may have changed the notes on disk — but only if the
+      // pull moved HEAD. Refreshing unconditionally re-read and re-decrypted
+      // every note in the root after every captured page.
+      const headAfter = await headCommitId();
+      if (headBefore === null || headAfter === null || headAfter !== headBefore) {
+        await useNotesStore.getState().refresh();
+        logSync("pull: notes refreshed after remote changes");
+      } else {
+        logSync("pull: nothing arrived; notes left untouched");
+      }
       await core
         .pruneMobileAudioCache()
         .then((prune) => {
