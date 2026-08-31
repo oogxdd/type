@@ -433,12 +433,25 @@ The React Native app (Expo) reuses the Rust core through
   mode, AssemblyAI key, appearance). Zustand stores in `src/state/`. Without the native
   module the app boots the mock core in demo mode (bottom banner) — that is
   what CI and Expo Go exercise.
+- **Organizing notes on the phone** — the Menu's Folders tab is an
+  expand/collapse tree over the whole `FolderNode` the core already returns
+  (`src/lib/folder-tree.ts`, pure and tested); Feed carries the desktop's
+  filter chips through the shared `matchesFeedFilter`. Holding any note row
+  opens `ui/note-actions-sheet` (archive marker, move, delete, or enter a
+  multi-select mode with a batch bar); `ui/note-organizer` owns that state for
+  every list. Moving uses `ui/folder-picker`, which doubles as folder
+  *creation* — see the create-folder gotcha below. Mutations live in
+  `state/notes-store.ts` and never call the full `refresh()`.
 
 ## Gotchas
 
 - **"Archieve" typo**: The archive folder is spelled "Archieve" in the codebase and in persisted data. Do not "fix" this — it would break existing user data.
 - **Never run the desktop app against production data.** `tauri dev` / `tauri build` with the *default* config uses identifier `com.digital.type2`, whose app-data directory holds the maintainer's real notes — a dev run there edits, renames, and auto-deletes actual content. Use `npm run desktop:app` (or `desktop:dmg:dev`), which layers `src-tauri/tauri.dev.conf.json`: identifier `com.digital.type2.dev`, its own app-data directory, product name "Type Dev", and `plugins.updater.endpoints: []` so a dev build can't replace itself with a production release. `npm run desktop:app:prod-data` is the deliberate escape hatch; back up first (`docs/RELEASING.md` §2b).
-- **Feed folder semantics**: `Feed` is the default notes folder and does not keep `.notes-order.json`.
+- **Feed folder semantics**: `Feed` is the default notes folder and does not keep `.notes-order.json`. Everywhere else the order the core returns *is* `.notes-order.json` and must be preserved — re-sorting a folder's notes by timestamp in a shell is how the mobile lists used to disagree with the desktop over identical data (`feedNoteRows` vs `folderNoteRows` in `apps/mobile/src/lib/feed.ts`).
+- **There is no create-folder command.** Not in `type-core`, not in `type-ffi`, not on the desktop. `move_items` and `create_note` both `create_dir_all` their destination, so "make a new folder" always means "put something into a path that does not exist yet" — which is what the desktop's move dialog means by *"Missing folders will be created"*, and what the phone's folder picker does.
+- **Two different archives**: the `Archieve` *folder* (a real move, `move_items`) and the `archived_ms` *marker* in front matter (`update_note_markers`, the note stays put). The desktop context menu offers both; the phone's note sheet writes the marker and its feed filter reads it. There is a matching `reviewed_ms` marker with no mobile UI yet.
+- **Capture-screen gestures must stay memoized.** `GestureDetector` re-runs `updateAttachedGestures` on every render (its effect depends on `props`), so an unmemoized `Gesture.*` re-serializes its whole closure graph into the UI runtime on every keystroke — including mid-commit, while the spring still holds the callback it was serialized with. Anything a gesture worklet calls needs one identity for the life of the screen (the `run*` ref proxies in `capture-screen.tsx`), and window dimensions belong in shared values, not captured props. On the new architecture the UI runtime is the iOS main thread, so a throw there is an uncatchable `abort`, not a caught JS error.
+- **`onEnd` gets a `success` argument.** RNGH also calls END when the system takes the touch (`State.CANCELLED`/`FAILED` from `ACTIVE`), with `success = false` and whatever velocity was left. Ignoring it made a cancelled swipe-up file a note.
 - **Recordings storage**: audio files live under hidden `Recordings/`; notes created from recordings can be in `Feed` or the selected folder and reference audio via frontmatter.
 - **Filename lifecycle**: per-profile setting controls new note file names:
   - `utc_timestamp_slug` (default): `YYYY-MM-DDTHH-mm-ssZ-<slug>.md`

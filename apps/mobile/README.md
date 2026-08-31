@@ -61,12 +61,20 @@ src/
   lib/appearance.ts       palette + theme derivation (pure, tested)
   lib/capture.ts          capture-page note lifecycle (pure, tested)
   lib/feed.ts             tree+previews → list rows (pure, tested)
-  state/                  zustand stores: notes, settings (working folders),
-                          sync, appearance (device-local, no core)
+  lib/folder-tree.ts      folder tree → flat expandable rows (pure, tested)
+  lib/capture-gesture.ts  swipe thresholds + decisions (pure, tested)
+  state/                  zustand stores: notes (incl. move/delete/archive),
+                          settings (working folders), sync, appearance
+                          (device-local, no core)
   screens/                capture, menu, feed, folder, editor, sync, settings
-  ui/                     dictation/photo capture button, audio player, shared
-                          primitives for the utility screens
+  ui/                     dictation/photo capture button, audio player, note
+                          actions sheet + folder picker + selection mode
+                          (note-organizer), shared primitives
 ```
+
+Notes are organized from any list: hold a row for archive / move / delete, or
+"Select more…" for a batch. Moving to a path that does not exist creates it —
+the core has no separate create-folder command.
 
 State flows one way: screens → `@typenotes/mobile-core/core-api` (typed
 facade over the FFI) → Rust core. Stores cache the tree/previews/status and
