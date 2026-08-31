@@ -95,12 +95,53 @@ export function useNotePreviews(
   const cacheRef = useRef<Map<string, CachedPreview>>(new Map());
   const persistKeyRef = useRef(persistKey);
   persistKeyRef.current = persistKey;
+  const resetKeyRef = useRef(resetKey);
+  resetKeyRef.current = resetKey;
   const allNotePathsRef = useRef(allNotePaths);
   allNotePathsRef.current = allNotePaths;
 
   useEffect(() => {
-    const onInvalidated = () => {
-      cacheRef.current.clear();
+    const onInvalidated = (event: Event) => {
+      const notePath = (event as CustomEvent<string>).detail;
+      if (notePath) {
+        const requestResetKey = resetKeyRef.current;
+        // Autosaves only change one note. Refresh that row in the background
+        // and retain every existing preview so Feed/tree navigation never
+        // collapses into its loading state while the user is typing.
+        void listNotePreviews([notePath])
+          .then((entries) => {
+            const entry = entries[0];
+            if (
+              !entry ||
+              resetKeyRef.current !== requestResetKey ||
+              !allNotePathsRef.current.includes(entry.path)
+            ) {
+              return;
+            }
+            const updatedMs = entry.meta.updated_ms ?? entry.meta.created_ms ?? null;
+            const preview = parseNotePreview(entry.content, updatedMs, entry.meta);
+            cacheRef.current.set(entry.path, { updatedMs, preview });
+            setNotePreviews((current) => ({
+              ...current,
+              [entry.path]: preview,
+            }));
+            const currentPersistKey = persistKeyRef.current;
+            if (currentPersistKey) {
+              writePersistedPreviews(
+                currentPersistKey,
+                cacheRef.current,
+                new Set(allNotePathsRef.current)
+              );
+            }
+          })
+          .catch((error) => {
+            console.error("[notes] failed to refresh note preview", error);
+          });
+        return;
+      }
+
+      // Structural or bulk changes still request a full reconciliation, but
+      // keep stale previews visible until the fresh batch arrives.
       setRefreshToken((value) => value + 1);
     };
     window.addEventListener("note-previews-invalidated", onInvalidated);

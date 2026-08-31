@@ -1,11 +1,12 @@
 use type_core::{
     application::git_sync::GitSyncUseCases, ensure_security_unlocked_for_app, ConnectGitArgs,
-    GitCommitHistoryEntry, GitHistoryArgs, GitPushArgs, GitSyncArgs, GitSyncStatus,
-    GitSyncAdapter,
+    GitCommitHistoryEntry, GitHistoryArgs, GitPushArgs, GitSyncAdapter, GitSyncArgs, GitSyncStatus,
 };
 
 fn git_sync_use_cases(app: tauri::AppHandle) -> Result<GitSyncUseCases<GitSyncAdapter>, String> {
-    Ok(GitSyncUseCases::new(GitSyncAdapter::new(crate::app_env(&app)?)))
+    Ok(GitSyncUseCases::new(GitSyncAdapter::new(crate::app_env(
+        &app,
+    )?)))
 }
 
 #[tauri::command]

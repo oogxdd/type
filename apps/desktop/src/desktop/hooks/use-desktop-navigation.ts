@@ -55,6 +55,7 @@ export function useDesktopNavigation({
     feedNotes,
     feedNotePreviews,
     deleteNotes,
+    moveNotesToArchive,
   } = useNotesTree();
   const {
     activeFolder,
@@ -116,20 +117,32 @@ export function useDesktopNavigation({
     }
   }, [activeFolder, activeNavigationTab]);
 
-  const deleteSelectedNotesByShortcut = useCallback(() => {
+  const selectedNotePaths = useCallback(() => {
     const selected = selectedNotesRef.current;
-    const paths =
+    return (
       activeNote && !selected.has(activeNote)
         ? [activeNote]
         : selected.size > 0
           ? Array.from(selected)
           : activeNote
             ? [activeNote]
-            : [];
+            : []
+    );
+  }, [activeNote]);
+
+  const moveSelectedNotesToTrashByShortcut = useCallback(() => {
+    const paths = selectedNotePaths();
+    if (paths.length > 0) {
+      void moveNotesToArchive(paths);
+    }
+  }, [moveNotesToArchive, selectedNotePaths]);
+
+  const deleteSelectedNotesByShortcut = useCallback(() => {
+    const paths = selectedNotePaths();
     if (paths.length > 0) {
       void deleteNotes(paths);
     }
-  }, [activeNote, deleteNotes]);
+  }, [deleteNotes, selectedNotePaths]);
 
   const openFeedTab = useCallback(() => {
     closeDesktopContextMenu();
@@ -272,6 +285,7 @@ export function useDesktopNavigation({
   return {
     activeNavigationTab,
     customFoldersTreeData,
+    moveSelectedNotesToTrashByShortcut,
     deleteSelectedNotesByShortcut,
     openFeedTab,
     openFoldersTab,

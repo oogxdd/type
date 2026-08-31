@@ -1,12 +1,14 @@
 use type_core::{
     application::profiles::ProfilesUseCases, ensure_security_unlocked_for_app, CreateProfileArgs,
-    DeleteProfileArgs, NotesProfilesSnapshot, ProfilesBackupArchive, ProfilesDocumentsExport,
-    SetActiveProfileArgs, SetProfileNotesRootArgs, ProfilesAdapter, UpdateAppConfigArgs,
+    DeleteProfileArgs, NotesProfilesSnapshot, ProfilesAdapter, ProfilesBackupArchive,
+    ProfilesDocumentsExport, SetActiveProfileArgs, SetProfileNotesRootArgs, UpdateAppConfigArgs,
     UpdateProfileArgs, UpdateProfileSettingsArgs,
 };
 
 fn profiles_use_cases(app: tauri::AppHandle) -> Result<ProfilesUseCases<ProfilesAdapter>, String> {
-    Ok(ProfilesUseCases::new(ProfilesAdapter::new(crate::app_env(&app)?)))
+    Ok(ProfilesUseCases::new(ProfilesAdapter::new(crate::app_env(
+        &app,
+    )?)))
 }
 
 #[tauri::command]

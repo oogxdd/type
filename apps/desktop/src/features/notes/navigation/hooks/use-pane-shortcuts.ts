@@ -10,6 +10,7 @@ type UsePaneShortcutsArgs = {
   appMode: AppMode;
   sidebarCollapsed: boolean;
   setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
+  moveSelectedNotesToTrash: () => void;
   deleteSelectedNotes: () => void;
   lockAppNow: () => Promise<void>;
   foldersPanelRef: React.RefObject<HTMLDivElement | null>;
@@ -20,13 +21,15 @@ type UsePaneShortcutsArgs = {
 /**
  * Desktop global keyboard shortcuts and pane focus management:
  * cmd/ctrl + T (toggle sidebar), W (toggle navigation/editor), K/J (cycle all panes),
- * N (new note), Backspace (delete), +/-/0 (editor font size), shift+L (lock).
+ * N (new note), Backspace (move to trash), shift+Backspace (delete), +/-/0
+ * (editor font size), shift+L (lock).
  * Tracks the last-focused left pane so toggling the sidebar can restore it.
  */
 export function usePaneShortcuts({
   appMode,
   sidebarCollapsed,
   setSidebarCollapsed,
+  moveSelectedNotesToTrash,
   deleteSelectedNotes,
   lockAppNow,
   foldersPanelRef,
@@ -142,7 +145,10 @@ export function usePaneShortcuts({
         return;
       }
       if (code === "Backspace") {
-        if (appMode === "notes") deleteSelectedNotes();
+        if (appMode === "notes") {
+          if (event.shiftKey) deleteSelectedNotes();
+          else moveSelectedNotesToTrash();
+        }
         return;
       }
       if (code === "KeyT") {
@@ -208,6 +214,7 @@ export function usePaneShortcuts({
     appMode,
     createNewNote,
     deleteSelectedNotes,
+    moveSelectedNotesToTrash,
     decreaseEditorFontSize,
     foldersPanelRef,
     increaseEditorFontSize,

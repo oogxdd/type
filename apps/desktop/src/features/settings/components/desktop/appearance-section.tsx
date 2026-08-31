@@ -1,5 +1,19 @@
 import { useShallow } from "zustand/react/shallow";
 
+import charcoalIcon from "@/assets/app-icons/charcoal.png";
+import forestIcon from "@/assets/app-icons/forest.png";
+import garnetIcon from "@/assets/app-icons/garnet.png";
+import glassIcon from "@/assets/app-icons/glass.png";
+import glassXlIcon from "@/assets/app-icons/glass-xl.png";
+import iceIcon from "@/assets/app-icons/ice.png";
+import paperIcon from "@/assets/app-icons/paper.png";
+import steelIcon from "@/assets/app-icons/steel.png";
+import stoneIcon from "@/assets/app-icons/stone.png";
+import stoneXlIcon from "@/assets/app-icons/stone-xl.png";
+import {
+  type AppIconId,
+  useAppIcon,
+} from "@/app/state/app-icon-store";
 import {
   DESIGN_FONT_OPTIONS,
   type DesignColorId,
@@ -10,15 +24,34 @@ import {
   MAX_EDITOR_FONT_SIZE,
   MIN_EDITOR_FONT_SIZE,
 } from "@/shared/constants";
+import { cn } from "@/shared/lib/utils";
 import type { NotesListMode, ThemeMode } from "@typenotes/shared/types";
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
 import {
   SettingsCard,
+  SettingsErrorText,
   SettingsField,
   SettingsSection,
   SettingsSelect,
 } from "../settings-ui";
+
+const APP_ICON_OPTIONS: Array<{
+  id: AppIconId;
+  label: string;
+  src: string;
+}> = [
+  { id: "stone", label: "Stone", src: stoneIcon },
+  { id: "stone-xl", label: "Stone — Large", src: stoneXlIcon },
+  { id: "glass", label: "Glass", src: glassIcon },
+  { id: "glass-xl", label: "Glass — Large", src: glassXlIcon },
+  { id: "paper", label: "Paper", src: paperIcon },
+  { id: "forest", label: "Forest", src: forestIcon },
+  { id: "garnet", label: "Garnet", src: garnetIcon },
+  { id: "ice", label: "Ice", src: iceIcon },
+  { id: "charcoal", label: "Charcoal", src: charcoalIcon },
+  { id: "steel", label: "Steel", src: steelIcon },
+];
 
 const COLOR_FIELDS: Array<{ id: DesignColorId; label: string }> = [
   { id: "background", label: "Background" },
@@ -29,6 +62,19 @@ const COLOR_FIELDS: Array<{ id: DesignColorId; label: string }> = [
 ];
 
 export function SettingsAppearanceSection() {
+  const {
+    appIcon,
+    applyingIcon,
+    appIconError,
+    setAppIcon,
+  } = useAppIcon(
+    useShallow((state) => ({
+      appIcon: state.appIcon,
+      applyingIcon: state.applyingIcon,
+      appIconError: state.appIconError,
+      setAppIcon: state.setAppIcon,
+    }))
+  );
   const {
     theme,
     setTheme,
@@ -79,6 +125,53 @@ export function SettingsAppearanceSection() {
             <option value="light">Light</option>
           </SettingsSelect>
         </SettingsField>
+      </SettingsCard>
+
+      <SettingsCard
+        title="App icon"
+        description="Choose the icon shown in the macOS Dock and app switcher. This preference stays on this device."
+      >
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {APP_ICON_OPTIONS.map((option) => {
+            const selected = option.id === appIcon;
+            const applying = option.id === applyingIcon;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                aria-pressed={selected}
+                disabled={applyingIcon !== null}
+                className={cn(
+                  "group grid gap-2 rounded-lg border bg-background/40 p-2 text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-wait disabled:opacity-70",
+                  selected
+                    ? "border-foreground/50 ring-1 ring-foreground/20"
+                    : "border-border/60"
+                )}
+                onClick={() => {
+                  void setAppIcon(option.id).catch(() => {});
+                }}
+              >
+                <img
+                  src={option.src}
+                  alt=""
+                  className="aspect-square w-full select-none object-contain"
+                  draggable={false}
+                />
+                <span className="flex items-center justify-between gap-2 px-1 text-xs font-medium text-foreground">
+                  {option.label}
+                  {applying ? (
+                    <span className="text-muted-foreground">Applying…</span>
+                  ) : selected ? (
+                    <span className="text-muted-foreground">Selected</span>
+                  ) : null}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {appIconError ? (
+          <SettingsErrorText>{appIconError}</SettingsErrorText>
+        ) : null}
       </SettingsCard>
 
       <SettingsCard

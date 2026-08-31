@@ -1,3 +1,4 @@
+mod app_icon;
 mod git_sync;
 mod handwriting;
 mod import;
@@ -64,6 +65,7 @@ pub(super) fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            app_icon::set_app_icon,
             security::get_security_state,
             security::enable_security,
             security::lock_security,

@@ -163,6 +163,7 @@ export function DesktopAppShell({
   const {
     activeNavigationTab,
     customFoldersTreeData,
+    moveSelectedNotesToTrashByShortcut,
     deleteSelectedNotesByShortcut,
     openFeedTab,
     openFoldersTab,
@@ -194,6 +195,7 @@ export function DesktopAppShell({
       appMode,
       sidebarCollapsed,
       setSidebarCollapsed,
+      moveSelectedNotesToTrash: moveSelectedNotesToTrashByShortcut,
       deleteSelectedNotes: deleteSelectedNotesByShortcut,
       // The lock shortcut is optional. When security is disabled, keep the
       // command surface stable but make it a no-op.

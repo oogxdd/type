@@ -4,7 +4,9 @@ use type_core::{
 };
 
 fn import_use_cases(app: tauri::AppHandle) -> Result<ImportUseCases<ImportAdapter>, String> {
-    Ok(ImportUseCases::new(ImportAdapter::new(crate::app_env(&app)?)))
+    Ok(ImportUseCases::new(ImportAdapter::new(crate::app_env(
+        &app,
+    )?)))
 }
 
 #[tauri::command]

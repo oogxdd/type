@@ -17,6 +17,7 @@ type UseKeyboardNavigationArgs = {
   appMode: AppMode;
   sidebarCollapsed: boolean;
   setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
+  moveSelectedNotesToTrash: () => void;
   deleteSelectedNotes: () => void;
   lockAppNow: () => Promise<void>;
   activeNavigationTab: "feed" | "folders";
@@ -33,6 +34,7 @@ export function useKeyboardNavigation({
   appMode,
   sidebarCollapsed,
   setSidebarCollapsed,
+  moveSelectedNotesToTrash,
   deleteSelectedNotes,
   lockAppNow,
   activeNavigationTab,
@@ -85,6 +87,7 @@ export function useKeyboardNavigation({
     appMode,
     sidebarCollapsed,
     setSidebarCollapsed,
+    moveSelectedNotesToTrash,
     deleteSelectedNotes,
     lockAppNow,
     foldersPanelRef,

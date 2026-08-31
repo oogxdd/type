@@ -8,8 +8,12 @@ const emitTreeInvalidated = () => {
   window.dispatchEvent(new CustomEvent("notes-tree-invalidated"));
 };
 
-const emitNotePreviewsInvalidated = () => {
-  window.dispatchEvent(new CustomEvent("note-previews-invalidated"));
+const emitNotePreviewsInvalidated = (notePath: string) => {
+  window.dispatchEvent(
+    new CustomEvent<string>("note-previews-invalidated", {
+      detail: notePath,
+    })
+  );
 };
 
 export function useNoteEditor(
@@ -46,7 +50,7 @@ export function useNoteEditor(
         await writeNote(targetNote, content);
         // Preview refresh is intentionally asynchronous: typing and saving do
         // not wait for the navigation title to be recomputed.
-        emitNotePreviewsInvalidated();
+        emitNotePreviewsInvalidated(targetNote);
         if (activeNoteRef.current === targetNote && noteContentRef.current === content) {
           setNoteDirty(false);
           noteDirtyRef.current = false;

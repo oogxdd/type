@@ -49,9 +49,9 @@ export function AppSidebar({
         className={cn("app-sidebar-shell pane tree-pane nav-pane h-full w-full border-r-0", className)}
         {...props}
       >
-        <SidebarHeader className="app-sidebar-header">
-          <SidebarMenu>
-            <SidebarMenuItem className="flex items-center gap-2">
+        <SidebarHeader className="app-sidebar-header" data-tauri-drag-region>
+          <SidebarMenu data-tauri-drag-region>
+            <SidebarMenuItem className="flex items-center gap-2" data-tauri-drag-region>
               <SidebarMenuButton onClick={onNewNoteClick}>
                 <CirclePlus />
                 <span>New note</span>

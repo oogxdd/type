@@ -1,10 +1,12 @@
 use type_core::{
-    application::security::SecurityUseCases, EnableSecurityArgs, SecurityState,
-    SecurityUnlockResult, SetSecurityPreferencesArgs, SecurityAdapter, UnlockSecurityArgs,
+    application::security::SecurityUseCases, EnableSecurityArgs, SecurityAdapter, SecurityState,
+    SecurityUnlockResult, SetSecurityPreferencesArgs, UnlockSecurityArgs,
 };
 
 fn security_use_cases(app: tauri::AppHandle) -> Result<SecurityUseCases<SecurityAdapter>, String> {
-    Ok(SecurityUseCases::new(SecurityAdapter::new(crate::app_env(&app)?)))
+    Ok(SecurityUseCases::new(SecurityAdapter::new(crate::app_env(
+        &app,
+    )?)))
 }
 
 #[tauri::command]

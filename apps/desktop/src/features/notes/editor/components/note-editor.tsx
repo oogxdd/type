@@ -10,6 +10,7 @@ import {
   appendRawLensBackmatterBlock,
   splitLensBackmatterBlock,
 } from "@typenotes/shared/lens-backmatter";
+import { NOTE_EDITOR_ENTER_INSERT_EVENT } from "../lib/editor-events";
 import { htmlToMarkdown, markdownToHtml } from "../lib/markdown-editor";
 import { useAppearance } from "@/app/state/appearance-store";
 
@@ -33,7 +34,7 @@ const VIM_JUMP_LINES = 10;
 const clampDocumentPosition = (view: EditorView, position: number) =>
   Math.max(1, Math.min(view.state.doc.content.size, position));
 
-const getEmptyParagraphVerticalPosition = (
+const getAdjacentTextblockVerticalPosition = (
   view: EditorView,
   position: number,
   direction: -1 | 1
@@ -48,17 +49,20 @@ const getEmptyParagraphVerticalPosition = (
       view.state.doc.resolve(boundary),
       direction
     );
-
-    // Coordinate-based movement can skip an empty paragraph because it has no
-    // glyph to hit-test. Use the document structure when either side of the
-    // move is empty, while retaining visual-line movement for normal/wrapped
-    // text.
-    if (
-      resolved.parent.content.size === 0 ||
-      adjacent.$head.parent.content.size === 0
-    ) {
-      return adjacent.head;
+    if (resolved.sameParent(adjacent.$head)) {
+      return null;
     }
+
+    // Once the cursor is at the first/last visual line of a text block, move
+    // through the document structure. Hit-testing coordinates at a paragraph
+    // boundary is asymmetric in ProseMirror: moving down usually resolves to
+    // the next block, while moving up can resolve back into the current one.
+    // The parent offset retains Vim's desired column and naturally becomes 0
+    // for an empty paragraph.
+    return (
+      adjacent.$head.start() +
+      Math.min(resolved.parentOffset, adjacent.$head.parent.content.size)
+    );
   } catch {
     // Fall through to geometry-based movement at unusual nested boundaries.
   }
@@ -152,6 +156,7 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
   const verticalGoalLeftRef = useRef<number | null>(null);
   const isVerticalMotionRef = useRef(false);
   const lastDocumentKeyRef = useRef<string | null>(null);
+  const pendingInsertDocumentKeyRef = useRef<string | null>(null);
   const isSyncing = useRef(false);
   const latestMarkdown = useRef(markdown);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -252,9 +257,9 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
           verticalGoalLeftRef.current ?? currentCoords.left + 1;
         verticalGoalLeftRef.current = goalLeft;
         isVerticalMotionRef.current = true;
-        const emptyParagraphTarget =
+        const adjacentTextblockTarget =
           lineCount === 1
-            ? getEmptyParagraphVerticalPosition(
+            ? getAdjacentTextblockVerticalPosition(
                 view,
                 view.state.selection.head,
                 direction
@@ -262,7 +267,7 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
             : null;
         moveVimSelection(
           view,
-          emptyParagraphTarget ??
+          adjacentTextblockTarget ??
             getVerticalPosition(
               view,
               view.state.selection.head,
@@ -427,19 +432,43 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
   }, [editor, markdown]);
 
   useEffect(() => {
+    const handleInsertRequest = (event: Event) => {
+      const notePath = (event as CustomEvent<string>).detail;
+      if (notePath) {
+        pendingInsertDocumentKeyRef.current = notePath;
+      }
+    };
+    window.addEventListener(NOTE_EDITOR_ENTER_INSERT_EVENT, handleInsertRequest);
+    return () =>
+      window.removeEventListener(
+        NOTE_EDITOR_ENTER_INSERT_EVENT,
+        handleInsertRequest
+      );
+  }, []);
+
+  useEffect(() => {
     if (!editor || !documentKey || documentKey === lastDocumentKeyRef.current) {
       return;
     }
     lastDocumentKeyRef.current = documentKey;
+    const shouldEnterInsertMode =
+      pendingInsertDocumentKeyRef.current === documentKey;
+    if (shouldEnterInsertMode) {
+      pendingInsertDocumentKeyRef.current = null;
+    }
 
     // Promoting a focused draft to a persisted note is not navigation: keep
     // the insertion point so background note creation never interrupts typing.
-    if (editor.view.hasFocus() && vimModeRef.current === "insert") {
+    if (
+      !shouldEnterInsertMode &&
+      editor.view.hasFocus() &&
+      vimModeRef.current === "insert"
+    ) {
       return;
     }
 
     verticalGoalLeftRef.current = null;
-    setVimMode("normal");
+    setVimMode(shouldEnterInsertMode ? "insert" : "normal");
     editor.view.dispatch(
       editor.view.state.tr
         .setSelection(TextSelection.atStart(editor.view.state.doc))
@@ -449,7 +478,13 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
       scrollRef.current.scrollTop = 0;
       scrollRef.current.scrollLeft = 0;
     }
-    requestAnimationFrame(() => updateVimCursor(editor.view));
+    requestAnimationFrame(() => {
+      if (shouldEnterInsertMode) {
+        editor.commands.focus("start");
+      } else {
+        updateVimCursor(editor.view);
+      }
+    });
   }, [documentKey, editor, setVimMode, updateVimCursor]);
 
   useEffect(() => {

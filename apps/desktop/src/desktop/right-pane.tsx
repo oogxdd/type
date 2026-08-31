@@ -83,9 +83,9 @@ export function DesktopRightPane({
             </Suspense>
           ) : (
             <div className="editor-single">
-              <div className="editor-top-row">
+              <div className="editor-top-row" data-tauri-drag-region>
                 {canOpenLens ? (
-                  <div className="editor-lens-menu-area">
+                  <div className="editor-lens-menu-area" data-tauri-drag-region>
                     <DropdownMenu open={isLensMenuOpen} onOpenChange={setIsLensMenuOpen}>
                       <DropdownMenuTrigger asChild>
                         <button

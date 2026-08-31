@@ -13,6 +13,7 @@ import {
 } from "@typenotes/shared/constants";
 import { confirmAction, focusNoScroll } from "@/shared/lib/dom";
 import { getNoteParentPath } from "@typenotes/shared/notes";
+import { requestNoteEditorInsertMode } from "@/features/notes/editor/lib/editor-events";
 import { applyFolderRenameToSelection, collectNotesForFlattening } from "../model/notes-tree-model";
 import { findNode } from "@/features/notes/navigation/model/tree-ops";
 import { findPostDeletionNavigationTarget } from "../model/visible-navigation";
@@ -105,6 +106,9 @@ export function useNotesTreeActions({
       // sync selection, and hand focus to the editor in one pass.
       selectNote(path, folderPath);
       clearDraft();
+      if (initialContent.length === 0) {
+        requestNoteEditorInsertMode(path);
+      }
 
       requestAnimationFrame(() => {
         const editorElement =

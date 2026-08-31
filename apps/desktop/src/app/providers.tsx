@@ -2,6 +2,7 @@ import { useRef, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { AppearanceProvider } from "@/app/state/appearance-store";
+import { AppIconProvider } from "@/app/state/app-icon-store";
 import { SelectionProvider, useSelection } from "@/app/state/selection-store";
 import { EditorProvider, useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { HandwritingProvider } from "@/features/handwriting/hooks/handwriting-context";
@@ -94,13 +95,15 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <AppearanceProvider>
-      <SecurityProvider>
-        <AppSecurityGate>
-          <UnlockedAppProviders flushSaveRef={flushSaveRef}>
-            {children}
-          </UnlockedAppProviders>
-        </AppSecurityGate>
-      </SecurityProvider>
+      <AppIconProvider>
+        <SecurityProvider>
+          <AppSecurityGate>
+            <UnlockedAppProviders flushSaveRef={flushSaveRef}>
+              {children}
+            </UnlockedAppProviders>
+          </AppSecurityGate>
+        </SecurityProvider>
+      </AppIconProvider>
     </AppearanceProvider>
   );
 }

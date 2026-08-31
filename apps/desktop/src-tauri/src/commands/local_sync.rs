@@ -1,10 +1,14 @@
 use type_core::{
     application::local_sync::LocalSyncUseCases, ensure_security_unlocked_for_app, DiscoveredServer,
-    LocalSyncServerStatus, LocalSyncAdapter,
+    LocalSyncAdapter, LocalSyncServerStatus,
 };
 
-fn local_sync_use_cases(app: tauri::AppHandle) -> Result<LocalSyncUseCases<LocalSyncAdapter>, String> {
-    Ok(LocalSyncUseCases::new(LocalSyncAdapter::new(crate::app_env(&app)?)))
+fn local_sync_use_cases(
+    app: tauri::AppHandle,
+) -> Result<LocalSyncUseCases<LocalSyncAdapter>, String> {
+    Ok(LocalSyncUseCases::new(LocalSyncAdapter::new(
+        crate::app_env(&app)?,
+    )))
 }
 
 #[tauri::command]
