@@ -6,12 +6,14 @@ import {
   DEFAULT_APPEARANCE,
   DEFAULT_FONT_SIZE,
   deriveTheme,
+  FONT_FAMILIES,
   isDarkColor,
   MAX_FONT_SIZE,
   MIN_FONT_SIZE,
   mix,
   normalizeAppearance,
   readableOn,
+  resolveFontFamily,
   TEXT_COLORS,
   clampFontSize,
 } from "./appearance";
@@ -118,6 +120,7 @@ describe("deriveTheme", () => {
     expect(theme.colors.accent).toBe("#2563eb");
     expect(theme.fontSize).toBe(17);
     expect(theme.lineHeight).toBe(26);
+    expect(theme.fontFamily).toBeUndefined();
   });
 
   it("scales the line height with the font size", () => {
@@ -133,9 +136,44 @@ describe("deriveTheme", () => {
   });
 });
 
+describe("font families", () => {
+  it("follows the platform for System", () => {
+    expect(resolveFontFamily("system", "ios")).toBeUndefined();
+    expect(resolveFontFamily("system", "android")).toBeUndefined();
+  });
+
+  it("uses native family names for each platform", () => {
+    expect(resolveFontFamily("serif", "ios")).toBe("Georgia");
+    expect(resolveFontFamily("serif", "android")).toBe("serif");
+    expect(resolveFontFamily("monospace", "ios")).toBe("Menlo");
+  });
+
+  it("derives the selected family into the theme", () => {
+    const appearance = { ...DEFAULT_APPEARANCE, fontFamily: "rounded" as const };
+    expect(deriveTheme(appearance, false, "ios").fontFamily).toBe("ui-rounded");
+    expect(deriveTheme(appearance, false, "android").fontFamily).toBe(
+      "sans-serif-medium"
+    );
+  });
+
+  it("ships a concise set of choices", () => {
+    expect(FONT_FAMILIES.map((option) => option.id)).toEqual([
+      "system",
+      "serif",
+      "rounded",
+      "monospace",
+    ]);
+  });
+});
+
 describe("normalizeAppearance", () => {
   it("round-trips a valid stored value", () => {
-    const stored = { background: "paper", textColor: "sepia", fontSize: 19 };
+    const stored = {
+      background: "paper",
+      textColor: "sepia",
+      fontSize: 19,
+      fontFamily: "serif",
+    };
     expect(normalizeAppearance(stored)).toEqual(stored);
   });
 

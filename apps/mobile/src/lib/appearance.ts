@@ -28,6 +28,8 @@ export type Theme = {
   /** Body text size for the capture page and the note editor. */
   fontSize: number;
   lineHeight: number;
+  /** Native font family for note content; undefined follows the platform. */
+  fontFamily: string | undefined;
 };
 
 export type BackgroundId =
@@ -50,10 +52,15 @@ export type TextColorId =
   | "plum"
   | "paper";
 
+export type FontFamilyId = "system" | "serif" | "rounded" | "monospace";
+
+export type AppearancePlatform = "ios" | "android" | "web";
+
 export type Appearance = {
   background: BackgroundId;
   textColor: TextColorId;
   fontSize: number;
+  fontFamily: FontFamilyId;
 };
 
 /** A palette entry; `color: null` means "follow the system light/dark theme". */
@@ -71,7 +78,34 @@ export const DEFAULT_APPEARANCE: Appearance = {
   background: "system",
   textColor: "system",
   fontSize: DEFAULT_FONT_SIZE,
+  fontFamily: "system",
 };
+
+export const FONT_FAMILIES: AppearanceOption<FontFamilyId>[] = [
+  { id: "system", label: "System", color: null },
+  { id: "serif", label: "Serif", color: null },
+  { id: "rounded", label: "Rounded", color: null },
+  { id: "monospace", label: "Monospace", color: null },
+];
+
+const PLATFORM_FONT_FAMILIES: Record<
+  Exclude<FontFamilyId, "system">,
+  Record<AppearancePlatform, string>
+> = {
+  serif: { ios: "Georgia", android: "serif", web: "serif" },
+  rounded: {
+    ios: "ui-rounded",
+    android: "sans-serif-medium",
+    web: "system-ui",
+  },
+  monospace: { ios: "Menlo", android: "monospace", web: "monospace" },
+};
+
+export const resolveFontFamily = (
+  id: FontFamilyId,
+  platform: AppearancePlatform
+): string | undefined =>
+  id === "system" ? undefined : PLATFORM_FONT_FAMILIES[id][platform];
 
 export const BACKGROUNDS: AppearanceOption<BackgroundId>[] = [
   { id: "system", label: "System", color: null },
@@ -233,9 +267,13 @@ export const backgroundLabel = (id: BackgroundId): string =>
 export const textColorLabel = (id: TextColorId): string =>
   TEXT_COLORS.find((option) => option.id === id)?.label ?? "System";
 
+export const fontFamilyLabel = (id: FontFamilyId): string =>
+  FONT_FAMILIES.find((option) => option.id === id)?.label ?? "System";
+
 export const deriveTheme = (
   appearance: Appearance,
-  systemDark: boolean
+  systemDark: boolean,
+  platform: AppearancePlatform = "ios"
 ): Theme => {
   const background = resolveBackground(appearance.background, systemDark);
   const dark = isDarkColor(background);
@@ -261,6 +299,7 @@ export const deriveTheme = (
     },
     fontSize,
     lineHeight: Math.round(fontSize * 1.53),
+    fontFamily: resolveFontFamily(appearance.fontFamily, platform),
   };
 };
 
@@ -282,5 +321,8 @@ export const normalizeAppearance = (raw: unknown): Appearance => {
       typeof value.fontSize === "number"
         ? clampFontSize(value.fontSize)
         : DEFAULT_APPEARANCE.fontSize,
+    fontFamily: FONT_FAMILIES.some((option) => option.id === value.fontFamily)
+      ? (value.fontFamily as FontFamilyId)
+      : DEFAULT_APPEARANCE.fontFamily,
   };
 };

@@ -17,6 +17,7 @@ import {
 import {
   backgroundLabel,
   BACKGROUNDS,
+  FONT_FAMILIES,
   MAX_FONT_SIZE,
   MIN_FONT_SIZE,
   resolveBackground,
@@ -224,6 +225,7 @@ export const SettingsAppearanceScreen = () => {
   const setBackground = useAppearanceStore((s) => s.setBackground);
   const setTextColor = useAppearanceStore((s) => s.setTextColor);
   const setFontSize = useAppearanceStore((s) => s.setFontSize);
+  const setFontFamily = useAppearanceStore((s) => s.setFontFamily);
   const reset = useAppearanceStore((s) => s.reset);
 
   // "System" swatches are resolved to what the phone is showing right now, and
@@ -279,6 +281,20 @@ export const SettingsAppearanceScreen = () => {
         />
       </SettingsGroup>
 
+      <SettingsGroup
+        header="Font"
+        footer="The font applies to the blank capture page and note editor."
+      >
+        {FONT_FAMILIES.map((option) => (
+          <SettingsRow
+            key={option.id}
+            title={option.label}
+            checked={appearance.fontFamily === option.id}
+            onPress={() => setFontFamily(option.id)}
+          />
+        ))}
+      </SettingsGroup>
+
       <View
         style={[
           styles.preview,
@@ -293,6 +309,7 @@ export const SettingsAppearanceScreen = () => {
             color: theme.colors.text,
             fontSize: theme.fontSize,
             lineHeight: theme.lineHeight,
+            fontFamily: theme.fontFamily,
           }}
         >
           {PREVIEW_TEXT}
@@ -301,6 +318,24 @@ export const SettingsAppearanceScreen = () => {
 
       <SettingsGroup footer="These settings are stored on this phone only — they are never synced to your other devices.">
         <SettingsActionRow title="Reset to Defaults" onPress={reset} />
+      </SettingsGroup>
+
+      <SettingsGroup
+        header="Debug"
+        footer="Temporary development output. Long-press the JSON to select and copy it."
+      >
+        <Text
+          selectable
+          style={[
+            styles.debugJson,
+            {
+              color: theme.colors.text,
+              fontFamily: "monospace",
+            },
+          ]}
+        >
+          {JSON.stringify(appearance, null, 2)}
+        </Text>
       </SettingsGroup>
     </ScrollView>
   );
@@ -379,5 +414,11 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     padding: 16,
     marginBottom: 28,
+  },
+  debugJson: {
+    fontSize: 12,
+    lineHeight: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
 });
