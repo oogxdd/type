@@ -236,7 +236,7 @@ export const DictationButton = ({
     if (stopPromise.current) {
       return stopPromise.current;
     }
-    const operation = performStopAndSave(interrupted).finally(() => {
+    const operation: Promise<void> = performStopAndSave(interrupted).finally(() => {
       if (stopPromise.current === operation) {
         stopPromise.current = null;
       }
