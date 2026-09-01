@@ -40,6 +40,7 @@ import {
 } from "../lib/recording-activity";
 import { elapsedSeconds, formatRecordingTimer } from "../lib/recording-timer";
 import { useNotesStore } from "../state/notes-store";
+import { useRecordingSessionStore } from "../state/recording-session-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
@@ -156,6 +157,10 @@ export const DictationButton = ({
     });
     await recorder.prepareToRecordAsync();
     recorder.record();
+    // Set this synchronously after the native recorder starts. App.tsx reads
+    // it during the iOS background transition and keeps Capture mounted until
+    // this component has stopped and safely saved the clip.
+    useRecordingSessionStore.getState().setActive(true);
     recordingStartedAt.current = Date.now();
     setNowMs(Date.now());
     // Mirror the session onto the Lock Screen / Dynamic Island so it stays
@@ -211,6 +216,9 @@ export const DictationButton = ({
         playsInSilentMode: true,
         shouldPlayInBackground: false,
       }).catch(() => {});
+      // Last: releasing this flag may let App.tsx apply a deferred app lock,
+      // which unmounts this component.
+      useRecordingSessionStore.getState().setActive(false);
     }
   };
 
@@ -275,7 +283,7 @@ export const DictationButton = ({
   // stops and saves the clip instead of silently dropping it.
   useEffect(
     () => () => {
-      if (recordingRef.current) {
+      if (recordingRef.current || startPromise.current) {
         void stopAndSaveRef.current().catch(() => {});
       }
     },

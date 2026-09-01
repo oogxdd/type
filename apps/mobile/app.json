@@ -23,6 +23,9 @@
       "infoPlist": {
         "UIFileSharingEnabled": true,
         "LSSupportsOpeningDocumentsInPlace": true,
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "Type uses selected photos to create handwritten note attachments.",
         "NSPhotoLibraryAddUsageDescription": "Type can use photos you take as handwritten note attachments.",
