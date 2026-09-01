@@ -29,9 +29,10 @@ export const bootCore = async (): Promise<BootResult> => {
     setRawCore(coreModule);
   }
 
-  // The app's Documents directory is user-visible in the Files app
-  // (UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace), so working
-  // folders created under it can be browsed and backed up by the user.
+  // This is still an app-container directory. iOS may surface parts of it
+  // under "On My iPhone" when file sharing is enabled, but that is not a
+  // dependable backup contract; Settings uses native Files/SAF pickers to
+  // export explicit copies outside the container.
   const documents = FileSystem.documentDirectory
     ? uriToPath(FileSystem.documentDirectory)
     : "";

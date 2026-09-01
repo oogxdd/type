@@ -5,10 +5,13 @@
 
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import * as FileSystem from "expo-file-system/legacy";
 import { useState } from "react";
 import { ScrollView, StyleSheet, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import * as core from "@typenotes/mobile-core/core-api";
+import { getErrorMessage } from "@typenotes/shared/errors";
 import {
   effectiveTranscriptionMode,
   type TranscriptionMode,
@@ -23,8 +26,14 @@ import {
   resolveTextColor,
   TEXT_COLORS,
 } from "../lib/appearance";
+import {
+  copyWorkingFolderToFiles,
+  exportArchiveToFiles,
+} from "../lib/backup-export";
+import { backupFolderName } from "../lib/backup-naming";
 import type { RootStackParamList } from "../navigation";
 import { useAppearanceStore } from "../state/appearance-store";
+import { useBackgroundOperationStore } from "../state/background-operation-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useTheme } from "../theme";
 import {
@@ -139,7 +148,71 @@ export const SettingsWorkingFoldersScreen = () => {
   const profile = activeProfile(snapshot);
 
   const [newFolderName, setNewFolderName] = useState("");
-  const [notesRoot, setNotesRoot] = useState(profile?.notes_root ?? "");
+  const [backupBusy, setBackupBusy] = useState<"archive" | "folder" | null>(null);
+  const [backupStatus, setBackupStatus] = useState<{
+    kind: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  const saveArchive = async () => {
+    useBackgroundOperationStore.getState().begin();
+    setBackupBusy("archive");
+    setBackupStatus(null);
+    let archivePath: string | null = null;
+    try {
+      const archive = await core.createProfilesBackupZip();
+      archivePath = archive.archive_path;
+      const result = await exportArchiveToFiles(
+        archive.archive_path,
+        archive.archive_name
+      );
+      setBackupStatus(
+        result.cancelled
+          ? { kind: "success", text: "Backup canceled — nothing was changed." }
+          : {
+              kind: "success",
+              text: `ZIP saved: ${archive.file_count} files from ${archive.profile_count} working folder${archive.profile_count === 1 ? "" : "s"}.`,
+            }
+      );
+    } catch (error) {
+      setBackupStatus({ kind: "error", text: getErrorMessage(error) });
+    } finally {
+      if (archivePath) {
+        const archiveUri = archivePath.startsWith("file://")
+          ? archivePath
+          : `file://${archivePath}`;
+        await FileSystem.deleteAsync(archiveUri, { idempotent: true }).catch(() => {});
+      }
+      setBackupBusy(null);
+      useBackgroundOperationStore.getState().end();
+    }
+  };
+
+  const copyFolder = async () => {
+    if (!profile) return;
+    useBackgroundOperationStore.getState().begin();
+    setBackupBusy("folder");
+    setBackupStatus(null);
+    try {
+      const result = await copyWorkingFolderToFiles(
+        profile.notes_root,
+        backupFolderName(profile.name)
+      );
+      setBackupStatus(
+        result.cancelled
+          ? { kind: "success", text: "Backup canceled — nothing was changed." }
+          : {
+              kind: "success",
+              text: `Folder copied: ${result.file_count ?? 0} files.`,
+            }
+      );
+    } catch (error) {
+      setBackupStatus({ kind: "error", text: getErrorMessage(error) });
+    } finally {
+      setBackupBusy(null);
+      useBackgroundOperationStore.getState().end();
+    }
+  };
 
   return (
     <ScrollView
@@ -148,7 +221,7 @@ export const SettingsWorkingFoldersScreen = () => {
     >
       <SettingsGroup
         header="Working folders"
-        footer="Each working folder is a directory of markdown files with its own settings (git remote, transcription mode). The app's Documents directory is visible in the Files app, so your notes are always reachable outside the app."
+        footer="Each working folder is a directory of Markdown files with its own settings. On mobile it currently lives inside Type's private app container; use Backups below to put a safe copy in Files."
       >
         {snapshot?.profiles.map((p) => {
           const active = p.id === snapshot.active_profile_id;
@@ -156,7 +229,7 @@ export const SettingsWorkingFoldersScreen = () => {
             <SettingsRow
               key={p.id}
               title={p.name}
-              subtitle={p.notes_root}
+              subtitle="App storage"
               checked={active}
               disabled={active}
               onPress={() => void store.switchWorkingFolder(p.id).catch(() => {})}
@@ -186,21 +259,47 @@ export const SettingsWorkingFoldersScreen = () => {
       {profile ? (
         <SettingsGroup
           header={`Folder location — ${profile.name}`}
-          footer="Existing content is moved to the new location."
+          footer="Choosing a Files folder as the live working folder is not available yet. The backup copy below is independent and will not move or change your live notes."
         >
-          <SettingsFieldRow
-            value={notesRoot}
-            onChangeText={setNotesRoot}
-            placeholder="Absolute path"
-          />
-          <SettingsActionRow
-            title="Move Folder"
-            disabled={!notesRoot.trim() || notesRoot === profile.notes_root}
-            onPress={() =>
-              void store.setNotesRoot(profile.id, notesRoot.trim()).catch(() => {})
-            }
-          />
+          <SettingsRow title="App storage" value="Default" />
         </SettingsGroup>
+      ) : null}
+
+      <SettingsGroup
+        header="Backups"
+        footer="Save a ZIP containing every working folder, or copy the active working folder as ordinary files. Both include hidden folder settings, recordings, attachments, and Git data. The live folder is never moved."
+      >
+        <SettingsActionRow
+          title={backupBusy === "archive" ? "Preparing ZIP…" : "Save All as ZIP to Files…"}
+          disabled={backupBusy !== null || store.demoMode}
+          onPress={() => void saveArchive()}
+        />
+        <SettingsActionRow
+          title={
+            backupBusy === "folder"
+              ? "Copying Folder…"
+              : `Copy ${profile?.name ?? "Active Folder"} to Files…`
+          }
+          disabled={backupBusy !== null || !profile || store.demoMode}
+          onPress={() => void copyFolder()}
+        />
+      </SettingsGroup>
+
+      {backupStatus ? (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={[
+            styles.backupStatus,
+            {
+              color:
+                backupStatus.kind === "error"
+                  ? theme.colors.danger
+                  : theme.colors.secondaryText,
+            },
+          ]}
+        >
+          {backupStatus.text}
+        </Text>
       ) : null}
 
       {store.error ? (
@@ -372,6 +471,7 @@ export const SettingsTranscriptionScreen = () => {
 const styles = StyleSheet.create({
   content: { padding: 16, paddingTop: 20 },
   error: { fontSize: 13, marginHorizontal: 16 },
+  backupStatus: { fontSize: 13, lineHeight: 18, marginHorizontal: 16, marginTop: -16, marginBottom: 28 },
   // Painted in the page background rather than the card surface: the sample
   // has to show the real editor colors, so only the hairline separates it.
   preview: {

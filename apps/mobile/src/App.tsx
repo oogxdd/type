@@ -28,6 +28,7 @@ import {
 } from "./screens/settings-screen";
 import { SyncScreen } from "./screens/sync-screen";
 import { useAppearanceStore } from "./state/appearance-store";
+import { useBackgroundOperationStore } from "./state/background-operation-store";
 import { useNotesStore } from "./state/notes-store";
 import { useRecordingSessionStore } from "./state/recording-session-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
@@ -225,6 +226,10 @@ export default function App() {
   useEffect(() => {
     let backgroundLockDeferred = false;
 
+    const protectedOperationActive = () =>
+      useRecordingSessionStore.getState().active ||
+      useBackgroundOperationStore.getState().count > 0;
+
     const lockIfEnabled = () => {
       const security = useSecurityStore.getState();
       if (
@@ -248,7 +253,7 @@ export default function App() {
         securityState?.encryption_enabled &&
         securityState.auto_lock_on_background
       ) {
-        if (useRecordingSessionStore.getState().active) {
+        if (protectedOperationActive()) {
           backgroundLockDeferred = true;
         } else {
           lockIfEnabled();
@@ -256,23 +261,24 @@ export default function App() {
       }
     });
 
-    const unsubscribeRecording = useRecordingSessionStore.subscribe(
-      (state, previous) => {
-        if (
-          previous.active &&
-          !state.active &&
-          backgroundLockDeferred &&
-          AppState.currentState !== "active"
-        ) {
-          backgroundLockDeferred = false;
-          lockIfEnabled();
-        }
+    const finishDeferredLock = () => {
+      if (
+        backgroundLockDeferred &&
+        !protectedOperationActive() &&
+        AppState.currentState !== "active"
+      ) {
+        backgroundLockDeferred = false;
+        lockIfEnabled();
       }
-    );
+    };
+    const unsubscribeRecording = useRecordingSessionStore.subscribe(finishDeferredLock);
+    const unsubscribeBackgroundOperation =
+      useBackgroundOperationStore.subscribe(finishDeferredLock);
 
     return () => {
       subscription.remove();
       unsubscribeRecording();
+      unsubscribeBackgroundOperation();
     };
   }, []);
 

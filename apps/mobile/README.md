@@ -43,11 +43,13 @@ npm run prebuild -w @typenotes/mobile    # expo prebuild → ios/ + android/
 npm run ios -w @typenotes/mobile         # or: npm run android -w @typenotes/mobile
 ```
 
-The iOS app's Documents directory is user-visible in the Files app
-(`UIFileSharingEnabled` + `LSSupportsOpeningDocumentsInPlace`), so working
-folders created under it can be browsed, backed up, and pointed at from
-other apps. True security-scoped external folders (iCloud Drive etc.) are a
-later step.
+Mobile working folders currently live inside Type's app container. iOS file
+sharing can expose an app Documents location in some configurations, but the
+app does not treat that as a dependable backup or external-folder contract.
+Use **Settings → Working Folders → Backups** to save a ZIP through the system
+file picker or recursively copy the active folder to Files (iOS) / a Storage
+Access Framework provider (Android). Choosing an external folder as the live
+working folder is a later step.
 
 ## Layout
 
@@ -62,6 +64,8 @@ src/
   lib/capture.ts          capture-page note lifecycle (pure, tested)
   lib/feed.ts             tree+previews → list rows (pure, tested)
   lib/folder-tree.ts      folder tree → flat expandable rows (pure, tested)
+  lib/backup-export.ts    native Files / SAF backup bridge
+  lib/backup-naming.ts    provider-safe timestamped backup folder names
   lib/capture-gesture.ts  swipe thresholds + decisions (pure, tested)
   state/                  zustand stores: notes (incl. move/delete/archive),
                           settings (working folders), sync, appearance
@@ -117,3 +121,17 @@ file under `Attachments/` and remains pending on mobile. Desktop scans pending
 handwriting notes after sync and dispatches them to the selected local or cloud
 OCR provider. See `docs/ATTACHMENT_RETENTION.md` before adding device cleanup:
 removing a tracked attachment directly would sync that deletion to desktop.
+
+## Backups
+
+The Rust core creates a complete ZIP containing every configured working
+folder. The mobile exporter then asks the system where to save it; the temporary
+archive in Type's container is deleted after the picker completes or is
+cancelled. The second action copies the active working folder as ordinary files.
+Both paths include hidden `.type` settings, recordings, attachments, and Git
+data, and neither changes the live folder.
+
+Large transfers run in the native module under `modules/backup-export`, not as
+base64 payloads on the JS bridge. Android uses `ACTION_CREATE_DOCUMENT` /
+`ACTION_OPEN_DOCUMENT_TREE`; iOS uses `UIDocumentPickerViewController` and a
+staged directory copy.
