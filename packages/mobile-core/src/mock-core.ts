@@ -182,6 +182,23 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
     notes_root: "/demo/default/notes",
   });
 
+  // Demo mode always reports a healthy, already-paired direct connection so the
+  // Sync screen's connection panel has something realistic to render.
+  const irohStatus = (remoteUrl: string) => ({
+    running: true,
+    local_port: 19418,
+    local_remote_url: remoteUrl.replace(
+      /^(ssh:\/\/(?:[^@/]+@)?)(?:\[[^\]]+\]|[^/:]+)(?::\d+)?\//i,
+      "$1127.0.0.1:19418/"
+    ),
+    endpoint_id: "demo-iroh-endpoint",
+    local_endpoint_id: "demo-phone-endpoint",
+    paired: true,
+    pair_error: null,
+    connection: "direct",
+    last_error: null,
+  });
+
   const profilesSnapshot = () =>
     JSON.stringify({
       active_profile_id: "default",
@@ -425,18 +442,17 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
     },
     startIrohSyncClient: async (argsJson) => {
       const args = JSON.parse(argsJson) as { remote_url: string };
-      return JSON.stringify({
-        running: true,
-        local_port: 19418,
-        local_remote_url: args.remote_url.replace(
-          /^(ssh:\/\/(?:[^@/]+@)?)(?:\[[^\]]+\]|[^/:]+)(?::\d+)?\//i,
-          "$1127.0.0.1:19418/"
-        ),
-        endpoint_id: "demo-iroh-endpoint",
-      });
+      return JSON.stringify(irohStatus(args.remote_url));
     },
+    irohClientStatus: async (remoteUrl) => JSON.stringify(irohStatus(remoteUrl)),
     archiveMobileAudioWithIroh: async () =>
-      JSON.stringify({ scanned: audio.size, uploaded: 0, already_archived: audio.size }),
+      JSON.stringify({
+        scanned: audio.size,
+        uploaded: 0,
+        already_archived: audio.size,
+        skipped: 0,
+        error: null,
+      }),
     setMobileAudioGitExclusion: async () => {},
 
     // ── Recordings ──

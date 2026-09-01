@@ -29,7 +29,9 @@ const statusForLog = (status: LocalSyncServerStatus): string =>
     status.host ?? "<none>"
   } branch=${status.branch ?? "<none>"} ssh=${redactRemoteForLog(status.ssh_url)} paired=${
     status.paired_devices.length
-  } iroh=${status.iroh_endpoint_id ?? "<none>"} error=${status.error ?? "<none>"}`;
+  } iroh=${status.iroh_endpoint_id ?? "<none>"} relay=${
+    status.iroh_relay ?? "<pending>"
+  } error=${status.error ?? "<none>"}`;
 
 export function LocalSyncServerCard() {
   const [status, setStatus] = useState<LocalSyncServerStatus | null>(null);
@@ -177,6 +179,15 @@ export function LocalSyncServerCard() {
                 <strong className="text-foreground">Point your phone's Camera at this</strong> to
                 pair once. The phone can sync without staying on the same Wi-Fi.
               </p>
+              {status?.iroh_ticket && !status.iroh_relay ? (
+                // The QR is usable the moment the server starts, but until a
+                // relay attaches it only carries this machine's own addresses.
+                // Say so rather than letting an off-network pairing quietly fail.
+                <p className="text-center text-xs text-muted-foreground">
+                  Still connecting to a relay — pairing works on this network now, and from
+                  anywhere within a few seconds. The code updates itself.
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -198,6 +209,16 @@ export function LocalSyncServerCard() {
             {status?.iroh_endpoint_id ? (
               <SettingsHelpText>
                 Iroh endpoint: <code>{status.iroh_endpoint_id}</code>
+              </SettingsHelpText>
+            ) : null}
+            {status?.iroh_endpoint_id ? (
+              <SettingsHelpText>
+                Relay:{" "}
+                {status.iroh_relay ? (
+                  <code>{status.iroh_relay}</code>
+                ) : (
+                  "connecting — this computer is reachable on its own network in the meantime"
+                )}
               </SettingsHelpText>
             ) : null}
             {status?.ssh_url ? (

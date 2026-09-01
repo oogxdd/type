@@ -1271,7 +1271,12 @@ fn parse_host_port(value: &str, default_port: u16) -> Option<TcpTarget> {
 }
 
 fn network_probe_error(host: &str, port: u16, error: Option<std::io::Error>) -> String {
-    let local_hint = if is_lan_host(host) || host.ends_with(".local") {
+    // A loopback sync remote is this device's own direct-sync proxy, not the
+    // computer. Telling the user to check their Wi-Fi here sends them looking
+    // in entirely the wrong place — the proxy simply is not running.
+    let local_hint = if is_loopback_host(host) {
+        " The direct-sync proxy is not running on this device. Open the Sync screen and connect again."
+    } else if is_lan_host(host) || host.ends_with(".local") {
         " Check that the desktop sync server is running, both devices are on the same Wi-Fi or hotspot, and Local Network access is allowed in iOS Settings."
     } else {
         " Check the network connection, remote URL, and credentials."
@@ -1293,6 +1298,15 @@ fn is_lan_host(host: &str) -> bool {
         Ok(IpAddr::V4(ip)) => ip.is_private() || ip.is_link_local() || ip.is_loopback(),
         Ok(IpAddr::V6(ip)) => ip.is_loopback() || ip.is_unicast_link_local(),
         Err(_) => false,
+    }
+}
+
+/// A loopback remote means the direct-sync proxy, never another machine. Note
+/// [`is_lan_host`] also matches loopback, so check this one first.
+fn is_loopback_host(host: &str) -> bool {
+    match host.parse::<IpAddr>() {
+        Ok(ip) => ip.is_loopback(),
+        Err(_) => host.eq_ignore_ascii_case("localhost"),
     }
 }
 
@@ -1662,6 +1676,18 @@ mod tests {
     fn lan_git_remotes_are_rejected_with_guidance() {
         let error = probe_remote_url("git://192.168.1.10/notes").unwrap_err();
         assert!(error.contains("scan the new QR code"), "got: {error}");
+    }
+
+    #[test]
+    fn a_loopback_remote_blames_the_proxy_not_the_wifi() {
+        // The phone's sync remote is its own direct-sync proxy on loopback.
+        // "Check you are on the same Wi-Fi" would be the wrong instruction.
+        let error = network_probe_error("127.0.0.1", 19_418, None);
+        assert!(error.contains("direct-sync proxy"), "got: {error}");
+        assert!(!error.contains("same Wi-Fi"), "got: {error}");
+
+        let lan = network_probe_error("192.168.1.10", 9418, None);
+        assert!(lan.contains("same Wi-Fi"), "got: {lan}");
     }
 
     #[test]

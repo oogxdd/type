@@ -39,10 +39,55 @@ the network path between a phone and a desktop.
   the phone's authenticated Iroh Endpoint ID into a desktop allowlist; audio
   offers from any other Endpoint ID are rejected before a blob is fetched.
   Iroh relays are transport only and do not store the notes repository.
+- One QR scan pairs both transports, and whichever half lands first rotates the
+  token out from under the other. Iroh authorization therefore shares the SSH
+  server's list of recently retired tokens (`consumed_pairing_tokens`, a
+  five-minute grace) rather than keeping a second store of its own. An empty
+  token is a *check*, not a pairing attempt: the phone sends one on every sync
+  so its Sync screen can report audio pairing long after the QR token is gone.
 
 The first version deliberately does not replace Git with `iroh-docs` or a new
 merge model. That keeps note conflicts, history, backup, and rollback behavior
 unchanged while making the transport testable independently.
+
+## Connection rules
+
+Three rules are load-bearing. Breaking any of them produces failures that look
+like network flakiness — they were the cause of "the desktop did not
+acknowledge Iroh pairing: connection lost" and of intermittently truncated
+syncs.
+
+1. **A handler must not return while the peer still needs the connection.**
+   iroh's `Router` drops the `Connection` the moment `ProtocolHandler::accept`
+   returns, and a dropped QUIC connection discards anything it has not had
+   acknowledged — `SendStream::finish` only marks the end of the stream, it does
+   not wait for delivery. So `serve_iroh_connection` loops on `accept_bi()`
+   until the peer closes, spawning a task per stream, rather than replying and
+   returning. iroh's own echo example makes the same point with
+   `connection.closed().await`.
+2. **The phone keeps one connection per computer.** Git tunnel streams, the
+   pairing check, and audio offers are all streams on it. Besides removing a
+   QUIC handshake per libgit2 connection, this means no reply can ever race a
+   teardown: the connection outlives every individual exchange.
+3. **The endpoint ticket is a snapshot; the endpoint id is not.** A ticket minted
+   at server start carries the addresses of that moment, and
+   `Endpoint::connect` only falls back to address lookup when the address it was
+   given has no relay URL — so a stale relay actively blocks discovery. The
+   desktop therefore recomputes its ticket on every status poll (the QR updates
+   itself), and the phone dials the ticket's addresses first and then retries
+   with the bare `EndpointId`, which `presets::N0` publishes to n0's pkarr/DNS.
+
+Waiting for a relay is never a precondition for hosting. It used to be: a slow
+first relay handshake produced a QR with no Iroh ticket at all, silently
+downgrading the phone to a LAN address that stopped working the moment it left
+the network. The server now returns as soon as its socket is bound and attaches
+the relay in the background.
+
+`crates/type-core/src/adapters/iroh_sync.rs` covers rules 1 and 2 with tests
+that run two endpoints in-process over loopback. They assert the invariant (one
+connection serves several streams) rather than delivery of a single reply —
+over loopback the racing close nearly always loses, so a delivery assertion
+would pass against the broken code.
 
 ## User experience under test
 
@@ -55,6 +100,16 @@ unchanged while making the transport testable independently.
 - Manual **Sync now** remains available and exposes errors; automatic attempts
   never block capture or editing. Manual sync uses the same pull → audio blob
   transfer → push path and retains visible object/byte progress.
+- **Audio pairing failing never fails a sync.** Only recordings need the Iroh
+  authorization; notes go through the SSH tunnel either way. A phone the desktop
+  has not authorized keeps carrying its audio inside Git — the pre-Iroh
+  behavior — rather than excluding it and uploading nothing. The phone reports
+  this in its Sync screen instead of turning it into a sync error.
+- The phone's **Direct connection** panel reports which computer it dials,
+  whether the last connection ran direct or through a relay, whether audio
+  transfer is paired, and the last transport failure. When the transport is what
+  broke, the phone shows that instead of libgit2's message about a loopback
+  port, which named the wrong problem entirely.
 - Capture and menu surfaces show `Saved locally`, `Waiting for computer`,
   `Syncing…`, or `Synced` without turning an offline Mac into an error dialog.
 - iOS and Android background execution is not promised. The reliable triggers

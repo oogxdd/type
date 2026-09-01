@@ -15,6 +15,15 @@ pub async fn start_iroh_sync_client(args_json: String) -> Result<String, CoreErr
     .await
 }
 
+/// What the phone knows about its direct connection right now: which computer
+/// it dials, whether that ran direct or through a relay, whether audio transfer
+/// is paired, and the last transport failure. Returns JSON `IrohClientStatus`,
+/// or `null` when no proxy has been started this session.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn iroh_client_status(remote_url: String) -> Result<String, CoreError> {
+    run_blocking(move || to_json(&type_core::iroh_client_status(&remote_url)?)).await
+}
+
 /// Upload local recording audio to the paired desktop over Iroh.
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn archive_mobile_audio_with_iroh() -> Result<String, CoreError> {

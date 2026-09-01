@@ -192,6 +192,24 @@ export const startIrohSyncClient = async (
 ): Promise<IrohClientStatus> =>
   parse(await getRawCore().startIrohSyncClient(JSON.stringify(args)));
 
+/**
+ * How the direct connection to the computer is doing right now, or null when
+ * no proxy has been started this session.
+ *
+ * Feature-detected: a native module generated before this export existed simply
+ * reports nothing, which the Sync screen renders as "not connected yet" rather
+ * than as an error.
+ */
+export const getIrohClientStatus = async (
+  remoteUrl: string
+): Promise<IrohClientStatus | null> => {
+  const core = getRawCore();
+  if (!core.irohClientStatus) {
+    return null;
+  }
+  return parse(await core.irohClientStatus(remoteUrl));
+};
+
 /** Copy local recording bytes to the paired desktop outside Git. */
 export const archiveMobileAudioWithIroh = async (): Promise<IrohAudioArchiveResult> =>
   parse(await getRawCore().archiveMobileAudioWithIroh());

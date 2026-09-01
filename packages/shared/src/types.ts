@@ -63,6 +63,8 @@ export type LocalSyncServerStatus = {
   host_key_sha256: string | null;
   iroh_ticket: string | null;
   iroh_endpoint_id: string | null;
+  /** Home relay this computer is reachable through; null while LAN-only. */
+  iroh_relay: string | null;
   paired_devices: PairedDeviceInfo[];
   repo_path: string;
   error: string | null;
@@ -432,13 +434,29 @@ export type IrohClientStatus = {
   running: boolean;
   local_port: number;
   local_remote_url: string;
+  /** The computer this phone tunnels to. */
   endpoint_id: string;
+  /** This phone's own endpoint id — what the computer authorizes. */
+  local_endpoint_id: string;
+  /** Whether the computer authorized this phone for out-of-band audio. Notes
+   * sync either way; only recordings need this. */
+  paired: boolean;
+  pair_error: string | null;
+  /** How the last connection ran. */
+  connection: "direct" | "relay" | "unknown";
+  /** Last transport failure, used to explain a git error in terms of the
+   * computer rather than of a loopback port. */
+  last_error: string | null;
 };
 
 export type IrohAudioArchiveResult = {
   scanned: number;
   uploaded: number;
   already_archived: number;
+  /** Recordings held back because audio transfer is not paired. */
+  skipped: number;
+  /** Why they were held back. Not a sync failure. */
+  error: string | null;
 };
 
 export type GitHistoryArgs = {

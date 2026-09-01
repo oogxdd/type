@@ -63,6 +63,10 @@ pub struct LocalSyncServerStatus {
     pub host_key_sha256: Option<String>,
     pub iroh_ticket: Option<String>,
     pub iroh_endpoint_id: Option<String>,
+    /// The home relay this computer is reachable through. `None` while the
+    /// endpoint is still LAN-only, which is what the desktop card reports as
+    /// "waiting for a relay" — a phone off this network cannot pair yet.
+    pub iroh_relay: Option<String>,
     pub paired_devices: Vec<PairedDeviceInfo>,
     pub repo_path: String,
     pub error: Option<String>,
@@ -258,17 +262,21 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
             served_name: served_name.clone(),
             branch: branch.clone(),
             pairing_token: pairing_token.clone(),
-            consumed_pairing_tokens,
+            consumed_pairing_tokens: consumed_pairing_tokens.clone(),
             pairing_token_path: token_path,
             devices_path: devices_path.clone(),
         });
         let server = ssh_server::start_ssh_server(shared, &host_key, LOCAL_SYNC_PORT)?;
 
+        // Iroh shares the SSH server's pairing token *and* its recently-rotated
+        // ones: one QR scan pairs both transports, and whichever lands first
+        // rotates the token out from under the other.
         let (iroh, iroh_error) = match crate::start_iroh_sync_server(
             app,
             LOCAL_SYNC_PORT,
             root.clone(),
             pairing_token.clone(),
+            consumed_pairing_tokens,
         ) {
             Ok(iroh) => {
                 if let Ok(repo) = git2::Repository::open(&root) {
@@ -411,6 +419,7 @@ fn unsupported_status(repo_path: String) -> LocalSyncServerStatus {
         host_key_sha256: None,
         iroh_ticket: None,
         iroh_endpoint_id: None,
+        iroh_relay: None,
         paired_devices: Vec::new(),
         repo_path,
         error: None,
@@ -430,6 +439,7 @@ fn idle_status(git_available: bool, repo_path: String) -> LocalSyncServerStatus 
         host_key_sha256: None,
         iroh_ticket: None,
         iroh_endpoint_id: None,
+        iroh_relay: None,
         paired_devices: Vec::new(),
         repo_path,
         error: None,
@@ -469,11 +479,15 @@ fn running_status(daemon: &RunningDaemon) -> LocalSyncServerStatus {
         branch: Some(daemon.branch.clone()),
         ssh_url,
         host_key_sha256: Some(daemon.host_key_sha256.clone()),
-        iroh_ticket: daemon.iroh.as_ref().map(|iroh| iroh.ticket().to_string()),
+        // Recomputed rather than cached: the ticket gains the relay address
+        // moments after startup and changes again whenever this computer moves
+        // networks, and the QR is rebuilt from this on every status poll.
+        iroh_ticket: daemon.iroh.as_ref().map(|iroh| iroh.ticket()),
         iroh_endpoint_id: daemon
             .iroh
             .as_ref()
             .map(|iroh| iroh.endpoint_id().to_string()),
+        iroh_relay: daemon.iroh.as_ref().and_then(|iroh| iroh.relay_url()),
         paired_devices,
         repo_path: daemon.repo_path.to_string_lossy().to_string(),
         error: daemon.iroh_error.clone(),
