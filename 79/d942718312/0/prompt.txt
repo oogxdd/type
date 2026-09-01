@@ -1,0 +1,96 @@
+make a worktree. so. iroh doesn't sort it seems. like. i can't make a sync now if both devices are not on the same network. but i want to be able to do it. and generally not super reliable. like right now both are on the same netowrk. i started server on desktop, then scanned qr with my phone, see error "desktop did not acknowledge iroh pairing: connection lost". and if i press "sync now" anyway. "cpnnection time out after 4 seconds blah blah"
+
+---
+
+[Request interrupted by user]
+
+---
+
+<task-notification>
+<task-id>ahow-i-can-a9ccab4e4b51ae7e</task-id>
+<output-file>/private/tmp/claude-501/-Volumes-KINGSTON-Projects-type-app/d5c9f3f1-bbfe-4361-956a-bb23348ce107/tasks/ahow-i-can-a9ccab4e4b51ae7e.output</output-file>
+<status>completed</status>
+<summary>Agent "how i can make a sync of my existing apps (mobile…" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>Как синхронизироваться на уже установленных сборках.
+
+**Почему вчера работало, а сегодня нет.** Версии ни при чём. Десктоп пишет «да» в ответ на пару и тут же закрывает соединение — QUIC не успевает доставить ответ. По прямому каналу в одной сети эта гонка иногда выигрывается, через релей — почти никогда. Вчера повезло с прямым путём, сегодня нет.
+
+**Важно:** при ошибке «desktop did not acknowledge Iroh pairing» десктоп уже записал телефон в список разрешённых — запись делается до ответа. То есть пара могла реально состояться, хотя телефон показал ошибку.
+
+**Что делать:**
+
+1. На Маке: Settings → Sync, останови и снова запусти сервер (новый токен и свежий адрес).
+2. Оба устройства в одной Wi-Fi сети. Сканируй QR. Если ошибка — сканируй ещё раз, пара попыток.
+3. Всё равно нажми **Sync now** — заметки часто проходят, даже если шаг с аудио-парой ругался.
+
+**Про «timed out after 4 seconds»** — телефон падает обратно на LAN-адрес. Проверь на Маке:
+
+- Выключи VPN / Tailscale. Адрес для QR выбирается по маршруту на 8.8.8.8, и с VPN туда попадает адрес, до которого телефон не достучится. После выключения перезапусти сервер.
+- Файрвол macOS и разрешение «Локальная сеть» для Type на iPhone.
+
+Чего не обещаю: если Мак отдаёт неправильный адрес, повторы не помогут. И синхронизация из другой сети на текущей сборке не заработает — это как раз то, что я сейчас чиню, нужна новая сборка на обоих устройствах.</result>
+<usage><subagent_tokens>284362</subagent_tokens><tool_uses>78</tool_uses><duration_ms>44188</duration_ms></usage>
+</task-notification>
+
+---
+
+[Request interrupted by user]
+
+---
+
+<task-notification>
+<task-id>b89a5p6fh</task-id>
+<tool-use-id>toolu_01VgP2JZdWmLtDgdUJ4D7t1s</tool-use-id>
+<output-file>/private/tmp/claude-501/-Volumes-KINGSTON-Projects-type-app/d5c9f3f1-bbfe-4361-956a-bb23348ce107/tasks/b89a5p6fh.output</output-file>
+<status>completed</status>
+<summary>Background command "Type-check the Rust workspace" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+continue
+
+---
+
+[Request interrupted by user]
+
+---
+
+<task-notification>
+<task-id>b9g4hv5vq</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Volumes-KINGSTON-Projects-type-app--claude-worktrees-iroh-cross-network-sync/bb551c1e-242f-482f-8f75-0f4d2029156a/tasks/b9g4hv5vq.output</output-file>
+<status>completed</status>
+<summary>Background command "Run Rust unit tests" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+continue
+
+---
+
+[Request interrupted by user]
+
+---
+
+<task-notification>
+<task-id>bh64qeuse</task-id>
+<tool-use-id>toolu_01QxrKWkqXEXskMQRqQTNtbm</tool-use-id>
+<output-file>/private/tmp/claude-501/-Volumes-KINGSTON-Projects-type-app--claude-worktrees-iroh-cross-network-sync/bb551c1e-242f-482f-8f75-0f4d2029156a/tasks/bh64qeuse.output</output-file>
+<status>completed</status>
+<summary>Background command "Install workspace deps in the worktree" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+[Request interrupted by user]
+
+---
+
+continue
+
+---
+
+commit and push (sepaarte branch)

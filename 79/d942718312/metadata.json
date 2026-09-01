@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "79d942718312",
+  "strategy": "manual-commit",
+  "branch": "worktree-iroh-cross-network-sync",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "AGENTS.md",
+    "apps/desktop/src/features/sync/components/local-sync-server-card.tsx",
+    "apps/mobile/src/screens/sync-screen.tsx",
+    "apps/mobile/src/state/sync-store.ts",
+    "crates/type-core/src/adapters/git/mod.rs",
+    "crates/type-core/src/adapters/iroh_sync.rs",
+    "crates/type-core/src/adapters/local_sync/mod.rs",
+    "crates/type-ffi/src/iroh_sync.rs",
+    "docs/IROH_SYNC_EXPERIMENT.md",
+    "packages/mobile-core/src/core-api.ts",
+    "packages/mobile-core/src/mock-core.ts",
+    "packages/mobile-core/src/raw-core.ts",
+    "packages/shared/src/types.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/79/d942718312/0/metadata.json",
+      "transcript": "/79/d942718312/0/full.jsonl",
+      "context": "/79/d942718312/0/context.md",
+      "content_hash": "/79/d942718312/0/content_hash.txt",
+      "prompt": "/79/d942718312/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 240,
+    "cache_creation_tokens": 1296334,
+    "cache_read_tokens": 29771557,
+    "output_tokens": 176217,
+    "api_call_count": 122
+  }
+}
