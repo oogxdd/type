@@ -12,6 +12,7 @@ import {
   normalizeAppearance,
   type Appearance,
   type BackgroundId,
+  type FontFamilyId,
   type TextColorId,
 } from "../lib/appearance";
 
@@ -27,6 +28,7 @@ type AppearanceState = {
   setBackground: (background: BackgroundId) => void;
   setTextColor: (textColor: TextColorId) => void;
   setFontSize: (fontSize: number) => void;
+  setFontFamily: (fontFamily: FontFamilyId) => void;
   reset: () => void;
 };
 
@@ -87,6 +89,7 @@ export const useAppearanceStore = create<AppearanceState>((set, get) => {
     setBackground: (background) => update({ background }),
     setTextColor: (textColor) => update({ textColor }),
     setFontSize: (fontSize) => update({ fontSize: clampFontSize(fontSize) }),
+    setFontFamily: (fontFamily) => update({ fontFamily }),
 
     reset: () => {
       set({ appearance: DEFAULT_APPEARANCE });

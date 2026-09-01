@@ -129,6 +129,7 @@ export const EditorScreen = () => {
             color: theme.colors.text,
             fontSize: theme.fontSize,
             lineHeight: theme.lineHeight,
+            fontFamily: theme.fontFamily,
           },
         ]}
         value={text ?? ""}

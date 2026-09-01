@@ -801,6 +801,7 @@ export const CaptureScreen = () => {
                       color: theme.colors.text,
                       fontSize: theme.fontSize,
                       lineHeight: theme.lineHeight,
+                      fontFamily: theme.fontFamily,
                     },
                   ]}
                   value={text}
@@ -851,6 +852,7 @@ export const CaptureScreen = () => {
                   // placeholder would not land where the caret will.
                   fontSize: theme.fontSize,
                   lineHeight: theme.lineHeight,
+                  fontFamily: theme.fontFamily,
                 }}
               >
                 {PLACEHOLDER}

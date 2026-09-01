@@ -4,7 +4,7 @@
 // the derivation rules live in lib/appearance.ts, which is pure and tested.
 
 import { useMemo } from "react";
-import { useColorScheme } from "react-native";
+import { Platform, useColorScheme } from "react-native";
 
 import { deriveTheme, type Theme } from "./lib/appearance";
 import { useAppearanceStore } from "./state/appearance-store";
@@ -15,7 +15,12 @@ export const useTheme = (): Theme => {
   const scheme = useColorScheme();
   const appearance = useAppearanceStore((state) => state.appearance);
   return useMemo(
-    () => deriveTheme(appearance, scheme === "dark"),
+    () =>
+      deriveTheme(
+        appearance,
+        scheme === "dark",
+        Platform.OS === "android" || Platform.OS === "web" ? Platform.OS : "ios"
+      ),
     [appearance, scheme]
   );
 };
