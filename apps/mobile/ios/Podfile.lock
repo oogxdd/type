@@ -1,4 +1,6 @@
 PODS:
+  - BackupExport (0.1.0):
+    - ExpoModulesCore
   - EXConstants (57.0.3):
     - ExpoModulesCore
   - Expo (57.0.4):
@@ -2246,6 +2248,7 @@ PODS:
   - Yoga (0.0.0)
 
 DEPENDENCIES:
+  - BackupExport (from `../modules/backup-export`)
   - EXConstants (from `../../../node_modules/expo-constants/ios`)
   - Expo (from `../../../node_modules/expo`)
   - ExpoAsset (from `../../../node_modules/expo-asset/ios`)
@@ -2349,6 +2352,8 @@ DEPENDENCIES:
   - Yoga (from `../../../node_modules/react-native/ReactCommon/yoga`)
 
 EXTERNAL SOURCES:
+  BackupExport:
+    :path: "../modules/backup-export"
   EXConstants:
     :path: "../../../node_modules/expo-constants/ios"
   Expo:
@@ -2552,6 +2557,7 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
+  BackupExport: dc5da2c1fb40ea11404cdfd28bac72d7ed3dff3f
   EXConstants: d069b4a2dd469d5a3a4d3d7b09757e708fda8f64
   Expo: cfb5f1189dfb9bd5ccc7701ceb2879d326c253e9
   ExpoAsset: 586e89aeaab2e23bfa90b9dce4d7d5e36815c039
