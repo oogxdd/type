@@ -150,6 +150,8 @@ export const SettingsActionRow = ({
     <Pressable
       onPress={onPress}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: Boolean(disabled) }}
       style={({ pressed }) => [
         styles.row,
         pressed && { backgroundColor: theme.dark ? "#ffffff14" : "#00000010" },

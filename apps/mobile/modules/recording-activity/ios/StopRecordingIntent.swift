@@ -12,8 +12,9 @@ import AppIntents
 // Backing intent for the Lock Screen / Dynamic Island "Stop" button.
 //
 // As a `LiveActivityIntent`, `perform()` runs in the *app's* process (not a
-// separate extension process) and without bringing the app to the foreground —
-// so the user can stop the recording from the Lock Screen without unlocking.
+// separate extension process) and without bringing the app to the foreground.
+// iOS may still require authentication before it performs an interactive Live
+// Activity action on a locked device.
 // It signals the app two ways:
 //   1. a durable flag in the app's own UserDefaults (honored on next resume if
 //      the JS runtime was suspended), and
@@ -23,7 +24,7 @@ import AppIntents
 public struct StopRecordingIntent: LiveActivityIntent {
   public static var title: LocalizedStringResource = "Stop Recording"
   public static var description = IntentDescription("Stops the in-progress voice recording.")
-  // Run in the background; never force the app open / require unlock.
+  // Run in the background and never force the app open.
   public static var openAppWhenRun: Bool = false
 
   public init() {}

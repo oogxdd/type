@@ -220,9 +220,9 @@ export default function App() {
 
   // Auto-lock when the app goes to background (if enabled in security prefs).
   // A screen lock is also an AppState background transition on iOS. While a
-  // voice note is recording, unmounting the app tree would stop the recorder,
-  // so defer Type's own lock until DictationButton reports that stop + save
-  // has completed. The OS lock screen still protects the device meanwhile.
+  // voice note is recording (or a native backup picker/transfer is active),
+  // unmounting the app tree would interrupt work. Defer Type's own lock until
+  // that operation finishes. The OS lock screen still protects the device.
   useEffect(() => {
     let backgroundLockDeferred = false;
 
