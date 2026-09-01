@@ -1,0 +1,42 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "79d942718312",
+  "session_id": "bb551c1e-242f-482f-8f75-0f4d2029156a",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-01T19:17:02.691725Z",
+  "branch": "worktree-iroh-cross-network-sync",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/mobile/src/screens/sync-screen.tsx",
+    "apps/mobile/src/state/sync-store.ts",
+    "crates/type-core/src/adapters/iroh_sync.rs",
+    "packages/mobile-core/src/mock-core.ts",
+    "packages/shared/src/types.ts",
+    "apps/desktop/src/features/sync/components/local-sync-server-card.tsx",
+    "crates/type-core/src/adapters/git/mod.rs",
+    "crates/type-core/src/adapters/local_sync/mod.rs",
+    "crates/type-ffi/src/iroh_sync.rs",
+    "docs/IROH_SYNC_EXPERIMENT.md",
+    "packages/mobile-core/src/core-api.ts",
+    "packages/mobile-core/src/raw-core.ts",
+    "AGENTS.md"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "ec76cb6c6a54",
+  "token_usage": {
+    "input_tokens": 190,
+    "cache_creation_tokens": 922349,
+    "cache_read_tokens": 21108609,
+    "output_tokens": 158366,
+    "api_call_count": 96
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-01T19:17:02.150713Z",
+    "agent_lines": 1413,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1413,
+    "agent_percentage": 100
+  }
+}
