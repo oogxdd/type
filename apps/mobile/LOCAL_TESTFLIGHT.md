@@ -78,3 +78,11 @@ Only use `npx expo prebuild --platform ios --clean` after changing Expo config,
 plugins, native dependencies, or if the native project is badly stale. It rewrites
 `apps/mobile/ios`, so inspect the diff afterward. The canonical export plist is
 `apps/mobile/ExportOptions.plist`, outside the generated directory.
+
+## Installing without TestFlight
+
+To put a Release build on a registered device directly — over the air from a web
+page, or over a cable — see
+[AD_HOC_DISTRIBUTION.md](./AD_HOC_DISTRIBUTION.md). It repeats the archive steps
+above with `ExportOptionsAdHoc.plist` instead of `ExportOptions.plist`, then
+hosts the result.
