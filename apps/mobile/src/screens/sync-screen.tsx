@@ -30,6 +30,7 @@ import {
   transferProgressFraction,
 } from "@typenotes/shared/format";
 import { parseSyncDeepLink, type SyncDeepLinkParams } from "@typenotes/shared/sync-link";
+import type { IrohClientStatus } from "@typenotes/shared/types";
 
 import { useClearInstantParam } from "../navigation";
 import { autoSyncLabel } from "../lib/sync-experience";
@@ -40,10 +41,26 @@ import { Button, Field, InlineNote, Section } from "../ui/controls";
 
 const SETUP_STEPS = [
   "Open the Type app on your computer.",
-  "Open desktop Settings → Sync (phone and computer on the same Wi-Fi or hotspot).",
+  "Open desktop Settings → Sync (pair on the same Wi-Fi or hotspot the first time).",
   "Tap “Scan QR code” below and point the camera at the code on the computer's screen.",
-  "After pairing, just open Type on your phone near the computer — sync starts automatically.",
+  "After pairing, open Type on your phone anywhere — sync starts automatically whenever the computer is on.",
 ];
+
+const connectionPathLabel = (connection: IrohClientStatus["connection"]): string => {
+  switch (connection) {
+    case "direct":
+      return "direct to the computer";
+    case "relay":
+      return "through an encrypted relay";
+    default:
+      return "not established yet";
+  }
+};
+
+/** Endpoint ids are 52 base32 characters. A prefix is enough to tell two
+ *  devices apart, which is all this panel needs it for. */
+const shortEndpointId = (id: string): string =>
+  id.length > 12 ? `${id.slice(0, 12)}…` : id || "—";
 
 export const SyncScreen = () => {
   const theme = useTheme();
@@ -72,6 +89,7 @@ export const SyncScreen = () => {
 
   useEffect(() => {
     void sync.refresh().catch(() => {});
+    void sync.refreshIrohStatus().catch(() => {});
     void core.getSshPublicKey().then(setSshKey).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -280,6 +298,36 @@ export const SyncScreen = () => {
         ) : null}
         {sync.hint ? <InlineNote>{sync.hint}</InlineNote> : null}
       </Section>
+
+      {sync.irohStatus ? (
+        <Section title="Direct connection">
+          <View style={styles.statusGrid}>
+            <StatusLine label="Path" value={connectionPathLabel(sync.irohStatus.connection)} />
+            <StatusLine label="Computer" value={shortEndpointId(sync.irohStatus.endpoint_id)} />
+            <StatusLine
+              label="This phone"
+              value={shortEndpointId(sync.irohStatus.local_endpoint_id)}
+            />
+            <StatusLine
+              label="Audio transfer"
+              value={sync.irohStatus.paired ? "paired" : "not paired"}
+            />
+          </View>
+          {sync.irohStatus.paired ? null : (
+            <InlineNote>
+              {sync.irohStatus.pair_error ??
+                "Recordings keep travelling inside Git until you scan the QR code again."}
+            </InlineNote>
+          )}
+          {sync.irohStatus.last_error ? (
+            <Text style={{ color: theme.colors.danger }}>{sync.irohStatus.last_error}</Text>
+          ) : (
+            <InlineNote>
+              Notes sync from any network while Type is open on the computer.
+            </InlineNote>
+          )}
+        </Section>
+      ) : null}
 
       {connected ? (
         <Section title="Change connection">

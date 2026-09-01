@@ -59,6 +59,9 @@ export interface RawCore {
   gitPull(argsJson: string): Promise<string>;
   gitPush(argsJson: string): Promise<string>;
   startIrohSyncClient(argsJson: string): Promise<string>;
+  /** JSON `IrohClientStatus | null` for the Sync screen's connection panel.
+   * Optional: absent in native modules generated before it existed. */
+  irohClientStatus?(remoteUrl: string): Promise<string>;
   archiveMobileAudioWithIroh(): Promise<string>;
   setMobileAudioGitExclusion(enabled: boolean): Promise<void>;
   /** Snapshot of the in-flight pull/push transfer progress (sync read).

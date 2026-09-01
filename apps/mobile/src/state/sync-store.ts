@@ -12,6 +12,7 @@ import type {
   GitCommitHistoryEntry,
   GitSyncStatus,
   GitTransferProgress,
+  IrohClientStatus,
 } from "@typenotes/shared/types";
 
 import {
@@ -69,9 +70,13 @@ type SyncState = {
   hint: string | null;
   autoSyncState: AutoSyncState | null;
   lastAutoSyncedAt: number | null;
+  /** How the direct connection to the computer is doing, for the Sync screen's
+   * connection panel. Null until a proxy has run this session. */
+  irohStatus: IrohClientStatus | null;
   /** A scanned/deep-linked type2://sync remote waiting to be applied. */
   pendingLink: SyncDeepLinkParams | null;
   setPendingLink: (link: SyncDeepLinkParams | null) => void;
+  refreshIrohStatus: () => Promise<void>;
   refresh: () => Promise<void>;
   connect: (args: ConnectGitArgs) => Promise<void>;
   /** Persist a scanned sync link to the working folder's settings + connect. */
@@ -113,7 +118,10 @@ export const useSyncStore = create<SyncState>((set, get) => {
       ticket: connection.irohTicket,
       remote_url: connection.remote_url,
     });
-    logSync(`iroh: proxy ready port=${proxy.local_port} endpoint=${proxy.endpoint_id}`);
+    set({ irohStatus: proxy });
+    logSync(
+      `iroh: proxy ready port=${proxy.local_port} computer=${proxy.endpoint_id} path=${proxy.connection} audioPaired=${proxy.paired}`
+    );
     return { ...connection, remote_url: proxy.local_remote_url };
   };
 
@@ -122,13 +130,52 @@ export const useSyncStore = create<SyncState>((set, get) => {
       await core.setMobileAudioGitExclusion(false);
       return;
     }
-    const archive = await core.archiveMobileAudioWithIroh();
-    if (archive.uploaded > 0) {
-      logSync(`audio archive: copied ${archive.uploaded} recording(s) to desktop over Iroh`);
+    // Recordings travel outside Git. Trouble moving them must not stop the
+    // notes from syncing — the notes are what the user is waiting on, and an
+    // unpaired phone keeps carrying its audio in Git as a fallback.
+    try {
+      const archive = await core.archiveMobileAudioWithIroh();
+      if (archive.uploaded > 0) {
+        logSync(`audio archive: copied ${archive.uploaded} recording(s) to the computer over Iroh`);
+      }
+      if (archive.skipped > 0) {
+        logSync(
+          `audio archive: keeping ${archive.skipped} recording(s) in Git - ${
+            archive.error ?? "audio transfer is not paired"
+          }`
+        );
+      }
+    } catch (error) {
+      logSync(`audio archive: skipped this run - ${getErrorMessage(error)}`);
     }
-    const prune = await core.pruneMobileAudioCache();
-    if (prune.evicted > 0) {
-      logSync(`audio cache: evicted ${prune.evicted} verified week-old recording(s)`);
+    try {
+      const prune = await core.pruneMobileAudioCache();
+      if (prune.evicted > 0) {
+        logSync(`audio cache: evicted ${prune.evicted} verified week-old recording(s)`);
+      }
+    } catch (error) {
+      logSync(`audio cache: prune skipped - ${getErrorMessage(error)}`);
+    }
+  };
+
+  /**
+   * A sync that fails on the direct connection surfaces as a libgit2 error
+   * about a loopback port, which tells the user nothing actionable. When the
+   * transport is what actually broke, report that instead.
+   */
+  const explainWithTransport = async (message: string): Promise<string> => {
+    const connection = savedGitConnection();
+    if (!connection?.irohTicket || !connection.remote_url) {
+      return message;
+    }
+    try {
+      const status = await core.getIrohClientStatus(connection.remote_url);
+      if (status) {
+        set({ irohStatus: status });
+      }
+      return status?.last_error ?? message;
+    } catch {
+      return message;
     }
   };
 
@@ -194,8 +241,9 @@ export const useSyncStore = create<SyncState>((set, get) => {
       logSync(`${action}: done in ${Date.now() - startedAt}ms; ${statusForLog(status)}`);
       set({ ...(status ? { status } : {}), history, action: "idle" });
     } catch (error) {
-      const message = getErrorMessage(error);
-      logSync(`${action}: failed after ${Date.now() - startedAt}ms - ${message}`);
+      const raw = getErrorMessage(error);
+      logSync(`${action}: failed after ${Date.now() - startedAt}ms - ${raw}`);
+      const message = await explainWithTransport(raw);
       set({ action: "idle", error: message, hint: getSyncHint(message) });
       throw error;
     } finally {
@@ -292,9 +340,23 @@ export const useSyncStore = create<SyncState>((set, get) => {
     hint: null,
     autoSyncState: null,
     lastAutoSyncedAt: null,
+    irohStatus: null,
     pendingLink: null,
 
     setPendingLink: (link) => set({ pendingLink: link }),
+
+    refreshIrohStatus: async () => {
+      const connection = savedGitConnection();
+      if (!connection?.irohTicket || !connection.remote_url) {
+        set({ irohStatus: null });
+        return;
+      }
+      try {
+        set({ irohStatus: await core.getIrohClientStatus(connection.remote_url) });
+      } catch (error) {
+        logSync(`iroh: status unavailable - ${getErrorMessage(error)}`);
+      }
+    },
 
     refresh: () => run("refresh", () => core.getGitStatus()),
 
@@ -308,14 +370,21 @@ export const useSyncStore = create<SyncState>((set, get) => {
       await run("connect", async () => {
         const settingsStore = useSettingsStore.getState();
         const profile = activeProfile(settingsStore.snapshot);
-        const pairingRemote = link.irohTicket
-          ? (
-              await core.startIrohSyncClient({
-                ticket: link.irohTicket,
-                remote_url: link.remote,
-              })
-            ).local_remote_url
-          : link.remote;
+        let pairingRemote = link.remote;
+        if (link.irohTicket) {
+          // Pairing the direct connection can report that audio transfer was
+          // refused while the tunnel itself is perfectly healthy. That is a
+          // partial result, not a reason to abandon the whole QR setup.
+          const proxy = await core.startIrohSyncClient({
+            ticket: link.irohTicket,
+            remote_url: link.remote,
+          });
+          set({ irohStatus: proxy });
+          pairingRemote = proxy.local_remote_url;
+          if (!proxy.paired) {
+            logSync(`qr: tunnel up but audio transfer not paired - ${proxy.pair_error ?? "unknown"}`);
+          }
+        }
         const trustedSshHost = link.hostKeySha256
           ? sshHostFromRemote(pairingRemote)
           : "";
