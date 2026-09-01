@@ -1,0 +1,21 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "b10c363b97a0",
+  "session_id": "909b001c-ae79-411a-8b1d-129af2b30403",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-01T20:46:47.728166Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/mobile/ios/Podfile.lock"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "d63235ed34ac",
+  "token_usage": {
+    "input_tokens": 142,
+    "cache_creation_tokens": 105967,
+    "cache_read_tokens": 5637559,
+    "output_tokens": 24404,
+    "api_call_count": 71
+  }
+}

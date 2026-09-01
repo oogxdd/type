@@ -1,0 +1,13 @@
+hi.
+
+  1) pull remote branches feat/mobile-backup-reliable-dictation and feat/
+  mobile-appearance-setting and worktree-iroh-cross-network-sync 
+
+  2) merge to main and mark as new mobile release
+
+  3) see the doc (git commit 9067f59df46b341c4c411cc14a4889385e222ad2) and
+  deploy it (my testflight isn't usable atm so i cant rely on that)
+
+---
+
+quick question: when i make a new release and deploy it to this ad-hoc website - will i have to fully reinstall the app as well? or just update?
