@@ -28,7 +28,9 @@ import {
 } from "./screens/settings-screen";
 import { SyncScreen } from "./screens/sync-screen";
 import { useAppearanceStore } from "./state/appearance-store";
+import { useBackgroundOperationStore } from "./state/background-operation-store";
 import { useNotesStore } from "./state/notes-store";
+import { useRecordingSessionStore } from "./state/recording-session-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
 import { useSettingsStore } from "./state/settings-store";
 import { useSyncStore } from "./state/sync-store";
@@ -217,21 +219,67 @@ export default function App() {
   }, []);
 
   // Auto-lock when the app goes to background (if enabled in security prefs).
+  // A screen lock is also an AppState background transition on iOS. While a
+  // voice note is recording (or a native backup picker/transfer is active),
+  // unmounting the app tree would interrupt work. Defer Type's own lock until
+  // that operation finishes. The OS lock screen still protects the device.
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", (next) => {
+    let backgroundLockDeferred = false;
+
+    const protectedOperationActive = () =>
+      useRecordingSessionStore.getState().active ||
+      useBackgroundOperationStore.getState().count > 0;
+
+    const lockIfEnabled = () => {
       const security = useSecurityStore.getState();
-      if (next === "active" && !isLocked(security.state)) {
-        useSyncStore.getState().scheduleAutoSync("app foregrounded", 0);
-      }
       if (
-        next === "background" &&
         security.state?.encryption_enabled &&
         security.state.auto_lock_on_background
       ) {
         void security.lock();
       }
+    };
+
+    const subscription = AppState.addEventListener("change", (next) => {
+      if (next === "active") {
+        backgroundLockDeferred = false;
+      }
+      const securityState = useSecurityStore.getState().state;
+      if (next === "active" && !isLocked(securityState)) {
+        useSyncStore.getState().scheduleAutoSync("app foregrounded", 0);
+      }
+      if (
+        next === "background" &&
+        securityState?.encryption_enabled &&
+        securityState.auto_lock_on_background
+      ) {
+        if (protectedOperationActive()) {
+          backgroundLockDeferred = true;
+        } else {
+          lockIfEnabled();
+        }
+      }
     });
-    return () => subscription.remove();
+
+    const finishDeferredLock = () => {
+      if (
+        backgroundLockDeferred &&
+        !protectedOperationActive() &&
+        AppState.currentState !== "active"
+      ) {
+        backgroundLockDeferred = false;
+        lockIfEnabled();
+      }
+    };
+    const unsubscribeRecording = useRecordingSessionStore.subscribe(finishDeferredLock);
+    const unsubscribeBackgroundOperation =
+      useBackgroundOperationStore.subscribe(finishDeferredLock);
+
+    return () => {
+      subscription.remove();
+      unsubscribeRecording();
+      unsubscribeBackgroundOperation();
+    };
   }, []);
 
   const securityState = useSecurityStore((s) => s.state);

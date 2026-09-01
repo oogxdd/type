@@ -2,7 +2,8 @@
 
 iOS-only local Expo module that puts an in-progress voice recording on the **Lock
 Screen and Dynamic Island** as an ActivityKit **Live Activity**, with a **Stop**
-button that works without unlocking the phone — the Apple Voice Memos behaviour.
+button on iOS 17+. iOS can require authentication before running an interactive
+action while the device is locked.
 
 Paired with the audio-session change in `src/ui/dictation-button.tsx`
 (`shouldPlayInBackground`), recording now survives the screen sleeping instead of
@@ -35,7 +36,8 @@ Two details worth knowing:
   wall-clock anchor as the in-app pill, so the two always agree.
 - **Stop reaches JS two ways.** `StopRecordingIntent` is a `LiveActivityIntent`,
   so `perform()` runs in the **app's own process** (not an extension) and without
-  foregrounding the app. It posts a Darwin notification (picked up immediately if
+  foregrounding the app after any authentication iOS requires. It posts a
+  Darwin notification (picked up immediately if
   the app is background-resumed) *and* writes a durable `UserDefaults` flag that
   JS honours on the next `AppState` → `active` if the runtime was suspended.
   Because the intent runs in the app process, **no App Group is required.**

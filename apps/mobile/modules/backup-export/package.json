@@ -1,0 +1,6 @@
+{
+  "name": "backup-export",
+  "version": "0.1.0",
+  "description": "Native Files and Storage Access Framework export for Type working-folder backups.",
+  "private": true
+}

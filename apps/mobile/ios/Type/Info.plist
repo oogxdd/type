@@ -66,6 +66,8 @@
 	<string>Type does not access your photo library; this permission is required by a bundled camera component.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Type uses speech recognition to transcribe your voice notes on this device.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UIBackgroundModes</key>

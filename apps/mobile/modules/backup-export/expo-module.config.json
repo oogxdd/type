@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["BackupExportModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.backupexport.BackupExportModule"]
+  }
+}

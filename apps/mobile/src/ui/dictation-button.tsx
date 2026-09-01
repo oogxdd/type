@@ -40,6 +40,7 @@ import {
 } from "../lib/recording-activity";
 import { elapsedSeconds, formatRecordingTimer } from "../lib/recording-timer";
 import { useNotesStore } from "../state/notes-store";
+import { useRecordingSessionStore } from "../state/recording-session-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
@@ -72,6 +73,9 @@ export const DictationButton = ({
   // Start is async (permission prompt, prepare) — a hold can end before it
   // finishes, so stopAndSave awaits the in-flight start before stopping.
   const startPromise = useRef<Promise<void> | null>(null);
+  // User, unmount, Lock Screen, and audio-interruption stops can race. One
+  // shared promise makes the native stop + core save exactly-once.
+  const stopPromise = useRef<Promise<void> | null>(null);
   const suppressNextPress = useRef(false);
 
   // Wall-clock anchor for the timer. expo-audio's polled `durationMillis`
@@ -156,6 +160,10 @@ export const DictationButton = ({
     });
     await recorder.prepareToRecordAsync();
     recorder.record();
+    // Set this synchronously after the native recorder starts. App.tsx reads
+    // it during the iOS background transition and keeps Capture mounted until
+    // this component has stopped and safely saved the clip.
+    useRecordingSessionStore.getState().setActive(true);
     recordingStartedAt.current = Date.now();
     setNowMs(Date.now());
     // Mirror the session onto the Lock Screen / Dynamic Island so it stays
@@ -163,11 +171,15 @@ export const DictationButton = ({
     startRecordingActivity(recordingStartedAt.current);
   };
 
-  const stopAndSave = async () => {
+  const performStopAndSave = async (interrupted = false) => {
     setBusy(true);
     try {
       await startPromise.current;
-      await recorder.stop();
+      // iOS can already have stopped the recorder for an audio interruption.
+      // Its URI is still the completed clip, so do not turn that into an error.
+      if (recorder.isRecording) {
+        await recorder.stop();
+      }
       const uri = recorder.uri;
       if (!uri) {
         throw new Error("Recorder produced no file.");
@@ -195,6 +207,9 @@ export const DictationButton = ({
           detail = `Saved, but queueing failed: ${getErrorMessage(queueError)}`;
         }
       }
+      if (interrupted) {
+        detail = `Recording was interrupted; ${detail.toLowerCase()}`;
+      }
       showStatus({ kind: "success", text: detail });
       void useNotesStore.getState().refresh();
     } catch (err) {
@@ -211,7 +226,23 @@ export const DictationButton = ({
         playsInSilentMode: true,
         shouldPlayInBackground: false,
       }).catch(() => {});
+      // Last: releasing this flag may let App.tsx apply a deferred app lock,
+      // which unmounts this component.
+      useRecordingSessionStore.getState().setActive(false);
     }
+  };
+
+  const stopAndSave = (interrupted = false): Promise<void> => {
+    if (stopPromise.current) {
+      return stopPromise.current;
+    }
+    const operation: Promise<void> = performStopAndSave(interrupted).finally(() => {
+      if (stopPromise.current === operation) {
+        stopPromise.current = null;
+      }
+    });
+    stopPromise.current = operation;
+    return operation;
   };
 
   const choosePhoto = async (source: "camera" | "library") => {
@@ -271,11 +302,31 @@ export const DictationButton = ({
   const recordingRef = useRef(false);
   recordingRef.current = recorderState.isRecording;
 
+  // Calls, Siri, route loss, or another app taking the audio session can stop
+  // a recording even though the JS button was never tapped. expo-audio keeps
+  // the completed URI; observe the native transition and save it immediately.
+  const nativeRecordingObserved = useRef(false);
+  useEffect(() => {
+    if (recorderState.isRecording) {
+      nativeRecordingObserved.current = true;
+      return;
+    }
+    if (
+      nativeRecordingObserved.current &&
+      recordingStartedAt.current != null &&
+      useRecordingSessionStore.getState().active &&
+      !stopPromise.current
+    ) {
+      nativeRecordingObserved.current = false;
+      void stopAndSaveRef.current(true).catch(() => {});
+    }
+  }, [recorderState.isRecording]);
+
   // Best effort: navigating away (the capture page pops) while recording
   // stops and saves the clip instead of silently dropping it.
   useEffect(
     () => () => {
-      if (recordingRef.current) {
+      if (recordingRef.current || startPromise.current) {
         void stopAndSaveRef.current().catch(() => {});
       }
     },
@@ -316,9 +367,7 @@ export const DictationButton = ({
       return;
     }
     if (recorder.isRecording || startPromise.current) {
-      if (recorder.isRecording) {
-        void stopAndSave();
-      }
+      void stopAndSave();
       return;
     }
     setAttachmentMenuOpen(false);
