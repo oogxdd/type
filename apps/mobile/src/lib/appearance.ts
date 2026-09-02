@@ -5,13 +5,12 @@
 // phone, not to the notes. Nothing here reaches a notes root, so no color
 // choice can ever ride a git sync to another device.
 //
-// Only two color knobs are stored. Everything else in the palette — surface,
-// border, secondary text, and whether the UI is in its dark variant — is
-// derived from the chosen background and text, so an arbitrary pair still
-// produces a coherent theme. `readableOn` puts a WCAG-AA floor under the body
-// text/background contrast: the point is to make "white on white" impossible
-// (it would lock the user out of the very screen that fixes it), not to
-// restyle sensible choices.
+// Background and text can be picked from presets or as arbitrary wheel colors;
+// accent can be automatic or arbitrary. Surface, border, secondary text, and
+// dark/light mode are still derived so a custom palette stays coherent.
+// `readableOn` puts a WCAG-AA floor under body text/background contrast: the
+// point is to make "white on white" impossible (it would lock the user out of
+// the very screen that fixes it), not to restyle sensible choices.
 
 export type Theme = {
   dark: boolean;
@@ -52,13 +51,28 @@ export type TextColorId =
   | "plum"
   | "paper";
 
-export type FontFamilyId = "system" | "serif" | "rounded" | "monospace";
+export type BackgroundChoice = BackgroundId | "custom";
+export type TextColorChoice = TextColorId | "custom";
+
+export type FontFamilyId =
+  | "system"
+  | "serif"
+  | "rounded"
+  | "monospace"
+  | "unbounded"
+  | "cormorant"
+  | "neucha"
+  | "golos";
 
 export type AppearancePlatform = "ios" | "android" | "web";
 
 export type Appearance = {
-  background: BackgroundId;
-  textColor: TextColorId;
+  background: BackgroundChoice;
+  customBackground: string;
+  textColor: TextColorChoice;
+  customTextColor: string;
+  /** Null keeps the light/dark palette's automatic blue accent. */
+  accentColor: string | null;
   fontSize: number;
   fontFamily: FontFamilyId;
 };
@@ -76,20 +90,37 @@ export const DEFAULT_FONT_SIZE = 17;
 
 export const DEFAULT_APPEARANCE: Appearance = {
   background: "system",
+  customBackground: "#efe7ff",
   textColor: "system",
+  customTextColor: "#251536",
+  accentColor: null,
   fontSize: DEFAULT_FONT_SIZE,
   fontFamily: "system",
 };
 
-export const FONT_FAMILIES: AppearanceOption<FontFamilyId>[] = [
-  { id: "system", label: "System", color: null },
-  { id: "serif", label: "Serif", color: null },
-  { id: "rounded", label: "Rounded", color: null },
-  { id: "monospace", label: "Monospace", color: null },
+export type FontOption = {
+  id: FontFamilyId;
+  label: string;
+  description: string;
+};
+
+export const FONT_FAMILIES: FontOption[] = [
+  { id: "system", label: "System", description: "Native and quiet" },
+  { id: "serif", label: "Serif", description: "Classic reading serif" },
+  { id: "rounded", label: "Rounded", description: "Soft geometric sans" },
+  { id: "monospace", label: "Monospace", description: "Technical and precise" },
+  { id: "unbounded", label: "Unbounded", description: "Wide futuristic display" },
+  {
+    id: "cormorant",
+    label: "Cormorant Garamond",
+    description: "Expressive editorial serif",
+  },
+  { id: "neucha", label: "Neucha", description: "Human handwritten rhythm" },
+  { id: "golos", label: "Golos Text", description: "Polished Cyrillic workhorse" },
 ];
 
 const PLATFORM_FONT_FAMILIES: Record<
-  Exclude<FontFamilyId, "system">,
+  Exclude<FontFamilyId, "system" | "unbounded" | "cormorant" | "neucha" | "golos">,
   Record<AppearancePlatform, string>
 > = {
   serif: { ios: "Georgia", android: "serif", web: "serif" },
@@ -101,11 +132,23 @@ const PLATFORM_FONT_FAMILIES: Record<
   monospace: { ios: "Menlo", android: "monospace", web: "monospace" },
 };
 
+const BUNDLED_FONT_FAMILIES: Partial<Record<FontFamilyId, string>> = {
+  unbounded: "TypeUnbounded",
+  cormorant: "TypeCormorantGaramond",
+  neucha: "TypeNeucha",
+  golos: "TypeGolosText",
+};
+
 export const resolveFontFamily = (
   id: FontFamilyId,
   platform: AppearancePlatform
 ): string | undefined =>
-  id === "system" ? undefined : PLATFORM_FONT_FAMILIES[id][platform];
+  id === "system"
+    ? undefined
+    : BUNDLED_FONT_FAMILIES[id] ??
+      PLATFORM_FONT_FAMILIES[
+        id as keyof typeof PLATFORM_FONT_FAMILIES
+      ][platform];
 
 export const BACKGROUNDS: AppearanceOption<BackgroundId>[] = [
   { id: "system", label: "System", color: null },
@@ -171,6 +214,12 @@ const parseHex = (hex: string): [number, number, number] => {
     parseInt(full.slice(4, 6), 16),
   ];
 };
+
+export const isHexColor = (value: unknown): value is string =>
+  typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+
+export const normalizeHexColor = (value: unknown, fallback: string): string =>
+  isHexColor(value) ? value.toLowerCase() : fallback;
 
 const toHex = (channels: number[]): string =>
   `#${channels
@@ -248,24 +297,37 @@ export const systemTextColor = (background: string): string =>
   isDarkColor(background) ? DARK_BASE.text : LIGHT_BASE.text;
 
 export const resolveBackground = (
-  id: BackgroundId,
-  systemDark: boolean
+  id: BackgroundChoice,
+  systemDark: boolean,
+  customColor: string = DEFAULT_APPEARANCE.customBackground
 ): string =>
-  BACKGROUNDS.find((option) => option.id === id)?.color ??
-  systemBackgroundColor(systemDark);
+  id === "custom"
+    ? normalizeHexColor(customColor, DEFAULT_APPEARANCE.customBackground)
+    : BACKGROUNDS.find((option) => option.id === id)?.color ??
+      systemBackgroundColor(systemDark);
 
-export const resolveTextColor = (id: TextColorId, background: string): string =>
+export const resolveTextColor = (
+  id: TextColorChoice,
+  background: string,
+  customColor: string = DEFAULT_APPEARANCE.customTextColor
+): string =>
   readableOn(
-    TEXT_COLORS.find((option) => option.id === id)?.color ??
-      systemTextColor(background),
+    id === "custom"
+      ? normalizeHexColor(customColor, DEFAULT_APPEARANCE.customTextColor)
+      : TEXT_COLORS.find((option) => option.id === id)?.color ??
+        systemTextColor(background),
     background
   );
 
-export const backgroundLabel = (id: BackgroundId): string =>
-  BACKGROUNDS.find((option) => option.id === id)?.label ?? "System";
+export const backgroundLabel = (id: BackgroundChoice): string =>
+  id === "custom"
+    ? "Custom"
+    : BACKGROUNDS.find((option) => option.id === id)?.label ?? "System";
 
-export const textColorLabel = (id: TextColorId): string =>
-  TEXT_COLORS.find((option) => option.id === id)?.label ?? "System";
+export const textColorLabel = (id: TextColorChoice): string =>
+  id === "custom"
+    ? "Custom"
+    : TEXT_COLORS.find((option) => option.id === id)?.label ?? "System";
 
 export const fontFamilyLabel = (id: FontFamilyId): string =>
   FONT_FAMILIES.find((option) => option.id === id)?.label ?? "System";
@@ -275,14 +337,22 @@ export const deriveTheme = (
   systemDark: boolean,
   platform: AppearancePlatform = "ios"
 ): Theme => {
-  const background = resolveBackground(appearance.background, systemDark);
+  const background = resolveBackground(
+    appearance.background,
+    systemDark,
+    appearance.customBackground
+  );
   const dark = isDarkColor(background);
   const base = dark ? DARK_BASE : LIGHT_BASE;
   // Chrome (cards, separators) is the background pushed a few percent toward
   // the contrasting pole, which keeps a custom background's hue instead of
   // dropping a fixed gray on top of it.
   const pole = dark ? "#ffffff" : "#000000";
-  const text = resolveTextColor(appearance.textColor, background);
+  const text = resolveTextColor(
+    appearance.textColor,
+    background,
+    appearance.customTextColor
+  );
   const fontSize = clampFontSize(appearance.fontSize);
 
   return {
@@ -293,7 +363,11 @@ export const deriveTheme = (
       text,
       secondaryText: mix(text, background, 0.42),
       border: mix(background, pole, 0.13),
-      accent: readableOn(base.accent, background, MIN_ACCENT_CONTRAST),
+      accent: readableOn(
+        appearance.accentColor ?? base.accent,
+        background,
+        MIN_ACCENT_CONTRAST
+      ),
       danger: readableOn(base.danger, background, MIN_ACCENT_CONTRAST),
       success: readableOn(base.success, background, MIN_ACCENT_CONTRAST),
     },
@@ -311,12 +385,30 @@ export const deriveTheme = (
 export const normalizeAppearance = (raw: unknown): Appearance => {
   const value = (raw ?? {}) as Partial<Record<keyof Appearance, unknown>>;
   return {
-    background: BACKGROUNDS.some((option) => option.id === value.background)
-      ? (value.background as BackgroundId)
+    background:
+      value.background === "custom" ||
+      BACKGROUNDS.some((option) => option.id === value.background)
+      ? (value.background as BackgroundChoice)
       : DEFAULT_APPEARANCE.background,
-    textColor: TEXT_COLORS.some((option) => option.id === value.textColor)
-      ? (value.textColor as TextColorId)
+    customBackground: normalizeHexColor(
+      value.customBackground,
+      DEFAULT_APPEARANCE.customBackground
+    ),
+    textColor:
+      value.textColor === "custom" ||
+      TEXT_COLORS.some((option) => option.id === value.textColor)
+      ? (value.textColor as TextColorChoice)
       : DEFAULT_APPEARANCE.textColor,
+    customTextColor: normalizeHexColor(
+      value.customTextColor,
+      DEFAULT_APPEARANCE.customTextColor
+    ),
+    accentColor:
+      value.accentColor === null
+        ? null
+        : isHexColor(value.accentColor)
+          ? value.accentColor.toLowerCase()
+          : DEFAULT_APPEARANCE.accentColor,
     fontSize:
       typeof value.fontSize === "number"
         ? clampFontSize(value.fontSize)

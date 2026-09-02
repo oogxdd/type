@@ -7,7 +7,14 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as FileSystem from "expo-file-system/legacy";
 import { useState } from "react";
-import { ScrollView, StyleSheet, Text, useColorScheme, View } from "react-native";
+import {
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useColorScheme,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import * as core from "@typenotes/mobile-core/core-api";
@@ -24,6 +31,7 @@ import {
   MAX_FONT_SIZE,
   MIN_FONT_SIZE,
   resolveBackground,
+  resolveFontFamily,
   resolveTextColor,
   TEXT_COLORS,
 } from "../lib/appearance";
@@ -40,6 +48,7 @@ import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useTheme } from "../theme";
 import {
   SettingsActionRow,
+  SettingsColorRow,
   SettingsFieldRow,
   SettingsGroup,
   SettingsToggleRow,
@@ -47,6 +56,7 @@ import {
   SettingsStepperRow,
   SettingsSwatchRow,
 } from "../ui/settings-list";
+import { ColorWheelModal } from "../ui/color-wheel-modal";
 
 const MODES: { mode: TranscriptionMode; label: string; description: string }[] = [
   {
@@ -323,8 +333,8 @@ export const SettingsWorkingFoldersScreen = () => {
 /**
  * Background, text color, and editor text size — all device-local. The whole
  * screen repaints from the live theme as you tap, so the settings UI itself is
- * the preview for the colors; the bordered sample below is there for the text
- * size, which only applies to the capture page and the note editor.
+ * the preview for the colors; the bordered sample below previews typography,
+ * which only applies to the capture page and the note editor.
  */
 export const SettingsAppearanceScreen = () => {
   const theme = useTheme();
@@ -333,9 +343,17 @@ export const SettingsAppearanceScreen = () => {
   const appearance = useAppearanceStore((s) => s.appearance);
   const setBackground = useAppearanceStore((s) => s.setBackground);
   const setTextColor = useAppearanceStore((s) => s.setTextColor);
+  const setCustomBackground = useAppearanceStore((s) => s.setCustomBackground);
+  const setCustomTextColor = useAppearanceStore((s) => s.setCustomTextColor);
+  const setAccentColor = useAppearanceStore((s) => s.setAccentColor);
   const setFontSize = useAppearanceStore((s) => s.setFontSize);
   const setFontFamily = useAppearanceStore((s) => s.setFontFamily);
   const reset = useAppearanceStore((s) => s.reset);
+  const [colorTarget, setColorTarget] = useState<
+    "background" | "text" | "accent" | null
+  >(null);
+  const platform =
+    Platform.OS === "android" || Platform.OS === "web" ? Platform.OS : "ios";
 
   // "System" swatches are resolved to what the phone is showing right now, and
   // text swatches are drawn on the chosen background, so both grids preview
@@ -351,6 +369,28 @@ export const SettingsAppearanceScreen = () => {
     color: resolveTextColor(option.id, theme.colors.background),
     fill: theme.colors.background,
   }));
+  const pickerValue =
+    colorTarget === "background"
+      ? appearance.customBackground
+      : colorTarget === "text"
+        ? appearance.customTextColor
+        : appearance.accentColor ?? theme.colors.accent;
+  const pickerTitle =
+    colorTarget === "background"
+      ? "Background color"
+      : colorTarget === "text"
+        ? "Text color"
+        : "Accent color";
+
+  const saveCustomColor = (color: string) => {
+    if (colorTarget === "background") {
+      setCustomBackground(color);
+    } else if (colorTarget === "text") {
+      setCustomTextColor(color);
+    } else if (colorTarget === "accent") {
+      setAccentColor(color);
+    }
+  };
 
   return (
     <ScrollView
@@ -366,6 +406,13 @@ export const SettingsAppearanceScreen = () => {
           selected={appearance.background}
           onSelect={setBackground}
         />
+        <SettingsColorRow
+          title="Custom color"
+          color={appearance.customBackground}
+          value={appearance.customBackground.toUpperCase()}
+          checked={appearance.background === "custom"}
+          onPress={() => setColorTarget("background")}
+        />
       </SettingsGroup>
 
       <SettingsGroup
@@ -376,6 +423,31 @@ export const SettingsAppearanceScreen = () => {
           options={textSwatches}
           selected={appearance.textColor}
           onSelect={setTextColor}
+        />
+        <SettingsColorRow
+          title="Custom color"
+          color={appearance.customTextColor}
+          value={appearance.customTextColor.toUpperCase()}
+          checked={appearance.textColor === "custom"}
+          onPress={() => setColorTarget("text")}
+        />
+      </SettingsGroup>
+
+      <SettingsGroup
+        header="Accent color"
+        footer="Accent colors buttons, checkmarks, links, and active controls. Automatic picks a readable blue for the current background."
+      >
+        <SettingsRow
+          title="Automatic"
+          checked={appearance.accentColor === null}
+          onPress={() => setAccentColor(null)}
+        />
+        <SettingsColorRow
+          title="Custom color"
+          color={appearance.accentColor ?? theme.colors.accent}
+          value={(appearance.accentColor ?? theme.colors.accent).toUpperCase()}
+          checked={appearance.accentColor !== null}
+          onPress={() => setColorTarget("accent")}
         />
       </SettingsGroup>
 
@@ -398,6 +470,8 @@ export const SettingsAppearanceScreen = () => {
           <SettingsRow
             key={option.id}
             title={option.label}
+            subtitle={option.description}
+            titleFontFamily={resolveFontFamily(option.id, platform)}
             checked={appearance.fontFamily === option.id}
             onPress={() => setFontFamily(option.id)}
           />
@@ -446,6 +520,14 @@ export const SettingsAppearanceScreen = () => {
           {JSON.stringify(appearance, null, 2)}
         </Text>
       </SettingsGroup>
+
+      <ColorWheelModal
+        visible={colorTarget !== null}
+        title={pickerTitle}
+        value={pickerValue}
+        onClose={() => setColorTarget(null)}
+        onSave={saveCustomColor}
+      />
     </ScrollView>
   );
 };

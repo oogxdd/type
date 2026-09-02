@@ -4,6 +4,7 @@ import {
   NavigationContainer,
 } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
+import { useFonts } from "expo-font";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Linking, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -47,6 +48,13 @@ type BootPhase = { state: "booting" } | { state: "ready" } | { state: "failed"; 
 // screens mounted in a pager.
 const BOOT_NAVIGATION_STATE = {
   routes: [{ name: "Menu" as const }, { name: "Capture" as const }],
+};
+
+const BUNDLED_FONTS = {
+  TypeUnbounded: require("../assets/fonts/Unbounded.ttf"),
+  TypeCormorantGaramond: require("../assets/fonts/CormorantGaramond.ttf"),
+  TypeNeucha: require("../assets/fonts/Neucha.ttf"),
+  TypeGolosText: require("../assets/fonts/GolosText.ttf"),
 };
 
 const RootStack = () => {
@@ -160,6 +168,7 @@ const handleSyncUrl = (url: string | null) => {
 
 export default function App() {
   const theme = useTheme();
+  const [fontsLoaded, fontError] = useFonts(BUNDLED_FONTS);
   const [phase, setPhase] = useState<BootPhase>({ state: "booting" });
   // The stock light/dark navigation themes carry their own background, which
   // would flash behind screens during transitions once the user picks a
@@ -294,12 +303,16 @@ export default function App() {
   const securityState = useSecurityStore((s) => s.state);
   const locked = isLocked(securityState);
 
-  if (phase.state !== "ready") {
+  if (phase.state !== "ready" || !fontsLoaded || fontError) {
     return (
-      <View style={[styles.boot, { backgroundColor: theme.colors.background }]}>
-        {phase.state === "failed" ? (
-          <Text style={[styles.bootError, { color: theme.colors.danger }]}>
-            {phase.error}
+      <View
+        style={[styles.boot, { backgroundColor: theme.colors.background }]}
+      >
+        {phase.state === "failed" || fontError ? (
+          <Text
+            style={[styles.bootError, { color: theme.colors.danger }]}
+          >
+            {fontError?.message ?? (phase.state === "failed" ? phase.error : "")}
           </Text>
         ) : null}
         <StatusBar style={theme.dark ? "light" : "dark"} />
