@@ -1,7 +1,9 @@
 {
   "cli_version": "0.4.9",
   "checkpoint_id": "14d4eea75e5c",
+  "session_id": "01a04f7d-0309-7e21-879f-0dcf75a7709d",
   "strategy": "manual-commit",
+  "created_at": "2026-09-02T12:30:33.452987Z",
   "branch": "mobile/fix-capture-swipe-crash",
   "checkpoints_count": 0,
   "files_touched": [
@@ -12,27 +14,24 @@
     "apps/mobile/src/state/diagnostics-store.ts",
     "apps/mobile/src/ui/settings-list.tsx"
   ],
-  "sessions": [
-    {
-      "metadata": "/14/d4eea75e5c/0/metadata.json",
-      "transcript": "/14/d4eea75e5c/0/full.jsonl",
-      "context": "",
-      "content_hash": "/14/d4eea75e5c/0/content_hash.txt",
-      "prompt": ""
-    },
-    {
-      "metadata": "/14/d4eea75e5c/1/metadata.json",
-      "transcript": "/14/d4eea75e5c/1/full.jsonl",
-      "context": "",
-      "content_hash": "/14/d4eea75e5c/1/content_hash.txt",
-      "prompt": ""
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "76326b5fc138",
+  "checkpoint_transcript_start": 130,
+  "transcript_lines_at_start": 130,
   "token_usage": {
     "input_tokens": 0,
     "cache_creation_tokens": 0,
     "cache_read_tokens": 0,
     "output_tokens": 0,
     "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-02T12:30:33.128069Z",
+    "agent_lines": 184,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 184,
+    "agent_percentage": 100
   }
 }
