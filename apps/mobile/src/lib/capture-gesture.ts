@@ -11,8 +11,8 @@
  * Releasing past this fraction of the visible page height commits the swipe;
  * a faster upward flick commits regardless of distance.
  */
-export const COMMIT_FRACTION = 0.2;
-export const COMMIT_VELOCITY = -550;
+export const COMMIT_FRACTION = 0.15;
+export const COMMIT_VELOCITY = -420;
 
 /**
  * How far past the arm point (the bottom edge) the finger must travel before
@@ -26,43 +26,64 @@ export const BOTTOM_SLACK = 6;
 export const TOP_SLACK = 4;
 
 /**
- * The iOS back-swipe strip. Capture runs with the whole-screen pop recognizer
- * enabled (as it did in mobile-v0.2.2), so this is not the only place back
- * lives — but the capture pans still exclude the strip outright via
- * `hitSlop({ left: -… })` so a drag starting on the edge is navigation, full
- * stop, with nothing to arbitrate.
+ * The strip along the left edge where a drag is navigation and nothing else.
+ *
+ * 24 rather than 48: the whole-screen pop recognizer is enabled for Capture,
+ * so this no longer has to be the only place a back swipe can start, and every
+ * pixel of it is a pixel where swiping up to file does not exist at all. 24pt
+ * still covers the true edge, where back is the only plausible intent.
  */
-export const BACK_SWIPE_GUTTER = 48;
+export const BACK_SWIPE_GUTTER = 24;
 
 /**
- * Rightward travel that means "this is navigation, not filing".
+ * Absolute sideways travel before a drag is called navigation rather than
+ * filing. `dx`/`dy` are measured from the touch start and the fail is terminal
+ * for the whole touch, so this one number decides how forgiving the swipe up
+ * feels.
  *
- * 8px / 1.0 are mobile-v0.2.2's values, restored deliberately. They are tight,
- * and `dx`/`dy` are measured from the touch start with the fail terminal for
- * the whole touch — so a thumb that arcs sideways early can lose a swipe up.
- * The alternative is worse: the whole-screen pop recognizer is back on for
- * Capture, and raising these makes swiping back out of Capture feel dead,
- * because the pan sits in BEGAN while the native gesture waits on it.
- * Navigation wins ties here on purpose.
+ * 8 (0.2.2's value) is too tight to live with: a thumb arcs, and at the start
+ * of a swipe up `dy` is still ~0, so an early 9px drift killed the gesture for
+ * good. 24pt is ~4mm — a real back swipe crosses it within the first frames
+ * and still feels immediate, while an arcing swipe up survives it.
+ *
+ * Past VERTICAL_LATCH this stops being consulted at all.
  */
-export const RIGHTWARD_FAIL = 8;
+export const RIGHTWARD_FAIL = 24;
 export const RIGHTWARD_FAIL_RATIO = 1;
 
 /**
- * Leftward travel belongs to swipeToSync, which claims at -24. Fail at 8 like
- * the rightward side, but *regardless of the vertical component*: a
- * manual-activation gesture that neither activates nor fails stays BEGAN
- * forever, and in `Gesture.Race` everything behind it waits on that failure —
- * which is how a diagonal drag used to wedge the Sync swipe shut. This is the
- * one intentional deviation from 0.2.2.
+ * Leftward travel belongs to swipeToSync, which claims at -24. Fail at the same
+ * point, but *regardless of the vertical component*: a manual-activation
+ * gesture that neither activates nor fails stays BEGAN forever, and in
+ * `Gesture.Race` everything behind it waits on that failure — which is how a
+ * diagonal drag used to wedge the Sync swipe shut.
  */
-export const LEFTWARD_FAIL = 8;
+export const LEFTWARD_FAIL = 24;
 
 /** swipeToSync's own guard against a rightward drag (the native back). */
 export const SYNC_RIGHTWARD_FAIL = 8;
 
 /** Pull-down at the top of the note that tucks the keyboard away. */
 export const ESCAPE_DRAG = 14;
+
+/**
+ * Upward travel after which the touch belongs to filing for good.
+ *
+ * Once the finger has clearly gone up, the sideways wobble every thumb makes
+ * as it extends must not be able to hand the touch back to navigation. Without
+ * this latch a swipe that started perfectly could still die two thirds of the
+ * way through, which is most of what made the gesture feel unreliable.
+ */
+export const VERTICAL_LATCH = 12;
+
+/**
+ * Has this drag committed to being vertical? Checked before the horizontal
+ * verdict; once true, `horizontalVerdict` is not consulted again for the touch.
+ */
+export const isVerticalCommitted = (dx: number, dy: number): boolean => {
+  "worklet";
+  return dy < -VERTICAL_LATCH && Math.abs(dx) < Math.abs(dy);
+};
 
 export type HorizontalVerdict = "undecided" | "navigation" | "sync";
 

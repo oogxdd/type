@@ -63,6 +63,7 @@ import {
   BACK_SWIPE_GUTTER,
   ESCAPE_DRAG,
   horizontalVerdict,
+  isVerticalCommitted,
   isAtScrollBottom,
   shouldCommitFiling,
   SYNC_RIGHTWARD_FAIL,
@@ -410,6 +411,9 @@ export const CaptureScreen = () => {
   const touchStartY = useSharedValue(0);
   const armY = useSharedValue(0);
   const dragBase = useSharedValue(0);
+  // Latched once the drag is unmistakably upward; from then on the horizontal
+  // verdict is not consulted, so late thumb wobble cannot lose the swipe.
+  const verticalLatched = useSharedValue(false);
 
   // Memoized, and every capture in the closures below is a stable identity —
   // shared values, the useAnimatedKeyboard ref, and the run* proxies. That is
@@ -438,6 +442,7 @@ export const CaptureScreen = () => {
           touchStartX.value = touch.x;
           touchStartY.value = touch.y;
           armY.value = touch.y;
+          verticalLatched.value = false;
         })
         .onTouchesMove((event, manager) => {
           const touch = event.allTouches[0];
@@ -447,12 +452,18 @@ export const CaptureScreen = () => {
           }
           const dx = touch.x - touchStartX.value;
           const dy = touch.y - touchStartY.value;
-          // Clearly-horizontal drags belong to native back or the Sync push.
-          // Anything still "undecided" stays ours: failing here is terminal for
-          // the whole touch, and at the start of a swipe up dy is still ~0.
-          if (horizontalVerdict(dx, dy) !== "undecided") {
-            manager.fail();
-            return;
+          if (!verticalLatched.value) {
+            if (isVerticalCommitted(dx, dy)) {
+              // Unmistakably upward — stop arbitrating for this touch.
+              verticalLatched.value = true;
+            } else if (horizontalVerdict(dx, dy) !== "undecided") {
+              // Clearly-horizontal drags belong to native back or the Sync
+              // push. Anything still "undecided" stays ours: failing here is
+              // terminal for the whole touch, and at the start of a swipe up
+              // dy is still ~0.
+              manager.fail();
+              return;
+            }
           }
           if (
             !isAtScrollBottom(offsetY.value, contentH.value, viewportH.value)
@@ -545,6 +556,7 @@ export const CaptureScreen = () => {
       touchStartX,
       touchStartY,
       transitioning,
+      verticalLatched,
       viewportH,
       windowH,
     ]
