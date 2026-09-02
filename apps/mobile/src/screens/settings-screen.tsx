@@ -35,12 +35,14 @@ import { backupFolderName } from "../lib/backup-naming";
 import type { RootStackParamList } from "../navigation";
 import { useAppearanceStore } from "../state/appearance-store";
 import { useBackgroundOperationStore } from "../state/background-operation-store";
+import { useDiagnosticsStore } from "../state/diagnostics-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useTheme } from "../theme";
 import {
   SettingsActionRow,
   SettingsFieldRow,
   SettingsGroup,
+  SettingsToggleRow,
   SettingsRow,
   SettingsStepperRow,
   SettingsSwatchRow,
@@ -82,6 +84,7 @@ const MODE_VALUE: Record<TranscriptionMode, string> = {
 const TILE_BLUE = "#007aff";
 const TILE_ORANGE = "#ff9500";
 const TILE_PURPLE = "#af52de";
+const TILE_GRAY = "#8e8e93";
 
 const FONT_SIZE_STEP = 1;
 
@@ -135,6 +138,13 @@ export const SettingsScreen = () => {
           value={backgroundLabel(appearance.background)}
           chevron
           onPress={() => navigation.navigate("SettingsAppearance")}
+        />
+        <SettingsRow
+          icon="pulse-outline"
+          iconColor={TILE_GRAY}
+          title="Diagnostics"
+          chevron
+          onPress={() => navigation.navigate("SettingsDiagnostics")}
         />
       </SettingsGroup>
     </ScrollView>
@@ -435,6 +445,40 @@ export const SettingsAppearanceScreen = () => {
         >
           {JSON.stringify(appearance, null, 2)}
         </Text>
+      </SettingsGroup>
+    </ScrollView>
+  );
+};
+
+/**
+ * Development-facing readouts, all off by default and all device-local. These
+ * are deliberately not on the Appearance screen: its "Reset to Defaults" must
+ * not switch a diagnostic back on behind the user's back.
+ */
+export const SettingsDiagnosticsScreen = () => {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const showCaptureSyncStatus = useDiagnosticsStore(
+    (s) => s.diagnostics.showCaptureSyncStatus
+  );
+  const setShowCaptureSyncStatus = useDiagnosticsStore(
+    (s) => s.setShowCaptureSyncStatus
+  );
+
+  return (
+    <ScrollView
+      style={{ backgroundColor: theme.colors.background }}
+      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 48 }]}
+    >
+      <SettingsGroup
+        header="Capture page"
+        footer="Shows the auto-sync state (Saved locally, Syncing…, Waiting for computer, Synced) in the top corner of the blank page. The same state is always on the Menu and Sync screens. Stored on this phone only — never synced."
+      >
+        <SettingsToggleRow
+          title="Sync status"
+          value={showCaptureSyncStatus}
+          onValueChange={setShowCaptureSyncStatus}
+        />
       </SettingsGroup>
     </ScrollView>
   );

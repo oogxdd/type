@@ -22,6 +22,7 @@ import { LockScreen } from "./screens/lock-screen";
 import { MenuScreen } from "./screens/menu-screen";
 import {
   SettingsAppearanceScreen,
+  SettingsDiagnosticsScreen,
   SettingsScreen,
   SettingsTranscriptionScreen,
   SettingsWorkingFoldersScreen,
@@ -29,6 +30,7 @@ import {
 import { SyncScreen } from "./screens/sync-screen";
 import { useAppearanceStore } from "./state/appearance-store";
 import { useBackgroundOperationStore } from "./state/background-operation-store";
+import { useDiagnosticsStore } from "./state/diagnostics-store";
 import { useNotesStore } from "./state/notes-store";
 import { useRecordingSessionStore } from "./state/recording-session-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
@@ -129,6 +131,11 @@ const RootStack = () => {
         options={{ title: "Transcription" }}
       />
       <Stack.Screen
+        name="SettingsDiagnostics"
+        component={SettingsDiagnosticsScreen}
+        options={{ title: "Diagnostics" }}
+      />
+      <Stack.Screen
         name="SettingsAppearance"
         component={SettingsAppearanceScreen}
         options={{ title: "Appearance" }}
@@ -183,6 +190,7 @@ export default function App() {
         // colors instead of flashing the system palette. It reads a plain
         // file, so it does not depend on the core coming up.
         await useAppearanceStore.getState().load();
+        await useDiagnosticsStore.getState().load();
         const { demoMode: demo } = await bootCore();
         useSettingsStore.getState().setDemoMode(demo);
         await useSecurityStore.getState().load();

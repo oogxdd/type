@@ -9,6 +9,7 @@ import { Children, Fragment, type ReactNode } from "react";
 import {
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -132,6 +133,48 @@ export const SettingsRow = ({
         />
       ) : null}
     </Pressable>
+  );
+};
+
+/** A row whose value is a boolean, shown as the platform switch. */
+export const SettingsToggleRow = ({
+  icon,
+  iconColor,
+  title,
+  subtitle,
+  value,
+  onValueChange,
+}: {
+  icon?: keyof typeof Ionicons.glyphMap;
+  iconColor?: string;
+  title: string;
+  subtitle?: string;
+  value: boolean;
+  onValueChange: (next: boolean) => void;
+}) => {
+  const theme = useTheme();
+  return (
+    <View style={styles.row}>
+      {icon ? (
+        <View style={[styles.iconTile, { backgroundColor: iconColor ?? theme.colors.accent }]}>
+          <Ionicons name={icon} size={17} color="#ffffff" />
+        </View>
+      ) : null}
+      <View style={styles.rowText}>
+        <Text style={[styles.rowTitle, { color: theme.colors.text }]} numberOfLines={1}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text
+            style={[styles.rowSubtitle, { color: theme.colors.secondaryText }]}
+            numberOfLines={2}
+          >
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      <Switch value={value} onValueChange={onValueChange} />
+    </View>
   );
 };
 

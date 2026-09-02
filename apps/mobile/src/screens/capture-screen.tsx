@@ -71,6 +71,7 @@ import {
 } from "../lib/capture-gesture";
 import { autoSyncLabel } from "../lib/sync-experience";
 import { useClearInstantParam, type RootStackParamList } from "../navigation";
+import { useDiagnosticsStore } from "../state/diagnostics-store";
 import { useNotesStore } from "../state/notes-store";
 import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
@@ -117,8 +118,13 @@ const CANCEL_SPRING = {
 const SyncStatusLabel = ({ top }: { top: number }) => {
   const theme = useTheme();
   const autoSyncState = useSyncStore((state) => state.autoSyncState);
+  // Off unless Settings -> Diagnostics turns it on: the capture page is meant
+  // to be a blank sheet, and the same state is on the Menu and Sync screens.
+  const enabled = useDiagnosticsStore(
+    (state) => state.diagnostics.showCaptureSyncStatus
+  );
   const label = autoSyncLabel(autoSyncState);
-  if (!label) {
+  if (!enabled || !label) {
     return null;
   }
   return (
