@@ -19,9 +19,16 @@ export type GestureAttempt = {
   /** Where the finger landed, in the gesture host's coordinates. */
   startX: number;
   startY: number;
-  /** Signed extremes of travel: how far it got, and which way. */
+  /**
+   * Signed extremes of travel, in the *touch* stream — which RNGH stops
+   * delivering the moment the handler activates. So on an activated touch this
+   * is the travel up to the claim, not the travel of the swipe; `maxPull` is
+   * the rest of it.
+   */
   maxDx: number;
   maxDy: number;
+  /** How far the page actually came up, in points. Only meaningful once activated. */
+  maxPull: number;
   durationMs: number;
   /** The drag went far enough up that we stopped arbitrating for it. */
   latchedVertical: boolean;
@@ -39,12 +46,19 @@ export type GestureAttempt = {
   endSuccess: boolean;
   /** The release committed to filing. */
   filed: boolean;
+  /**
+   * The touch started where the native back recognizer was still competing for
+   * it. Without this a row cannot be read: the same outcome means very
+   * different things inside and outside the band.
+   */
+  band: boolean;
 };
 
 export type GestureOutcome =
   | "filed"
   | "released"
   | "back"
+  | "cancelled"
   | "sync"
   | "blocked"
   | "stolen"
@@ -69,7 +83,9 @@ export const outcomeOf = (attempt: GestureAttempt): GestureOutcome => {
     return "filed";
   }
   if (attempt.activated) {
-    return "released";
+    // We owned the touch and something took it back mid-drag. Distinct from a
+    // pull the user simply did not finish, and far more interesting.
+    return attempt.gotEnd && !attempt.endSuccess ? "cancelled" : "released";
   }
   if (attempt.failedByVerdict) {
     return "back";

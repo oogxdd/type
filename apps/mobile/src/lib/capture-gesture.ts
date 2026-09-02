@@ -53,11 +53,17 @@ export const BACK_SWIPE_GUTTER = 24;
  * is uncontested. A decisive rightward drag down there still goes back, just as
  * a plain animated pop rather than one driven under the finger.
  *
- * 0.7 is a starting hypothesis from the mechanics of the two gestures, not a
- * measured value. The Gesture trace in Settings -> Diagnostics records where
- * each attempt started; move this line to whatever the distribution says.
+ * 0.7 was the starting hypothesis; 0.52 is what the first on-device trace
+ * measured (see apps/mobile/GESTURES.md). On a 932pt screen the recorded back
+ * swipes started between y=229 and y=474, and every recorded swipe up started
+ * at y>=499 — the two gestures separate by height after all, but the line sits
+ * near the middle of the screen, not at 70% of it. At 0.7 every swipe up in
+ * that sample began inside the band and was contested by the native pop.
+ *
+ * The Gesture trace in Settings -> Diagnostics records where each attempt
+ * started; move this line to whatever the distribution says.
  */
-export const NATIVE_BACK_BAND_FRACTION = 0.7;
+export const NATIVE_BACK_BAND_FRACTION = 0.52;
 
 /** The `gestureResponseDistance.bottom` that NATIVE_BACK_BAND_FRACTION implies. */
 export const nativeBackBandBottom = (windowHeight: number): number => {

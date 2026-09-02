@@ -256,4 +256,47 @@ changes who wins. See the top of this file.
 
 Filled in from the Gesture trace readout in Settings → Diagnostics.
 
-_Pending the first instrumented build._
+### Round 1 — build 0.2.10, iPhone 430×932pt, 27 rows
+
+Two mechanical bugs in the trace itself showed up first and are fixed:
+
+- **Every handed-over touch was recorded twice.** `onFinalize` fires once when
+  `manager.fail()` resolves the handler and again when the finger lifts, so each
+  `→ back` row appeared as a long/short pair with identical coordinates. Guarded
+  with `traceEmitted`.
+- **A row could not be read without knowing the window height**, since whether
+  the band applied is the difference between "the native pop took it" and
+  "nothing was competing and it still failed". Rows now print `band` / `free`.
+
+Discounting the duplicates, the sample is 14 back swipes and 5 swipes up:
+
+| gesture | startY | startX | travel |
+|---|---|---|---|
+| back (`→ back`) | 229 … 474, one at 564 | 29 … 195 | dx 26–59, \|dy\| ≤ 11 |
+| up (`→ released`) | 499 … 529, one at 869 | 204 … 301 | dy −11 … −33 |
+
+Three things follow.
+
+1. **The 0.7 line was in the wrong place.** Its bottom on this device is 652pt,
+   so *every* swipe up in the sample started inside the band and was contested
+   by the native pop — the split never protected the gesture it exists for.
+2. **The two gestures do separate by height, just not there.** Back swipes stop
+   at y≈474 and swipes up start at y≈499. `NATIVE_BACK_BAND_FRACTION` moved to
+   **0.52** (≈485pt here), which leaves 13 of the 14 back swipes on the native
+   interactive pop and puts all the swipes up in the free zone. They separate by
+   *x* too — back on the left half, up in the centre — which is a second lever
+   (`gestureResponseDistance.end`) if height alone turns out not to be enough.
+3. **`maxDy` on an activated touch was measuring the wrong thing.** It looked
+   as though no swipe up ever travelled past 33pt, which would have meant a
+   second unexplained cause. It does not: RNGH stops delivering `onTouchesMove`
+   once the handler activates, so on any `released` row `dy` is the travel *up
+   to the claim* and nothing after it. The rest of the swipe was never recorded.
+   `maxPull`, taken from `onUpdate`, now records it.
+
+Note also that no row in this sample reached `stolen` — every failed swipe up
+was `released`, i.e. we *did* claim the touch and it ended without committing.
+`released` was lumping together two different things, so it is now split:
+`cancelled` (we owned it and `onEnd` arrived with `success = false`, meaning
+something took it back mid-drag) versus `released` (a pull the user genuinely
+did not finish). Round 2 needs `pull=` and `cancelled` to say which of the two
+"the swipe up did not register" actually is.

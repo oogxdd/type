@@ -116,22 +116,22 @@ describe("shouldCommitFiling", () => {
 });
 
 describe("isInNativeBackBand", () => {
-  const H = 800; // bottom of the native band at 0.7 → 560
+  const H = 800; // bottom of the native band at 0.52 → 416
 
   it("puts the line where nativeBackBandBottom says", () => {
-    expect(nativeBackBandBottom(H)).toBe(560);
+    expect(nativeBackBandBottom(H)).toBe(416);
   });
 
   it("leaves the upper screen to the native back gesture", () => {
     expect(isInNativeBackBand(0, H)).toBe(true);
     expect(isInNativeBackBand(300, H)).toBe(true);
-    expect(isInNativeBackBand(560, H)).toBe(true);
+    expect(isInNativeBackBand(416, H)).toBe(true);
   });
 
   it("keeps the lower screen for the capture gestures", () => {
     // Where a thumb starts pushing the page up. Nothing may fail the touch
     // here, because nothing else is competing for it.
-    expect(isInNativeBackBand(561, H)).toBe(false);
+    expect(isInNativeBackBand(417, H)).toBe(false);
     expect(isInNativeBackBand(700, H)).toBe(false);
     expect(isInNativeBackBand(H, H)).toBe(false);
   });

@@ -430,6 +430,11 @@ export const CaptureScreen = () => {
   const traceGotEnd = useSharedValue(false);
   const traceEndSuccess = useSharedValue(false);
   const traceFiled = useSharedValue(false);
+  const traceMaxPull = useSharedValue(0);
+  // onFinalize can fire twice for one touch: once when manager.fail() resolves
+  // the handler, and again when the finger actually lifts. Without this guard
+  // every handed-over touch showed up as two identical rows.
+  const traceEmitted = useSharedValue(false);
 
   const runRecordAttempt = useCallback(
     (attempt: GestureAttempt) => recordGestureAttempt(attempt),
@@ -486,6 +491,8 @@ export const CaptureScreen = () => {
           traceGotEnd.value = false;
           traceEndSuccess.value = false;
           traceFiled.value = false;
+          traceMaxPull.value = 0;
+          traceEmitted.value = false;
         })
         .onTouchesMove((event, manager) => {
           const touch = event.allTouches[0];
@@ -569,6 +576,9 @@ export const CaptureScreen = () => {
             keyboard.height.value
           );
           pageY.value = -Math.min(Math.max(pull, 0), pageHeight);
+          if (pull > traceMaxPull.value) {
+            traceMaxPull.value = pull;
+          }
         })
         .onEnd((event, success) => {
           traceGotEnd.value = true;
@@ -628,7 +638,8 @@ export const CaptureScreen = () => {
           if (!transitioning.value && pageY.value !== 0) {
             pageY.value = withSpring(0, CANCEL_SPRING);
           }
-          if (traceEnabled.value) {
+          if (traceEnabled.value && !traceEmitted.value) {
+            traceEmitted.value = true;
             // One hop per touch, after everything has resolved.
             runOnJS(runRecordAttempt)({
               at: Date.now(),
@@ -636,6 +647,7 @@ export const CaptureScreen = () => {
               startY: touchStartY.value,
               maxDx: traceMaxDx.value,
               maxDy: traceMaxDy.value,
+              maxPull: traceMaxPull.value,
               durationMs: Date.now() - traceStartMs.value,
               latchedVertical: verticalLatched.value,
               activated: traceActivated.value,
@@ -645,6 +657,7 @@ export const CaptureScreen = () => {
               gotEnd: traceGotEnd.value,
               endSuccess: traceEndSuccess.value,
               filed: traceFiled.value,
+              band: startedInNativeBand.value,
             });
           }
         }),
@@ -664,6 +677,7 @@ export const CaptureScreen = () => {
       touchStartY,
       traceActivated,
       traceBlocked,
+      traceEmitted,
       traceEnabled,
       traceEndSuccess,
       traceFailedByVerdict,
@@ -672,6 +686,7 @@ export const CaptureScreen = () => {
       traceGotEnd,
       traceMaxDx,
       traceMaxDy,
+      traceMaxPull,
       traceStartMs,
       transitioning,
       verticalLatched,

@@ -15,6 +15,7 @@ const attempt = (patch: Partial<GestureAttempt> = {}): GestureAttempt => ({
   startY: 600,
   maxDx: 0,
   maxDy: 0,
+  maxPull: 0,
   durationMs: 120,
   latchedVertical: false,
   activated: false,
@@ -24,6 +25,7 @@ const attempt = (patch: Partial<GestureAttempt> = {}): GestureAttempt => ({
   gotEnd: false,
   endSuccess: false,
   filed: false,
+  band: false,
   ...patch,
 });
 
