@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "0590bbd7e7b6",
+  "strategy": "manual-commit",
+  "branch": "mobile/fix-capture-swipe-crash",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/mobile/app.json",
+    "apps/mobile/ios/Type/Info.plist"
+  ],
+  "sessions": [
+    {
+      "metadata": "/05/90bbd7e7b6/0/metadata.json",
+      "transcript": "/05/90bbd7e7b6/0/full.jsonl",
+      "context": "",
+      "content_hash": "/05/90bbd7e7b6/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
