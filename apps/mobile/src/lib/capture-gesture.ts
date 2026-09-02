@@ -26,34 +26,37 @@ export const BOTTOM_SLACK = 6;
 export const TOP_SLACK = 4;
 
 /**
- * The iOS back-swipe strip. Capture runs with `fullScreenGestureEnabled:
- * false`, so the native pop recognizer lives here and nowhere else; the
- * capture pans exclude exactly this strip via `hitSlop({ left: -… })`.
+ * The iOS back-swipe strip. Capture runs with the whole-screen pop recognizer
+ * enabled (as it did in mobile-v0.2.2), so this is not the only place back
+ * lives — but the capture pans still exclude the strip outright via
+ * `hitSlop({ left: -… })` so a drag starting on the edge is navigation, full
+ * stop, with nothing to arbitrate.
  */
 export const BACK_SWIPE_GUTTER = 48;
 
 /**
  * Rightward travel that means "this is navigation, not filing".
  *
- * These were 32px / 1.5 up to mobile-v0.2.1 and were cut to 8px / 1.0 in
- * 755be630 to appease the full-screen pop recognizer that 6abd8f6d had just
- * switched on across Capture. That cut is what stopped the swipe working:
- * `dx`/`dy` are measured from the touch start and the fail is terminal for the
- * whole touch, so at the beginning of a swipe up — where `dy` is still ~0 —
- * a thumb arcing 8-10px sideways killed the gesture permanently. With the
- * recognizer confined to the gutter again, the tolerant values come back.
+ * 8px / 1.0 are mobile-v0.2.2's values, restored deliberately. They are tight,
+ * and `dx`/`dy` are measured from the touch start with the fail terminal for
+ * the whole touch — so a thumb that arcs sideways early can lose a swipe up.
+ * The alternative is worse: the whole-screen pop recognizer is back on for
+ * Capture, and raising these makes swiping back out of Capture feel dead,
+ * because the pan sits in BEGAN while the native gesture waits on it.
+ * Navigation wins ties here on purpose.
  */
-export const RIGHTWARD_FAIL = 32;
-export const RIGHTWARD_FAIL_RATIO = 1.5;
+export const RIGHTWARD_FAIL = 8;
+export const RIGHTWARD_FAIL_RATIO = 1;
 
 /**
- * Leftward travel belongs to swipeToSync, which claims at -24. Fail at the
- * same point regardless of the vertical component: a manual-activation
- * gesture that neither activates nor fails stays BEGAN forever, and in
- * `Gesture.Race` everything behind it waits on that failure — so a diagonal
- * drag used to wedge the Sync swipe shut.
+ * Leftward travel belongs to swipeToSync, which claims at -24. Fail at 8 like
+ * the rightward side, but *regardless of the vertical component*: a
+ * manual-activation gesture that neither activates nor fails stays BEGAN
+ * forever, and in `Gesture.Race` everything behind it waits on that failure —
+ * which is how a diagonal drag used to wedge the Sync swipe shut. This is the
+ * one intentional deviation from 0.2.2.
  */
-export const LEFTWARD_FAIL = 24;
+export const LEFTWARD_FAIL = 8;
 
 /** swipeToSync's own guard against a rightward drag (the native back). */
 export const SYNC_RIGHTWARD_FAIL = 8;

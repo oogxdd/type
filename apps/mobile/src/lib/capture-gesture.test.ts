@@ -9,12 +9,20 @@ import {
 } from "./capture-gesture";
 
 describe("horizontalVerdict", () => {
-  it("keeps watching a swipe up that arcs sideways", () => {
-    // The regression from 755be630: at the start of a swipe up dy is still
-    // near zero, and an 8px sideways arc used to fail the gesture terminally.
-    expect(horizontalVerdict(9, -7)).toBe("undecided");
-    expect(horizontalVerdict(20, -4)).toBe("undecided");
-    expect(horizontalVerdict(-18, -6)).toBe("undecided");
+  it("keeps watching a swipe that is already mostly vertical", () => {
+    // Thresholds are tight (0.2.2's) because the whole-screen pop recognizer
+    // is on for Capture, so the pan must get out of its way quickly. What
+    // still has to survive is a drag whose vertical part already dominates.
+    expect(horizontalVerdict(6, -7)).toBe("undecided");
+    expect(horizontalVerdict(20, -40)).toBe("undecided");
+  });
+
+  it("hands an early sideways arc to navigation, ties included", () => {
+    // Deliberate: navigation wins ambiguity, because a pan sitting in BEGAN
+    // is what makes the native back gesture feel dead.
+    expect(horizontalVerdict(9, -7)).toBe("navigation");
+    expect(horizontalVerdict(20, -4)).toBe("navigation");
+    expect(horizontalVerdict(-18, -6)).toBe("sync");
   });
 
   it("gives a clearly rightward drag to navigation", () => {

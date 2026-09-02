@@ -80,10 +80,11 @@ const RootStack = () => {
         component={CaptureScreen}
         options={({ route }) => ({
           headerShown: false,
-          // Edge-only back here. Capture's own pans own the rest of the
-          // screen, and they reserve exactly this strip via
-          // hitSlop({ left: -BACK_SWIPE_GUTTER }), so the two never overlap.
-          fullScreenGestureEnabled: false,
+          // Capture inherits the whole-screen back gesture from screenOptions
+          // above, same as mobile-v0.2.2. Confining it to the left edge here
+          // made swiping back out of Capture feel broken; the capture pans
+          // co-exist with it by failing as soon as a drag reads horizontal
+          // (see horizontalVerdict) and by excluding the edge strip outright.
           // A gesture-driven preview already played this push when instant
           // is set; attach the real screen underneath without replaying it.
           animation: route.params?.instant ? "none" : "default",

@@ -495,10 +495,23 @@ export const CaptureScreen = () => {
                 if (finished) {
                   runOnJS(runFinishCommit)();
                 } else {
-                  // Interrupted mid-flight (unmount, new gesture) — don't leave
-                  // the page stranded off-screen without a swap.
+                  // Interrupted mid-flight. Only clear the flag — do NOT start
+                  // another animation on pageY from in here.
+                  //
+                  // Assigning an animation to a shared value from inside that
+                  // same value's animation callback re-enters cancellation,
+                  // which invokes this callback again, which assigns again:
+                  // recursion until "Maximum call stack size exceeded". In
+                  // worklets 0.10 `runGuarded` is a bare `runSync` with no
+                  // try/catch, so on the UI runtime (the iOS main thread) that
+                  // RangeError escapes as a C++ exception -> std::terminate ->
+                  // SIGABRT. That is the swipe-up crash, and it has been here
+                  // unchanged since mobile-v0.2.2.
+                  //
+                  // Nothing is stranded by leaving pageY alone: the only way to
+                  // interrupt an animation is to assign to the value, so
+                  // whoever interrupted us already owns its target.
                   transitioning.value = false;
-                  pageY.value = withSpring(0, CANCEL_SPRING);
                 }
               }
             );
