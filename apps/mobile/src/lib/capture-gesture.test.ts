@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   COMMIT_VELOCITY,
   horizontalVerdict,
+  isInNativeBackBand,
+  nativeBackBandBottom,
   isVerticalCommitted,
   isAtScrollBottom,
   shouldCommitFiling,
@@ -110,5 +112,27 @@ describe("shouldCommitFiling", () => {
 
   it("does not commit a downward flick", () => {
     expect(shouldCommitFiling(-10, 500, 900)).toBe(false);
+  });
+});
+
+describe("isInNativeBackBand", () => {
+  const H = 800; // bottom of the native band at 0.7 → 560
+
+  it("puts the line where nativeBackBandBottom says", () => {
+    expect(nativeBackBandBottom(H)).toBe(560);
+  });
+
+  it("leaves the upper screen to the native back gesture", () => {
+    expect(isInNativeBackBand(0, H)).toBe(true);
+    expect(isInNativeBackBand(300, H)).toBe(true);
+    expect(isInNativeBackBand(560, H)).toBe(true);
+  });
+
+  it("keeps the lower screen for the capture gestures", () => {
+    // Where a thumb starts pushing the page up. Nothing may fail the touch
+    // here, because nothing else is competing for it.
+    expect(isInNativeBackBand(561, H)).toBe(false);
+    expect(isInNativeBackBand(700, H)).toBe(false);
+    expect(isInNativeBackBand(H, H)).toBe(false);
   });
 });

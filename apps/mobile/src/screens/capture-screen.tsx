@@ -63,6 +63,7 @@ import {
   BACK_SWIPE_GUTTER,
   ESCAPE_DRAG,
   horizontalVerdict,
+  isInNativeBackBand,
   isVerticalCommitted,
   isAtScrollBottom,
   shouldCommitFiling,
@@ -70,6 +71,10 @@ import {
   TOP_SLACK,
   visiblePageHeight,
 } from "../lib/capture-gesture";
+import {
+  type GestureAttempt,
+  recordGestureAttempt,
+} from "../lib/gesture-trace";
 import { autoSyncLabel } from "../lib/sync-experience";
 import { useClearInstantParam, type RootStackParamList } from "../navigation";
 import { useDiagnosticsStore } from "../state/diagnostics-store";
@@ -82,12 +87,6 @@ import { ToolbarButton } from "../ui/toolbar-button";
 // The swipe's thresholds and decision arithmetic live in ../lib/capture-gesture
 // so they can be tested without a device; the comments there explain why each
 // one is the value it is.
-//
-// How long filing waits for storage before showing the fresh page anyway. Two
-// small file writes take single-digit milliseconds, so this is only ever
-// reached when something is genuinely stuck — and then a blank page you can
-// type on beats a page frozen off-screen.
-const COMMIT_HANDOVER_MS = 1200;
 
 // Horizontal Capture -> Sync preview mechanics, matching Menu -> Capture.
 const SYNC_OPEN_PROGRESS = 0.3;
@@ -273,12 +272,21 @@ export const CaptureScreen = () => {
     );
   }, [offsetY, pageY, showIcons, transitioning]);
 
-  // The committed page is off-screen. Wait for persistence before exposing the
-  // fresh page, so a failed write springs the original page back (with its own
-  // session, so the retry updates the same note) instead of losing it. The wait
-  // is bounded: storage that stalls must not strand the page off-screen with
-  // the app looking dead — past the deadline the fresh page comes in anyway and
-  // the handed-off session finishes on its own.
+  // The committed page is off-screen; bring the fresh one in at once and let
+  // the write finish behind it.
+  //
+  // This used to wait for storage (bounded at 1200ms) so that a failed write
+  // could spring the original page back. The wait cost far more than it bought:
+  // `transitioning` stays true for its whole length, and every touch that
+  // landed in that window was killed outright — so the natural reaction to a
+  // swipe that "didn't work", swiping again immediately, was guaranteed to fail
+  // too. The window is now just the commit spring, and a touch inside it is
+  // merely declined rather than failed (see swipeToFile.onTouchesMove).
+  //
+  // Handing over early is safe because the fresh session is already installed
+  // below, before anything is awaited: openBlankPage's setText("") reaches the
+  // new session, never the filed one, which keeps its own draft and retries on
+  // its own.
   const finishCommit = useCallback(() => {
     const filed = sessionRef.current;
     if (!filed) {
@@ -286,38 +294,18 @@ export const CaptureScreen = () => {
       return;
     }
     sessionRef.current = newSession();
-
-    let handedOver = false;
-    const handOver = () => {
-      handedOver = true;
-      openBlankPage();
-    };
-    const deadline = setTimeout(handOver, COMMIT_HANDOVER_MS);
+    openBlankPage();
 
     void filed
       .commit()
       .then((path) => {
-        clearTimeout(deadline);
         if (path) {
           // Not a full refresh: see notes-store's noteFiled.
           void useNotesStore.getState().noteFiled(path).catch(() => {});
         }
-        if (!handedOver) {
-          handOver();
-        }
       })
-      .catch(() => {
-        clearTimeout(deadline);
-        if (handedOver) {
-          // The fresh page is already in front of the user and owns the live
-          // session; the failed one keeps its draft for its own retry.
-          return;
-        }
-        sessionRef.current = filed;
-        transitioning.value = false;
-        pageY.value = withSpring(0, CANCEL_SPRING);
-      });
-  }, [newSession, openBlankPage, pageY, transitioning]);
+      .catch(() => {});
+  }, [newSession, openBlankPage]);
 
   // A worklet that outlives the render that created it must not hold a
   // per-render function. The commit spring's callback runs on the UI runtime
@@ -414,6 +402,49 @@ export const CaptureScreen = () => {
   // Latched once the drag is unmistakably upward; from then on the horizontal
   // verdict is not consulted, so late thumb wobble cannot lose the swipe.
   const verticalLatched = useSharedValue(false);
+  // Did this touch start where the native back recognizer is still competing?
+  // Decided at touch-down, because that is the only thing the native side looks
+  // at either (see isInNativeBackBand).
+  const startedInNativeBand = useSharedValue(true);
+  // One back navigation per touch.
+  const backTriggered = useSharedValue(false);
+
+  // ---- Gesture trace (Settings -> Diagnostics) ------------------------------
+  //
+  // Off by default and mirrored into a shared value, so a touch never reads the
+  // store and a disabled trace costs one boolean check per gesture. Everything
+  // is accumulated on the UI thread and emitted once, in onFinalize.
+  const traceEnabled = useSharedValue(false);
+  const traceOn = useDiagnosticsStore((state) => state.diagnostics.traceGestures);
+  useEffect(() => {
+    traceEnabled.value = traceOn;
+  }, [traceEnabled, traceOn]);
+
+  const traceStartMs = useSharedValue(0);
+  const traceMaxDx = useSharedValue(0);
+  const traceMaxDy = useSharedValue(0);
+  const traceActivated = useSharedValue(false);
+  const traceFailedByVerdict = useSharedValue(false);
+  const traceFailedToSync = useSharedValue(false);
+  const traceBlocked = useSharedValue(false);
+  const traceGotEnd = useSharedValue(false);
+  const traceEndSuccess = useSharedValue(false);
+  const traceFiled = useSharedValue(false);
+
+  const runRecordAttempt = useCallback(
+    (attempt: GestureAttempt) => recordGestureAttempt(attempt),
+    []
+  );
+
+  // Below the native back band nothing else is going to pop the screen, so a
+  // decisive rightward drag does it here. Not driven under the finger — the
+  // native animated pop is the same one the band above gets interactively.
+  const goBackToMenu = useCallback(() => {
+    navigation.popTo("Menu");
+  }, [navigation]);
+  const goBackRef = useRef(goBackToMenu);
+  goBackRef.current = goBackToMenu;
+  const runGoBack = useCallback(() => goBackRef.current(), []);
 
   // Memoized, and every capture in the closures below is a stable identity —
   // shared values, the useAnimatedKeyboard ref, and the run* proxies. That is
@@ -428,10 +459,6 @@ export const CaptureScreen = () => {
         .hitSlop({ left: -BACK_SWIPE_GUTTER })
         .manualActivation(true)
         .onTouchesDown((event, manager) => {
-          if (transitioning.value) {
-            manager.fail();
-            return;
-          }
           const touch = event.allTouches[0];
           // iOS can deliver a terminal/cancel frame with no remaining touches.
           // Never dereference that sparse frame inside a worklet.
@@ -443,6 +470,22 @@ export const CaptureScreen = () => {
           touchStartY.value = touch.y;
           armY.value = touch.y;
           verticalLatched.value = false;
+          backTriggered.value = false;
+          startedInNativeBand.value = isInNativeBackBand(
+            touch.y,
+            windowH.value
+          );
+
+          traceStartMs.value = Date.now();
+          traceMaxDx.value = 0;
+          traceMaxDy.value = 0;
+          traceActivated.value = false;
+          traceFailedByVerdict.value = false;
+          traceFailedToSync.value = false;
+          traceBlocked.value = false;
+          traceGotEnd.value = false;
+          traceEndSuccess.value = false;
+          traceFiled.value = false;
         })
         .onTouchesMove((event, manager) => {
           const touch = event.allTouches[0];
@@ -452,18 +495,55 @@ export const CaptureScreen = () => {
           }
           const dx = touch.x - touchStartX.value;
           const dy = touch.y - touchStartY.value;
+          if (Math.abs(dx) > Math.abs(traceMaxDx.value)) {
+            traceMaxDx.value = dx;
+          }
+          if (Math.abs(dy) > Math.abs(traceMaxDy.value)) {
+            traceMaxDy.value = dy;
+          }
+
           if (!verticalLatched.value) {
             if (isVerticalCommitted(dx, dy)) {
               // Unmistakably upward — stop arbitrating for this touch.
               verticalLatched.value = true;
-            } else if (horizontalVerdict(dx, dy) !== "undecided") {
-              // Clearly-horizontal drags belong to native back or the Sync
-              // push. Anything still "undecided" stays ours: failing here is
-              // terminal for the whole touch, and at the start of a swipe up
-              // dy is still ~0.
-              manager.fail();
-              return;
+            } else {
+              const verdict = horizontalVerdict(dx, dy);
+              if (verdict === "sync") {
+                // Always give this one up: swipeToSync sits behind us in the
+                // Race and cannot start until we resolve.
+                traceFailedToSync.value = true;
+                manager.fail();
+                return;
+              }
+              if (verdict === "navigation") {
+                if (startedInNativeBand.value) {
+                  // The native pop is competing for this touch; hand it over.
+                  // This is the only place failing is worth its cost.
+                  traceFailedByVerdict.value = true;
+                  manager.fail();
+                  return;
+                }
+                if (!backTriggered.value) {
+                  // Below the band the native recognizer was never offered
+                  // this touch, so going back is ours to do.
+                  backTriggered.value = true;
+                  traceFailedByVerdict.value = true;
+                  runOnJS(runGoBack)();
+                  manager.fail();
+                  return;
+                }
+              }
+              // "undecided" stays ours. Failing is terminal for the whole
+              // touch, and at the start of a swipe up dy is still ~0.
             }
+          }
+          if (transitioning.value) {
+            // A filed page is still parked off-screen. Decline rather than
+            // fail: the window is short, and a finger that arrives at its tail
+            // should still be able to file once it clears.
+            traceBlocked.value = true;
+            armY.value = touch.y;
+            return;
           }
           if (
             !isAtScrollBottom(offsetY.value, contentH.value, viewportH.value)
@@ -473,6 +553,7 @@ export const CaptureScreen = () => {
             return;
           }
           if (armY.value - touch.y > ACTIVATE_PULL) {
+            traceActivated.value = true;
             manager.activate();
           }
         })
@@ -490,6 +571,8 @@ export const CaptureScreen = () => {
           pageY.value = -Math.min(Math.max(pull, 0), pageHeight);
         })
         .onEnd((event, success) => {
+          traceGotEnd.value = true;
+          traceEndSuccess.value = success;
           // RNGH calls END on cancellation too, with success = false — when the
           // native back pan, a system sheet or the scroll takes the touch. The
           // leftover upward velocity would make that the committing branch, so
@@ -504,6 +587,7 @@ export const CaptureScreen = () => {
             keyboard.height.value
           );
           if (shouldCommitFiling(pageY.value, pageHeight, event.velocityY)) {
+            traceFiled.value = true;
             transitioning.value = true;
             pageY.value = withSpring(
               -pageHeight,
@@ -544,17 +628,51 @@ export const CaptureScreen = () => {
           if (!transitioning.value && pageY.value !== 0) {
             pageY.value = withSpring(0, CANCEL_SPRING);
           }
+          if (traceEnabled.value) {
+            // One hop per touch, after everything has resolved.
+            runOnJS(runRecordAttempt)({
+              at: Date.now(),
+              startX: touchStartX.value,
+              startY: touchStartY.value,
+              maxDx: traceMaxDx.value,
+              maxDy: traceMaxDy.value,
+              durationMs: Date.now() - traceStartMs.value,
+              latchedVertical: verticalLatched.value,
+              activated: traceActivated.value,
+              failedByVerdict: traceFailedByVerdict.value,
+              failedToSync: traceFailedToSync.value,
+              blockedByTransitioning: traceBlocked.value,
+              gotEnd: traceGotEnd.value,
+              endSuccess: traceEndSuccess.value,
+              filed: traceFiled.value,
+            });
+          }
         }),
     [
       armY,
+      backTriggered,
       contentH,
       dragBase,
       keyboard,
       offsetY,
       pageY,
       runFinishCommit,
+      runGoBack,
+      runRecordAttempt,
+      startedInNativeBand,
       touchStartX,
       touchStartY,
+      traceActivated,
+      traceBlocked,
+      traceEnabled,
+      traceEndSuccess,
+      traceFailedByVerdict,
+      traceFailedToSync,
+      traceFiled,
+      traceGotEnd,
+      traceMaxDx,
+      traceMaxDy,
+      traceStartMs,
       transitioning,
       verticalLatched,
       viewportH,
@@ -663,7 +781,9 @@ export const CaptureScreen = () => {
         .failOffsetY([-24, 24])
         .onTouchesDown((_event, manager) => {
           // Never leave for Sync while a filed page is parked off-screen and
-          // its commit is still in flight (up to COMMIT_HANDOVER_MS).
+          // the commit spring is still running. Failing is cheap here: this
+          // gesture sits behind swipeToFile in the Race, so giving it up costs
+          // the swipe up nothing.
           if (transitioning.value) {
             manager.fail();
           }

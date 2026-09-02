@@ -20,10 +20,17 @@ export type Diagnostics = {
    * blank sheet, and the same information is on the Menu and Sync screens.
    */
   showCaptureSyncStatus: boolean;
+  /**
+   * Record one entry per capture-screen touch into the in-memory gesture trace
+   * (src/lib/gesture-trace.ts) and show the readout on this screen. Off by
+   * default: it is a debugging instrument, not a feature.
+   */
+  traceGestures: boolean;
 };
 
 export const DEFAULT_DIAGNOSTICS: Diagnostics = {
   showCaptureSyncStatus: false,
+  traceGestures: false,
 };
 
 export const normalizeDiagnostics = (raw: unknown): Diagnostics => {
@@ -33,6 +40,10 @@ export const normalizeDiagnostics = (raw: unknown): Diagnostics => {
       typeof value.showCaptureSyncStatus === "boolean"
         ? value.showCaptureSyncStatus
         : DEFAULT_DIAGNOSTICS.showCaptureSyncStatus,
+    traceGestures:
+      typeof value.traceGestures === "boolean"
+        ? value.traceGestures
+        : DEFAULT_DIAGNOSTICS.traceGestures,
   };
 };
 
@@ -55,6 +66,7 @@ type DiagnosticsState = {
   hydrated: boolean;
   load: () => Promise<void>;
   setShowCaptureSyncStatus: (value: boolean) => void;
+  setTraceGestures: (value: boolean) => void;
 };
 
 export const useDiagnosticsStore = create<DiagnosticsState>((set, get) => {
@@ -77,5 +89,6 @@ export const useDiagnosticsStore = create<DiagnosticsState>((set, get) => {
       }
     },
     setShowCaptureSyncStatus: (value) => update({ showCaptureSyncStatus: value }),
+    setTraceGestures: (value) => update({ traceGestures: value }),
   };
 });

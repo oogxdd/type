@@ -6,7 +6,14 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Linking, StyleSheet, Text, View } from "react-native";
+import {
+  AppState,
+  Linking,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -37,6 +44,7 @@ import { useRecordingSessionStore } from "./state/recording-session-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
 import { useSettingsStore } from "./state/settings-store";
 import { useSyncStore } from "./state/sync-store";
+import { nativeBackBandBottom } from "./lib/capture-gesture";
 import { useTheme } from "./theme";
 import { ErrorBoundary } from "./ui/error-boundary";
 
@@ -59,6 +67,7 @@ const BUNDLED_FONTS = {
 
 const RootStack = () => {
   const theme = useTheme();
+  const { height } = useWindowDimensions();
   return (
     <Stack.Navigator
       initialRouteName="Capture"
@@ -70,10 +79,8 @@ const RootStack = () => {
         // Swipe back from anywhere on the screen, not just the left edge —
         // still the native UIKit pop transition, driven natively by
         // react-native-screens' pan recognizer. Ordinary pushed screens have
-        // no gestures of their own, so this is free there. Capture opts out
-        // (see below): its whole surface is a gesture target, and a
-        // full-screen pop recognizer racing every touch is what forced the
-        // capture pans to be tuned until they stopped recognizing anything.
+        // no gestures of their own, so this is free there. Capture keeps it
+        // too, but only over its upper band (see below).
         fullScreenGestureEnabled: true,
         // Chevron-only back everywhere: Sync has more than one entry point,
         // so naming the previous screen in the label would be noise.
@@ -90,11 +97,23 @@ const RootStack = () => {
         component={CaptureScreen}
         options={({ route }) => ({
           headerShown: false,
-          // Capture inherits the whole-screen back gesture from screenOptions
-          // above, same as mobile-v0.2.2. Confining it to the left edge here
-          // made swiping back out of Capture feel broken; the capture pans
-          // co-exist with it by failing as soon as a drag reads horizontal
-          // (see horizontalVerdict) and by excluding the edge strip outright.
+          // Capture is the one screen whose whole surface is a gesture target,
+          // and the native pop recognizer checks nothing but where a touch
+          // started — it fires on ~10pt in *any* direction, including straight
+          // up, and cancels our touch (see apps/mobile/GESTURES.md). It cannot
+          // be arbitrated with; the two libraries refuse each other's
+          // recognizers outright.
+          //
+          // So the screen is split by height instead. Above this line the
+          // native interactive pop is untouched, which is where a back swipe
+          // naturally starts anyway. Below it the recognizer is never offered
+          // the touch, so swiping up to file is uncontested; a decisive
+          // rightward drag down there pops from the capture screen itself.
+          //
+          // The values are absolute point coordinates, not edge distances —
+          // react-native-screens passes them straight through to
+          // isInGestureResponseDistance.
+          gestureResponseDistance: { bottom: nativeBackBandBottom(height) },
           // A gesture-driven preview already played this push when instant
           // is set; attach the real screen underneath without replaying it.
           animation: route.params?.instant ? "none" : "default",

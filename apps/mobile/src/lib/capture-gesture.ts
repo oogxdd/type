@@ -28,12 +28,56 @@ export const TOP_SLACK = 4;
 /**
  * The strip along the left edge where a drag is navigation and nothing else.
  *
- * 24 rather than 48: the whole-screen pop recognizer is enabled for Capture,
- * so this no longer has to be the only place a back swipe can start, and every
- * pixel of it is a pixel where swiping up to file does not exist at all. 24pt
- * still covers the true edge, where back is the only plausible intent.
+ * This is not about the full-screen pop recognizer, which is now gated by where
+ * the touch starts (see isInNativeBackBand). It is about UIKit's own edge pop,
+ * which react-native-screens waves through unconditionally
+ * (RNSScreenStack.mm:876-877) and which no prop can narrow. 24pt covers the
+ * true edge, where back is the only plausible intent.
  */
 export const BACK_SWIPE_GUTTER = 24;
+
+/**
+ * How much of the screen, measured from the top, still belongs to the native
+ * full-screen back gesture.
+ *
+ * The native recognizer checks nothing but where the touch started
+ * (RNSScreenStack.mm:1042-1063), and it cannot be arbitrated with — it fires on
+ * ~10pt of movement in *any* direction, including straight up, and cancels our
+ * touch. `gestureResponseDistance` is the one lever that works, because it
+ * decides before the drag begins.
+ *
+ * So the screen is split. Above the line the native interactive pop is
+ * untouched, which is what it should be: that is where the text is and where a
+ * back swipe naturally starts. Below it, where a thumb starts pushing the page
+ * up, the native recognizer is never offered the touch at all and the swipe up
+ * is uncontested. A decisive rightward drag down there still goes back, just as
+ * a plain animated pop rather than one driven under the finger.
+ *
+ * 0.7 is a starting hypothesis from the mechanics of the two gestures, not a
+ * measured value. The Gesture trace in Settings -> Diagnostics records where
+ * each attempt started; move this line to whatever the distribution says.
+ */
+export const NATIVE_BACK_BAND_FRACTION = 0.7;
+
+/** The `gestureResponseDistance.bottom` that NATIVE_BACK_BAND_FRACTION implies. */
+export const nativeBackBandBottom = (windowHeight: number): number => {
+  "worklet";
+  return Math.round(windowHeight * NATIVE_BACK_BAND_FRACTION);
+};
+
+/**
+ * Did this touch start where the native back recognizer is still competing?
+ *
+ * Only there does handing the touch over cost anything, and only there may the
+ * gesture call the terminal `manager.fail()`.
+ */
+export const isInNativeBackBand = (
+  startY: number,
+  windowHeight: number
+): boolean => {
+  "worklet";
+  return startY <= nativeBackBandBottom(windowHeight);
+};
 
 /**
  * Absolute sideways travel before a drag is called navigation rather than
@@ -46,7 +90,9 @@ export const BACK_SWIPE_GUTTER = 24;
  * good. 24pt is ~4mm — a real back swipe crosses it within the first frames
  * and still feels immediate, while an arcing swipe up survives it.
  *
- * Past VERTICAL_LATCH this stops being consulted at all.
+ * Past VERTICAL_LATCH this stops being consulted at all, and outside the native
+ * back band (isInNativeBackBand) crossing it no longer fails the gesture —
+ * there is nobody to hand the touch to down there.
  */
 export const RIGHTWARD_FAIL = 24;
 export const RIGHTWARD_FAIL_RATIO = 1;

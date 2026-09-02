@@ -6,7 +6,7 @@
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as FileSystem from "expo-file-system/legacy";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import {
   Platform,
   ScrollView,
@@ -40,6 +40,13 @@ import {
   exportArchiveToFiles,
 } from "../lib/backup-export";
 import { backupFolderName } from "../lib/backup-naming";
+import {
+  clearGestureAttempts,
+  getGestureAttempts,
+  outcomeOf,
+  subscribeToGestureAttempts,
+  summarizeGestureAttempts,
+} from "../lib/gesture-trace";
 import type { RootStackParamList } from "../navigation";
 import { useAppearanceStore } from "../state/appearance-store";
 import { useBackgroundOperationStore } from "../state/background-operation-store";
@@ -537,6 +544,62 @@ export const SettingsAppearanceScreen = () => {
  * are deliberately not on the Appearance screen: its "Reset to Defaults" must
  * not switch a diagnostic back on behind the user's back.
  */
+/**
+ * One line per recorded touch on the capture page.
+ *
+ * Reads the ring buffer directly through useSyncExternalStore rather than a
+ * store: the trace is a debugging instrument with a one-session lifetime, and
+ * nothing outside this screen should be able to subscribe to it.
+ */
+const GestureTraceList = () => {
+  const theme = useTheme();
+  const attempts = useSyncExternalStore(
+    subscribeToGestureAttempts,
+    getGestureAttempts
+  );
+  const summary = summarizeGestureAttempts(attempts);
+
+  if (attempts.length === 0) {
+    return (
+      <Text style={[styles.traceEmpty, { color: theme.colors.secondaryText }]}>
+        No touches recorded yet. Swipe on the capture page and come back.
+      </Text>
+    );
+  }
+
+  return (
+    <View>
+      <Text style={[styles.traceSummary, { color: theme.colors.text }]}>
+        {summary.total} upward {summary.total === 1 ? "swipe" : "swipes"}:{" "}
+        {summary.filed} filed, {summary.stolen} taken away
+        {summary.stolen > 0
+          ? ` (started at y=${summary.stolenStartY.join(", ")})`
+          : ""}
+      </Text>
+      {attempts.map((attempt, index) => (
+        <Text
+          // Two touches can land in the same millisecond; the position in the
+          // buffer is what actually identifies a row.
+          key={`${attempt.at}-${index}`}
+          style={[
+            styles.traceRow,
+            {
+              color:
+                outcomeOf(attempt) === "stolen"
+                  ? theme.colors.danger
+                  : theme.colors.secondaryText,
+            },
+          ]}
+        >
+          {`x=${Math.round(attempt.startX)} y=${Math.round(attempt.startY)}  `}
+          {`dx=${Math.round(attempt.maxDx)} dy=${Math.round(attempt.maxDy)}  `}
+          {`${attempt.durationMs}ms  → ${outcomeOf(attempt)}`}
+        </Text>
+      ))}
+    </View>
+  );
+};
+
 export const SettingsDiagnosticsScreen = () => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -546,6 +609,8 @@ export const SettingsDiagnosticsScreen = () => {
   const setShowCaptureSyncStatus = useDiagnosticsStore(
     (s) => s.setShowCaptureSyncStatus
   );
+  const traceGestures = useDiagnosticsStore((s) => s.diagnostics.traceGestures);
+  const setTraceGestures = useDiagnosticsStore((s) => s.setTraceGestures);
 
   return (
     <ScrollView
@@ -562,6 +627,22 @@ export const SettingsDiagnosticsScreen = () => {
           onValueChange={setShowCaptureSyncStatus}
         />
       </SettingsGroup>
+
+      <SettingsGroup
+        header="Gesture trace"
+        footer="Records one line per touch on the capture page: where it started, how far it travelled, and what became of it. `stolen` means the finger clearly went up but something outside the app took the touch — the native back gesture, or the system's home-indicator swipe at the very bottom edge. Kept in memory only, cleared when the app restarts."
+      >
+        <SettingsToggleRow
+          title="Record swipes"
+          value={traceGestures}
+          onValueChange={setTraceGestures}
+        />
+        {traceGestures ? (
+          <SettingsActionRow title="Clear" onPress={clearGestureAttempts} />
+        ) : null}
+      </SettingsGroup>
+
+      {traceGestures ? <GestureTraceList /> : null}
     </ScrollView>
   );
 };
@@ -646,5 +727,25 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  traceEmpty: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginHorizontal: 16,
+    marginTop: 4,
+  },
+  traceSummary: {
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  traceRow: {
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    fontSize: 11,
+    lineHeight: 16,
+    marginHorizontal: 16,
   },
 });
