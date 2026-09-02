@@ -2,7 +2,7 @@
   "expo": {
     "name": "Type",
     "slug": "typenotes",
-    "version": "0.2.7",
+    "version": "0.2.8",
     "scheme": [
       "typenotes",
       "type2"
@@ -18,7 +18,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.typenotes.mobile",
-      "buildNumber": "2026090201",
+      "buildNumber": "2026090202",
       "supportsTablet": true,
       "infoPlist": {
         "UIFileSharingEnabled": true,
@@ -37,7 +37,7 @@
     },
     "android": {
       "package": "com.typenotes.mobile",
-      "versionCode": 2026090201,
+      "versionCode": 2026090202,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW"
       ],
