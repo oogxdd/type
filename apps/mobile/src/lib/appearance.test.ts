@@ -12,6 +12,7 @@ import {
   MIN_FONT_SIZE,
   mix,
   normalizeAppearance,
+  normalizeHexColor,
   readableOn,
   resolveFontFamily,
   TEXT_COLORS,
@@ -45,6 +46,12 @@ describe("color math", () => {
     expect(isDarkColor("#2b2f36")).toBe(true);
     expect(isDarkColor("#ffffff")).toBe(false);
     expect(isDarkColor("#f4ecd8")).toBe(false);
+  });
+
+  it("normalizes valid hex colors and rejects malformed persisted values", () => {
+    expect(normalizeHexColor("#A1B2C3", "#000000")).toBe("#a1b2c3");
+    expect(normalizeHexColor("red", "#000000")).toBe("#000000");
+    expect(normalizeHexColor("#fff", "#000000")).toBe("#000000");
   });
 });
 
@@ -107,8 +114,16 @@ describe("deriveTheme", () => {
   });
 
   it("switches to the dark variant for a dark custom background", () => {
-    const theme = deriveTheme({ ...DEFAULT_APPEARANCE, background: "slate" }, false);
+    const theme = deriveTheme(
+      {
+        ...DEFAULT_APPEARANCE,
+        background: "custom",
+        customBackground: "#172033",
+      },
+      false
+    );
     expect(theme.dark).toBe(true);
+    expect(theme.colors.background).toBe("#172033");
     // Chrome is derived from the background, so it keeps the background's hue.
     expect(theme.colors.surface).not.toBe(theme.colors.background);
     expect(theme.colors.border).not.toBe(theme.colors.background);
@@ -134,6 +149,23 @@ describe("deriveTheme", () => {
       MAX_FONT_SIZE
     );
   });
+
+  it("uses arbitrary text and accent colors while keeping them readable", () => {
+    const theme = deriveTheme(
+      {
+        ...DEFAULT_APPEARANCE,
+        background: "custom",
+        customBackground: "#fff1a8",
+        textColor: "custom",
+        customTextColor: "#5d1644",
+        accentColor: "#006d77",
+      },
+      false
+    );
+    expect(theme.colors.background).toBe("#fff1a8");
+    expect(theme.colors.text).toBe("#5d1644");
+    expect(theme.colors.accent).toBe("#006d77");
+  });
 });
 
 describe("font families", () => {
@@ -156,12 +188,25 @@ describe("font families", () => {
     );
   });
 
+  it("resolves bundled fonts to their registered asset names", () => {
+    expect(resolveFontFamily("unbounded", "ios")).toBe("TypeUnbounded");
+    expect(resolveFontFamily("cormorant", "android")).toBe(
+      "TypeCormorantGaramond"
+    );
+    expect(resolveFontFamily("neucha", "ios")).toBe("TypeNeucha");
+    expect(resolveFontFamily("golos", "android")).toBe("TypeGolosText");
+  });
+
   it("ships a concise set of choices", () => {
     expect(FONT_FAMILIES.map((option) => option.id)).toEqual([
       "system",
       "serif",
       "rounded",
       "monospace",
+      "unbounded",
+      "cormorant",
+      "neucha",
+      "golos",
     ]);
   });
 });
@@ -170,9 +215,12 @@ describe("normalizeAppearance", () => {
   it("round-trips a valid stored value", () => {
     const stored = {
       background: "paper",
+      customBackground: "#fedcba",
       textColor: "sepia",
+      customTextColor: "#123456",
+      accentColor: "#abcdef",
       fontSize: 19,
-      fontFamily: "serif",
+      fontFamily: "unbounded",
     };
     expect(normalizeAppearance(stored)).toEqual(stored);
   });
@@ -181,6 +229,23 @@ describe("normalizeAppearance", () => {
     expect(
       normalizeAppearance({ background: "neon", textColor: 7, fontSize: "big" })
     ).toEqual(DEFAULT_APPEARANCE);
+  });
+
+  it("keeps custom mode but repairs malformed custom colors", () => {
+    expect(
+      normalizeAppearance({
+        ...DEFAULT_APPEARANCE,
+        background: "custom",
+        customBackground: "transparent",
+        textColor: "custom",
+        customTextColor: "#12",
+        accentColor: "blue",
+      })
+    ).toEqual({
+      ...DEFAULT_APPEARANCE,
+      background: "custom",
+      textColor: "custom",
+    });
   });
 
   it("survives null, undefined, and non-objects", () => {
