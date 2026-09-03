@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "82f23a57b942",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "packages/shared/src/feed-tree-model.test.ts",
+    "packages/shared/src/feed-tree-model.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/82/f23a57b942/0/metadata.json",
+      "transcript": "/82/f23a57b942/0/full.jsonl",
+      "context": "",
+      "content_hash": "/82/f23a57b942/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
