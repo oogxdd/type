@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import * as gitApi from "@/features/sync/api/git-api";
 import { buildSyncDeepLink } from "@typenotes/shared/sync-link";
-import type { LocalSyncServerStatus } from "@typenotes/shared/types";
 import { Button } from "@/shared/ui/button";
-import { getErrorMessage } from "@typenotes/shared/errors";
+import { useGitSync } from "@/features/sync/hooks/git-sync-context";
 import {
   SettingsActionRow,
   SettingsCard,
@@ -12,47 +10,19 @@ import {
   SettingsHelpText,
 } from "@/features/settings/components/settings-ui";
 
-const redactRemoteForLog = (remote: string | null | undefined): string => {
-  if (!remote) return "<none>";
-  const match = remote.match(/^([a-z][a-z0-9+.-]*:\/\/)([^@/?#]+)@(.+)$/i);
-  if (!match) return remote;
-  const [, scheme, userinfo, rest] = match;
-  if (scheme.toLowerCase() === "ssh://" && userinfo.toLowerCase().startsWith("pair-")) {
-    const token = userinfo.slice("pair-".length);
-    return `${scheme}pair-<token:${token.slice(-6)}>@${rest}`;
-  }
-  return `${scheme}${userinfo.includes(":") ? "<credentials>" : userinfo}@${rest}`;
-};
-
-const statusForLog = (status: LocalSyncServerStatus): string =>
-  `running=${status.running} supported=${status.supported} git=${status.git_available} host=${
-    status.host ?? "<none>"
-  } branch=${status.branch ?? "<none>"} ssh=${redactRemoteForLog(status.ssh_url)} paired=${
-    status.paired_devices.length
-  } iroh=${status.iroh_endpoint_id ?? "<none>"} relay=${
-    status.iroh_relay ?? "<pending>"
-  } error=${status.error ?? "<none>"}`;
-
 export function LocalSyncServerCard() {
-  const [status, setStatus] = useState<LocalSyncServerStatus | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    localSyncServerStatus: status,
+    localSyncServerBusy: busy,
+    localSyncServerError: error,
+    refreshLocalSyncServer: refresh,
+    toggleLocalSyncServer: toggleServer,
+  } = useGitSync();
   const [copied, setCopied] = useState<string | null>(null);
 
   // Opening the settings page only reads status. The first start remains an
   // explicit user action; after that, app startup restores the server until
   // the user explicitly stops it.
-  const refresh = useCallback(async () => {
-    try {
-      const current = await gitApi.getLocalSyncServerStatus();
-      console.log(`[local-sync:ui] status: ${statusForLog(current)}`);
-      setStatus(current);
-    } catch (err) {
-      console.log(`[local-sync:ui] status failed: ${getErrorMessage(err)}`);
-      setError(getErrorMessage(err));
-    }
-  }, []);
-
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -61,36 +31,6 @@ export function LocalSyncServerCard() {
   // must re-render with the live one) and newly paired devices should show up
   // without a manual refresh.
   const running = Boolean(status?.running);
-  useEffect(() => {
-    if (!running) {
-      return;
-    }
-    const timer = window.setInterval(() => {
-      void gitApi
-        .getLocalSyncServerStatus()
-        .then(setStatus)
-        .catch(() => {});
-    }, 4000);
-    return () => window.clearInterval(timer);
-  }, [running]);
-
-  const toggleServer = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const next = status?.running
-        ? await gitApi.stopLocalSyncServer()
-        : await gitApi.startLocalSyncServer();
-      console.log(`[local-sync:ui] toggled server: ${statusForLog(next)}`);
-      setStatus(next);
-    } catch (err) {
-      console.log(`[local-sync:ui] toggle failed: ${getErrorMessage(err)}`);
-      setError(getErrorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }, [status?.running]);
-
   const copy = useCallback((value: string) => {
     void navigator.clipboard.writeText(value);
     setCopied(value);

@@ -191,7 +191,12 @@ export function TreeRow({
           onClick={(event) => event.stopPropagation()}
         />
       ) : (
-        <span className="item-label">{node.name}</span>
+        <span className="item-label">
+          {node.name}
+          {feedMode && node.secondaryName ? (
+            <span className="feed-secondary-label">{node.secondaryName}</span>
+          ) : null}
+        </span>
       )}
       {!renaming && node.noteCount ? (
         <span className="note-count" title={`${node.noteCount} notes`}>

@@ -128,7 +128,7 @@ export function AppSidebar({
                           className="grid size-8 shrink-0 place-items-center rounded-md hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:cursor-not-allowed disabled:opacity-50"
                           onClick={onSyncClick}
                           disabled={syncDisabled}
-                          aria-label={syncActive ? "Sync notes now" : "Turn on sync"}
+                          aria-label={syncActive ? "Stop sync server" : "Start sync server"}
                           aria-pressed={syncActive}
                         >
                           <span

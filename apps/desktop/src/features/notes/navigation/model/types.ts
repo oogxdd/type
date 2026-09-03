@@ -5,6 +5,7 @@ import type { NoteEntry } from "@typenotes/shared/types";
 export type NavigationNode = {
   id: string;
   name: string;
+  secondaryName?: string | null;
   children: NavigationNode[];
   noteCount?: number;
   notes?: NoteEntry[];

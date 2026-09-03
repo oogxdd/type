@@ -10,9 +10,11 @@ import type {
   GitCommitHistoryEntry,
   GitSyncAction,
   GitSyncStatus,
+  LocalSyncServerStatus,
 } from "@typenotes/shared/types";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useGitSyncWorkflows } from "./use-git-sync-workflows";
+import { useLocalSyncServer } from "./use-local-sync-server";
 import {
   readLastSuccessfulSyncAt,
   writeLastSuccessfulSyncAt,
@@ -27,6 +29,11 @@ type GitSyncContextValue = {
   gitHistoryBusy: boolean;
   gitHistoryError: string | null;
   lastSuccessfulSyncAt: string;
+  localSyncServerStatus: LocalSyncServerStatus | null;
+  localSyncServerBusy: boolean;
+  localSyncServerError: string | null;
+  refreshLocalSyncServer: () => Promise<void>;
+  toggleLocalSyncServer: () => Promise<void>;
   refreshGitStatus: () => Promise<void>;
   refreshGitHistory: (limit?: number) => Promise<void>;
   connectGitRepo: () => Promise<void>;
@@ -52,6 +59,13 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
   const [gitHistoryBusy, setGitHistoryBusy] = useState(false);
   const [gitHistoryError, setGitHistoryError] = useState<string | null>(null);
   const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState("");
+  const {
+    status: localSyncServerStatus,
+    busy: localSyncServerBusy,
+    error: localSyncServerError,
+    refresh: refreshLocalSyncServer,
+    toggle: toggleLocalSyncServer,
+  } = useLocalSyncServer();
 
   const recordSuccessfulSync = useCallback(
     (syncedAt: string) => {
@@ -129,6 +143,11 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
         gitHistoryBusy,
         gitHistoryError,
         lastSuccessfulSyncAt,
+        localSyncServerStatus,
+        localSyncServerBusy,
+        localSyncServerError,
+        refreshLocalSyncServer,
+        toggleLocalSyncServer,
         refreshGitStatus,
         refreshGitHistory,
         connectGitRepo,

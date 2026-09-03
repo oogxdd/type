@@ -94,7 +94,12 @@ export function DesktopAppShell({
     stopRecording,
   } = useRecordings();
   const { handwritingImportBusy } = useHandwriting();
-  const { gitSyncBusy, lastSuccessfulSyncAt, syncNow } = useGitSync();
+  const {
+    lastSuccessfulSyncAt,
+    localSyncServerStatus,
+    localSyncServerBusy,
+    toggleLocalSyncServer,
+  } = useGitSync();
   const { lockSecurity } = useSecurity();
   const lockAppNow = useCallback(async () => {
     if (!APP_EXTENSIONS.security) {
@@ -135,7 +140,6 @@ export function DesktopAppShell({
     shouldNestNotesInNavigation,
     feedNoteFilter,
     setFeedNoteFilter,
-    refreshTree,
   } = useNotesTree();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -256,11 +260,16 @@ export function DesktopAppShell({
         }}
         onHandwritingImportClick={onImportHandwriting}
         onSettingsClick={() => onAppModeChange("settings")}
-        syncActive={Boolean(lastSuccessfulSyncAt)}
-        syncBusy={gitSyncBusy}
-        syncDisabled={gitSyncBusy}
+        syncActive={Boolean(localSyncServerStatus?.running)}
+        syncBusy={localSyncServerBusy}
+        syncDisabled={
+          localSyncServerBusy ||
+          !localSyncServerStatus ||
+          !localSyncServerStatus.git_available ||
+          !localSyncServerStatus.supported
+        }
         syncTooltip={formatLastSuccessfulSync(lastSuccessfulSyncAt)}
-        onSyncClick={() => void syncNow({ onAfterPull: () => refreshTree() })}
+        onSyncClick={() => void toggleLocalSyncServer()}
       >
         <Tabs
           value={activeNavigationTab}

@@ -43,8 +43,10 @@ describe("buildFeedTree current-week pseudo-folders", () => {
     expect(treeData).toHaveLength(7);
     expect(treeData.every(isCurrentWeekFeedNode)).toBe(true);
     expect(treeData.map((node) => node.name)).toEqual([
-      "Monday · 31 Aug", "Tuesday · 1 Sep", "Wednesday · 2 Sep",
-      "Thursday · 3 Sep", "Friday · 4 Sep", "Saturday · 5 Sep", "Sunday · 6 Sep",
+      "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+    ]);
+    expect(treeData.map((node) => node.secondaryName)).toEqual([
+      null, null, null, null, null, null, null,
     ]);
     expect(treeData.map((node) => node.noteCount)).toEqual([0, 0, 0, 0, 0, 0, 0]);
   });
@@ -67,8 +69,7 @@ describe("buildFeedTree current-week pseudo-folders", () => {
       "sunday.md": new Date(2026, 8, 6, 8),
     });
     expect(treeData.slice(0, 7).map((node) => node.name)).toEqual([
-      "Monday · 7 Sep", "Tuesday · 8 Sep", "Wednesday · 9 Sep",
-      "Thursday · 10 Sep", "Friday · 11 Sep", "Saturday · 12 Sep", "Sunday · 13 Sep",
+      "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
     ]);
     expect(treeData[0].notes[0]?.path).toBe("monday.md");
     expect(findFeedNode(treeData, "feed:month:2026:9:week:36")?.notes).toEqual([]);
@@ -97,7 +98,7 @@ describe("buildFeedTree Earlier hierarchy", () => {
     });
     const august = findFeedNode(treeData, "feed:month:2026:8");
     expect(august?.children.map((week) => week.name)).toEqual([
-      "Week 4 · (24–30 Aug)", "Week 2 · (10–16 Aug)", "Week 1 · (3–9 Aug)",
+      "Week 4 (24–30 aug)", "Week 2 (10–16 aug)", "Week 1 (3–9 aug)",
     ]);
     expect(findFeedNode(treeData, "feed:month:2026:8:week:32")?.noteCount).toBe(2);
   });
@@ -109,11 +110,14 @@ describe("buildFeedTree Earlier hierarchy", () => {
       "aug-03.md": new Date(2026, 7, 3, 8),
     });
     expect(findFeedNode(treeData, "feed:month:2026:7:week:31")).toMatchObject({
-      name: "Week 5 · (27 Jul–2 Aug)", noteCount: 2,
+      name: "Week 5 (27 jul–2 aug)", noteCount: 2,
     });
     expect(findFeedNode(treeData, "feed:month:2026:8:week:32")).toMatchObject({
-      name: "Week 1 · (3–9 Aug)", noteCount: 1,
+      name: "Week 1 (3–9 aug)", noteCount: 1,
     });
+    expect(
+      findFeedNode(treeData, "feed:month:2026:8:week:32:day:3")
+    ).toMatchObject({ name: "Monday", secondaryName: "(3aug)" });
   });
 
   it("adds the year to older month labels", () => {

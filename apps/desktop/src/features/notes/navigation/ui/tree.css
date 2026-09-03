@@ -528,6 +528,12 @@
   font-size: 12px;
 }
 
+.tree-pane .feed-navigation-tree .feed-secondary-label {
+  margin-left: 5px;
+  color: var(--ui-muted);
+  opacity: 0.72;
+}
+
 .tree-pane .feed-navigation-tree .feed-bucket-row {
   min-height: 32px;
   padding-top: 5px;

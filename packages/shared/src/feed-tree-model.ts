@@ -16,14 +16,14 @@ export type { FeedNoteFilter };
 // Shape of the tree (today = Fri 4 Sep 2026, for example):
 //
 //   This week                               <- visual section (rendered by UI)
-//     Monday · 31 Aug
-//     Tuesday · 1 Sep
+//     Monday
+//     Tuesday
 //     ...                                   <- all seven days, even when empty
 //   Earlier                                 <- visual section (rendered by UI)
 //     August
-//       Week 4 · (24–30 Aug)
-//       Week 3 · (17–23 Aug)
-//         Monday · 17 Aug
+//       Week 4 (24–30 aug)
+//       Week 3 (17–23 aug)
+//         Monday (17aug)
 //         ...
 //     July
 //
@@ -42,6 +42,7 @@ export type FeedTreeNodeKind =
 export type FeedTreeNode = {
   id: string;
   name: string;
+  secondaryName: string | null;
   kind: FeedTreeNodeKind;
   parentId: string | null;
   rangeStartMs: number | null;
@@ -61,6 +62,7 @@ export type FeedTreeBuildResult = {
 type FeedNodeBuilder = {
   id: string;
   name: string;
+  secondaryName: string | null;
   kind: FeedTreeNodeKind;
   parentId: string | null;
   rangeStartMs: number | null;
@@ -99,6 +101,7 @@ const createBuilder = (
 ): FeedNodeBuilder => ({
   id,
   name,
+  secondaryName: null,
   kind,
   parentId,
   rangeStartMs,
@@ -257,7 +260,7 @@ const getWeekRange = (weekStart: Date, now: Date): FeedDateRange => ({
 const weekLabelCache = new Map<number, string>();
 
 const getShortMonthLabel = (date: Date) =>
-  date.toLocaleDateString([], { month: "short" });
+  date.toLocaleDateString([], { month: "short" }).toLocaleLowerCase();
 
 const getMonthWeekNumber = (weekStart: Date) => {
   const owner = addDays(weekStart, 3);
@@ -282,7 +285,7 @@ const getWeekLabel = (weekStart: Date) => {
     weekStart.getMonth() === weekEnd.getMonth()
       ? `${weekStart.getDate()}–${formatDay(weekEnd)}`
       : `${formatDay(weekStart)}–${formatDay(weekEnd)}`;
-  const label = `Week ${getMonthWeekNumber(weekStart)} · (${range})`;
+  const label = `Week ${getMonthWeekNumber(weekStart)} (${range})`;
   weekLabelCache.set(cacheKey, label);
   return label;
 };
@@ -332,11 +335,8 @@ const getWeekdayName = (date: Date) => {
   return label;
 };
 
-// Day rows carry the day of month because an ISO week can span two months, so
-// the weekday name alone no longer pins the date. Only the weekday name is
-// cached (7 entries) — the number is appended, keeping this off the hot path.
-const getDayLabel = (date: Date) =>
-  `${getWeekdayName(date)} · ${date.getDate()} ${getShortMonthLabel(date)}`;
+const getCalendarDaySecondaryLabel = (date: Date) =>
+  `(${date.getDate()}${getShortMonthLabel(date)})`;
 
 const buildPathSegments = (segments: Array<string | number>) =>
   `feed:${segments.map((segment) => String(segment)).join(":")}`;
@@ -372,12 +372,13 @@ const addNoteToDay = (
   const dayNode = ensureBuilder(
     parent,
     buildPathSegments([...parentPathSegments, "day", date.getDate()]),
-    getDayLabel(date),
+    getWeekdayName(date),
     "day",
     getChronologicalRank(dayRange.rangeStartMs),
     dayRange.rangeStartMs,
     dayRange.rangeEndMs
   );
+  dayNode.secondaryName = getCalendarDaySecondaryLabel(date);
   addNoteToBuilder(dayNode, note, timestampMs);
 };
 
@@ -466,6 +467,7 @@ const finalizeBuilder = (builder: FeedNodeBuilder): FeedTreeNode => {
   return {
     id: builder.id,
     name: builder.name,
+    secondaryName: builder.secondaryName,
     kind: builder.kind,
     parentId: builder.parentId,
     rangeStartMs: builder.rangeStartMs,
@@ -506,7 +508,7 @@ const ensureCurrentWeekDays = (
     ensureBuilder(
       root,
       buildPathSegments(currentWeekDaySegments(date)),
-      getDayLabel(date),
+      getWeekdayName(date),
       "day",
       dayOffset,
       dayRange.rangeStartMs,
