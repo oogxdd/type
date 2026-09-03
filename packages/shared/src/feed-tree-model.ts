@@ -336,7 +336,7 @@ const getWeekdayName = (date: Date) => {
 };
 
 const getCalendarDaySecondaryLabel = (date: Date) =>
-  `(${date.getDate()}${getShortMonthLabel(date)})`;
+  `${date.getDate()}${getShortMonthLabel(date)}`;
 
 const buildPathSegments = (segments: Array<string | number>) =>
   `feed:${segments.map((segment) => String(segment)).join(":")}`;
@@ -502,15 +502,21 @@ const ensureCurrentWeekDays = (
   bounds: FeedBoundaries
 ) => {
   const weekStart = new Date(bounds.thisWeekStartMs);
-  for (let dayOffset = 0; dayOffset < 7; dayOffset += 1) {
+  const currentDayOffset = (now.getDay() + 6) % 7;
+  for (let dayOffset = currentDayOffset; dayOffset >= 0; dayOffset -= 1) {
     const date = addDays(weekStart, dayOffset);
     const dayRange = getDayRange(date, now);
+    const relativeDayOffset = currentDayOffset - dayOffset;
     ensureBuilder(
       root,
       buildPathSegments(currentWeekDaySegments(date)),
-      getWeekdayName(date),
+      relativeDayOffset === 0
+        ? "Today"
+        : relativeDayOffset === 1
+          ? "Yesterday"
+          : getWeekdayName(date),
       "day",
-      dayOffset,
+      relativeDayOffset,
       dayRange.rangeStartMs,
       dayRange.rangeEndMs
     );

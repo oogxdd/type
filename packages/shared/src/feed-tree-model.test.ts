@@ -38,17 +38,17 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("buildFeedTree current-week pseudo-folders", () => {
-  it("always emits every Monday–Sunday day, including empty and future days", () => {
+  it("emits today first, followed by earlier weekdays, without future days", () => {
     const { treeData } = buildTree({});
-    expect(treeData).toHaveLength(7);
+    expect(treeData).toHaveLength(5);
     expect(treeData.every(isCurrentWeekFeedNode)).toBe(true);
     expect(treeData.map((node) => node.name)).toEqual([
-      "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+      "Today", "Yesterday", "Wednesday", "Tuesday", "Monday",
     ]);
     expect(treeData.map((node) => node.secondaryName)).toEqual([
-      null, null, null, null, null, null, null,
+      null, null, null, null, null,
     ]);
-    expect(treeData.map((node) => node.noteCount)).toEqual([0, 0, 0, 0, 0, 0, 0]);
+    expect(treeData.map((node) => node.noteCount)).toEqual([0, 0, 0, 0, 0]);
   });
 
   it("routes notes to their date and selects today as the initial feed group", () => {
@@ -56,10 +56,10 @@ describe("buildFeedTree current-week pseudo-folders", () => {
       "monday.md": new Date(2026, 7, 31, 9),
       "today.md": new Date(2026, 8, 4, 9),
     });
-    expect(treeData[0].notes.map((entry) => entry.path)).toEqual(["monday.md"]);
-    expect(treeData[4].notes.map((entry) => entry.path)).toEqual(["today.md"]);
-    expect(getFirstFeedGroupId(treeData)).toBe(treeData[4].id);
-    expect(treeData[4].rangeEndMs).toBe(NOW.getTime());
+    expect(treeData[0].notes.map((entry) => entry.path)).toEqual(["today.md"]);
+    expect(treeData[4].notes.map((entry) => entry.path)).toEqual(["monday.md"]);
+    expect(getFirstFeedGroupId(treeData)).toBe(treeData[0].id);
+    expect(treeData[0].rangeEndMs).toBe(NOW.getTime());
   });
 
   it("starts a new current week on Monday and files Sunday under Earlier", () => {
@@ -68,9 +68,8 @@ describe("buildFeedTree current-week pseudo-folders", () => {
       "monday.md": new Date(2026, 8, 7, 8),
       "sunday.md": new Date(2026, 8, 6, 8),
     });
-    expect(treeData.slice(0, 7).map((node) => node.name)).toEqual([
-      "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
-    ]);
+    expect(treeData[0].name).toBe("Today");
+    expect(treeData.filter(isCurrentWeekFeedNode)).toHaveLength(1);
     expect(treeData[0].notes[0]?.path).toBe("monday.md");
     expect(findFeedNode(treeData, "feed:month:2026:9:week:36")?.notes).toEqual([]);
     expect(findFeedNode(treeData, "feed:month:2026:9:week:36:day:6")?.notes[0]?.path)
@@ -85,8 +84,8 @@ describe("buildFeedTree Earlier hierarchy", () => {
       "jul.md": new Date(2026, 6, 13, 8),
       "jun.md": new Date(2026, 5, 15, 8),
     });
-    expect(treeData.slice(7).map((node) => node.name)).toEqual(["August", "July", "June"]);
-    expect(treeData.slice(7).map((node) => node.kind)).toEqual(["month", "month", "month"]);
+    expect(treeData.slice(5).map((node) => node.name)).toEqual(["August", "July", "June"]);
+    expect(treeData.slice(5).map((node) => node.kind)).toEqual(["month", "month", "month"]);
   });
 
   it("numbers weeks within their owning month and formats an en-dash range", () => {
@@ -117,7 +116,7 @@ describe("buildFeedTree Earlier hierarchy", () => {
     });
     expect(
       findFeedNode(treeData, "feed:month:2026:8:week:32:day:3")
-    ).toMatchObject({ name: "Monday", secondaryName: "(3aug)" });
+    ).toMatchObject({ name: "Monday", secondaryName: "3aug" });
   });
 
   it("adds the year to older month labels", () => {
@@ -125,7 +124,7 @@ describe("buildFeedTree Earlier hierarchy", () => {
       "dec-2025.md": new Date(2025, 11, 15, 8),
       "jan-2026.md": new Date(2026, 0, 12, 8),
     });
-    expect(treeData.slice(7).map((node) => node.name)).toEqual(["January", "December 2025"]);
+    expect(treeData.slice(5).map((node) => node.name)).toEqual(["January", "December 2025"]);
   });
 });
 
@@ -141,15 +140,14 @@ describe("feed filters and target timestamps", () => {
       [active.path]: preview(new Date(2026, 6, 3, 8)),
     };
     const { treeData } = buildFeedTree([archived, active], previews, "active");
-    expect(treeData.slice(0, 7).every(isCurrentWeekFeedNode)).toBe(true);
-    expect(treeData.slice(7).map((node) => node.name)).toEqual(["July"]);
+    expect(treeData.slice(0, 5).every(isCurrentWeekFeedNode)).toBe(true);
+    expect(treeData.slice(5).map((node) => node.name)).toEqual(["July"]);
   });
 
   it("uses now for today, the end of a past day, and no time for future days", () => {
     const { treeData } = buildTree({});
-    expect(getLatestFeedTargetTimestamp(treeData[0], NOW)).toBe(endOfDayMs(new Date(2026, 7, 31)));
-    expect(getLatestFeedTargetTimestamp(treeData[4], NOW)).toBe(NOW.getTime());
-    expect(getLatestFeedTargetTimestamp(treeData[5], NOW)).toBeNull();
-    expect(treeData[0].rangeStartMs).toBe(startOfDayMs(new Date(2026, 7, 31)));
+    expect(getLatestFeedTargetTimestamp(treeData[0], NOW)).toBe(NOW.getTime());
+    expect(getLatestFeedTargetTimestamp(treeData[4], NOW)).toBe(endOfDayMs(new Date(2026, 7, 31)));
+    expect(treeData[4].rangeStartMs).toBe(startOfDayMs(new Date(2026, 7, 31)));
   });
 });
