@@ -1,0 +1,33 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "82f23a57b942",
+  "session_id": "01a068e2-32ba-7752-8b46-01fed8aa8c66",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-03T22:42:57.280516Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "packages/shared/src/feed-tree-model.test.ts",
+    "packages/shared/src/feed-tree-model.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "06ca1063c51b",
+  "checkpoint_transcript_start": 359,
+  "transcript_lines_at_start": 359,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-03T22:42:54.475706Z",
+    "agent_lines": 822,
+    "human_added": 734,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1556,
+    "agent_percentage": 52.82776349614395
+  }
+}
