@@ -569,6 +569,10 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
         ref={(node) => {
           scrollRef.current = node;
         }}
+        onClick={() => {
+          editor.commands.focus();
+          setVimMode("insert");
+        }}
       >
         <EditorContent editor={editor} />
         {vimMode !== "insert" && vimCursorRect ? (

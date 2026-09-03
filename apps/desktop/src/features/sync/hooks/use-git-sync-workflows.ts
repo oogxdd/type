@@ -21,6 +21,7 @@ type UseGitSyncWorkflowsArgs = {
   setGitHistoryError: (error: string | null) => void;
   syncSettings: ProfileSyncSettings;
   updateSyncSettings: (patch: Partial<ProfileSyncSettings>) => Promise<void>;
+  onSuccessfulSync: (syncedAt: string) => void;
 };
 
 const needsGitReconnect = (
@@ -43,6 +44,7 @@ export function useGitSyncWorkflows({
   setGitHistoryError,
   syncSettings,
   updateSyncSettings,
+  onSuccessfulSync,
 }: UseGitSyncWorkflowsArgs) {
   const gitSyncBusy = gitSyncAction !== "idle";
 
@@ -147,7 +149,9 @@ export function useGitSyncWorkflows({
         );
         setGitStatus(status);
         setGitSyncError(null);
-        updateSyncSettings({ lastSuccessfulSyncAt: new Date().toISOString() });
+        const syncedAt = new Date().toISOString();
+        updateSyncSettings({ lastSuccessfulSyncAt: syncedAt });
+        onSuccessfulSync(syncedAt);
         void refreshGitHistory();
         if (opts?.onAfterPull) {
           await opts.onAfterPull();
@@ -166,6 +170,7 @@ export function useGitSyncWorkflows({
       setGitSyncError,
       syncSettings,
       updateSyncSettings,
+      onSuccessfulSync,
     ]
   );
 
@@ -196,7 +201,9 @@ export function useGitSyncWorkflows({
       );
       setGitStatus(status);
       setGitSyncError(null);
-      updateSyncSettings({ lastSuccessfulSyncAt: new Date().toISOString() });
+      const syncedAt = new Date().toISOString();
+      updateSyncSettings({ lastSuccessfulSyncAt: syncedAt });
+      onSuccessfulSync(syncedAt);
       void refreshGitHistory();
     } catch (error) {
       setGitSyncError(getErrorMessage(error));
@@ -211,6 +218,7 @@ export function useGitSyncWorkflows({
     setGitSyncError,
     syncSettings,
     updateSyncSettings,
+    onSuccessfulSync,
   ]);
 
   // One-tap sync: connect (if needed) -> push local work -> pull/merge remote
@@ -278,7 +286,9 @@ export function useGitSyncWorkflows({
         }
 
         setGitSyncError(null);
-        updateSyncSettings({ lastSuccessfulSyncAt: new Date().toISOString() });
+        const syncedAt = new Date().toISOString();
+        updateSyncSettings({ lastSuccessfulSyncAt: syncedAt });
+        onSuccessfulSync(syncedAt);
         void refreshGitHistory();
       } catch (error) {
         setGitSyncError(getErrorMessage(error));
@@ -294,6 +304,7 @@ export function useGitSyncWorkflows({
       setGitSyncError,
       syncSettings,
       updateSyncSettings,
+      onSuccessfulSync,
     ]
   );
 

@@ -6,6 +6,12 @@ import { CirclePlus, FilePenLine, Mic, Settings2, Square } from "lucide-react"
 import { cn } from "@/shared/lib/utils"
 import { Button } from "@/shared/ui/button"
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/shared/ui/tooltip"
+import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
@@ -26,6 +32,11 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   onRecordingClick: () => void
   onHandwritingImportClick: () => void
   onSettingsClick: () => void
+  syncActive: boolean
+  syncBusy: boolean
+  syncDisabled: boolean
+  syncTooltip: string
+  onSyncClick: () => void
   children: React.ReactNode
 }
 
@@ -38,6 +49,11 @@ export function AppSidebar({
   onRecordingClick,
   onHandwritingImportClick,
   onSettingsClick,
+  syncActive,
+  syncBusy,
+  syncDisabled,
+  syncTooltip,
+  onSyncClick,
   className,
   children,
   ...props
@@ -95,11 +111,41 @@ export function AppSidebar({
           <SidebarGroup className="mt-auto">
             <SidebarGroupContent>
               <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton isActive={settingsActive} onClick={onSettingsClick}>
+                <SidebarMenuItem className="flex items-center gap-2">
+                  <SidebarMenuButton
+                    className="min-w-0 flex-1"
+                    isActive={settingsActive}
+                    onClick={onSettingsClick}
+                  >
                     <Settings2 />
                     <span>Settings</span>
                   </SidebarMenuButton>
+                  <TooltipProvider delayDuration={1000}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="grid size-8 shrink-0 place-items-center rounded-md hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:cursor-not-allowed disabled:opacity-50"
+                          onClick={onSyncClick}
+                          disabled={syncDisabled}
+                          aria-label={syncActive ? "Sync notes now" : "Turn on sync"}
+                          aria-pressed={syncActive}
+                        >
+                          <span
+                            className={cn(
+                              "size-2.5 rounded-full bg-muted-foreground/45 transition-colors",
+                              syncActive && "bg-emerald-500",
+                              syncBusy && "animate-pulse"
+                            )}
+                            aria-hidden="true"
+                          />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" sideOffset={6}>
+                        {syncTooltip}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>

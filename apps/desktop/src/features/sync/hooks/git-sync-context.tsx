@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -12,6 +13,10 @@ import type {
 } from "@typenotes/shared/types";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useGitSyncWorkflows } from "./use-git-sync-workflows";
+import {
+  readLastSuccessfulSyncAt,
+  writeLastSuccessfulSyncAt,
+} from "../lib/sync-metadata";
 
 type GitSyncContextValue = {
   gitStatus: GitSyncStatus | null;
@@ -21,6 +26,7 @@ type GitSyncContextValue = {
   gitCommitHistory: GitCommitHistoryEntry[];
   gitHistoryBusy: boolean;
   gitHistoryError: string | null;
+  lastSuccessfulSyncAt: string;
   refreshGitStatus: () => Promise<void>;
   refreshGitHistory: (limit?: number) => Promise<void>;
   connectGitRepo: () => Promise<void>;
@@ -45,7 +51,16 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
   const [gitCommitHistory, setGitCommitHistory] = useState<GitCommitHistoryEntry[]>([]);
   const [gitHistoryBusy, setGitHistoryBusy] = useState(false);
   const [gitHistoryError, setGitHistoryError] = useState<string | null>(null);
+  const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState("");
 
+  const recordSuccessfulSync = useCallback(
+    (syncedAt: string) => {
+      if (!activeProfileId) return;
+      writeLastSuccessfulSyncAt(activeProfileId, syncedAt);
+      setLastSuccessfulSyncAt(syncedAt);
+    },
+    [activeProfileId]
+  );
   const {
     gitSyncBusy,
     refreshGitStatus,
@@ -65,9 +80,11 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
     setGitHistoryError,
     syncSettings,
     updateSyncSettings,
+    onSuccessfulSync: recordSuccessfulSync,
   });
 
   useEffect(() => {
+    setLastSuccessfulSyncAt(readLastSuccessfulSyncAt(activeProfileId));
     if (!activeProfileId) {
       setGitStatus(null);
       setGitSyncError(null);
@@ -111,6 +128,7 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
         gitCommitHistory,
         gitHistoryBusy,
         gitHistoryError,
+        lastSuccessfulSyncAt,
         refreshGitStatus,
         refreshGitHistory,
         connectGitRepo,

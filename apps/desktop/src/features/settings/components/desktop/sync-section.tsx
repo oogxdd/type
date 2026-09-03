@@ -31,6 +31,7 @@ export function SettingsSyncSection() {
     gitCommitHistory,
     gitHistoryBusy,
     gitHistoryError,
+    lastSuccessfulSyncAt,
     refreshGitStatus,
     refreshGitHistory,
     connectGitRepo,
@@ -47,8 +48,8 @@ export function SettingsSyncSection() {
   }, [refreshGitHistory, refreshGitStatus]);
 
   const syncHint = useMemo(() => getSyncHint(gitSyncError), [gitSyncError]);
-  const lastSuccessfulSyncAt = syncSettings.lastSuccessfulSyncAt
-    ? new Date(syncSettings.lastSuccessfulSyncAt).toLocaleString()
+  const lastSuccessfulSyncLabel = lastSuccessfulSyncAt
+    ? new Date(lastSuccessfulSyncAt).toLocaleString()
     : null;
   const visibleCommits = gitCommitHistory.slice(0, 8);
 
@@ -72,7 +73,7 @@ export function SettingsSyncSection() {
             </SettingsInfoRow>
           ) : null}
           <SettingsInfoRow label="Last sync">
-            <code className="text-xs">{lastSuccessfulSyncAt ?? "Never"}</code>
+            <code className="text-xs">{lastSuccessfulSyncLabel ?? "Never"}</code>
           </SettingsInfoRow>
         </SettingsInfoGrid>
 

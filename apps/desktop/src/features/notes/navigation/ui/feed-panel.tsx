@@ -10,6 +10,7 @@ import { useSelection } from "@/app/state/selection-store";
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import { focusNoScroll } from "@/shared/lib/dom";
 import { computeRangeSelection } from "@/shared/lib/selection";
+import { isCurrentWeekFeedNode } from "../model/feed-tree-model";
 import { TreeNode } from "./tree-node";
 
 type FeedPanelProps = {
@@ -37,9 +38,10 @@ export function FeedPanel({
     expanded,
     setExpanded,
     allNotePreviews,
-    feedLoading,
     shouldNestNotesInNavigation,
   } = useNotesTree();
+  const currentWeekNodes = feedTreeData.filter(isCurrentWeekFeedNode);
+  const earlierNodes = feedTreeData.filter((node) => !isCurrentWeekFeedNode(node));
   const {
     selectFolder,
     selectNote,
@@ -186,17 +188,40 @@ export function FeedPanel({
           }
         }}
       >
-        {feedTreeData.length === 0 ? (
-          <div className="empty">
-            {feedLoading
-              ? "Loading feed..."
-              : feedNoteFilter === "all"
-                ? "No feed notes yet."
-                : `No ${feedNoteFilter} notes.`}
-          </div>
-        ) : (
-          <div className="pane-body tree-root feed-navigation-tree">
-            {feedTreeData.map((node) => (
+        <div className="pane-body tree-root feed-navigation-tree">
+          <div className="feed-section-label">This week</div>
+          {currentWeekNodes.map((node) => (
+            <TreeNode
+              key={node.id}
+              node={node}
+              depth={0}
+              selectedIds={activeFeedGroup ? new Set([activeFeedGroup]) : new Set()}
+              selectedNoteIds={selectedNotes}
+              showNotesAsChildren={shouldNestNotesInNavigation}
+              edgeSnap={null}
+              expanded={expanded}
+              feedMode
+              onSelect={(event, id) => {
+                event.stopPropagation();
+                selectFeedGroup(id);
+              }}
+              onToggle={handleToggle}
+              onNoteSelect={handleNoteSelect}
+              onNoteContextMenu={handleNoteContextMenu}
+              notePreviews={allNotePreviews}
+              onContextMenu={(event, id) => {
+                event.preventDefault();
+                event.stopPropagation();
+                selectFeedGroup(id);
+              }}
+              indentationWidth={18}
+              draggable={false}
+            />
+          ))}
+          {earlierNodes.length > 0 && (
+            <div className="feed-section-label feed-section-label-earlier">Earlier</div>
+          )}
+          {earlierNodes.map((node) => (
               <TreeNode
                 key={node.id}
                 node={node}
@@ -212,6 +237,9 @@ export function FeedPanel({
                 onSelect={(event, id) => {
                   event.stopPropagation();
                   selectFeedGroup(id);
+                  if (feedNodeById.get(id)?.kind === "month") {
+                    setExpanded((previous) => new Set(previous).add(id));
+                  }
                 }}
                 onToggle={handleToggle}
                 onNoteSelect={handleNoteSelect}
@@ -225,9 +253,11 @@ export function FeedPanel({
                 indentationWidth={18}
                 draggable={false}
               />
-            ))}
-          </div>
-        )}
+          ))}
+          {earlierNodes.length === 0 && feedNoteFilter !== "all" && (
+            <div className="feed-section-empty">No {feedNoteFilter} earlier notes.</div>
+          )}
+        </div>
       </div>
     </div>
   );

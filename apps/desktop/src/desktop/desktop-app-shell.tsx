@@ -32,6 +32,8 @@ import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { useSecurity } from "@/features/security/hooks/security-context";
+import { useGitSync } from "@/features/sync/hooks/git-sync-context";
+import { formatLastSuccessfulSync } from "@/features/sync/lib/sync-metadata";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import { DesktopContextMenu } from "./desktop-context-menu";
 import { useDesktopNavigation } from "./hooks/use-desktop-navigation";
@@ -92,6 +94,7 @@ export function DesktopAppShell({
     stopRecording,
   } = useRecordings();
   const { handwritingImportBusy } = useHandwriting();
+  const { gitSyncBusy, lastSuccessfulSyncAt, syncNow } = useGitSync();
   const { lockSecurity } = useSecurity();
   const lockAppNow = useCallback(async () => {
     if (!APP_EXTENSIONS.security) {
@@ -132,6 +135,7 @@ export function DesktopAppShell({
     shouldNestNotesInNavigation,
     feedNoteFilter,
     setFeedNoteFilter,
+    refreshTree,
   } = useNotesTree();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -252,6 +256,11 @@ export function DesktopAppShell({
         }}
         onHandwritingImportClick={onImportHandwriting}
         onSettingsClick={() => onAppModeChange("settings")}
+        syncActive={Boolean(lastSuccessfulSyncAt)}
+        syncBusy={gitSyncBusy}
+        syncDisabled={gitSyncBusy}
+        syncTooltip={formatLastSuccessfulSync(lastSuccessfulSyncAt)}
+        onSyncClick={() => void syncNow({ onAfterPull: () => refreshTree() })}
       >
         <Tabs
           value={activeNavigationTab}
