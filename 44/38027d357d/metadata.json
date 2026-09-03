@@ -1,0 +1,34 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "4438027d357d",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/mobile/app.json",
+    "apps/mobile/ios/Type/Info.plist",
+    "apps/mobile/src/screens/settings-screen.tsx",
+    "apps/mobile/src/state/diagnostics-store.ts",
+    "apps/mobile/src/state/sync-log-store.ts",
+    "apps/mobile/src/state/sync-store.ts",
+    "crates/type-core/src/adapters/iroh_sync.rs",
+    "packages/mobile-core/src/mock-core.ts",
+    "packages/shared/src/types.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/44/38027d357d/0/metadata.json",
+      "transcript": "/44/38027d357d/0/full.jsonl",
+      "context": "",
+      "content_hash": "/44/38027d357d/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
