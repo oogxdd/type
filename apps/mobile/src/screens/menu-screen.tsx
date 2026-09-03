@@ -217,8 +217,20 @@ export const MenuScreen = () => {
 
   const lastSyncedMs = useSyncStore((s) => s.history[0]?.authored_ms ?? null);
   const autoSyncState = useSyncStore((s) => s.autoSyncState);
+  const syncAction = useSyncStore((s) => s.action);
+  const syncNow = useSyncStore((s) => s.syncNow);
+  const syncBusy = syncAction !== "idle";
   const syncSubtitle =
     autoSyncLabel(autoSyncState) ?? `Last synced ${formatRelativeTime(lastSyncedMs)}`;
+
+  const quickSync = () => {
+    if (pressWasSwipe() || syncBusy) {
+      return;
+    }
+    void syncNow().catch(() => {
+      // The store owns the visible error/waiting state; stay on the menu.
+    });
+  };
 
   // Boot pushes Capture on top of the menu in the same first React commit,
   // so building the note/folder lists here would sit on the app's
@@ -438,6 +450,9 @@ export const MenuScreen = () => {
             label="Sync"
             subtitle={syncSubtitle}
             onPress={() => openScreen("Sync")}
+            actionLabel={syncBusy ? "Syncing…" : "Sync"}
+            actionDisabled={syncBusy}
+            onActionPress={quickSync}
           />
           <View style={[styles.bottomSeparator, { backgroundColor: theme.colors.border }]} />
           <BottomItem
@@ -592,11 +607,17 @@ const BottomItem = ({
   label,
   subtitle,
   onPress,
+  actionLabel,
+  actionDisabled = false,
+  onActionPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   subtitle?: string;
   onPress: () => void;
+  actionLabel?: string;
+  actionDisabled?: boolean;
+  onActionPress?: () => void;
 }) => {
   const theme = useTheme();
   return (
@@ -613,6 +634,30 @@ const BottomItem = ({
           </Text>
         ) : null}
       </View>
+      {actionLabel && onActionPress ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={actionLabel}
+          disabled={actionDisabled}
+          hitSlop={6}
+          onPress={(event) => {
+            event.stopPropagation();
+            onActionPress();
+          }}
+          style={({ pressed }) => [
+            styles.bottomAction,
+            {
+              backgroundColor: theme.colors.background,
+              borderColor: theme.colors.border,
+              opacity: actionDisabled ? 0.5 : pressed ? 0.65 : 1,
+            },
+          ]}
+        >
+          <Text style={[styles.bottomActionLabel, { color: theme.colors.text }]}>
+            {actionLabel}
+          </Text>
+        </Pressable>
+      ) : null}
       <Text style={{ color: theme.colors.secondaryText }}>›</Text>
     </Pressable>
   );
@@ -734,4 +779,14 @@ const styles = StyleSheet.create({
   bottomItemText: { flex: 1, gap: 2 },
   bottomLabel: { fontSize: 15, fontWeight: "500" },
   bottomSubtitle: { fontSize: 12 },
+  bottomAction: {
+    minWidth: 58,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  bottomActionLabel: { fontSize: 13, fontWeight: "600" },
 });
