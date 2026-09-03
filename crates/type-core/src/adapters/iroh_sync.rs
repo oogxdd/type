@@ -65,6 +65,16 @@ const IROH_DISCOVERY_DIAL_TIMEOUT: Duration = Duration::from_secs(30);
 /// How long the phone waits for a relay before publishing a blob ticket. Missing
 /// the deadline is not fatal — the desktop can still find the phone by id.
 const IROH_BLOB_PUBLISH_TIMEOUT: Duration = Duration::from_secs(20);
+/// Budget for one recording's full offer-and-transfer round trip. Neither
+/// `send_audio_blob_offer`'s ack read nor the desktop's blob fetch carry their
+/// own timeout, so a stalled relay/NAT path can otherwise hang here forever —
+/// this is what turns that into "skip this recording, try again next sync"
+/// instead of blocking the whole archive (and, before the phase split below,
+/// the whole push) indefinitely.
+const IROH_AUDIO_TRANSFER_TIMEOUT: Duration = Duration::from_secs(60);
+/// Same reasoning for the small pairing-check round trip: its ack read has no
+/// timeout of its own.
+const IROH_PAIRING_CHECK_TIMEOUT: Duration = Duration::from_secs(20);
 /// QUIC application close code used for "we are done, nothing went wrong".
 const IROH_CLOSE_OK: u32 = 0;
 
@@ -106,7 +116,11 @@ pub struct IrohAudioArchiveResult {
     /// Recordings deliberately left on the phone this run — the computer has
     /// not authorized this phone for audio yet.
     pub skipped: usize,
-    /// Why they were skipped. Not an error: notes still synced.
+    /// Recordings that were attempted but did not make it this run (timeout,
+    /// dropped connection, …). They stay on the phone and are retried on the
+    /// next sync — not a hard failure, so notes still synced.
+    pub failed: usize,
+    /// Why the last skip/failure happened. Not an error: notes still synced.
     pub error: Option<String>,
 }
 
@@ -561,11 +575,13 @@ async fn receive_audio_blob_inner(
         .connect(ticket.addr().clone(), iroh_blobs::ALPN)
         .await
         .map_err(|error| format!("Could not reach the phone's recording blob: {error}"))?;
-    blobs
-        .remote()
-        .fetch(blob_connection, ticket.hash())
-        .await
-        .map_err(|error| format!("Could not download the recording blob: {error}"))?;
+    tokio::time::timeout(
+        IROH_AUDIO_TRANSFER_TIMEOUT,
+        blobs.remote().fetch(blob_connection, ticket.hash()),
+    )
+    .await
+    .map_err(|_| "Downloading the recording blob timed out.".to_string())?
+    .map_err(|error| format!("Could not download the recording blob: {error}"))?;
     blobs
         .blobs()
         .export(ticket.hash(), temporary.clone())
@@ -852,10 +868,20 @@ impl IrohClientHandle {
     }
 
     fn run_pairing_check(&self, pairing_token: &str) {
-        match self
-            .runtime
-            .block_on(check_iroh_pairing(&self.dialer, pairing_token))
-        {
+        let outcome = self.runtime.block_on(async {
+            tokio::time::timeout(
+                IROH_PAIRING_CHECK_TIMEOUT,
+                check_iroh_pairing(&self.dialer, pairing_token),
+            )
+            .await
+            .unwrap_or_else(|_| {
+                Err(format!(
+                    "The pairing check did not answer within {}s.",
+                    IROH_PAIRING_CHECK_TIMEOUT.as_secs()
+                ))
+            })
+        });
+        match outcome {
             Ok(()) => self.dialer.update(|state| {
                 state.paired = true;
                 state.pair_error = None;
@@ -1017,6 +1043,7 @@ pub fn archive_mobile_audio_with_iroh(app: &AppEnv) -> Result<IrohAudioArchiveRe
         uploaded: 0,
         already_archived: 0,
         skipped: 0,
+        failed: 0,
         error: None,
     };
     let guard = CLIENT
@@ -1052,27 +1079,78 @@ pub fn archive_mobile_audio_with_iroh(app: &AppEnv) -> Result<IrohAudioArchiveRe
         if !recording.audio_path.is_file() {
             continue;
         }
-        let (sha256, byte_length) = crate::hash_file(&recording.audio_path)?;
+        let (sha256, byte_length) = match crate::hash_file(&recording.audio_path) {
+            Ok(value) => value,
+            Err(error) => {
+                eprintln!(
+                    "[iroh-sync] could not hash recording {}: {error}",
+                    recording.audio_rel
+                );
+                result.failed += 1;
+                result.error = Some(error);
+                continue;
+            }
+        };
         if crate::audio_has_desktop_ack(&root, &recording.audio_rel, &sha256, byte_length) {
             result.already_archived += 1;
             continue;
         }
-        let (header, blob_tag) = client.runtime.block_on(prepare_audio_blob_offer(
-            client.router.endpoint(),
-            &client.blobs,
-            &recording.audio_path,
-            recording.audio_rel.clone(),
-            sha256.clone(),
-            byte_length,
-        ))?;
-        client
-            .runtime
-            .block_on(send_audio_blob_offer(&client.dialer, &header))?;
-        // The temporary tag keeps the source alive for the entire transfer.
-        // Dropping it makes the imported cache entry eligible for blob-store GC.
-        drop(blob_tag);
-        crate::record_desktop_audio_ack(&root, recording.audio_rel, sha256, byte_length)?;
-        result.uploaded += 1;
+        // Every network step for one recording — hashing for iroh-blobs,
+        // offering it, and waiting on the desktop's ack — shares one timeout.
+        // Neither `send_audio_blob_offer`'s ack read nor the desktop's blob
+        // fetch has its own deadline, so without this a stalled relay/NAT path
+        // hangs here indefinitely instead of moving on to the next recording
+        // (or, before the sync phase split, blocking the whole push).
+        let audio_rel = recording.audio_rel.clone();
+        let outcome = client.runtime.block_on(tokio::time::timeout(
+            IROH_AUDIO_TRANSFER_TIMEOUT,
+            async {
+                let (header, blob_tag) = prepare_audio_blob_offer(
+                    client.router.endpoint(),
+                    &client.blobs,
+                    &recording.audio_path,
+                    audio_rel.clone(),
+                    sha256.clone(),
+                    byte_length,
+                )
+                .await?;
+                send_audio_blob_offer(&client.dialer, &header).await?;
+                // The temporary tag keeps the source alive for the entire
+                // transfer. Dropping it makes the imported cache entry
+                // eligible for blob-store GC.
+                drop(blob_tag);
+                Ok::<(), String>(())
+            },
+        ));
+        match outcome {
+            Ok(Ok(())) => match crate::record_desktop_audio_ack(
+                &root,
+                audio_rel.clone(),
+                sha256,
+                byte_length,
+            ) {
+                Ok(()) => result.uploaded += 1,
+                Err(error) => {
+                    eprintln!("[iroh-sync] could not record archive receipt for {audio_rel}: {error}");
+                    result.failed += 1;
+                    result.error = Some(error);
+                }
+            },
+            Ok(Err(error)) => {
+                eprintln!("[iroh-sync] audio archive failed for {audio_rel}: {error}");
+                result.failed += 1;
+                result.error = Some(error);
+            }
+            Err(_) => {
+                let message = format!(
+                    "Sending recording '{audio_rel}' timed out after {}s; it will retry next sync.",
+                    IROH_AUDIO_TRANSFER_TIMEOUT.as_secs()
+                );
+                eprintln!("[iroh-sync] {message}");
+                result.failed += 1;
+                result.error = Some(message);
+            }
+        }
     }
 
     let repo = crate::ensure_git_repo(&root)?;

@@ -26,11 +26,19 @@ export type Diagnostics = {
    * default: it is a debugging instrument, not a feature.
    */
   traceGestures: boolean;
+  /**
+   * Record every `[sync]` line (with a timestamp) into an in-memory buffer so
+   * it can be exported from the Diagnostics screen. Standalone/TestFlight
+   * builds have no attached console, so this is the only way to see what a
+   * stuck sync was actually doing. Off by default; cleared on app restart.
+   */
+  captureSyncLogs: boolean;
 };
 
 export const DEFAULT_DIAGNOSTICS: Diagnostics = {
   showCaptureSyncStatus: false,
   traceGestures: false,
+  captureSyncLogs: false,
 };
 
 export const normalizeDiagnostics = (raw: unknown): Diagnostics => {
@@ -44,6 +52,10 @@ export const normalizeDiagnostics = (raw: unknown): Diagnostics => {
       typeof value.traceGestures === "boolean"
         ? value.traceGestures
         : DEFAULT_DIAGNOSTICS.traceGestures,
+    captureSyncLogs:
+      typeof value.captureSyncLogs === "boolean"
+        ? value.captureSyncLogs
+        : DEFAULT_DIAGNOSTICS.captureSyncLogs,
   };
 };
 
@@ -67,6 +79,7 @@ type DiagnosticsState = {
   load: () => Promise<void>;
   setShowCaptureSyncStatus: (value: boolean) => void;
   setTraceGestures: (value: boolean) => void;
+  setCaptureSyncLogs: (value: boolean) => void;
 };
 
 export const useDiagnosticsStore = create<DiagnosticsState>((set, get) => {
@@ -90,5 +103,6 @@ export const useDiagnosticsStore = create<DiagnosticsState>((set, get) => {
     },
     setShowCaptureSyncStatus: (value) => update({ showCaptureSyncStatus: value }),
     setTraceGestures: (value) => update({ traceGestures: value }),
+    setCaptureSyncLogs: (value) => update({ captureSyncLogs: value }),
   };
 });

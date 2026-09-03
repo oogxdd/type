@@ -455,7 +455,10 @@ export type IrohAudioArchiveResult = {
   already_archived: number;
   /** Recordings held back because audio transfer is not paired. */
   skipped: number;
-  /** Why they were held back. Not a sync failure. */
+  /** Recordings attempted but not delivered this run (timeout, dropped
+   * connection, …) — retried on the next sync. Not a sync failure. */
+  failed: number;
+  /** Why the last skip/failure happened. Not a sync failure. */
   error: string | null;
 };
 

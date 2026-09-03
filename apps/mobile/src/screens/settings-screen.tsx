@@ -10,6 +10,7 @@ import { useState, useSyncExternalStore } from "react";
 import {
   Platform,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   useColorScheme,
@@ -52,6 +53,11 @@ import { useAppearanceStore } from "../state/appearance-store";
 import { useBackgroundOperationStore } from "../state/background-operation-store";
 import { useDiagnosticsStore } from "../state/diagnostics-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
+import {
+  formatSyncLogForExport,
+  formatSyncLogTimestamp,
+  useSyncLogStore,
+} from "../state/sync-log-store";
 import { useTheme } from "../theme";
 import {
   SettingsActionRow,
@@ -602,6 +608,35 @@ const GestureTraceList = () => {
   );
 };
 
+const SyncLogList = () => {
+  const theme = useTheme();
+  const entries = useSyncLogStore((s) => s.entries);
+
+  if (entries.length === 0) {
+    return (
+      <Text style={[styles.traceEmpty, { color: theme.colors.secondaryText }]}>
+        No sync activity captured yet. Trigger a sync and come back.
+      </Text>
+    );
+  }
+
+  return (
+    <View>
+      <Text style={[styles.traceSummary, { color: theme.colors.text }]}>
+        {entries.length} line{entries.length === 1 ? "" : "s"}
+      </Text>
+      {entries.map((entry, index) => (
+        <Text
+          key={`${entry.at}-${index}`}
+          style={[styles.traceRow, { color: theme.colors.secondaryText }]}
+        >
+          {`[${formatSyncLogTimestamp(entry.at)}] ${entry.message}`}
+        </Text>
+      ))}
+    </View>
+  );
+};
+
 export const SettingsDiagnosticsScreen = () => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -613,6 +648,20 @@ export const SettingsDiagnosticsScreen = () => {
   );
   const traceGestures = useDiagnosticsStore((s) => s.diagnostics.traceGestures);
   const setTraceGestures = useDiagnosticsStore((s) => s.setTraceGestures);
+  const captureSyncLogs = useDiagnosticsStore((s) => s.diagnostics.captureSyncLogs);
+  const setCaptureSyncLogs = useDiagnosticsStore((s) => s.setCaptureSyncLogs);
+  const syncLogEntries = useSyncLogStore((s) => s.entries);
+  const clearSyncLog = useSyncLogStore((s) => s.clear);
+
+  const exportSyncLog = async () => {
+    try {
+      await Share.share({ message: formatSyncLogForExport(syncLogEntries) });
+    } catch (error) {
+      // The share sheet can be dismissed or fail on some targets; there is
+      // nothing more useful to do than leave the log intact to retry.
+      console.log(`[diagnostics] sync log export failed - ${getErrorMessage(error)}`);
+    }
+  };
 
   return (
     <ScrollView
@@ -645,6 +694,25 @@ export const SettingsDiagnosticsScreen = () => {
       </SettingsGroup>
 
       {traceGestures ? <GestureTraceList /> : null}
+
+      <SettingsGroup
+        header="Sync log"
+        footer="Captures every [sync] line (pull, push, the Iroh audio archive, connection errors) with a timestamp, so a stuck sync can be diagnosed from a standalone build with no attached console. Export shares the captured lines as text. Kept in memory only, cleared when the app restarts."
+      >
+        <SettingsToggleRow
+          title="Capture sync logs"
+          value={captureSyncLogs}
+          onValueChange={setCaptureSyncLogs}
+        />
+        {captureSyncLogs && syncLogEntries.length > 0 ? (
+          <>
+            <SettingsActionRow title="Export" onPress={() => void exportSyncLog()} />
+            <SettingsActionRow title="Clear" onPress={clearSyncLog} />
+          </>
+        ) : null}
+      </SettingsGroup>
+
+      {captureSyncLogs ? <SyncLogList /> : null}
     </ScrollView>
   );
 };

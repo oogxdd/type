@@ -20,8 +20,10 @@ import {
   saveReasonHasLocalChanges,
   type AutoSyncState,
 } from "../lib/sync-experience";
+import { useDiagnosticsStore } from "./diagnostics-store";
 import { useNotesStore } from "./notes-store";
 import { activeProfile, useSettingsStore } from "./settings-store";
+import { useSyncLogStore } from "./sync-log-store";
 
 type SyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
 type SavedGitConnection = ConnectGitArgs & { irohTicket: string | null };
@@ -58,7 +60,12 @@ const statusForLog = (status: GitSyncStatus | null): string =>
       )} ahead=${status.ahead} behind=${status.behind} dirty=${status.has_uncommitted_changes} push=${status.push_required}`
     : "status=<none>";
 
-const logSync = (message: string) => console.log(`[sync] ${message}`);
+const logSync = (message: string) => {
+  console.log(`[sync] ${message}`);
+  if (useDiagnosticsStore.getState().diagnostics.captureSyncLogs) {
+    useSyncLogStore.getState().push(message);
+  }
+};
 
 type SyncState = {
   status: GitSyncStatus | null;
@@ -70,6 +77,10 @@ type SyncState = {
   hint: string | null;
   autoSyncState: AutoSyncState | null;
   lastAutoSyncedAt: number | null;
+  /** Phase two of sync: recordings moving to the computer over Iroh after
+   * notes have already pushed. Null until a push with a paired connection has
+   * run this session; never blocks `action`/`autoSyncState`. */
+  audioArchiveState: "archiving" | "done" | "error" | null;
   /** How the direct connection to the computer is doing, for the Sync screen's
    * connection panel. Null until a proxy has run this session. */
   irohStatus: IrohClientStatus | null;
@@ -125,37 +136,69 @@ export const useSyncStore = create<SyncState>((set, get) => {
     return { ...connection, remote_url: proxy.local_remote_url };
   };
 
-  const prepareAudioForPush = async (connection: SavedGitConnection | null) => {
-    if (!connection?.irohTicket) {
-      await core.setMobileAudioGitExclusion(false);
+  // Sync runs in two phases: notes over git first (what the user is actually
+  // waiting on), then recordings over Iroh as a best-effort follow-up. Audio
+  // transfer talks to a relay/NAT path that can stall for a while even with
+  // the core-side timeouts, so it must never sit in front of the git push the
+  // way it used to — that turned one slow recording into "syncing forever"
+  // with the notes never leaving the phone.
+  const applyAudioGitExclusionFast = async (connection: SavedGitConnection | null) => {
+    // Local-only flag flip: whether audio should ride in git (unpaired
+    // fallback) or be excluded (Iroh will carry it). Cheap, so it stays ahead
+    // of the push/pull it affects; the slow part (actually moving bytes) is
+    // archiveAudioBestEffort below.
+    try {
+      await core.setMobileAudioGitExclusion(Boolean(connection?.irohTicket));
+    } catch (error) {
+      logSync(`audio git exclusion: skipped - ${getErrorMessage(error)}`);
+    }
+  };
+
+  let audioArchiveInFlight = false;
+  const archiveAudioBestEffort = (connection: SavedGitConnection | null) => {
+    if (!connection?.irohTicket || audioArchiveInFlight) {
       return;
     }
-    // Recordings travel outside Git. Trouble moving them must not stop the
-    // notes from syncing — the notes are what the user is waiting on, and an
-    // unpaired phone keeps carrying its audio in Git as a fallback.
-    try {
-      const archive = await core.archiveMobileAudioWithIroh();
-      if (archive.uploaded > 0) {
-        logSync(`audio archive: copied ${archive.uploaded} recording(s) to the computer over Iroh`);
+    audioArchiveInFlight = true;
+    set({ audioArchiveState: "archiving" });
+    void (async () => {
+      // Recordings travel outside Git. Trouble moving them must not stop the
+      // notes from syncing — the notes are what the user is waiting on, and an
+      // unpaired phone keeps carrying its audio in Git as a fallback.
+      try {
+        const archive = await core.archiveMobileAudioWithIroh();
+        if (archive.uploaded > 0) {
+          logSync(`audio archive: copied ${archive.uploaded} recording(s) to the computer over Iroh`);
+        }
+        if (archive.skipped > 0) {
+          logSync(
+            `audio archive: keeping ${archive.skipped} recording(s) in Git - ${
+              archive.error ?? "audio transfer is not paired"
+            }`
+          );
+        }
+        if (archive.failed > 0) {
+          logSync(
+            `audio archive: ${archive.failed} recording(s) did not make it this run - ${
+              archive.error ?? "unknown error"
+            }; will retry next sync`
+          );
+        }
+        set({ audioArchiveState: archive.failed > 0 ? "error" : "done" });
+      } catch (error) {
+        logSync(`audio archive: skipped this run - ${getErrorMessage(error)}`);
+        set({ audioArchiveState: "error" });
       }
-      if (archive.skipped > 0) {
-        logSync(
-          `audio archive: keeping ${archive.skipped} recording(s) in Git - ${
-            archive.error ?? "audio transfer is not paired"
-          }`
-        );
+      try {
+        const prune = await core.pruneMobileAudioCache();
+        if (prune.evicted > 0) {
+          logSync(`audio cache: evicted ${prune.evicted} verified week-old recording(s)`);
+        }
+      } catch (error) {
+        logSync(`audio cache: prune skipped - ${getErrorMessage(error)}`);
       }
-    } catch (error) {
-      logSync(`audio archive: skipped this run - ${getErrorMessage(error)}`);
-    }
-    try {
-      const prune = await core.pruneMobileAudioCache();
-      if (prune.evicted > 0) {
-        logSync(`audio cache: evicted ${prune.evicted} verified week-old recording(s)`);
-      }
-    } catch (error) {
-      logSync(`audio cache: prune skipped - ${getErrorMessage(error)}`);
-    }
+      audioArchiveInFlight = false;
+    })();
   };
 
   /**
@@ -340,6 +383,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
     hint: null,
     autoSyncState: null,
     lastAutoSyncedAt: null,
+    audioArchiveState: null,
     irohStatus: null,
     pendingLink: null,
 
@@ -428,17 +472,17 @@ export const useSyncStore = create<SyncState>((set, get) => {
             logSync("ssh key: existing app-managed key found");
           }
         }
-        if (link.irohTicket) {
-          await prepareAudioForPush({
-            remote_url: link.remote,
-            branch: link.branch ?? null,
-            username: null,
-            password: null,
-            irohTicket: link.irohTicket,
-          });
-        } else {
-          await core.setMobileAudioGitExclusion(false);
-        }
+        await applyAudioGitExclusionFast(
+          link.irohTicket
+            ? {
+                remote_url: link.remote,
+                branch: link.branch ?? null,
+                username: null,
+                password: null,
+                irohTicket: link.irohTicket,
+              }
+            : null
+        );
         logSync(`qr: connecting with pairing remote ${redactRemoteForLog(pairingRemote)}`);
         const pairingStatus = await core.connectGitRepo({
           remote_url: pairingRemote,
@@ -464,6 +508,15 @@ export const useSyncStore = create<SyncState>((set, get) => {
         await saveLinkSettingsBestEffort(pairingRemote);
         return pairingStatus;
       });
+      if (link.irohTicket) {
+        archiveAudioBestEffort({
+          remote_url: link.remote,
+          branch: link.branch ?? null,
+          username: null,
+          password: null,
+          irohTicket: link.irohTicket,
+        });
+      }
     },
 
     pull: async () => {
@@ -474,7 +527,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
       await run("pull", async () => {
         const savedConnection = savedGitConnection();
         const connection = await prepareIrohConnection(savedConnection);
-        await prepareAudioForPush(savedConnection);
+        await applyAudioGitExclusionFast(savedConnection);
         logSync(
           `pull: saved connection remote=${redactRemoteForLog(connection?.remote_url)} branch=${
             connection?.branch ?? "main"
@@ -544,10 +597,10 @@ export const useSyncStore = create<SyncState>((set, get) => {
       if (isBusy("push")) {
         return;
       }
+      const savedConnection = savedGitConnection();
       await run("push", async () => {
-        const savedConnection = savedGitConnection();
         const connection = await prepareIrohConnection(savedConnection);
-        await prepareAudioForPush(savedConnection);
+        await applyAudioGitExclusionFast(savedConnection);
         logSync(
           `push: saved connection remote=${redactRemoteForLog(connection?.remote_url)} branch=${
             connection?.branch ?? "main"
@@ -568,6 +621,9 @@ export const useSyncStore = create<SyncState>((set, get) => {
             throw error;
           });
       });
+      // Notes are on the computer now — phase two (recordings) runs in the
+      // background and never re-blocks this push or the "synced" state.
+      archiveAudioBestEffort(savedConnection);
     },
   };
 });

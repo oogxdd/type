@@ -451,6 +451,7 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
         uploaded: 0,
         already_archived: audio.size,
         skipped: 0,
+        failed: 0,
         error: null,
       }),
     setMobileAudioGitExclusion: async () => {},
