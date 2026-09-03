@@ -27,6 +27,9 @@ type AppearanceState = {
   load: () => Promise<void>;
   setBackground: (background: BackgroundId) => void;
   setTextColor: (textColor: TextColorId) => void;
+  setCustomBackground: (color: string) => void;
+  setCustomTextColor: (color: string) => void;
+  setAccentColor: (color: string | null) => void;
   setFontSize: (fontSize: number) => void;
   setFontFamily: (fontFamily: FontFamilyId) => void;
   reset: () => void;
@@ -88,6 +91,11 @@ export const useAppearanceStore = create<AppearanceState>((set, get) => {
 
     setBackground: (background) => update({ background }),
     setTextColor: (textColor) => update({ textColor }),
+    setCustomBackground: (customBackground) =>
+      update({ background: "custom", customBackground }),
+    setCustomTextColor: (customTextColor) =>
+      update({ textColor: "custom", customTextColor }),
+    setAccentColor: (accentColor) => update({ accentColor }),
     setFontSize: (fontSize) => update({ fontSize: clampFontSize(fontSize) }),
     setFontFamily: (fontFamily) => update({ fontFamily }),
 

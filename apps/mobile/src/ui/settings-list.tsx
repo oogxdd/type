@@ -9,6 +9,7 @@ import { Children, Fragment, type ReactNode } from "react";
 import {
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -68,6 +69,7 @@ export const SettingsRow = ({
   title,
   subtitle,
   value,
+  titleFontFamily,
   checked,
   chevron,
   disabled,
@@ -79,6 +81,7 @@ export const SettingsRow = ({
   title: string;
   subtitle?: string;
   value?: string;
+  titleFontFamily?: string;
   checked?: boolean;
   chevron?: boolean;
   disabled?: boolean;
@@ -100,7 +103,13 @@ export const SettingsRow = ({
         </View>
       ) : null}
       <View style={styles.rowText}>
-        <Text style={[styles.rowTitle, { color: theme.colors.text }]} numberOfLines={1}>
+        <Text
+          style={[
+            styles.rowTitle,
+            { color: theme.colors.text, fontFamily: titleFontFamily },
+          ]}
+          numberOfLines={1}
+        >
           {title}
         </Text>
         {subtitle ? (
@@ -132,6 +141,48 @@ export const SettingsRow = ({
         />
       ) : null}
     </Pressable>
+  );
+};
+
+/** A row whose value is a boolean, shown as the platform switch. */
+export const SettingsToggleRow = ({
+  icon,
+  iconColor,
+  title,
+  subtitle,
+  value,
+  onValueChange,
+}: {
+  icon?: keyof typeof Ionicons.glyphMap;
+  iconColor?: string;
+  title: string;
+  subtitle?: string;
+  value: boolean;
+  onValueChange: (next: boolean) => void;
+}) => {
+  const theme = useTheme();
+  return (
+    <View style={styles.row}>
+      {icon ? (
+        <View style={[styles.iconTile, { backgroundColor: iconColor ?? theme.colors.accent }]}>
+          <Ionicons name={icon} size={17} color="#ffffff" />
+        </View>
+      ) : null}
+      <View style={styles.rowText}>
+        <Text style={[styles.rowTitle, { color: theme.colors.text }]} numberOfLines={1}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text
+            style={[styles.rowSubtitle, { color: theme.colors.secondaryText }]}
+            numberOfLines={2}
+          >
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      <Switch value={value} onValueChange={onValueChange} />
+    </View>
   );
 };
 
@@ -186,7 +237,7 @@ export function SettingsSwatchRow<Id extends string>({
    * disc, which is how text colors are previewed against the live background.
    */
   options: { id: Id; label: string; color: string; fill?: string }[];
-  selected: Id;
+  selected: string;
   onSelect: (id: Id) => void;
 }) {
   const theme = useTheme();
@@ -235,6 +286,60 @@ export function SettingsSwatchRow<Id extends string>({
     </View>
   );
 }
+
+export const SettingsColorRow = ({
+  title,
+  color,
+  value,
+  checked,
+  onPress,
+}: {
+  title: string;
+  color: string;
+  value: string;
+  checked?: boolean;
+  onPress: () => void;
+}) => {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}, ${value}`}
+      accessibilityState={{ selected: checked }}
+      style={({ pressed }) => [
+        styles.row,
+        pressed && { backgroundColor: theme.dark ? "#ffffff14" : "#00000010" },
+      ]}
+    >
+      <View
+        style={[
+          styles.colorChip,
+          { backgroundColor: color, borderColor: theme.colors.border },
+        ]}
+      />
+      <Text
+        style={[styles.rowTitle, styles.rowText, { color: theme.colors.text }]}
+      >
+        {title}
+      </Text>
+      <Text
+        style={[styles.stepperValue, { color: theme.colors.secondaryText }]}
+      >
+        {value}
+      </Text>
+      {checked ? (
+        <Ionicons name="checkmark" size={19} color={theme.colors.accent} />
+      ) : null}
+      <Ionicons
+        name="chevron-forward"
+        size={16}
+        color={theme.colors.secondaryText}
+        style={styles.chevron}
+      />
+    </Pressable>
+  );
+};
 
 /** A row whose value is nudged by −/+ buttons, like iOS' text-size controls. */
 export const SettingsStepperRow = ({
@@ -385,4 +490,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   stepperValue: { fontSize: 15, minWidth: 44, textAlign: "center" },
+  colorChip: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
 });
