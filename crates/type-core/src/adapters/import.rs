@@ -394,6 +394,7 @@ fn import_one(
         id: Some(note_id),
         created_ms: Some(parsed.created_ms),
         updated_ms: Some(parsed.created_ms),
+        imported_from_apple_notes: Some(true),
         ..Default::default()
     };
     write_note_with_front_matter(&path, &meta, &parsed.body)?;

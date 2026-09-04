@@ -51,6 +51,7 @@ pub struct NoteFrontMatter {
     pub ocr_status: Option<String>,
     pub ocr_error: Option<String>,
     pub ocr_updated_ms: Option<i64>,
+    pub imported_from_apple_notes: Option<bool>,
     pub passthrough_lines: Vec<String>,
 }
 

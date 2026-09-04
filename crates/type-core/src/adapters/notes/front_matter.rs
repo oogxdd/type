@@ -123,6 +123,13 @@ pub fn parse_note_front_matter(raw: &str) -> (NoteFrontMatter, String) {
                     meta.passthrough_lines.push(trimmed.to_string());
                 }
             }
+            "imported_from_apple_notes" => {
+                if let Ok(parsed) = value.parse::<bool>() {
+                    meta.imported_from_apple_notes = Some(parsed);
+                } else {
+                    meta.passthrough_lines.push(trimmed.to_string());
+                }
+            }
             _ => meta.passthrough_lines.push(trimmed.to_string()),
         }
     }
@@ -208,6 +215,12 @@ pub fn render_note_with_front_matter(meta: &NoteFrontMatter, body: &str) -> Stri
     }
     if let Some(updated_ms) = meta.ocr_updated_ms {
         output.push_str(&format!("ocr_updated_ms: {}\n", updated_ms));
+    }
+    if let Some(imported_from_apple_notes) = meta.imported_from_apple_notes {
+        output.push_str(&format!(
+            "imported_from_apple_notes: {}\n",
+            imported_from_apple_notes
+        ));
     }
     for line in &meta.passthrough_lines {
         output.push_str(line);
