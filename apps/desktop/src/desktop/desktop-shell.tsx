@@ -30,38 +30,43 @@ export function DesktopShell({
   middlePane,
   rightPane,
 }: DesktopShellProps) {
+  const rightPaneWithSidebarToggle = (
+    <div className="desktop-right-pane-slot">
+      {rightPane}
+      <button
+        type="button"
+        className="sidebar-toggle-btn"
+        aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+        aria-pressed={!sidebarCollapsed}
+        title={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+        onClick={onToggleSidebar}
+      >
+        <svg viewBox="0 0 16 16" aria-hidden>
+          <rect
+            x="1.25"
+            y="1.75"
+            width="13.5"
+            height="12.5"
+            rx="3.25"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.25"
+          />
+          <path
+            d="M5.8 2.9v10.2"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.25"
+          />
+        </svg>
+      </button>
+    </div>
+  );
+
   return (
     <div className={`app theme-${theme}${sidebarCollapsed ? " sidebar-collapsed" : ""}`} style={appStyle}>
-      {!sidebarCollapsed ? (
-        <button
-          type="button"
-          className="sidebar-toggle-btn"
-          aria-label="Hide sidebar"
-          onClick={onToggleSidebar}
-        >
-          <svg viewBox="0 0 16 16" aria-hidden>
-            <rect
-              x="1.25"
-              y="1.75"
-              width="13.5"
-              height="12.5"
-              rx="3.25"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.25"
-            />
-            <path
-              d="M5.8 2.9v10.2"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.25"
-            />
-          </svg>
-        </button>
-      ) : null}
-
       {sidebarCollapsed ? (
-        <div className="app-single-pane">{rightPane}</div>
+        <div className="app-single-pane">{rightPaneWithSidebarToggle}</div>
       ) : !showMiddlePane ? (
         <ResizablePanelGroup
           orientation="horizontal"
@@ -85,7 +90,7 @@ export function DesktopShell({
             minSize="35%"
             className="min-w-0 h-full min-h-0"
           >
-            {rightPane}
+            {rightPaneWithSidebarToggle}
           </ResizablePanel>
         </ResizablePanelGroup>
       ) : (
@@ -121,7 +126,7 @@ export function DesktopShell({
             minSize="30%"
             className="min-w-0 h-full min-h-0"
           >
-            {rightPane}
+            {rightPaneWithSidebarToggle}
           </ResizablePanel>
         </ResizablePanelGroup>
       )}
