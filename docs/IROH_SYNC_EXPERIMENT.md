@@ -3,6 +3,10 @@
 This experiment keeps the existing Git/SSH sync semantics and replaces only
 the network path between a phone and a desktop.
 
+For a less implementation-heavy explanation of how Git, SSH, Iroh, direct
+paths, relays, and the sync logs fit together, see
+[`IROH_SYNC_MENTAL_MODEL.md`](./IROH_SYNC_MENTAL_MODEL.md).
+
 ## Version and stability boundary
 
 - Type pins Rust `1.97.1` in `rust-toolchain.toml`; the workspace manifests,
