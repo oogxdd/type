@@ -328,6 +328,7 @@ impl RecordingsGateway for RecordingsAdapter {
         let (target_folder_rel, target_folder_path) =
             resolve_recording_target_folder(&self.app, args.folder_path.as_deref())?;
         let extension = audio_extension_from_mime(args.mime_type.as_deref());
+        validate_audio_payload(&audio_bytes, extension)?;
         let audio_path = recording_audio_file_path(&root, extension)?;
         fs::write(&audio_path, audio_bytes).map_err(|error| error.to_string())?;
 
@@ -572,6 +573,58 @@ pub fn audio_extension_from_mime(mime_type: Option<&str>) -> &'static str {
         return "flac";
     }
     "webm"
+}
+
+/// Reject an interrupted MP4/M4A recording before it is persisted and synced.
+/// Apple recorders finalize the container by writing a top-level `moov` atom;
+/// without it the media bytes cannot be decoded or repaired by Whisper.
+fn validate_audio_payload(bytes: &[u8], extension: &str) -> Result<(), String> {
+    if !matches!(extension, "m4a" | "mp4") {
+        return Ok(());
+    }
+
+    let mut offset = 0usize;
+    let mut has_ftyp = false;
+    let mut has_moov = false;
+
+    while bytes.len().saturating_sub(offset) >= 8 {
+        let size32 = u32::from_be_bytes(
+            bytes[offset..offset + 4]
+                .try_into()
+                .expect("slice has four bytes"),
+        ) as usize;
+        let atom_type = &bytes[offset + 4..offset + 8];
+        let (header_len, atom_len) = if size32 == 1 {
+            if bytes.len().saturating_sub(offset) < 16 {
+                break;
+            }
+            let extended = u64::from_be_bytes(
+                bytes[offset + 8..offset + 16]
+                    .try_into()
+                    .expect("slice has eight bytes"),
+            );
+            let Ok(atom_len) = usize::try_from(extended) else {
+                break;
+            };
+            (16usize, atom_len)
+        } else if size32 == 0 {
+            (8usize, bytes.len() - offset)
+        } else {
+            (8usize, size32)
+        };
+
+        if atom_len < header_len || atom_len > bytes.len() - offset {
+            break;
+        }
+        has_ftyp |= atom_type == b"ftyp";
+        has_moov |= atom_type == b"moov";
+        if has_ftyp && has_moov {
+            return Ok(());
+        }
+        offset += atom_len;
+    }
+
+    Err("Audio recording is incomplete or invalid (missing M4A metadata).".to_string())
 }
 
 /// Infer MIME type from an audio file's extension.
@@ -922,16 +975,7 @@ fn queue_recordings_with_method(
         let status = recording.status.as_str();
         let is_active = active_recordings.contains(&recording.note_rel);
 
-        if status == RECORDING_STATUS_COMPLETED {
-            skipped += 1;
-            continue;
-        }
-
-        if matches!(
-            status,
-            crate::RECORDING_STATUS_QUEUED | RECORDING_STATUS_PROCESSING
-        ) && is_active
-        {
+        if !should_auto_queue_recording(status, is_active) {
             skipped += 1;
             continue;
         }
@@ -977,6 +1021,21 @@ fn queue_recordings_with_method(
     })
 }
 
+/// Decide whether a recording discovered by a bulk/automatic scan should be
+/// queued. Failed recordings remain terminal until the user explicitly asks
+/// for a retry through `retrigger_single_transcription`; otherwise the desktop
+/// auto-queue timer would retry a permanently malformed audio file forever.
+fn should_auto_queue_recording(status: &str, is_active: bool) -> bool {
+    if matches!(status, RECORDING_STATUS_COMPLETED | RECORDING_STATUS_FAILED) {
+        return false;
+    }
+
+    !(matches!(
+        status,
+        crate::RECORDING_STATUS_QUEUED | RECORDING_STATUS_PROCESSING
+    ) && is_active)
+}
+
 /// Reset a single recording's status and re-queue it with `method`.
 pub fn retrigger_single_transcription(
     root: &Path,
@@ -1016,6 +1075,54 @@ pub fn retrigger_single_transcription(
 
     spawn_transcription_worker_if_needed();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{should_auto_queue_recording, validate_audio_payload};
+    use crate::{
+        RECORDING_STATUS_COMPLETED, RECORDING_STATUS_FAILED, RECORDING_STATUS_PENDING,
+        RECORDING_STATUS_PROCESSING, RECORDING_STATUS_QUEUED,
+    };
+
+    #[test]
+    fn automatic_scan_leaves_completed_and_failed_recordings_terminal() {
+        assert!(!should_auto_queue_recording(
+            RECORDING_STATUS_COMPLETED,
+            false
+        ));
+        assert!(!should_auto_queue_recording(RECORDING_STATUS_FAILED, false));
+        assert!(should_auto_queue_recording(RECORDING_STATUS_PENDING, false));
+    }
+
+    #[test]
+    fn automatic_scan_only_recovers_stale_in_flight_statuses() {
+        assert!(!should_auto_queue_recording(RECORDING_STATUS_QUEUED, true));
+        assert!(!should_auto_queue_recording(
+            RECORDING_STATUS_PROCESSING,
+            true
+        ));
+        assert!(should_auto_queue_recording(RECORDING_STATUS_QUEUED, false));
+        assert!(should_auto_queue_recording(
+            RECORDING_STATUS_PROCESSING,
+            false
+        ));
+    }
+
+    #[test]
+    fn m4a_payload_must_contain_a_complete_top_level_moov_atom() {
+        let valid = [
+            0, 0, 0, 12, b'f', b't', b'y', b'p', b'M', b'4', b'A', b' ', 0, 0, 0, 8, b'm', b'o',
+            b'o', b'v',
+        ];
+        let interrupted = [
+            0, 0, 0, 12, b'f', b't', b'y', b'p', b'M', b'4', b'A', b' ', 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+
+        assert!(validate_audio_payload(&valid, "m4a").is_ok());
+        assert!(validate_audio_payload(&interrupted, "m4a").is_err());
+        assert!(validate_audio_payload(&interrupted, "webm").is_ok());
+    }
 }
 
 // ── File allocation ────────────────────────────────────────────────────────────

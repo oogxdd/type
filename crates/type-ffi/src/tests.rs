@@ -5,9 +5,10 @@
 
 use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
-/// "test-audio" as base64. Providers receive a file path, not parsed audio,
-/// so the content never has to be a real recording.
-const FAKE_AUDIO_BASE64: &str = "dGVzdC1hdWRpbw==";
+/// Minimal finalized M4A (`ftyp` + `moov`) as base64. Providers receive a file
+/// path rather than decoding it, but the save boundary rejects interrupted
+/// M4A containers before they can be synced.
+const FAKE_AUDIO_BASE64: &str = "AAAADGZ0eXBNNEEgAAAACG1vb3Y=";
 /// Minimal payload is sufficient because save validates the declared format,
 /// not image decoding; desktop OCR is intentionally not invoked in this test.
 const FAKE_IMAGE_BASE64: &str = "dGVzdC1pbWFnZQ==";
