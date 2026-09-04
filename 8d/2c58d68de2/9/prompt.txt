@@ -1,0 +1,212 @@
+can you please add some "refresh" button when you hover over settings item in the navbar? like at the right of the settings (in desktop app)
+
+---
+
+<task-notification>
+<task-id>a00cf2e4f7c1250c4</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Volumes-KINGSTON-Projects-type-app/ba9bd2ce-668a-4b86-bbb2-c199dce39214/tasks/a00cf2e4f7c1250c4.output</output-file>
+<status>completed</status>
+<summary>Agent "Find settings nav item in desktop sidebar" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>I now have everything needed. Here's the full report.
+
+## 1. Settings nav item — exact location
+
+`/Volumes/KINGSTON/Projects/type/app/apps/desktop/src/desktop/app-sidebar.tsx`, lines 111–152 (the whole bottom `SidebarGroup`), with the actual button at **lines 115–122**:
+
+```tsx
+&lt;SidebarMenuItem className="flex items-center gap-2"&gt;
+  &lt;SidebarMenuButton
+    className="min-w-0 flex-1"
+    isActive={settingsActive}
+    onClick={onSettingsClick}
+  &gt;
+    &lt;Settings2 /&gt;
+    &lt;span&gt;Settings&lt;/span&gt;
+  &lt;/SidebarMenuButton&gt;
+  ...
+&lt;/SidebarMenuItem&gt;
+```
+
+Icon import is at line 4: `import { CirclePlus, FilePenLine, Mic, Settings2, Square } from "lucide-react"`.
+
+## 2. Surrounding pattern / hover-reveal — already exists as a shadcn primitive
+
+Right next to Settings (lines 123–148) is an existing hover-adjacent action: the sync-server status dot, a plain `&lt;button&gt;` inside `TooltipProvider`/`Tooltip` with classes `"grid size-8 shrink-0 place-items-center rounded-md hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:cursor-not-allowed disabled:opacity-50"`. That's the pattern used for "small icon button beside the nav item," but it's always-visible, not hover-reveal.
+
+**Better fit — there's a purpose-built hover-reveal component already in the shadcn sidebar primitives**, unused elsewhere in this codebase but ready to use: `SidebarMenuAction` in `/Volumes/KINGSTON/Projects/type/app/apps/desktop/src/shared/ui/sidebar.tsx`, lines 546–576:
+
+```tsx
+function SidebarMenuAction({
+  className,
+  asChild = false,
+  showOnHover = false,
+  ...props
+}: React.ComponentProps&lt;"button"&gt; &amp; {
+  asChild?: boolean
+  showOnHover?: boolean
+}) {
+  const Comp = asChild ? Slot.Root : "button"
+  return (
+    &lt;Comp
+      data-slot="sidebar-menu-action"
+      data-sidebar="menu-action"
+      className={cn(
+        "text-sidebar-foreground ring-sidebar-ring hover:bg-sidebar-accent hover:text-sidebar-accent-foreground peer-hover/menu-button:text-sidebar-accent-foreground absolute top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-md p-0 outline-hidden transition-transform focus-visible:ring-2 [&amp;&gt;svg]:size-4 [&amp;&gt;svg]:shrink-0",
+        "after:absolute after:-inset-2 md:after:hidden",
+        "peer-data-[size=sm]/menu-button:top-1",
+        "peer-data-[size=default]/menu-button:top-1.5",
+        "peer-data-[size=lg]/menu-button:top-2.5",
+        "group-data-[collapsible=icon]:hidden",
+        showOnHover &amp;&amp;
+          "peer-data-[active=true]/menu-button:text-sidebar-accent-foreground group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 md:opacity-0",
+        className
+      )}
+      {...props}
+    /&gt;
+  )
+}
+```
+
+It's exported at line 628 (`export { ..., SidebarMenuAction, ... }`). It relies on:
+- `SidebarMenuItem` (line 463–472) already carrying `group/menu-item relative` — the Settings `&lt;SidebarMenuItem&gt;` at line 114 already has this via the shared component, so it's already the right hover group scope.
+- `SidebarMenuButton` already carries `peer/menu-button` (line 475) and `group-has-data-[sidebar=menu-action]/menu-item:pr-8` (auto-adds right padding when a sibling action exists) — so dropping a `&lt;SidebarMenuAction showOnHover&gt;` as a sibling of `SidebarMenuButton` inside the same `SidebarMenuItem` "just works": invisible until the row is hovered/focused, fades in via `md:opacity-0` + `group-hover/menu-item:opacity-100`.
+
+This is the idiomatic pattern to replicate — no other hover-reveal pattern (note rows / folder rows) exists in this codebase; a repo-wide grep for `group-hover`/`opacity-0 ... hover` found no matches in note/folder row components.
+
+Caveat: it's positioned `absolute right-1 top-1.5`, i.e. designed to float over the button's own row, not sit as a separate flex sibling like the current sync button (`flex items-center gap-2` two-button row). You'd either (a) add a third `SidebarMenuAction` absolutely positioned within the Settings `SidebarMenuItem` (but that item is a flex row with two children already — the absolute action would need its own no-`flex-1` sibling slot, similar to how the sync tooltip button is already a sibling), or (b) just copy the sync button's existing style/wrapper (lines 123–148) and add `opacity-0 group-hover/menu-item:opacity-100 transition-opacity` manually to it — simpler given the current layout already uses explicit flex siblings rather than absolute overlay.
+
+## 3. Refresh tree function — already exists
+
+`refreshTree: () =&gt; Promise&lt;void&gt;` is exposed on `NotesTreeContext`:
+
+- Defined in the context value type: `/Volumes/KINGSTON/Projects/type/app/apps/desktop/src/features/notes/navigation/state/notes-tree-context.tsx:56`
+- Implemented in `/Volumes/KINGSTON/Projects/type/app/apps/desktop/src/features/notes/navigation/state/use-notes-tree-state.ts:94` (`const refreshTree = useCallback(async () =&gt; {...})`), returned from the hook at line 250.
+- Provider wires it: `notes-tree-context.tsx:83` passes `state.refreshTree` into `useNotesTreeActions`, and it's spread into context value via `{ ...state, ...actions }` (line 110).
+- Already consumed for the exact use case you want (a manual/event-triggered refresh): `notes-tree-context.tsx:98-107` calls `void refreshTree()` in response to a `local-sync-push-received` Tauri event.
+- Also called elsewhere after mutations (create/delete/move/rename) throughout `use-notes-tree-actions.ts` and `use-drag-drop.ts`.
+- No existing dedicated "Refresh" button anywhere in the UI currently calls it directly — it's only auto-triggered after mutations/events. To wire a manual refresh button, consume it via `useNotesTree().refreshTree` (the hook is exported at the bottom of `notes-tree-context.tsx`, `useNotesTree()`) and pass a `onRefreshClick` callback down from wherever `AppSidebar` is rendered (check `desktop-app-shell.tsx` for where `AppSidebar`'s props like `onSettingsClick` are supplied — that's the composition point to also thread `refreshTree`).
+
+## 4. Icon library — lucide-react, RefreshCw precedent
+
+Confirmed `lucide-react` is the icon library (see import at `app-sidebar.tsx:4`). An existing `RefreshCw` usage with spin-on-loading pattern is in `/Volumes/KINGSTON/Projects/type/app/apps/desktop/src/features/settings/components/desktop/local-ocr-engine-card.tsx`:
+
+```tsx
+import { FolderOpen, RefreshCw } from "lucide-react"
+...
+&lt;RefreshCw size={14} className={settingUp ? "animate-spin" : ""} /&gt;
+```
+
+That's the pattern to copy for a spinning-while-busy refresh icon.
+
+## Suggested implementation sketch
+
+In `app-sidebar.tsx`, add a prop `onRefreshClick?: () =&gt; void` (and optionally `refreshing?: boolean`), import `RefreshCw` from lucide-react, and add a sibling button next to the Settings `SidebarMenuButton` (same `SidebarMenuItem`, lines 114-122) styled like the sync button block (lines 123-148) but with `opacity-0 group-hover/menu-item:opacity-100 focus-visible:opacity-100 transition-opacity` added to its className, and `&lt;RefreshCw className={refreshing ? "animate-spin" : ""} /&gt;` as its icon. Thread `refreshTree` from `useNotesTree()` through the composition point that currently supplies `onSettingsClick` to `AppSidebar` (in `desktop-app-shell.tsx` or `app-shell.tsx`).</result>
+<usage><subagent_tokens>60402</subagent_tokens><tool_uses>8</tool_uses><duration_ms>48497</duration_ms></usage>
+</task-notification>
+
+---
+
+hey. now. when i right click in the navbar [Image #1] (eg below projects) i want to see "create folder" in the context menu
+
+---
+
+[Image: source: /var/folders/lx/ngyct7rs5pv8dcf14w9npxmr0000gn/T/TemporaryItems/NSIRD_screencaptureui_aoudQ8/Screenshot 2026-09-04 at 3.46.52 AM.png]
+
+---
+
+also implement right clicking folder or note has button "open in finder" (and finder gets opened and this folder/note is selected)
+
+---
+
+hey. create folder foesn't work as expected (the modal instantly gets closed)
+
+---
+
+Base directory for this skill: /private/tmp/claude-501/bundled-skills/2.1.236/a67f2b73178b7f6991d393770aa0119c/run
+
+**Running means launching the actual app and interacting with it** —
+not the test suite, not an `import` of an internal function and a
+`console.log`. The app as a user (human or programmatic) would meet
+it: the CLI at its command, the server at its socket, the GUI at its
+window.
+
+## First: does a project skill already cover this?
+
+A project skill that launches this app is the repo's verified path —
+its author already cold-started from a Linux container and committed
+what worked: the exact `apt-get` line, the env vars, the patches, the
+driver. Use it instead of rediscovering.
+
+```bash
+d=$PWD; while :; do
+  grep -Hm1 '^description:' "$d"/.claude/skills/*/SKILL.md 2>/dev/null
+  [ -e "$d/.git" ] || [ "$d" = / ] && break
+  d=$(dirname "$d")
+done
+```
+
+- **One describes launching/driving this app** → read that SKILL.md
+  and follow it verbatim. Don't paraphrase; don't skip the patches.
+- **Mega-repo, several plausible, no clear match** → ask the user
+  which unit to run.
+- **Stale** (fails on mechanics unrelated to your task) → tell the
+  user; offer to refresh it via `/run-skill-generator`.
+- **Nothing about running** → fall back to the patterns below.
+
+## Otherwise: match the shape, use the pattern
+
+Pick the row closest to your project. Each example walks through
+launch + first interaction; ignore any trailing "write the skill"
+section — you're using the recipe, not authoring one.
+
+| Project type | Handle | Example |
+|---|---|---|
+| CLI tool | direct invocation, exit code, stdin/stdout | [examples/cli.md](examples/cli.md) |
+| Web server / API | background launch + `curl` smoke | [examples/server.md](examples/server.md) |
+| TUI / interactive terminal | tmux `send-keys` / `capture-pane` | [examples/tui.md](examples/tui.md) |
+| Electron / desktop GUI | Playwright `_electron` REPL under xvfb | [examples/electron.md](examples/electron.md) |
+| Browser-driven | dev server + `chromium-cli` script | [examples/playwright.md](examples/playwright.md) |
+| Library / SDK | import-and-call smoke script at the package boundary | [examples/library.md](examples/library.md) |
+
+If nothing fits, start from the closest match and adapt. For a web
+app, [examples/playwright.md](examples/playwright.md) — drive it with
+`chromium-cli`, no custom driver needed. For a desktop app,
+[examples/electron.md](examples/electron.md) — it has the `_electron`
+REPL driver skeleton and the tmux wrapping.
+
+## Drive it, don't just launch it
+
+Launching with no interaction proves the entrypoint resolves. That's
+not running the app — it's typechecking with extra steps. Drive it to
+a point where a user would see something:
+
+- CLI → type a representative command, check the exit code and output.
+- Server → hit the route the diff touches with `curl`, read the body.
+- TUI → `send-keys` a navigation, `capture-pane` the result.
+- GUI → click the button, screenshot the window. **Look at the
+  screenshot.** A blank frame is a failure to launch.
+
+If the fallback pattern didn't work out of the box — you had to
+install packages, set env vars, patch config, or write a driver —
+recommend `/run-skill-generator` in your report so that work gets
+captured as a project skill. If it just worked, don't.
+
+---
+
+hey. something has happened. i renamed a folder - and it disappeared
+
+---
+
+[Request interrupted by user]
+
+---
+
+sorry. last answer was done by mistaken.
+
+"2. Apple Notes Aug 2026/iCloud/calle-me (4 notes) got moved to Feed/calle-me (name preserved) — this looks like a drag-and-drop of that folder onto Feed." - i think this is the case. im fine with jobbi and everything but not this callme. this got dragndropped accidently. and i guess this behavior shouldn't be possible. idk. or how rename caused it?
+
+---
+
+2. Guard rename_item so it refuses a destination that already exists, instead of silently proceeding. - yep
