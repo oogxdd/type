@@ -15,6 +15,9 @@ export const getTree = (): Promise<FolderNode> =>
 export const readNote = (path: string): Promise<string> =>
   invokeLogged<string>("read_note", { path });
 
+export const getAbsolutePath = (path: string): Promise<string> =>
+  invokeLogged<string>("get_absolute_path", { path });
+
 export const createNote = (
   folderPath?: string,
   content = "",

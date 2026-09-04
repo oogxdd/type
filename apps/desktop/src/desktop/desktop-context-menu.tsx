@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import { getAbsolutePath } from "@/features/notes/api/notes-api";
 import { isSystemFolder } from "@typenotes/shared/constants";
 import { Button } from "@/shared/ui/button";
 import {
@@ -29,21 +31,37 @@ export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) 
     updateNoteMarkers,
     deleteNotes,
     showNoteInfo,
+    createFolder,
     allNotePreviews,
   } = useNotesTree();
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [destinationPath, setDestinationPath] = useState("");
+  const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
+  const [newFolderPath, setNewFolderPath] = useState("");
 
   useEffect(() => {
     if (!state) {
       setMoveDialogOpen(false);
       setDestinationPath("");
+      setCreateFolderDialogOpen(false);
+      setNewFolderPath("");
     }
   }, [state]);
+
+  const revealPathsInFinder = async (paths: string[]) => {
+    try {
+      const absolutePaths = await Promise.all(paths.map((path) => getAbsolutePath(path)));
+      await revealItemInDir(absolutePaths.length === 1 ? absolutePaths[0] : absolutePaths);
+    } catch (error) {
+      console.error("[notes] failed to reveal in Finder", error);
+    }
+  };
 
   const closeAll = () => {
     setMoveDialogOpen(false);
     setDestinationPath("");
+    setCreateFolderDialogOpen(false);
+    setNewFolderPath("");
     onClose();
   };
 
@@ -63,6 +81,25 @@ export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) 
       return [];
     }
 
+    if (state.kind === "empty") {
+      return [
+        {
+          id: "empty.createFolder",
+          label: "Create folder",
+          run: () => {
+            // Close the dropdown first (radix's outside-pointer-down
+            // detection otherwise sees the same click and dismisses the
+            // dialog the instant it mounts). Opening the dialog on the next
+            // frame lets the dropdown fully unmount first.
+            onClose();
+            requestAnimationFrame(() => {
+              setCreateFolderDialogOpen(true);
+            });
+          },
+        },
+      ];
+    }
+
     if (state.kind === "folder") {
       const canRename = state.targetPaths.length === 1 && !isSystemFolder(state.targetPaths[0]);
       const canDelete = !state.targetPaths.some(isSystemFolder);
@@ -74,6 +111,15 @@ export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) 
           run: () => {
             if (!canRename) return;
             startRenameFolder(state.targetPaths[0]);
+            closeAll();
+          },
+        },
+        {
+          id: "folder.reveal",
+          label: "Show in Finder",
+          disabled: state.targetPaths.length === 0,
+          run: () => {
+            void revealPathsInFinder(state.targetPaths);
             closeAll();
           },
         },
@@ -142,6 +188,14 @@ export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) 
         },
       },
       {
+        id: "note.reveal",
+        label: "Show in Finder",
+        run: () => {
+          void revealPathsInFinder(state.targetPaths);
+          closeAll();
+        },
+      },
+      {
         id: "note.info",
         label: "See info",
         run: () => {
@@ -168,6 +222,8 @@ export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) 
     flattenIntoFeed,
     moveNotesToArchive,
     noteSelectedCount,
+    onClose,
+    revealPathsInFinder,
     showNoteInfo,
     startRenameFolder,
     state,
@@ -175,7 +231,7 @@ export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) 
   ]);
 
   const onSubmitMove = async () => {
-    if (!state) {
+    if (!state || state.kind !== "note") {
       return;
     }
     const nextDestination = destinationPath.trim();
@@ -183,6 +239,15 @@ export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) 
       return;
     }
     await moveNotesToFolder(state.targetPaths, nextDestination);
+    closeAll();
+  };
+
+  const onSubmitCreateFolder = async () => {
+    const nextPath = newFolderPath.trim();
+    if (!nextPath) {
+      return;
+    }
+    await createFolder(nextPath);
     closeAll();
   };
 
@@ -217,8 +282,12 @@ export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) 
         >
           {menuItems.map((item, index) => (
             <div key={item.id}>
-              {index === 2 && state?.kind === "folder" ? <DropdownMenuSeparator /> : null}
-              {index === 0 && state?.kind === "note" ? null : null}
+              {state?.kind === "folder" &&
+              item.destructive &&
+              index > 0 &&
+              !menuItems[index - 1].destructive ? (
+                <DropdownMenuSeparator />
+              ) : null}
               <DropdownMenuItem
                 disabled={"disabled" in item ? item.disabled : false}
                 variant={item.destructive ? "destructive" : "default"}
@@ -282,6 +351,54 @@ export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) 
             </Button>
             <Button type="button" onClick={() => void onSubmitMove()}>
               Move
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={createFolderDialogOpen}
+        onOpenChange={(open) => {
+          setCreateFolderDialogOpen(open);
+          if (!open) {
+            setNewFolderPath("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create folder</DialogTitle>
+            <DialogDescription>
+              Enter a folder name or path. Missing parent folders will be created.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Input
+              autoFocus
+              value={newFolderPath}
+              onChange={(event) => setNewFolderPath(event.target.value)}
+              placeholder="Events/Wedding/Photos"
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void onSubmitCreateFolder();
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setCreateFolderDialogOpen(false);
+                setNewFolderPath("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void onSubmitCreateFolder()}>
+              Create
             </Button>
           </DialogFooter>
         </DialogContent>

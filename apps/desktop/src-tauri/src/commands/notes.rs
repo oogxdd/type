@@ -1,8 +1,8 @@
 use type_core::{
-    application::notes::NotesService, ensure_security_unlocked_for_app, notes_root, CreateNoteArgs,
-    CreateNoteResult, FilesystemNotesRepository, FolderNode, FrontMatterNoteDocumentCodec,
-    NoteMeta, NotePreviewEntry, RuntimeNoteBodyCrypto, SetNoteMarkersArgs, SetNoteTimestampArgs,
-    SetOrderArgs, SystemNoteClock, UuidNoteIdGenerator,
+    application::notes::NotesService, ensure_security_unlocked_for_app, notes_root, resolve_path,
+    CreateNoteArgs, CreateNoteResult, FilesystemNotesRepository, FolderNode,
+    FrontMatterNoteDocumentCodec, NoteMeta, NotePreviewEntry, RuntimeNoteBodyCrypto,
+    SetNoteMarkersArgs, SetNoteTimestampArgs, SetOrderArgs, SystemNoteClock, UuidNoteIdGenerator,
 };
 
 fn notes_service(
@@ -37,6 +37,14 @@ pub(super) async fn get_tree(app: tauri::AppHandle) -> Result<FolderNode, String
 pub(super) fn read_note(app: tauri::AppHandle, path: String) -> Result<String, String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     notes_service(&app)?.read_note(&path)
+}
+
+#[tauri::command]
+pub(super) fn get_absolute_path(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    let env = crate::app_env(&app)?;
+    ensure_security_unlocked_for_app(&env)?;
+    let absolute = resolve_path(&env, &path)?;
+    Ok(absolute.to_string_lossy().into_owned())
 }
 
 #[tauri::command]

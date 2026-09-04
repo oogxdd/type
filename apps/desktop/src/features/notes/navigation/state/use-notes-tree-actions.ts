@@ -471,8 +471,29 @@ export function useNotesTreeActions({
     }
   }, []);
 
+  const createFolder = useCallback(
+    async (path: string) => {
+      const normalizedPath = path
+        .split("/")
+        .map((segment) => segment.trim())
+        .filter(Boolean)
+        .join("/");
+      if (!normalizedPath || isSystemFolder(normalizedPath)) {
+        return;
+      }
+      // There is no bare create-folder command: create_note's create_dir_all
+      // of its destination is what materializes the folder (matching the
+      // desktop move dialog and the mobile folder picker).
+      await api.createNote(normalizedPath, "", undefined, syncSettings.noteFileNameFormat);
+      await refreshTree();
+      selectFolder(normalizedPath);
+    },
+    [refreshTree, selectFolder, syncSettings.noteFileNameFormat]
+  );
+
   return {
     createNewNote,
+    createFolder,
     deleteFolders,
     deleteNotes,
     moveNotesToArchive,

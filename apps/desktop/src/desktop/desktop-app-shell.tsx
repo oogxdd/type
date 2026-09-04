@@ -143,9 +143,15 @@ export function DesktopAppShell({
     shouldNestNotesInNavigation,
     feedNoteFilter,
     setFeedNoteFilter,
+    refreshTree,
   } = useNotesTree();
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [treeRefreshing, setTreeRefreshing] = useState(false);
+  const handleRefreshClick = useCallback(() => {
+    setTreeRefreshing(true);
+    void refreshTree().finally(() => setTreeRefreshing(false));
+  }, [refreshTree]);
   const [feedFilterOpen, setFeedFilterOpen] = useState(false);
   const [threePaneLayout, setThreePaneLayout] = useState<Record<string, number>>({
     nav: 22,
@@ -166,6 +172,7 @@ export function DesktopAppShell({
     handleNoteClick,
     handleFolderContextMenu,
     handleNoteContextMenu,
+    handleEmptyAreaContextMenu,
     desktopContextMenuState,
     openDesktopContextMenu,
     closeDesktopContextMenu,
@@ -262,6 +269,8 @@ export function DesktopAppShell({
         }}
         onHandwritingImportClick={onImportHandwriting}
         onSettingsClick={() => onAppModeChange("settings")}
+        onRefreshClick={handleRefreshClick}
+        refreshing={treeRefreshing}
         syncActive={Boolean(localSyncServerStatus?.running)}
         syncBusy={localSyncServerBusy}
         syncDisabled={
@@ -385,6 +394,7 @@ export function DesktopAppShell({
               submitRenameFolder={submitRenameFolder}
               cancelRenameFolder={cancelRenameFolder}
               onContextMenu={handleFolderContextMenu}
+              onEmptyAreaContextMenu={handleEmptyAreaContextMenu}
               indentationWidth={indentationWidth}
             />
           </TabsContent>

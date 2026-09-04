@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CirclePlus, FilePenLine, Mic, Settings2, Square } from "lucide-react"
+import { CirclePlus, FilePenLine, Mic, RefreshCw, Settings2, Square } from "lucide-react"
 
 import { cn } from "@/shared/lib/utils"
 import { Button } from "@/shared/ui/button"
@@ -32,6 +32,8 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   onRecordingClick: () => void
   onHandwritingImportClick: () => void
   onSettingsClick: () => void
+  onRefreshClick: () => void
+  refreshing: boolean
   syncActive: boolean
   syncBusy: boolean
   syncDisabled: boolean
@@ -49,6 +51,8 @@ export function AppSidebar({
   onRecordingClick,
   onHandwritingImportClick,
   onSettingsClick,
+  onRefreshClick,
+  refreshing,
   syncActive,
   syncBusy,
   syncDisabled,
@@ -112,13 +116,44 @@ export function AppSidebar({
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem className="flex items-center gap-2">
-                  <SidebarMenuButton
-                    className="min-w-0 flex-1"
-                    isActive={settingsActive}
-                    onClick={onSettingsClick}
-                  >
-                    <Settings2 />
-                    <span>Settings</span>
+                  <SidebarMenuButton asChild className="min-w-0 flex-1" isActive={settingsActive}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={onSettingsClick}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault()
+                          onSettingsClick()
+                        }
+                      }}
+                    >
+                      <Settings2 />
+                      <span className="min-w-0 flex-1 truncate">Settings</span>
+                      <TooltipProvider delayDuration={1000}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="grid size-5 shrink-0 place-items-center rounded opacity-0 transition-opacity hover:bg-sidebar-accent-foreground/10 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring disabled:cursor-not-allowed disabled:opacity-50 group-hover/menu-item:opacity-100 group-focus-within/menu-item:opacity-100"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                onRefreshClick()
+                              }}
+                              disabled={refreshing}
+                              aria-label="Refresh"
+                              title="Refresh"
+                            >
+                              <RefreshCw className={cn("size-3", refreshing && "animate-spin")} />
+                              <span className="sr-only">Refresh</span>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" sideOffset={6}>
+                            Refresh
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </SidebarMenuButton>
                   <TooltipProvider delayDuration={1000}>
                     <Tooltip>

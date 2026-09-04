@@ -35,6 +35,11 @@ export type DesktopContextMenuState =
       path: string;
       parentPath: string;
       targetPaths: string[];
+    }
+  | {
+      kind: "empty";
+      x: number;
+      y: number;
     };
 
 export type TreeInteractions = {
@@ -54,6 +59,7 @@ export type TreeInteractions = {
     path: string,
     parentPath?: string
   ) => Promise<void>;
+  handleEmptyAreaContextMenu: (event: ReactMouseEvent) => void;
   desktopContextMenuState: DesktopContextMenuState | null;
   openDesktopContextMenu: (state: DesktopContextMenuState) => void;
   closeDesktopContextMenu: () => void;
@@ -223,12 +229,30 @@ export const useTreeInteractions = ({
     });
   };
 
+  const handleEmptyAreaContextMenu = (event: ReactMouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedFolders(new Set());
+    setLastSelectedFolder("");
+    setActiveFolder("");
+    setSelectedNotes(new Set());
+    setLastSelectedNote("");
+    setActiveNote(null);
+
+    setDesktopContextMenuState({
+      kind: "empty",
+      x: event.clientX,
+      y: event.clientY,
+    });
+  };
+
   return {
     handleFolderClick,
     handleToggle,
     handleNoteClick,
     handleFolderContextMenu,
     handleNoteContextMenu,
+    handleEmptyAreaContextMenu,
     desktopContextMenuState,
     openDesktopContextMenu,
     closeDesktopContextMenu,

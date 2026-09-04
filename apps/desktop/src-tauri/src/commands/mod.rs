@@ -83,6 +83,7 @@ pub(super) fn run() {
             profiles::export_profiles_to_documents,
             notes::get_tree,
             notes::read_note,
+            notes::get_absolute_path,
             notes::create_note,
             notes::write_note,
             notes::set_note_timestamp,

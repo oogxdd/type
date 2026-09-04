@@ -59,6 +59,7 @@ type NotesTreeContextValue = {
     initialContent?: string,
     targetTimestampMs?: number
   ) => Promise<string | null>;
+  createFolder: (path: string) => Promise<void>;
   deleteNotes: (paths: string[]) => Promise<boolean>;
   deleteFolders: (paths: string[]) => Promise<void>;
   moveNotesToArchive: (paths: string[]) => Promise<void>;

@@ -27,6 +27,7 @@ type FoldersPanelProps = {
   submitRenameFolder: () => void;
   cancelRenameFolder: () => void;
   onContextMenu: (event: ReactMouseEvent, id: string) => void;
+  onEmptyAreaContextMenu?: (event: ReactMouseEvent) => void;
   showNotesAsChildren?: boolean;
   selectedNoteIds?: Set<string>;
   onNoteSelect?: (notePath: string, event: ReactMouseEvent, parentPath: string) => void;
@@ -56,6 +57,7 @@ export function FoldersPanel({
   submitRenameFolder,
   cancelRenameFolder,
   onContextMenu,
+  onEmptyAreaContextMenu,
   showNotesAsChildren = false,
   selectedNoteIds = EMPTY_STRING_SET,
   onNoteSelect,
@@ -98,6 +100,11 @@ export function FoldersPanel({
             }
             if (event.target === event.currentTarget) {
               onClearSelection();
+            }
+          }}
+          onContextMenu={(event) => {
+            if (onEmptyAreaContextMenu && event.target === event.currentTarget) {
+              onEmptyAreaContextMenu(event);
             }
           }}
         >

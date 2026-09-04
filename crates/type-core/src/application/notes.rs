@@ -411,6 +411,26 @@ where
         let is_folder =
             self.repository.entry_kind(&full_path)? == Some(NoteStorageEntryKind::Directory);
         let new_path = parent.join(new_name);
+        if new_path != full_path && self.repository.entry_kind(&new_path)?.is_some() {
+            // On case-insensitive filesystems (the macOS/Windows default),
+            // new_path can "exist" only because it's the same entry as
+            // full_path under a different case (e.g. "calle-me" ->
+            // "Calle-Me") — canonicalize both to allow that, not just a
+            // literal path match.
+            let same_entry = std::fs::canonicalize(&full_path)
+                .ok()
+                .zip(std::fs::canonicalize(&new_path).ok())
+                .is_some_and(|(a, b)| a == b);
+            if !same_entry {
+                return Err(format!(
+                    "\"{}\" already exists here.",
+                    new_path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or(new_name)
+                ));
+            }
+        }
         self.repository.rename(&full_path, &new_path)?;
         self.repository
             .update_order_rename(parent, &old_name, new_name, is_folder)?;
