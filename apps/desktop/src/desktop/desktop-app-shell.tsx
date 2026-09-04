@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type Dispatch,
+  type RefObject,
   type SetStateAction,
   type CSSProperties,
 } from "react";
@@ -64,6 +65,7 @@ type DesktopAppShellProps = {
   onSettingsSectionChange: (section: SettingsSectionId) => void;
   onImportHandwriting: () => void;
   onOpenPinnedFolder: (path: string) => void;
+  foldersPanelRef: RefObject<HTMLDivElement | null>;
 };
 
 const FEED_FILTER_OPTIONS: Array<{ value: FeedNoteFilter; label: string }> = [
@@ -81,6 +83,7 @@ export function DesktopAppShell({
   onSettingsSectionChange,
   onImportHandwriting,
   onOpenPinnedFolder,
+  foldersPanelRef,
 }: DesktopAppShellProps) {
   const theme = useAppearance((state) => state.theme);
   const editorFontSize = useAppearance((state) => state.editorFontSize);
@@ -155,7 +158,6 @@ export function DesktopAppShell({
   });
 
   const notesPanelRef = useRef<HTMLDivElement | null>(null);
-  const foldersPanelRef = useRef<HTMLDivElement | null>(null);
   const middlePaneRef = useRef<HTMLDivElement | null>(null);
 
   const {

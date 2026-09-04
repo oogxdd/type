@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { FolderPlusIcon, FolderIcon } from "lucide-react";
 
 import {
@@ -15,6 +16,7 @@ type CommandPaletteProps = {
   onOpenSettings: (section: SettingsSectionId) => void;
   onOpenFeed: () => void;
   onOpenArchive: () => void;
+  onMoveFocusRestore: () => void;
   onNewRecording: () => void;
   onImportHandwriting: () => void;
 };
@@ -28,9 +30,11 @@ export function CommandPalette({
   onOpenSettings,
   onOpenFeed,
   onOpenArchive,
+  onMoveFocusRestore,
   onNewRecording,
   onImportHandwriting,
 }: CommandPaletteProps) {
+  const restoreNavigationFocusOnCloseRef = useRef(false);
   const {
     open,
     setOpen,
@@ -63,6 +67,14 @@ export function CommandPalette({
       // In move mode we render our own folder suggestions, so let cmdk show them
       // verbatim instead of fuzzy-filtering against the "mv …" input.
       shouldFilter={!moveMode}
+      onCloseAutoFocus={(event) => {
+        if (!restoreNavigationFocusOnCloseRef.current) {
+          return;
+        }
+        restoreNavigationFocusOnCloseRef.current = false;
+        event.preventDefault();
+        onMoveFocusRestore();
+      }}
     >
       <CommandInput
         placeholder={
@@ -111,7 +123,10 @@ export function CommandPalette({
                       key={`${row.kind}:${row.path}`}
                       value={`${row.kind}:${row.path}`}
                       data-folder-path={row.kind === "folder" ? row.path : undefined}
-                      onSelect={() => runMove(row.path)}
+                      onSelect={() => {
+                        restoreNavigationFocusOnCloseRef.current = true;
+                        runMove(row.path);
+                      }}
                     >
                       <Icon className="text-muted-foreground" />
                       <span className="truncate">{row.label}</span>

@@ -40,12 +40,14 @@ function CommandDialog({
   value,
   onValueChange,
   loop,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof Dialog> & {
   title?: string
   description?: string
   className?: string
   showCloseButton?: boolean
+  onCloseAutoFocus?: React.ComponentProps<typeof DialogContent>["onCloseAutoFocus"]
 } & Pick<
     React.ComponentProps<typeof CommandPrimitive>,
     "shouldFilter" | "filter" | "value" | "onValueChange" | "loop"
@@ -59,6 +61,7 @@ function CommandDialog({
       <DialogContent
         className={cn("overflow-hidden p-0", className)}
         showCloseButton={showCloseButton}
+        onCloseAutoFocus={onCloseAutoFocus}
       >
         <Command
           shouldFilter={shouldFilter}
