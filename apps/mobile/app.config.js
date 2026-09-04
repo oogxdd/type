@@ -4,11 +4,11 @@
  * Production (default): bundle ID com.typenotes.mobile, name "Type".
  * Dev (APP_VARIANT=dev): bundle ID com.typenotes.mobile.dev, name "Type Dev".
  *
- * The dev variant installs alongside the TestFlight production build on the
+ * The dev variant installs alongside the ad-hoc production build on the
  * same device — they use separate data containers and appear as separate apps.
  *
  * Usage:
- *   # Production prebuild (TestFlight):
+ *   # Production prebuild (ad-hoc release):
  *   npx expo prebuild --platform ios --clean
  *
  *   # Dev prebuild (device development):

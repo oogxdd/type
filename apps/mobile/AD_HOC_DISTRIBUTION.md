@@ -1,14 +1,14 @@
-# Ad-hoc: building an .ipa and installing it without TestFlight
+# Ad-hoc: building and installing the iOS app without TestFlight
 
-TestFlight is the normal route — push a `mobile-v*` tag and
-`.github/workflows/mobile-testflight.yml` archives, exports, and uploads
-(`docs/RELEASING.md`). This runbook is the fallback: build a Release `.ipa` on
-this Mac and put it on a device directly, either over the air from a static host
-or over a cable.
+Ad-hoc is the normal mobile release route. Push a `mobile-v*` tag and
+`.github/workflows/mobile-adhoc.yml` builds a signed `.ipa`, verifies that the
+configured devices are in its provisioning profile, stores it as a workflow
+artifact and GitHub Release asset, and deploys the install page to
+`https://type-ota.vercel.app`.
 
-Use it when TestFlight is unavailable, when a build has to reach a device faster
-than App Store Connect processes one, or to test the exact binary CI produces
-without waiting on review plumbing.
+The local build instructions below remain as a fallback and as a way to debug
+signing. CI and local builds use the same native-code generation, Xcode archive,
+`ExportOptionsAdHoc.plist`, and OTA generator.
 
 > **Read this before installing.** An ad-hoc build carries a different signature
 > than the TestFlight copy of the same bundle id, so iOS refuses to install one
@@ -19,12 +19,40 @@ without waiting on review plumbing.
 
 ---
 
-## Prerequisites
+## GitHub Actions release (normal route)
+
+The one-time setup, secrets, and release flow are documented in
+[`docs/MOBILE_AD_HOC_GITHUB_ACTIONS.md`](../../docs/MOBILE_AD_HOC_GITHUB_ACTIONS.md).
+For a release from `main`:
+
+```sh
+git tag mobile-v0.2.7
+git push origin mobile-v0.2.7
+```
+
+When the **Mobile Ad Hoc** workflow succeeds, open
+`https://type-ota.vercel.app` in Safari on a registered device. A manual run is
+also available under Actions and accepts an explicit version/build number.
+
+## Local-build prerequisites
 
 - Apple Developer Program membership, team `Y377P5XKGJ`.
 - App Store Connect API key at
   `~/.appstoreconnect/private_keys/AuthKey_W2Y52J5N33.p8`
   (issuer `bd0c62da-fcbf-4770-a10d-2ee30da0963e`). Same key CI uses.
+  **No local Apple Distribution certificate or `.p12` is needed** — `security
+  find-identity -v -p codesigning` on this Mac normally shows only an "Apple
+  Development" identity, never "Apple Distribution". That is fine: §1.5's
+  archive step only needs *some* valid identity (Development is enough), and
+  §1.6's `-exportArchive -allowProvisioningUpdates` is what actually gets the
+  Distribution certificate — the API key lets Xcode fetch/provision it from
+  App Store Connect during export, without ever touching the local keychain.
+  Don't go hunting for a `.p12` or let Xcode create a certificate by hand
+  first; just run the documented archive + export commands and let export
+  handle it. (Verified 2026-09-04: archived with "Apple Development", the
+  exported `.ipa` came back signed "Apple Distribution: Maxim Ignatev
+  (Y377P5XKGJ)", and `security find-identity` was unchanged before and after —
+  no certificate was created or consumed locally.)
 - **The target device's UDID registered in the developer account.** Ad-hoc
   provisioning profiles embed a device list; export fails while building the
   profile if the device is not on it. Get the UDID from Xcode → Window → Devices

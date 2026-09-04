@@ -156,9 +156,9 @@ dev-режиме в приложение не вшит — он тянется �
 
 Без Мака локальная iOS-сборка невозможна (нужен Xcode). Обходные пути —
 Android-dev-клиент (`npm run codegen:android` работает и на Linux, нужен NDK)
-или нативный workflow `.github/workflows/mobile-testflight.yml` на GitHub
-macOS runner. Он сам выполняет codegen, Expo prebuild, Xcode export и загрузку
-в TestFlight; EAS Build не используется.
+или нативный workflow `.github/workflows/mobile-adhoc.yml` на GitHub macOS
+runner. Он сам выполняет codegen, Expo prebuild, ad-hoc Xcode export и
+публикацию OTA-сайта; EAS Build не используется.
 
 ## День разработчика: три петли
 

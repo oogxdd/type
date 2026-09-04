@@ -1,0 +1,379 @@
+name: Mobile Ad Hoc
+
+on:
+  push:
+    tags:
+      - "mobile-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.2.7"
+        required: true
+        type: string
+      build_number:
+        description: "Optional iOS build number. Defaults to the GitHub run number."
+        required: false
+        type: string
+
+concurrency:
+  group: mobile-adhoc-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+      tag: ${{ steps.parse.outputs.tag }}
+      build_number: ${{ steps.parse.outputs.build_number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: parse
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            TAG="mobile-v$VERSION"
+            BUILD_NUMBER="${{ inputs.build_number }}"
+            [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "Expected a semver version like 0.2.7, got $VERSION." >&2
+              exit 1
+            }
+            if [ "${{ github.ref_name }}" != "main" ]; then
+              echo "Manual mobile releases must be run from main." >&2
+              exit 1
+            fi
+          else
+            TAG="${{ github.ref_name }}"
+            VERSION="${TAG#mobile-v}"
+            BUILD_NUMBER=""
+            [[ "$TAG" =~ ^mobile-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "Expected a mobile semver tag like mobile-v0.2.7, got $TAG." >&2
+              exit 1
+            }
+            git fetch origin main
+            RELEASE_SHA="$(git rev-list -n 1 "$TAG")"
+            git merge-base --is-ancestor "$RELEASE_SHA" origin/main || {
+              echo "Tag $TAG does not point to a commit on origin/main." >&2
+              exit 1
+            }
+          fi
+
+          if [ -z "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER="${{ github.run_number }}"
+          fi
+          [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || {
+            echo "Expected a numeric iOS build number, got $BUILD_NUMBER." >&2
+            exit 1
+          }
+
+          {
+            echo "version=$VERSION"
+            echo "tag=$TAG"
+            echo "build_number=$BUILD_NUMBER"
+          } >> "$GITHUB_OUTPUT"
+          echo "Ad-hoc release -> version=$VERSION build=$BUILD_NUMBER tag=$TAG"
+
+  ios:
+    needs: setup
+    runs-on: macos-26
+    timeout-minutes: 180
+    # Keep the existing environment so its Apple API-key secrets remain usable.
+    # The environment name is legacy; this workflow never uploads to TestFlight.
+    environment: testflight
+    permissions:
+      contents: read
+    env:
+      APP_VARIANT: production
+      MOBILE_VERSION: ${{ needs.setup.outputs.version }}
+      IOS_BUILD_NUMBER: ${{ needs.setup.outputs.build_number }}
+      IPHONEOS_DEPLOYMENT_TARGET: "16.4"
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+      IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+      IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+      IOS_AD_HOC_DEVICE_UDIDS: ${{ secrets.IOS_AD_HOC_DEVICE_UDIDS }}
+      OTA_BASE_URL: ${{ vars.IOS_AD_HOC_BASE_URL || 'https://type-ota.vercel.app' }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID || 'team_BfDOMB3NjBU2lgN9aNtFtJKC' }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID || 'prj_hQJ2vJZY73nDFw2gl2jPrXZU5ZC8' }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode 26.6
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+          xcodebuild -version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+      - uses: swatinem/rust-cache@v2
+
+      - name: Verify required secrets and variables
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in \
+            APPLE_TEAM_ID \
+            APP_STORE_CONNECT_KEY_ID \
+            APP_STORE_CONNECT_ISSUER_ID \
+            APP_STORE_CONNECT_PRIVATE_KEY \
+            IOS_DISTRIBUTION_CERTIFICATE_BASE64 \
+            IOS_DISTRIBUTION_CERTIFICATE_PASSWORD \
+            VERCEL_ORG_ID \
+            VERCEL_PROJECT_ID \
+            VERCEL_TOKEN \
+            IOS_AD_HOC_DEVICE_UDIDS \
+            OTA_BASE_URL
+          do
+            [ -n "${!name:-}" ] || {
+              echo "Missing required secret or variable: $name" >&2
+              exit 1
+            }
+          done
+          [[ "$OTA_BASE_URL" == https://* ]] || {
+            echo "IOS_AD_HOC_BASE_URL must begin with https://, got $OTA_BASE_URL." >&2
+            exit 1
+          }
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check mobile code
+        run: |
+          npm run typecheck -w @typenotes/mobile
+          npm run test -w @typenotes/mobile
+
+      - name: Generate iOS native core
+        run: npm run --workspace @typenotes/mobile-core codegen:ios:device
+
+      - name: Verify production native core
+        run: |
+          set -euo pipefail
+          test -f packages/mobile-core/TypeCore.podspec
+          test -f packages/mobile-core/TypenotesMobileCoreFramework.xcframework/ios-arm64/libtype_ffi.a
+          grep -q 'Generated by uniffi-bindgen-react-native' packages/mobile-core/src/index.tsx
+          if grep -q '__isDemoCore' packages/mobile-core/src/index.tsx; then
+            echo "Production build still points at the demo core." >&2
+            exit 1
+          fi
+
+      - name: Sync Expo native project
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform ios
+
+      - name: Install iOS pods
+        working-directory: apps/mobile
+        run: npx pod-install ios
+
+      - name: Install Apple signing credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ASC_KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          ASC_KEY_PATH="$ASC_KEY_DIR/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+          CERTIFICATE_PATH="$RUNNER_TEMP/ios-distribution.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/mobile-adhoc.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+
+          mkdir -p "$ASC_KEY_DIR"
+          printf '%s' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$ASC_KEY_PATH"
+          chmod 600 "$ASC_KEY_PATH"
+
+          printf '%s' "$IOS_DISTRIBUTION_CERTIFICATE_BASE64" \
+            | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -P "$IOS_DISTRIBUTION_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list \
+            -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s \
+            "$KEYCHAIN_PATH" "$HOME/Library/Keychains/login.keychain-db"
+
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | grep -q 'Apple Distribution' || {
+              echo "The imported .p12 has no Apple Distribution signing identity." >&2
+              exit 1
+            }
+
+          {
+            echo "ASC_KEY_PATH=$ASC_KEY_PATH"
+            echo "CERTIFICATE_PATH=$CERTIFICATE_PATH"
+            echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"
+          } >> "$GITHUB_ENV"
+
+      - name: Archive iOS app
+        working-directory: apps/mobile/ios
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -workspace Type.xcworkspace \
+            -scheme Type \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/Type.xcarchive" \
+            archive \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            MARKETING_VERSION="$MOBILE_VERSION" \
+            CURRENT_PROJECT_VERSION="$IOS_BUILD_NUMBER" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
+
+      - name: Export ad-hoc IPA
+        working-directory: apps/mobile/ios
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$RUNNER_TEMP/Type.xcarchive" \
+            -exportOptionsPlist ../ExportOptionsAdHoc.plist \
+            -exportPath "$RUNNER_TEMP/type-export-adhoc" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
+          test -f "$RUNNER_TEMP/type-export-adhoc/Type.ipa"
+
+      - name: Verify IPA and registered devices
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERIFY_DIR="$RUNNER_TEMP/verify-ipa"
+          mkdir -p "$VERIFY_DIR"
+          unzip -q "$RUNNER_TEMP/type-export-adhoc/Type.ipa" -d "$VERIFY_DIR"
+          APP_PATH="$(find "$VERIFY_DIR/Payload" -maxdepth 1 -name '*.app' -type d -print -quit)"
+          test -n "$APP_PATH"
+
+          ACTUAL_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")"
+          ACTUAL_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")"
+          ACTUAL_BUNDLE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")"
+          [ "$ACTUAL_VERSION" = "$MOBILE_VERSION" ]
+          [ "$ACTUAL_BUILD" = "$IOS_BUILD_NUMBER" ]
+          [ "$ACTUAL_BUNDLE" = "com.typenotes.mobile" ]
+          codesign --verify --deep --strict "$APP_PATH"
+
+          NORMALIZED_UDIDS="$(printf '%s' "$IOS_AD_HOC_DEVICE_UDIDS" | tr ',\n' '  ')"
+          PROFILE_COUNT=0
+          while IFS= read -r PROFILE_PATH; do
+            PROFILE_COUNT=$((PROFILE_COUNT + 1))
+            PROFILE_PLIST="$VERIFY_DIR/profile-$PROFILE_COUNT.plist"
+            security cms -D -i "$PROFILE_PATH" > "$PROFILE_PLIST"
+            PROFILE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$PROFILE_PLIST")"
+            PROFILE_DEVICES="$(/usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' "$PROFILE_PLIST")"
+            for udid in $NORMALIZED_UDIDS; do
+              printf '%s\n' "$PROFILE_DEVICES" | grep -Fq "$udid" || {
+                echo "A configured ad-hoc device is absent from $PROFILE_NAME." >&2
+                exit 1
+              }
+            done
+          done < <(find "$APP_PATH" -name embedded.mobileprovision -type f -print)
+          [ "$PROFILE_COUNT" -gt 0 ]
+          echo "Verified $ACTUAL_BUNDLE $ACTUAL_VERSION ($ACTUAL_BUILD) and $PROFILE_COUNT provisioning profile(s)."
+
+      - name: Build OTA install site
+        run: |
+          npm run ota -w @typenotes/mobile -- build \
+            "$RUNNER_TEMP/type-export-adhoc/Type.ipa" \
+            --base-url "$OTA_BASE_URL" \
+            --out "$RUNNER_TEMP/type-ota"
+
+      - name: Deploy OTA site to Vercel
+        run: |
+          set -euo pipefail
+          npx --yes vercel@59.11.2 deploy "$RUNNER_TEMP/type-ota" \
+            --prod --yes --token "$VERCEL_TOKEN"
+
+      - name: Verify OTA deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location \
+            --retry 5 --retry-all-errors --retry-delay 5 \
+            -o /dev/null "$OTA_BASE_URL/"
+          MANIFEST="$(curl --fail --silent --show-error --location \
+            --retry 5 --retry-all-errors --retry-delay 5 \
+            "$OTA_BASE_URL/manifest.plist")"
+          printf '%s' "$MANIFEST" | grep -Fq "$OTA_BASE_URL/Type.ipa"
+          printf '%s' "$MANIFEST" | grep -Fq "$MOBILE_VERSION"
+          curl --fail --silent --show-error --location \
+            --retry 5 --retry-all-errors --retry-delay 5 \
+            --range 0-0 -o /dev/null "$OTA_BASE_URL/Type.ipa"
+          echo "Ad-hoc build is available at $OTA_BASE_URL"
+
+      - name: Upload IPA artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: type-ios-adhoc-${{ needs.setup.outputs.tag }}
+          path: ${{ runner.temp }}/type-export-adhoc/Type.ipa
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Remove signing credentials
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "$RUNNER_TEMP/mobile-adhoc.keychain-db" || true
+          rm -f \
+            "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8" \
+            "$RUNNER_TEMP/ios-distribution.p12"
+
+  github-release:
+    if: github.event_name == 'push'
+    needs: [setup, ios]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: type-ios-adhoc-${{ needs.setup.outputs.tag }}
+          path: release-assets
+
+      - name: Publish GitHub release and IPA
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.setup.outputs.tag }}
+          VERSION: ${{ needs.setup.outputs.version }}
+          OTA_BASE_URL: ${{ vars.IOS_AD_HOC_BASE_URL || 'https://type-ota.vercel.app' }}
+        run: |
+          set -euo pipefail
+          RELEASE_NOTES="Ad-hoc iOS release $VERSION. Install on a registered device from $OTA_BASE_URL in Safari."
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --repo "${{ github.repository }}" \
+              --title "Type Mobile $VERSION" \
+              --notes "$RELEASE_NOTES" \
+              --latest=false
+            gh release upload "$TAG" release-assets/Type.ipa \
+              --repo "${{ github.repository }}" --clobber
+          else
+            gh release create "$TAG" \
+              --repo "${{ github.repository }}" \
+              --verify-tag \
+              --title "Type Mobile $VERSION" \
+              --notes "$RELEASE_NOTES" \
+              --latest=false \
+              release-assets/Type.ipa
+          fi

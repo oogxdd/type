@@ -126,9 +126,9 @@ Everything that matters — `notes/`, `profiles/`, `config.json`,
 
 ## 3. How to cut a mobile release
 
-For the native Xcode build and direct App Store Connect upload used by the
+For the native Xcode ad-hoc build, signing, and OTA deployment used by the
 GitHub-hosted macOS runner, see
-[MOBILE_TESTFLIGHT_GITHUB_ACTIONS_NATIVE.md](./MOBILE_TESTFLIGHT_GITHUB_ACTIONS_NATIVE.md).
+[MOBILE_AD_HOC_GITHUB_ACTIONS.md](./MOBILE_AD_HOC_GITHUB_ACTIONS.md).
 
 ```bash
 git checkout main && git pull
@@ -136,20 +136,21 @@ git tag mobile-v0.2.0
 git push origin mobile-v0.2.0
 ```
 
-CI ([`.github/workflows/mobile-testflight.yml`](../.github/workflows/mobile-testflight.yml)):
+CI ([`.github/workflows/mobile-adhoc.yml`](../.github/workflows/mobile-adhoc.yml)):
 
-1. creates a metadata-only GitHub Release without changing the desktop Latest,
+1. creates a GitHub Release without changing the desktop Latest,
 2. runs on a macOS runner,
 3. generates the iOS UniFFI/native module from `packages/mobile-core`,
-4. archives and exports an `.ipa` with Xcode, and
-5. validates and uploads that `.ipa` directly to App Store Connect/TestFlight.
+4. archives and exports an ad-hoc `.ipa` with Xcode,
+5. verifies its signature, version, and registered-device profile,
+6. uploads it as a workflow artifact and tagged GitHub Release asset, and
+7. deploys the OTA install site to `https://type-ota.vercel.app`.
 
 The workflow sets `MOBILE_VERSION` from the tag and uses the GitHub run number
-as `IOS_BUILD_NUMBER`. For a manual rerun, use Actions → **Mobile TestFlight**
-and optionally enter an explicit build number. Manual dispatch uploads a new
-TestFlight build but does not create a GitHub Release; the `github-release` job
-runs only for a pushed `mobile-v*` tag. A GitHub Release is version/tag-level,
-not one-per-TestFlight-build-number.
+as `IOS_BUILD_NUMBER`. For a manual run, use Actions → **Mobile Ad Hoc** and
+optionally enter an explicit build number. Manual dispatch updates the OTA site
+and keeps the IPA as a 30-day workflow artifact but does not create a GitHub
+Release; the `github-release` job runs only for a pushed `mobile-v*` tag.
 
 ---
 
@@ -159,9 +160,10 @@ Add under **Settings → Secrets and variables → Actions**.
 
 ### Mobile (required)
 
-The `ios` job uses the `testflight` GitHub Environment. Add the following as
-environment secrets (or repository secrets if environment scoping is not
-desired):
+The `ios` job keeps using the existing `testflight` GitHub Environment so its
+Apple API-key secrets remain available; the legacy environment name does not
+mean the workflow uploads to TestFlight. Add the following as environment
+secrets (or repository secrets if environment scoping is not desired):
 
 | Secret | What it is |
 | --- | --- |
@@ -169,13 +171,19 @@ desired):
 | `APP_STORE_CONNECT_KEY_ID` | Team App Store Connect API key ID |
 | `APP_STORE_CONNECT_ISSUER_ID` | Team App Store Connect API issuer ID |
 | `APP_STORE_CONNECT_PRIVATE_KEY` | Complete contents of the API key `.p8` file |
+| `IOS_DISTRIBUTION_CERTIFICATE_BASE64` | Base64-encoded Apple Distribution `.p12` including its private key |
+| `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD` | Password for that `.p12` |
+| `IOS_AD_HOC_DEVICE_UDIDS` | Required registered device UDIDs, separated by commas, spaces, or newlines |
+| `VERCEL_TOKEN` | Token with deploy access to the OTA project |
 
-The runner creates an unsigned intermediate archive, then Xcode uses the team
-API key and cloud-managed signing to export the signed IPA. A distribution
-`.p12`, temporary Keychain, `EXPO_TOKEN`, and EAS-managed credentials are not
-used by the native workflow.
-See [MOBILE_TESTFLIGHT_GITHUB_ACTIONS_NATIVE.md](./MOBILE_TESTFLIGHT_GITHUB_ACTIONS_NATIVE.md)
-for the one-time Apple and GitHub setup.
+`IOS_AD_HOC_BASE_URL`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` are optional
+repository variables. The workflow defaults them to the existing production
+URL and Vercel project.
+
+The runner imports the distribution identity into a temporary Keychain; Xcode
+uses the API key for automatic provisioning and exports with
+`ExportOptionsAdHoc.plist`. Expo/EAS and TestFlight are not used. See
+[MOBILE_AD_HOC_GITHUB_ACTIONS.md](./MOBILE_AD_HOC_GITHUB_ACTIONS.md) for setup.
 
 ### Desktop (required)
 
@@ -206,14 +214,14 @@ entitlement the hardened runtime requires:
    [DESKTOP_AUTO_UPDATE.md](./DESKTOP_AUTO_UPDATE.md).
 2. Put the public key into `tauri.conf.json` → `plugins.updater.pubkey` (replace
    `REPLACE_WITH_UPDATER_PUBLIC_KEY`) and commit it.
-3. Link `apps/mobile` to the correct EAS project (`eas init` from
-   `apps/mobile`) and commit the resulting `extra.eas.projectId` if EAS adds one.
-4. Configure EAS remote credentials and submit credentials for the mobile app.
-5. Tag `desktop-v0.5.0` (or your next version) and push. Verify the desktop job produces
+3. Configure the mobile secrets in the `testflight` GitHub Environment,
+   including registered device UDIDs,
+   Apple signing secrets, and Vercel project secrets.
+4. Tag `desktop-v0.5.0` (or your next version) and push. Verify the desktop job produces
    a Release with `Type_*.dmg`, `*.app.tar.gz`, `*.app.tar.gz.sig`, and
    `latest.json`, and that an older install sees the update.
-6. Tag `mobile-v0.2.0` (or your next mobile version) and push. Verify App Store
-   Connect shows the build in TestFlight after processing.
+5. Tag `mobile-v0.2.0` (or your next mobile version) and push. Open
+   `https://type-ota.vercel.app` in Safari on a registered device and install it.
 
 ---
 
@@ -224,7 +232,7 @@ entitlement the hardened runtime requires:
 | `ci.yml` | push to `main`/`master`; every PR commit, any branch — **except** changes that touch only `**.md` / `docs/**` | ubuntu ×2 | No — typecheck + unit tests |
 | `ffi-bindings-check.yml` | PRs touching `crates/type-ffi/**`, `packages/mobile-core/**`, `scripts/check-ffi-surface.mjs`; manual | ubuntu (PRs); **macOS only on manual dispatch** — its `codegen` job is gated on `github.event_name == 'workflow_dispatch'` | No — surface check + codegen |
 | `release.yml` | push of a `desktop-v*` tag; manual | ubuntu + **macOS** | **Yes** — `.dmg` + updater artifacts |
-| `mobile-testflight.yml` | push of a `mobile-v*` tag; manual | ubuntu ×2 + **macOS** | Yes — `.ipa` → TestFlight |
+| `mobile-adhoc.yml` | push of a `mobile-v*` tag; manual | ubuntu + **macOS** | Yes — ad-hoc `.ipa` → Vercel OTA site + artifact/release asset |
 
 Things that trigger **nothing**: pushing a branch that has no open PR, and
 pushing a tag outside the `desktop-v*` / `mobile-v*` namespaces.
