@@ -11,6 +11,7 @@ import type {
   CreateProfileArgs,
   EnableSecurityArgs,
   FolderNode,
+  GitCommitArgs,
   GitCommitHistoryEntry,
   GitHistoryArgs,
   GitPushArgs,
@@ -182,6 +183,9 @@ export const connectGitRepo = async (
 
 export const gitPull = async (args: GitSyncArgs = {}): Promise<GitSyncStatus> =>
   parse(await getRawCore().gitPull(JSON.stringify(args)));
+
+export const gitCommit = async (args: GitCommitArgs = {}): Promise<GitSyncStatus> =>
+  parse(await getRawCore().gitCommit(JSON.stringify(args)));
 
 export const gitPush = async (args: GitPushArgs = {}): Promise<GitSyncStatus> =>
   parse(await getRawCore().gitPush(JSON.stringify(args)));

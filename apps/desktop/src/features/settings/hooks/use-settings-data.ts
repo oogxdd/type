@@ -19,6 +19,10 @@ export function useSettingsData() {
     Boolean(gitStatus?.repo_initialized) &&
     !gitStatus?.has_uncommitted_changes;
   const canPush = !gitSyncBusy && Boolean(gitStatus?.repo_initialized);
+  const canCommit =
+    !gitSyncBusy &&
+    Boolean(gitStatus) &&
+    (!gitStatus?.repo_initialized || Boolean(gitStatus.has_uncommitted_changes));
   const canConnect = !gitSyncBusy && syncSettings.gitRemoteUrl.trim().length > 0;
   // One-tap sync connects on demand, so it only needs a remote URL.
   const canSync = !gitSyncBusy && syncSettings.gitRemoteUrl.trim().length > 0;
@@ -35,9 +39,11 @@ export function useSettingsData() {
         ? "Pulling..."
         : gitSyncAction === "push"
           ? "Pushing..."
-          : gitSyncAction === "refresh"
-            ? "Refreshing..."
-            : "Idle";
+          : gitSyncAction === "commit"
+            ? "Committing..."
+            : gitSyncAction === "refresh"
+              ? "Refreshing..."
+              : "Idle";
 
   const recorderState = !recordingSupported
     ? "Unsupported"
@@ -51,6 +57,7 @@ export function useSettingsData() {
     isRecordingBusy,
     canPull,
     canPush,
+    canCommit,
     canConnect,
     canSync,
     canQueue,

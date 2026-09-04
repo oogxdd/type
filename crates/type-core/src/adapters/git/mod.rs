@@ -69,6 +69,13 @@ pub struct GitSyncArgs {
     pub password: Option<String>,
 }
 
+/// Arguments for creating a local checkpoint commit without syncing.
+#[derive(Deserialize)]
+pub struct GitCommitArgs {
+    pub message: Option<String>,
+    pub branch: Option<String>,
+}
+
 /// Arguments for committing and pushing local changes.
 #[derive(Deserialize)]
 pub struct GitPushArgs {
@@ -114,6 +121,7 @@ impl GitSyncGateway for GitSyncAdapter {
     type History = GitCommitHistoryEntry;
     type ConnectArgs = ConnectGitArgs;
     type PullArgs = GitSyncArgs;
+    type CommitArgs = GitCommitArgs;
     type PushArgs = GitPushArgs;
 
     fn generate_ssh_key(&self) -> Result<String, String> {
@@ -303,6 +311,30 @@ impl GitSyncGateway for GitSyncAdapter {
             return Ok(build_git_status(&root));
         }
         Err("Pull failed because local and remote history could not be merged.".to_string())
+    }
+
+    fn commit(&self, args: Self::CommitArgs) -> Result<Self::Status, String> {
+        let (root, settings) = self.resolve_settings();
+        let repo = ensure_git_repo(&root)?;
+        let branch = args
+            .branch
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(settings.git_branch.as_str());
+        let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
+        switch_or_prepare_branch(&repo, &target_branch)?;
+
+        if !git_has_changes(&repo) {
+            return Ok(build_git_status(&root));
+        }
+
+        let message = args
+            .message
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or("Checkpoint");
+        commit_all_changes(&repo, message, &target_branch)?;
+        Ok(build_git_status(&root))
     }
 
     fn push(&self, args: Self::PushArgs) -> Result<Self::Status, String> {
@@ -1059,14 +1091,14 @@ pub fn commit_all_changes(
     message: &str,
     branch: &str,
 ) -> Result<Option<Oid>, String> {
+    if !git_has_changes(repo) {
+        return Ok(None);
+    }
     let mut index = repo.index().map_err(map_git_error)?;
     index
         .add_all(["*"].iter(), IndexAddOption::DEFAULT, None)
         .map_err(map_git_error)?;
     index.write().map_err(map_git_error)?;
-    if index.is_empty() && !git_has_changes(repo) {
-        return Ok(None);
-    }
     let tree_id = index.write_tree().map_err(map_git_error)?;
     let tree = repo.find_tree(tree_id).map_err(map_git_error)?;
     let sig = default_signature(repo)?;
@@ -1776,5 +1808,35 @@ mod tests {
         assert_eq!(hits, 1);
 
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn local_checkpoint_initializes_repo_without_a_remote() {
+        let app_dir =
+            std::env::temp_dir().join(format!("type-git-checkpoint-{}", uuid::Uuid::now_v7()));
+        let app = AppEnv::new(&app_dir);
+        let root = crate::ensured_notes_root(&app).unwrap();
+        fs::write(root.join("Feed").join("checkpoint.md"), "before editing\n").unwrap();
+
+        let adapter = GitSyncAdapter::new(app);
+        let status = adapter
+            .commit(GitCommitArgs {
+                message: Some("Before rewrite".to_string()),
+                branch: None,
+            })
+            .unwrap();
+
+        assert!(status.repo_initialized);
+        assert!(status.remote_url.is_none());
+        assert!(!status.has_uncommitted_changes);
+        assert!(status.push_required);
+        let history = build_git_history(&root, 1).unwrap();
+        assert_eq!(history[0].summary, "Before rewrite");
+        assert_eq!(history[0].sync_state, "local");
+        let repo = open_repo(&root).unwrap();
+        assert_eq!(commit_all_changes(&repo, "Duplicate", "main").unwrap(), None);
+        assert_eq!(build_git_history(&root, 10).unwrap().len(), 1);
+
+        fs::remove_dir_all(&app_dir).unwrap();
     }
 }

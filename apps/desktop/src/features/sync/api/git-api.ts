@@ -51,6 +51,17 @@ export const gitPull = (
     },
   });
 
+export const gitCommit = (
+  message?: string,
+  branch?: string
+): Promise<GitSyncStatus> =>
+  invokeLogged<GitSyncStatus>("git_commit", {
+    args: {
+      message,
+      branch,
+    },
+  });
+
 export const gitPush = (
   message?: string,
   branch?: string,

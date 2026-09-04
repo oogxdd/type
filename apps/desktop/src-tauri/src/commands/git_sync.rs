@@ -1,6 +1,7 @@
 use type_core::{
     application::git_sync::GitSyncUseCases, ensure_security_unlocked_for_app, ConnectGitArgs,
-    GitCommitHistoryEntry, GitHistoryArgs, GitPushArgs, GitSyncAdapter, GitSyncArgs, GitSyncStatus,
+    GitCommitArgs, GitCommitHistoryEntry, GitHistoryArgs, GitPushArgs, GitSyncAdapter, GitSyncArgs,
+    GitSyncStatus,
 };
 
 fn git_sync_use_cases(app: tauri::AppHandle) -> Result<GitSyncUseCases<GitSyncAdapter>, String> {
@@ -61,6 +62,15 @@ pub(super) async fn git_pull(
 ) -> Result<GitSyncStatus, String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     super::run_blocking_command(move || git_sync_use_cases(app)?.pull(args)).await
+}
+
+#[tauri::command]
+pub(super) async fn git_commit(
+    app: tauri::AppHandle,
+    args: GitCommitArgs,
+) -> Result<GitSyncStatus, String> {
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
+    super::run_blocking_command(move || git_sync_use_cases(app)?.commit(args)).await
 }
 
 #[tauri::command]

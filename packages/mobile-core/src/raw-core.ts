@@ -57,6 +57,7 @@ export interface RawCore {
   getGitHistory(argsJson: string | undefined): Promise<string>;
   connectGitRepo(argsJson: string): Promise<string>;
   gitPull(argsJson: string): Promise<string>;
+  gitCommit(argsJson: string): Promise<string>;
   gitPush(argsJson: string): Promise<string>;
   startIrohSyncClient(argsJson: string): Promise<string>;
   /** JSON `IrohClientStatus | null` for the Sync screen's connection panel.

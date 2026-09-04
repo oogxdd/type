@@ -38,6 +38,7 @@ type GitSyncContextValue = {
   refreshGitHistory: (limit?: number) => Promise<void>;
   connectGitRepo: () => Promise<void>;
   gitPull: (opts?: { onAfterPull?: () => Promise<void> }) => Promise<void>;
+  gitCommit: () => Promise<void>;
   gitPush: () => Promise<void>;
   syncNow: (opts?: {
     remote?: string;
@@ -81,6 +82,7 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
     refreshGitHistory,
     connectGitRepo,
     gitPull,
+    gitCommit,
     gitPush,
     syncNow,
   } = useGitSyncWorkflows({
@@ -152,6 +154,7 @@ export function GitSyncProvider({ children }: { children: ReactNode }) {
         refreshGitHistory,
         connectGitRepo,
         gitPull,
+        gitCommit,
         gitPush,
         syncNow,
         setGitStatus,

@@ -81,7 +81,8 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
 
   let profileSettings = defaultProfileSettings();
   let appConfig = defaultAppConfig();
-  let commits: { id: string; summary: string; authored_ms: number }[] = [];
+  let gitInitialized = false;
+  let commits: { id: string; summary: string; authored_ms: number; synced: boolean }[] = [];
   let sshPublicKey: string | null = null;
 
   let security = {
@@ -172,12 +173,12 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
 
   const gitStatus = () => ({
     git_available: true,
-    repo_initialized: profileSettings.git_remote_url !== "",
+    repo_initialized: gitInitialized,
     current_branch: profileSettings.git_branch || "main",
     remote_url: profileSettings.git_remote_url || null,
     has_uncommitted_changes: false,
-    push_required: false,
-    ahead: 0,
+    push_required: commits.some((commit) => !commit.synced),
+    ahead: commits.filter((commit) => !commit.synced).length,
     behind: 0,
     notes_root: "/demo/default/notes",
   });
@@ -411,7 +412,7 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
             summary: commit.summary,
             author: "Demo",
             authored_ms: commit.authored_ms,
-            sync_state: "synced",
+            sync_state: commit.synced ? "synced" : "local",
             is_head: index === 0,
           }))
       ),
@@ -419,9 +420,22 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       const args = JSON.parse(argsJson) as { remote_url?: string | null; branch?: string | null };
       profileSettings.git_remote_url = args.remote_url ?? profileSettings.git_remote_url;
       profileSettings.git_branch = args.branch ?? profileSettings.git_branch;
+      gitInitialized = true;
       return JSON.stringify(gitStatus());
     },
     gitPull: async () => JSON.stringify(gitStatus()),
+    gitCommit: async (argsJson) => {
+      const args = JSON.parse(argsJson) as { message?: string | null };
+      gitInitialized = true;
+      counter += 1;
+      commits.push({
+        id: `${counter}`.padStart(40, "0"),
+        summary: args.message || "Checkpoint",
+        authored_ms: now(),
+        synced: false,
+      });
+      return JSON.stringify(gitStatus());
+    },
     getGitSyncProgress: () =>
       JSON.stringify({
         phase: "idle",
@@ -432,12 +446,16 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       }),
     gitPush: async (argsJson) => {
       const args = JSON.parse(argsJson) as { message?: string | null };
-      counter += 1;
-      commits.push({
-        id: `${counter}`.padStart(40, "0"),
-        summary: args.message || profileSettings.git_commit_message,
-        authored_ms: now(),
-      });
+      if (!commits.some((commit) => !commit.synced)) {
+        counter += 1;
+        commits.push({
+          id: `${counter}`.padStart(40, "0"),
+          summary: args.message || profileSettings.git_commit_message,
+          authored_ms: now(),
+          synced: true,
+        });
+      }
+      commits = commits.map((commit) => ({ ...commit, synced: true }));
       return JSON.stringify(gitStatus());
     },
     startIrohSyncClient: async (argsJson) => {

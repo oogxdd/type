@@ -174,6 +174,28 @@ export function useGitSyncWorkflows({
     ]
   );
 
+  const gitCommit = useCallback(async () => {
+    const branch = syncSettings.gitBranch.trim();
+    setGitSyncAction("commit");
+    await yieldToUi();
+    try {
+      const status = await api.gitCommit("Checkpoint", branch || undefined);
+      setGitStatus(status);
+      setGitSyncError(null);
+      void refreshGitHistory();
+    } catch (error) {
+      setGitSyncError(getErrorMessage(error));
+    } finally {
+      setGitSyncAction("idle");
+    }
+  }, [
+    refreshGitHistory,
+    setGitStatus,
+    setGitSyncAction,
+    setGitSyncError,
+    syncSettings.gitBranch,
+  ]);
+
   const gitPush = useCallback(async () => {
     const branch = syncSettings.gitBranch.trim();
     const commitMessage = syncSettings.gitCommitMessage.trim();
@@ -314,6 +336,7 @@ export function useGitSyncWorkflows({
     refreshGitHistory,
     connectGitRepo,
     gitPull,
+    gitCommit,
     gitPush,
     syncNow,
   };

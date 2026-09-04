@@ -111,6 +111,24 @@ describe("core-api over the mock core", () => {
     expect(history[0].is_head).toBe(true);
   });
 
+  it("creates a local checkpoint without connecting a remote", async () => {
+    const status = await core.gitCommit({ message: "Before rewrite" });
+    expect(status.repo_initialized).toBe(true);
+    expect(status.remote_url).toBeNull();
+    expect(status.push_required).toBe(true);
+
+    const history = await core.getGitHistory();
+    expect(history[0].summary).toBe("Before rewrite");
+    expect(history[0].sync_state).toBe("local");
+
+    await core.connectGitRepo({ remote_url: "git@github.com:demo/notes.git" });
+    await core.gitPush();
+    const pushedHistory = await core.getGitHistory();
+    expect(pushedHistory).toHaveLength(1);
+    expect(pushedHistory[0].summary).toBe("Before rewrite");
+    expect(pushedHistory[0].sync_state).toBe("synced");
+  });
+
   it("throws a helpful error when the raw core is not wired", async () => {
     // @ts-expect-error — deliberately unset for this test
     setRawCore(null);

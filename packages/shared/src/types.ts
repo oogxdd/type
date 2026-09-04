@@ -287,6 +287,7 @@ export type GitSyncAction =
   | "refresh"
   | "connect"
   | "pull"
+  | "commit"
   | "push"
   | "sync";
 export type NoteFileNameFormat =
@@ -416,6 +417,11 @@ export type GitSyncArgs = {
   branch?: string | null;
   username?: string | null;
   password?: string | null;
+};
+
+export type GitCommitArgs = {
+  message?: string | null;
+  branch?: string | null;
 };
 
 export type GitPushArgs = {

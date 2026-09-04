@@ -42,6 +42,7 @@ export const {
   getGitHistory,
   connectGitRepo,
   gitPull,
+  gitCommit,
   gitPush,
   getGitSyncProgress,
   saveAudioRecording,

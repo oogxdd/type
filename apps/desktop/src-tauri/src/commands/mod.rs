@@ -118,6 +118,7 @@ pub(super) fn run() {
             git_sync::get_git_history,
             git_sync::connect_git_repo,
             git_sync::git_pull,
+            git_sync::git_commit,
             git_sync::git_push,
             local_sync::get_local_sync_server_status,
             local_sync::start_local_sync_server,

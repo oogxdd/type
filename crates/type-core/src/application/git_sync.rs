@@ -38,6 +38,10 @@ impl<G: GitSyncGateway> GitSyncUseCases<G> {
         self.gateway.pull(args)
     }
 
+    pub fn commit(&self, args: G::CommitArgs) -> Result<G::Status, String> {
+        self.gateway.commit(args)
+    }
+
     pub fn push(&self, args: G::PushArgs) -> Result<G::Status, String> {
         self.gateway.push(args)
     }

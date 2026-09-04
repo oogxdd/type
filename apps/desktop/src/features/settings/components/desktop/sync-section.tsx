@@ -36,11 +36,12 @@ export function SettingsSyncSection() {
     refreshGitHistory,
     connectGitRepo,
     gitPull,
+    gitCommit,
     gitPush,
     syncNow,
   } = useGitSync();
   const { refreshTree } = useNotesTree();
-  const { canPull, canPush, canConnect, canSync } = useSettingsData();
+  const { canPull, canPush, canCommit, canConnect, canSync } = useSettingsData();
 
   useEffect(() => {
     void refreshGitStatus();
@@ -115,6 +116,15 @@ export function SettingsSyncSection() {
             variant="secondary"
             size="sm"
             type="button"
+            onClick={() => void gitCommit()}
+            disabled={!canCommit}
+          >
+            {gitSyncAction === "commit" ? "Committing..." : "Commit checkpoint"}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            type="button"
             onClick={() => void gitPush()}
             disabled={!canPush}
           >
@@ -133,6 +143,10 @@ export function SettingsSyncSection() {
             {gitSyncAction === "refresh" || gitHistoryBusy ? "Refreshing..." : "Refresh"}
           </Button>
         </SettingsActionRow>
+        <SettingsHelpText>
+          Commit checkpoint saves all current changes in local Git history without pulling or
+          pushing.
+        </SettingsHelpText>
       </SettingsCard>
 
       <LocalSyncServerCard />

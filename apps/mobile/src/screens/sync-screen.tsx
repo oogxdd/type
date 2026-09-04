@@ -166,6 +166,7 @@ export const SyncScreen = () => {
           : busy
             ? "Syncing..."
             : "Sync now";
+  const commitTitle = sync.action === "commit" ? "Committing..." : "Commit checkpoint";
   const status = sync.status;
   const transferLabel = formatTransferProgress(sync.progress);
   const transferFraction = transferProgressFraction(sync.progress);
@@ -293,6 +294,19 @@ export const SyncScreen = () => {
             <Button title="Push only" kind="secondary" onPress={() => void sync.push().catch(() => {})} disabled={busy || !connected} />
           </View>
         </View>
+        <Button
+          title={commitTitle}
+          kind="secondary"
+          onPress={() => void sync.commit().catch(() => {})}
+          disabled={
+            busy ||
+            !status ||
+            (status.repo_initialized && !status.has_uncommitted_changes)
+          }
+        />
+        <InlineNote>
+          Saves all current changes in local Git history without pulling or pushing.
+        </InlineNote>
         {sync.error ? (
           <Text style={{ color: theme.colors.danger }}>{sync.error}</Text>
         ) : null}

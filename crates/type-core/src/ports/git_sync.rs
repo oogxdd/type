@@ -44,6 +44,7 @@ pub trait GitSyncService {
         username: Option<&str>,
         password: Option<&str>,
     ) -> Result<GitSyncStatus, String>;
+    fn commit(&self, message: Option<&str>, branch: Option<&str>) -> Result<GitSyncStatus, String>;
     fn push(
         &self,
         message: Option<&str>,
@@ -63,6 +64,7 @@ pub trait GitSyncGateway {
     type History;
     type ConnectArgs;
     type PullArgs;
+    type CommitArgs;
     type PushArgs;
 
     fn generate_ssh_key(&self) -> Result<String, String>;
@@ -72,6 +74,7 @@ pub trait GitSyncGateway {
     fn history(&self, args: Option<Self::HistoryArgs>) -> Result<Vec<Self::History>, String>;
     fn connect(&self, args: Self::ConnectArgs) -> Result<Self::Status, String>;
     fn pull(&self, args: Self::PullArgs) -> Result<Self::Status, String>;
+    fn commit(&self, args: Self::CommitArgs) -> Result<Self::Status, String>;
     fn push(&self, args: Self::PushArgs) -> Result<Self::Status, String>;
 }
 
@@ -116,6 +119,14 @@ pub trait GitSyncGateway {
 //   - Fetches and performs fast-forward, or three-way merge if needed
 //   - On merge conflicts: keeps "ours", saves "theirs" as .conflict files (e.g. note.conflict.md)
 //   - Never loses data — conflict files preserve the remote version
+//
+// commit(message, branch)
+//   in:  message — commit message, defaults to "Checkpoint"
+//        branch — target branch, defaults to current or configured branch
+//   out: GitSyncStatus — status after committing
+//   - Initializes a local repository if needed
+//   - Stages and commits all working-folder changes without network access
+//   - No-op when the working tree is clean
 //
 // push(message, branch, username, password)
 //   in:  message — commit message, defaults to "Sync notes"

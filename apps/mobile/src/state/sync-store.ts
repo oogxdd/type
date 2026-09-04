@@ -25,7 +25,7 @@ import { useNotesStore } from "./notes-store";
 import { activeProfile, useSettingsStore } from "./settings-store";
 import { useSyncLogStore } from "./sync-log-store";
 
-type SyncAction = "idle" | "refresh" | "connect" | "pull" | "push";
+type SyncAction = "idle" | "refresh" | "connect" | "pull" | "commit" | "push";
 type SavedGitConnection = ConnectGitArgs & { irohTicket: string | null };
 const AUTO_SYNC_DELAY_MS = 1_500;
 const AUTO_SYNC_BUSY_RETRY_MS = 2_000;
@@ -93,6 +93,8 @@ type SyncState = {
   /** Persist a scanned sync link to the working folder's settings + connect. */
   connectFromLink: (link: SyncDeepLinkParams) => Promise<void>;
   pull: () => Promise<void>;
+  /** Commit all current working-folder changes locally, without syncing. */
+  commit: (message?: string) => Promise<void>;
   push: (message?: string) => Promise<void>;
   /** The one-button flow: pull, then push. */
   syncNow: () => Promise<void>;
@@ -272,7 +274,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
     // Surface libgit2's transfer progress (objects/bytes) while the network
     // action runs; the core publishes a snapshot that is cheap to poll.
     const progressTimer =
-      action === "refresh"
+      action === "refresh" || action === "commit"
         ? null
         : setInterval(() => {
             const progress = core.getGitSyncProgress();
@@ -565,6 +567,19 @@ export const useSyncStore = create<SyncState>((set, get) => {
         .catch((error) => {
           logSync(`audio cache: prune skipped - ${getErrorMessage(error)}`);
         });
+    },
+
+    commit: async (message = "Checkpoint") => {
+      if (isBusy("commit")) {
+        return;
+      }
+      await run("commit", () => {
+        const connection = savedGitConnection();
+        return core.gitCommit({
+          message,
+          branch: connection?.branch,
+        });
+      });
     },
 
     syncNow: async () => {

@@ -3,8 +3,8 @@
 //! locked, exactly like the desktop shell.
 
 use type_core::{
-    application::git_sync::GitSyncUseCases, ConnectGitArgs, GitHistoryArgs, GitPushArgs,
-    GitSyncAdapter, GitSyncArgs,
+    application::git_sync::GitSyncUseCases, ConnectGitArgs, GitCommitArgs, GitHistoryArgs,
+    GitPushArgs, GitSyncAdapter, GitSyncArgs,
 };
 
 use crate::{current_env, from_json, run_blocking, to_json, unlocked_env, CoreError};
@@ -76,6 +76,16 @@ pub async fn git_pull(args_json: String) -> Result<String, CoreError> {
     run_blocking(move || {
         let args: GitSyncArgs = from_json(&args_json)?;
         to_json(&git_sync_use_cases()?.pull(args)?)
+    })
+    .await
+}
+
+/// `args_json`: `GitCommitArgs`. Creates a local commit without network access.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn git_commit(args_json: String) -> Result<String, CoreError> {
+    run_blocking(move || {
+        let args: GitCommitArgs = from_json(&args_json)?;
+        to_json(&git_sync_use_cases()?.commit(args)?)
     })
     .await
 }
