@@ -299,9 +299,15 @@ Each feature's context provider lives in `hooks/` alongside its hooks.
   - `api/notes-api` — the IPC surface (`getTree`, `readNote`, `createNote`, `writeNote`,
     `getNoteMeta`, `listNotePreviews`, `deleteItems`, `moveItems`, `renameItem`, `setOrder`, …),
     used by every other notes sub-slice.
-  - `editor/` — `components/note-editor` (Tiptap); `hooks/{editor-context, use-note-editor}`;
-    `lib/{markdown-editor, note-autoname}`. `use-note-editor`: debounced 400ms autosave,
-    dirty/saving/error, empty-note cleanup, and the flush/rename bridge into the notes domain.
+  - `editor/` — `components/note-editor` (Tiptap); `hooks/{editor-context, use-note-editor,
+    use-vim}`; `lib/{markdown-editor, note-autoname}` + `lib/vim/`. `use-note-editor`:
+    debounced 400ms autosave, dirty/saving/error, empty-note cleanup, and the flush/rename
+    bridge into the notes domain. `lib/vim/` is the modal editing layer — `keys` (pure
+    keyboard grammar), `text-motions` (pure motions/text objects), `flat-doc` (projects the
+    ProseMirror doc onto Vim's buffer-of-lines model), `commands` (executes a parsed command
+    against the view), `registers`, `vertical-motion` (geometry), `key-event` (layout
+    normalisation); `use-vim` owns mode state and the `VimHost` seam. See
+    [docs/VIM_MODE.md](./docs/VIM_MODE.md).
   - `list/` — note list components + `hooks/use-note-previews` (stale-while-revalidate
     preview cache).
   - `navigation/` — `state/{notes-tree-context, use-notes-tree-state, use-notes-tree-actions}`
@@ -477,5 +483,6 @@ The React Native app (Expo) reuses the Rust core through
 - **Sync history UX**: settings now show commit history from real git log. This cannot reliably encode which device performed push/pull for every commit.
 - **Note previews are persisted per profile** in localStorage (`notes-viewer-note-previews-v1:<profileId>`) and hydrated on launch for an instant first paint, then revalidated via the bulk `list_note_previews` command (stale-while-revalidate). Persistence is disabled while encryption is on, and enabling encryption purges the snapshots (`clearPersistedNotePreviews` in `shared/lib/storage`). `get_tree` never reads note bodies — Feed is name-sorted (file names are time-prefixed) and the UI re-sorts by front-matter timestamps from previews. The full cache/invalidation design (and the deferred TanStack Query decision) is documented in `docs/architecture/07-frontend-caching.md`.
 - **Editor saves are debounced** (400ms). `flushSave()` must be called before navigation away, profile switching, or app backgrounding.
+- **Vim mode splits visual and logical lines on purpose.** `j`/`k` move by *visual* line (layout geometry, effectively Vim's `gj`/`gk`) because one prose paragraph is one logical line and jumping whole paragraphs would be useless. Everything linewise — `dd`, `V`, `dj`, `yy`, `cc` — operates on *logical* lines, so `dd` deletes the paragraph. Don't "fix" one to match the other. Related: charwise Visual selects the character under the cursor, so the ProseMirror selection head sits one past it — `VimHost.visualHead` is the authoritative cursor while Visual is active, never `selection.head`. Command keys are normalised to the US layout via `event.code` (so `dd` works on a Cyrillic layout) while `f{c}`/`r{c}` read `event.key`. Full keymap and rationale: [docs/VIM_MODE.md](./docs/VIM_MODE.md).
 - **`shouldNestNotesInNavigation`**: When `notesListMode === "nested"`, notes appear inline inside the folder tree instead of in a separate middle pane. This affects keyboard navigation, rendering, and the visible navigation items computation.
 - **Context split ordering matters**: SelectionContext and EditorContext are above NotesTreeContext in the provider tree. NotesTreeContext consumes both to update selection/editor after CRUD ops. Don't reorder providers without understanding these dependencies.

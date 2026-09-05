@@ -1069,19 +1069,24 @@ body {
   pointer-events: none;
 }
 
-.tiptap-editor[data-vim-mode="visual"] .vim-block-cursor {
+.tiptap-editor[data-vim-mode="visual"] .vim-block-cursor,
+.tiptap-editor[data-vim-mode="visual-line"] .vim-block-cursor {
   background: var(--vim-visual-blue);
   mix-blend-mode: screen;
 }
 
 .app.theme-light
   .tiptap-editor[data-vim-mode="visual"]
+  .vim-block-cursor,
+.app.theme-light
+  .tiptap-editor[data-vim-mode="visual-line"]
   .vim-block-cursor {
   mix-blend-mode: multiply;
 }
 
 .tiptap-editor[data-vim-mode="normal"] .tiptap-content,
-.tiptap-editor[data-vim-mode="visual"] .tiptap-content {
+.tiptap-editor[data-vim-mode="visual"] .tiptap-content,
+.tiptap-editor[data-vim-mode="visual-line"] .tiptap-content {
   caret-color: transparent;
 }
 
@@ -1090,13 +1095,22 @@ body {
 }
 
 .tiptap-editor[data-vim-mode="visual"] .tiptap-content::selection,
-.tiptap-editor[data-vim-mode="visual"] .tiptap-content ::selection {
+.tiptap-editor[data-vim-mode="visual"] .tiptap-content ::selection,
+.tiptap-editor[data-vim-mode="visual-line"] .tiptap-content::selection,
+.tiptap-editor[data-vim-mode="visual-line"] .tiptap-content ::selection {
   background: color-mix(in srgb, var(--vim-visual-blue) 42%, transparent);
 }
 
 .tiptap-editor[data-vim-mode="insert"] .vim-mode-indicator {
   border-color: color-mix(in srgb, var(--ui-accent) 45%, var(--ui-border));
   color: var(--ui-accent);
+}
+
+/* The keys of a half-typed command (`3d`, `"a`, `ci`), shown as you type. */
+.vim-pending-keys {
+  margin-left: 6px;
+  color: var(--ui-text);
+  letter-spacing: 0;
 }
 
 .tiptap-content {
