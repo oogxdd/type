@@ -48,6 +48,9 @@ pub trait NotesRepository {
     fn strip_root(&self, path: &std::path::Path) -> String;
     fn build_tree(&self) -> Result<FolderNode, String>;
     fn read_to_string(&self, path: &std::path::Path) -> Result<String, String>;
+    /// Recursively collect every markdown note file under `dir` (skipping
+    /// dot-entries and hidden storage folders, same rules as `build_tree`).
+    fn collect_note_files(&self, dir: &std::path::Path) -> Result<Vec<PathBuf>, String>;
     fn entry_kind(&self, path: &std::path::Path) -> Result<Option<NoteStorageEntryKind>, String>;
     fn file_times(
         &self,

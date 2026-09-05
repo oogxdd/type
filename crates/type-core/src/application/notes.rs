@@ -1,4 +1,7 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use crate::{
     ports::notes::{
@@ -6,7 +9,8 @@ use crate::{
         NotesRepository,
     },
     CreateNoteArgs, CreateNoteResult, FolderNode, NoteFrontMatter, NoteMeta, NotePreviewEntry,
-    OrderFile, SetNoteTimestampArgs, SetOrderArgs, FEED_FOLDER,
+    OrderFile, SetNoteTimestampArgs, SetOrderArgs, ATTACHMENTS_STORAGE_FOLDER, FEED_FOLDER,
+    RECORDINGS_STORAGE_FOLDER,
 };
 
 /// Note use cases. This layer owns workflow and policy while persistence,
@@ -345,7 +349,7 @@ where
     }
 
     pub fn delete_items(&self, items: Vec<String>) -> Result<(), String> {
-        self.repository.ensured_root()?;
+        let root = self.repository.ensured_root()?;
         let mut parent_folder_groups: HashMap<PathBuf, Vec<String>> = HashMap::new();
         let mut parent_note_groups: HashMap<PathBuf, Vec<String>> = HashMap::new();
 
@@ -371,9 +375,15 @@ where
                 .entry_kind(&full_path)?
                 .ok_or_else(|| "Item does not exist.".to_string())?;
             if kind == NoteStorageEntryKind::Directory {
+                if let Ok(note_files) = self.repository.collect_note_files(&full_path) {
+                    for note_path in &note_files {
+                        self.delete_associated_media(&root, note_path);
+                    }
+                }
                 self.repository.remove_dir_all(&full_path)?;
                 parent_folder_groups.entry(parent).or_default().push(name);
             } else {
+                self.delete_associated_media(&root, &full_path);
                 self.repository.remove_file(&full_path)?;
                 parent_note_groups.entry(parent).or_default().push(name);
             }
@@ -389,6 +399,33 @@ where
         }
 
         Ok(())
+    }
+
+    /// Best-effort: delete the audio recording / handwriting attachment a note
+    /// references in its front matter, if any. Failures are ignored — a
+    /// missing or already-deleted media file must never block note deletion.
+    fn delete_associated_media(&self, root: &Path, note_path: &Path) {
+        let Ok(raw) = self.repository.read_to_string(note_path) else {
+            return;
+        };
+        let (meta, _) = self.documents.parse(&raw);
+        for rel in [meta.recording_audio_path, meta.handwriting_attachment_path]
+            .into_iter()
+            .flatten()
+        {
+            let rel = rel.trim();
+            if rel.is_empty() {
+                continue;
+            }
+            let Ok(full_path) = self.repository.resolve_path(rel) else {
+                continue;
+            };
+            let allowed = full_path.starts_with(root.join(RECORDINGS_STORAGE_FOLDER))
+                || full_path.starts_with(root.join(ATTACHMENTS_STORAGE_FOLDER));
+            if allowed {
+                let _ = self.repository.remove_file(&full_path);
+            }
+        }
     }
 
     pub fn rename_item(&self, path: &str, new_name: &str) -> Result<String, String> {

@@ -158,6 +158,12 @@ impl NotesRepository for FilesystemNotesRepository {
         fs::read_to_string(path).map_err(|err| err.to_string())
     }
 
+    fn collect_note_files(&self, dir: &Path) -> Result<Vec<PathBuf>, String> {
+        let mut files = Vec::new();
+        collect_markdown_note_files(&self.root, dir, &mut files)?;
+        Ok(files)
+    }
+
     fn entry_kind(&self, path: &Path) -> Result<Option<NoteStorageEntryKind>, String> {
         let metadata = match fs::metadata(path) {
             Ok(metadata) => metadata,
