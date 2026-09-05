@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 import {
   ArchiveIcon,
   DownloadIcon,
+  EraserIcon,
   FilePlusIcon,
   FolderInputIcon,
   ImageIcon,
@@ -10,6 +11,7 @@ import {
   MicIcon,
   MoonIcon,
   PencilIcon,
+  ScissorsIcon,
   SettingsIcon,
   SunIcon,
   Trash2Icon,
@@ -21,6 +23,9 @@ import { useAppearance } from "@/app/state/appearance-store";
 import { FEED_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
 import { collectFolderPaths, getNoteParentPath } from "@typenotes/shared/notes";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
+import { getActiveNoteEditor } from "@/features/notes/editor/lib/editor-bridge";
+import { canSplitNoteAtCursor } from "@/features/notes/editor/lib/note-split";
+import { getUntitledRenameTarget } from "@/features/notes/editor/lib/note-autoname";
 import {
   buildFolderSuggestions,
   folderExists,
@@ -94,6 +99,8 @@ export function useCommandPaletteCommands({
     moveNotesToFolder,
     flattenIntoFeed,
     updateNoteMarkers,
+    splitNoteAtCursor,
+    resetNoteFileNameToUntitled,
     startRenameFolder,
     allNotePreviews,
   } = useNotesTree();
@@ -136,6 +143,19 @@ export function useCommandPaletteCommands({
     noteTargets.length > 0 && noteTargets.every((path) => allNotePreviews[path]?.isReviewed);
 
   const allFolderPaths = useMemo(() => collectFolderPaths(tree), [tree]);
+
+  // Both of these read state the palette does not subscribe to (the editor's
+  // caret, the note's file name), but neither can change while the palette is
+  // open — so evaluating them on open is enough.
+  const canSplitActiveNote = (() => {
+    if (!open || !activeNote || getNoteParentPath(activeNote) !== FEED_FOLDER_PATH) {
+      return false;
+    }
+    const noteEditor = getActiveNoteEditor();
+    return Boolean(noteEditor && canSplitNoteAtCursor(noteEditor));
+  })();
+  const untitledRenameTarget =
+    open && noteTargets.length === 1 ? getUntitledRenameTarget(noteTargets[0]) : null;
 
   // --- Terminal `mv` command -------------------------------------------------
   const parsedMove = parseMoveCommand(inputValue);
@@ -208,6 +228,24 @@ export function useCommandPaletteCommands({
 
   // --- Normal command list ---------------------------------------------------
   const selectionCommands: PaletteCommand[] = [];
+  if (canSplitActiveNote) {
+    selectionCommands.push({
+      id: "split-note",
+      label: "Split note at cursor",
+      icon: ScissorsIcon,
+      keywords: ["split", "divide", "break", "cursor"],
+      run: () => void splitNoteAtCursor(),
+    });
+  }
+  if (untitledRenameTarget) {
+    selectionCommands.push({
+      id: "untitle-note",
+      label: "Rename note file to untitled",
+      icon: EraserIcon,
+      keywords: ["untitled", "title", "slug", "filename", "rename"],
+      run: () => void resetNoteFileNameToUntitled(noteTargets[0]),
+    });
+  }
   if (noteTargets.length > 0) {
     selectionCommands.push({
       id: "move-notes-folder",

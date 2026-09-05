@@ -14,6 +14,9 @@ import {
 import { confirmAction, focusNoScroll } from "@/shared/lib/dom";
 import { getNoteParentPath } from "@typenotes/shared/notes";
 import { requestNoteEditorInsertMode } from "@/features/notes/editor/lib/editor-events";
+import { getActiveNoteEditor } from "@/features/notes/editor/lib/editor-bridge";
+import { getNoteSplitAtCursor } from "@/features/notes/editor/lib/note-split";
+import { getUntitledRenameTarget } from "@/features/notes/editor/lib/note-autoname";
 import { applyFolderRenameToSelection, collectNotesForFlattening } from "../model/notes-tree-model";
 import { findNode } from "@/features/notes/navigation/model/tree-ops";
 import { findPostDeletionNavigationTarget } from "../model/visible-navigation";
@@ -54,13 +57,14 @@ export function useNotesTreeActions({
   setRenameValue,
 }: UseNotesTreeActionsArgs) {
   const { syncSettings } = useProfiles();
-  const { clearDraft, clearNote, rightPaneRef } = useEditor();
+  const { clearDraft, clearNote, flushSave, rightPaneRef } = useEditor();
   const {
     selectedFolders,
     setSelectedFolders,
     setLastSelectedFolder,
     activeFolder,
     setActiveFolder,
+    activeNote,
     setSelectedNotes,
     setLastSelectedNote,
     setActiveNote,
@@ -73,6 +77,7 @@ export function useNotesTreeActions({
       setLastSelectedFolder: state.setLastSelectedFolder,
       activeFolder: state.activeFolder,
       setActiveFolder: state.setActiveFolder,
+      activeNote: state.activeNote,
       setSelectedNotes: state.setSelectedNotes,
       setLastSelectedNote: state.setLastSelectedNote,
       setActiveNote: state.setActiveNote,
@@ -128,6 +133,65 @@ export function useNotesTreeActions({
       syncSettings.noteFileNameFormat,
       tree,
     ]
+  );
+
+  /**
+   * Splits the open note at the caret: the block the cursor sits in, and
+   * everything after it, moves into a fresh note that inherits the original's
+   * creation timestamp (so it lands beside it in Feed) and gets its own
+   * generated slug. Feed-only for now.
+   */
+  const splitNoteAtCursor = useCallback(async () => {
+    const noteEditor = getActiveNoteEditor();
+    if (!noteEditor || !activeNote) {
+      return null;
+    }
+    if (getNoteParentPath(activeNote) !== FEED_FOLDER_PATH) {
+      return null;
+    }
+    const split = getNoteSplitAtCursor(noteEditor);
+    if (!split) {
+      return null;
+    }
+    let createdMs: number | undefined;
+    try {
+      const meta = await api.getNoteMeta(activeNote);
+      createdMs = meta.created_ms ?? undefined;
+    } catch (error) {
+      console.error("[notes] failed to read note meta before split", error);
+    }
+    // Truncating through the editor (rather than writing the file directly)
+    // keeps the ProseMirror doc, the autosave buffer and the file in agreement;
+    // the flush then lands it before the new note takes the selection.
+    noteEditor
+      .chain()
+      .deleteRange({ from: split.from, to: split.to })
+      .run();
+    await flushSave();
+    return createNewNote(FEED_FOLDER_PATH, split.markdown, createdMs);
+  }, [activeNote, createNewNote, flushSave]);
+
+  /** Drops a note's generated filename slug in favour of "untitled". */
+  const resetNoteFileNameToUntitled = useCallback(
+    async (path: string) => {
+      const target = getUntitledRenameTarget(path);
+      if (!target) {
+        return null;
+      }
+      const isActiveNote = activeNote === path;
+      if (isActiveNote) {
+        // A pending debounced save would otherwise recreate the old file.
+        await flushSave();
+      }
+      const newPath = await api.renameItem(path, target);
+      await refreshTree();
+      if (isActiveNote) {
+        selectNote(newPath, getNoteParentPath(newPath));
+      }
+      window.dispatchEvent(new CustomEvent("note-previews-invalidated"));
+      return newPath;
+    },
+    [activeNote, flushSave, refreshTree, selectNote]
   );
 
   const selectPostDeletionTarget = useCallback(
@@ -494,6 +558,8 @@ export function useNotesTreeActions({
   return {
     createNewNote,
     createFolder,
+    splitNoteAtCursor,
+    resetNoteFileNameToUntitled,
     deleteFolders,
     deleteNotes,
     moveNotesToArchive,

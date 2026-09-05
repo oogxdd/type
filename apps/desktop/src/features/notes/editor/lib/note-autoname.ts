@@ -11,8 +11,10 @@ const MIN_SLUG_CONTENT_CHARS = 8;
 const MAX_SLUG_WORDS = 8;
 const MAX_SLUG_LENGTH = 56;
 const NOISE_HASH_RE = /^[a-z0-9]{1,32}$/;
+// "untitled" is deliberately absent: it is never generated, only chosen (see
+// getUntitledRenameTarget), so auto-renaming must leave it alone.
 const PLACEHOLDER_SUFFIX_RE =
-  /^(?:note|untitled|note-[0-9a-f-]{8,}|recording|recording-[0-9a-f-]{8,}|handwriting|handwriting-[0-9a-f-]{8,})$/i;
+  /^(?:note|note-[0-9a-f-]{8,}|recording|recording-[0-9a-f-]{8,}|handwriting|handwriting-[0-9a-f-]{8,})$/i;
 
 const slugContentCharCount = (value: string) => value.replace(/-/g, "").length;
 
@@ -124,4 +126,29 @@ export const getAutoRenameTarget = (
   const prefix = rootId.slice(0, 13);
   const nextName = `${prefix}-${slug}.md`;
   return nextName.toLowerCase() === fileName.toLowerCase() ? null : nextName;
+};
+
+export const UNTITLED_SLUG = "untitled";
+
+/**
+ * The file name that drops a note's generated slug in favour of "untitled",
+ * keeping whatever prefix the current naming format uses. Null when the name
+ * carries no slug to replace (plain `uuid_v7`) or already is untitled.
+ */
+export const getUntitledRenameTarget = (notePath: string) => {
+  const fileName = notePath.split("/").pop() || "";
+  const timestampMatch = fileName.match(UTC_TIMESTAMP_FILE_NAME_RE);
+  if (timestampMatch) {
+    const nextName = `${timestampMatch[1]}-${UNTITLED_SLUG}.md`;
+    return nextName.toLowerCase() === fileName.toLowerCase() ? null : nextName;
+  }
+  if (UUID_V7_FILE_NAME_RE.test(fileName)) {
+    return null;
+  }
+  const prefixMatch = fileName.match(UUID_V7_PREFIX_FILE_NAME_RE);
+  if (prefixMatch) {
+    const nextName = `${(prefixMatch[1] || "").toLowerCase()}-${UNTITLED_SLUG}.md`;
+    return nextName.toLowerCase() === fileName.toLowerCase() ? null : nextName;
+  }
+  return null;
 };

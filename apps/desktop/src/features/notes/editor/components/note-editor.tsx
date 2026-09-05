@@ -10,6 +10,7 @@ import {
   splitLensBackmatterBlock,
 } from "@typenotes/shared/lens-backmatter";
 import { NOTE_EDITOR_ENTER_INSERT_EVENT } from "../lib/editor-events";
+import { setActiveNoteEditor } from "../lib/editor-bridge";
 import { htmlToMarkdown, markdownToHtml } from "../lib/markdown-editor";
 import { useVim } from "../hooks/use-vim";
 import { useAppearance } from "@/app/state/appearance-store";
@@ -145,7 +146,11 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
 
   useEffect(() => {
     attachEditor(editor ?? null);
-    return () => attachEditor(null);
+    setActiveNoteEditor(editor ?? null);
+    return () => {
+      attachEditor(null);
+      setActiveNoteEditor(null);
+    };
   }, [attachEditor, editor]);
 
   useEffect(() => {

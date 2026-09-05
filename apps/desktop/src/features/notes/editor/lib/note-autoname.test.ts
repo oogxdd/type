@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildSlugFromContent, getAutoRenameTarget } from "./note-autoname";
+import {
+  buildSlugFromContent,
+  getAutoRenameTarget,
+  getUntitledRenameTarget,
+} from "./note-autoname";
 
 describe("buildSlugFromContent", () => {
   it("builds a slug from user-authored markdown only", () => {
@@ -68,5 +72,36 @@ describe("getAutoRenameTarget", () => {
         "uuid_v7_prefix_slug"
       )
     ).toBe("018fa2b1-2b3c-a-useful-morning-reflection.md");
+  });
+});
+
+describe("getUntitledRenameTarget", () => {
+  it("replaces a generated slug with untitled", () => {
+    expect(
+      getUntitledRenameTarget("Feed/2026-09-05T10-00-00Z-morning-reflection.md")
+    ).toBe("2026-09-05T10-00-00Z-untitled.md");
+    expect(getUntitledRenameTarget("Feed/0192f0aa-1b2c-morning-plan.md")).toBe(
+      "0192f0aa-1b2c-untitled.md"
+    );
+  });
+
+  it("returns null when there is no slug to replace", () => {
+    expect(
+      getUntitledRenameTarget("Feed/2026-09-05T10-00-00Z-untitled.md")
+    ).toBeNull();
+    expect(
+      getUntitledRenameTarget("Feed/0192f0aa-1b2c-7def-8abc-0123456789ab.md")
+    ).toBeNull();
+    expect(getUntitledRenameTarget("Feed/hand written name.md")).toBeNull();
+  });
+
+  it("keeps an explicit untitled name stable against auto-renaming", () => {
+    expect(
+      getAutoRenameTarget(
+        "Feed/2026-09-05T10-00-00Z-untitled.md",
+        "Morning reflection about the plan",
+        "utc_timestamp_slug"
+      )
+    ).toBeNull();
   });
 });

@@ -60,6 +60,8 @@ type NotesTreeContextValue = {
     targetTimestampMs?: number
   ) => Promise<string | null>;
   createFolder: (path: string) => Promise<void>;
+  splitNoteAtCursor: () => Promise<string | null>;
+  resetNoteFileNameToUntitled: (path: string) => Promise<string | null>;
   deleteNotes: (paths: string[]) => Promise<boolean>;
   deleteFolders: (paths: string[]) => Promise<void>;
   moveNotesToArchive: (paths: string[]) => Promise<void>;
