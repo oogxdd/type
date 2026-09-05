@@ -1,0 +1,42 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "a1a8175cc815",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "AGENTS.md",
+    "apps/desktop/src/app/app.css",
+    "apps/desktop/src/features/notes/editor/components/note-editor.tsx",
+    "apps/desktop/src/features/notes/editor/hooks/use-vim.ts",
+    "apps/desktop/src/features/notes/editor/lib/vim/commands.test.ts",
+    "apps/desktop/src/features/notes/editor/lib/vim/commands.ts",
+    "apps/desktop/src/features/notes/editor/lib/vim/flat-doc.test.ts",
+    "apps/desktop/src/features/notes/editor/lib/vim/flat-doc.ts",
+    "apps/desktop/src/features/notes/editor/lib/vim/key-event.test.ts",
+    "apps/desktop/src/features/notes/editor/lib/vim/key-event.ts",
+    "apps/desktop/src/features/notes/editor/lib/vim/keys.test.ts",
+    "apps/desktop/src/features/notes/editor/lib/vim/keys.ts",
+    "apps/desktop/src/features/notes/editor/lib/vim/registers.ts",
+    "apps/desktop/src/features/notes/editor/lib/vim/text-motions.test.ts",
+    "apps/desktop/src/features/notes/editor/lib/vim/text-motions.ts",
+    "apps/desktop/src/features/notes/editor/lib/vim/vertical-motion.ts",
+    "docs/VIM_MODE.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/a1/a8175cc815/0/metadata.json",
+      "transcript": "/a1/a8175cc815/0/full.jsonl",
+      "context": "",
+      "content_hash": "/a1/a8175cc815/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
