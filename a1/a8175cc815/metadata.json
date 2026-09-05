@@ -30,6 +30,13 @@
       "context": "",
       "content_hash": "/a1/a8175cc815/0/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/a1/a8175cc815/1/metadata.json",
+      "transcript": "/a1/a8175cc815/1/full.jsonl",
+      "context": "",
+      "content_hash": "/a1/a8175cc815/1/content_hash.txt",
+      "prompt": ""
     }
   ],
   "token_usage": {
