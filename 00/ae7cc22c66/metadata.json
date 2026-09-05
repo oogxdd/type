@@ -1,0 +1,48 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "00ae7cc22c66",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    ".github/workflows/mobile-adhoc.yml",
+    ".github/workflows/mobile-testflight.yml",
+    "apps/mobile/AD_HOC_DISTRIBUTION.md",
+    "apps/mobile/app.config.js",
+    "docs/MOBILE_AD_HOC_GITHUB_ACTIONS.md",
+    "docs/MOBILE_TESTFLIGHT_GITHUB_ACTIONS_NATIVE.md",
+    "docs/RELEASING.md",
+    "docs/architecture/08-shared-code-review.md",
+    "docs/architecture/09-adding-features-and-codegen.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/00/ae7cc22c66/0/metadata.json",
+      "transcript": "/00/ae7cc22c66/0/full.jsonl",
+      "context": "",
+      "content_hash": "/00/ae7cc22c66/0/content_hash.txt",
+      "prompt": ""
+    },
+    {
+      "metadata": "/00/ae7cc22c66/1/metadata.json",
+      "transcript": "/00/ae7cc22c66/1/full.jsonl",
+      "context": "",
+      "content_hash": "/00/ae7cc22c66/1/content_hash.txt",
+      "prompt": ""
+    },
+    {
+      "metadata": "/00/ae7cc22c66/2/metadata.json",
+      "transcript": "/00/ae7cc22c66/2/full.jsonl",
+      "context": "",
+      "content_hash": "/00/ae7cc22c66/2/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
