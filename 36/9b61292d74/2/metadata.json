@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "369b61292d74",
+  "session_id": "01a069ac-c73c-7a70-b6c3-734cb6b22275",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-07T12:04:36.622174Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/desktop/src/features/notes/navigation/ui/feed-panel.tsx",
+    "apps/desktop/src/features/notes/navigation/ui/nav-note-row.tsx",
+    "apps/desktop/src/features/notes/navigation/ui/tree-node.tsx",
+    "apps/desktop/src/features/notes/navigation/ui/tree-row.tsx",
+    "apps/desktop/src/features/notes/navigation/ui/tree.css",
+    "apps/desktop/src/app/app.css"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "c33e669017cf",
+  "checkpoint_transcript_start": 134,
+  "transcript_lines_at_start": 134,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-07T12:04:36.436997Z",
+    "agent_lines": 0,
+    "human_added": 6232,
+    "human_modified": 93,
+    "human_removed": 0,
+    "total_committed": 6232,
+    "agent_percentage": 0
+  }
+}
