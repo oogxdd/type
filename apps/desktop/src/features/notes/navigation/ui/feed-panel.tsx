@@ -8,6 +8,7 @@ import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-conte
 import { type DesktopContextMenuState } from "@/app/hooks/use-tree-interactions";
 import { useSelection } from "@/app/state/selection-store";
 import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { indentationWidth } from "@/shared/constants";
 import { focusNoScroll } from "@/shared/lib/dom";
 import { computeRangeSelection } from "@/shared/lib/selection";
 import { isCurrentWeekFeedNode } from "../model/feed-tree-model";
@@ -214,7 +215,7 @@ export function FeedPanel({
                 event.stopPropagation();
                 selectFeedGroup(id);
               }}
-              indentationWidth={18}
+              indentationWidth={indentationWidth}
               draggable={false}
             />
           ))}
@@ -250,7 +251,7 @@ export function FeedPanel({
                   event.stopPropagation();
                   selectFeedGroup(id);
                 }}
-                indentationWidth={18}
+                indentationWidth={indentationWidth}
                 draggable={false}
               />
           ))}

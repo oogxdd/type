@@ -79,7 +79,6 @@ export function TreeRow({
     transform: isDragging ? undefined : CSS.Translate.toString(transform),
     paddingLeft: 12 + depth * indentationWidth,
   } as React.CSSProperties;
-  const guideBaseLeft = 12 + indentationWidth / 2;
 
   return (
     <div
@@ -106,17 +105,6 @@ export function TreeRow({
       {...listeners}
       {...attributes}
     >
-      {depth > 0 && (
-        <span className="tree-guides" aria-hidden>
-          {Array.from({ length: depth }, (_, index) => (
-            <span
-              key={`depth-${index}`}
-              className="tree-guide-vert"
-              style={{ left: guideBaseLeft + index * indentationWidth }}
-            />
-          ))}
-        </span>
-      )}
       {hasNestedItems ? (
         <button
           type="button"

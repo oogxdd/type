@@ -54,7 +54,6 @@ export function NavNoteRow({
     transform: isDragging ? undefined : CSS.Translate.toString(transform),
     paddingLeft: 12 + depth * indentationWidth,
   } as React.CSSProperties;
-  const guideBaseLeft = 12 + indentationWidth / 2;
   const title = preview ? preview.title || "Empty note" : "New note";
 
   return (
@@ -70,17 +69,6 @@ export function NavNoteRow({
       {...listeners}
       {...attributes}
     >
-      {depth > 0 ? (
-        <span className="tree-guides" aria-hidden>
-          {Array.from({ length: depth }, (_, index) => (
-            <span
-              key={`depth-${index}`}
-              className="tree-guide-vert"
-              style={{ left: guideBaseLeft + index * indentationWidth }}
-            />
-          ))}
-        </span>
-      ) : null}
       <span className="icon-spacer" aria-hidden />
       <span className="nav-note-glyph" aria-hidden>
         <svg viewBox="0 0 24 24">

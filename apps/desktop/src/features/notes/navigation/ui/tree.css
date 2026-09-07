@@ -24,7 +24,7 @@
   min-height: 0;
 }
 
-.sidebar-folders-section .nav-scroll-area {
+.tree-pane .nav-scroll-area {
   padding: 0 8px 10px;
 }
 
@@ -38,6 +38,11 @@
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.nav-scroll-area::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-scroll-area .pane-body {
@@ -316,8 +321,8 @@
 .tree-pane .item-row {
   border-radius: 0;
   margin: 0;
-  min-height: 30px;
-  padding: 6px 10px;
+  min-height: 32px;
+  padding: 5px 10px;
   padding-right: 12px;
   transition: background 0.1s ease;
   border: none;
@@ -363,6 +368,7 @@
 .tree-pane .nav-note-glyph {
   width: 16px;
   height: 16px;
+  flex: 0 0 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -374,18 +380,15 @@
   height: 13px;
 }
 
-.tree-pane .tree-guides {
-  position: absolute;
-  inset: 2px 0;
-  pointer-events: none;
-}
-
 .tree-pane .tree-guide-vert {
   position: absolute;
   top: 0;
   bottom: 0;
+  left: var(--tree-guide-left);
   width: 1px;
   background: #e2e9f0;
+  pointer-events: none;
+  z-index: 2;
 }
 
 .tree-pane .item-row:hover,
@@ -412,6 +415,7 @@
 }
 
 .tree-pane .tree-children {
+  position: relative;
   margin-left: 0;
   border-left: none;
   padding-left: 0;
@@ -450,8 +454,9 @@
 }
 
 .tree-pane .tree-toggle {
-  width: 20px;
-  height: 22px;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -475,6 +480,7 @@
 .tree-pane .folder-glyph {
   width: 16px;
   height: 16px;
+  flex: 0 0 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -500,13 +506,13 @@
 }
 
 .tree-pane .icon-spacer {
-  width: 20px;
-  height: 22px;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
   display: inline-block;
 }
 
-/* Feed-only calendar-bucket row sizing (still gated by the feedMode prop —
-   this is the one legitimate visual difference between Feed and Folders). */
+/* Feed date metadata; row geometry is shared with Folders. */
 
 .tree-pane .feed-navigation-tree .feed-section-label {
   padding: 10px 12px 5px;
@@ -532,53 +538,6 @@
   margin-left: 5px;
   color: var(--ui-muted);
   opacity: 0.72;
-}
-
-.tree-pane .feed-navigation-tree .feed-bucket-row {
-  min-height: 32px;
-  padding-top: 5px;
-  padding-bottom: 5px;
-}
-
-.tree-pane .feed-navigation-tree .feed-bucket-row .tree-toggle,
-.tree-pane .feed-navigation-tree .feed-bucket-row .icon-spacer {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
-}
-
-/* Feed note rows reserve the same disclosure column as their date buckets.
-   Without this override the generic 20px folder spacer adds 6px of accidental
-   indentation, so note labels drift away from the date-tree grid. */
-.tree-pane .feed-navigation-tree .nav-note-row .icon-spacer {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
-}
-
-.tree-pane .feed-navigation-tree .feed-bucket-row .tree-toggle {
-  padding: 0;
-  opacity: 0.72;
-}
-
-.tree-pane .feed-navigation-tree .feed-bucket-row .tree-toggle:hover {
-  background: transparent;
-  opacity: 1;
-}
-
-.tree-pane .feed-navigation-tree .feed-bucket-row .tree-toggle svg {
-  width: 14px;
-  height: 14px;
-}
-
-.tree-pane .feed-navigation-tree .feed-bucket-row .folder-glyph {
-  color: currentColor;
-  opacity: 0.74;
-}
-
-.tree-pane .feed-navigation-tree .feed-bucket-row.selected .folder-glyph,
-.tree-pane .feed-navigation-tree .feed-bucket-row:hover .folder-glyph {
-  opacity: 0.9;
 }
 
 /* Dark theme */

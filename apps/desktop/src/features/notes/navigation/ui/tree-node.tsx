@@ -95,7 +95,11 @@ export function TreeNode({
         renamingEnabled={renamingEnabled}
       />
       {hasNestedItems && !isCollapsed && (
-        <div className="tree-children">
+        <div
+          className="tree-children"
+          style={{ "--tree-guide-left": `${12 + depth * indentationWidth + 7}px` } as React.CSSProperties}
+        >
+          <span className="tree-guide-vert" aria-hidden />
           {notes.map((note) => (
             <NavNoteRow
               key={note.path}

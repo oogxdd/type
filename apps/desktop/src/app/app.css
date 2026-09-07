@@ -2323,7 +2323,8 @@ body {
   background: var(--ui-pane);
 }
 
-.app .tree-pane .item-row.nav-note-row {
+.app.theme-light .tree-pane .item-row,
+.app.theme-dark .tree-pane .item-row {
   margin: 0;
 }
 
