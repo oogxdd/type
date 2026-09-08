@@ -1,0 +1,32 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "8a357075b79e",
+  "session_id": "01a069ac-c73c-7a70-b6c3-734cb6b22275",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-08T10:50:54.303911Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/desktop/src/features/notes/editor/lib/markdown-editor.test.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "c33e669017cf",
+  "checkpoint_transcript_start": 134,
+  "transcript_lines_at_start": 134,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-08T10:50:54.049329Z",
+    "agent_lines": 17,
+    "human_added": 36,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 53,
+    "agent_percentage": 32.075471698113205
+  }
+}
