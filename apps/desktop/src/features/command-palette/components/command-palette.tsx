@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { lazy, Suspense, useRef } from "react";
 import { FolderPlusIcon, FolderIcon } from "lucide-react";
 
 import {
@@ -11,6 +11,8 @@ import {
 } from "@/shared/ui/command";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import { useCommandPaletteCommands } from "../hooks/use-command-palette-commands";
+
+const AssignTagDialog = lazy(() => import("@/features/selection-tags/components/assign-tag-dialog").then((module) => ({ default: module.AssignTagDialog })));
 
 type CommandPaletteProps = {
   onOpenSettings: (section: SettingsSectionId) => void;
@@ -46,6 +48,8 @@ export function CommandPalette({
     moveMode,
     runMove,
     completePath,
+    tagDialogSelection,
+    closeTagDialog,
   } = useCommandPaletteCommands({
     onOpenSettings,
     onOpenFeed,
@@ -55,6 +59,7 @@ export function CommandPalette({
   });
 
   return (
+    <>
     <CommandDialog
       open={open}
       onOpenChange={(nextOpen) => {
@@ -68,6 +73,10 @@ export function CommandPalette({
       // verbatim instead of fuzzy-filtering against the "mv …" input.
       shouldFilter={!moveMode}
       onCloseAutoFocus={(event) => {
+        if (tagDialogSelection) {
+          event.preventDefault();
+          return;
+        }
         if (!restoreNavigationFocusOnCloseRef.current) {
           return;
         }
@@ -165,5 +174,7 @@ export function CommandPalette({
         )}
       </CommandList>
     </CommandDialog>
+    {tagDialogSelection ? <Suspense fallback={null}><AssignTagDialog selection={tagDialogSelection} onClose={closeTagDialog} /></Suspense> : null}
+    </>
   );
 }

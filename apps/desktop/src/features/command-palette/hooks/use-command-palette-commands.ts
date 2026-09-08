@@ -15,9 +15,12 @@ import {
   SettingsIcon,
   SunIcon,
   Trash2Icon,
+  TagIcon,
 } from "lucide-react";
 
 import { useSelection } from "@/app/state/selection-store";
+import { captureTagSelection, type CapturedTagSelection } from "@/features/selection-tags/lib/selection-surfaces";
+import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { useAppearance } from "@/app/state/appearance-store";
 import { FEED_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
@@ -81,6 +84,15 @@ export function useCommandPaletteCommands({
 }: UseCommandPaletteCommandsArgs) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [textSelection, setTextSelection] = useState<CapturedTagSelection[]>([]);
+  const [tagDialogSelection, setTagDialogSelection] = useState<CapturedTagSelection[] | null>(null);
+  const { activeProfileId, activeProfileNotesRoot } = useProfiles();
+
+  useEffect(() => {
+    setOpen(false);
+    setTextSelection([]);
+    setTagDialogSelection(null);
+  }, [activeProfileId, activeProfileNotesRoot]);
 
   const { selectedNotes, selectedFolders, activeNote, activeFolder } = useSelection(
     useShallow((state) => ({
@@ -115,12 +127,14 @@ export function useCommandPaletteCommands({
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.code === "KeyK") {
         event.preventDefault();
+        if (tagDialogSelection) return;
+        if (!open) setTextSelection(captureTagSelection());
         setOpen((prev) => !prev);
       }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [open, tagDialogSelection]);
 
   const noteTargets = useMemo(
     () =>
@@ -228,6 +242,15 @@ export function useCommandPaletteCommands({
 
   // --- Normal command list ---------------------------------------------------
   const selectionCommands: PaletteCommand[] = [];
+  if (textSelection.length) {
+    selectionCommands.push({
+      id: "assign-selection-tag",
+      label: "Assign tag…",
+      icon: TagIcon,
+      keywords: ["tag", "label", "color", "highlight", "selection"],
+      run: () => setTagDialogSelection(textSelection),
+    });
+  }
   if (canSplitActiveNote) {
     selectionCommands.push({
       id: "split-note",
@@ -427,5 +450,7 @@ export function useCommandPaletteCommands({
     moveMode,
     runMove,
     completePath,
+    tagDialogSelection,
+    closeTagDialog: () => setTagDialogSelection(null),
   };
 }

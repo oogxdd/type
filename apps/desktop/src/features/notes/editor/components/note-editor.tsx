@@ -14,6 +14,9 @@ import { setActiveNoteEditor } from "../lib/editor-bridge";
 import { htmlToMarkdown, markdownToHtml } from "../lib/markdown-editor";
 import { useVim } from "../hooks/use-vim";
 import { useAppearance } from "@/app/state/appearance-store";
+import { readSelectionTags, writeSelectionTags, type TaggedBlock } from "@typenotes/shared/selection-tags";
+import { TaggedBlocks, restoreTaggedBlocks, snapshotTaggedBlocks } from "@/features/selection-tags/lib/tagged-blocks";
+import { registerTagSurface } from "@/features/selection-tags/lib/selection-surfaces";
 
 type NoteEditorProps = {
   documentKey: string | null;
@@ -58,6 +61,7 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
   const pendingInsertDocumentKeyRef = useRef<string | null>(null);
   const isSyncing = useRef(false);
   const latestMarkdown = useRef(markdown);
+  const unresolvedTagsRef = useRef<TaggedBlock[]>([]);
   const initialContentRef = useRef(splitEditorMarkdown(markdown));
   const frontmatterRef = useRef<string | null>(
     initialContentRef.current.frontmatterBlock
@@ -98,6 +102,7 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
       Placeholder.configure({
         placeholder: "What's on your mind?",
       }),
+      TaggedBlocks,
     ],
     []
   );
@@ -134,15 +139,28 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
         frontmatterRef.current,
         nextBodyMarkdown
       );
-      const nextMarkdown = appendRawLensBackmatterBlock(
+      const nextMarkdown = writeSelectionTags(appendRawLensBackmatterBlock(
         frontmatterJoined,
         backmatterRef.current
-      );
+      ), [...snapshotTaggedBlocks(currentEditor.state.doc), ...unresolvedTagsRef.current]);
+      frontmatterRef.current = splitFrontmatter(nextMarkdown).frontmatterBlock;
       latestMarkdown.current = nextMarkdown;
       onChange(nextMarkdown);
       requestAnimationFrame(() => keepCaretBreathingRoom(currentEditor));
     },
   });
+
+  useEffect(() => {
+    if (!editor) return;
+    isSyncing.current = true;
+    unresolvedTagsRef.current = restoreTaggedBlocks(editor, readSelectionTags(latestMarkdown.current));
+    isSyncing.current = false;
+  }, [editor]);
+
+  useEffect(() => {
+    if (!editor || !documentKey) return;
+    return registerTagSurface({ editor, path: documentKey, editable: true });
+  }, [documentKey, editor]);
 
   useEffect(() => {
     attachEditor(editor ?? null);
@@ -165,6 +183,9 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
     backmatterRef.current = incoming.backmatterBlock;
     const currentBodyMarkdown = htmlToMarkdown(editor.getHTML());
     if (currentBodyMarkdown === incoming.body) {
+      isSyncing.current = true;
+      unresolvedTagsRef.current = restoreTaggedBlocks(editor, readSelectionTags(markdown));
+      isSyncing.current = false;
       latestMarkdown.current = markdown;
       return;
     }
@@ -172,6 +193,7 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
     editor.commands.setContent(markdownToHtml(incoming.body), {
       emitUpdate: false,
     });
+    unresolvedTagsRef.current = restoreTaggedBlocks(editor, readSelectionTags(markdown));
     isSyncing.current = false;
     latestMarkdown.current = markdown;
   }, [editor, markdown]);

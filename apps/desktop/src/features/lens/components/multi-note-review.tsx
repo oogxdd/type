@@ -8,7 +8,7 @@ import { stripFrontmatter } from "@typenotes/shared/frontmatter";
 import type { LensNote } from "../hooks/use-lens-annotations";
 import { NoteReadonlyContent } from "./note-readonly-content";
 
-type ReviewBody = { markdown: string; error?: never } | { markdown?: never; error: string };
+type ReviewBody = { markdown: string; raw: string; error?: never } | { markdown?: never; raw?: never; error: string };
 
 export function MultiNoteReview({
   notes,
@@ -43,7 +43,7 @@ export function MultiNoteReview({
           const markdown = note.isRecording
             ? sanitizeRecordingEditorContent(body, note.transcriptionStatus)
             : body;
-          return [note.path, { markdown }] as const;
+          return [note.path, { markdown, raw }] as const;
         } catch (cause) {
           return [note.path, { error: getErrorMessage(cause) }] as const;
         }
@@ -84,7 +84,7 @@ export function MultiNoteReview({
               </header>
               {!body ? <p className="note-review-placeholder" role="status">Loading note...</p>
                 : body.error !== undefined ? <div className="note-review-error" role="alert">{body.error} <button type="button" className="multi-lens-btn" onClick={() => setRevision((value) => value + 1)}>Retry</button></div>
-                : body.markdown.trim() ? <NoteReadonlyContent markdown={body.markdown} />
+                : body.markdown.trim() ? <NoteReadonlyContent markdown={body.markdown} rawMarkdown={body.raw} notePath={note.path} />
                 : <p className="note-review-placeholder">Empty note</p>}
             </article>
           );
