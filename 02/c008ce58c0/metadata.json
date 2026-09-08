@@ -3,7 +3,7 @@
   "checkpoint_id": "02c008ce58c0",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     "apps/desktop/src/app/app.css",
     "apps/desktop/src/desktop/hooks/use-desktop-editor-pane.ts",
@@ -37,6 +37,13 @@
       "transcript": "/02/c008ce58c0/3/full.jsonl",
       "context": "",
       "content_hash": "/02/c008ce58c0/3/content_hash.txt",
+      "prompt": ""
+    },
+    {
+      "metadata": "/02/c008ce58c0/4/metadata.json",
+      "transcript": "/02/c008ce58c0/4/full.jsonl",
+      "context": "",
+      "content_hash": "/02/c008ce58c0/4/content_hash.txt",
       "prompt": ""
     }
   ],
