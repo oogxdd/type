@@ -3,7 +3,7 @@
   "checkpoint_id": "8a357075b79e",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 0,
+  "checkpoints_count": 2,
   "files_touched": [
     "apps/desktop/src/features/notes/editor/lib/markdown-editor.test.ts"
   ],
@@ -34,6 +34,13 @@
       "transcript": "/8a/357075b79e/3/full.jsonl",
       "context": "",
       "content_hash": "/8a/357075b79e/3/content_hash.txt",
+      "prompt": ""
+    },
+    {
+      "metadata": "/8a/357075b79e/4/metadata.json",
+      "transcript": "/8a/357075b79e/4/full.jsonl",
+      "context": "",
+      "content_hash": "/8a/357075b79e/4/content_hash.txt",
       "prompt": ""
     }
   ],
