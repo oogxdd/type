@@ -23,6 +23,12 @@ const MultiNoteLens = lazy(() =>
   }))
 );
 
+const MultiNoteReview = lazy(() =>
+  import("@/features/lens/components/multi-note-review").then((module) => ({
+    default: module.MultiNoteReview,
+  }))
+);
+
 type DesktopRightPaneProps = {
   appMode: AppMode;
   activeSettingsSection: SettingsSectionId;
@@ -42,6 +48,7 @@ export function DesktopRightPane({
     editorMarkdown,
     handleEditorChange,
     flushSave,
+    prepareReview,
     rightPaneRef,
     canOpenLens,
     shouldShowLens,
@@ -61,7 +68,7 @@ export function DesktopRightPane({
           ref={rightPaneRef}
           tabIndex={0}
           onClick={() => {
-            if (shouldShowLens) {
+            if (shouldShowLens || selectedNotePaths.length > 1) {
               return;
             }
             const editorElement =
@@ -71,7 +78,11 @@ export function DesktopRightPane({
             focusNoScroll(editorElement);
           }}
         >
-          {shouldShowLens ? (
+          {selectedNotePaths.length > 1 ? (
+            <Suspense fallback={<div className="empty">Loading selected notes...</div>}>
+              <MultiNoteReview notes={lensNotes} onBeforeRead={prepareReview} />
+            </Suspense>
+          ) : shouldShowLens ? (
             <Suspense fallback={<div className="empty">Loading lens...</div>}>
               <MultiNoteLens
                 notes={lensNotes}

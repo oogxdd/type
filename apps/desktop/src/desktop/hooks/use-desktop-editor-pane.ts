@@ -32,6 +32,7 @@ export function useDesktopEditorPane() {
   } = useEditor();
   const {
     notes,
+    feedNotes,
     notePreviews,
     allNotePreviews,
     activeFeedNode,
@@ -95,7 +96,7 @@ export function useDesktopEditorPane() {
   );
 
   const selectedNotePaths = useMemo(() => {
-    const orderedByMiddleList = notes
+    const orderedByMiddleList = (activeFolder === FEED_FOLDER_PATH ? feedNotes : notes)
       .map((note) => note.path)
       .filter((path) => selectedNotes.has(path));
     const remainingSelected = Array.from(selectedNotes).filter(
@@ -106,7 +107,7 @@ export function useDesktopEditorPane() {
       return mergedSelection;
     }
     return activeNote ? [activeNote] : [];
-  }, [activeNote, notes, selectedNotes]);
+  }, [activeFolder, activeNote, feedNotes, notes, selectedNotes]);
 
   useEffect(() => {
     if (APP_EXTENSIONS.multiLens && selectedNotes.size > 1) {
@@ -166,6 +167,14 @@ export function useDesktopEditorPane() {
     [activeNote, handleEditorChange]
   );
 
+  const prepareReview = useCallback(async () => {
+    // During a selection change the editor's navigation effect owns the old
+    // draft save. Do not flush that draft against the newly selected path.
+    if (loadedNotePath === activeNote) {
+      await flushSave();
+    }
+  }, [activeNote, flushSave, loadedNotePath]);
+
   return {
     activeNote,
     loadedNotePath,
@@ -174,6 +183,7 @@ export function useDesktopEditorPane() {
     editorMarkdown,
     handleEditorChange,
     flushSave,
+    prepareReview,
     rightPaneRef,
     canOpenLens,
     shouldShowLens,
