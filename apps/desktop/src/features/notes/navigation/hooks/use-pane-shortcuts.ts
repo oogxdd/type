@@ -123,6 +123,10 @@ export function usePaneShortcuts({
       )
         return;
       event.preventDefault();
+      // Capture pane shortcuts before contenteditable/Tiptap key handlers. On
+      // macOS, Control+T and Control+W otherwise reach the editor first and
+      // behave differently from their Command-key equivalents.
+      event.stopPropagation();
 
       if (code === "Equal" || code === "NumpadAdd") {
         if (appMode === "notes") increaseEditorFontSize();
@@ -208,8 +212,9 @@ export function usePaneShortcuts({
       focusPane(targetPane);
     };
 
-    window.addEventListener("keydown", handleGlobalKeyDown);
-    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+    window.addEventListener("keydown", handleGlobalKeyDown, { capture: true });
+    return () =>
+      window.removeEventListener("keydown", handleGlobalKeyDown, { capture: true });
   }, [
     appMode,
     createNewNote,

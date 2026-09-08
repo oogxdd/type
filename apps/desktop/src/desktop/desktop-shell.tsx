@@ -79,7 +79,7 @@ export function DesktopShell({
             defaultSize="29%"
             minSize="18%"
             maxSize="44%"
-            className="min-w-0 h-full min-h-0"
+            className="desktop-navigation-pane min-w-0 h-full min-h-0"
           >
             {leftPane}
           </ResizablePanel>
@@ -105,7 +105,7 @@ export function DesktopShell({
             defaultSize="22%"
             minSize="16%"
             maxSize="34%"
-            className="min-w-0 h-full min-h-0"
+            className="desktop-navigation-pane min-w-0 h-full min-h-0"
           >
             {leftPane}
           </ResizablePanel>
@@ -115,7 +115,7 @@ export function DesktopShell({
             defaultSize="25%"
             minSize="18%"
             maxSize="40%"
-            className="min-w-0 h-full min-h-0"
+            className="desktop-navigation-pane min-w-0 h-full min-h-0"
           >
             {middlePane}
           </ResizablePanel>

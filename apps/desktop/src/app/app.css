@@ -1984,6 +1984,19 @@ body {
   background: color-mix(in srgb, var(--design-light-border) 55%, var(--design-light-text));
 }
 
+.app.theme-light
+  .desktop-navigation-pane:focus-within
+  + .app-resize-handle::before {
+  width: 2px;
+  background: color-mix(
+    in srgb,
+    var(--design-light-selection) 72%,
+    var(--design-light-text)
+  );
+  box-shadow: 0 0 6px
+    color-mix(in srgb, var(--design-light-selection) 45%, transparent);
+}
+
 .app.theme-light .app-sidebar-header {
   padding: calc(18px + var(--left-panels-drag-height)) 14px 14px;
 }
@@ -2215,6 +2228,19 @@ body {
 .app.theme-dark .app-resize-handle-editor:hover::before {
   width: 1px;
   background: color-mix(in srgb, var(--design-dark-border) 55%, var(--design-dark-text));
+}
+
+.app.theme-dark
+  .desktop-navigation-pane:focus-within
+  + .app-resize-handle::before {
+  width: 2px;
+  background: color-mix(
+    in srgb,
+    var(--design-dark-selection) 72%,
+    var(--design-dark-text)
+  );
+  box-shadow: 0 0 6px
+    color-mix(in srgb, var(--design-dark-selection) 45%, transparent);
 }
 
 .app.theme-dark .tree-pane .item-row,
