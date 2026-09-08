@@ -1,0 +1,39 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "81b114696262",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "apps/desktop/src/app/app.css",
+    "apps/desktop/src/features/command-palette/components/command-palette.tsx",
+    "apps/desktop/src/features/command-palette/hooks/use-command-palette-commands.ts",
+    "apps/desktop/src/features/lens/components/multi-note-review.tsx",
+    "apps/desktop/src/features/lens/components/note-readonly-content.tsx",
+    "apps/desktop/src/features/notes/editor/components/note-editor.tsx",
+    "apps/desktop/src/features/selection-tags/components/assign-tag-dialog.tsx",
+    "apps/desktop/src/features/selection-tags/lib/persist-selection-tag.ts",
+    "apps/desktop/src/features/selection-tags/lib/selection-surfaces.ts",
+    "apps/desktop/src/features/selection-tags/lib/tagged-blocks.test.ts",
+    "apps/desktop/src/features/selection-tags/lib/tagged-blocks.ts",
+    "docs/SELECTION_TAGS.md",
+    "packages/shared/src/selection-tags.test.ts",
+    "packages/shared/src/selection-tags.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/81/b114696262/0/metadata.json",
+      "transcript": "/81/b114696262/0/full.jsonl",
+      "context": "",
+      "content_hash": "/81/b114696262/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
