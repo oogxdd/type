@@ -1,0 +1,45 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "81b114696262",
+  "session_id": "01a080a4-3659-7a61-b874-ffbc4aee4efb",
+  "strategy": "manual-commit",
+  "created_at": "2026-09-08T14:55:27.786197Z",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "packages/shared/src/selection-tags.ts",
+    "apps/desktop/src/features/command-palette/components/command-palette.tsx",
+    "apps/desktop/src/features/command-palette/hooks/use-command-palette-commands.ts",
+    "apps/desktop/src/features/lens/components/multi-note-review.tsx",
+    "apps/desktop/src/features/lens/components/note-readonly-content.tsx",
+    "apps/desktop/src/features/selection-tags/lib/persist-selection-tag.ts",
+    "apps/desktop/src/features/selection-tags/lib/tagged-blocks.test.ts",
+    "apps/desktop/src/features/selection-tags/lib/tagged-blocks.ts",
+    "docs/SELECTION_TAGS.md",
+    "apps/desktop/src/app/app.css",
+    "apps/desktop/src/features/notes/editor/components/note-editor.tsx",
+    "apps/desktop/src/features/selection-tags/components/assign-tag-dialog.tsx",
+    "apps/desktop/src/features/selection-tags/lib/selection-surfaces.ts",
+    "packages/shared/src/selection-tags.test.ts"
+  ],
+  "agent": "Claude Code",
+  "turn_id": "d36fc32572a1",
+  "checkpoint_transcript_start": 380,
+  "transcript_lines_at_start": 380,
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-08T14:55:26.965029Z",
+    "agent_lines": 662,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 662,
+    "agent_percentage": 100
+  }
+}
