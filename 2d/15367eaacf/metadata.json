@@ -1,0 +1,50 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "2d15367eaacf",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 0,
+  "files_touched": [
+    "AGENTS.md",
+    "apps/desktop/package.json",
+    "apps/desktop/src/features/notes/editor/lib/markdown-editor.ts",
+    "apps/desktop/src/features/selection-tags/lib/tagged-blocks.ts",
+    "apps/notes-mcp/build.mjs",
+    "apps/notes-mcp/package.json",
+    "apps/notes-mcp/src/agent-workspace.test.ts",
+    "apps/notes-mcp/src/agent-workspace.ts",
+    "apps/notes-mcp/src/main.ts",
+    "apps/notes-mcp/src/projection.test.ts",
+    "apps/notes-mcp/src/projection.ts",
+    "apps/notes-mcp/src/repository.ts",
+    "apps/notes-mcp/src/server.test.ts",
+    "apps/notes-mcp/src/server.ts",
+    "apps/notes-mcp/tsconfig.json",
+    "docs/AI_NOTES_MCP.md",
+    "docs/AI_NOTES_QUICKSTART.md",
+    "docs/LINE_TAG_MIGRATION.md",
+    "package-lock.json",
+    "package.json",
+    "packages/note-document/package.json",
+    "packages/note-document/src/markdown.ts",
+    "packages/note-document/src/tagged-blocks.ts",
+    "packages/note-document/tsconfig.json",
+    "scripts/test-notes-mcp.mjs"
+  ],
+  "sessions": [
+    {
+      "metadata": "/2d/15367eaacf/0/metadata.json",
+      "transcript": "/2d/15367eaacf/0/full.jsonl",
+      "context": "",
+      "content_hash": "/2d/15367eaacf/0/content_hash.txt",
+      "prompt": ""
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 0,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 0,
+    "output_tokens": 0,
+    "api_call_count": 0
+  }
+}
