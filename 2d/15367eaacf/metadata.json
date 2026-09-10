@@ -3,7 +3,7 @@
   "checkpoint_id": "2d15367eaacf",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 0,
+  "checkpoints_count": 1,
   "files_touched": [
     "AGENTS.md",
     "apps/desktop/package.json",
@@ -59,13 +59,20 @@
       "context": "",
       "content_hash": "/2d/15367eaacf/3/content_hash.txt",
       "prompt": ""
+    },
+    {
+      "metadata": "/2d/15367eaacf/4/metadata.json",
+      "transcript": "/2d/15367eaacf/4/full.jsonl",
+      "context": "/2d/15367eaacf/4/context.md",
+      "content_hash": "/2d/15367eaacf/4/content_hash.txt",
+      "prompt": "/2d/15367eaacf/4/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 0,
-    "cache_creation_tokens": 0,
-    "cache_read_tokens": 0,
-    "output_tokens": 0,
-    "api_call_count": 0
+    "input_tokens": 64,
+    "cache_creation_tokens": 121368,
+    "cache_read_tokens": 2907118,
+    "output_tokens": 23959,
+    "api_call_count": 32
   }
 }
