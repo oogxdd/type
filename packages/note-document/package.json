@@ -1,0 +1,24 @@
+{
+  "name": "@typenotes/note-document",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DOM-aware note parsing and block anchors shared by the desktop editor and the read-only MCP shell.",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@typenotes/shared": "*",
+    "@tiptap/core": "^3.19.0",
+    "@tiptap/pm": "^3.19.0",
+    "marked": "^17.0.1",
+    "turndown": "^7.2.2"
+  },
+  "devDependencies": {
+    "@types/turndown": "^5.0.6",
+    "typescript": "~5.8.3"
+  }
+}

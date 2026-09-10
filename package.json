@@ -20,7 +20,9 @@
     "mobile:ios:dev:prebuild": "APP_VARIANT=dev npm run --workspace @typenotes/mobile prebuild -- --platform ios --clean",
     "mobile:ios:dev:device": "npm run --workspace @typenotes/mobile ios -- --device",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "mcp:build": "npm run --workspace @typenotes/notes-mcp build",
+    "mcp:test": "npm run --workspace @typenotes/notes-mcp test"
   },
   "version": "1.0.0",
   "dependencies": {
