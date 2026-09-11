@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "f9f9f98787c0",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 4,
+  "files_touched": [
+    "apps/desktop/package.json",
+    "apps/desktop/src/app/app.css",
+    "apps/desktop/src/features/command-palette/hooks/use-command-palette-commands.ts",
+    "apps/desktop/src/features/notes/navigation/hooks/use-pane-shortcuts.ts",
+    "apps/desktop/src/features/notes/navigation/model/pane-shortcuts.test.ts",
+    "apps/desktop/src/features/notes/navigation/model/pane-shortcuts.ts",
+    "apps/desktop/src/features/selection-tags/lib/selection-surfaces.test.ts",
+    "apps/desktop/vitest.config.ts",
+    "docs/KEYBOARD_NAVIGATION_EXPERIENCE.md",
+    "docs/SELECTION_TAGS.md",
+    "docs/VIM_MODE.md",
+    "package-lock.json",
+    "packages/note-document/src/tagged-blocks.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/f9/f9f98787c0/0/metadata.json",
+      "transcript": "/f9/f9f98787c0/0/full.jsonl",
+      "context": "/f9/f9f98787c0/0/context.md",
+      "content_hash": "/f9/f9f98787c0/0/content_hash.txt",
+      "prompt": "/f9/f9f98787c0/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 168,
+    "cache_creation_tokens": 405694,
+    "cache_read_tokens": 9151892,
+    "output_tokens": 58610,
+    "api_call_count": 84
+  }
+}
