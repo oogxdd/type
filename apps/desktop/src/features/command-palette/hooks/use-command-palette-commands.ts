@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { useSelection } from "@/app/state/selection-store";
+import { useGlobalShortcut } from "@/shared/keyboard/use-global-shortcuts";
 import { captureTagSelection, isTagSurfaceCurrent, type CapturedTagSelection } from "@/features/selection-tags/lib/selection-surfaces";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
@@ -123,18 +124,12 @@ export function useCommandPaletteCommands({
     }))
   );
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.code === "KeyK") {
-        event.preventDefault();
-        if (tagDialogSelection) return;
-        if (!open) setTextSelection(captureTagSelection());
-        setOpen((prev) => !prev);
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open, tagDialogSelection]);
+  useGlobalShortcut("open-command-palette", () => {
+    if (tagDialogSelection) return;
+    // Capture the text selection before the dialog's focus trap replaces it.
+    if (!open) setTextSelection(captureTagSelection());
+    setOpen((prev) => !prev);
+  });
 
   const noteTargets = useMemo(
     () =>

@@ -6,12 +6,16 @@ import { DesktopAppShell } from "@/desktop/desktop-app-shell";
 import { CommandPalette } from "@/features/command-palette/components/command-palette";
 import { useHandwriting } from "@/features/handwriting/hooks/handwriting-context";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
+import { useGlobalShortcutDispatcher } from "@/shared/keyboard/use-global-shortcuts";
 import { focusNoScroll } from "@/shared/lib/dom";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import { ARCHIEVE_FOLDER_PATH, FEED_FOLDER_PATH } from "@typenotes/shared/constants";
 import type { AppMode } from "@typenotes/shared/types";
 
 export function AppShell() {
+  // The one listener for every modified keystroke; see shared/keyboard/keymap.
+  useGlobalShortcutDispatcher();
+
   const [desktopAppMode, setDesktopAppMode] = useState<AppMode>("notes");
   const [activeSettingsSection, setActiveSettingsSection] =
     useState<SettingsSectionId>("general");

@@ -394,6 +394,14 @@ Each feature's context provider lives in `hooks/` alongside its hooks.
 
 ### shared/
 
+`shared/keyboard/` — the whole modified-keystroke layer: `keymap.ts` (the one
+table of chords, each owned by exactly one shortcut), `chord.ts` (pure parsing,
+matching, formatting) and `use-global-shortcuts.ts` (a single capture-phase
+listener plus `useGlobalShortcut(id, handler)` for features). Features must not
+add their own key listeners for modified chords — a second listener that stops
+propagation silently disables somebody else's shortcut. Unmodified navigation
+keys stay with the pane that owns focus, and Vim's grammar stays in the editor.
+
 `shared/api/invoke.ts` — `invokeLogged` (dev-only sanitized IPC tracing) used by every
 feature `api/`. `shared/lib/` — `dom`, `notes` (base64 + yieldToUi), `selection`,
 `storage`, `utils` (`cn`). `shared/ui/` — shadcn. `shared/hooks/use-mobile.ts` — the

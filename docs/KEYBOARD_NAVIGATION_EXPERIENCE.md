@@ -183,9 +183,11 @@ applies to modal editor keys and modified shortcuts such as `Cmd+W` and
 | `Cmd+J` / `Ctrl+J` | Cycle focus through every pane, wrapping at the end |
 | `Cmd+K` / `Ctrl+K` | Open the command palette |
 
-The palette chord is exclusive. The global pane listener captures keys before
-every other handler, so it must claim nothing that another surface owns — the
-one list of chords it takes lives in `model/pane-shortcuts.ts`.
+Every modified keystroke is matched in one place and dispatched by one
+capture-phase listener (`shared/keyboard/`). A chord it claims is taken away
+from every other handler, including the editor's, so two owners for one chord
+is a bug — its test suite fails on a duplicate. `Ctrl+J`/`Ctrl+K` inside a
+focused editor stay with the editor, as the modal-editing section requires.
 
 Navigation is over **visible rows**, not the entire hidden tree. Collapsed
 descendants must be skipped. Movement clamps at the first and last row rather
