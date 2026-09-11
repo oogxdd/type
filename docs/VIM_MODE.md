@@ -117,6 +117,13 @@ the cursor back from the selection would drift by one on every keypress — this
 was a real bug, caught by `commands.test.ts`. `VimHost.visualHead` is the
 authoritative cursor while Visual is active.
 
+**⌘/⌥ chords belong to the app, not to Vim.** `handleKeyDown` returns early for
+them, so Visual mode is also how you feed a selection to the command palette:
+`V`, extend, then ⌘K → *Selection → Assign tag…* tags every selected block (see
+[SELECTION_TAGS.md](./SELECTION_TAGS.md)). The palette captures the ProseMirror
+selection Visual mode maintains, which is why `applySelection` keeps that
+selection true to the Visual range on every motion.
+
 **Undo groups per Insert session.** Entering and leaving Insert calls
 `closeHistory`, so `u` undoes a whole typed phrase rather than one keystroke's
 worth of ProseMirror history grouping.

@@ -757,6 +757,7 @@ body {
 
 .multi-lens-note-readonly .tiptap-content {
   min-height: 0;
+  --selection-tag-bleed-right: 16px;
   padding: 12px 16px 14px 18px;
   font-size: var(--editor-font-size, 14px);
 }
@@ -2475,12 +2476,71 @@ body {
 
 .note-review .tiptap-content::after { display: none; }
 
-.tiptap-content [data-selection-tagged] {
-  border-top: 1px solid color-mix(in srgb, var(--selection-tag-color) 60%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--selection-tag-color) 60%, transparent);
-  border-radius: 3px;
-  box-shadow: -6px 0 0 color-mix(in srgb, var(--selection-tag-color) 10%, transparent), 6px 0 0 color-mix(in srgb, var(--selection-tag-color) 10%, transparent);
+/* A tagged block reads as a full-bleed band across the pane, with the tag names
+   sitting on its top rule. The band is a pseudo-element rather than the block's
+   own background so it can escape the editor's text padding: it stretches far
+   past the left edge (overflow to the left of the content box is clipped and
+   never scrollable in LTR, so no scrollbar appears) and exactly to the pane's
+   right edge, which is also where the badge is anchored. Colours come entirely
+   from the inline `--selection-tag-*` gradients that `TaggedBlocks` renders. */
+.tiptap-content {
+  --selection-tag-bleed-right: 12px;
 }
+
+.tiptap-content [data-selection-tagged] {
+  position: relative;
+  /* Own stacking context: without it the band (z-index -1) would sink below the
+     opaque background of whichever pane ancestor happens to paint one. */
+  isolation: isolate;
+  border-radius: 0;
+}
+
+.tiptap-content [data-selection-tagged]:not(.is-editor-empty)::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  bottom: 0;
+  left: -9999px;
+  right: calc(-1 * var(--selection-tag-bleed-right));
+  background:
+    var(--selection-tag-line) top / 100% 1px no-repeat,
+    var(--selection-tag-line) bottom / 100% 1px no-repeat,
+    var(--selection-tag-fill);
+  pointer-events: none;
+}
+
+/* A code block paints its own surface, so the band has to go through it. */
+.tiptap-content pre[data-selection-tagged] {
+  background-image: var(--selection-tag-fill);
+}
+
+.tiptap-content [data-selection-tagged]::after {
+  content: attr(data-selection-tag-names);
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: calc(-1 * var(--selection-tag-bleed-right));
+  transform: translateY(-50%);
+  max-width: 70%;
+  overflow: hidden;
+  padding: 0 5px;
+  /* Same wash and same rule colour as the block it labels; with several tags
+     both are split into equal bands, so the badge mirrors the row's colours in
+     the same order. `border-image` is what lets one border carry them all. */
+  background: var(--selection-tag-fill);
+  border: 1px solid transparent;
+  border-image: var(--selection-tag-line) 1;
+  color: var(--ui-text);
+  font: 600 10px / 1.6 "Avenir Next", "SF Pro Text", "Segoe UI", "Noto Sans",
+    Arial, sans-serif;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  user-select: none;
+}
+
 .selection-tag-form { display: grid; gap: 14px; }
 .selection-tag-form label, .selection-tag-form legend { font-size: 12px; font-weight: 600; }
 .selection-tag-catalog { display: flex; flex-wrap: wrap; gap: 6px; max-height: 160px; overflow: auto; }
@@ -2492,4 +2552,4 @@ body {
 .selection-tag-colors button { width: 24px; height: 24px; border-radius: 50%; }
 .selection-tag-colors button[aria-pressed="true"] { outline: 2px solid var(--ui-text); outline-offset: 3px; }
 .selection-tag-colors input { width: 30px; height: 30px; padding: 0; border: 0; background: transparent; }
-.selection-tag-preview { border-block: 1px solid; border-radius: 3px; padding: 14px 10px; font-size: 14px; overflow-wrap: anywhere; }
+.selection-tag-preview { border-block: 1px solid; padding: 14px 10px; font-size: 14px; overflow-wrap: anywhere; }

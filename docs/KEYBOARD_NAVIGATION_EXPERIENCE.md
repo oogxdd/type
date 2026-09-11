@@ -180,7 +180,12 @@ applies to modal editor keys and modified shortcuts such as `Cmd+W` and
 | `Enter` on a group/folder | Toggle expanded/collapsed state without leaving navigation |
 | `Tab` | Switch between Feed and Folders while keeping navigation focus |
 | `Cmd+W` / `Ctrl+W` | Toggle focus between navigation and content |
+| `Cmd+J` / `Ctrl+J` | Cycle focus through every pane, wrapping at the end |
 | `Cmd+K` / `Ctrl+K` | Open the command palette |
+
+The palette chord is exclusive. The global pane listener captures keys before
+every other handler, so it must claim nothing that another surface owns — the
+one list of chords it takes lives in `model/pane-shortcuts.ts`.
 
 Navigation is over **visible rows**, not the entire hidden tree. Collapsed
 descendants must be skipped. Movement clamps at the first and last row rather

@@ -1,11 +1,19 @@
 # Tags on selected text
 
 On desktop, select text in the normal editor or across notes in multi-note
-review, then choose **Cmd+K / Ctrl+K → Selection → Assign tag…**. The picker
-reuses tags found in the active working folder, or creates a name with a preset
-or custom color. Each affected paragraph, heading, list-item paragraph, or code
-block receives a light background and colored top/bottom borders. Wrapped visual
-lines and explicit line breaks inside one paragraph belong to the same block.
+review, then choose **Cmd+K / Ctrl+K → Selection → Assign tag…**. In Vim mode
+that selection is a Visual or Visual Line range: `v`/`V`, extend it, then
+Cmd+K — Vim leaves ⌘-chords to the platform, the palette captures the Visual
+range before its focus trap opens, and closing the tag window puts focus back
+in the editor (in Normal mode). The picker reuses tags found in the active
+working folder, or creates a name with a preset or custom color. Each affected
+paragraph, heading, list-item paragraph, or code block receives a light
+background band across the full editor width, with
+colored rules along its top and bottom edge and a badge naming its tags sitting
+on the top rule at the right. The badge carries the same wash and rule color as
+the block; with several tags both are split into equal bands in tag order.
+Wrapped visual lines and explicit line breaks inside one paragraph belong to the
+same block.
 Hovering shows the tag names. Multiple tags can coexist on a block; their colors
 share the background. Changing the color when assigning an existing tag affects
 only that selection, not every occurrence of the tag.
@@ -55,7 +63,9 @@ rules when the desktop opens it again.
 ## Validation
 
 Shared tests cover relocation, duplicate ambiguity, metadata roundtrips and
-validation. Desktop tests cover editor insertions, in-block edits, splitting,
+validation. Desktop tests cover the Visual-mode capture (`selection-surfaces.test.ts`
+drives the real Vim commands against a real ProseMirror view under jsdom),
+editor insertions, in-block edits, splitting,
 deletion, Undo/Redo and restoring metadata without adding history steps. Browser
 verification uses mocked Tauri IPC with the real providers, command palette,
 editor and review components; it exercises single-note creation, cross-note

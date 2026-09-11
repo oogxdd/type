@@ -4,6 +4,7 @@ import type { AppMode, PaneId } from "@typenotes/shared/types";
 import { useAppearance } from "@/app/state/appearance-store";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
+import { paneShortcutFor } from "@/features/notes/navigation/model/pane-shortcuts";
 import { focusNoScroll } from "@/shared/lib/dom";
 
 type UsePaneShortcutsArgs = {
@@ -20,9 +21,11 @@ type UsePaneShortcutsArgs = {
 
 /**
  * Desktop global keyboard shortcuts and pane focus management:
- * cmd/ctrl + T (toggle sidebar), W (toggle navigation/editor), K/J (cycle all panes),
+ * cmd/ctrl + T (toggle sidebar), W (toggle navigation/editor), J (cycle all panes),
  * N (new note), Backspace (move to trash), shift+Backspace (delete), +/-/0
- * (editor font size), shift+L (lock).
+ * (editor font size), shift+L (lock). `model/pane-shortcuts` is the whole list —
+ * this listener captures and stops propagation, so a chord it claims is taken
+ * away from the command palette and the editor.
  * Tracks the last-focused left pane so toggling the sidebar can restore it.
  */
 export function usePaneShortcuts({
@@ -104,58 +107,42 @@ export function usePaneShortcuts({
 
     const handleGlobalKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey || event.repeat) return;
-      const code = event.code;
-      const isLockShortcut = code === "KeyL" && event.shiftKey;
-      if (
-        code !== "KeyT" &&
-        code !== "KeyW" &&
-        code !== "KeyK" &&
-        code !== "KeyJ" &&
-        code !== "KeyN" &&
-        code !== "Backspace" &&
-        code !== "Equal" &&
-        code !== "Minus" &&
-        code !== "Digit0" &&
-        code !== "NumpadAdd" &&
-        code !== "NumpadSubtract" &&
-        code !== "Numpad0" &&
-        !isLockShortcut
-      )
-        return;
+      const shortcut = paneShortcutFor(event.code, { shiftKey: event.shiftKey });
+      if (!shortcut) return;
       event.preventDefault();
       // Capture pane shortcuts before contenteditable/Tiptap key handlers. On
       // macOS, Control+T and Control+W otherwise reach the editor first and
       // behave differently from their Command-key equivalents.
       event.stopPropagation();
 
-      if (code === "Equal" || code === "NumpadAdd") {
+      if (shortcut === "font-size-up") {
         if (appMode === "notes") increaseEditorFontSize();
         return;
       }
-      if (code === "Minus" || code === "NumpadSubtract") {
+      if (shortcut === "font-size-down") {
         if (appMode === "notes") decreaseEditorFontSize();
         return;
       }
-      if (code === "Digit0" || code === "Numpad0") {
+      if (shortcut === "font-size-reset") {
         if (appMode === "notes") resetEditorFontSize();
         return;
       }
-      if (code === "KeyN") {
+      if (shortcut === "new-note") {
         void createNewNote();
         return;
       }
-      if (isLockShortcut) {
+      if (shortcut === "lock-app") {
         void lockAppNow();
         return;
       }
-      if (code === "Backspace") {
+      if (shortcut === "delete-selection" || shortcut === "trash-selection") {
         if (appMode === "notes") {
-          if (event.shiftKey) deleteSelectedNotes();
+          if (shortcut === "delete-selection") deleteSelectedNotes();
           else moveSelectedNotesToTrash();
         }
         return;
       }
-      if (code === "KeyT") {
+      if (shortcut === "toggle-sidebar") {
         const currentPane = getFocusedPane();
         setSidebarCollapsed((prev) => {
           const next = !prev;
@@ -170,7 +157,7 @@ export function usePaneShortcuts({
         });
         return;
       }
-      if (code === "KeyW") {
+      if (shortcut === "toggle-navigation-focus") {
         const navigationPane: "folders" | "middle" =
           appMode === "settings" ? "middle" : "folders";
         if (sidebarCollapsed && navigationPane === "folders") {
@@ -201,11 +188,10 @@ export function usePaneShortcuts({
           : hasMiddlePane
             ? "middle"
             : "folders";
-      const delta = code === "KeyK" ? 1 : -1;
-      const nextIndex = Math.max(
-        0,
-        Math.min(panes.length - 1, panes.indexOf(startPane) + delta)
-      );
+      // "cycle-panes" is one key, so it has to be able to visit every pane:
+      // it wraps instead of clamping at the ends.
+      const currentIndex = panes.indexOf(startPane);
+      const nextIndex = (currentIndex + 1) % panes.length;
       const targetPane = panes[nextIndex];
       if (targetPane === "folders" || targetPane === "middle")
         lastLeftPaneFocusRef.current = targetPane;

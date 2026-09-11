@@ -14,12 +14,26 @@ export const TaggedBlocks = Extension.create({
           const tags = (attributes.selectionTags as SelectionTag[]).filter(validTag);
           if (!tags.length) return {};
           const colors = tags.map((tag) => tag.color);
-          const background = colors.map((color, i) => `${color}1a ${i * 100 / colors.length}%, ${color}1a ${(i + 1) * 100 / colors.length}%`).join(", ");
+          // Hard stops, so several tags on one block read as equal bands of
+          // colour rather than a blend nobody can name. The stylesheet paints
+          // these behind the text and inside the badge; it never sets a colour
+          // of its own, so a tag always looks the same wherever it is rendered.
+          const band = (alpha: string) =>
+            `linear-gradient(90deg, ${colors
+              .map((color, index) => `${color}${alpha} ${(index * 100) / colors.length}%, ${color}${alpha} ${((index + 1) * 100) / colors.length}%`)
+              .join(", ")})`;
+          const names = tags.map((tag) => tag.name);
           return {
             "data-selection-tagged": "true",
-            "data-selection-tag-names": tags.map((tag) => tag.name).join(", "),
-            title: tags.map((tag) => tag.name).join(" · "),
-            style: `--selection-tag-color: ${colors[colors.length - 1]}; background: linear-gradient(90deg, ${background});`,
+            "data-selection-tag-names": names.join(" · "),
+            title: names.join(" · "),
+            style: [
+              `--selection-tag-color: ${colors[colors.length - 1]}`,
+              // The fill is the block's wash; the line is the same colours at
+              // the 60% the rules have always used. The badge reuses both.
+              `--selection-tag-fill: ${band("1a")}`,
+              `--selection-tag-line: ${band("99")}`,
+            ].join("; "),
           };
         },
       },

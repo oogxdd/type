@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 
 import { useSelection } from "@/app/state/selection-store";
-import { captureTagSelection, type CapturedTagSelection } from "@/features/selection-tags/lib/selection-surfaces";
+import { captureTagSelection, isTagSurfaceCurrent, type CapturedTagSelection } from "@/features/selection-tags/lib/selection-surfaces";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { useAppearance } from "@/app/state/appearance-store";
@@ -451,6 +451,16 @@ export function useCommandPaletteCommands({
     runMove,
     completePath,
     tagDialogSelection,
-    closeTagDialog: () => setTagDialogSelection(null),
+    closeTagDialog: () => {
+      // Coming from Vim's Visual mode the editor was the only thing focused, and
+      // the palette input Radix would hand focus back to is already unmounted —
+      // put the caret back where the selection came from.
+      const target = tagDialogSelection?.find((entry) => entry.surface.editable);
+      setTagDialogSelection(null);
+      if (!target) return;
+      requestAnimationFrame(() => {
+        if (isTagSurfaceCurrent(target.surface)) target.surface.editor.view.focus();
+      });
+    },
   };
 }
