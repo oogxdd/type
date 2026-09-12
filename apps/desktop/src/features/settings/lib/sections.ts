@@ -2,6 +2,7 @@ import { APP_EXTENSIONS } from "@/features/extensions/registry";
 
 export type SettingsSectionId =
   | "general"
+  | "tags"
   | "profile"
   | "import"
   | "sync"
@@ -23,6 +24,7 @@ const SECURITY_SETTINGS_SECTIONS: SettingsSection[] = APP_EXTENSIONS.security
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "general", title: "General" },
   { id: "profile", title: "Profile" },
+  { id: "tags", title: "Tags" },
   { id: "import", title: "Import" },
   { id: "sync", title: "Sync" },
   { id: "updates", title: "Updates" },

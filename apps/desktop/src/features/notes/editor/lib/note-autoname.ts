@@ -1,3 +1,4 @@
+import { stripTagSyntaxFromLine } from "@typenotes/shared/tags";
 import type { NoteFileNameFormat } from "@typenotes/shared/types";
 import { stripInlineAnnotationMetadata } from "@typenotes/shared/annotation-metadata";
 import { stripFrontmatter } from "@typenotes/shared/frontmatter";
@@ -47,6 +48,7 @@ const stripNoiseTokenSequences = (tokens: string[]) => {
 
 export const buildSlugFromContent = (markdown: string) => {
   const normalized = stripInlineAnnotationMetadata(stripFrontmatter(markdown))
+    .split(/\r?\n/).map(line => stripTagSyntaxFromLine(line) ?? "").join("\n")
     .replace(/NV_EMPTY_LINE_TOKEN_[A-Za-z0-9]+/g, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/```[\s\S]*?```/g, " ")

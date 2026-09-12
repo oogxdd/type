@@ -1,16 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useTags } from "@/features/tags/hooks/tags-context";
+import { useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
-import { readNote } from "@/features/notes/api/notes-api";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useSelection } from "@/app/state/selection-store";
-import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
-import { collectAllNotes } from "@typenotes/shared/notes";
 import { getErrorMessage } from "@typenotes/shared/errors";
-import { DEFAULT_TAG_COLOR, readSelectionTags, tagKey, validTag, type SelectionTag } from "@typenotes/shared/selection-tags";
-import { assignEditorTag, snapshotTaggedBlocks } from "../lib/tagged-blocks";
-import { isTagSurfaceCurrent, type CapturedTagSelection } from "../lib/selection-surfaces";
+import { DEFAULT_TAG_COLOR, tagKey, validTag, type SelectionTag } from "@typenotes/shared/selection-tags";
+import { assignEditorTag } from "../lib/tagged-blocks";
+import { isTagSurfaceCurrent, openDocumentTags, type CapturedTagSelection } from "../lib/selection-surfaces";
 import { persistReviewTag } from "../lib/persist-selection-tag";
 
 const COLORS = ["#8b5cf6", "#2563eb", "#0891b2", "#16a34a", "#ca8a04", "#ea580c", "#e11d48", "#64748b"];
@@ -19,46 +17,22 @@ export function AssignTagDialog({ selection, onClose }: {
   selection: CapturedTagSelection[];
   onClose: () => void;
 }) {
-  const { tree } = useNotesTree();
+  const { tags: registry, save: saveRegistry, loading, error: registryError } = useTags();
   const { flushSave, loadedNotePath, primeNoteContent } = useEditor();
   const activeNote = useSelection((state) => state.activeNote);
   const [name, setName] = useState("");
   const [color, setColor] = useState(DEFAULT_TAG_COLOR);
-  const [catalog, setCatalog] = useState<SelectionTag[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [catalogError, setCatalogError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const busyRef = useRef(false);
   const completedRef = useRef(new Set<string>());
-  const paths = useMemo(() => collectAllNotes(tree).map((note) => note.path), [tree]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const found = new Map<string, SelectionTag>();
-    const add = (tag: SelectionTag) => { if (!found.has(tagKey(tag.name))) found.set(tagKey(tag.name), tag); };
-    // Include unsaved tags from the live editor immediately.
-    for (const target of selection) {
-      for (const block of snapshotTaggedBlocks(target.surface.editor.state.doc)) block.tags.forEach(add);
+  const catalog = useMemo(() => {
+    const found = new Map<string, SelectionTag>(registry.map(tag => [tagKey(tag.name), tag]));
+    for (const tag of openDocumentTags()) {
+      if (!found.has(tagKey(tag.name))) found.set(tagKey(tag.name), tag);
     }
-    setCatalog([...found.values()]);
-    setLoading(true);
-    setCatalogError(false);
-    let cursor = 0;
-    const worker = async () => {
-      while (!cancelled && cursor < paths.length) {
-        const path = paths[cursor++];
-        try { readSelectionTags(await readNote(path)).forEach((block) => block.tags.forEach(add)); }
-        catch { if (!cancelled) setCatalogError(true); }
-      }
-    };
-    void Promise.all(Array.from({ length: Math.min(6, paths.length) }, worker)).then(() => {
-      if (cancelled) return;
-      setCatalog([...found.values()].sort((a, b) => a.name.localeCompare(b.name)));
-      setLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, [paths, selection]);
+    return [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [registry, selection]);
 
   const matching = catalog.filter((tag) => tagKey(tag.name).includes(tagKey(name)));
   const existing = catalog.find((tag) => tagKey(tag.name) === tagKey(name));
@@ -73,12 +47,16 @@ export function AssignTagDialog({ selection, onClose }: {
     setError(null);
     try {
       if (selection.some((target) => !isTagSurfaceCurrent(target.surface))) throw new Error("The selection changed. Close this window and select the text again.");
+      if (!registry.some(entry => tagKey(entry.name) === tagKey(tag.name) && entry.color === color)) {
+        await saveRegistry([...registry.filter(entry => tagKey(entry.name) !== tagKey(tag.name)), { ...tag, description: registry.find(entry => tagKey(entry.name) === tagKey(tag.name))?.description ?? "" }]);
+      }
       // The editor's navigation effect owns a pending old-note flush.
       if (loadedNotePath === activeNote) await flushSave();
       for (const target of selection) {
         if (completedRef.current.has(target.surface.path)) continue;
         if (!isTagSurfaceCurrent(target.surface)) throw new Error("The selection changed. Select the text again.");
         if (target.surface.editable) {
+          if (!target.surface.editor.state.doc.eq(target.doc)) throw new Error("The selected text changed. Select it again.");
           assignEditorTag(target.surface.editor, target.blocks, tag);
           await flushSave();
         } else {
@@ -101,7 +79,7 @@ export function AssignTagDialog({ selection, onClose }: {
       <DialogContent showCloseButton={!saving} onEscapeKeyDown={(event) => { if (saving) event.preventDefault(); }} onPointerDownOutside={(event) => { if (saving) event.preventDefault(); }}>
         <DialogHeader>
           <DialogTitle>Assign tag</DialogTitle>
-          <DialogDescription>{blockCount} text block{blockCount === 1 ? "" : "s"} in {selection.length} note{selection.length === 1 ? "" : "s"}. Tags cover whole paragraphs and list items.</DialogDescription>
+          <DialogDescription>{blockCount} text block{blockCount === 1 ? "" : "s"} in {selection.length} note{selection.length === 1 ? "" : "s"}. Tags cover the selected phrase or blocks.</DialogDescription>
         </DialogHeader>
         <form onSubmit={(event) => { event.preventDefault(); void assign(); }} className="selection-tag-form">
           <label htmlFor="selection-tag-name">Tag name</label>
@@ -115,8 +93,8 @@ export function AssignTagDialog({ selection, onClose }: {
             {matching.map((entry) => <button type="button" disabled={fieldsDisabled} key={tagKey(entry.name)} onClick={() => { setName(entry.name); setColor(entry.color); }} className="selection-tag-option" aria-pressed={tagKey(entry.name) === tagKey(name)}>
               <span style={{ background: entry.color }} aria-hidden="true" />{entry.name}
             </button>)}
-            {loading ? <p role="status">Looking for tags in this working folder…</p> : !matching.length ? <p>{name.trim() ? `Create “${name.trim()}”` : "No tags yet. Give your first tag a name."}</p> : null}
-            {catalogError ? <p role="status">Some notes could not be read. The tag list may be incomplete.</p> : null}
+            {loading ? <p role="status">Loading tag registry…</p> : !matching.length ? <p>{name.trim() ? `Create “${name.trim()}”` : "No tags yet. Give your first tag a name."}</p> : null}
+            {registryError ? <p role="status">The tag registry could not be read.</p> : null}
           </div>
           <fieldset disabled={fieldsDisabled}>
             <legend>Color</legend>
@@ -126,7 +104,7 @@ export function AssignTagDialog({ selection, onClose }: {
             </div>
           </fieldset>
           <div className="selection-tag-preview" style={{ background: `${color}1a`, borderColor: color }}>{name.trim() || "Your tagged text"}</div>
-          {existing ? <p className="selection-tag-hint">Color applies to this selection. Other tagged text keeps its color.</p> : null}
+          {existing ? <p className="selection-tag-hint">Color applies to every occurrence of this tag.</p> : null}
           {error ? <p role="alert" className="text-destructive text-sm">{error}</p> : null}
           <DialogFooter>
             <Button type="button" variant="outline" disabled={saving} onClick={onClose}>Cancel</Button>

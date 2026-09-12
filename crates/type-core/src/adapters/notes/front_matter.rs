@@ -36,6 +36,16 @@ pub fn parse_note_front_matter(raw: &str) -> (NoteFrontMatter, String) {
             .trim_matches('\'')
             .to_string();
         match key.as_str() {
+            "tags" => {
+                let raw_tags = value_raw.trim();
+                let parsed = serde_json::from_str::<Vec<String>>(raw_tags).ok().or_else(|| {
+                    let inner = raw_tags.strip_prefix('[')?.strip_suffix(']')?;
+                    let tags: Vec<String> = inner.split(',').map(|v| v.trim().trim_matches('\'').to_string()).filter(|v| !v.is_empty()).collect();
+                    tags.iter().all(|tag| crate::domain::tag_registry::valid_tag_name(tag)).then_some(tags)
+                });
+                if let Some(tags) = parsed { meta.tags = Some(tags); }
+                else { meta.passthrough_lines.push(trimmed.to_string()); }
+            }
             "id" => {
                 if !value.is_empty() {
                     meta.id = Some(value);
@@ -153,6 +163,9 @@ fn front_matter_safe_value(value: &str) -> String {
 pub fn render_note_with_front_matter(meta: &NoteFrontMatter, body: &str) -> String {
     let mut output = String::new();
     output.push_str("---\n");
+    if let Some(tags) = &meta.tags {
+        output.push_str(&format!("tags: {}\n", serde_json::to_string(tags).expect("string list")));
+    }
     if let Some(id) = &meta.id {
         output.push_str(&format!("id: {}\n", front_matter_safe_value(id)));
     }
@@ -283,4 +296,29 @@ mod tests {
         assert_eq!(parsed.reviewed_ms, Some(88));
         assert_eq!(body.trim(), "Body text");
     }
+}
+
+#[cfg(test)]
+mod tag_tests {
+    use super::*;
+    #[test]
+    fn note_tags_round_trip() {
+        let (meta, _) = parse_note_front_matter("---\ntags: [todo, urgent, работа]\n---\nbody");
+        assert_eq!(meta.tags.as_ref().unwrap(), &vec!["todo", "urgent", "работа"]);
+        let rendered = render_note_with_front_matter(&meta, "body");
+        assert_eq!(parse_note_front_matter(&rendered).0.tags, meta.tags);
+    }
+}
+
+/// Header-only writes must not add separator blank lines or re-encrypt the body.
+pub(super) fn write_note_metadata(path: &Path, meta: &NoteFrontMatter) -> Result<(), String> {
+    let raw = fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let body = [("---\n", "\n---\n"), ("---\r\n", "\r\n---\r\n")].iter()
+        .find_map(|(opening, closing)| raw.strip_prefix(opening).and_then(|rest| {
+            rest.find(closing).map(|index| &rest[index + closing.len()..])
+        })).unwrap_or(&raw);
+    let mut header = render_note_with_front_matter(meta, "");
+    header.pop(); // renderer's extra blank separator already belongs to the persisted body
+    header.push_str(body);
+    fs::write(path, header).map_err(|e| e.to_string())
 }

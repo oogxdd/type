@@ -1,3 +1,4 @@
+import { stripTagSyntaxFromLine } from "./tags";
 import type {
   GitTransferProgress,
   HandwritingOcrListItem,
@@ -11,7 +12,7 @@ const RECORDING_NOTE_TYPE = "audio_recording";
 const HANDWRITING_NOTE_TYPE = "handwriting_attachment";
 
 const stripMarkdownLine = (line: string) =>
-  line
+  (stripTagSyntaxFromLine(line) ?? "")
     .replace(/\\+_/g, "_")
     .replace(/NV_EMPTY_LINE_TOKEN_[A-Za-z0-9]+/gi, " ")
     .replace(/NV[\s_]+EMPTY[\s_]+LINE[\s_]+TOKEN(?:[\s_]+[A-Za-z0-9]+)?/gi, " ")
@@ -87,6 +88,7 @@ export const formatRecordingStatusLabel = (status: string | null | undefined) =>
 };
 
 export type NotePreview = {
+  tags?: string[];
   title: string;
   dateLabel: string;
   secondLine: string;
@@ -146,6 +148,7 @@ export const parseNotePreview = (
   updatedMs: number | null,
   noteMeta?: Pick<
     NoteMeta,
+    | "tags"
     | "created_ms"
     | "note_type"
     | "archived_ms"
@@ -204,6 +207,7 @@ export const parseNotePreview = (
   const secondLine = useVoiceRecordingPlaceholder ? "" : previewLines[1] || "";
   return {
     title,
+    tags: noteMeta?.tags ?? [],
     dateLabel: formatNoteDateLabel(updatedMs),
     secondLine,
     createdMs,

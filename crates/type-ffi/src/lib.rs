@@ -24,6 +24,7 @@ mod notes;
 mod profiles;
 mod recordings;
 mod security;
+mod tag_registry;
 
 pub use git_sync::*;
 pub use handwriting::*;
@@ -32,6 +33,7 @@ pub use notes::*;
 pub use profiles::*;
 pub use recordings::*;
 pub use security::*;
+pub use tag_registry::*;
 
 #[cfg(test)]
 mod tests;

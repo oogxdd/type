@@ -1,55 +1,47 @@
-import { documentBlocks } from "@typenotes/note-document/tagged-blocks";
-export { TaggedBlocks, documentBlocks } from "@typenotes/note-document/tagged-blocks";
 import type { Editor } from "@tiptap/react";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { closeHistory } from "@tiptap/pm/history";
-import {
-  mergeTag, resolveBlockAnchor, validTag,
-  type BlockAnchor, type SelectionTag, type TaggedBlock,
-} from "@typenotes/shared/selection-tags";
+import { findWrapping } from "@tiptap/pm/transform";
+import { DEFAULT_TAG_COLOR, mergeTagAttrs, type TagAttrs } from "@typenotes/shared/tags";
+import type { SelectionTag } from "@typenotes/shared/selection-tags";
+export { TagBlock, TagSpan } from "@typenotes/note-document/tagged-blocks";
+export type TagSelectionRange = { from: number; to: number; block: boolean };
 
-export function snapshotTaggedBlocks(doc: ProseMirrorNode): TaggedBlock[] {
-  return documentBlocks(doc).flatMap(({ node, anchor }) => {
-    const tags = (node.attrs.selectionTags as SelectionTag[]).filter(validTag);
-    return tags.length ? [{ ...anchor, tags }] : [];
+export function documentTagNames(doc: ProseMirrorNode): SelectionTag[] {
+  const names = new Set<string>();
+  doc.descendants(node => {
+    if (node.type.name === "tagBlock") for (const name of node.attrs.tags) names.add(name);
+    for (const mark of node.marks) if (mark.type.name === "tagSpan") for (const name of mark.attrs.tags) names.add(name);
   });
+  return [...names].map(name => ({ name, color: DEFAULT_TAG_COLOR }));
 }
 
-/** Restoring node attributes on load must never create an undo step. */
-export function restoreTaggedBlocks(editor: Editor, saved: TaggedBlock[]): TaggedBlock[] {
-  const blocks = documentBlocks(editor.state.doc);
-  const anchors = blocks.map((block) => block.anchor);
-  const unresolved: TaggedBlock[] = [];
-  const byIndex = new Map<number, SelectionTag[]>();
-  for (const entry of saved) {
-    const index = resolveBlockAnchor(entry, anchors);
-    if (index === null) { unresolved.push(entry); continue; }
-    let tags = byIndex.get(index) ?? [];
-    for (const tag of entry.tags) tags = mergeTag(tags, tag);
-    byIndex.set(index, tags);
-  }
-  const tr = editor.state.tr.setMeta("addToHistory", false);
-  for (const { node, pos, anchor } of blocks) {
-    const tags = byIndex.get(anchor.index) ?? [];
-    if (JSON.stringify(node.attrs.selectionTags) !== JSON.stringify(tags)) {
-      tr.setNodeMarkup(pos, undefined, { ...node.attrs, selectionTags: tags });
+export function assignEditorTag(editor: Editor, selected: TagSelectionRange[], tag: SelectionTag) {
+  const tr = closeHistory(editor.state.tr);
+  const extra = { tags: [tag.name], flags: {} };
+  for (const selection of selected) {
+    const from = tr.mapping.map(selection.from), to = tr.mapping.map(selection.to);
+    if (from < 0 || to > tr.doc.content.size || from >= to) throw new Error("The selected text changed. Select it again.");
+    if (!selection.block) {
+      const segments: { from: number; to: number; attrs: TagAttrs }[] = [];
+      tr.doc.nodesBetween(from, to, (node, pos) => {
+        if (!node.isInline) return;
+        const mark = node.marks.find(mark => mark.type.name === "tagSpan");
+        segments.push({ from: Math.max(from, pos), to: Math.min(to, pos + node.nodeSize), attrs: mergeTagAttrs(mark?.attrs as TagAttrs ?? { tags: [], flags: {} }, extra) });
+      });
+      for (const segment of segments) tr.addMark(segment.from, segment.to, editor.schema.marks.tagSpan.create(segment.attrs));
+    } else {
+      const range = tr.doc.resolve(from).blockRange(tr.doc.resolve(to));
+      if (!range) throw new Error("Select a block of text.");
+      if (range.parent.type.name === "tagBlock" && range.startIndex === 0 && range.endIndex === range.parent.childCount) {
+        tr.setNodeMarkup(tr.doc.resolve(from).before(range.depth), undefined, { ...range.parent.attrs, ...mergeTagAttrs(range.parent.attrs as TagAttrs, extra) });
+        continue;
+      }
+      const wrapping = findWrapping(range, editor.schema.nodes.tagBlock, extra);
+      if (!wrapping) throw new Error("This selection cannot be wrapped. Select its containing blocks.");
+      tr.wrap(range, wrapping);
     }
   }
-  if (tr.docChanged) editor.view.dispatch(tr);
-  return unresolved;
-}
-
-export function assignEditorTag(editor: Editor, selected: BlockAnchor[], tag: SelectionTag) {
-  const blocks = documentBlocks(editor.state.doc);
-  const anchors = blocks.map((block) => block.anchor);
-  const indices = selected.map((anchor) => resolveBlockAnchor(anchor, anchors));
-  if (indices.some((index) => index === null)) throw new Error("The selected text changed. Select it again before assigning a tag.");
-  const tr = closeHistory(editor.state.tr);
-  for (const index of new Set(indices)) {
-    const { node, pos } = blocks[index!];
-    tr.setNodeMarkup(pos, undefined, { ...node.attrs, selectionTags: mergeTag(node.attrs.selectionTags, tag) });
-  }
   editor.view.dispatch(tr);
-  // Keep the next keystroke separate from the tag assignment in Undo.
   editor.view.dispatch(closeHistory(editor.state.tr));
 }

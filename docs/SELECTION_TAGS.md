@@ -1,72 +1,79 @@
-# Tags on selected text
+# Tags in note bodies
 
-On desktop, select text in the normal editor or across notes in multi-note
-review, then choose **Cmd+K / Ctrl+K → Selection → Assign tag…**. In Vim mode
-that selection is a Visual or Visual Line range: `v`/`V`, extend it, then
-Cmd+K — Vim leaves ⌘-chords to the platform, the palette captures the Visual
-range before its focus trap opens, and closing the tag window puts focus back
-in the editor (in Normal mode). The picker reuses tags found in the active
-working folder, or creates a name with a preset or custom color. Each affected
-paragraph, heading, list-item paragraph, or code block receives a light
-background band across the full editor width, with
-colored rules along its top and bottom edge and a badge naming its tags sitting
-on the top rule at the right. The badge carries the same wash and rule color as
-the block; with several tags both are split into equal bands in tag order.
-Wrapped visual lines and explicit line breaks inside one paragraph belong to the
-same block.
-Hovering shows the tag names. Multiple tags can coexist on a block; their colors
-share the background. Changing the color when assigning an existing tag affects
-only that selection, not every occurrence of the tag.
+Select text, then **Cmd+K / Ctrl+K → Selection → Assign tag…**. Vim `v` and `V`
+work through the same captured ProseMirror selection. A phrase receives a `TagSpan`
+mark; a whole block or several blocks receive one `TagBlock` wrapper. Each range
+has a frame and a badge listing its names and flags. Overlapping spans split at
+their boundaries and keep the union of names. Assignment is its own Undo step.
 
-Multi-note review leaves note bodies intact and writes only frontmatter. In the
-normal editor, tags are ProseMirror node attributes: typing inside a block,
-inserting paragraphs above it, splitting it, and Undo/Redo preserve the tag
-through the editor's existing document history and autosave. Deleting a block
-removes its tag; Undo restores both. Pasting text does not import its tags.
+## Storage
 
-## Storage and matching
+```markdown
+#todo позвонить в банк
 
-`packages/shared/src/selection-tags.ts` owns the versioned wire format, validation,
-and matching. `type_selection_tags` is a single JSON object on a frontmatter line
-(JSON is valid YAML flow syntax), so the Rust core's existing passthrough field
-handling preserves it across desktop/mobile writes and sync. It contains
-`version: 1` and a `blocks` array. Each entry carries:
+::: #urgent researched=true
+## Heading
 
-- `tags`: `{ name, color }` objects; colors are six-digit hex values.
-- `index`: zero-based text-block ordinal, not a Markdown source line number.
-- `hash`, `before`, `after`: fingerprints of the rendered block and its neighbors.
-- `document`: a fingerprint of the ordered block fingerprints.
+Several paragraphs, lists, quotes or code blocks.
+:::
 
-No excerpt of the selected text is copied into the header. Fingerprints are
-non-cryptographic matching hints; frontmatter (including tag names) remains
-plaintext under the app's existing body-only encryption contract.
+A [short phrase]{#component number=42} inside a paragraph.
+```
 
-When a note is reopened, an unchanged document uses the exact block ordinal.
-Otherwise a unique text fingerprint follows the block even if preceding lines
-were inserted or deleted, or the block moved. Repeated text uses neighboring
-fingerprints. If external editing changes the tagged text itself, or duplicate
-blocks cannot be distinguished safely, the entry remains in frontmatter but has
-no highlight. The app does not guess a replacement location. Editing that text
-inside the desktop editor updates its fingerprints automatically.
+The shared attribute grammar lives in `packages/shared/src/tags.ts`, so previews
+can use it without depending on DOM code. Names start with a Unicode letter or
+number, then accept letters, numbers, `_./-`, up to 80 characters. Escaped `\_`
+from older Turndown output is accepted. Tags are whitespace separated; flags use
+`key=value` or `key="quoted value"` with escaped quotes/backslashes. Flags are
+parsed, displayed and saved; their editing UI is deferred.
 
-The desktop implementation lives in `features/selection-tags`. The palette
-captures selection before its focus trap opens, via the registered editable and
-read-only note surfaces. Review assignments reread each source note and resolve
-anchors before writing, retain unrelated metadata, and report partial failures.
-A retry skips notes already saved. The tag catalog is derived from the current
-working folder with bounded concurrent reads, and is not persisted separately.
+A leading run tags the block; a mid-line hashtag is prose. `#fff` and `#123` at
+the start of a block are tags when followed by content. `# Heading` remains an
+ATX heading. Code fences are parsed before their contents can become tags.
 
-Mobile has no tag-editing/highlight UI yet. Its existing frontmatter passthrough
-retains the metadata; text changed on mobile uses the external-edit matching
-rules when the desktop opens it again.
+Container fences contain at least three colons, with an exact-length closing
+fence alone on its line. Outer fences are longer than nested fences. A one-paragraph
+container with names only is serialized as a leading run. An unterminated
+container consumes the rest of the body and is first saved with an explicit closing
+fence; subsequent saves can canonicalize that repaired one-paragraph container.
+No existing text is moved outside its scope during repair. Normal Markdown
+canonicalization (emphasis, lists, hard breaks and extra blank paragraphs) still applies.
 
-## Validation
+There are no anchors, fingerprints or unresolved tags. Editing text externally
+keeps its tag because the delimiters stay with the text. Copying and pasting tagged
+HTML carries names and flags. Enter at the end of a container exits it; Backspace
+at its start unwraps it. Multi-note review reserializes Markdown when assigning
+and checks the captured document before writing; its body is not byte-preserved.
 
-Shared tests cover relocation, duplicate ambiguity, metadata roundtrips and
-validation. Desktop tests cover the Visual-mode capture (`selection-surfaces.test.ts`
-drives the real Vim commands against a real ProseMirror view under jsdom),
-editor insertions, in-block edits, splitting,
-deletion, Undo/Redo and restoring metadata without adding history steps. Browser
-verification uses mocked Tauri IPC with the real providers, command palette,
-editor and review components; it exercises single-note creation, cross-note
-assignment, catalog reuse, persistence, and switching back to the editor.
+Note-wide names are separate metadata: `tags: [todo, urgent]` in the actual
+frontmatter. `update_note_tags` updates these through Rust, preserving the body
+and encryption, rather than prepending frontmatter to the body returned by read_note.
+
+## Registry and colors
+
+`<notes_root>/.type/tags.json` is a synced, version-1 registry:
+
+```json
+{"version":1,"tags":[{"name":"skip-ai","color":"#8b5cf6","description":""}]}
+```
+
+Settings → Tags adds, edits, recolors and deletes registry entries. Colors are
+six-digit hex, resolved by a ProseMirror decoration plugin. Recoloring changes
+all open occurrences without changing Markdown. Multiple names use equal color
+bands. Renaming/deleting changes the registry only: existing names in notes remain
+and unknown names use `DEFAULT_TAG_COLOR`. The assignment dialog reads the registry
+and names in open documents; it does not scan every note. The provider resets by
+working-folder root and reloads on focus or preview invalidation.
+
+Mobile stores the same Markdown and has Rust/UniFFI registry and note-tag APIs.
+It does not yet have tag highlighting or a registry editor. Preserve delimiters
+when editing there; deleting a privacy delimiter can change what MCP exposes.
+
+## Verification
+
+`npm test` covers grammar, parsing/serialization, ten reloads, nested scopes,
+Unicode, code/lists, overlap, paste, history and real Vim selection capture.
+`cargo test --workspace --lib` covers frontmatter and registry persistence.
+`npm run mcp:build && npm run mcp:test` and `node scripts/test-notes-mcp.mjs`
+exercise the shared privacy projection and real stdio canaries. See
+[AI_NOTES_MCP.md](AI_NOTES_MCP.md) for the manual privacy check.

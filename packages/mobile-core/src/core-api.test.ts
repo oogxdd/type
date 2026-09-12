@@ -29,6 +29,16 @@ describe("core-api over the mock core", () => {
     expect(tree.children.map((child) => child.path)).not.toContain("Recordings");
   });
 
+  it("round-trips registry and note-wide tags independently of the body", async () => {
+    const note = await core.createNote({ content: "#work body" });
+    await core.updateNoteTags(note.path, ["todo"]);
+    expect((await core.getNoteMeta(note.path)).tags).toEqual(["todo"]);
+    expect(await core.readNote(note.path)).toBe("#work body");
+    const registry = { version: 1 as const, tags: [{ name: "work", color: "#123456", description: "" }] };
+    await core.writeTagRegistry(registry);
+    expect(await core.readTagRegistry()).toEqual(registry);
+  });
+
   it("moves and renames items", async () => {
     const created = await core.createNote({ content: "move me" });
     await core.moveItems([created.path], "Projects");

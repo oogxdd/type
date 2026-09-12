@@ -72,6 +72,7 @@ export type MockCoreOptions = {
 
 export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
   const now = options.now ?? Date.now;
+  let tagRegistry = JSON.stringify({ version: 1, tags: [] });
 
   let folders = new Set<string>([FEED, ARCHIEVE, RECORDINGS, ATTACHMENTS]);
   let notes = new Map<string, MockNote>();
@@ -269,6 +270,13 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
     setNoteTimestamp: async (argsJson) => {
       const args = JSON.parse(argsJson) as { path: string; timestamp_ms: number };
       requireNote(args.path).meta.created_ms = args.timestamp_ms;
+    },
+    readTagRegistry: async () => tagRegistry,
+    writeTagRegistry: async (registryJson) => { tagRegistry = registryJson; },
+    updateNoteTags: async (argsJson) => {
+      const args = JSON.parse(argsJson) as { path: string; tags: string[] };
+      requireNote(args.path).meta.tags = args.tags;
+      requireNote(args.path).meta.updated_ms = now();
     },
     updateNoteMarkers: async (argsJson) => {
       const args = JSON.parse(argsJson) as {

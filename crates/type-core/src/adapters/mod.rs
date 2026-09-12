@@ -30,3 +30,5 @@ pub use recordings::*;
 pub use attachment_retention::*;
 pub use security::*;
 pub use whisper_env::*;
+
+pub mod tag_registry;

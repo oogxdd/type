@@ -208,6 +208,10 @@ impl NotesRepository for FilesystemNotesRepository {
         write_note_with_front_matter(path, meta, body)
     }
 
+    fn write_note_metadata(&self, path: &Path, meta: &NoteFrontMatter) -> Result<(), String> {
+        front_matter::write_note_metadata(path, meta)
+    }
+
     fn allocate_note_file_name(
         &self,
         folder: &Path,

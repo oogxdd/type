@@ -1,3 +1,4 @@
+import { SettingsTagsSection } from "./tags-section";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { cn } from "@/shared/lib/utils";
@@ -58,6 +59,7 @@ function SettingsDetail({
   sectionId: SettingsSectionId;
   onOpenTrash: () => void;
 }) {
+  if (sectionId === "tags") return <SettingsTagsSection />;
   if (sectionId === "general") return <SettingsGeneralSection onOpenTrash={onOpenTrash} />;
   if (sectionId === "profile") return <SettingsProfileSection />;
   if (sectionId === "import") return <SettingsImportSection />;

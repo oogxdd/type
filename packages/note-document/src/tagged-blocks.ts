@@ -1,53 +1,76 @@
-import { Extension } from "@tiptap/core";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { blockAnchors, validTag, type SelectionTag } from "@typenotes/shared/selection-tags";
+import { Node, Mark } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
+import type { ResolvedPos } from "@tiptap/pm/model";
+import { liftTarget } from "@tiptap/pm/transform";
+import { emptyTagAttrs, parseTagAttrs, formatTagAttrs, mergeTagAttrs } from "@typenotes/shared/tags";
 
-export const TaggedBlocks = Extension.create({
-  name: "taggedBlocks",
-  addGlobalAttributes() {
-    return [{ types: ["paragraph", "heading", "codeBlock"], attributes: {
-      selectionTags: {
-        default: [],
-        // Pasted HTML cannot introduce persistent tags into another note.
-        parseHTML: () => [],
-        renderHTML: (attributes) => {
-          const tags = (attributes.selectionTags as SelectionTag[]).filter(validTag);
-          if (!tags.length) return {};
-          const colors = tags.map((tag) => tag.color);
-          // Hard stops, so several tags on one block read as equal bands of
-          // colour rather than a blend nobody can name. The stylesheet paints
-          // these behind the text and inside the badge; it never sets a colour
-          // of its own, so a tag always looks the same wherever it is rendered.
-          const band = (alpha: string) =>
-            `linear-gradient(90deg, ${colors
-              .map((color, index) => `${color}${alpha} ${(index * 100) / colors.length}%, ${color}${alpha} ${((index + 1) * 100) / colors.length}%`)
-              .join(", ")})`;
-          const names = tags.map((tag) => tag.name);
-          return {
-            "data-selection-tagged": "true",
-            "data-selection-tag-names": names.join(" · "),
-            title: names.join(" · "),
-            style: [
-              `--selection-tag-color: ${colors[colors.length - 1]}`,
-              // The fill is the block's wash; the line is the same colours at
-              // the 60% the rules have always used. The badge reuses both.
-              `--selection-tag-fill: ${band("1a")}`,
-              `--selection-tag-line: ${band("99")}`,
-            ].join("; "),
-          };
-        },
-      },
-    } }];
-  },
+const attributes = () => ({
+  tags: { default: [], rendered: false },
+  flags: { default: {}, rendered: false },
+  unterminated: { default: false, rendered: false },
+});
+const read = (element: HTMLElement) => ({
+  ...(parseTagAttrs(element.getAttribute("data-tag-attrs") ?? "") ?? emptyTagAttrs()),
+  unterminated: element.hasAttribute("data-tag-unterminated"),
+});
+const render = (attrs: ReturnType<typeof read>) => ({
+  "data-tag-attrs": formatTagAttrs(attrs),
+  "data-tag-names": formatTagAttrs(attrs),
+  title: formatTagAttrs(attrs),
+  ...(attrs.unterminated ? { "data-tag-unterminated": "true" } : {}),
 });
 
-export function documentBlocks(doc: ProseMirrorNode) {
-  const entries: { node: ProseMirrorNode; pos: number }[] = [];
-  doc.descendants((node, pos) => {
-    if (node.isTextblock && "selectionTags" in node.attrs) entries.push({ node, pos });
-  });
-  // Explicit hard breaks contribute to the fingerprint too.
-  const anchors = blockAnchors(entries.map(({ node }) => node.textBetween(0, node.content.size, "\n", "\n")));
-  return entries.map((entry, index) => ({ ...entry, anchor: anchors[index] }));
-}
+// Find the nearest container whose first/last descendant owns this caret.
+const edgeContainer = ($pos: ResolvedPos, end: boolean) => {
+  for (let depth = $pos.depth - 1; depth > 0; depth--) {
+    if ($pos.index(depth) !== (end ? $pos.node(depth).childCount - 1 : 0)) return null;
+    if ($pos.node(depth).type.name === "tagBlock") return depth;
+  }
+  return null;
+};
 
+export const TagBlock = Node.create({
+  name: "tagBlock", group: "block", content: "block+", defining: true,
+  addAttributes: attributes,
+  parseHTML: () => [{ tag: "div[data-tag-attrs]", getAttrs: read }],
+  renderHTML: ({ node }) => ["div", render(node.attrs as ReturnType<typeof read>), 0],
+  addKeyboardShortcuts() {
+    return {
+      Enter: () => {
+        const { state, view } = this.editor;
+        const { $from, empty } = state.selection;
+        if (!empty || !$from.parent.isTextblock || $from.parentOffset !== $from.parent.content.size) return false;
+        const depth = edgeContainer($from, true);
+        if (depth === null) return false;
+        const pos = $from.after(depth);
+        const next = state.doc.nodeAt(pos);
+        const tr = next?.type.name === "paragraph" && !next.content.size ? state.tr : state.tr.insert(pos, state.schema.nodes.paragraph.create());
+        view.dispatch(tr.setSelection(TextSelection.create(tr.doc, pos + 1)).scrollIntoView());
+        return true;
+      },
+      Backspace: () => {
+        const { state, view } = this.editor;
+        const { $from, empty } = state.selection;
+        const depth = edgeContainer($from, false);
+        if (!empty || $from.parentOffset !== 0 || depth === null) return false;
+        const range = state.doc.resolve($from.start(depth)).blockRange(state.doc.resolve($from.end(depth)));
+        const target = range && liftTarget(range);
+        if (!range || target == null) return false;
+        view.dispatch(state.tr.lift(range, target).scrollIntoView());
+        return true;
+      },
+    };
+  },
+});
+export const TagSpan = Mark.create({
+  name: "tagSpan", inclusive: false,
+  addAttributes: attributes,
+  parseHTML: () => [{ tag: "span[data-tag-attrs]", getAttrs: (element) => {
+    let attrs = read(element);
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      if (parent.matches("span[data-tag-attrs]")) attrs = { ...attrs, ...mergeTagAttrs(read(parent), attrs) };
+    }
+    return attrs;
+  } }],
+  renderHTML: ({ mark }) => ["span", render(mark.attrs as ReturnType<typeof read>), 0],
+});

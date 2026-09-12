@@ -1,47 +1,36 @@
 import { describe, expect, it } from 'vitest';
-import { blockAnchors, writeSelectionTags } from '@typenotes/shared/selection-tags';
 import { projectNote } from './projection';
-
-const tag = { name: 'skip-ai', color: '#8b5cf6' };
-function tagged(body: string, texts: string[], indices: number[]) {
-  const anchors = blockAnchors(texts);
-  return writeSelectionTags(body, indices.map(index => ({ ...anchors[index], tags: [tag] })));
-}
-describe('v1 selection-tag AI projection', () => {
-  it('hides assigned blocks, not literal hashtags or other custom tags', () => {
-    const body = 'Visible #skip-ai\n\nCANARY\n\nLast';
-    const raw = tagged(body, ['Visible #skip-ai', 'CANARY', 'Last'], [1]);
-    expect(projectNote(raw)).toBe('Visible #skip-ai\n\nLast');
-    expect(projectNote(raw.replace('"name":"skip-ai"', '"name":"work"'))).toContain('CANARY');
+describe('body-tag AI projection', () => {
+  it('note-wide skip-ai hides the complete note', () => { expect(projectNote('---\ntags: [todo, skip-ai]\n---\nCANARY')).toBe(''); expect(projectNote('---\ntags: [todo]\n---\nVisible')).toBe('Visible'); });
+  it('leading hashtags and containers are tags; mid-line hashtags are prose', () => {
+    expect(projectNote('Visible #skip-ai\n\n#skip-ai CANARY\n\n::: #skip-ai\nCANARY\n:::\n\n#work Last')).toBe('Visible #skip-ai\n\nLast');
   });
-  it('matches headings, lists, formatted text, Unicode, hard breaks and code', () => {
-    const body = '# Visible\n\n- **Секрет** 😀\n- safe\n\nline one\nline two\n\n```js\nCANARY\ncode\n```\n\nEnd';
-    const raw = tagged(body, ['Visible', 'Секрет 😀', 'safe', 'line one\nline two', 'CANARY\ncode\n', 'End'], [1, 3, 4]);
-    expect(projectNote(raw)).toBe('Visible\n\nsafe\n\nEnd');
+  it('hides whole subtrees including headings, lists, code and nested containers', () => {
+    expect(projectNote('Visible\n\n:::: #skip-ai\n# Header\n\n- CANARY\n\n```js\nCANARY\n```\n\n::: #work\nCANARY\n:::\n::::\n\nEnd')).toBe('Visible\n\nEnd');
   });
-  it('resolves an insertion above the private block', () => {
-    const raw = tagged('before\n\nCANARY\n\nafter', ['before','CANARY','after'], [1]);
-    expect(projectNote(raw.replace('\nbefore', '\nnew\n\nbefore'))).toBe('new\n\nbefore\n\nafter');
+  it('hides spans within formatted text and lists, stripping all tag syntax', () => {
+    expect(projectNote('- safe [**CANARY** 😀]{#SKIP-AI}\n- [visible]{#work number=42}')).toBe('safe \n\nvisible');
   });
-  it('withholds stale and ambiguous private tags', () => {
-    const raw = tagged('CANARY', ['CANARY'], [0]);
-    expect(() => projectNote(raw.replace(/\nCANARY$/, '\nchanged'))).toThrow('Cannot resolve');
-    expect(() => projectNote(raw.replace(/\nCANARY$/, '\nx\n\nCANARY\n\nx\n\nCANARY\n\nx'))).toThrow('Cannot resolve');
+  it('text edits and duplicate paragraphs do not detach privacy', () => {
+    expect(projectNote('new\n\n::: #skip-ai\nchanged\n\nsame\n:::\n\nsame')).toBe('new\n\nsame');
   });
-  it('withholds invalid, unsupported, duplicate metadata and encrypted notes', () => {
-    for (const value of ['broken', '{"version":2,"blocks":[]}', '{"version":1,"blocks":[{}]}']) {
-      expect(() => projectNote(`---\ntype_selection_tags: ${value}\n---\nCANARY`)).toThrow();
-    }
-    expect(() => projectNote('---\ntype_selection_tags: {}\ntype_selection_tags: {}\n---\nCANARY')).toThrow();
-    expect(() => projectNote('---\nsecret: CANARY')).toThrow();
-    expect(() => projectNote('---\nid: x\n---\nNV_ENC_V1:CANARY')).toThrow();
+  it('unterminated private containers extend to end of body', () => {
+    expect(projectNote('visible\n\n::: #skip-ai\nCANARY\n\nlast')).toBe('visible');
+    expect(projectNote(':::: #work\nvisible\n\n::: #skip-ai\nCANARY')).toBe('visible');
   });
-  it('never returns frontmatter, annotation copies, comments or link targets', () => {
-    const raw = '---\ntitle: CANARY\n---\n[Visible](https://CANARY)\n\ntype_annotations_b64: Q0FOQVJZQ0FOQVJZ\n\n<!-- type:lens:v1\n{"text":"CANARY"}\n-->';
-    expect(projectNote(raw)).toBe('Visible');
+  it('an outer closer cannot narrow an unterminated private child', () => { expect(projectNote(':::: #work\nvisible\n\n::: #skip-ai\nCANARY\n::::\nAFTER_CANARY')).toBe('visible'); });
+  it('withholds malformed openers, attributes and encrypted notes', () => {
+    for (const body of ['::: #bad!!\nCANARY', '::: #skip-ai x="unfinished\nCANARY', ':::#bad!!\nCANARY', '---\nsecret: CANARY', '---\nid: x\n---\nNV_ENC_V1:CANARY']) expect(() => projectNote(body)).toThrow();
   });
-  it('handles CRLF and blank editor paragraphs', () => {
-    const raw = tagged('before\n\n\n\nCANARY\n\nafter', ['before','','CANARY','after'], [2]);
-    expect(projectNote(raw.replace(/\n/g,'\r\n'))).not.toContain('CANARY');
+  it('nested public spans cannot override an enclosing private span', () => { expect(projectNote('[outer [CANARY]{#work}]{#skip-ai}')).toBe(''); });
+  it('a leading tag paragraph cannot swallow a following privacy opener', () => { expect(projectNote('#work visible\n::: #skip-ai\nCANARY\n:::')).toBe('visible'); expect(projectNote('#work visible\n#skip-ai CANARY')).toBe('visible'); });
+  it('keeps tags inside code literal', () => {
+    expect(projectNote('```\n#skip-ai literal\n```')).toContain('#skip-ai literal');
+  });
+  it('never returns metadata, annotation copies, comments or link targets', () => {
+    expect(projectNote('---\ntitle: CANARY\n---\n[Visible](https://CANARY)\n\ntype_annotations_b64: Q0FOQVJZQ0FOQVJZ\n\n<!-- type:lens:v1\n{"text":"CANARY"}\n-->')).toBe('Visible');
+  });
+  it('handles CRLF and blank editor paragraphs inside private ranges', () => {
+    expect(projectNote('before\r\n\r\n::: #skip-ai\r\n\r\n\r\n\r\nCANARY\r\n:::\r\n\r\nafter')).toBe('before\n\nafter');
   });
 });

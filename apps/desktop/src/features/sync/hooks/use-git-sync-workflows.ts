@@ -153,6 +153,7 @@ export function useGitSyncWorkflows({
         updateSyncSettings({ lastSuccessfulSyncAt: syncedAt });
         onSuccessfulSync(syncedAt);
         void refreshGitHistory();
+        window.dispatchEvent(new CustomEvent("tag-registry-invalidated"));
         if (opts?.onAfterPull) {
           await opts.onAfterPull();
         }
@@ -295,6 +296,7 @@ export function useGitSyncWorkflows({
         if (!beforePull.has_uncommitted_changes) {
           status = await api.gitPull(branch, username, password);
           setGitStatus(status);
+          window.dispatchEvent(new CustomEvent("tag-registry-invalidated"));
           if (opts?.onAfterPull) {
             await opts.onAfterPull();
           }

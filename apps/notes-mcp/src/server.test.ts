@@ -6,13 +6,12 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { NotesRepository } from './repository';
 import { createServer } from './server';
-import { blockAnchors, writeSelectionTags } from '@typenotes/shared/selection-tags';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {recursive:true,force:true}))); });
 async function folder() { const root = await mkdtemp(join(tmpdir(),'type-mcp-test-')); roots.push(root); return root; }
 it('serves the MCP lifecycle and filtered reads and scoped mutation tools without leaking or writing', async () => {
   const root = await folder();
-  const raw = writeSelectionTags('Visible\n\nCANARY', [{...blockAnchors(['Visible','CANARY'])[1],tags:[{name:'skip-ai',color:'#8b5cf6'}]}]);
+  const raw = 'Visible\n\n::: #skip-ai\nCANARY\n:::';
   const path = join(root,'CANARY-filename.md');
   await writeFile(path,raw);
   const server = createServer(await NotesRepository.create(root));
@@ -62,6 +61,6 @@ it('refreshes filtered reads and paginates', async () => {
   const first = await repo.list(undefined,0,1);
   const second = await repo.list(undefined,Number(first.nextCursor),1);
   expect(second.nextCursor).toBeNull(); expect(second.notes[0].preview).toBe('second');
-  await writeFile(join(root,'a.md'),writeSelectionTags('first',[{...blockAnchors(['first'])[0],tags:[{name:'skip-ai',color:'#8b5cf6'}]}]));
+  await writeFile(join(root,'a.md'),'#skip-ai first');
   expect((await repo.read(first.notes[0].id)).content).toBe('');
 });

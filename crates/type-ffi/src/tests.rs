@@ -96,6 +96,17 @@ async fn ffi_end_to_end() {
     assert_eq!(previews[0]["path"], note_path.as_str());
     assert_eq!(previews[0]["content"].as_str().unwrap().trim(), "updated body");
 
+    // Tags use the real header without changing or nesting the body.
+    let before_tags = crate::read_note(note_path.clone()).await.unwrap();
+    for tags in [serde_json::json!(["todo", "работа"]), serde_json::json!([])] {
+        crate::update_note_tags(serde_json::json!({ "path": note_path, "tags": tags }).to_string()).await.unwrap();
+        assert_eq!(crate::read_note(note_path.clone()).await.unwrap(), before_tags);
+        assert_eq!(parse(&crate::get_note_meta(note_path.clone()).await.unwrap())["tags"], tags);
+    }
+    let registry = serde_json::json!({"version":1,"tags":[{"name":"work","color":"#123456","description":"Shared"}]});
+    crate::write_tag_registry(registry.to_string()).await.unwrap();
+    assert_eq!(parse(&crate::read_tag_registry().await.unwrap()), registry);
+
     // ── Working-folder settings: transcription_mode round-trip ────────────────
     let settings_args = serde_json::json!({
         "profile_id": profile_id,

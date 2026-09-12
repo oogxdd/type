@@ -1,9 +1,8 @@
 import type { Editor } from "@tiptap/react";
-import type { BlockAnchor } from "@typenotes/shared/selection-tags";
-import { documentBlocks } from "./tagged-blocks";
+import { documentTagNames, type TagSelectionRange } from "./tagged-blocks";
 
 export type TagSurface = { editor: Editor; path: string; editable: boolean };
-export type CapturedTagSelection = { surface: TagSurface; blocks: BlockAnchor[] };
+export type CapturedTagSelection = { surface: TagSurface; blocks: TagSelectionRange[]; doc: Editor["state"]["doc"] };
 const surfaces = new Set<TagSurface>();
 
 export function registerTagSurface(surface: TagSurface) {
@@ -11,6 +10,8 @@ export function registerTagSurface(surface: TagSurface) {
   return () => { surfaces.delete(surface); };
 }
 export const isTagSurfaceCurrent = (surface: TagSurface) => surfaces.has(surface) && !surface.editor.isDestroyed;
+
+export const openDocumentTags = () => [...surfaces].filter(surface => !surface.editor.isDestroyed).flatMap(surface => documentTagNames(surface.editor.state.doc));
 
 /** Capture before Cmd+K moves focus and replaces the browser selection. */
 export function captureTagSelection(): CapturedTagSelection[] {
@@ -20,21 +21,23 @@ export function captureTagSelection(): CapturedTagSelection[] {
   for (const surface of surfaces) {
     if (surface.editor.isDestroyed) continue;
     const { editor } = surface;
-    const selected = documentBlocks(editor.state.doc).filter(({ node, pos }) => {
-      if (surface.editable && editor.view.hasFocus()) {
-        const { from, to, empty } = editor.state.selection;
-        return !empty && from < pos + node.nodeSize - 1 && to > pos + 1;
-      }
-      if (!range) return false;
-      const dom = editor.view.nodeDOM(pos);
-      if (!dom || !range.intersectsNode(dom)) return false;
-      const intersection = document.createRange();
-      intersection.selectNodeContents(dom);
-      if (range.compareBoundaryPoints(Range.START_TO_START, intersection) > 0) intersection.setStart(range.startContainer, range.startOffset);
-      if (range.compareBoundaryPoints(Range.END_TO_END, intersection) < 0) intersection.setEnd(range.endContainer, range.endOffset);
-      return !intersection.collapsed && intersection.toString().length > 0;
-    });
-    if (selected.length) result.push({ surface, blocks: selected.map((block) => block.anchor) });
+    let from: number, to: number;
+    if (surface.editable && editor.view.hasFocus()) {
+      if (editor.state.selection.empty) continue;
+      ({ from, to } = editor.state.selection);
+    } else {
+      if (!range || !range.intersectsNode(editor.view.dom)) continue;
+      const local = document.createRange();
+      local.selectNodeContents(editor.view.dom);
+      if (range.compareBoundaryPoints(Range.START_TO_START, local) > 0) local.setStart(range.startContainer, range.startOffset);
+      if (range.compareBoundaryPoints(Range.END_TO_END, local) < 0) local.setEnd(range.endContainer, range.endOffset);
+      if (local.collapsed || !local.toString()) continue;
+      from = editor.view.posAtDOM(local.startContainer, local.startOffset);
+      to = editor.view.posAtDOM(local.endContainer, local.endOffset);
+    }
+    const $from = editor.state.doc.resolve(from), $to = editor.state.doc.resolve(to);
+    const block = !$from.sameParent($to) || (from === $from.start() && to === $to.end());
+    result.push({ surface, blocks: [{ from, to, block }], doc: editor.state.doc });
   }
   return result;
 }

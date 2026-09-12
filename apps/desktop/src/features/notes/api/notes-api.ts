@@ -64,3 +64,5 @@ export const renameItem = (path: string, newName: string): Promise<string> =>
 
 export const setOrder = (args: SetOrderArgs): Promise<void> =>
   invokeLogged("set_order", { args });
+
+export const updateNoteTags = (path: string, tags: string[]) => invokeLogged<void>("update_note_tags", { args: { path, tags } });

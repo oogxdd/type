@@ -14,6 +14,7 @@ export type FolderNode = {
 };
 
 export type NoteMeta = {
+  tags?: string[] | null;
   created_ms: number | null;
   updated_ms: number | null;
   note_type?: string | null;
@@ -273,6 +274,8 @@ export type SetOrderArgs = {
   folderOrder: string[];
   noteOrder: string[];
 };
+
+export type SetNoteTagsArgs = { path: string; tags: string[] };
 
 export type SetNoteMarkersArgs = {
   path: string;

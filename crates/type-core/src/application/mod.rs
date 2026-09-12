@@ -6,3 +6,5 @@ pub mod notes;
 pub mod profiles;
 pub mod recordings;
 pub mod security;
+
+pub mod tag_registry;

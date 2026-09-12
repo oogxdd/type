@@ -1,3 +1,4 @@
+import { TagsProvider } from "@/features/tags/hooks/tags-context";
 import { useRef, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 
@@ -73,6 +74,7 @@ function UnlockedAppProviders({
 }) {
   return (
     <ProfilesProvider flushSaveRef={flushSaveRef}>
+      <TagsProvider>
       <GitSyncProvider>
         <SelectionProvider>
           <EditorProvider>
@@ -86,6 +88,7 @@ function UnlockedAppProviders({
           </EditorProvider>
         </SelectionProvider>
       </GitSyncProvider>
+      </TagsProvider>
     </ProfilesProvider>
   );
 }

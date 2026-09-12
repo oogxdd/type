@@ -2482,12 +2482,12 @@ body {
    past the left edge (overflow to the left of the content box is clipped and
    never scrollable in LTR, so no scrollbar appears) and exactly to the pane's
    right edge, which is also where the badge is anchored. Colours come entirely
-   from the inline `--selection-tag-*` gradients that `TaggedBlocks` renders. */
+   from the inline `--selection-tag-*` gradients that the tag-color plugin supplies. */
 .tiptap-content {
   --selection-tag-bleed-right: 12px;
 }
 
-.tiptap-content [data-selection-tagged] {
+.tiptap-content div[data-tag-attrs] {
   position: relative;
   /* Own stacking context: without it the band (z-index -1) would sink below the
      opaque background of whichever pane ancestor happens to paint one. */
@@ -2495,7 +2495,7 @@ body {
   border-radius: 0;
 }
 
-.tiptap-content [data-selection-tagged]:not(.is-editor-empty)::before {
+.tiptap-content div[data-tag-attrs]:not(.is-editor-empty)::before {
   content: "";
   position: absolute;
   z-index: -1;
@@ -2511,12 +2511,12 @@ body {
 }
 
 /* A code block paints its own surface, so the band has to go through it. */
-.tiptap-content pre[data-selection-tagged] {
+.tiptap-content div[data-tag-attrs] pre {
   background-image: var(--selection-tag-fill);
 }
 
-.tiptap-content [data-selection-tagged]::after {
-  content: attr(data-selection-tag-names);
+.tiptap-content div[data-tag-attrs]::after {
+  content: attr(data-tag-names);
   position: absolute;
   z-index: 1;
   top: 0;
@@ -2553,3 +2553,21 @@ body {
 .selection-tag-colors button[aria-pressed="true"] { outline: 2px solid var(--ui-text); outline-offset: 3px; }
 .selection-tag-colors input { width: 30px; height: 30px; padding: 0; border: 0; background: transparent; }
 .selection-tag-preview { border-block: 1px solid; padding: 14px 10px; font-size: 14px; overflow-wrap: anywhere; }
+
+/* Inline tags keep their frame within the phrase, including wrapped lines. */
+.tiptap-content span[data-tag-inline] {
+  position: relative;
+  background: var(--selection-tag-fill, #8b5cf61a);
+  border: 1px solid var(--selection-tag-color, #8b5cf6);
+  border-radius: 4px;
+  padding: 1px 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.tiptap-content span[data-tag-inline]::after {
+  content: attr(data-tag-inline);
+  font: 9px/1.2 system-ui;
+  vertical-align: super;
+  margin-left: 4px;
+  color: var(--selection-tag-color, #8b5cf6);
+}

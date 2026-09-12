@@ -30,6 +30,9 @@ export interface RawCore {
   writeNote(path: string, content: string): Promise<void>;
   setNoteTimestamp(argsJson: string): Promise<void>;
   updateNoteMarkers(argsJson: string): Promise<void>;
+  updateNoteTags(argsJson: string): Promise<void>;
+  readTagRegistry(): Promise<string>;
+  writeTagRegistry(registryJson: string): Promise<void>;
   getNoteMeta(path: string): Promise<string>;
   listNotePreviews(paths: string[]): Promise<string>;
   moveItems(items: string[], destination: string): Promise<void>;

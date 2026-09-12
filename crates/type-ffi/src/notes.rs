@@ -112,3 +112,11 @@ pub async fn set_order(args_json: String) -> Result<(), CoreError> {
     })
     .await
 }
+
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn update_note_tags(args_json: String) -> Result<(), CoreError> {
+    run_blocking(move || {
+        let args: type_core::domain::notes::SetNoteTagsArgs = from_json(&args_json)?;
+        notes_service()?.update_note_tags(&args.path, args.tags)
+    }).await
+}

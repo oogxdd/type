@@ -17,17 +17,17 @@ import {
   type VimHost,
 } from "@/features/notes/editor/lib/vim/commands";
 import { emptyPending, parseVimKey, type VimMode } from "@/features/notes/editor/lib/vim/keys";
-import { TaggedBlocks } from "./tagged-blocks";
+import { TagBlock, TagSpan } from "./tagged-blocks";
 import { captureTagSelection, registerTagSurface } from "./selection-surfaces";
 
-const schema = getSchema([StarterKit, TaggedBlocks]);
+const schema = getSchema([StarterKit, TagBlock, TagSpan]);
 const cleanups: Array<() => void> = [];
 
 afterEach(() => {
   while (cleanups.length) cleanups.pop()!();
 });
 
-function editorFixture(texts: string[]) {
+function editorFixture(texts: string[], wrapped = false) {
   const mount = document.createElement("div");
   document.body.appendChild(mount);
   const view = new EditorView(mount, {
@@ -37,7 +37,7 @@ function editorFixture(texts: string[]) {
       doc: schema.node(
         "doc",
         null,
-        texts.map((text) => schema.node("paragraph", null, text ? schema.text(text) : undefined))
+        texts.map((text, index) => { const p = schema.node("paragraph", null, text ? schema.text(text) : undefined); return wrapped && index === 0 ? schema.node("tagBlock", { tags: ["work"], flags: {} }, [p]) : p; })
       ),
     }),
   });
@@ -55,8 +55,8 @@ function editorFixture(texts: string[]) {
 }
 
 /** The parts of `useVim`'s host a Visual-mode motion touches. */
-function vimFixture(texts: string[]) {
-  const { view, surface } = editorFixture(texts);
+function vimFixture(texts: string[], wrapped = false) {
+  const { view, surface } = editorFixture(texts, wrapped);
   let mode: VimMode = "normal";
   let visualAnchor: number | null = null;
   let visualHead: number | null = null;
@@ -104,10 +104,30 @@ function vimFixture(texts: string[]) {
   return { view, surface, press, get mode() { return mode; } };
 }
 
-const capturedIndices = () =>
-  captureTagSelection().flatMap((entry) => entry.blocks.map((block) => block.index));
+const capturedIndices = () => captureTagSelection().flatMap(entry => {
+  const indices: number[] = []; let index = 0;
+  entry.doc.descendants((node, pos) => {
+    if (!node.isTextblock) return;
+    if (entry.blocks.some(range => range.from < pos + node.nodeSize - 1 && range.to > pos + 1)) indices.push(index);
+    index++;
+  });
+  return indices;
+});
 
 describe("capturing a selection for the tag palette", () => {
+  it("V crosses a container boundary", () => {
+    const vim = vimFixture(["first", "second"], true);
+    vim.press("Vj");
+    expect(capturedIndices()).toEqual([0, 1]);
+    expect(captureTagSelection()[0].blocks[0].block).toBe(true);
+  });
+  it("dd on the only child keeps a valid document and the next paragraph", () => {
+    const vim = vimFixture(["first", "second"], true);
+    vim.press("dd");
+    expect(vim.view.state.doc.textContent).toBe("second");
+    expect(() => vim.view.state.doc.check()).not.toThrow();
+  });
+
   it("captures the line under the cursor as soon as Visual Line starts", () => {
     const vim = vimFixture(["first", "second", "third"]);
     vim.press("jV");

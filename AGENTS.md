@@ -29,17 +29,17 @@ packages/mobile-core/  @typenotes/mobile-core — typed TS bridge to type-ffi
 
 `apps/notes-mcp` is a standalone Node/stdio shell for Codex and Claude Code.
 It exposes filtered reads against an explicitly selected notes root and scoped
-CRUD operations exclusively inside `<root>/agent` (see `agent-workspace.ts`). All outputs pass through `src/projection.ts`, which resolves
-existing `type_selection_tags` v1 block anchors and hides custom tags named
-`skip-ai`. Invalid metadata or unresolved private anchors withhold the entire note.
-Do not replace this with a literal hashtag filter or expose raw previews/filenames.
+CRUD operations exclusively inside `<root>/agent` (see `agent-workspace.ts`). All
+outputs pass through `src/projection.ts`. Leading hashtag runs and `:::` containers
+are tags; mid-line hashtags are prose. `skip-ai` hides a container's whole subtree
+or a span's text; note-wide `tags: [skip-ai]` hides the whole note. Unterminated containers extend through EOF; malformed opener
+attributes withhold the entire note. Never expose raw previews or filenames.
 Encrypted notes are unsupported by this standalone process.
 
-`packages/note-document` contains the DOM-aware Markdown conversion and Tiptap
-block attributes/enumeration shared with the desktop editor. Keep the MCP schema
-aligned with the editor schema. This package is separate from platform-free
-`packages/shared`. For a future line-based format, change the projection/anchor
-adapter, preserving the MCP filtering contract and fail-closed behavior.
+`packages/note-document` contains the shared Markdown conversion and TagBlock/TagSpan
+schema. Keep the MCP schema aligned with the editor. Grammar and registry value
+validation live in platform-free `packages/shared/src/tags.ts`. Registry colors in
+`.type/tags.json` are advisory and must never gate tag rendering or privacy.
 Build: `npm run mcp:build`; tests: `npm run mcp:test`; real stdio smoke:
 `node scripts/test-notes-mcp.mjs`. See [docs/AI_NOTES_MCP.md](docs/AI_NOTES_MCP.md)
 and [docs/LINE_TAG_MIGRATION.md](docs/LINE_TAG_MIGRATION.md).

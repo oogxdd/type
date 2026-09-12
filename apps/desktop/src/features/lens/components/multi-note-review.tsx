@@ -84,7 +84,7 @@ export function MultiNoteReview({
               </header>
               {!body ? <p className="note-review-placeholder" role="status">Loading note...</p>
                 : body.error !== undefined ? <div className="note-review-error" role="alert">{body.error} <button type="button" className="multi-lens-btn" onClick={() => setRevision((value) => value + 1)}>Retry</button></div>
-                : body.markdown.trim() ? <NoteReadonlyContent markdown={body.markdown} rawMarkdown={body.raw} notePath={note.path} />
+                : body.markdown.trim() ? <NoteReadonlyContent markdown={body.markdown} notePath={note.path} />
                 : <p className="note-review-placeholder">Empty note</p>}
             </article>
           );

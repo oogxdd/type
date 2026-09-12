@@ -6,6 +6,9 @@ import {
 } from "./note-autoname";
 
 describe("buildSlugFromContent", () => {
+  it("does not put body tag names or flags into slugs", () => {
+    expect(buildSlugFromContent('::: #urgent researched=true\n#todo Call the [bank today]{#component}\n:::')).toBe("call-the-bank-today");
+  });
   it("builds a slug from user-authored markdown only", () => {
     const markdown = [
       "---",

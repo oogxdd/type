@@ -1,24 +1,25 @@
+import { TagColors } from "@/features/tags/lib/tag-colors";
+import { useTagColors } from "@/features/tags/hooks/use-tag-colors";
 import { useEffect, useMemo } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { markdownToHtml } from "@/features/notes/editor/lib/markdown-editor";
-import { TaggedBlocks, restoreTaggedBlocks } from "@/features/selection-tags/lib/tagged-blocks";
+import { TagBlock, TagSpan } from "@/features/selection-tags/lib/tagged-blocks";
 import { registerTagSurface } from "@/features/selection-tags/lib/selection-surfaces";
-import { readSelectionTags } from "@typenotes/shared/selection-tags";
 
 type NoteReadonlyContentProps = {
   markdown: string;
-  rawMarkdown?: string;
   notePath?: string;
 };
 
-export function NoteReadonlyContent({ markdown, rawMarkdown, notePath }: NoteReadonlyContentProps) {
+export function NoteReadonlyContent({ markdown, notePath }: NoteReadonlyContentProps) {
   const extensions = useMemo(
     () => [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        trailingNode: { notAfter: ["tagBlock"] },
       }),
-      TaggedBlocks,
+      TagBlock, TagSpan, TagColors,
     ],
     []
   );
@@ -35,13 +36,14 @@ export function NoteReadonlyContent({ markdown, rawMarkdown, notePath }: NoteRea
     },
   });
 
+  useTagColors(editor);
+
   useEffect(() => {
     if (!editor) {
       return;
     }
     editor.commands.setContent(markdownToHtml(markdown), { emitUpdate: false });
-    restoreTaggedBlocks(editor, readSelectionTags(rawMarkdown ?? markdown));
-  }, [editor, markdown, rawMarkdown]);
+  }, [editor, markdown]);
 
   useEffect(() => {
     if (!editor || !notePath) return;

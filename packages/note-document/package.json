@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "DOM-aware note parsing and block anchors shared by the desktop editor and the read-only MCP shell.",
+  "description": "DOM-aware Markdown conversion and body-tag schema shared by desktop and MCP.",
   "exports": {
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@typenotes/shared": "*",
@@ -19,6 +20,9 @@
   },
   "devDependencies": {
     "@types/turndown": "^5.0.6",
-    "typescript": "~5.8.3"
+    "typescript": "~5.8.3",
+    "@tiptap/starter-kit": "^3.19.0",
+    "jsdom": "^26.1.0",
+    "vitest": "^4.1.8"
   }
 }

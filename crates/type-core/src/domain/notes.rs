@@ -15,6 +15,7 @@ pub struct NoteMeta {
     pub note_type: Option<String>,
     pub archived_ms: Option<i64>,
     pub reviewed_ms: Option<i64>,
+    pub tags: Option<Vec<String>>,
     pub recording_audio_path: Option<String>,
     pub handwriting_attachment_path: Option<String>,
     pub transcription_status: Option<String>,
@@ -42,6 +43,7 @@ pub struct NoteFrontMatter {
     pub note_type: Option<String>,
     pub archived_ms: Option<i64>,
     pub reviewed_ms: Option<i64>,
+    pub tags: Option<Vec<String>>,
     pub recording_audio_path: Option<String>,
     pub handwriting_attachment_path: Option<String>,
     pub transcription_status: Option<String>,
@@ -123,3 +125,6 @@ pub struct CreateNoteArgs {
 pub struct CreateNoteResult {
     pub path: String,
 }
+
+#[derive(Deserialize)]
+pub struct SetNoteTagsArgs { pub path: String, pub tags: Vec<String> }

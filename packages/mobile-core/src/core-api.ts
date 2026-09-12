@@ -311,3 +311,10 @@ export const setSecurityPreferences = async (
   args: SetSecurityPreferencesArgs
 ): Promise<SecurityState> =>
   parse(await getRawCore().setSecurityPreferences(JSON.stringify(args)));
+
+export const updateNoteTags = (path: string, tags: string[]): Promise<void> =>
+  getRawCore().updateNoteTags(JSON.stringify({ path, tags }));
+export const readTagRegistry = async (): Promise<{ version: 1; tags: import("@typenotes/shared/tags").TagDefinition[] }> =>
+  parse(await getRawCore().readTagRegistry());
+export const writeTagRegistry = (registry: { version: 1; tags: import("@typenotes/shared/tags").TagDefinition[] }): Promise<void> =>
+  getRawCore().writeTagRegistry(JSON.stringify(registry));

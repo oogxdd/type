@@ -211,6 +211,7 @@ where
             note_type: front_matter_meta.note_type.clone(),
             archived_ms: front_matter_meta.archived_ms,
             reviewed_ms: front_matter_meta.reviewed_ms,
+            tags: front_matter_meta.tags.clone(),
             recording_audio_path: front_matter_meta.recording_audio_path.clone(),
             handwriting_attachment_path: front_matter_meta.handwriting_attachment_path.clone(),
             transcription_status: front_matter_meta.transcription_status.clone(),
@@ -220,6 +221,22 @@ where
             ocr_error: front_matter_meta.ocr_error.clone(),
             ocr_updated_ms: front_matter_meta.ocr_updated_ms,
         })
+    }
+
+    pub fn update_note_tags(&self, path: &str, tags: Vec<String>) -> Result<(), String> {
+        if !tags.iter().all(|tag| crate::domain::tag_registry::valid_tag_name(tag)) {
+            return Err("Invalid tag name.".into());
+        }
+        let full_path = self.repository.resolve_path(path)?;
+        if self.repository.entry_kind(&full_path)? != Some(NoteStorageEntryKind::File) {
+            return Err("Note file does not exist.".into());
+        }
+        let raw = self.repository.read_to_string(&full_path)?;
+        let (mut meta, _) = self.documents.parse(&raw);
+        meta.tags = Some(tags);
+        meta.passthrough_lines.retain(|line| !line.split_once(':').is_some_and(|(key, _)| key.trim().eq_ignore_ascii_case("tags")));
+        meta.updated_ms = self.clock.now_ms().or(meta.updated_ms);
+        self.repository.write_note_metadata(&full_path, &meta)
     }
 
     pub fn update_note_markers(

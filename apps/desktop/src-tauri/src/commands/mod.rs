@@ -1,3 +1,4 @@
+mod tag_registry;
 mod app_icon;
 mod git_sync;
 mod handwriting;
@@ -88,6 +89,9 @@ pub(super) fn run() {
             notes::write_note,
             notes::set_note_timestamp,
             notes::update_note_markers,
+            notes::update_note_tags,
+            tag_registry::read_tag_registry,
+            tag_registry::write_tag_registry,
             notes::get_note_meta,
             notes::list_note_previews,
             notes::move_items,
