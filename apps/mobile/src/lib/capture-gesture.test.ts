@@ -1,105 +1,81 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  COMMIT_VELOCITY,
-  horizontalVerdict,
-  isVerticalCommitted,
-  isAtScrollBottom,
-  shouldCommitFiling,
+  overscrollPastEnd,
+  PULL_TAB_HEIGHT,
+  PULL_TAB_MAX_STRETCH,
+  PULL_THRESHOLD,
+  pullProgress,
+  pullTabReveal,
+  shouldCommitPull,
   visiblePageHeight,
 } from "./capture-gesture";
 
-describe("horizontalVerdict", () => {
-  it("keeps watching a swipe up that arcs sideways", () => {
-    // The whole point of RIGHTWARD_FAIL being 24 and not 8: at the start of a
-    // swipe up dy is still ~0, and a thumb arcs. These used to fail the
-    // gesture terminally, which is what made it hard to perform.
-    expect(horizontalVerdict(9, -7)).toBe("undecided");
-    expect(horizontalVerdict(20, -4)).toBe("undecided");
-    expect(horizontalVerdict(-18, -6)).toBe("undecided");
-    expect(horizontalVerdict(6, -7)).toBe("undecided");
-    expect(horizontalVerdict(20, -40)).toBe("undecided");
+describe("overscrollPastEnd", () => {
+  it("is zero while there is still note below", () => {
+    expect(overscrollPastEnd(100, 1000, 600)).toBe(0);
   });
 
-  it("gives a clearly rightward drag to navigation", () => {
-    expect(horizontalVerdict(40, -10)).toBe("navigation");
-    expect(horizontalVerdict(26, 0)).toBe("navigation");
+  it("is zero exactly at the end", () => {
+    expect(overscrollPastEnd(400, 1000, 600)).toBe(0);
   });
 
-  it("does not call a rightward drag navigation while it is mostly vertical", () => {
-    expect(horizontalVerdict(40, -60)).toBe("undecided");
+  it("measures how far past the end the content has been dragged", () => {
+    expect(overscrollPastEnd(460, 1000, 600)).toBe(60);
   });
 
-  it("gives a clearly leftward drag to sync regardless of the vertical part", () => {
-    expect(horizontalVerdict(-30, -5)).toBe("sync");
-    expect(horizontalVerdict(-25, 0)).toBe("sync");
-    // A diagonal used to wedge the race: neither activate nor fail.
-    expect(horizontalVerdict(-30, -200)).toBe("sync");
+  it("treats a note shorter than the viewport as already at its end", () => {
+    // Nothing to scroll, so the first pixel of drag is already a pull. That is
+    // what makes a blank page fileable without a special case for it.
+    expect(overscrollPastEnd(0, 200, 600)).toBe(0);
+    expect(overscrollPastEnd(30, 200, 600)).toBe(30);
   });
 
-  it("ignores jitter around the origin", () => {
-    expect(horizontalVerdict(0, 0)).toBe("undecided");
-    expect(horizontalVerdict(3, 3)).toBe("undecided");
+  it("ignores the top bounce", () => {
+    // Bouncing backwards past the start is a negative offset and belongs to
+    // the keyboard-escape observer, not to filing.
+    expect(overscrollPastEnd(-50, 1000, 600)).toBe(0);
   });
 });
 
-describe("isVerticalCommitted", () => {
-  it("latches once the drag is clearly upward", () => {
-    expect(isVerticalCommitted(0, -13)).toBe(true);
-    expect(isVerticalCommitted(-8, -30)).toBe(true);
+describe("shouldCommitPull", () => {
+  it("commits at the threshold and past it", () => {
+    expect(shouldCommitPull(PULL_THRESHOLD)).toBe(true);
+    expect(shouldCommitPull(PULL_THRESHOLD + 40)).toBe(true);
   });
 
-  it("does not latch before the drag has gone far enough up", () => {
-    expect(isVerticalCommitted(0, -11)).toBe(false);
-    expect(isVerticalCommitted(0, 40)).toBe(false);
-  });
-
-  it("latches a thumb arc, which is what a real swipe up looks like", () => {
-    // A thumb pivots at its base, so a swipe up from the lower right drifts
-    // left as it extends. The old 45deg rule missed these, they fell through to
-    // horizontalVerdict, and the leftward branch failed the touch terminally --
-    // the single biggest cause of "it works every other time".
-    expect(isVerticalCommitted(-26, -14)).toBe(true);
-    expect(isVerticalCommitted(26, -14)).toBe(true);
-    expect(isVerticalCommitted(-30, -20)).toBe(true);
-  });
-
-  it("still refuses a drag that is genuinely sideways", () => {
-    expect(isVerticalCommitted(50, -20)).toBe(false);
-    expect(isVerticalCommitted(-50, -20)).toBe(false);
-    expect(isVerticalCommitted(40, -13)).toBe(false);
-  });
-
-  it("latches the arc before the horizontal verdict can throw it away", () => {
-    // The exact pair that used to die: dy clears the latch, but the old
-    // |dx| < |dy| rule did not, and horizontalVerdict's leftward branch has no
-    // dominance test -- so this read as "sync" and called the terminal fail().
-    // swipeToSync could not have taken it either; its failOffsetY([-24, 24])
-    // kills it as soon as the drag goes vertical.
-    expect(isVerticalCommitted(-26, -14)).toBe(true);
-    expect(horizontalVerdict(-26, -14)).toBe("sync");
-  });
-
-  it("keeps a swipe that only wobbles sideways after committing", () => {
-    // 60px up, 20px of thumb drift: still filing, and once latched the caller
-    // stops consulting horizontalVerdict — which would say "navigation" here.
-    expect(isVerticalCommitted(20, -60)).toBe(true);
-    expect(horizontalVerdict(20, -60)).toBe("undecided");
-    expect(horizontalVerdict(30, -60)).toBe("undecided");
+  it("does not commit a pull that fell short", () => {
+    expect(shouldCommitPull(PULL_THRESHOLD - 1)).toBe(false);
+    expect(shouldCommitPull(0)).toBe(false);
   });
 });
 
-describe("isAtScrollBottom", () => {
-  it("is true for a note shorter than the viewport", () => {
-    expect(isAtScrollBottom(0, 200, 600)).toBe(true);
+describe("pullProgress", () => {
+  it("runs 0..1 across the threshold and then holds", () => {
+    expect(pullProgress(0)).toBe(0);
+    expect(pullProgress(PULL_THRESHOLD / 2)).toBeCloseTo(0.5);
+    expect(pullProgress(PULL_THRESHOLD)).toBe(1);
+    expect(pullProgress(PULL_THRESHOLD * 3)).toBe(1);
+  });
+});
+
+describe("pullTabReveal", () => {
+  it("tracks the overscroll one to one", () => {
+    // The tab has to read as attached to the page, so any damping here would
+    // show up as lag against the text moving beside it.
+    expect(pullTabReveal(0)).toBe(0);
+    expect(pullTabReveal(30)).toBe(30);
+    expect(pullTabReveal(PULL_TAB_HEIGHT)).toBe(PULL_TAB_HEIGHT);
   });
 
-  it("is true within the slack of the real bottom", () => {
-    expect(isAtScrollBottom(396, 1000, 600)).toBe(true);
+  it("stops so a hard fling cannot throw it off screen", () => {
+    expect(pullTabReveal(10_000)).toBe(PULL_TAB_HEIGHT + PULL_TAB_MAX_STRETCH);
   });
 
-  it("is false while there is still note below", () => {
-    expect(isAtScrollBottom(100, 1000, 600)).toBe(false);
+  it("has fully cleared the bottom edge before the threshold", () => {
+    // Otherwise the tab would still be half off-screen at the moment it turns
+    // armed, and the state change would be invisible where it matters most.
+    expect(pullTabReveal(PULL_THRESHOLD)).toBeGreaterThan(PULL_TAB_HEIGHT);
   });
 });
 
@@ -110,26 +86,5 @@ describe("visiblePageHeight", () => {
 
   it("never collapses to zero", () => {
     expect(visiblePageHeight(300, 800)).toBe(1);
-  });
-});
-
-describe("shouldCommitFiling", () => {
-  it("commits past COMMIT_FRACTION of the page", () => {
-    // 15% of 500 = 75px. A short deliberate pull should already count.
-    expect(shouldCommitFiling(-150, 500, 0)).toBe(true);
-    expect(shouldCommitFiling(-90, 500, 0)).toBe(true);
-    expect(shouldCommitFiling(-60, 500, 0)).toBe(false);
-  });
-
-  it("commits a fast flick regardless of distance", () => {
-    expect(shouldCommitFiling(-10, 500, COMMIT_VELOCITY - 1)).toBe(true);
-  });
-
-  it("does not commit a slow short pull", () => {
-    expect(shouldCommitFiling(-10, 500, -100)).toBe(false);
-  });
-
-  it("does not commit a downward flick", () => {
-    expect(shouldCommitFiling(-10, 500, 900)).toBe(false);
   });
 });

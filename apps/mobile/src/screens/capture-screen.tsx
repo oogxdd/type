@@ -44,13 +44,13 @@ import {
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
+  interpolateColor,
   runOnJS,
   useAnimatedKeyboard,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -59,20 +59,16 @@ import * as core from "@typenotes/mobile-core/core-api";
 
 import { CaptureSession } from "../lib/capture";
 import {
-  ACTIVATE_PULL,
   ESCAPE_DRAG,
-  horizontalVerdict,
-  isVerticalCommitted,
-  isAtScrollBottom,
-  shouldCommitFiling,
+  overscrollPastEnd,
+  PULL_TAB_HEIGHT,
+  pullProgress,
+  pullTabReveal,
+  shouldCommitPull,
   SYNC_RIGHTWARD_FAIL,
   TOP_SLACK,
   visiblePageHeight,
 } from "../lib/capture-gesture";
-import {
-  type GestureAttempt,
-  recordGestureAttempt,
-} from "../lib/gesture-trace";
 import { autoSyncLabel } from "../lib/sync-experience";
 import { useClearInstantParam, type RootStackParamList } from "../navigation";
 import { useHomeShell } from "./home-shell";
@@ -101,16 +97,6 @@ const SYNC_PARALLAX = 0.3;
 
 const PLACEHOLDER = "Start typing…";
 
-const COMMIT_SPRING = {
-  damping: 34,
-  stiffness: 320,
-  overshootClamping: true,
-} as const;
-const CANCEL_SPRING = {
-  damping: 26,
-  stiffness: 280,
-  overshootClamping: true,
-} as const;
 
 /**
  * The auto-sync status line, with its own store subscription.
@@ -324,6 +310,24 @@ export const CaptureScreen = () => {
   finishCommitRef.current = finishCommit;
   const runFinishCommit = useCallback(() => finishCommitRef.current(), []);
 
+  // How far the note is overscrolled past its end, in points. Written by the
+  // scroll handler, read by the pull tab. This is the entire state the filing
+  // gesture has left: the arm point, the latch, the drag base and the touch
+  // origin were all bookkeeping for stealing the touch from the scroll view.
+  const pull = useSharedValue(0);
+
+  // Live gesture log to Metro. One line per lifecycle event, never per move,
+  // so a swipe that did not register can be read after the fact.
+  const runLog = useCallback((line: string) => {
+    console.log(`[gesture] ${line}`);
+  }, []);
+
+  // Both of the above must stay ABOVE the scroll handler.
+  // useAnimatedScrollHandler serializes its worklet at call time and captures
+  // whatever these names hold at that moment. Declared below it they capture
+  // undefined, and the first scroll event dies with "Cannot set property
+  // 'value' of undefined" on the UI runtime.
+
   // ---- Scroll plumbing ------------------------------------------------------
 
   const onScroll = useAnimatedScrollHandler({
@@ -334,6 +338,49 @@ export const CaptureScreen = () => {
       // Surface the indicator while scrolling; let it fade shortly after.
       indicatorOpacity.value = 1;
       indicatorOpacity.value = withDelay(600, withTiming(0, { duration: 350 }));
+
+      // The pull, straight from the numbers the scroll view just laid out
+      // with. While a commit is in flight the page is already leaving, so the
+      // bounce-back underneath it must not drive the tab.
+      if (!transitioning.value) {
+        pull.value = overscrollPastEnd(
+          event.contentOffset.y,
+          event.contentSize.height,
+          event.layoutMeasurement.height
+        );
+      }
+    },
+    // Fires when the finger lifts, before the bounce settles -- the release
+    // decision, and the direct analogue of a pan's onEnd. A ScrollEnd event
+    // would arrive after the spring-back and be far too late to feel like
+    // letting go.
+    onEndDrag: () => {
+      if (transitioning.value || !shouldCommitPull(pull.value)) {
+        return;
+      }
+      const pageHeight = visiblePageHeight(
+        windowH.value,
+        keyboard.height.value
+      );
+      transitioning.value = true;
+      runOnJS(runLog)(`pull:commit at=${Math.round(pull.value)}`);
+      pull.value = 0;
+      pageY.value = withTiming(
+        -pageHeight,
+        { duration: 260, easing: Easing.out(Easing.cubic) },
+        (finished) => {
+          if (finished) {
+            runOnJS(runFinishCommit)();
+          } else {
+            // Never assign an animation to a shared value from inside that
+            // same value's animation callback: it re-enters cancellation,
+            // which invokes this callback again, until the stack overflows.
+            // On the UI runtime (the iOS main thread) that RangeError escapes
+            // as a C++ exception and aborts the process.
+            transitioning.value = false;
+          }
+        }
+      );
     },
   });
 
@@ -396,315 +443,21 @@ export const CaptureScreen = () => {
 
   // ---- Gestures --------------------------------------------------------------
 
-  // Swipe up → file the page. Manual activation, gated on live scroll
-  // geometry: the pan claims the touch only once the note sits at its bottom
-  // edge and the finger keeps moving up — so a long note scrolls first and
-  // the same drag rolls into the page pull the moment it hits the end. While
-  // the note is above the bottom, the arm point trails the finger, so the
-  // extra pull needed once the edge arrives is always the same few px.
-  const touchStartX = useSharedValue(0);
-  const touchStartY = useSharedValue(0);
-  const armY = useSharedValue(0);
-  const dragBase = useSharedValue(0);
-  // Latched once the drag is unmistakably upward; from then on the horizontal
-  // verdict is not consulted, so late thumb wobble cannot lose the swipe.
-  const verticalLatched = useSharedValue(false);
-
-  // ---- Gesture trace (Settings -> Diagnostics) ------------------------------
+  // Filing is no longer a gesture.
   //
-  // Off by default and mirrored into a shared value, so a touch never reads the
-  // store and a disabled trace costs one boolean check per gesture. Everything
-  // is accumulated on the UI thread and emitted once, in onFinalize.
-  const traceEnabled = useSharedValue(false);
-  const traceOn = useDiagnosticsStore((state) => state.diagnostics.traceGestures);
-  useEffect(() => {
-    traceEnabled.value = traceOn;
-  }, [traceEnabled, traceOn]);
-
-  const traceStartMs = useSharedValue(0);
-  const traceMaxDx = useSharedValue(0);
-  const traceMaxDy = useSharedValue(0);
-  const traceActivated = useSharedValue(false);
-  const traceFailedByVerdict = useSharedValue(false);
-  const traceFailedToSync = useSharedValue(false);
-  const traceBlocked = useSharedValue(false);
-  const traceGotEnd = useSharedValue(false);
-  const traceEndSuccess = useSharedValue(false);
-  const traceFiled = useSharedValue(false);
-  const traceMaxPull = useSharedValue(0);
-  // Where the drag actually was when a verdict threw the touch away. maxDx and
-  // maxDy are independent extremes and can describe a pair that never existed,
-  // which is useless for moving VERTICAL_LATCH_RATIO from evidence.
-  const traceVerdictDx = useSharedValue(0);
-  const traceVerdictDy = useSharedValue(0);
-  // onFinalize can fire twice for one touch: once when manager.fail() resolves
-  // the handler, and again when the finger actually lifts. Without this guard
-  // every handed-over touch showed up as two identical rows.
-  const traceEmitted = useSharedValue(false);
-
-  const runRecordAttempt = useCallback(
-    (attempt: GestureAttempt) => recordGestureAttempt(attempt),
-    []
-  );
-
-  // Live gesture log to Metro. One line per lifecycle event, never per move,
-  // so a failed swipe can be read after the fact instead of reasoned about:
-  // whether swipeToMenu ever began is the whole question, and only the log
-  // can answer it.
-  const runLog = useCallback((line: string) => {
-    console.log(`[gesture] ${line}`);
-  }, []);
-
-  // Memoized, and every capture in the closures below is a stable identity —
-  // shared values, the useAnimatedKeyboard ref, and the run* proxies. That is
-  // not a micro-optimization: GestureDetector re-runs updateAttachedGestures on
-  // every render (its effect depends on `props`), and an unmemoized gesture
-  // makes it re-serialize all three closure graphs into the UI runtime on every
-  // keystroke — including in the middle of the commit spring, whose callback
-  // the runtime is still holding.
-  const swipeToFile = useMemo(
-    () =>
-      Gesture.Pan()
-        .manualActivation(true)
-        .onTouchesDown((event, manager) => {
-          const touch = event.allTouches[0];
-          // iOS can deliver a terminal/cancel frame with no remaining touches.
-          // Never dereference that sparse frame inside a worklet.
-          if (!touch) {
-            manager.fail();
-            return;
-          }
-          runOnJS(runLog)(
-            `file:down x=${Math.round(touch.x)} y=${Math.round(touch.y)}`
-          );
-          touchStartX.value = touch.x;
-          touchStartY.value = touch.y;
-          armY.value = touch.y;
-          verticalLatched.value = false;
-
-          traceStartMs.value = Date.now();
-          traceMaxDx.value = 0;
-          traceMaxDy.value = 0;
-          traceActivated.value = false;
-          traceFailedByVerdict.value = false;
-          traceFailedToSync.value = false;
-          traceBlocked.value = false;
-          traceGotEnd.value = false;
-          traceEndSuccess.value = false;
-          traceFiled.value = false;
-          traceMaxPull.value = 0;
-          traceVerdictDx.value = 0;
-          traceVerdictDy.value = 0;
-          traceEmitted.value = false;
-        })
-        .onTouchesMove((event, manager) => {
-          const touch = event.allTouches[0];
-          if (!touch) {
-            manager.fail();
-            return;
-          }
-          const dx = touch.x - touchStartX.value;
-          const dy = touch.y - touchStartY.value;
-          if (Math.abs(dx) > Math.abs(traceMaxDx.value)) {
-            traceMaxDx.value = dx;
-          }
-          if (Math.abs(dy) > Math.abs(traceMaxDy.value)) {
-            traceMaxDy.value = dy;
-          }
-
-          if (!verticalLatched.value) {
-            if (isVerticalCommitted(dx, dy)) {
-              // Unmistakably upward — stop arbitrating for this touch.
-              // NOTE: from here on swipeToFile holds the touch for good, so
-              // swipeToMenu/swipeToSync behind it in the Race can never start.
-              verticalLatched.value = true;
-              runOnJS(runLog)(
-                `file:latch-vertical dx=${Math.round(dx)} dy=${Math.round(dy)}`
-              );
-            } else {
-              const verdict = horizontalVerdict(dx, dy);
-              if (verdict === "sync") {
-                // Always give this one up: swipeToSync sits behind us in the
-                // Race and cannot start until we resolve.
-                traceFailedToSync.value = true;
-                traceVerdictDx.value = dx;
-                traceVerdictDy.value = dy;
-                runOnJS(runLog)(
-                  `file:release->sync dx=${Math.round(dx)} dy=${Math.round(dy)}`
-                );
-                manager.fail();
-                return;
-              }
-              if (verdict === "navigation") {
-                // Give it up exactly like the sync branch: swipeToMenu sits
-                // behind us in the Race and cannot start until we resolve.
-                // Going back used to be a JS call from right here, which is
-                // why it could never be driven under the finger.
-                traceFailedByVerdict.value = true;
-                traceVerdictDx.value = dx;
-                traceVerdictDy.value = dy;
-                runOnJS(runLog)(
-                  `file:release->menu dx=${Math.round(dx)} dy=${Math.round(dy)}`
-                );
-                manager.fail();
-                return;
-              }
-              // "undecided" stays ours. Failing is terminal for the whole
-              // touch, and at the start of a swipe up dy is still ~0.
-            }
-          }
-          if (transitioning.value) {
-            // A filed page is still parked off-screen. Decline rather than
-            // fail: the window is short, and a finger that arrives at its tail
-            // should still be able to file once it clears.
-            traceBlocked.value = true;
-            armY.value = touch.y;
-            return;
-          }
-          if (
-            !isAtScrollBottom(offsetY.value, contentH.value, viewportH.value)
-          ) {
-            // Still scrolling — keep the arm point under the finger.
-            armY.value = touch.y;
-            return;
-          }
-          if (armY.value - touch.y > ACTIVATE_PULL) {
-            traceActivated.value = true;
-            runOnJS(runLog)("file:activate");
-            manager.activate();
-          }
-        })
-        .onStart((event) => {
-          // Translation accumulated before activation belongs to the scroll;
-          // the page follows 1:1 from the claim point on.
-          dragBase.value = event.translationY;
-        })
-        .onUpdate((event) => {
-          const pull = -(event.translationY - dragBase.value);
-          const pageHeight = visiblePageHeight(
-            windowH.value,
-            keyboard.height.value
-          );
-          pageY.value = -Math.min(Math.max(pull, 0), pageHeight);
-          if (pull > traceMaxPull.value) {
-            traceMaxPull.value = pull;
-          }
-        })
-        .onEnd((event, success) => {
-          traceGotEnd.value = true;
-          traceEndSuccess.value = success;
-          // RNGH calls END on cancellation too, with success = false — when the
-          // native back pan, a system sheet or the scroll takes the touch. The
-          // leftover upward velocity would make that the committing branch, so
-          // a gesture the user never finished would file a note.
-          if (!success) {
-            transitioning.value = false;
-            pageY.value = withSpring(0, CANCEL_SPRING);
-            return;
-          }
-          const pageHeight = visiblePageHeight(
-            windowH.value,
-            keyboard.height.value
-          );
-          if (shouldCommitFiling(pageY.value, pageHeight, event.velocityY)) {
-            traceFiled.value = true;
-            transitioning.value = true;
-            pageY.value = withSpring(
-              -pageHeight,
-              { ...COMMIT_SPRING, velocity: event.velocityY },
-              (finished) => {
-                if (finished) {
-                  runOnJS(runFinishCommit)();
-                } else {
-                  // Interrupted mid-flight. Only clear the flag — do NOT start
-                  // another animation on pageY from in here.
-                  //
-                  // Assigning an animation to a shared value from inside that
-                  // same value's animation callback re-enters cancellation,
-                  // which invokes this callback again, which assigns again:
-                  // recursion until "Maximum call stack size exceeded". In
-                  // worklets 0.10 `runGuarded` is a bare `runSync` with no
-                  // try/catch, so on the UI runtime (the iOS main thread) that
-                  // RangeError escapes as a C++ exception -> std::terminate ->
-                  // SIGABRT. That is the swipe-up crash, and it has been here
-                  // unchanged since mobile-v0.2.2.
-                  //
-                  // Nothing is stranded by leaving pageY alone: the only way to
-                  // interrupt an animation is to assign to the value, so
-                  // whoever interrupted us already owns its target.
-                  transitioning.value = false;
-                }
-              }
-            );
-          } else {
-            pageY.value = withSpring(0, {
-              ...CANCEL_SPRING,
-              velocity: event.velocityY,
-            });
-          }
-        })
-        .onFinalize(() => {
-          // Cancellation without onEnd (system claimed the touch): spring home.
-          if (!transitioning.value && pageY.value !== 0) {
-            pageY.value = withSpring(0, CANCEL_SPRING);
-          }
-          if (traceEnabled.value && !traceEmitted.value) {
-            traceEmitted.value = true;
-            // One hop per touch, after everything has resolved.
-            runOnJS(runRecordAttempt)({
-              at: Date.now(),
-              startX: touchStartX.value,
-              startY: touchStartY.value,
-              maxDx: traceMaxDx.value,
-              maxDy: traceMaxDy.value,
-              maxPull: traceMaxPull.value,
-              durationMs: Date.now() - traceStartMs.value,
-              latchedVertical: verticalLatched.value,
-              activated: traceActivated.value,
-              failedByVerdict: traceFailedByVerdict.value,
-              failedToSync: traceFailedToSync.value,
-              blockedByTransitioning: traceBlocked.value,
-              gotEnd: traceGotEnd.value,
-              endSuccess: traceEndSuccess.value,
-              filed: traceFiled.value,
-              verdictDx: traceVerdictDx.value,
-              verdictDy: traceVerdictDy.value,
-            });
-          }
-        }),
-    [
-      armY,
-      contentH,
-      dragBase,
-      keyboard,
-      offsetY,
-      pageY,
-      runFinishCommit,
-      runLog,
-      runRecordAttempt,
-      touchStartX,
-      touchStartY,
-      traceActivated,
-      traceBlocked,
-      traceEmitted,
-      traceEnabled,
-      traceEndSuccess,
-      traceFailedByVerdict,
-      traceFailedToSync,
-      traceFiled,
-      traceGotEnd,
-      traceMaxDx,
-      traceMaxDy,
-      traceMaxPull,
-      traceStartMs,
-      traceVerdictDx,
-      traceVerdictDy,
-      transitioning,
-      verticalLatched,
-      viewportH,
-      windowH,
-    ]
-  );
+  // It was a Pan with manualActivation that watched the mirrored scroll
+  // geometry and called manager.activate() the moment the note hit its bottom
+  // edge -- i.e. it *stole* the touch from the ScrollView. Stealing is what
+  // made it unreliable: the only tools a manual-activation gesture has are
+  // activate() and a fail() that is terminal for the whole touch, and while it
+  // held the touch undecided, everything behind it in the Race was blocked.
+  // The Metro log showed horizontal swipes dying in exactly that window.
+  //
+  // The pull now rides the scroll view's own overscroll (see onScroll below).
+  // Nothing competes with a scroll view for a vertical drag, "you must reach
+  // the end of the note first" stops being a rule anybody enforces -- there is
+  // simply no overscroll until you get there -- and the release decision is
+  // onEndDrag, which fires when the finger lifts.
 
   // Quick pull-down at the very top of the note tucks the keyboard away.
   // This observer never activates — it dispatches the dismiss and fails, so
@@ -749,7 +502,8 @@ export const CaptureScreen = () => {
           }
           const dx = touch.x - escapeStartX.value;
           const dy = touch.y - escapeStartY.value;
-          if (horizontalVerdict(dx, dy) !== "undecided") {
+          // Clearly sideways: belongs to swipeToMenu or swipeToSync.
+          if (Math.abs(dx) > 24 && Math.abs(dx) > Math.abs(dy)) {
             manager.fail();
             return;
           }
@@ -907,9 +661,9 @@ export const CaptureScreen = () => {
     () =>
       Gesture.Simultaneous(
         keyboardEscape,
-        Gesture.Race(swipeToFile, swipeToSync, swipeToMenu)
+        Gesture.Race(swipeToMenu, swipeToSync)
       ),
-    [keyboardEscape, swipeToFile, swipeToMenu, swipeToSync]
+    [keyboardEscape, swipeToMenu, swipeToSync]
   );
 
   // ---- Animated styles --------------------------------------------------------
@@ -965,6 +719,46 @@ export const CaptureScreen = () => {
   }));
   // The dictation FAB floats close above the keyboard when it's up, and at
   // its resting spot above the home indicator when it's not.
+  // The tab rides the overscroll 1:1 so it reads as attached to the page, and
+  // rides the keyboard so it is never hidden behind it. At rest it sits one
+  // tab-height below the bottom edge, i.e. out of sight.
+  const pullPillStyle = useAnimatedStyle(() => {
+    const reveal = pullTabReveal(pull.value);
+    return {
+      transform: [
+        { translateY: PULL_TAB_HEIGHT - reveal - keyboard.height.value },
+      ],
+      opacity: Math.min(1, reveal / (PULL_TAB_HEIGHT * 0.5)),
+      backgroundColor: interpolateColor(
+        pullProgress(pull.value),
+        [0, 1],
+        [theme.colors.surface, theme.colors.accent]
+      ),
+    };
+  });
+
+  // The string the tab is being pulled out on: it only exists once the tab has
+  // cleared the edge, and grows with whatever pull is left over.
+  const pullStemStyle = useAnimatedStyle(() => {
+    const reveal = pullTabReveal(pull.value);
+    return {
+      height: Math.max(0, reveal - PULL_TAB_HEIGHT),
+      transform: [{ translateY: -keyboard.height.value }],
+      backgroundColor: interpolateColor(
+        pullProgress(pull.value),
+        [0, 1],
+        [theme.colors.border, theme.colors.accent]
+      ),
+    };
+  });
+
+  const pullHintStyle = useAnimatedStyle(() => ({
+    opacity: pullProgress(pull.value) >= 1 ? 0 : 1,
+  }));
+  const pullArmedStyle = useAnimatedStyle(() => ({
+    opacity: pullProgress(pull.value) >= 1 ? 1 : 0,
+  }));
+
   const fabStyle = useAnimatedStyle(() => ({
     opacity: iconsOpacity.value * micOpacity.value,
     transform: [
@@ -1090,6 +884,39 @@ export const CaptureScreen = () => {
                 {PLACEHOLDER}
               </Text>
             </Animated.View>
+
+            {/* Pull-to-file feedback. Before this the gesture said nothing at
+                all until the page moved, so a pull that fell short looked
+                exactly like a dead screen — which is most of why filing felt
+                unreliable even when it was working. */}
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.pullStem, pullStemStyle]}
+            />
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.pullPill, pullPillStyle]}
+            >
+              <Animated.Text
+                style={[
+                  styles.pullLabel,
+                  { color: theme.colors.secondaryText },
+                  pullHintStyle,
+                ]}
+              >
+                Keep pulling
+              </Animated.Text>
+              <Animated.Text
+                style={[
+                  styles.pullLabel,
+                  styles.pullLabelOverlay,
+                  { color: theme.colors.background },
+                  pullArmedStyle,
+                ]}
+              >
+                Release for a new page
+              </Animated.Text>
+            </Animated.View>
           </View>
         </GestureDetector>
 
@@ -1177,6 +1004,25 @@ const styles = StyleSheet.create({
   },
   // The custom scroll indicator's rail, pinned to the scroll area's right
   // edge (absolute children respect the page's animated bottom padding).
+  pullPill: {
+    position: "absolute",
+    bottom: 0,
+    alignSelf: "center",
+    height: PULL_TAB_HEIGHT,
+    minWidth: 200,
+    paddingHorizontal: 20,
+    borderRadius: PULL_TAB_HEIGHT / 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pullLabel: { fontSize: 13, fontWeight: "600" },
+  pullLabelOverlay: { position: "absolute" },
+  pullStem: {
+    position: "absolute",
+    bottom: 0,
+    alignSelf: "center",
+    width: 2,
+  },
   indicatorTrack: {
     position: "absolute",
     top: 4,

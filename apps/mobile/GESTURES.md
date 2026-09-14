@@ -11,19 +11,26 @@ Line numbers are from `react-native-screens@4.25.2`,
 
 ## The gestures
 
-Three pans live on the capture page (`src/screens/capture-screen.tsx`),
-composed as `Gesture.Simultaneous(keyboardEscape, Gesture.Race(swipeToFile,
+Two pans live on the capture page (`src/screens/capture-screen.tsx`),
+composed as `Gesture.Simultaneous(keyboardEscape, Gesture.Race(swipeToMenu,
 swipeToSync))`:
 
 | gesture | direction | what it does |
 |---|---|---|
-| `swipeToFile` | up | slides the page off the top, files it into Feed, brings a blank page in from below |
+| `swipeToMenu` | right | slides the page off the menu behind it, under the finger |
 | `swipeToSync` | left | pulls in a replica of the Sync header, then pushes the real screen |
 | `keyboardEscape` | down at the top of the note | tucks the keyboard away |
 
-Rightward — back to Menu — is **not** one of ours. It belongs to the native
-stack (`fullScreenGestureEnabled: true` in `src/App.tsx`'s `screenOptions`).
-That single fact is the source of every difficulty below.
+**Filing is not in that list, and that is the point.** Swiping up past the end
+of the note files the page, but it is not a gesture — it is the scroll view's
+own overscroll, read in `useAnimatedScrollHandler` and committed in
+`onEndDrag`. There is no recognizer, so there is nothing to arbitrate: you
+cannot reach the end of the note without scrolling to it, and past the end the
+bounce *is* the interaction.
+
+Rightward — back to Menu — used to belong to the native stack
+(`fullScreenGestureEnabled`), and that single fact was the source of every
+difficulty below. It is ours now; see "What the screen does now".
 
 ## Why the race with the native back gesture cannot be arbitrated
 
@@ -127,6 +134,9 @@ unconditional `return YES` (`:876-877`). That is why the small negative left
 
 ## `manualActivation`, and why `fail()` is expensive
 
+*Historical: no gesture on this screen uses manual activation any more. Kept
+because it is what the Metro log finally caught in the act — see Round 3.*
+
 `swipeToFile` and `keyboardEscape` use `.manualActivation(true)`. That installs
 a second, invisible recognizer (`RNGestureHandler.mm:445-458`) which blocks the
 real one until JS calls `manager.activate()`
@@ -185,6 +195,19 @@ all deleted; keep reading it for *why*, not for what the code does.
 - **Android hardware back** is handled explicitly in `HomeScreen`: from the
   capture page it opens the menu, and only from the menu does it fall through
   and leave the app. The stack used to do this for free.
+- **Filing rides the overscroll.** `onScroll` computes `overscrollPastEnd` from
+  the scroll event's own `contentSize`/`layoutMeasurement` — not from mirrored
+  shared values, which a layout pass may not have refreshed — and `onEndDrag`
+  decides, because that is the event that fires when the finger lifts. A
+  `ScrollEnd` would arrive after the spring-back, far too late to feel like
+  letting go.
+- **The pull tab** comes up out of the bottom edge on a stem, tracking the
+  overscroll 1:1 and turning accent-coloured past the threshold. Not
+  decoration: before it, the gesture gave no feedback at all until the page
+  moved, so a pull that fell short was indistinguishable from a dead screen.
+- **`[gesture]` lines in the Metro log** replace the on-device trace for the
+  two remaining pans. One line per lifecycle event, readable straight from the
+  bundler output.
 - **A commit no longer blocks the next touch.** Filing hands the fresh page over
   immediately instead of waiting up to 1200ms for storage, and a touch that
   arrives while the commit spring is still running is *declined* (the gesture
