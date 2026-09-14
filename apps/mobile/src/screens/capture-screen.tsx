@@ -447,6 +447,14 @@ export const CaptureScreen = () => {
     []
   );
 
+  // Live gesture log to Metro. One line per lifecycle event, never per move,
+  // so a failed swipe can be read after the fact instead of reasoned about:
+  // whether swipeToMenu ever began is the whole question, and only the log
+  // can answer it.
+  const runLog = useCallback((line: string) => {
+    console.log(`[gesture] ${line}`);
+  }, []);
+
   // Memoized, and every capture in the closures below is a stable identity —
   // shared values, the useAnimatedKeyboard ref, and the run* proxies. That is
   // not a micro-optimization: GestureDetector re-runs updateAttachedGestures on
@@ -466,6 +474,9 @@ export const CaptureScreen = () => {
             manager.fail();
             return;
           }
+          runOnJS(runLog)(
+            `file:down x=${Math.round(touch.x)} y=${Math.round(touch.y)}`
+          );
           touchStartX.value = touch.x;
           touchStartY.value = touch.y;
           armY.value = touch.y;
@@ -504,7 +515,12 @@ export const CaptureScreen = () => {
           if (!verticalLatched.value) {
             if (isVerticalCommitted(dx, dy)) {
               // Unmistakably upward — stop arbitrating for this touch.
+              // NOTE: from here on swipeToFile holds the touch for good, so
+              // swipeToMenu/swipeToSync behind it in the Race can never start.
               verticalLatched.value = true;
+              runOnJS(runLog)(
+                `file:latch-vertical dx=${Math.round(dx)} dy=${Math.round(dy)}`
+              );
             } else {
               const verdict = horizontalVerdict(dx, dy);
               if (verdict === "sync") {
@@ -513,6 +529,9 @@ export const CaptureScreen = () => {
                 traceFailedToSync.value = true;
                 traceVerdictDx.value = dx;
                 traceVerdictDy.value = dy;
+                runOnJS(runLog)(
+                  `file:release->sync dx=${Math.round(dx)} dy=${Math.round(dy)}`
+                );
                 manager.fail();
                 return;
               }
@@ -524,6 +543,9 @@ export const CaptureScreen = () => {
                 traceFailedByVerdict.value = true;
                 traceVerdictDx.value = dx;
                 traceVerdictDy.value = dy;
+                runOnJS(runLog)(
+                  `file:release->menu dx=${Math.round(dx)} dy=${Math.round(dy)}`
+                );
                 manager.fail();
                 return;
               }
@@ -548,6 +570,7 @@ export const CaptureScreen = () => {
           }
           if (armY.value - touch.y > ACTIVATE_PULL) {
             traceActivated.value = true;
+            runOnJS(runLog)("file:activate");
             manager.activate();
           }
         })
@@ -657,6 +680,7 @@ export const CaptureScreen = () => {
       offsetY,
       pageY,
       runFinishCommit,
+      runLog,
       runRecordAttempt,
       touchStartX,
       touchStartY,
@@ -788,7 +812,11 @@ export const CaptureScreen = () => {
         .activeOffsetX(16)
         .failOffsetX(-24)
         .failOffsetY([-24, 24])
+        .onBegin(() => {
+          runOnJS(runLog)("menu:begin");
+        })
         .onStart(() => {
+          runOnJS(runLog)("menu:start");
           runOnJS(dismissKeyboard)();
         })
         .onUpdate((event) => {
@@ -801,18 +829,29 @@ export const CaptureScreen = () => {
           // RNGH calls END on cancellation too; opening the menu because the
           // system took the touch away is not what the finger asked for.
           if (!success) {
+            runOnJS(runLog)("menu:cancelled");
             menuProgress.value = withTiming(0, { duration: 180 });
             return;
           }
           const shouldOpen =
             menuProgress.value > MENU_OPEN_PROGRESS ||
             event.velocityX > MENU_OPEN_VELOCITY;
+          runOnJS(runLog)(
+            `menu:end p=${menuProgress.value.toFixed(2)} ` +
+              `vx=${Math.round(event.velocityX)} open=${shouldOpen}`
+          );
           menuProgress.value = withTiming(shouldOpen ? 1 : 0, {
             duration: shouldOpen ? 160 : 180,
             easing: Easing.out(Easing.cubic),
           });
+        })
+        .onFinalize((_event, success) => {
+          // Fires even when the pan never activated. A horizontal swipe that
+          // "did not register" shows up here with no preceding menu:start —
+          // that means something ahead of it in the Race still held the touch.
+          runOnJS(runLog)(`menu:finalize success=${success}`);
         }),
-    [dismissKeyboard, menuProgress, windowW]
+    [dismissKeyboard, menuProgress, runLog, windowW]
   );
 
   const swipeToSync = useMemo(
