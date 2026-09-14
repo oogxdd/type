@@ -11,16 +11,16 @@ import {
 } from "@react-navigation/native-stack";
 import { useEffect } from "react";
 
-// One native stack, with Menu as its root. Conceptually Menu sits to the
-// left of Capture and Sync sits to its right. The app boots with Capture
-// pushed above Menu (see App.tsx), so the native interactive back gesture
-// reveals Menu. The two forward gestures use live previews and then attach
-// the real stack screen underneath with animation disabled.
+// One native stack rooted at Home, which is the capture page and the menu
+// together -- two layers of one screen rather than two screens (see
+// home-screen.tsx for why). Everything else is pushed on top of it and keeps
+// the ordinary native back gesture, which is free there because those screens
+// have no gestures of their own.
+//
+// Sync still sits to Capture's right and is reached through a live preview
+// that attaches the real screen underneath with animation disabled.
 export type RootStackParamList = {
-  Menu: undefined;
-  // `instant` skips the native push because a gesture-driven preview has
-  // already played the transition (Menu -> Capture or Capture -> Sync).
-  Capture: { instant?: boolean } | undefined;
+  Home: undefined;
   Feed: undefined;
   Folder: { path: string; title: string };
   Editor: { path: string; title?: string };
@@ -53,8 +53,8 @@ export const navigateToScreen = <Screen extends keyof RootStackParamList>(
  */
 export const useClearInstantParam = () => {
   const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList, "Capture" | "Sync">>();
-  const route = useRoute<RouteProp<RootStackParamList, "Capture" | "Sync">>();
+    useNavigation<NativeStackNavigationProp<RootStackParamList, "Sync">>();
+  const route = useRoute<RouteProp<RootStackParamList, "Sync">>();
   const instant = route.params?.instant;
 
   useEffect(() => {

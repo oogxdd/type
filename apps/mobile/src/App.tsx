@@ -21,12 +21,11 @@ import { parseSyncDeepLink } from "@typenotes/shared/sync-link";
 
 import { bootCore } from "./core/boot";
 import { navigateToScreen, navigationRef, Stack } from "./navigation";
-import { CaptureScreen } from "./screens/capture-screen";
 import { EditorScreen } from "./screens/editor-screen";
 import { FeedScreen } from "./screens/feed-screen";
 import { FolderScreen } from "./screens/folder-screen";
+import { HomeScreen } from "./screens/home-screen";
 import { LockScreen } from "./screens/lock-screen";
-import { MenuScreen } from "./screens/menu-screen";
 import {
   SettingsAppearanceScreen,
   SettingsDiagnosticsScreen,
@@ -43,19 +42,10 @@ import { useRecordingSessionStore } from "./state/recording-session-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
 import { useSettingsStore } from "./state/settings-store";
 import { useSyncStore } from "./state/sync-store";
-import { NATIVE_BACK_RESPONSE_DISTANCE } from "./lib/capture-gesture";
 import { useTheme } from "./theme";
 import { ErrorBoundary } from "./ui/error-boundary";
 
 type BootPhase = { state: "booting" } | { state: "ready" } | { state: "failed"; error: string };
-
-// Boot with Capture pushed on top of Menu so the blank page is what you see
-// first, while the menu is already behind it. Capture can then use the native
-// interactive back gesture to reveal Menu without keeping all three primary
-// screens mounted in a pager.
-const BOOT_NAVIGATION_STATE = {
-  routes: [{ name: "Menu" as const }, { name: "Capture" as const }],
-};
 
 const BUNDLED_FONTS = {
   TypeUnbounded: require("../assets/fonts/Unbounded.ttf"),
@@ -68,7 +58,7 @@ const RootStack = () => {
   const theme = useTheme();
   return (
     <Stack.Navigator
-      initialRouteName="Capture"
+      initialRouteName="Home"
       screenOptions={{
         headerStyle: { backgroundColor: theme.colors.background },
         headerTintColor: theme.colors.text,
@@ -76,54 +66,24 @@ const RootStack = () => {
         contentStyle: { backgroundColor: theme.colors.background },
         // Swipe back from anywhere on the screen, not just the left edge —
         // still the native UIKit pop transition, driven natively by
-        // react-native-screens' pan recognizer. Ordinary pushed screens have
-        // no gestures of their own, so this is free there. Capture narrows it
-        // to the left gutter instead (see below).
+        // react-native-screens' pan recognizer. Every screen in this stack is
+        // pushed on top of Home and has no gestures of its own, so this is
+        // free. Home itself is the root: there is nothing under it to pop to,
+        // which is exactly why the capture page can own its whole surface now.
         fullScreenGestureEnabled: true,
         // Chevron-only back everywhere: Sync has more than one entry point,
         // so naming the previous screen in the label would be noise.
         headerBackButtonDisplayMode: "minimal",
       }}
     >
+      {/* Capture and Menu, as two layers of one screen. Being the root is the
+          point: with nothing beneath it in the stack there is no pop gesture
+          on the capture page, so its whole surface is ours and both
+          directions run under the finger. See screens/home-screen.tsx. */}
       <Stack.Screen
-        name="Menu"
-        component={MenuScreen}
-        options={{ gestureEnabled: false, headerShown: false, title: "Menu" }}
-      />
-      <Stack.Screen
-        name="Capture"
-        component={CaptureScreen}
-        options={({ route }) => ({
-          headerShown: false,
-          // Capture is the one screen whose whole surface is a gesture target,
-          // and the native pop recognizer checks nothing but where a touch
-          // started — it fires on ~10pt in *any* direction, including straight
-          // up, and cancels our touch (see apps/mobile/GESTURES.md). It cannot
-          // be arbitrated with; the two libraries refuse each other's
-          // recognizers outright.
-          //
-          // So it gets the left gutter and nothing else. This used to be a
-          // split by *height* at 52% of the screen, which left the whole upper
-          // half contested — a swipe up that happened to start above the line
-          // was cancelled before it began — and ran the same rightward drag
-          // through two implementations whose thresholds differed by 2.5x
-          // depending on where the thumb landed. One gesture behaving two ways
-          // is what "back works every other time" actually was.
-          //
-          // Now the partition is clean: x <= 24 is the native interactive pop
-          // (which is where a back swipe starts anyway, and where UIKit's own
-          // uncancellable edge pop lives regardless), everything else is ours
-          // uncontested, and a decisive rightward drag out there pops from the
-          // capture screen itself.
-          //
-          // The values are absolute point coordinates, not edge distances —
-          // react-native-screens passes them straight through to
-          // isInGestureResponseDistance.
-          gestureResponseDistance: NATIVE_BACK_RESPONSE_DISTANCE,
-          // A gesture-driven preview already played this push when instant
-          // is set; attach the real screen underneath without replaying it.
-          animation: route.params?.instant ? "none" : "default",
-        })}
+        name="Home"
+        component={HomeScreen}
+        options={{ headerShown: false }}
       />
       <Stack.Screen name="Feed" component={FeedScreen} />
       <Stack.Screen
@@ -360,7 +320,6 @@ export default function App() {
         <NavigationContainer
           ref={navigationRef}
           theme={navigationTheme}
-          initialState={BOOT_NAVIGATION_STATE}
           onReady={() => {
             if (!initialUrlHandled.current) {
               initialUrlHandled.current = true;
@@ -373,7 +332,13 @@ export default function App() {
           </ErrorBoundary>
         </NavigationContainer>
         {demoMode ? (
-          <View style={[styles.demoBanner, { backgroundColor: theme.colors.accent }]}>
+          // Purely informational, and it sits across the bottom edge — exactly
+          // where a swipe up to file starts. Without this it swallows those
+          // touches and the gesture silently never begins.
+          <View
+            pointerEvents="none"
+            style={[styles.demoBanner, { backgroundColor: theme.colors.accent }]}
+          >
             <Text style={styles.demoBannerText}>
               Demo mode — native core not linked, notes are not persisted
             </Text>

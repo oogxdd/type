@@ -60,7 +60,6 @@ import * as core from "@typenotes/mobile-core/core-api";
 import { CaptureSession } from "../lib/capture";
 import {
   ACTIVATE_PULL,
-  BACK_SWIPE_GUTTER,
   ESCAPE_DRAG,
   horizontalVerdict,
   isVerticalCommitted,
@@ -76,6 +75,7 @@ import {
 } from "../lib/gesture-trace";
 import { autoSyncLabel } from "../lib/sync-experience";
 import { useClearInstantParam, type RootStackParamList } from "../navigation";
+import { useHomeShell } from "./home-shell";
 import { useDiagnosticsStore } from "../state/diagnostics-store";
 import { useNotesStore } from "../state/notes-store";
 import { useSyncStore } from "../state/sync-store";
@@ -86,6 +86,13 @@ import { ToolbarButton } from "../ui/toolbar-button";
 // The swipe's thresholds and decision arithmetic live in ../lib/capture-gesture
 // so they can be tested without a device; the comments there explain why each
 // one is the value it is.
+
+// Release past this fraction of the window, or flick harder than this, and the
+// horizontal drag lands on the far side instead of springing back. Symmetric
+// for both directions, and the reason the transition is adaptive: under these
+// you come back to where you started, however far you travelled.
+const MENU_OPEN_PROGRESS = 0.3;
+const MENU_OPEN_VELOCITY = 500;
 
 // Horizontal Capture -> Sync preview mechanics, matching Menu -> Capture.
 const SYNC_OPEN_PROGRESS = 0.3;
@@ -148,6 +155,7 @@ export const CaptureScreen = () => {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { height, width } = useWindowDimensions();
+  const { menuProgress, openMenu } = useHomeShell();
 
   const [text, setText] = useState("");
   const [iconsVisible, setIconsVisible] = useState(true);
@@ -401,8 +409,6 @@ export const CaptureScreen = () => {
   // Latched once the drag is unmistakably upward; from then on the horizontal
   // verdict is not consulted, so late thumb wobble cannot lose the swipe.
   const verticalLatched = useSharedValue(false);
-  // One back navigation per touch.
-  const backTriggered = useSharedValue(false);
 
   // ---- Gesture trace (Settings -> Diagnostics) ------------------------------
   //
@@ -441,16 +447,6 @@ export const CaptureScreen = () => {
     []
   );
 
-  // Below the native back band nothing else is going to pop the screen, so a
-  // decisive rightward drag does it here. Not driven under the finger — the
-  // native animated pop is the same one the band above gets interactively.
-  const goBackToMenu = useCallback(() => {
-    navigation.popTo("Menu");
-  }, [navigation]);
-  const goBackRef = useRef(goBackToMenu);
-  goBackRef.current = goBackToMenu;
-  const runGoBack = useCallback(() => goBackRef.current(), []);
-
   // Memoized, and every capture in the closures below is a stable identity —
   // shared values, the useAnimatedKeyboard ref, and the run* proxies. That is
   // not a micro-optimization: GestureDetector re-runs updateAttachedGestures on
@@ -461,7 +457,6 @@ export const CaptureScreen = () => {
   const swipeToFile = useMemo(
     () =>
       Gesture.Pan()
-        .hitSlop({ left: -BACK_SWIPE_GUTTER })
         .manualActivation(true)
         .onTouchesDown((event, manager) => {
           const touch = event.allTouches[0];
@@ -475,7 +470,6 @@ export const CaptureScreen = () => {
           touchStartY.value = touch.y;
           armY.value = touch.y;
           verticalLatched.value = false;
-          backTriggered.value = false;
 
           traceStartMs.value = Date.now();
           traceMaxDx.value = 0;
@@ -522,18 +516,14 @@ export const CaptureScreen = () => {
                 manager.fail();
                 return;
               }
-              if (verdict === "navigation" && !backTriggered.value) {
-                // Outside the left gutter the native recognizer is never
-                // offered the touch (gestureResponseDistance), so going back is
-                // ours to do everywhere on the screen. Failing afterwards is
-                // correct here and only here: we have just navigated away, so
-                // the touch has nothing left to do, and leaving the pan in
-                // BEGAN would let it file the page while Menu animates in.
-                backTriggered.value = true;
+              if (verdict === "navigation") {
+                // Give it up exactly like the sync branch: swipeToMenu sits
+                // behind us in the Race and cannot start until we resolve.
+                // Going back used to be a JS call from right here, which is
+                // why it could never be driven under the finger.
                 traceFailedByVerdict.value = true;
                 traceVerdictDx.value = dx;
                 traceVerdictDy.value = dy;
-                runOnJS(runGoBack)();
                 manager.fail();
                 return;
               }
@@ -661,14 +651,12 @@ export const CaptureScreen = () => {
         }),
     [
       armY,
-      backTriggered,
       contentH,
       dragBase,
       keyboard,
       offsetY,
       pageY,
       runFinishCommit,
-      runGoBack,
       runRecordAttempt,
       touchStartX,
       touchStartY,
@@ -711,7 +699,6 @@ export const CaptureScreen = () => {
   const keyboardEscape = useMemo(
     () =>
       Gesture.Pan()
-        .hitSlop({ left: -BACK_SWIPE_GUTTER })
         .manualActivation(true)
         .onTouchesDown((event, manager) => {
           if (transitioning.value) {
@@ -786,10 +773,51 @@ export const CaptureScreen = () => {
   openSyncRef.current = openSyncBehindPreview;
   const runOpenSync = useCallback(() => openSyncRef.current(), []);
 
+  // Menu sits behind this page to the left. A clearly-rightward drag slides
+  // the page off it under the finger — mirror image of swipeToSync, and the
+  // exact interaction the native stack pop used to provide.
+  //
+  // The difference is that nothing is being popped, so nothing outside
+  // react-native-gesture-handler is competing for the touch. That is the whole
+  // reason this can exist: as a pushed screen, every threshold here would have
+  // been racing a UIKit recognizer that activates on ~10pt in any direction
+  // and cancels the touch underneath it.
+  const swipeToMenu = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX(16)
+        .failOffsetX(-24)
+        .failOffsetY([-24, 24])
+        .onStart(() => {
+          runOnJS(dismissKeyboard)();
+        })
+        .onUpdate((event) => {
+          menuProgress.value = Math.min(
+            1,
+            Math.max(0, event.translationX / Math.max(windowW.value, 1))
+          );
+        })
+        .onEnd((event, success) => {
+          // RNGH calls END on cancellation too; opening the menu because the
+          // system took the touch away is not what the finger asked for.
+          if (!success) {
+            menuProgress.value = withTiming(0, { duration: 180 });
+            return;
+          }
+          const shouldOpen =
+            menuProgress.value > MENU_OPEN_PROGRESS ||
+            event.velocityX > MENU_OPEN_VELOCITY;
+          menuProgress.value = withTiming(shouldOpen ? 1 : 0, {
+            duration: shouldOpen ? 160 : 180,
+            easing: Easing.out(Easing.cubic),
+          });
+        }),
+    [dismissKeyboard, menuProgress, windowW]
+  );
+
   const swipeToSync = useMemo(
     () =>
       Gesture.Pan()
-        .hitSlop({ left: -BACK_SWIPE_GUTTER })
         .activeOffsetX(-24)
         .failOffsetX(SYNC_RIGHTWARD_FAIL)
         .failOffsetY([-24, 24])
@@ -840,9 +868,9 @@ export const CaptureScreen = () => {
     () =>
       Gesture.Simultaneous(
         keyboardEscape,
-        Gesture.Race(swipeToFile, swipeToSync)
+        Gesture.Race(swipeToFile, swipeToSync, swipeToMenu)
       ),
-    [keyboardEscape, swipeToFile, swipeToSync]
+    [keyboardEscape, swipeToFile, swipeToMenu, swipeToSync]
   );
 
   // ---- Animated styles --------------------------------------------------------
@@ -1034,7 +1062,7 @@ export const CaptureScreen = () => {
             icon="menu-outline"
             // Menu is the root immediately beneath Capture. popTo avoids
             // accidentally pushing a duplicate Menu screen.
-            onPress={() => navigation.popTo("Menu")}
+            onPress={openMenu}
           />
         </Animated.View>
         <SyncStatusLabel top={insets.top + 18} />

@@ -157,18 +157,34 @@ touches that begin in the leftmost 24pt.
 
 ## What the screen does now
 
-- **`gestureResponseDistance: NATIVE_BACK_RESPONSE_DISTANCE`** — that is
-  `{ end: BACK_SWIPE_GUTTER }` — on the Capture screen (`src/App.tsx`). Inside
-  the left gutter the native interactive pop is exactly what it always was.
-  Everywhere else the native recognizer is never offered the touch.
-- **The pan's `hitSlop({ left: -BACK_SWIPE_GUTTER })`** lines our side up with
-  it from the other direction, so the two never overlap. `x <= 24` is
-  navigation's, everything else is ours, and no zone is contested. There is no
-  longer any place where `manager.fail()` hands a touch to a foreign
-  recognizer, because there is no longer a foreign recognizer to hand it to.
-- **A rightward drag outside the gutter** calls `navigation.popTo("Menu")` from
-  the gesture. Same native pop animation, just not driven under the finger.
-  This now applies to the whole screen rather than half of it.
+**Capture is no longer a pushed screen.** It and the menu are two layers of one
+root screen, `Home` (`src/screens/home-screen.tsx`), and the only thing between
+them is `menuProgress`, a shared value: 0 means capture fills the window, 1
+means the menu does.
+
+Everything above this line describes a race that no longer takes place. With
+nothing beneath Capture in the stack there is no pop to drive, so
+react-native-screens' recognizer is never in the arena — not out-competed,
+absent. `gestureResponseDistance`, `NATIVE_BACK_BAND_FRACTION`,
+`isInNativeBackBand`, `BACK_SWIPE_GUTTER` and the pan's negative `hitSlop` are
+all deleted; keep reading it for *why*, not for what the code does.
+
+- **`swipeToMenu`** (`capture-screen.tsx`) is a plain pan, the mirror image of
+  `swipeToSync`: `activeOffsetX(16)`, `failOffsetX(-24)`,
+  `failOffsetY([-24, 24])`. It writes `menuProgress` from `onUpdate`, so the
+  menu tracks the finger, and lands it on 0 or 1 in `onEnd`. Release under 30%
+  of the window (and under 500px/s) and it comes back — which is the part that
+  was missing while a rightward drag simply called `popTo`.
+- **`swipeToCapture`** (`menu-screen.tsx`) is the same pan in reverse, and now
+  writes the same shared value instead of pushing a stack screen behind a
+  hand-drawn replica of the capture page.
+- **`horizontalVerdict` still exists**, but its only job now is to release
+  `swipeToFile` early so whichever horizontal pan the drag belongs to can
+  start. It no longer navigates, and no branch of it hands a touch to a foreign
+  recognizer.
+- **Android hardware back** is handled explicitly in `HomeScreen`: from the
+  capture page it opens the menu, and only from the menu does it fall through
+  and leave the app. The stack used to do this for free.
 - **A commit no longer blocks the next touch.** Filing hands the fresh page over
   immediately instead of waiting up to 1200ms for storage, and a touch that
   arrives while the commit spring is still running is *declined* (the gesture
@@ -181,7 +197,12 @@ touches that begin in the leftmost 24pt.
 
 Kept here so the decision can be revisited without redoing the research.
 
-### A. Own the back swipe with a Menu replica
+### A. Own the back swipe ourselves — **adopted**
+
+Taken, in the variant described at the end of this section. What follows is the
+original write-up and the reasoning that rejected it the first time; it is left
+intact because the objections were real and it matters which ones the adopted
+variant answers and which it simply accepts.
 
 Turn the native gesture off on Capture entirely (`fullScreenGestureEnabled:
 false`, `gestureEnabled: false`) and drive Capture → Menu ourselves, with the

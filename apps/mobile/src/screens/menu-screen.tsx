@@ -9,7 +9,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   InteractionManager,
@@ -22,10 +22,8 @@ import {
   View,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
+import {
   Easing,
-  runOnJS,
-  useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
@@ -51,6 +49,7 @@ import {
 import { formatRelativeTime } from "../lib/relative-time";
 import { autoSyncLabel } from "../lib/sync-experience";
 import type { RootStackParamList } from "../navigation";
+import { useHomeShell } from "./home-shell";
 import { useNotesStore } from "../state/notes-store";
 import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
@@ -74,7 +73,6 @@ const OPEN_CAPTURE_PROGRESS = 0.3;
 const OPEN_CAPTURE_VELOCITY = -500;
 // How far the menu slides left behind the incoming page — the depth effect
 // of a native iOS push.
-const MENU_PARALLAX = 0.3;
 
 export const MenuScreen = () => {
   const theme = useTheme();
@@ -96,35 +94,20 @@ export const MenuScreen = () => {
   // the contentReady early return, because it is a hook.
   const organizer = useNoteOrganizer(tree);
 
-  // 0..1 — how far the capture-page preview has slid in over the menu.
-  // Driven on the UI thread by the pan below; at 1 the real Capture screen
-  // is pushed underneath it with animation:none (there is no native
-  // interactive *push* gesture, so this hand-rolls one — the preview is a
-  // pixel replica of the blank capture page, and the swap is invisible).
-  const captureProgress = useSharedValue(0);
-
-  const menuDepthStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: -width * MENU_PARALLAX * captureProgress.value }],
-  }));
-  const dimStyle = useAnimatedStyle(() => ({
-    opacity: 0.08 * captureProgress.value,
-  }));
-  const capturePreviewStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: width * (1 - captureProgress.value) }],
-    // At rest the preview sits exactly one screen-width to the right — but
-    // during a native pop the whole menu view (preview included) slides in
-    // from -30% parallax, which would poke the preview's left edge (its
-    // hamburger replica) into the top-right of the frame. Hide it whenever
-    // the menu's own gesture isn't driving it.
-    opacity: captureProgress.value > 0 ? 1 : 0,
-  }));
+  // The capture page is a real, permanently mounted layer above this one, and
+  // HomeScreen owns the parallax, the dim and the translate. What used to be
+  // here was a hand-drawn replica of a blank capture page dragged in under the
+  // finger, with the real screen pushed behind it once the gesture committed —
+  // a pixel forgery that the moment anything changed on the capture page would
+  // start to diverge from. There is nothing to forge now.
+  const { menuProgress, openCapture } = useHomeShell();
 
   // RNGH's pan activating does not reliably cancel React Native's own
   // responder (and by claiming the gesture it also keeps the lists' scroll
   // from doing that cancelling), so a swipe that starts on a row/button can
   // still fire its onPress on release. A genuine tap never moves the pan, so
   // any preview progress at press time means the touch was a swipe: drop it.
-  const pressWasSwipe = () => captureProgress.value > 0.001;
+  const pressWasSwipe = () => menuProgress.value < 0.999;
 
   const openScreen = <Screen extends keyof RootStackParamList>(
     screen: Screen,
@@ -142,30 +125,12 @@ export const MenuScreen = () => {
     }
   };
 
-  const openCapture = () => {
+  const closeMenu = () => {
     if (pressWasSwipe()) {
       return;
     }
-    navigation.navigate("Capture");
+    openCapture();
   };
-  const openCaptureBehindPreview = useCallback(() => {
-    navigation.navigate("Capture", { instant: true });
-    // Drop the preview once the pushed screen is attached on top of the
-    // menu. There is no native "attached" signal with animation:none; the
-    // delay just has to outlive the mount, and only a back swipe started
-    // within it could glimpse the reset.
-    setTimeout(() => {
-      captureProgress.value = 0;
-    }, 400);
-  }, [captureProgress, navigation]);
-
-  // The gesture below is memoized, so it must not capture a per-render
-  // function: the UI runtime keeps the remote-function handle it was
-  // serialized with for as long as the timing animation runs. Same reason the
-  // window width becomes a shared value.
-  const openCaptureRef = useRef(openCaptureBehindPreview);
-  openCaptureRef.current = openCaptureBehindPreview;
-  const runOpenCapture = useCallback(() => openCaptureRef.current(), []);
 
   const windowW = useSharedValue(width);
   useEffect(() => {
@@ -173,9 +138,14 @@ export const MenuScreen = () => {
   }, [width, windowW]);
 
   // The whole menu is the gesture surface: a clearly-leftward drag anywhere
-  // (16px of horizontal travel) pulls the capture-page preview in with the
-  // finger. Presses under the swipe are filtered by pressWasSwipe above;
-  // vertical drags fail fast and stay with the note/folder lists.
+  // (16px of horizontal travel) pushes the capture page back over the menu
+  // with the finger. Presses under the swipe are filtered by pressWasSwipe
+  // above; vertical drags fail fast and stay with the note/folder lists.
+  //
+  // This used to end in a JS hop that pushed a stack screen. Now it just
+  // lands menuProgress on 0 or 1 — the capture page is already mounted and
+  // already following the value, so releasing is the end of the interaction
+  // rather than the start of a transition.
   const swipeToCapture = useMemo(
     () =>
       Gesture.Pan()
@@ -183,36 +153,28 @@ export const MenuScreen = () => {
         .failOffsetX(24)
         .failOffsetY([-20, 20])
         .onUpdate((event) => {
-          captureProgress.value = Math.min(
+          const closed = Math.min(
             1,
             Math.max(0, -event.translationX / Math.max(windowW.value, 1))
           );
+          menuProgress.value = 1 - closed;
         })
         .onEnd((event, success) => {
-          // RNGH calls END on cancellation too; opening Capture from a gesture
-          // the system took away is not what the finger asked for.
+          // RNGH calls END on cancellation too; leaving the menu because the
+          // system took the touch away is not what the finger asked for.
           if (!success) {
-            captureProgress.value = withTiming(0, { duration: 180 });
+            menuProgress.value = withTiming(1, { duration: 180 });
             return;
           }
-          const shouldOpen =
-            captureProgress.value > OPEN_CAPTURE_PROGRESS ||
+          const shouldClose =
+            menuProgress.value < 1 - OPEN_CAPTURE_PROGRESS ||
             event.velocityX < OPEN_CAPTURE_VELOCITY;
-          if (shouldOpen) {
-            captureProgress.value = withTiming(
-              1,
-              { duration: 160, easing: Easing.out(Easing.cubic) },
-              (finished) => {
-                if (finished) {
-                  runOnJS(runOpenCapture)();
-                }
-              }
-            );
-          } else {
-            captureProgress.value = withTiming(0, { duration: 180 });
-          }
+          menuProgress.value = withTiming(shouldClose ? 0 : 1, {
+            duration: shouldClose ? 160 : 180,
+            easing: Easing.out(Easing.cubic),
+          });
         }),
-    [captureProgress, runOpenCapture, windowW]
+    [menuProgress, windowW]
   );
 
   const lastSyncedMs = useSyncStore((s) => s.history[0]?.authored_ms ?? null);
@@ -265,15 +227,14 @@ export const MenuScreen = () => {
   return (
     <GestureDetector gesture={swipeToCapture}>
       <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-        <Animated.View
+        <View
           style={[
             styles.menuContent,
             { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 },
-            menuDepthStyle,
           ]}
         >
         <View style={styles.topBar}>
-          <ToolbarButton icon="close-outline" onPress={openCapture} />
+          <ToolbarButton icon="close-outline" onPress={closeMenu} />
         </View>
 
         <View style={[styles.tabs, { backgroundColor: theme.colors.surface }]}>
@@ -462,58 +423,7 @@ export const MenuScreen = () => {
           />
         </View>
         {organizer.overlay}
-        </Animated.View>
-
-        {/* Native-push depth cues: the menu dims while the preview page
-            rides in above it, casting a shadow over the seam. */}
-        <Animated.View
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFill, styles.dim, dimStyle]}
-        />
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.capturePreview,
-            { backgroundColor: theme.colors.background },
-            capturePreviewStyle,
-          ]}
-        >
-          <Text
-            style={[
-              styles.previewPlaceholder,
-              { color: theme.colors.secondaryText, marginTop: insets.top + 56 },
-            ]}
-          >
-            Start typing…
-          </Text>
-          <View
-            style={[
-              styles.previewButton,
-              {
-                left: 20,
-                top: insets.top + 8,
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-              },
-            ]}
-          >
-            <Ionicons name="menu-outline" size={20} color={theme.colors.text} />
-          </View>
-          <View
-            style={[
-              styles.previewButton,
-              styles.previewMic,
-              {
-                right: 32,
-                bottom: insets.bottom + 36,
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-              },
-            ]}
-          >
-            <Ionicons name="mic-outline" size={22} color={theme.colors.text} />
-          </View>
-        </Animated.View>
+        </View>
       </View>
     </GestureDetector>
   );
@@ -666,32 +576,6 @@ const BottomItem = ({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   menuContent: { flex: 1 },
-  dim: { backgroundColor: "#000" },
-  capturePreview: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    shadowColor: "#000",
-    shadowOffset: { width: -4, height: 0 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-  },
-  // The preview mirrors the blank capture page (capture-screen.tsx): page
-  // padding top +12 / horizontal 20, input paddingTop 44, 17pt text, and the
-  // toolbar circle geometry from ToolbarButton / DictationButton.
-  previewPlaceholder: { paddingHorizontal: 20, fontSize: 17, lineHeight: 26 },
-  previewButton: {
-    position: "absolute",
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  previewMic: { width: 44, height: 44, borderRadius: 22 },
   topBar: {
     flexDirection: "row",
     justifyContent: "flex-end",

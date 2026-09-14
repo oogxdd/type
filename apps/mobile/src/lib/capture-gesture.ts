@@ -26,41 +26,6 @@ export const BOTTOM_SLACK = 6;
 export const TOP_SLACK = 4;
 
 /**
- * The strip along the left edge where a drag is navigation and nothing else.
- *
- * UIKit's own edge pop (`_UIParallaxTransitionPanGestureRecognizer`) is waved
- * through unconditionally by react-native-screens (RNSScreenStack.mm:876-877)
- * and no prop can narrow it, so this strip was always going to belong to
- * navigation. The screen's `gestureResponseDistance` now lines the full-screen
- * recognizer up with it exactly, and the pan's `hitSlop({ left: -24 })` lines
- * our side up from the other direction.
- *
- * The result is a clean partition rather than a contested zone: x <= 24 is
- * navigation's, everything else is ours. See apps/mobile/GESTURES.md for why
- * the previous split — by *height*, at 52% of the screen — could not be made
- * to feel consistent.
- */
-export const BACK_SWIPE_GUTTER = 24;
-
-/**
- * The `gestureResponseDistance` that confines the native full-screen pop to the
- * left gutter.
- *
- * The values are absolute point coordinates in the stack view's space, not edge
- * distances, and -1 means unconstrained — so this says "only touches starting
- * at x <= BACK_SWIPE_GUTTER are ever offered to the native recognizer".
- *
- * The previous split was by height (NATIVE_BACK_BAND_FRACTION = 0.52), which
- * left the top half of the screen contested: the native recognizer fires on
- * ~10pt in *any* direction, so a swipe up that happened to start above the line
- * was cancelled before it began. Worse, the same rightward drag ran through two
- * different implementations with thresholds 2.5x apart depending on which half
- * of the screen the thumb landed in — which is most of why back "worked every
- * other time". See apps/mobile/GESTURES.md.
- */
-export const NATIVE_BACK_RESPONSE_DISTANCE = { end: BACK_SWIPE_GUTTER };
-
-/**
  * Absolute sideways travel before a drag is called navigation rather than
  * filing. `dx`/`dy` are measured from the touch start and the fail is terminal
  * for the whole touch, so this one number decides how forgiving the swipe up

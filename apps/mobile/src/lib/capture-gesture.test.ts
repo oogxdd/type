@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   COMMIT_VELOCITY,
-  BACK_SWIPE_GUTTER,
   horizontalVerdict,
-  NATIVE_BACK_RESPONSE_DISTANCE,
   isVerticalCommitted,
   isAtScrollBottom,
   shouldCommitFiling,
@@ -133,25 +131,5 @@ describe("shouldCommitFiling", () => {
 
   it("does not commit a downward flick", () => {
     expect(shouldCommitFiling(-10, 500, 900)).toBe(false);
-  });
-});
-
-describe("NATIVE_BACK_RESPONSE_DISTANCE", () => {
-  it("confines the native pop to the left gutter and nothing else", () => {
-    // Absolute point coordinates, not edge distances: react-native-screens
-    // passes them straight to isInGestureResponseDistance, which rejects a
-    // touch when x > end. Unconstrained on every other side.
-    expect(NATIVE_BACK_RESPONSE_DISTANCE).toEqual({ end: BACK_SWIPE_GUTTER });
-  });
-
-  it("partitions the screen rather than overlapping the pan's hitSlop", () => {
-    // The pan carries hitSlop({ left: -BACK_SWIPE_GUTTER }), so it never sees a
-    // touch starting left of the gutter -- and the native recognizer never sees
-    // one starting right of it. No zone is contested, which is the whole point.
-    const nativeTakes = (x: number) => x <= NATIVE_BACK_RESPONSE_DISTANCE.end;
-    const panTakes = (x: number) => x >= BACK_SWIPE_GUTTER;
-    for (const x of [0, 10, 23, 25, 200, 400]) {
-      expect(nativeTakes(x) && panTakes(x)).toBe(false);
-    }
   });
 });
