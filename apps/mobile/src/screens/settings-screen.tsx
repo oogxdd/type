@@ -600,7 +600,10 @@ const GestureTraceList = () => {
           {`x=${Math.round(attempt.startX)} y=${Math.round(attempt.startY)}  `}
           {`dx=${Math.round(attempt.maxDx)} dy=${Math.round(attempt.maxDy)} `}
           {attempt.activated ? `pull=${Math.round(attempt.maxPull)} ` : ""}
-          {`${attempt.durationMs}ms ${attempt.band ? "band" : "free"}`}
+          {attempt.verdictDx || attempt.verdictDy
+            ? `verdict=${Math.round(attempt.verdictDx)},${Math.round(attempt.verdictDy)} `
+            : ""}
+          {`${attempt.durationMs}ms`}
           {` → ${outcomeOf(attempt)}`}
         </Text>
       ))}

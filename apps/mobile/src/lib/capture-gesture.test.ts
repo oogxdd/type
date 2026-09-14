@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   COMMIT_VELOCITY,
+  BACK_SWIPE_GUTTER,
   horizontalVerdict,
-  isInNativeBackBand,
-  nativeBackBandBottom,
+  NATIVE_BACK_RESPONSE_DISTANCE,
   isVerticalCommitted,
   isAtScrollBottom,
   shouldCommitFiling,
@@ -56,9 +56,30 @@ describe("isVerticalCommitted", () => {
     expect(isVerticalCommitted(0, 40)).toBe(false);
   });
 
-  it("does not latch a diagonal that is more sideways than up", () => {
-    expect(isVerticalCommitted(30, -20)).toBe(false);
-    expect(isVerticalCommitted(-30, -20)).toBe(false);
+  it("latches a thumb arc, which is what a real swipe up looks like", () => {
+    // A thumb pivots at its base, so a swipe up from the lower right drifts
+    // left as it extends. The old 45deg rule missed these, they fell through to
+    // horizontalVerdict, and the leftward branch failed the touch terminally --
+    // the single biggest cause of "it works every other time".
+    expect(isVerticalCommitted(-26, -14)).toBe(true);
+    expect(isVerticalCommitted(26, -14)).toBe(true);
+    expect(isVerticalCommitted(-30, -20)).toBe(true);
+  });
+
+  it("still refuses a drag that is genuinely sideways", () => {
+    expect(isVerticalCommitted(50, -20)).toBe(false);
+    expect(isVerticalCommitted(-50, -20)).toBe(false);
+    expect(isVerticalCommitted(40, -13)).toBe(false);
+  });
+
+  it("latches the arc before the horizontal verdict can throw it away", () => {
+    // The exact pair that used to die: dy clears the latch, but the old
+    // |dx| < |dy| rule did not, and horizontalVerdict's leftward branch has no
+    // dominance test -- so this read as "sync" and called the terminal fail().
+    // swipeToSync could not have taken it either; its failOffsetY([-24, 24])
+    // kills it as soon as the drag goes vertical.
+    expect(isVerticalCommitted(-26, -14)).toBe(true);
+    expect(horizontalVerdict(-26, -14)).toBe("sync");
   });
 
   it("keeps a swipe that only wobbles sideways after committing", () => {
@@ -115,24 +136,22 @@ describe("shouldCommitFiling", () => {
   });
 });
 
-describe("isInNativeBackBand", () => {
-  const H = 800; // bottom of the native band at 0.52 → 416
-
-  it("puts the line where nativeBackBandBottom says", () => {
-    expect(nativeBackBandBottom(H)).toBe(416);
+describe("NATIVE_BACK_RESPONSE_DISTANCE", () => {
+  it("confines the native pop to the left gutter and nothing else", () => {
+    // Absolute point coordinates, not edge distances: react-native-screens
+    // passes them straight to isInGestureResponseDistance, which rejects a
+    // touch when x > end. Unconstrained on every other side.
+    expect(NATIVE_BACK_RESPONSE_DISTANCE).toEqual({ end: BACK_SWIPE_GUTTER });
   });
 
-  it("leaves the upper screen to the native back gesture", () => {
-    expect(isInNativeBackBand(0, H)).toBe(true);
-    expect(isInNativeBackBand(300, H)).toBe(true);
-    expect(isInNativeBackBand(416, H)).toBe(true);
-  });
-
-  it("keeps the lower screen for the capture gestures", () => {
-    // Where a thumb starts pushing the page up. Nothing may fail the touch
-    // here, because nothing else is competing for it.
-    expect(isInNativeBackBand(417, H)).toBe(false);
-    expect(isInNativeBackBand(700, H)).toBe(false);
-    expect(isInNativeBackBand(H, H)).toBe(false);
+  it("partitions the screen rather than overlapping the pan's hitSlop", () => {
+    // The pan carries hitSlop({ left: -BACK_SWIPE_GUTTER }), so it never sees a
+    // touch starting left of the gutter -- and the native recognizer never sees
+    // one starting right of it. No zone is contested, which is the whole point.
+    const nativeTakes = (x: number) => x <= NATIVE_BACK_RESPONSE_DISTANCE.end;
+    const panTakes = (x: number) => x >= BACK_SWIPE_GUTTER;
+    for (const x of [0, 10, 23, 25, 200, 400]) {
+      expect(nativeTakes(x) && panTakes(x)).toBe(false);
+    }
   });
 });

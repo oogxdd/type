@@ -28,62 +28,37 @@ export const TOP_SLACK = 4;
 /**
  * The strip along the left edge where a drag is navigation and nothing else.
  *
- * This is not about the full-screen pop recognizer, which is now gated by where
- * the touch starts (see isInNativeBackBand). It is about UIKit's own edge pop,
- * which react-native-screens waves through unconditionally
- * (RNSScreenStack.mm:876-877) and which no prop can narrow. 24pt covers the
- * true edge, where back is the only plausible intent.
+ * UIKit's own edge pop (`_UIParallaxTransitionPanGestureRecognizer`) is waved
+ * through unconditionally by react-native-screens (RNSScreenStack.mm:876-877)
+ * and no prop can narrow it, so this strip was always going to belong to
+ * navigation. The screen's `gestureResponseDistance` now lines the full-screen
+ * recognizer up with it exactly, and the pan's `hitSlop({ left: -24 })` lines
+ * our side up from the other direction.
+ *
+ * The result is a clean partition rather than a contested zone: x <= 24 is
+ * navigation's, everything else is ours. See apps/mobile/GESTURES.md for why
+ * the previous split — by *height*, at 52% of the screen — could not be made
+ * to feel consistent.
  */
 export const BACK_SWIPE_GUTTER = 24;
 
 /**
- * How much of the screen, measured from the top, still belongs to the native
- * full-screen back gesture.
+ * The `gestureResponseDistance` that confines the native full-screen pop to the
+ * left gutter.
  *
- * The native recognizer checks nothing but where the touch started
- * (RNSScreenStack.mm:1042-1063), and it cannot be arbitrated with — it fires on
- * ~10pt of movement in *any* direction, including straight up, and cancels our
- * touch. `gestureResponseDistance` is the one lever that works, because it
- * decides before the drag begins.
+ * The values are absolute point coordinates in the stack view's space, not edge
+ * distances, and -1 means unconstrained — so this says "only touches starting
+ * at x <= BACK_SWIPE_GUTTER are ever offered to the native recognizer".
  *
- * So the screen is split. Above the line the native interactive pop is
- * untouched, which is what it should be: that is where the text is and where a
- * back swipe naturally starts. Below it, where a thumb starts pushing the page
- * up, the native recognizer is never offered the touch at all and the swipe up
- * is uncontested. A decisive rightward drag down there still goes back, just as
- * a plain animated pop rather than one driven under the finger.
- *
- * 0.7 was the starting hypothesis; 0.52 is what the first on-device trace
- * measured (see apps/mobile/GESTURES.md). On a 932pt screen the recorded back
- * swipes started between y=229 and y=474, and every recorded swipe up started
- * at y>=499 — the two gestures separate by height after all, but the line sits
- * near the middle of the screen, not at 70% of it. At 0.7 every swipe up in
- * that sample began inside the band and was contested by the native pop.
- *
- * The Gesture trace in Settings -> Diagnostics records where each attempt
- * started; move this line to whatever the distribution says.
+ * The previous split was by height (NATIVE_BACK_BAND_FRACTION = 0.52), which
+ * left the top half of the screen contested: the native recognizer fires on
+ * ~10pt in *any* direction, so a swipe up that happened to start above the line
+ * was cancelled before it began. Worse, the same rightward drag ran through two
+ * different implementations with thresholds 2.5x apart depending on which half
+ * of the screen the thumb landed in — which is most of why back "worked every
+ * other time". See apps/mobile/GESTURES.md.
  */
-export const NATIVE_BACK_BAND_FRACTION = 0.52;
-
-/** The `gestureResponseDistance.bottom` that NATIVE_BACK_BAND_FRACTION implies. */
-export const nativeBackBandBottom = (windowHeight: number): number => {
-  "worklet";
-  return Math.round(windowHeight * NATIVE_BACK_BAND_FRACTION);
-};
-
-/**
- * Did this touch start where the native back recognizer is still competing?
- *
- * Only there does handing the touch over cost anything, and only there may the
- * gesture call the terminal `manager.fail()`.
- */
-export const isInNativeBackBand = (
-  startY: number,
-  windowHeight: number
-): boolean => {
-  "worklet";
-  return startY <= nativeBackBandBottom(windowHeight);
-};
+export const NATIVE_BACK_RESPONSE_DISTANCE = { end: BACK_SWIPE_GUTTER };
 
 /**
  * Absolute sideways travel before a drag is called navigation rather than
@@ -96,9 +71,10 @@ export const isInNativeBackBand = (
  * good. 24pt is ~4mm — a real back swipe crosses it within the first frames
  * and still feels immediate, while an arcing swipe up survives it.
  *
- * Past VERTICAL_LATCH this stops being consulted at all, and outside the native
- * back band (isInNativeBackBand) crossing it no longer fails the gesture —
- * there is nobody to hand the touch to down there.
+ * Past VERTICAL_LATCH (as widened by VERTICAL_LATCH_RATIO) this stops being
+ * consulted at all. Crossing it no longer hands the touch to the native
+ * recognizer either — outside the left gutter there is nobody to hand it to —
+ * so the gesture navigates to Menu itself and only then fails.
  */
 export const RIGHTWARD_FAIL = 24;
 export const RIGHTWARD_FAIL_RATIO = 1;
@@ -129,12 +105,38 @@ export const ESCAPE_DRAG = 14;
 export const VERTICAL_LATCH = 12;
 
 /**
+ * How much sideways travel an upward drag may have and still latch as vertical.
+ *
+ * This is the fix for "the swipe up works every other time". A thumb pivots at
+ * its base, so as it extends it does not travel straight up — it arcs, and for
+ * a right thumb starting low on the screen that arc goes *left*. The latch used
+ * to require |dx| < |dy|, i.e. within 45° of vertical, which a real arc breaks
+ * constantly in its first frames.
+ *
+ * A drag that misses the latch falls through to `horizontalVerdict`, and there
+ * the leftward branch has no dominance test at all — so dx = -26, dy = -14 (an
+ * ordinary arcing swipe up) read as "sync" and called the *terminal*
+ * `manager.fail()`. The swipe up was dead, and swipeToSync could not have taken
+ * the touch either: its own failOffsetY([-24, 24]) kills it the moment the drag
+ * goes vertical. The touch was thrown away and handed to nobody.
+ *
+ * 2 means "within ~63° of vertical still counts as going up". Raise it if the
+ * trace still shows arcing swipes leaving by verdict; lower it if deliberate
+ * diagonal back-swipes start filing pages instead. verdictDx/verdictDy in the
+ * Gesture trace record the exact point each verdict was taken at, so this can
+ * be moved from evidence rather than guessed.
+ */
+export const VERTICAL_LATCH_RATIO = 2;
+
+/**
  * Has this drag committed to being vertical? Checked before the horizontal
  * verdict; once true, `horizontalVerdict` is not consulted again for the touch.
  */
 export const isVerticalCommitted = (dx: number, dy: number): boolean => {
   "worklet";
-  return dy < -VERTICAL_LATCH && Math.abs(dx) < Math.abs(dy);
+  return (
+    dy < -VERTICAL_LATCH && Math.abs(dx) < Math.abs(dy) * VERTICAL_LATCH_RATIO
+  );
 };
 
 export type HorizontalVerdict = "undecided" | "navigation" | "sync";

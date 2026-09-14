@@ -113,9 +113,12 @@ It gates **both** code paths — the pre-iOS-26 `RNSPanGestureRecognizer`
 and `@react-navigation/native-stack` forwards it as a screen option
 (`src/views/NativeStackView.native.tsx:110`, passed through to `ScreenStackItem`).
 
-So the screen can be split by height: touches starting above the line keep the
-untouched native interactive pop, touches starting below it are never offered to
-the native recognizer at all, and the app's own gestures own that band outright.
+So the screen can be partitioned by where the touch starts. It was first split
+by *height* (`{ bottom: 0.52 * windowHeight }`); it is now split by *x*
+(`{ end: BACK_SWIPE_GUTTER }`), for the reasons in "Round 2" below. Touches
+starting in the left gutter keep the untouched native interactive pop; every
+other touch on the screen is never offered to the native recognizer at all, so
+the app's own gestures own it outright.
 
 Not gated by it: the system's own left-edge pop
 (`_UIParallaxTransitionPanGestureRecognizer`), which falls through to an
@@ -154,16 +157,18 @@ touches that begin in the leftmost 24pt.
 
 ## What the screen does now
 
-- **`gestureResponseDistance: { bottom: nativeBackBandBottom(height) }`** on the
-  Capture screen (`src/App.tsx`). Above that line the native interactive pop is
-  exactly what it always was. Below it the native recognizer is never offered
-  the touch.
-- **`isInNativeBackBand`** (`src/lib/capture-gesture.ts`) is the same line, read
-  at touch-down inside the pan. It is the only thing that licenses a
-  `manager.fail()`: above the line the touch is genuinely wanted by someone
-  else; below it, failing would just throw the finger away.
-- **A rightward drag below the line** calls `navigation.popTo("Menu")` from the
-  gesture. Same native pop animation, just not driven under the finger.
+- **`gestureResponseDistance: NATIVE_BACK_RESPONSE_DISTANCE`** — that is
+  `{ end: BACK_SWIPE_GUTTER }` — on the Capture screen (`src/App.tsx`). Inside
+  the left gutter the native interactive pop is exactly what it always was.
+  Everywhere else the native recognizer is never offered the touch.
+- **The pan's `hitSlop({ left: -BACK_SWIPE_GUTTER })`** lines our side up with
+  it from the other direction, so the two never overlap. `x <= 24` is
+  navigation's, everything else is ours, and no zone is contested. There is no
+  longer any place where `manager.fail()` hands a touch to a foreign
+  recognizer, because there is no longer a foreign recognizer to hand it to.
+- **A rightward drag outside the gutter** calls `navigation.popTo("Menu")` from
+  the gesture. Same native pop animation, just not driven under the finger.
+  This now applies to the whole screen rather than half of it.
 - **A commit no longer blocks the next touch.** Filing hands the fresh page over
   immediately instead of waiting up to 1200ms for storage, and a touch that
   arrives while the commit spring is still running is *declined* (the gesture
@@ -208,6 +213,20 @@ static replica visibly differs from the destination, and mounting a second real
 `MenuScreen` is not viable — it carries live store subscriptions, its own
 `tab`/`filter`/`expanded` state, a `useNoteOrganizer` overlay, an
 `InteractionManager` first-paint deferral, and its own `GestureDetector`.
+
+**Re-opened by `experiments/gesture_lab`.** Both objections above are objections
+to *replica-then-push*. The Flutter prototype does neither: Menu is mounted
+once, permanently, behind Capture, and the whole interaction is a `translateX`
+on a single progress value. There is no replica to diverge from the destination,
+the mount cost is paid at startup instead of under the finger, and Menu's
+`tab`/`filter`/`expanded`/scroll state persists across trips — which is a
+feature rather than a cost. Capture stops being a pushed screen, so the native
+pop recognizer is not in the picture at all and the gutter carve-out above can
+go too.
+
+What that route still owes: an explicit `BackHandler` for Android hardware back
+(currently free from the stack), Menu staying subscribed for the life of the
+app, and hand-matching the push spring since UIKit's is no longer doing it.
 
 One more wrinkle for this route: the pop must not animate, so Capture's
 `animation` option needs to be `"none"` at pop time. Setting a route param and
@@ -255,6 +274,56 @@ changes who wins. See the top of this file.
 ## Findings from the on-device trace
 
 Filled in from the Gesture trace readout in Settings → Diagnostics.
+
+### Round 2 — from reading the code, not the trace
+
+Two defects found by re-deriving the arbitration by hand after a Flutter
+prototype of the same three interactions (`experiments/gesture_lab`) turned out
+to be reliable where this is not. Both produce the same symptom — "the swipe
+works every other time" — and neither is a threshold that can be tuned.
+
+**The vertical latch was narrower than the fail that follows it.**
+`isVerticalCommitted` required `|dx| < |dy|`, i.e. within 45° of vertical. A
+thumb pivots at its base, so a swipe up from the lower right *arcs left* as it
+extends, and breaks 45° constantly in its first frames. A drag that missed the
+latch fell through to `horizontalVerdict`, whose leftward branch has no
+dominance test at all — so an ordinary `dx = -26, dy = -14` read as `"sync"` and
+called the **terminal** `manager.fail()`.
+
+The touch was then handed to nobody: `swipeToSync` could not have taken it
+either, because its own `failOffsetY([-24, 24])` kills it the moment the drag
+goes vertical. Fixed by widening the latch with `VERTICAL_LATCH_RATIO = 2`
+(~63° of vertical). The verdict itself is unchanged — the latch is the right
+place, because it is *permanent* for the touch, so no later wobble can undo it.
+
+A residual window remains by construction: between `dy = 0` and
+`dy = -VERTICAL_LATCH` the latch cannot engage yet, so >24pt of lateral drift in
+the first ~12pt of travel still resolves by verdict. That is genuinely ambiguous
+input. `verdictDx`/`verdictDy` in the trace now record the exact frame each
+verdict fired at, so this can be measured rather than argued about.
+
+**The back swipe was two different gestures wearing one name.** Split by height
+at 52%, a touch above the line got the native recognizer (activating on ~10pt in
+*any* direction, driven interactively under the finger) and a touch below it got
+ours (`dx > 24 && dx > |dy|`, then a non-interactive `popTo`). Thresholds 2.5x
+apart and a different feel, selected by where the thumb happened to land — a
+line a thumb crosses constantly. Inconsistency was the design, not a bug in it.
+
+It also cost the swipe *up*: above the line the native recognizer fires on
+upward movement too, so any swipe up starting in the top half was cancelled
+before it began. Round 1 read as though swipes up simply start low (y>=499);
+they start low because the ones that started higher never registered.
+
+Fixed by moving the partition from height to x — `{ end: BACK_SWIPE_GUTTER }`,
+flush against the pan's existing `hitSlop({ left: -24 })`. The native pop keeps
+the gutter, where UIKit's own uncancellable edge pop lives anyway and where a
+back swipe actually starts; everything else is one uncontested domain.
+
+The cost, stated plainly: the interactive finger-driven pop is now only
+available from the gutter. A rightward drag anywhere else is a triggered
+animation. That is the same trade already accepted for the lower half of the
+screen — it now applies uniformly. Making it finger-driven everywhere is
+alternative A below, which the Flutter prototype re-opens: see the note there.
 
 ### Round 1 — build 0.2.10, iPhone 430×932pt, 27 rows
 

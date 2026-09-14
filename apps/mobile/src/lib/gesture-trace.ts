@@ -47,11 +47,15 @@ export type GestureAttempt = {
   /** The release committed to filing. */
   filed: boolean;
   /**
-   * The touch started where the native back recognizer was still competing for
-   * it. Without this a row cannot be read: the same outcome means very
-   * different things inside and outside the band.
+   * Where the drag actually was at the moment a verdict handed the touch away.
+   *
+   * maxDx and maxDy are independent extremes over the whole touch, so the pair
+   * they describe may never have existed at any single instant — useless for
+   * deciding whether VERTICAL_LATCH_RATIO is too tight. These two are sampled
+   * together, at the one frame that mattered. Both 0 when no verdict fired.
    */
-  band: boolean;
+  verdictDx: number;
+  verdictDy: number;
 };
 
 export type GestureOutcome =

@@ -63,7 +63,6 @@ import {
   BACK_SWIPE_GUTTER,
   ESCAPE_DRAG,
   horizontalVerdict,
-  isInNativeBackBand,
   isVerticalCommitted,
   isAtScrollBottom,
   shouldCommitFiling,
@@ -402,10 +401,6 @@ export const CaptureScreen = () => {
   // Latched once the drag is unmistakably upward; from then on the horizontal
   // verdict is not consulted, so late thumb wobble cannot lose the swipe.
   const verticalLatched = useSharedValue(false);
-  // Did this touch start where the native back recognizer is still competing?
-  // Decided at touch-down, because that is the only thing the native side looks
-  // at either (see isInNativeBackBand).
-  const startedInNativeBand = useSharedValue(true);
   // One back navigation per touch.
   const backTriggered = useSharedValue(false);
 
@@ -431,6 +426,11 @@ export const CaptureScreen = () => {
   const traceEndSuccess = useSharedValue(false);
   const traceFiled = useSharedValue(false);
   const traceMaxPull = useSharedValue(0);
+  // Where the drag actually was when a verdict threw the touch away. maxDx and
+  // maxDy are independent extremes and can describe a pair that never existed,
+  // which is useless for moving VERTICAL_LATCH_RATIO from evidence.
+  const traceVerdictDx = useSharedValue(0);
+  const traceVerdictDy = useSharedValue(0);
   // onFinalize can fire twice for one touch: once when manager.fail() resolves
   // the handler, and again when the finger actually lifts. Without this guard
   // every handed-over touch showed up as two identical rows.
@@ -476,10 +476,6 @@ export const CaptureScreen = () => {
           armY.value = touch.y;
           verticalLatched.value = false;
           backTriggered.value = false;
-          startedInNativeBand.value = isInNativeBackBand(
-            touch.y,
-            windowH.value
-          );
 
           traceStartMs.value = Date.now();
           traceMaxDx.value = 0;
@@ -492,6 +488,8 @@ export const CaptureScreen = () => {
           traceEndSuccess.value = false;
           traceFiled.value = false;
           traceMaxPull.value = 0;
+          traceVerdictDx.value = 0;
+          traceVerdictDy.value = 0;
           traceEmitted.value = false;
         })
         .onTouchesMove((event, manager) => {
@@ -519,26 +517,25 @@ export const CaptureScreen = () => {
                 // Always give this one up: swipeToSync sits behind us in the
                 // Race and cannot start until we resolve.
                 traceFailedToSync.value = true;
+                traceVerdictDx.value = dx;
+                traceVerdictDy.value = dy;
                 manager.fail();
                 return;
               }
-              if (verdict === "navigation") {
-                if (startedInNativeBand.value) {
-                  // The native pop is competing for this touch; hand it over.
-                  // This is the only place failing is worth its cost.
-                  traceFailedByVerdict.value = true;
-                  manager.fail();
-                  return;
-                }
-                if (!backTriggered.value) {
-                  // Below the band the native recognizer was never offered
-                  // this touch, so going back is ours to do.
-                  backTriggered.value = true;
-                  traceFailedByVerdict.value = true;
-                  runOnJS(runGoBack)();
-                  manager.fail();
-                  return;
-                }
+              if (verdict === "navigation" && !backTriggered.value) {
+                // Outside the left gutter the native recognizer is never
+                // offered the touch (gestureResponseDistance), so going back is
+                // ours to do everywhere on the screen. Failing afterwards is
+                // correct here and only here: we have just navigated away, so
+                // the touch has nothing left to do, and leaving the pan in
+                // BEGAN would let it file the page while Menu animates in.
+                backTriggered.value = true;
+                traceFailedByVerdict.value = true;
+                traceVerdictDx.value = dx;
+                traceVerdictDy.value = dy;
+                runOnJS(runGoBack)();
+                manager.fail();
+                return;
               }
               // "undecided" stays ours. Failing is terminal for the whole
               // touch, and at the start of a swipe up dy is still ~0.
@@ -657,7 +654,8 @@ export const CaptureScreen = () => {
               gotEnd: traceGotEnd.value,
               endSuccess: traceEndSuccess.value,
               filed: traceFiled.value,
-              band: startedInNativeBand.value,
+              verdictDx: traceVerdictDx.value,
+              verdictDy: traceVerdictDy.value,
             });
           }
         }),
@@ -672,7 +670,6 @@ export const CaptureScreen = () => {
       runFinishCommit,
       runGoBack,
       runRecordAttempt,
-      startedInNativeBand,
       touchStartX,
       touchStartY,
       traceActivated,
@@ -688,6 +685,8 @@ export const CaptureScreen = () => {
       traceMaxDy,
       traceMaxPull,
       traceStartMs,
+      traceVerdictDx,
+      traceVerdictDy,
       transitioning,
       verticalLatched,
       viewportH,

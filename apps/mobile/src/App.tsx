@@ -11,7 +11,6 @@ import {
   Linking,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -44,7 +43,7 @@ import { useRecordingSessionStore } from "./state/recording-session-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
 import { useSettingsStore } from "./state/settings-store";
 import { useSyncStore } from "./state/sync-store";
-import { nativeBackBandBottom } from "./lib/capture-gesture";
+import { NATIVE_BACK_RESPONSE_DISTANCE } from "./lib/capture-gesture";
 import { useTheme } from "./theme";
 import { ErrorBoundary } from "./ui/error-boundary";
 
@@ -67,7 +66,6 @@ const BUNDLED_FONTS = {
 
 const RootStack = () => {
   const theme = useTheme();
-  const { height } = useWindowDimensions();
   return (
     <Stack.Navigator
       initialRouteName="Capture"
@@ -79,8 +77,8 @@ const RootStack = () => {
         // Swipe back from anywhere on the screen, not just the left edge —
         // still the native UIKit pop transition, driven natively by
         // react-native-screens' pan recognizer. Ordinary pushed screens have
-        // no gestures of their own, so this is free there. Capture keeps it
-        // too, but only over its upper band (see below).
+        // no gestures of their own, so this is free there. Capture narrows it
+        // to the left gutter instead (see below).
         fullScreenGestureEnabled: true,
         // Chevron-only back everywhere: Sync has more than one entry point,
         // so naming the previous screen in the label would be noise.
@@ -104,16 +102,24 @@ const RootStack = () => {
           // be arbitrated with; the two libraries refuse each other's
           // recognizers outright.
           //
-          // So the screen is split by height instead. Above this line the
-          // native interactive pop is untouched, which is where a back swipe
-          // naturally starts anyway. Below it the recognizer is never offered
-          // the touch, so swiping up to file is uncontested; a decisive
-          // rightward drag down there pops from the capture screen itself.
+          // So it gets the left gutter and nothing else. This used to be a
+          // split by *height* at 52% of the screen, which left the whole upper
+          // half contested — a swipe up that happened to start above the line
+          // was cancelled before it began — and ran the same rightward drag
+          // through two implementations whose thresholds differed by 2.5x
+          // depending on where the thumb landed. One gesture behaving two ways
+          // is what "back works every other time" actually was.
+          //
+          // Now the partition is clean: x <= 24 is the native interactive pop
+          // (which is where a back swipe starts anyway, and where UIKit's own
+          // uncancellable edge pop lives regardless), everything else is ours
+          // uncontested, and a decisive rightward drag out there pops from the
+          // capture screen itself.
           //
           // The values are absolute point coordinates, not edge distances —
           // react-native-screens passes them straight through to
           // isInGestureResponseDistance.
-          gestureResponseDistance: { bottom: nativeBackBandBottom(height) },
+          gestureResponseDistance: NATIVE_BACK_RESPONSE_DISTANCE,
           // A gesture-driven preview already played this push when instant
           // is set; attach the real screen underneath without replaying it.
           animation: route.params?.instant ? "none" : "default",
