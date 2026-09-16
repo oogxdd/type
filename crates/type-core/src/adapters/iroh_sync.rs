@@ -1074,10 +1074,8 @@ pub fn archive_mobile_audio_with_iroh(app: &AppEnv) -> Result<IrohAudioArchiveRe
         .as_ref()
         .ok_or_else(|| "Start the Iroh sync connection before archiving audio.".to_string())?;
 
-    // Audio is the only part of sync that needs Iroh authorization. When the
-    // computer has not authorized this phone, carry audio in Git as before
-    // rather than excluding it and uploading nothing — otherwise the recordings
-    // would simply never arrive.
+    // A failed pairing must never silently move recordings into permanent Git
+    // history. Keep the local files for the next authorized Iroh attempt.
     let pending = recordings
         .iter()
         .filter(|recording| recording.audio_path.is_file())
@@ -1092,10 +1090,11 @@ pub fn archive_mobile_audio_with_iroh(app: &AppEnv) -> Result<IrohAudioArchiveRe
             "This phone is not paired for direct audio transfer. Scan the QR code in desktop Settings → Sync again.".to_string()
         }));
         let repo = crate::ensure_git_repo(&root)?;
-        crate::set_audio_git_exclusion(&repo, false)?;
+        crate::set_audio_git_exclusion(&repo, true)?;
         return Ok(result);
     }
 
+    let receipts = crate::AudioArchiveReceipts::load(&root);
     for recording in recordings {
         if !recording.audio_path.is_file() {
             continue;
@@ -1112,7 +1111,7 @@ pub fn archive_mobile_audio_with_iroh(app: &AppEnv) -> Result<IrohAudioArchiveRe
                 continue;
             }
         };
-        if crate::audio_has_desktop_ack(&root, &recording.audio_rel, &sha256, byte_length) {
+        if receipts.matches(&recording.audio_rel, &sha256, byte_length) {
             result.already_archived += 1;
             continue;
         }

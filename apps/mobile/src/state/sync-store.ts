@@ -147,14 +147,15 @@ export const useSyncStore = create<SyncState>((set, get) => {
   // way it used to — that turned one slow recording into "syncing forever"
   // with the notes never leaving the phone.
   const applyAudioGitExclusionFast = async (connection: SavedGitConnection | null) => {
-    // Local-only flag flip: whether audio should ride in git (unpaired
-    // fallback) or be excluded (Iroh will carry it). Cheap, so it stays ahead
+    // Local-only flag flip: ordinary Git remotes carry audio, while Iroh
+    // connections always exclude it, even when pairing fails. This stays ahead
     // of the push/pull it affects; the slow part (actually moving bytes) is
     // archiveAudioBestEffort below.
     try {
       await core.setMobileAudioGitExclusion(Boolean(connection?.irohTicket));
     } catch (error) {
-      logSync(`audio git exclusion: skipped - ${getErrorMessage(error)}`);
+      logSync(`audio git exclusion: failed - ${getErrorMessage(error)}`);
+      if (connection?.irohTicket) throw error;
     }
   };
 
@@ -170,7 +171,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
     void (async () => {
       // Recordings travel outside Git. Trouble moving them must not stop the
       // notes from syncing — the notes are what the user is waiting on, and an
-      // unpaired phone keeps carrying its audio in Git as a fallback.
+      // unpaired phone keeps its audio locally until pairing succeeds.
       try {
         const archive = await core.archiveMobileAudioWithIroh();
         if (archive.uploaded > 0) {
@@ -178,7 +179,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
         }
         if (archive.skipped > 0) {
           logSync(
-            `audio archive: keeping ${archive.skipped} recording(s) in Git - ${
+            `audio archive: keeping ${archive.skipped} recording(s) on this phone until direct transfer is paired - ${
               archive.error ?? "audio transfer is not paired"
             }`
           );
@@ -190,8 +191,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
             }; will retry next sync`
           );
         }
-        // A fallback only changes what the *next* Git push includes.
-        // This push already finished, so skipped audio is not transferred yet.
+        // Unpaired audio stays local and retries outside Git on the next sync.
         set({ audioArchiveState: archive.failed > 0 || archive.skipped > 0 ? "error" : "done" });
       } catch (error) {
         logSync(`audio archive: skipped this run - ${getErrorMessage(error)}`);

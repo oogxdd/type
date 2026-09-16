@@ -114,9 +114,8 @@ pub trait GitSyncGateway {
 //   in:  branch — target branch, defaults to current
 //        username, password — optional HTTPS credentials
 //   out: GitSyncStatus — status after pulling
-//   - Commits pending local changes first (files are the source of truth;
-//     sync never blocks on a dirty tree)
-//   - Fetches and performs fast-forward, or three-way merge if needed
+//   - Fetches before creating commits, so offline attempts leave edits uncommitted
+//   - Commits pending local changes, then fast-forwards or merges as needed
 //   - On merge conflicts: keeps "ours", saves "theirs" as .conflict files (e.g. note.conflict.md)
 //   - Never loses data — conflict files preserve the remote version
 //
@@ -133,8 +132,8 @@ pub trait GitSyncGateway {
 //        branch — target branch, defaults to current
 //        username, password — optional HTTPS credentials
 //   out: GitSyncStatus — status after pushing
-//   - Stages all changes and commits
-//   - Pushes to the remote
+//   - Authenticates the remote before staging changes and committing
+//   - Pushes over the same authenticated connection
 //   - Sets upstream tracking on the branch
 //   - No-op if push_required is false
 //

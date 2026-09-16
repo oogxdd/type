@@ -102,13 +102,13 @@ would pass against the broken code.
   every five minutes while the mobile process remains active. A new save or
   foreground event resets the backoff.
 - Manual **Sync now** remains available and exposes errors; automatic attempts
-  never block capture or editing. Manual sync uses the same pull → audio blob
-  transfer → push path and retains visible object/byte progress.
+  never block capture or editing. Manual sync uses the same pull → push → background audio blob
+  transfer path and retains visible object/byte progress.
 - **Audio pairing failing never fails a sync.** Only recordings need the Iroh
   authorization; notes go through the SSH tunnel either way. A phone the desktop
-  has not authorized keeps carrying its audio inside Git — the pre-Iroh
-  behavior — rather than excluding it and uploading nothing. The phone reports
-  this in its Sync screen instead of turning it into a sync error.
+  has not authorized keeps audio on the phone and retries after pairing; it
+  never silently inserts recordings into Git history. The phone reports this
+  in its Sync screen without blocking the notes sync.
 - The phone's **Direct connection** panel reports which computer it dials,
   whether the last connection ran direct or through a relay, whether audio
   transfer is paired, and the last transport failure. When the transport is what
@@ -152,9 +152,9 @@ enough to delete the phone copy.
 
 Recordings that were already tracked by Git before this experiment are kept on
 the phone. Removing only their working-tree copy would not release their Git
-blob, so migrating old recordings is deliberately deferred rather than
-presenting a misleading storage saving. New recordings use the true
-out-of-band path.
+blob. A separate verified migration can remove audio from history while
+preserving all text commits; see [Audio history migration](AUDIO_HISTORY_MIGRATION.md).
+New recordings use the true out-of-band path.
 
 ## Rollout boundary
 
@@ -167,3 +167,13 @@ Future optional directions are documented separately:
   mailbox that stores only client-encrypted objects.
 - `architecture/11-filesystem-sync-without-git.md` — retaining Markdown and
   folders while replacing Git commits with a file-operation journal.
+
+## Offline attempts and timings
+
+Pull fetches from the actual peer before committing local edits. Push authenticates
+before committing and keeps that connection for transfer. A failed dial therefore
+does not create a commit for each captured page; manual checkpoints still work
+offline. A connection can fail after a commit, so this is not a promise of exactly
+one commit per successful sync. Native logs separate fetch, push authentication,
+local commit, and total push durations. Mobile logs separate Git, note refresh,
+history reads, and audio cache maintenance.

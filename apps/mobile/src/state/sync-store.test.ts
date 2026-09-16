@@ -5,11 +5,12 @@ import { setRawCore } from "@typenotes/mobile-core/raw-core";
 import { useNotesStore } from "./notes-store";
 import { useSyncStore } from "./sync-store";
 
+const { profileSettings } = vi.hoisted(() => ({ profileSettings: {
+  git_remote_url: "ssh://127.0.0.1:19418/notes", git_branch: "main",
+  git_username: "", git_password: "", git_iroh_ticket: "",
+} }));
 vi.mock("./settings-store", () => ({
-  activeProfile: () => ({ settings: {
-    git_remote_url: "ssh://127.0.0.1:19418/notes", git_branch: "main",
-    git_username: "", git_password: "", git_iroh_ticket: "",
-  } }),
+  activeProfile: () => ({ settings: profileSettings }),
   useSettingsStore: { getState: () => ({ snapshot: null }) },
 }));
 vi.mock("./notes-store", () => ({
@@ -29,6 +30,7 @@ const deferred = () => {
 describe("mobile sync coordination", () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
+    profileSettings.git_iroh_ticket = "";
     refreshNotes.mockReset().mockResolvedValue(undefined);
     const raw = createMockCore();
     await raw.initCore("/tmp/type-sync-test", "/tmp");
@@ -94,6 +96,28 @@ describe("mobile sync coordination", () => {
     await useSyncStore.getState().syncNow();
     expect(core.gitPush).toHaveBeenCalledTimes(1);
     expect(useSyncStore.getState().autoSyncState).toBe("synced");
+  });
+
+  it("keeps unpaired Iroh audio excluded while notes still sync", async () => {
+    profileSettings.git_iroh_ticket = "ticket";
+    const exclusion = vi.spyOn(core, "setMobileAudioGitExclusion");
+    vi.spyOn(core, "archiveMobileAudioWithIroh").mockResolvedValue({
+      scanned: 1, uploaded: 0, already_archived: 0, skipped: 1, failed: 0, error: "not paired",
+    });
+    await useSyncStore.getState().syncNow();
+    expect(core.gitPush).toHaveBeenCalledTimes(1);
+    expect(exclusion.mock.calls.every(([enabled]) => enabled)).toBe(true);
+    expect(useSyncStore.getState().audioArchiveState).toBe("error");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  it("does not commit or push if excluding Iroh audio fails", async () => {
+    profileSettings.git_iroh_ticket = "ticket";
+    vi.spyOn(core, "setMobileAudioGitExclusion").mockRejectedValue(new Error("exclude write failed"));
+    await expect(useSyncStore.getState().syncNow()).rejects.toThrow("exclude write failed");
+    expect(core.gitPull).not.toHaveBeenCalled();
+    expect(core.gitPush).not.toHaveBeenCalled();
+    expect(useSyncStore.getState().autoSyncState).toBe("waiting_for_computer");
   });
 
   it("reserves standalone pull before its first HEAD read", async () => {

@@ -12,7 +12,7 @@ use std::{
     fs,
     net::{IpAddr, TcpStream, ToSocketAddrs},
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::ports::git_sync::GitSyncGateway;
@@ -195,9 +195,7 @@ impl GitSyncGateway for GitSyncAdapter {
         // the next pull/push can recover from instead of a repo with no origin.
         ensure_origin_remote(&repo, remote_url)?;
         let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
-        prepare_bootstrap_worktree_for_sync(&root, &repo, &target_branch)?;
         probe_remote_url(remote_url)?;
-        switch_or_prepare_branch(&repo, &target_branch)?;
         let ssh_priv = ssh_private_key_if_exists(&self.app);
         let ssh_pub = ssh_public_key_if_exists(&self.app);
         let trusted_host_key = trusted_ssh_host_key_from_settings(&settings);
@@ -220,6 +218,8 @@ impl GitSyncGateway for GitSyncAdapter {
                 }
             }
         };
+        prepare_bootstrap_worktree_for_sync(&root, &repo, &target_branch)?;
+        switch_or_prepare_branch(&repo, &target_branch)?;
         if let Some(fetched_commit) = fetched {
             let analysis = repo
                 .merge_analysis(&[&fetched_commit])
@@ -270,22 +270,9 @@ impl GitSyncGateway for GitSyncAdapter {
 
         let repo = open_repo(&root)?;
         let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
-        prepare_bootstrap_worktree_for_sync(&root, &repo, &target_branch)?;
-        // Files are the source of truth and merges never block: pending local
-        // edits are committed (exactly like push does) instead of failing the
-        // pull, so the one-button pull-then-push sync just works.
-        if git_has_changes(&repo) {
-            let message = if settings.git_commit_message.trim().is_empty() {
-                "Sync notes"
-            } else {
-                settings.git_commit_message.as_str()
-            };
-            commit_all_changes(&repo, message, &target_branch)?;
-        }
         if let Some(remote_url) = git_remote_url(&repo) {
             probe_remote_url(&remote_url)?;
         }
-        switch_or_prepare_branch(&repo, &target_branch)?;
         let ssh_priv = ssh_private_key_if_exists(&self.app);
         let ssh_pub = ssh_public_key_if_exists(&self.app);
         let trusted_host_key = trusted_ssh_host_key_from_settings(&settings);
@@ -298,6 +285,21 @@ impl GitSyncGateway for GitSyncAdapter {
             ssh_pub,
             trusted_host_key,
         )?;
+        // Fetch authenticates the real peer before creating local history. A
+        // reachable phone loopback proxy is not proof the desktop is online.
+        prepare_bootstrap_worktree_for_sync(&root, &repo, &target_branch)?;
+        // Files are the source of truth and merges never block: pending local
+        // edits are committed (exactly like push does) instead of failing the
+        // pull, so the one-button pull-then-push sync just works.
+        if git_has_changes(&repo) {
+            let message = if settings.git_commit_message.trim().is_empty() {
+                "Sync notes"
+            } else {
+                settings.git_commit_message.as_str()
+            };
+            commit_all_changes(&repo, message, &target_branch)?;
+        }
+        switch_or_prepare_branch(&repo, &target_branch)?;
         let (analysis, _) = repo.merge_analysis(&[&fetched]).map_err(map_git_error)?;
         if analysis.is_up_to_date() {
             return Ok(build_git_status(&root));
@@ -390,13 +392,13 @@ impl GitSyncGateway for GitSyncAdapter {
         if let Some(remote_url) = git_remote_url(&repo) {
             probe_remote_url(&remote_url)?;
         }
-        let _ = commit_all_changes(&repo, commit_message, &target_branch)?;
         let ssh_priv = ssh_private_key_if_exists(&self.app);
         let ssh_pub = ssh_public_key_if_exists(&self.app);
         let trusted_host_key = trusted_ssh_host_key_from_settings(&settings);
         remote_push(
             &repo,
             &target_branch,
+            commit_message,
             username,
             password,
             ssh_priv,
@@ -410,12 +412,14 @@ impl GitSyncGateway for GitSyncAdapter {
 fn remote_push(
     repo: &Repository,
     branch: &str,
+    commit_message: &str,
     username: Option<&str>,
     password: Option<&str>,
     ssh_private_key: Option<PathBuf>,
     ssh_public_key: Option<PathBuf>,
     trusted_host_key: Option<TrustedSshHostKey>,
 ) -> Result<(), String> {
+    let started_at = Instant::now();
     let mut callbacks = build_callbacks(
         username,
         password,
@@ -451,7 +455,7 @@ fn remote_push(
         "[git] pushing '{branch}' to {}",
         redact_remote_url_for_log(remote.url().unwrap_or("<invalid url>"))
     );
-    remote
+    let mut connection = remote
         .connect_auth(
             Direction::Push,
             Some(build_callbacks(
@@ -464,13 +468,25 @@ fn remote_push(
             None,
         )
         .map_err(map_git_error)?;
+    eprintln!(
+        "[git] push connection ready in {}ms",
+        started_at.elapsed().as_millis()
+    );
+    let commit_started_at = Instant::now();
+    // Authenticate first: offline auto-sync attempts must not accumulate a
+    // commit for every saved note. Manual checkpoints remain independent.
+    commit_all_changes(repo, commit_message, branch)?;
+    eprintln!(
+        "[git] push local commit finished in {}ms",
+        commit_started_at.elapsed().as_millis()
+    );
     update_transfer_progress(|progress| {
         *progress = GitTransferProgress {
             phase: "pushing".to_string(),
             ..GitTransferProgress::default()
         };
     });
-    let push_result = remote.push(
+    let push_result = connection.remote().push(
         &[&format!("refs/heads/{0}:refs/heads/{0}", branch)],
         Some(&mut push_options),
     );
@@ -480,7 +496,7 @@ fn remote_push(
         eprintln!("[git] push failed: {message}");
         message
     })?;
-    eprintln!("[git] push complete");
+    eprintln!("[git] push complete in {}ms", started_at.elapsed().as_millis());
     let mut local = repo
         .find_branch(branch, git2::BranchType::Local)
         .map_err(map_git_error)?;
@@ -832,6 +848,9 @@ pub fn ensure_git_repo(root: &Path) -> Result<Repository, String> {
         Err(_) => Repository::init(root).map_err(map_git_error)?,
     };
     ensure_device_settings_excluded(&repo);
+    if !crate::load_profile_settings(root).git_iroh_ticket.trim().is_empty() {
+        set_audio_git_exclusion(&repo, true)?;
+    }
     Ok(repo)
 }
 
@@ -881,7 +900,11 @@ pub fn set_audio_git_exclusion(repo: &Repository, enabled: bool) -> Result<(), S
     if let Some(parent) = exclude_path.parent() {
         fs::create_dir_all(parent).map_err(map_git_error_io)?;
     }
-    fs::write(exclude_path, format!("{}\n", lines.join("\n"))).map_err(map_git_error_io)
+    let updated = format!("{}\n", lines.join("\n"));
+    if updated == existing {
+        return Ok(());
+    }
+    fs::write(exclude_path, updated).map_err(map_git_error_io)
 }
 
 fn map_git_error_io(error: std::io::Error) -> String {
@@ -1408,6 +1431,7 @@ pub fn perform_fetch<'a>(
     ssh_public_key: Option<PathBuf>,
     trusted_host_key: Option<TrustedSshHostKey>,
 ) -> Result<AnnotatedCommit<'a>, String> {
+    let started_at = Instant::now();
     let mut remote = repo.find_remote("origin").map_err(map_git_error)?;
     eprintln!(
         "[git] fetching '{branch}' from {}",
@@ -1456,7 +1480,7 @@ pub fn perform_fetch<'a>(
         eprintln!("[git] fetch failed: {message}");
         message
     })?;
-    eprintln!("[git] fetch complete");
+    eprintln!("[git] fetch complete in {}ms", started_at.elapsed().as_millis());
     let fetch_head = repo.find_reference("FETCH_HEAD").map_err(map_git_error)?;
     repo.reference_to_annotated_commit(&fetch_head)
         .map_err(map_git_error)
@@ -1808,6 +1832,153 @@ mod tests {
         assert_eq!(hits, 1);
 
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn irohs_manual_checkpoint_excludes_new_audio() {
+        let app_dir =
+            std::env::temp_dir().join(format!("type-git-iroh-checkpoint-{}", uuid::Uuid::now_v7()));
+        let app = AppEnv::new(&app_dir);
+        let root = crate::ensured_notes_root(&app).unwrap();
+        let mut settings = crate::load_profile_settings(&root);
+        settings.git_iroh_ticket = "paired-ticket".into();
+        crate::save_profile_settings(&root, &settings).unwrap();
+        fs::write(root.join("Feed/note.md"), "recording note\n").unwrap();
+        fs::write(root.join("Recordings/audio.m4a"), "audio bytes").unwrap();
+        GitSyncAdapter::new(app)
+            .commit(GitCommitArgs {
+                message: None,
+                branch: None,
+            })
+            .unwrap();
+        let repo = open_repo(&root).unwrap();
+        let tree = repo.head().unwrap().peel_to_tree().unwrap();
+        assert!(tree.get_path(Path::new("Feed/note.md")).is_ok());
+        assert!(tree.get_path(Path::new("Recordings/audio.m4a")).is_err());
+        assert!(root.join("Recordings/audio.m4a").is_file());
+        fs::remove_dir_all(app_dir).unwrap();
+    }
+
+    #[test]
+    fn failed_network_attempts_do_not_commit_local_edits() {
+        let app_dir =
+            std::env::temp_dir().join(format!("type-git-offline-{}", uuid::Uuid::now_v7()));
+        let app = AppEnv::new(&app_dir);
+        let root = crate::ensured_notes_root(&app).unwrap();
+        let repo = ensure_git_repo(&root).unwrap();
+        fs::write(root.join("Feed/note.md"), "initial\n").unwrap();
+        let initial = commit_all_changes(&repo, "initial", "main")
+            .unwrap()
+            .unwrap();
+        // A missing file remote fails in libgit2, after any TCP preflight.
+        ensure_origin_remote(&repo, app_dir.join("offline.git").to_str().unwrap()).unwrap();
+        let adapter = GitSyncAdapter::new(app);
+        for text in ["edit one\n", "edit two\n"] {
+            fs::write(root.join("Feed/note.md"), text).unwrap();
+            assert!(adapter
+                .pull(GitSyncArgs {
+                    branch: None,
+                    username: None,
+                    password: None
+                })
+                .is_err());
+            assert!(adapter
+                .push(GitPushArgs {
+                    message: None,
+                    branch: None,
+                    username: None,
+                    password: None
+                })
+                .is_err());
+            assert_eq!(repo.head().unwrap().target(), Some(initial));
+            assert_eq!(fs::read_to_string(root.join("Feed/note.md")).unwrap(), text);
+            assert!(git_has_changes(&repo));
+        }
+        // Once the peer exists, accumulated edits become one local commit.
+        let remote = Repository::init_bare(app_dir.join("offline.git")).unwrap();
+        adapter
+            .push(GitPushArgs {
+                message: None,
+                branch: None,
+                username: None,
+                password: None,
+            })
+            .unwrap();
+        let head = repo.head().unwrap().peel_to_commit().unwrap();
+        assert_eq!(head.parent_id(0).unwrap(), initial);
+        assert_eq!(
+            remote.find_reference("refs/heads/main").unwrap().target(),
+            Some(head.id())
+        );
+        fs::remove_dir_all(app_dir).unwrap();
+    }
+
+    #[test]
+    fn fetch_before_commit_still_merges_dirty_local_notes() {
+        let app_dir =
+            std::env::temp_dir().join(format!("type-git-dirty-pull-{}", uuid::Uuid::now_v7()));
+        let app = AppEnv::new(&app_dir);
+        let root = crate::ensured_notes_root(&app).unwrap();
+        let repo = ensure_git_repo(&root).unwrap();
+        fs::write(root.join("Feed/local.md"), "original\n").unwrap();
+        commit_all_changes(&repo, "local", "main").unwrap();
+        fs::write(root.join("Feed/local.md"), "edited offline\n").unwrap();
+        let desktop = app_dir.join("desktop");
+        fs::create_dir_all(desktop.join("Feed")).unwrap();
+        fs::write(desktop.join("Feed/desktop.md"), "remote note\n").unwrap();
+        let remote = ensure_git_repo(&desktop).unwrap();
+        commit_all_changes(&remote, "remote", "main").unwrap();
+        ensure_origin_remote(&repo, desktop.to_str().unwrap()).unwrap();
+        GitSyncAdapter::new(app)
+            .pull(GitSyncArgs {
+                branch: Some("main".into()),
+                username: None,
+                password: None,
+            })
+            .unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join("Feed/local.md")).unwrap(),
+            "edited offline\n"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("Feed/desktop.md")).unwrap(),
+            "remote note\n"
+        );
+        assert_eq!(
+            repo.head()
+                .unwrap()
+                .peel_to_commit()
+                .unwrap()
+                .parent_count(),
+            2
+        );
+        assert!(!git_has_changes(&repo));
+        fs::remove_dir_all(app_dir).unwrap();
+    }
+
+    #[test]
+    fn failed_first_connection_leaves_captured_notes_uncommitted() {
+        let app_dir =
+            std::env::temp_dir().join(format!("type-git-offline-connect-{}", uuid::Uuid::now_v7()));
+        let app = AppEnv::new(&app_dir);
+        let root = crate::ensured_notes_root(&app).unwrap();
+        fs::write(root.join("Feed/captured.md"), "keep this\n").unwrap();
+        let adapter = GitSyncAdapter::new(app);
+        assert!(adapter
+            .connect(ConnectGitArgs {
+                remote_url: Some(app_dir.join("offline.git").to_string_lossy().into_owned()),
+                branch: Some("main".into()),
+                username: None,
+                password: None,
+            })
+            .is_err());
+        let repo = open_repo(&root).unwrap();
+        assert!(!git_head_has_commit(&repo));
+        assert_eq!(
+            fs::read_to_string(root.join("Feed/captured.md")).unwrap(),
+            "keep this\n"
+        );
+        fs::remove_dir_all(app_dir).unwrap();
     }
 
     #[test]

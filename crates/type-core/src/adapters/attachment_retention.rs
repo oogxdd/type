@@ -169,7 +169,9 @@ fn prune_mobile_audio_cache_at(root: &Path, now: i64) -> Result<MobileAudioPrune
 
     for recording in recordings {
         if !recording.audio_path.is_file() {
-            if is_audio_evicted_locally(root, &recording.audio_rel) {
+            if cache.evicted.contains_key(&recording.audio_rel)
+                || receipts.receipts.contains_key(&recording.audio_rel)
+            {
                 result.already_evicted += 1;
             } else {
                 result.waiting_for_desktop_receipt += 1;
@@ -253,26 +255,26 @@ pub fn is_audio_evicted_locally(root: &Path, audio_rel: &str) -> bool {
             .contains_key(audio_rel)
 }
 
-pub(crate) fn audio_has_desktop_ack(
-    root: &Path,
-    audio_rel: &str,
-    sha256: &str,
-    byte_length: u64,
-) -> bool {
-    let receipt_path = root.join(AUDIO_RECEIPTS_REL_PATH);
-    if receipt_path.is_file() {
-        return read_json_or_default::<AudioReceiptManifest>(&receipt_path)
-            .receipts
-            .get(audio_rel)
-            .map(|receipt| receipt.sha256 == sha256 && receipt.byte_length == byte_length)
-            .unwrap_or(false);
+/// Load once per archive scan instead of parsing the growing manifests for
+/// every recording. A tracked manifest remains authoritative, including when
+/// it is empty (the desktop may have revoked a receipt).
+pub(crate) struct AudioArchiveReceipts(BTreeMap<String, AudioDurabilityReceipt>);
+
+impl AudioArchiveReceipts {
+    pub(crate) fn load(root: &Path) -> Self {
+        let path = root.join(AUDIO_RECEIPTS_REL_PATH);
+        if path.is_file() {
+            Self(read_json_or_default::<AudioReceiptManifest>(&path).receipts)
+        } else {
+            Self(read_json_or_default::<AudioCacheManifest>(&root.join(AUDIO_CACHE_REL_PATH)).desktop_acks)
+        }
     }
-    let cache = read_json_or_default::<AudioCacheManifest>(&root.join(AUDIO_CACHE_REL_PATH));
-    cache
-        .desktop_acks
-        .get(audio_rel)
-        .map(|receipt| receipt.sha256 == sha256 && receipt.byte_length == byte_length)
-        .unwrap_or(false)
+
+    pub(crate) fn matches(&self, audio_rel: &str, sha256: &str, byte_length: u64) -> bool {
+        self.0.get(audio_rel)
+            .map(|receipt| receipt.sha256 == sha256 && receipt.byte_length == byte_length)
+            .unwrap_or(false)
+    }
 }
 
 pub(crate) fn record_desktop_audio_ack(
@@ -363,6 +365,17 @@ mod tests {
         crate::set_audio_git_exclusion(&repo, true).unwrap();
         commit_all_changes(&repo, "fixture", "main").unwrap();
         root
+    }
+
+    #[test]
+    fn archive_receipt_snapshot_respects_desktop_revocation() {
+        let root = recording_fixture("ack-snapshot", "completed", 0);
+        record_desktop_audio_ack(&root, "Recordings/audio.m4a".into(), "hash".into(), 12).unwrap();
+        assert!(AudioArchiveReceipts::load(&root).matches("Recordings/audio.m4a", "hash", 12));
+        assert!(!AudioArchiveReceipts::load(&root).matches("Recordings/audio.m4a", "changed", 12));
+        write_json(&root.join(AUDIO_RECEIPTS_REL_PATH), &AudioReceiptManifest::default()).unwrap();
+        assert!(!AudioArchiveReceipts::load(&root).matches("Recordings/audio.m4a", "hash", 12));
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
