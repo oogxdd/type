@@ -140,9 +140,9 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
           const markdown = document?.content ?? "";
           return (
             <article key={note.path} className="note-editor-section" data-active={activePath === note.path} aria-label={note.title}>
-              {multiple ? <header className="note-editor-divider" contentEditable={false}>
+              <header className="note-editor-divider" contentEditable={false}>
                 <time>{formatEditorDate(preview?.createdMs ?? preview?.updatedMs ?? null)}</time>
-              </header> : null}
+              </header>
               <RecordingNoteHeader notePath={note.path} preview={preview} />
               <HandwritingNoteHeader notePath={note.path} preview={preview} />
               {document?.error ? <div role="alert" className="note-editor-error">{document.error} <button type="button" onClick={() => void (document.loaded && document.dirty ? session.flush(note.path) : session.load(note.path, true)).catch(() => {})}>Retry</button></div> : null}

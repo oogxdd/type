@@ -15,7 +15,7 @@ import {
   appendRawLensBackmatterBlock,
   splitLensBackmatterBlock,
 } from "@typenotes/shared/lens-backmatter";
-import { consumeNoteEditorInsertRequest, NOTE_EDITOR_ENTER_INSERT_EVENT } from "../lib/editor-events";
+import { consumeNoteEditorFocusRequest, NOTE_EDITOR_FOCUS_EVENT, consumeNoteEditorInsertRequest, NOTE_EDITOR_ENTER_INSERT_EVENT } from "../lib/editor-events";
 import { getActiveNoteEditor, setActiveNoteEditor } from "../lib/editor-bridge";
 import { htmlToMarkdown, markdownToHtml } from "../lib/markdown-editor";
 import { useVim } from "../hooks/use-vim";
@@ -279,6 +279,31 @@ export function NoteEditor({ documentKey, markdown, onChange, surface }: NoteEdi
       }
     });
   }, [documentKey, editor, resetForDocument, updateCursor, vimModeRef]);
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || !documentKey) return;
+    let frame = 0;
+    const focusRequested = () => {
+      cancelAnimationFrame(frame);
+      // Run after the list click / context-menu focus restoration has finished.
+      frame = requestAnimationFrame(() => {
+        if (editor.isDestroyed || !consumeNoteEditorFocusRequest(documentKey)) return;
+        focusModeRef.current = "normal";
+        editor.view.focus();
+        resetForDocument("normal");
+        editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(editor.state.selection.$head)).scrollIntoView());
+        setActiveNoteEditor(editor, documentKey);
+        if (handleRef.current) surfaceRef.current?.activate(handleRef.current);
+        updateCursor(editor.view);
+      });
+    };
+    window.addEventListener(NOTE_EDITOR_FOCUS_EVENT, focusRequested);
+    focusRequested();
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener(NOTE_EDITOR_FOCUS_EVENT, focusRequested);
+    };
+  }, [documentKey, editor, resetForDocument, updateCursor]);
 
   useEffect(() => {
     if (!editor || editor.isDestroyed || !scrollRef.current) {

@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useSelection } from "@/app/state/selection-store";
+import { collectFeedNotes } from "@/features/notes/navigation/model/feed-tree-model";
+import { requestNoteEditorFocus } from "@/features/notes/editor/lib/editor-events";
+import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { getAbsolutePath } from "@/features/notes/api/notes-api";
@@ -33,7 +37,11 @@ export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) 
     showNoteInfo,
     createFolder,
     allNotePreviews,
+    feedNodeById,
+    setActiveFeedGroup,
   } = useNotesTree();
+  const selectNote = useSelection((selection) => selection.selectNote);
+  const focusEditorOnClose = useRef(false);
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [destinationPath, setDestinationPath] = useState("");
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
@@ -98,6 +106,23 @@ export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) 
           },
         },
       ];
+    }
+
+    if (state.kind === "feed-group") {
+      const paths = [...new Set(collectFeedNotes(feedNodeById.get(state.path) ?? null).map((note) => note.path))];
+      return [{
+        id: "feed.selectAll",
+        label: `Select all notes (${paths.length})`,
+        disabled: paths.length === 0,
+        run: () => {
+          if (!paths.length) return;
+          setActiveFeedGroup(state.path);
+          selectNote(paths[0], FEED_FOLDER_PATH, new Set(paths));
+          focusEditorOnClose.current = true;
+          closeAll();
+          requestNoteEditorFocus(paths[0]);
+        },
+      }];
     }
 
     if (state.kind === "folder") {
@@ -216,6 +241,9 @@ export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) 
   }, [
     allArchived,
     allReviewed,
+    feedNodeById,
+    setActiveFeedGroup,
+    selectNote,
     closeAll,
     deleteFolders,
     deleteNotes,
@@ -279,6 +307,12 @@ export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) 
           sideOffset={4}
           collisionPadding={8}
           className="w-72"
+          onCloseAutoFocus={(event) => {
+            if (focusEditorOnClose.current) {
+              event.preventDefault();
+              focusEditorOnClose.current = false;
+            }
+          }}
         >
           {menuItems.map((item, index) => (
             <div key={item.id}>

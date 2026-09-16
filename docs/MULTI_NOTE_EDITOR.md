@@ -1,8 +1,10 @@
 # Editing selected notes together
 
 Selecting multiple notes opens the ordinary editor on all their bodies in middle-pane order.
-Thin, non-editable full-width date/time dividers mark file boundaries. There is one scroll container
-and one set of editor controls. Each note has its own Tiptap document and Undo/Redo history;
+Thin, non-editable inset date/time dividers mark file boundaries. There is one scroll container
+and one set of editor controls. The first note also shows its date, even when selected alone.
+Clicking a note selection focuses the editor in Normal mode. Feed month/week/day context
+menus select every note below that group, including collapsed descendants. Each note has its own Tiptap document and Undo/Redo history;
 remaining editors stay mounted when the selection grows or shrinks, including the transition
 to one note.
 

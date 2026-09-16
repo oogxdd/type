@@ -1,3 +1,4 @@
+import { requestNoteEditorFocus } from "@/features/notes/editor/lib/editor-events";
 // Feed navigation renders synthetic time buckets, not the folder tree.
 import type { MouseEvent as ReactMouseEvent, RefObject } from "react";
 import { useCallback } from "react";
@@ -98,6 +99,9 @@ export function FeedPanel({
         FEED_FOLDER_PATH,
         computeRangeSelection(event, selectedNotes, notePaths, lastSelectedNote, notePath)
       );
+      const nextSelection = useSelection.getState().selectedNotes;
+      const focusPath = nextSelection.has(notePath) ? notePath : nextSelection.values().next().value;
+      if (focusPath) requestNoteEditorFocus(focusPath);
       setActiveFeedGroup(parentPath);
       if (shouldNestNotesInNavigation) {
         focusNoScroll(paneBodyRef.current);
@@ -130,6 +134,12 @@ export function FeedPanel({
     },
     [setExpanded]
   );
+
+  const handleGroupContextMenu = useCallback((event: ReactMouseEvent, id: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onOpenContextMenu({ kind: "feed-group", x: event.clientX, y: event.clientY, path: id });
+  }, [onOpenContextMenu]);
 
   const handleNoteContextMenu = useCallback(
     (event: ReactMouseEvent, notePath: string, parentPath: string) => {
@@ -210,11 +220,7 @@ export function FeedPanel({
               onNoteSelect={handleNoteSelect}
               onNoteContextMenu={handleNoteContextMenu}
               notePreviews={allNotePreviews}
-              onContextMenu={(event, id) => {
-                event.preventDefault();
-                event.stopPropagation();
-                selectFeedGroup(id);
-              }}
+              onContextMenu={handleGroupContextMenu}
               indentationWidth={indentationWidth}
               draggable={false}
             />
@@ -246,11 +252,7 @@ export function FeedPanel({
                 onNoteSelect={handleNoteSelect}
                 onNoteContextMenu={handleNoteContextMenu}
                 notePreviews={allNotePreviews}
-                onContextMenu={(event, id) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  selectFeedGroup(id);
-                }}
+                onContextMenu={handleGroupContextMenu}
                 indentationWidth={indentationWidth}
                 draggable={false}
               />

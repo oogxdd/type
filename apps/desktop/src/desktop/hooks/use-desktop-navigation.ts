@@ -1,3 +1,4 @@
+import { requestNoteEditorFocus } from "@/features/notes/editor/lib/editor-events";
 import {
   useCallback,
   useEffect,
@@ -183,6 +184,9 @@ export function useDesktopNavigation({
         FEED_FOLDER_PATH,
         computeRangeSelection(event, selectedNotes, notePaths, lastSelectedNote, notePath)
       );
+      const nextSelection = useSelection.getState().selectedNotes;
+      const focusPath = nextSelection.has(notePath) ? notePath : nextSelection.values().next().value;
+      if (focusPath) requestNoteEditorFocus(focusPath);
       setActiveFeedGroup(activeFeedGroup || activeFeedNode?.id || "");
       setActiveNavigationTab("feed");
     },

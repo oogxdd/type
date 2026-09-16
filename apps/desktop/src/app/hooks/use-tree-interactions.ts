@@ -1,3 +1,4 @@
+import { requestNoteEditorFocus } from "@/features/notes/editor/lib/editor-events";
 import {
   useCallback,
   useRef,
@@ -21,6 +22,12 @@ type UseTreeInteractionsArgs = {
 };
 
 export type DesktopContextMenuState =
+  | {
+      kind: "feed-group";
+      x: number;
+      y: number;
+      path: string;
+    }
   | {
       kind: "folder";
       x: number;
@@ -190,6 +197,9 @@ export const useTreeInteractions = ({
       noteParentPath,
       computeRangeSelection(event, selectedNotes, notePaths, lastSelectedNote, notePath)
     );
+    const nextSelection = useSelection.getState().selectedNotes;
+    const focusPath = nextSelection.has(notePath) ? notePath : nextSelection.values().next().value;
+    if (focusPath) requestNoteEditorFocus(focusPath);
     if (parentPath !== undefined || shouldNestNotesInNavigation) {
       focusNoScroll(foldersPanelRef.current);
     }

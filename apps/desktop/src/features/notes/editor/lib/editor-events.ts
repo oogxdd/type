@@ -10,3 +10,16 @@ export const consumeNoteEditorInsertRequest = (notePath: string) => {
   pending.delete(notePath);
   return position;
 };
+
+export const NOTE_EDITOR_FOCUS_EVENT = "note-editor-focus";
+let pendingFocus: string | null = null;
+/** Survives async note loading; the most recent selection owns focus. */
+export const requestNoteEditorFocus = (notePath: string) => {
+  pendingFocus = notePath;
+  window.dispatchEvent(new Event(NOTE_EDITOR_FOCUS_EVENT));
+};
+export const consumeNoteEditorFocusRequest = (notePath: string) => {
+  if (pendingFocus !== notePath) return false;
+  pendingFocus = null;
+  return true;
+};
