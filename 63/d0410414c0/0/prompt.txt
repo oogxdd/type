@@ -1,0 +1,282 @@
+хочу сделать ноывй релиз
+
+1) скажи какие ветки локал/ремоут осталиьс несмержнутые
+2) по коммитам определи что в целом изменилось с последнего релиза (необязательно полынй список, просто основные моменты)
+3) пойми сможешь ли ты замутить релиз (либо локально либо через git runner чтобы по ad-hoc на моем айфоне обновилось (ну либо чтоб я по ссылке зашел и обновил))
+
+---
+
+[Request interrupted by user for tool use]
+
+---
+
+подожди. я хочу бэклог сделать (но не чисто технический а просто обозначить в общих чертах что изменилось с последней версии (или последней тэгнутого релиза - не знаю)
+
+---
+
+короче дай
+
+1. bug:improve geastures (describe which geastures)
+2. bug:debug sync bugs. improve sync ui (still button-press based)
+3. feat:be able to "commit" local changes any time you want (act as checkpoint)
+4. feat:custom (customizable) appearence
+5. chore:diagnostics tab
+6: " - Отклоняются повреждённые/незавершённые аудиозаписи (m4a) — чтобы битый файл не портил транскрипцию." - ченибудь чуть потробнее про это. кажется это ломакало синк. возможно как баг фикс (а возможно внутри синк багс - скорее это)
+
+
+хотя improve geasture это скорее improvement. 
+
+
+запревьювь как можешь оформить релиз пост
+
+---
+
+nah. in english literally in the same stylistics
+
+  1. bug:improve geastures (describe which geastures)
+  2. bug:debug sync bugs. improve sync ui (still button-press based)
+  3. feat:be able to "commit" local changes any time you want (act as checkpoint)
+  4. feat:custom (customizable) appearence
+  5. chore:diagnostics tab
+     6: " - Отклоняются повреждённые/незавершённые аудиозаписи (m4a) — чтобы битый файл не портил транскрипцию." - ченибудь чуть потробнее про это. кажется это ломакало синк.
+  возможно как баг фикс (а возможно внутри синк багс - скорее это)
+
+---
+
+dude. i said in literally same kind of typing as above. eg i dont care about this shit:
+
+Fixed a crash (SIGABRT) on a fast swipe-up, and reworked the
+     recognizer so the file gesture no longer fights the OS's edge-swipe-back gesture.
+
+
+(it can be generally extracted from commit names)
+
+---
+
+cause i make it people facing and not "techy geeky shit generated with ai noone really cares about". if people want to get on full comprehensive technical log - i will maintain it separately later
+
+---
+
+/compact
+
+---
+
+This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.
+
+Summary:
+1. Primary Request and Intent:
+   The user (writing primarily in Russian and English, mixed) wanted to prepare a new release of the "type" app (a local-first markdown notes app with a Tauri desktop app and a React Native mobile app sharing one Rust core, per AGENTS.md/CLAUDE.md). The explicit, evolving requests were:
+   
+   a) **Original 3-part ask**: (1) list unmerged local/remote git branches, (2) summarize what's changed since the last tagged release based on commits (general points, not exhaustive), (3) determine whether a release could actually be cut — either locally, or via CI so it updates via ad-hoc on the user's iPhone, or so the user can visit a link and install.
+   
+   b) User then narrowed scope: "ах да, я имел ввиду только мобильную пока" — only wanted the **mobile** release pursued for now (not desktop).
+   
+   c) User asked me to check docs for a **local build/rollout path** rather than the CI path (which was blocked on missing GitHub secrets): "посмотри в docs. я думаю локальный роллаут задокументирован гдето".
+   
+   d) User confirmed readiness to run the local build pipeline: "Да, телефон засинкан, запускай" (after confirming phone was already synced, aware ad-hoc reinstall would wipe app container).
+   
+   e) Mid-build, user paused to request a **backlog/changelog** of what changed since the last mobile release (`mobile-v0.2.7`), explicitly wanting it "не чисто технический а просто обозначить в общих чертах" (not purely technical, just general terms), scoped to mobile only, delivered as plain chat text (not a file).
+   
+   f) User iteratively refined the desired format for this changelog across several messages, ending on an explicit, strongly-worded stylistic requirement (see Errors and Fixes below) — terse `tag:short-description` bullets (e.g. `bug:sync`, `feat:customizable appearance`), no explanatory prose about mechanisms/root causes, extracted from commit subject lines. User explained why: "cause i make it people facing and not 'techy geeky shit generated with ai noone really cares about'. if people want to get on full comprehensive technical log - i will maintain it separately later."
+   
+   g) User then said (mid-turn, delivered via system-reminder while I was saving memory): "actually when you give me option - just proceed with the release (without the release notes yet. i will later give you the decided option on release notes (i guess it can be added later right, on github? on expo i dont care about them now)" — explicit instruction to resume and complete the actual mobile release build/deploy pipeline immediately, without waiting to finalize release-notes wording, since GitHub release notes can be edited later and OTA/Expo notes don't matter right now.
+   
+   h) After the OTA deployment succeeded, I asked whether to also create a git tag + GitHub Release (flagging the expected CI failure due to missing secrets). User answered: "Да, создай тег и Release вручную" (yes, create tag and Release manually).
+
+2. Key Technical Concepts:
+   - Monorepo: npm workspaces + one Cargo workspace; Tauri v2 desktop app + React Native (Expo) mobile app sharing `crates/type-core` via `crates/type-ffi` (UniFFI) → `packages/mobile-core`.
+   - Tag-driven release model: two separate tag namespaces `desktop-v*` and `mobile-v*`, documented in `docs/RELEASING.md`.
+   - GitHub's "latest release" flag matters critically for the desktop Tauri auto-updater, which polls `.../releases/latest/download/latest.json`. Mobile releases must NOT become GitHub's "latest" — normally enforced via `--latest=false` in CI (`.github/workflows/mobile-adhoc.yml` lines 368, 377), while desktop CI explicitly runs `gh release edit "$TAG" --latest --prerelease=false` (`.github/workflows/release.yml` line 197).
+   - Mobile ad-hoc distribution: `.github/workflows/mobile-adhoc.yml` (a.k.a. "Mobile Ad Hoc" workflow, replacing the old "Mobile TestFlight" pipeline per commit `a39ff788`) requires GitHub secrets in the `testflight` environment: `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_PRIVATE_KEY` (present), plus `IOS_DISTRIBUTION_CERTIFICATE_BASE64`, `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD`, `IOS_AD_HOC_DEVICE_UDIDS`, `VERCEL_TOKEN` (all **missing** — this blocks CI-based mobile releases).
+   - Local ad-hoc build path (`apps/mobile/AD_HOC_DISTRIBUTION.md`) does NOT need a local `.p12`/Distribution certificate — Xcode fetches/provisions the Distribution cert automatically during `-exportArchive -allowProvisioningUpdates` using the App Store Connect API key alone (`~/.appstoreconnect/private_keys/AuthKey_W2Y52J5N33.p8`, key ID `W2Y52J5N33`, issuer `bd0c62da-fcbf-4770-a10d-2ee30da0963e`, team `Y377P5XKGJ`).
+   - UniFFI codegen for a real device build: `IPHONEOS_DEPLOYMENT_TARGET=16.4 npm run codegen:ios:device -w @typenotes/mobile-core` — builds Rust for `aarch64-apple-ios` (device) + `aarch64-apple-ios-sim`, creates an xcframework, generates TS bindings; must verify NOT left in "demo mode" (`__isDemoCore` absent from generated `src/index.tsx`) before archiving, or the device build will boot into mock/demo mode.
+   - `pod install` must be run from `apps/mobile/ios` directly (not via `--project-directory` from repo root), because the Podfile resolves React Native's location from `Dir.pwd`.
+   - `libtype_ffi.a` statically includes libgit2, requiring `-lz -liconv` linker flags (added by a Podfile post-install hook) — verified present in `Pods-Type.release.xcconfig`.
+   - Archive step signs with whatever local identity is available ("Apple Development" is fine); actual Distribution signing happens during export via the API key, not the local Keychain — verified no certificate is created/consumed locally, matching the doc's note.
+   - `ExportOptionsAdHoc.plist` is the ad-hoc export options file (method `release-testing` in Xcode 15+ terminology).
+   - OTA distribution: `scripts/ota.mjs` (invoked via `npm run ota -w @typenotes/mobile -- build <ipa> --base-url <url>`) reads bundle id/version/build directly from the `.ipa`, generates `index.html` + `manifest.plist` (`itms-services://` install flow, requires HTTPS with a publicly trusted cert) + copies the `.ipa` + a `vercel.json` for correct content types, into `apps/mobile/ios/build/ota`.
+   - Vercel deployment: `vercel deploy --prod --yes` from the `ota` output directory, aliased to the stable `https://type-ota.vercel.app` (existing linked project `type-ota` under `maxim-ignatevs-projects-ef3992aa`).
+   - Ad-hoc signature mismatch caveat: installing a new ad-hoc build over an existing differently-signed install (e.g. previous TestFlight build) requires deleting the app first, which **erases its container — notes, sync settings, and the device's SSH key**. User must sync from phone first (confirmed done).
+   - `gh release create <tag> <asset...> --title ... --notes ...` will create the tag (if it doesn't exist) and push it, which triggers push-based GitHub Actions workflows just like `git push origin <tag>` — and by default makes the new release GitHub's "latest" unless `--latest=false` is passed.
+   - Memory system (project-specific, at `/Users/digital/.claude/projects/-Volumes-KINGSTON-Projects-type-app/memory/`) with typed files (user/feedback/project/reference) and an index `MEMORY.md`.
+
+3. Files and Code Sections:
+   - **`docs/RELEASING.md`** (read in full) — the canonical release doc: tag-driven versioning model, desktop release steps (Option A: push tag; Option B: manual CI dispatch; Option C: build locally via `apps/desktop/scripts/release-local.sh`), local-dev-vs-prod-data safety table, mobile release steps (`git tag mobile-v0.2.0 && git push origin mobile-v0.2.0`), required GitHub secrets tables (mobile — `testflight` environment; desktop — repo secrets), first-release checklist, CI trigger/cost table, and critically the note that "the desktop release must be marked as GitHub's latest release... Mobile releases are also listed on GitHub, but are explicitly prevented from replacing the latest desktop release."
+   - **`apps/mobile/AD_HOC_DISTRIBUTION.md`** (read in full) — the local ad-hoc build/distribute playbook I executed step by step: prerequisites, `1.1` typecheck+test, `1.2` version-setting via `expo prebuild` env vars or manual edit of `app.json`+`Info.plist`, `1.3` `codegen:ios:device` + verification commands, `1.4` `pod install` from the `ios/` directory, `1.5` `xcodebuild archive` command (with exact flags used), `1.6` `xcodebuild -exportArchive` command (exact flags used), `1.7` `.ipa` verification (version/bundle id/provisioning profile devices via `PlistBuddy` and `security cms -D`), section `2` OTA generation and Vercel deploy (with exact commands), section `2.3` verification curls, section `3`/`4` alternatives (tunnel, cable), and a troubleshooting table.
+   - **`.github/workflows/mobile-adhoc.yml`** — grepped for `latest`; found lines 368 and 377 use `--latest=false` when the CI job creates its own release, confirming manual releases must replicate this.
+   - **`.github/workflows/release.yml`** — grepped for `latest`; found line 197: `gh release edit "${{ needs.setup.outputs.tag }}" --latest --prerelease=false`, used as the exact command template I replicated to restore `desktop-v0.5.0` as latest.
+   - **`apps/mobile/app.json`** — inspected (not edited): confirmed `"version": "0.2.13"` and `ios.buildNumber: "2026090402"` already committed on `main` (bumped by commit `da205b41`), so no version bump was needed before building.
+   - **`apps/mobile/ios/Type/Info.plist`** — inspected: `CFBundleShortVersionString` = `0.2.13`, `CFBundleVersion` = `2026090402`, confirmed in sync with `app.json`.
+   - **`packages/mobile-core/src/index.tsx`** — checked before and after codegen: before, contained `__isDemoCore` (mock mode); after running `codegen:ios:device`, regenerated with `'Generated by uniffi-bindgen-react-native'` marker and no `__isDemoCore`, confirming a real device build. (Per doc, this file must be restored via `git checkout -- packages/mobile-core/src/index.tsx` after finishing and must never be committed in its device-built state — **this restoration has NOT yet been done** as of the end of the visible conversation, and is a likely pending cleanup step.)
+   - **`packages/mobile-core/TypeCore.podspec`**, **`TypenotesMobileCoreFramework.xcframework/ios-arm64/libtype_ffi.a`** — verified present after codegen.
+   - **`apps/mobile/ios/Pods/Target Support Files/Pods-Type/Pods-Type.release.xcconfig`** — verified contains `-lz -liconv` and the full expected `OTHER_LDFLAGS` including `-l"TypeCore"` and `-l"type_ffi"`.
+   - **`apps/mobile/ios/build/Type.xcarchive`** — produced by the archive step; verified `Info.plist` contains `CFBundleShortVersionString=0.2.13`, `CFBundleVersion=2026090402`.
+   - **`apps/mobile/ios/build/export-adhoc-0.2.13/Type.ipa`** — the final signed ad-hoc build artifact; verified internal `Info.plist` (version/build/bundle id) and `embedded.mobileprovision` (profile name "iOS Team Ad Hoc Provisioning Profile: com.typenotes.mobile", 3 provisioned device identifiers). This file was later attached as a release asset via `gh release create`.
+   - **`apps/mobile/ios/build/ota/`** — generated by `scripts/ota.mjs`; contains `index.html`, `manifest.plist`, `Type.ipa`, `vercel.json`, and a pre-existing `.vercel/project.json` link to the `type-ota` Vercel project. Deployed to production and aliased to `https://type-ota.vercel.app`.
+   - **`/Users/digital/.claude/projects/-Volumes-KINGSTON-Projects-type-app/memory/release-notes-terse-user-facing.md`** — newly created feedback memory file (full content reproduced in Errors/Fixes section below) capturing the user's explicit stylistic preference for terse, non-technical release notes.
+   - **`/Users/digital/.claude/projects/-Volumes-KINGSTON-Projects-type-app/memory/MEMORY.md`** — updated (via Edit tool) to add the index line: `- [Release notes: terse, user-facing](release-notes-terse-user-facing.md) — tag:description bullets only, no AI-prose padding`.
+   - Commits examined in detail via `git show`/`git log -p` (no code changes made to these, purely investigative): `be8b8266` (m4a validation fix, `crates/type-core/src/adapters/recordings/mod.rs`), `da205b41`, `cedb8bb2`, `9db67e20`, `af9b8665`, `03a0923a`, `93d0485c`, `5dd44cd2`, `1dcfd2a0`, `d52ada06`, `a24524f6`, `476d6f59`, `85fe3fe7`, `9a35934a`, `6eac75b7`, `a39ff788`, `f81d4b0c`, `dff79aa9`, `c2c7327c`, `eea1aaca`, `603fb961`.
+
+4. Errors and fixes:
+   - **Error**: First `npm run ota -w @typenotes/mobile -- build apps/mobile/ios/build/export-adhoc-0.2.13/Type.ipa ...` failed with "No such file: .../apps/mobile/apps/mobile/ios/build/export-adhoc-0.2.13/Type.ipa" because the npm workspace script resolves relative paths from `apps/mobile`, not the repo root.
+     - **Fix**: Re-ran with the path relative to `apps/mobile`: `ios/build/export-adhoc-0.2.13/Type.ipa` — succeeded.
+   - **Error/self-caught issue**: After running `gh release create mobile-v0.2.13 <ipa> --title "Mobile 0.2.13" --notes "..."` without specifying `--latest=false`, the new mobile release automatically became GitHub's "latest" release (confirmed via `gh api repos/oogxdd/type/releases/latest --jq '.tag_name'` returning `mobile-v0.2.13`). This is dangerous because the desktop Tauri auto-updater reads `.../releases/latest/download/latest.json`, and the mobile release has no `latest.json` asset — this would have broken the desktop auto-update mechanism for all users.
+     - **Fix**: Immediately ran `gh release edit mobile-v0.2.13 --latest=false`, then `gh release edit desktop-v0.5.0 --latest --prerelease=false` (matching the exact flags used by `.github/workflows/release.yml`), then re-verified via `gh api repos/oogxdd/type/releases/latest --jq '.tag_name'` which now correctly returned `desktop-v0.5.0`. This fix was completed as the very last action in the conversation before the summary request — **I have not yet reported this fix to the user in a text message.**
+   - **User feedback / stylistic correction (significant, saved to memory)**: Initial changelog draft was too prose-heavy/technical (explained gesture-recognizer mechanics, SIGABRT root cause, etc.). User corrected twice, with increasing bluntness:
+     - First: "nah. in english literally in the same stylistics [pasted their own terse tag:description example]"
+     - Second (sharper): "dude. i said in literally same kind of typing as above. eg i dont care about this shit: [quoted my verbose sentence] (it can be generally extracted from commit names)"
+     - Then explained the underlying reasoning: "cause i make it people facing and not 'techy geeky shit generated with ai noone really cares about'. if people want to get on full comprehensive technical log - i will maintain it separately later"
+     - **Fix**: Produced the terse final version and saved a persistent feedback memory (`release-notes-terse-user-facing.md`) so future release-notes requests in this repo default to terse tag:description bullets without explanatory prose, only elaborating if explicitly asked.
+   - **Note on interruption handling**: When the user rejected the `npm run test -w @typenotes/mobile` tool call mid-pipeline (system message: "The user doesn't want to proceed with this tool use... STOP what you are doing and wait for the user to tell you how to proceed"), I correctly stopped and waited rather than retrying, and pivoted to the user's new backlog request. Later, when the user gave the explicit go-ahead ("actually when you give me option - just proceed with the release..."), I resumed the exact same pipeline from the interrupted step (re-running `npm run test -w @typenotes/mobile`) rather than restarting from scratch.
+
+5. Problem Solving:
+   - Diagnosed why mobile releases had stalled: CI-based `mobile-adhoc.yml` blocked by 4 missing GitHub environment secrets; found and used the documented local-build alternative instead, which requires none of those missing secrets.
+   - Confirmed via existing local build artifacts (from a prior 0.2.12 local build) and version-bump-only commits in git history that this exact local pipeline had been used successfully before on this machine/for this device, giving confidence it would work again.
+   - Verified test suite health end-to-end: mobile typecheck clean, 110/110 vitest tests passing, confirming main branch is release-ready.
+   - Successfully executed the entire local ad-hoc build → export → OTA generation → Vercel deploy pipeline for mobile version 0.2.13, verifying every artifact at each step (codegen device-mode check, Podfile linker flags, archive version, exported ipa version/bundle-id/provisioning-profile devices, live OTA site HTTP responses and manifest content).
+   - Caught and corrected a real production-risk mistake (mobile release accidentally overriding GitHub's "latest" release pointer, which would have broken the desktop app's auto-updater) immediately after creating the release, before any user-facing harm occurred (the fix was applied within the same tool-call sequence, with no confirmation gap, since it was a same-session correction of my own mistake, not a new destructive action).
+   - Outstanding/unverified: whether the 3 UDIDs embedded in the ad-hoc provisioning profile actually include the user's currently-paired iPhone (`iPhoni`, `iPhone XR`, devicectl identifier `6770E9B2-3D19-533E-A584-7A0D2E409375` — a different ID format than the profile's list, which includes what looks like a classic 40-char hex UDID `20aa2a8e...` and a device-style ID `00008020-001E28210A62002E` and another 40-char hex `712ba8b1...`). I assumed this was fine because the export succeeded and prior local builds (0.2.12) presumably targeted the same device, but this was not explicitly cross-verified against the specific device identifier.
+
+6. All user messages (verbatim, non-tool-result turns only):
+   - "хочу сделать ноывй релиз\n\n1) скажи какие ветки локал/ремоут осталиьс несмержнутые\n2) по коммитам определи что в целом изменилось с последнего релиза (необязательно полынй список, просто основные моменты)\n3) пойми сможешь ли ты замутить релиз (либо локально либо через git runner чтобы по ad-hoc на моем айфоне обновилось (ну либо чтоб я по ссылке зашел и обновил))"
+   - (AskUserQuestion #1 answer) "ах да, я имел ввиду только мобильную пока"
+   - (AskUserQuestion #2 answer) "посмотри в docs. я думаю локальный роллаут задокументирован гдето"
+   - (AskUserQuestion #3 answer) "Да, телефон засинкан, запускай (Recommended)"
+   - "подожди. я хочу бэклог сделать (но не чисто технический а просто обозначить в общих чертах что изменилось с последней версии (или последней тэгнутого релиза - не знаю)"
+   - (AskUserQuestion #4 answers) "Только мобильный" / "Просто в чат текстом (Recommended)"
+   - "короче дай\n\n1. bug:improve geastures (describe which geastures)\n2. bug:debug sync bugs. improve sync ui (still button-press based)\n3. feat:be able to \"commit\" local changes any time you want (act as checkpoint)\n4. feat:custom (customizable) appearence\n5. chore:diagnostics tab\n6: \" - Отклоняются повреждённые/незавершённые аудиозаписи (m4a) — чтобы битый файл не портил транскрипцию.\" - ченибудь чуть потробнее про это. кажется это ломакало синк. возможно как баг фикс (а возможно внутри синк багс - скорее это)\n\n\nхотя improve geasture это скорее improvement. \n\n\nзапревьювь как можешь оформить релиз пост"
+   - "nah. in english literally in the same stylistics\n\n  1. bug:improve geastures (describe which geastures)\n  2. bug:debug sync bugs. improve sync ui (still button-press based)\n  3. feat:be able to \"commit\" local changes any time you want (act as checkpoint)\n  4. feat:custom (customizable) appearence\n  5. chore:diagnostics tab\n     6: \" - Отклоняются повреждённые/незавершённые аудиозаписи (m4a) — чтобы битый файл не портил транскрипцию.\" - ченибудь чуть потробнее про это. кажется это ломакало синк.\n  возможно как баг фикс (а возможно внутри синк багс - скорее это)"
+   - "dude. i said in literally same kind of typing as above. eg i dont care about this shit:\n\n  Fixed a crash (SIGABRT) on a fast swipe-up, and reworked the\n       recognizer so the file gesture no longer fights the OS's edge-swipe-back gesture.\n\n\n  (it can be generally extracted from commit names)"
+   - "cause i make it people facing and not \"techy geeky shit generated with ai noone really cares about\". if people want to get on full comprehensive technical log - i will maintain it separately later"
+   - (mid-turn message, delivered via system-reminder) "actually when you give me option - just proceed with the release (without the release notes yet. i will later give you the decided option on release notes ( i guess it can be added later right, on github? on expo i dont care about them now)"
+   - (AskUserQuestion #5 answer) "Да, создай тег и Release вручную"
+
+7. Pending Tasks:
+   - **Report to the user** the outcome of the "latest release" self-correction (mobile-v0.2.13 accidentally became GitHub's latest, was fixed; desktop-v0.5.0 restored as latest) — this communication has NOT yet been sent.
+   - **Restore `packages/mobile-core/src/index.tsx`** to its mock/demo fallback state via `git checkout -- packages/mobile-core/src/index.tsx`, per the doc's explicit instruction ("do not commit it"), since it's currently overwritten with the real device bindings from the codegen step. This has not been done yet and `git status` on the repo would currently show it as modified.
+   - Possibly clean up other build-time working-tree changes if any exist (e.g., check `git status` for anything else dirtied by the pipeline, such as `apps/mobile/ios/build/generated/` or Pods changes — though these are typically gitignored).
+   - The user said they will later decide on the actual release notes content and give it to me — implying a **future follow-up task** to update the GitHub Release (`mobile-v0.2.13`) notes once the user decides on final wording, using the terse tag:description style now saved in memory.
+   - No explicit request yet to also cut the desktop release (`desktop-v0.5.1` or similar) — user explicitly scoped this effort to mobile only; desktop remains untouched/pending unless the user asks.
+
+8. Current Work:
+   Immediately before this summary request, I had just finished creating the `mobile-v0.2.13` git tag and GitHub Release per the user's explicit instruction ("Да, создай тег и Release вручную"), then discovered — via my own verification step (`gh api repos/oogxdd/type/releases/latest --jq '.tag_name'` returning `mobile-v0.2.13` instead of the expected `desktop-v0.5.0`) — that the new mobile release had inadvertently become GitHub's "latest" release, which would break the desktop Tauri auto-updater. I immediately corrected this by running:
+   ```
+   gh release edit mobile-v0.2.13 --latest=false
+   gh release edit desktop-v0.5.0 --latest --prerelease=false
+   ```
+   and then re-verified with:
+   ```
+   gh api repos/oogxdd/type/releases/latest --jq '.tag_name'
+   ```
+   which returned `desktop-v0.5.0`, confirming the fix worked. This was the last tool output received; no assistant text message has yet been sent reporting this fix or summarizing the overall completed mobile release to the user.
+
+9. Optional Next Step:
+   The immediate next step, directly continuing the just-completed work, is to send the user a concise status report confirming: (a) the `mobile-v0.2.13` tag was pushed and the GitHub Release was created with the `.ipa` attached at `https://github.com/oogxdd/type/releases/tag/mobile-v0.2.13`; (b) I caught and fixed a mistake where the new release had briefly become GitHub's "latest" release (which would have broken the desktop auto-updater), and restored `desktop-v0.5.0` as latest; (c) the `Mobile Ad Hoc` CI workflow will show/has shown a failed run for this tag, which is expected and harmless given the known-missing secrets; (d) remind that the OTA install link `https://type-ota.vercel.app` is live and ready to install on the synced iPhone; and (e) flag the still-pending local cleanup of `packages/mobile-core/src/index.tsx` (should be reverted to its mock state via `git checkout -- packages/mobile-core/src/index.tsx` per the doc's instruction not to commit the device-built bindings) — and ask whether the user wants me to do that cleanup now. This directly follows the user's last explicit instruction ("Да, создай тег и Release вручную") and the self-correction work performed immediately after it; no tangential or older pending tasks (e.g., desktop release, branch cleanup) should be started without the user asking again.
+
+If you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: /Users/digital/.claude/projects/-Volumes-KINGSTON-Projects-type-app/c5e66028-82c7-4820-a760-bdefaed5c924.jsonl
+Continue the conversation from where it left off without asking the user any further questions. Resume directly — do not acknowledge the summary, do not recap what was happening, do not preface with "I'll continue" or similar. Pick up the last task as if the break never happened.
+
+---
+
+Continue from where you left off.
+
+---
+
+ок. а можешь мне теперь также кратко сказать что в десктоп версии изменилось с последнего релиза. и я бы хотел оформить релиз десктоп версии тоже
+
+---
+
+так бля. если кратко
+
+- improve command+k palette
+- tags (phrase-based, line-based, block-based, note-based) support
+- feature: review pane (consolidated notes so you can see all of them at once (and be able to easily review/tag certain lines/blocks and so on)
+- mcp server
+- navbar trees ui improvement
+- refactor keyboard shortcuts related code
+- fix blank line bug
+- cascade deletion of recording/attachment on note deletion
+- fix whisper transcription on desktop
+
+
+
+я думаю вот такой changelog post сделай. просто вот мой немодифицированный. в скобках можешь указать кратко на коммиты которые related to it)
+
+
+proceed with release. regarding version - make it 0.6.0
+
+
+
+(хотя подожди, щас я еще один коммит добавлю (fix whisper transcription on desktop)
+
+
+пока что ознаменуй для себя просто план как ты будешь билдить/релизить
+
+---
+
+ok, commited to main. proceed with release now.
+
+---
+
+Check `gh run list --workflow=release.yml --limit 1` for the desktop-v0.6.0 release build. If completed successfully, verify it's marked GitHub's latest release (`gh api repos/oogxdd/type/releases/latest --jq '.tag_name'` should return desktop-v0.6.0) and that the release has the expected assets (dmg, app.tar.gz, .sig, latest.json) via `gh release view desktop-v0.6.0`. Then update the release notes on desktop-v0.6.0 using `gh release edit desktop-v0.6.0 --notes '...'` with this exact user-approved changelog (terse, unmodified, with related commit hashes in parens — use short hashes from `git log desktop-v0.5.0..desktop-v0.6.0 --oneline`):
+
+- improve command+k palette
+- tags (phrase-based, line-based, block-based, note-based) support
+- feature: review pane (consolidated notes so you can see all of them at once, and be able to easily review/tag certain lines/blocks and so on)
+- mcp server
+- navbar trees ui improvement
+- refactor keyboard shortcuts related code
+- fix blank line bug
+- cascade deletion of recording/attachment on note deletion
+- fix whisper transcription on desktop
+
+Map each bullet to its relevant commit(s) from this list (already gathered): d521d050 (cascade deletion), 904c3f98 (command palette split/rename), c6662012 (navbar trees), 769a625a (macOS shortcuts fix - not in list, skip or fold in), 56924573 (blank line test/fix), 6e199ac8 (review pane), 41dea3c7 (persistent tags), 15c9f56f (mcp server), da8019c1 (Cmd+K freed / tags styling), 1af1f77d (keyboard shortcuts refactor), be8f3d2f (tags in markdown + registry), f4c56e62 (whisper fix - just added). Note: user wants command+k palette improvements possibly combining da8019c1+1af1f77d+904c3f98; tags support combining 41dea3c7+be8f3d2f+da8019c1. Use judgment to group commit refs sensibly per bullet, short hashes in parens.
+
+If the build failed instead, report the failure logs (`gh run view <id> --log-failed`) so it can be diagnosed.
+
+Report back to the user in chat once done: confirm the release is live, marked latest, assets present, and notes updated — plus mention if anything needs attention (e.g., mobile-v0.2.13 still correctly non-latest, sweep.timestamp untracked file still sitting in the repo root unaddressed).
+
+---
+
+can you roll out new release (both desktop and mobile)
+
+i dont care about the release notes - just bump a minor version to both and roll out both
+
+---
+
+Resume the mobile 0.3.0 ad-hoc release pipeline. Background task bf3fgeeea (xcodebuild archive, run from apps/mobile/ios) should be done or close to it — check its status/output. If it succeeded, verify the archive version:
+
+/usr/libexec/PlistBuddy -c "Print :ApplicationProperties:CFBundleShortVersionString" -c "Print :ApplicationProperties:CFBundleVersion" apps/mobile/ios/build/Type.xcarchive/Info.plist
+
+Expect 0.3.0 / 2026091701. Then run the export step from apps/mobile/ios:
+
+xcodebuild -exportArchive -archivePath build/Type.xcarchive \
+  -exportOptionsPlist ../ExportOptionsAdHoc.plist \
+  -exportPath build/export-adhoc-0.3.0 \
+  -allowProvisioningUpdates \
+  -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_W2Y52J5N33.p8 \
+  -authenticationKeyID W2Y52J5N33 \
+  -authenticationKeyIssuerID bd0c62da-fcbf-4770-a10d-2ee30da0963e
+
+(run this one in the background too if it doesn't finish within the tool's timeout, then wait for it). Verify the resulting .ipa (apps/mobile/ios/build/export-adhoc-0.3.0/Type.ipa) by unzipping to a temp dir and checking Info.plist (version 0.3.0, build 2026091701, bundle id com.typenotes.mobile) and the embedded.mobileprovision device list via `security cms -D -i embedded.mobileprovision`.
+
+Then generate the OTA site (from apps/mobile, path relative to that dir):
+npm run ota -w @typenotes/mobile -- build ios/build/export-adhoc-0.3.0/Type.ipa --base-url https://type-ota.vercel.app
+
+Deploy it to Vercel production from apps/mobile/ios/build/ota: `vercel deploy --prod --yes`, then make sure it's aliased to https://type-ota.vercel.app (the existing linked project). Verify with curl that https://type-ota.vercel.app/manifest.plist reflects version 0.3.0/build 2026091701.
+
+Then tag and release mobile:
+git tag mobile-v0.3.0 && git push origin mobile-v0.3.0
+gh release create mobile-v0.3.0 apps/mobile/ios/build/export-adhoc-0.3.0/Type.ipa --title "Mobile 0.3.0" --notes "" --latest=false
+
+CRITICAL: always pass --latest=false explicitly (a prior mistake let a mobile release become GitHub's "latest" and would have broken the desktop Tauri auto-updater, which reads releases/latest/download/latest.json). After creating it, verify with:
+gh api repos/oogxdd/type/releases/latest --jq '.tag_name'
+This MUST return desktop-v0.7.0, not mobile-v0.3.0. If it doesn't, immediately run `gh release edit mobile-v0.3.0 --latest=false` and `gh release edit desktop-v0.7.0 --latest --prerelease=false` to fix it, matching the exact recovery procedure used last time.
+
+Also separately check on desktop-v0.7.0 CI (`gh run list --workflow=release.yml --limit 1`) — if the run completed, confirm via `gh release view desktop-v0.7.0` that all 4 assets exist (dmg, app.tar.gz, .sig, latest.json) and it's published/not a draft.
+
+Finally, clean up local build-only changes so they never get committed:
+git checkout -- packages/mobile-core/src/index.tsx
+Then run `git status` — app.json and Info.plist version bumps (0.3.0 / 2026091701) SHOULD remain as committed... wait, actually check: were the app.json/Info.plist version bumps committed yet, or are they still uncommitted working-tree changes? If uncommitted, decide whether to commit them (a real version bump belongs in git so the repo baseline matches what shipped) — commit just those two files with a message like "Bump mobile to 0.3.0" and push to main. Do NOT touch or commit the unrelated pre-existing docs/architecture/* modifications and untracked files (02-layers.md, README.md, 12-architecture-map.md, 13-shared-stores-proposal.md, 14-exposed-api-catalog.md, diagrams/, output/, sweep.timestamp) — those belong to other work in this shared worktree, stage files explicitly and never use git add -A.
+
+Report back a complete summary in chat covering: mobile 0.3.0 OTA link live and release published (not latest), desktop-v0.7.0 status and confirmed as GitHub's latest, and confirmation that the version-bump commit was pushed and mobile-core/src/index.tsx was reverted. If any step failed, report the actual error output rather than guessing at a fix.

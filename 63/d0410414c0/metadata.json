@@ -1,0 +1,27 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "63d0410414c0",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 2,
+  "files_touched": [
+    "apps/mobile/app.json",
+    "apps/mobile/ios/Type/Info.plist"
+  ],
+  "sessions": [
+    {
+      "metadata": "/63/d0410414c0/0/metadata.json",
+      "transcript": "/63/d0410414c0/0/full.jsonl",
+      "context": "/63/d0410414c0/0/context.md",
+      "content_hash": "/63/d0410414c0/0/content_hash.txt",
+      "prompt": "/63/d0410414c0/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 238,
+    "cache_creation_tokens": 317504,
+    "cache_read_tokens": 13908810,
+    "output_tokens": 57552,
+    "api_call_count": 120
+  }
+}
