@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { TextSelection } from "@tiptap/pm/state";
+import { formatEditorDate } from "../lib/editor-date";
 import type { Editor } from "@tiptap/react";
 import { useEditor } from "../hooks/editor-context";
 import { useAppearance } from "@/app/state/appearance-store";
@@ -124,7 +126,14 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
   return (
     <section className="note-editor-group tiptap-editor" aria-label={multiple ? "Selected notes editor" : "Note editor surface"} data-vim-mode={status.mode === "V-LINE" ? "visual-line" : status.mode.toLowerCase()}>
       <EditorToolbar editor={activeEditor} />
-      <div className="tiptap-scroll note-editor-group-scroll" ref={scrollRef}>
+      <div className="tiptap-scroll note-editor-group-scroll" ref={scrollRef} onClick={(event) => {
+        if (event.target !== event.currentTarget) return;
+        const last = [...ordered.current].reverse().map((note) => handles.current.get(note.path)).find(Boolean);
+        if (last) {
+          event.stopPropagation();
+          last.focus(TextSelection.atEnd(last.editor.state.doc).head, "insert");
+        }
+      }}>
         {notes.map((note) => {
           const document = session.documents.get(note.path);
           const preview = notePreviews[note.path] ?? allNotePreviews[note.path];
@@ -132,7 +141,7 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
           return (
             <article key={note.path} className="note-editor-section" data-active={activePath === note.path} aria-label={note.title}>
               {multiple ? <header className="note-editor-divider" contentEditable={false}>
-                <span>{note.title}</span><time>{note.dateLabel}</time>
+                <time>{formatEditorDate(preview?.createdMs ?? preview?.updatedMs ?? null)}</time>
               </header> : null}
               <RecordingNoteHeader notePath={note.path} preview={preview} />
               <HandwritingNoteHeader notePath={note.path} preview={preview} />

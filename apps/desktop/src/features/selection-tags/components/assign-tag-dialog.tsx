@@ -26,6 +26,7 @@ export function AssignTagDialog({ selection, onClose }: {
   const [error, setError] = useState<string | null>(null);
   const busyRef = useRef(false);
   const completedRef = useRef(new Set<string>());
+  const appliedRef = useRef(new Set<string>());
   const catalog = useMemo(() => {
     const found = new Map<string, SelectionTag>(registry.map(tag => [tagKey(tag.name), tag]));
     for (const tag of openDocumentTags()) {
@@ -37,7 +38,7 @@ export function AssignTagDialog({ selection, onClose }: {
   const matching = catalog.filter((tag) => tagKey(tag.name).includes(tagKey(name)));
   const existing = catalog.find((tag) => tagKey(tag.name) === tagKey(name));
   const tag = { name: existing?.name ?? name.trim(), color };
-  const fieldsDisabled = saving || completedRef.current.size > 0;
+  const fieldsDisabled = saving || appliedRef.current.size > 0 || completedRef.current.size > 0;
   const blockCount = selection.reduce((sum, target) => sum + target.blocks.length, 0);
 
   const assign = async () => {
@@ -56,8 +57,11 @@ export function AssignTagDialog({ selection, onClose }: {
         if (completedRef.current.has(target.surface.path)) continue;
         if (!isTagSurfaceCurrent(target.surface)) throw new Error("The selection changed. Select the text again.");
         if (target.surface.editable) {
-          if (!target.surface.editor.state.doc.eq(target.doc)) throw new Error("The selected text changed. Select it again.");
-          assignEditorTag(target.surface.editor, target.blocks, tag);
+          if (!appliedRef.current.has(target.surface.path)) {
+            if (!target.surface.editor.state.doc.eq(target.doc)) throw new Error("The selected text changed. Select it again.");
+            assignEditorTag(target.surface.editor, target.blocks, tag);
+            appliedRef.current.add(target.surface.path);
+          }
           await flushSave();
         } else {
           const next = await persistReviewTag(target, tag);
@@ -108,7 +112,7 @@ export function AssignTagDialog({ selection, onClose }: {
           {error ? <p role="alert" className="text-destructive text-sm">{error}</p> : null}
           <DialogFooter>
             <Button type="button" variant="outline" disabled={saving} onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={saving || !validTag(tag)}>{saving ? "Saving…" : completedRef.current.size ? "Retry remaining notes" : existing ? "Assign tag" : "Create & assign"}</Button>
+            <Button type="submit" disabled={saving || !validTag(tag)}>{saving ? "Saving…" : (completedRef.current.size || appliedRef.current.size) ? "Retry remaining notes" : existing ? "Assign tag" : "Create & assign"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

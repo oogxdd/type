@@ -5,7 +5,7 @@
  * `Cmd+K` on a Cyrillic layout — the rule the keyboard contract in
  * `docs/KEYBOARD_NAVIGATION_EXPERIENCE.md` states for every modified shortcut.
  * `Mod` means ⌘ on macOS and Ctrl elsewhere; a binding written once matches
- * both, because no surface in this app wants to tell them apart.
+ * both. `Meta` explicitly requires ⌘, as the command palette does.
  *
  * Matching is exact on every modifier. Shortcuts used to be recognised with
  * hand-written conditions that each forgot a different modifier, so `Alt+Cmd+K`
@@ -16,12 +16,12 @@ export type Chord = {
   /** `KeyK`, `Digit0`, `Backspace`, `NumpadAdd`, … */
   code: string;
   /** ⌘ on macOS, Ctrl elsewhere. */
-  mod: boolean;
+  modifier: "Mod" | "Meta" | "Ctrl" | "Meta+Ctrl" | null;
   shift: boolean;
   alt: boolean;
 };
 
-const MODIFIERS = new Set(["Mod", "Shift", "Alt"]);
+const MODIFIERS = new Set(["Mod", "Meta", "Ctrl", "Shift", "Alt"]);
 
 /** Parses `"Mod+KeyK"`, `"Mod+Shift+KeyL"`, `"Mod+Backspace"`. */
 export function parseChord(spec: string): Chord {
@@ -30,9 +30,12 @@ export function parseChord(spec: string): Chord {
   if (!code || MODIFIERS.has(code)) {
     throw new Error(`Chord "${spec}" names no key`);
   }
-  const chord: Chord = { code, mod: false, shift: false, alt: false };
+  const chord: Chord = { code, modifier: null, shift: false, alt: false };
   for (const part of parts) {
-    if (part === "Mod") chord.mod = true;
+    if (part === "Mod" || part === "Meta" || part === "Ctrl") {
+      if (chord.modifier) throw new Error(`Chord "${spec}" mixes primary modifiers`);
+      chord.modifier = part;
+    }
     else if (part === "Shift") chord.shift = true;
     else if (part === "Alt") chord.alt = true;
     else throw new Error(`Chord "${spec}" has an unknown modifier "${part}"`);
@@ -43,7 +46,7 @@ export function parseChord(spec: string): Chord {
 export function chordFromEvent(event: KeyboardEvent): Chord {
   return {
     code: event.code,
-    mod: event.metaKey || event.ctrlKey,
+    modifier: event.metaKey ? (event.ctrlKey ? "Meta+Ctrl" : "Meta") : event.ctrlKey ? "Ctrl" : null,
     shift: event.shiftKey,
     alt: event.altKey,
   };
@@ -52,7 +55,7 @@ export function chordFromEvent(event: KeyboardEvent): Chord {
 /** Canonical string for a chord — equal ids mean the same keystroke. */
 export function chordId(chord: Chord): string {
   return [
-    chord.mod ? "Mod" : "",
+    chord.modifier ?? "",
     chord.shift ? "Shift" : "",
     chord.alt ? "Alt" : "",
     chord.code,
@@ -61,8 +64,12 @@ export function chordId(chord: Chord): string {
     .join("+");
 }
 
-export const chordMatches = (a: Chord, b: Chord) =>
-  a.code === b.code && a.mod === b.mod && a.shift === b.shift && a.alt === b.alt;
+/** Matches a binding against an event; Mod accepts either sole primary modifier. */
+export const chordMatches = (binding: Chord, event: Chord) =>
+  binding.code === event.code && binding.shift === event.shift && binding.alt === event.alt &&
+  (binding.modifier === "Mod"
+    ? event.modifier === "Meta" || event.modifier === "Ctrl" || event.modifier === "Mod"
+    : binding.modifier === event.modifier);
 
 const KEY_LABELS: Record<string, string> = {
   Backspace: "⌫",
@@ -80,7 +87,8 @@ const keyLabel = (code: string) =>
 /** For menus and palette hints: `⌘⇧L` on macOS, `Ctrl+Shift+L` elsewhere. */
 export function formatChord(chord: Chord, isMac: boolean): string {
   const parts = [
-    chord.mod ? (isMac ? "⌘" : "Ctrl") : "",
+    chord.modifier === "Mod" ? (isMac ? "⌘" : "Ctrl") :
+      chord.modifier === "Meta" ? (isMac ? "⌘" : "Meta") : chord.modifier ?? "",
     chord.alt ? (isMac ? "⌥" : "Alt") : "",
     chord.shift ? (isMac ? "⇧" : "Shift") : "",
     keyLabel(chord.code),

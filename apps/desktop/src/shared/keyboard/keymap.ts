@@ -40,7 +40,7 @@ export type ShortcutBinding = {
   label: string;
   /**
    * Who wins while a text editor owns focus. `"editor"` hands the keystroke to
-   * the editor's own keymap — Ctrl+J/K inside the editor are Vim's jumps, and
+   * the editor's own keymap — Ctrl chords inside the editor belong to Vim, and
    * the keyboard contract says modal keys are handled before pane shortcuts.
    * Everything else is app-level and works in every mode.
    */
@@ -48,7 +48,7 @@ export type ShortcutBinding = {
 };
 
 export const SHORTCUTS: readonly ShortcutBinding[] = [
-  { id: "open-command-palette", chord: "Mod+KeyK", label: "Open the command palette" },
+  { id: "open-command-palette", chord: "Meta+KeyK", label: "Open the command palette" },
   { id: "toggle-sidebar-rail", chord: "Mod+KeyB", label: "Show or hide the sidebar rail" },
   { id: "toggle-sidebar", chord: "Mod+KeyT", label: "Collapse or expand the navigation sidebar" },
   { id: "toggle-navigation-focus", chord: "Mod+KeyW", label: "Toggle focus between navigation and content" },
@@ -85,7 +85,7 @@ export function matchShortcut(
   // A held key repeats; none of these shortcuts wants to fire per repeat.
   if (event.repeat) return null;
   const chord = chordFromEvent(event);
-  if (!chord.mod) return null;
+  if (!chord.modifier) return null;
   const binding = BINDINGS.find((candidate) => chordMatches(candidate.parsed, chord));
   if (!binding) return null;
   // ⌘ chords never reach a contenteditable as editing input, so only the Ctrl

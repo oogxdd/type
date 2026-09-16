@@ -82,7 +82,7 @@ export function DesktopRightPane({
             focusNoScroll(editorElement);
           }}
         >
-          {[...session.documents].filter(([path, entry]) => entry.error && !selectedNotePaths.includes(path)).map(([path, entry]) => (
+          {[...session.documents].filter(([path, entry]) => entry.dirty && entry.error && !selectedNotePaths.includes(path)).map(([path, entry]) => (
             <div className="note-editor-error" role="alert" key={path}>
               {path}: {entry.error}
               <button type="button" onClick={() => void session.flush(path).catch(() => {})}>Retry save</button>

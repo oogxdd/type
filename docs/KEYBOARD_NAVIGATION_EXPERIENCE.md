@@ -181,12 +181,12 @@ applies to modal editor keys and modified shortcuts such as `Cmd+W` and
 | `Tab` | Switch between Feed and Folders while keeping navigation focus |
 | `Cmd+W` / `Ctrl+W` | Toggle focus between navigation and content |
 | `Cmd+J` / `Ctrl+J` | Cycle focus through every pane, wrapping at the end |
-| `Cmd+K` / `Ctrl+K` | Open the command palette |
+| `Cmd+K` | Open the command palette |
 
 Every modified keystroke is matched in one place and dispatched by one
 capture-phase listener (`shared/keyboard/`). A chord it claims is taken away
 from every other handler, including the editor's, so two owners for one chord
-is a bug — its test suite fails on a duplicate. `Ctrl+J`/`Ctrl+K` inside a
+is a bug — its test suite fails on a duplicate. `Ctrl+J` inside a
 focused editor stay with the editor, as the modal-editing section requires.
 
 Navigation is over **visible rows**, not the entire hidden tree. Collapsed

@@ -385,9 +385,15 @@ export function useVim({ scrollRef, onVerticalMove }: UseVimOptions) {
       setPending(result.pending);
       try {
         const command = result.command;
-        if (modeRef.current === "normal" && command.type === "motion" && !command.operator &&
-            (command.motion.type === "down" || command.motion.type === "up") &&
-            verticalMoveRef.current?.(command.motion.type === "down" ? 1 : -1, command.count, "normal")) return true;
+        if (modeRef.current === "normal" && command.type === "motion" && !command.operator) {
+          const motion = command.motion.type;
+          const halfPage = motion === "halfPageDown" || motion === "halfPageUp";
+          if (motion === "down" || motion === "up" || halfPage) {
+            const direction = motion === "down" || motion === "halfPageDown" ? 1 : -1;
+            const lines = command.count * (halfPage ? buildHost(view).halfPageLines() : 1);
+            if (verticalMoveRef.current?.(direction, lines, "normal")) return true;
+          }
+        }
         executeVimCommand(command, buildHost(view));
       } finally {
         isVerticalMotionRef.current = false;

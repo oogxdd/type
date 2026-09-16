@@ -21,9 +21,11 @@ describe("the global keymap", () => {
     }
   });
 
-  it("opens the palette on ⌘K and on Ctrl+K", () => {
+  it("opens the palette only on ⌘K", () => {
     expect(match(press({ code: "KeyK", metaKey: true }))).toBe("open-command-palette");
-    expect(match(press({ code: "KeyK", ctrlKey: true }))).toBe("open-command-palette");
+    expect(match(press({ code: "KeyK", ctrlKey: true }))).toBeNull();
+    expect(match(press({ code: "KeyK", ctrlKey: true }), true)).toBeNull();
+    expect(match(press({ code: "KeyK", metaKey: true, ctrlKey: true }))).toBeNull();
   });
 
   it("matches modifiers exactly", () => {
@@ -62,6 +64,7 @@ describe("the global keymap", () => {
     expect(formatChord(parseChord("Mod+Shift+KeyL"), true)).toBe("⌘⇧L");
     expect(formatChord(parseChord("Mod+Shift+KeyL"), false)).toBe("Ctrl+Shift+L");
     expect(formatChord(parseChord("Mod+Backspace"), true)).toBe("⌘⌫");
+    expect(formatChord(shortcutChords("open-command-palette")[0], true)).toBe("⌘K");
   });
 
   it("rejects a malformed binding", () => {

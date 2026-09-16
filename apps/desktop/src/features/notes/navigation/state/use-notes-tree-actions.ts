@@ -180,10 +180,8 @@ export function useNotesTreeActions({
         return null;
       }
       const isActiveNote = activeNote === path;
-      if (isActiveNote) {
-        // A pending debounced save would otherwise recreate the old file.
-        await flushSave();
-      }
+      // Every selected note may now own a pending write.
+      await flushSave();
       const newPath = await api.renameItem(path, target);
       await refreshTree();
       if (isActiveNote) {
@@ -273,13 +271,14 @@ export function useNotesTreeActions({
       setRenamingFolder(null);
       return;
     }
+    await flushSave();
     const oldPath = renamingFolder;
     const newPath = await api.renameItem(oldPath, renameValue.trim());
     setRenamingFolder(null);
     setRenameValue("");
     await refreshTree();
     applyFolderRename(oldPath, newPath);
-  }, [applyFolderRename, refreshTree, renamingFolder, renameValue, setRenamingFolder, setRenameValue]);
+  }, [flushSave, applyFolderRename, refreshTree, renamingFolder, renameValue, setRenamingFolder, setRenameValue]);
 
   const cancelRenameFolder = useCallback(() => {
     setRenamingFolder(null);
@@ -306,11 +305,12 @@ export function useNotesTreeActions({
         visibleNavigationItems,
         removedIds
       );
+      await flushSave();
       await api.deleteItems(paths);
       await refreshTree();
       selectPostDeletionTarget(nextTarget, false);
     },
-    [refreshTree, selectPostDeletionTarget, visibleNavigationItems]
+    [flushSave, refreshTree, selectPostDeletionTarget, visibleNavigationItems]
   );
 
   const deleteNotes = useCallback(
@@ -335,12 +335,14 @@ export function useNotesTreeActions({
         navigationItems,
         new Set(paths)
       );
+      await flushSave();
       await api.deleteItems(paths);
       await refreshTree();
       selectPostDeletionTarget(nextTarget, fromFeed);
       return true;
     },
     [
+      flushSave,
       activeFolder,
       feedNotes,
       feedVisibleNavigationItems,
@@ -371,11 +373,13 @@ export function useNotesTreeActions({
         navigationItems,
         new Set(paths)
       );
+      await flushSave();
       await api.moveItems(paths, ARCHIEVE_FOLDER_PATH);
       await refreshTree();
       selectPostDeletionTarget(nextTarget, fromFeed);
     },
     [
+      flushSave,
       activeFolder,
       feedNotes,
       feedVisibleNavigationItems,
@@ -401,6 +405,7 @@ export function useNotesTreeActions({
             new Set(paths)
           )
         : null;
+      await flushSave();
       await api.moveItems(paths, normalizedDestination);
       await refreshTree();
       if (movesOutOfFeed) {
@@ -411,6 +416,7 @@ export function useNotesTreeActions({
       clearNote();
     },
     [
+      flushSave,
       activeFolder,
       clearNote,
       feedVisibleNavigationItems,
@@ -439,6 +445,7 @@ export function useNotesTreeActions({
             new Set(uniquePaths)
           )
         : null;
+      await flushSave();
       await Promise.all(
         uniquePaths.map((path) =>
           api.updateNoteMarkers({
@@ -454,6 +461,7 @@ export function useNotesTreeActions({
       }
     },
     [
+      flushSave,
       activeFolder,
       feedNoteFilter,
       feedVisibleNavigationItems,
@@ -486,6 +494,7 @@ export function useNotesTreeActions({
       );
       if (!confirmed) return;
 
+      await flushSave();
       if (notesToMove.length > 0) {
         await api.moveItems(notesToMove, FEED_FOLDER_PATH);
       }
@@ -503,6 +512,7 @@ export function useNotesTreeActions({
       await refreshTree();
     },
     [
+      flushSave,
       refreshTree,
       setActiveFolder,
       setLastSelectedFolder,

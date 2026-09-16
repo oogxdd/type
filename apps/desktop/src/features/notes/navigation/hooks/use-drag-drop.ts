@@ -46,7 +46,7 @@ export function useDragDrop() {
     refreshTree,
     parentById,
   } = useNotesTree();
-  const { clearNote } = useEditor();
+  const { clearNote, flushSave } = useEditor();
   const {
     selectedFolders,
     setSelectedFolders,
@@ -320,6 +320,7 @@ export function useDragDrop() {
         const oldParent = oldParentById[id] ?? null;
         const newParent = newParentById[id] ?? null;
         if (oldParent !== newParent) {
+          await flushSave();
           await moveItems([id], newParent ?? "");
         }
       }
@@ -359,7 +360,7 @@ export function useDragDrop() {
         await refreshTree();
       }
     },
-    [edgeSnap, flatItems, orderedIds, parentById, refreshTree, selectedFolders, setTree, tree, treeData]
+    [flushSave, edgeSnap, flatItems, orderedIds, parentById, refreshTree, selectedFolders, setTree, tree, treeData]
   );
 
   // Note drops: move the dragged note(s) to a folder / another note's parent,
@@ -385,6 +386,7 @@ export function useDragDrop() {
           notes: selectedList,
           destination: overData.path,
         });
+        await flushSave();
         await moveItems(selectedList, overData.path);
         if (selectedList.includes(activeNote || "")) {
           setActiveNote(null);
@@ -403,6 +405,7 @@ export function useDragDrop() {
             destination: destinationParentPath,
             over: overData.path,
           });
+          await flushSave();
           await moveItems(selectedList, destinationParentPath);
           if (selectedList.includes(activeNote || "")) {
             setActiveNote(null);
@@ -452,6 +455,7 @@ export function useDragDrop() {
     [
       activeNote,
       clearNote,
+      flushSave,
       refreshTree,
       selectedNotes,
       setActiveNote,

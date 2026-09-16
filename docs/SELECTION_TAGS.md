@@ -42,8 +42,9 @@ canonicalization (emphasis, lists, hard breaks and extra blank paragraphs) still
 There are no anchors, fingerprints or unresolved tags. Editing text externally
 keeps its tag because the delimiters stay with the text. Copying and pasting tagged
 HTML carries names and flags. Enter at the end of a container exits it; Backspace
-at its start unwraps it. Multi-note review reserializes Markdown when assigning
-and checks the captured document before writing; its body is not byte-preserved.
+at its start unwraps it. The multi-note editor assigns through the same live editor as the single-note view,
+checks the captured document before applying, and saves only that note. The optional
+read-only lens reserializes Markdown on assignment; its body is not byte-preserved.
 
 Note-wide names are separate metadata: `tags: [todo, urgent]` in the actual
 frontmatter. `update_note_tags` updates these through Rust, preserving the body

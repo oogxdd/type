@@ -97,6 +97,8 @@ export function usePaneShortcuts({
       const editorElement =
         appMode === "notes"
           ? rightPaneRef.current?.querySelector<HTMLElement>(
+              ".note-editor-section[data-active='true'] .tiptap-content[contenteditable='true']"
+            ) || rightPaneRef.current?.querySelector<HTMLElement>(
               ".tiptap-content[contenteditable='true']"
             ) || rightPaneRef.current
           : rightPaneRef.current;

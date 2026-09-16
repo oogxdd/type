@@ -2510,13 +2510,12 @@ body {
 .note-editor-group-scroll { padding-bottom: 20vh; }
 .note-editor-section { min-width: 0; }
 .note-editor-divider {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 16px;
-  margin: 28px 24px 10px; padding-top: 12px;
+  display: flex; align-items: baseline; justify-content: flex-end;
+  margin: 28px 0 10px; padding: 12px 24px 0;
   border-top: 1px solid var(--ui-border); color: var(--ui-muted);
   font-size: 11px; line-height: 1.5; user-select: none;
 }
 .note-editor-section:first-child .note-editor-divider { margin-top: 12px; }
-.note-editor-divider span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .note-editor-divider time { flex-shrink: 0; opacity: .75; }
 .note-editor-section[data-active="true"] .note-editor-divider { color: var(--ui-text); }
 .note-editor-group .tiptap-editor-embedded { height: auto; overflow: visible; }
