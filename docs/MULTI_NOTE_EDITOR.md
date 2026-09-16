@@ -3,7 +3,10 @@
 Selecting multiple notes opens the ordinary editor on all their bodies in middle-pane order.
 Thin, non-editable inset date/time dividers mark file boundaries. There is one scroll container
 and one set of editor controls. The first note also shows its date, even when selected alone.
-Clicking a note selection focuses the editor in Normal mode. Feed month/week/day context
+Clicking a note selection focuses the first note in Normal mode and resets the scroll to the top.
+In a multi-note selection, gg returns to the first note; reaching its first visual line also
+reveals the date divider. Audio notes use a compact play/pause control beside the date, with
+elapsed/total time while playing; audio resolves only when requested. Feed month/week/day context
 menus select every note below that group, including collapsed descendants. Each note has its own Tiptap document and Undo/Redo history;
 remaining editors stay mounted when the selection grows or shrinks, including the transition
 to one note.

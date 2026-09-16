@@ -9,6 +9,7 @@ import { NoteEditor } from "./note-editor";
 import { EditorToolbar } from "./editor-toolbar";
 import { constrainSelection, moveBetweenEditors, type EditorSurface, type EditorSurfaceHandle } from "../lib/editor-surface";
 import { getActiveNoteEditor, setActiveNoteEditor } from "../lib/editor-bridge";
+import { RecordingNotePlayback } from "@/features/recording/components/recording-note-playback";
 import { RecordingNoteHeader } from "@/features/recording/components/recording-note-header";
 import { HandwritingNoteHeader } from "@/features/handwriting/components/handwriting-note-header";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
@@ -36,6 +37,15 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
   const [, redrawToolbar] = useState(0);
   const goal = useRef<number | null>(null);
   const moving = useRef(false);
+  const pendingStart = useRef<string | null>(null);
+  const startFrame = useRef(0);
+  const revealFrame = useRef(0);
+  const selectedPathsKey = JSON.stringify(notes.map((note) => note.path));
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    if (pendingStart.current && pendingStart.current !== ordered.current[0]?.path) pendingStart.current = null;
+  }, [selectedPathsKey]);
+  useEffect(() => () => { cancelAnimationFrame(startFrame.current); cancelAnimationFrame(revealFrame.current); }, []);
   const surface = useMemo<EditorSurface>(() => {
     const activate = (handle: EditorSurfaceHandle) => {
       active.current = handle;
@@ -44,10 +54,44 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
       setActiveNoteEditor(handle.editor, handle.path);
       setStatus(statuses.current.get(handle.path) ?? { mode: "NORMAL", pending: "" });
     };
+    const focusStart = (multipleOnly = false) => {
+      if (multipleOnly && ordered.current.length < 2) return false;
+      const path = ordered.current[0]?.path;
+      if (!path) return false;
+      pendingStart.current = path;
+      if (scrollRef.current) scrollRef.current.scrollTop = 0;
+      const first = handles.current.get(path);
+      if (first) {
+        pendingStart.current = null;
+        first.focus(TextSelection.atStart(first.editor.state.doc).head, "normal");
+        if (scrollRef.current) scrollRef.current.scrollTop = 0;
+      }
+      return true;
+    };
+    const revealStart = (handle: EditorSurfaceHandle) => {
+      if (ordered.current.length < 2 || handle.path !== ordered.current[0]?.path) return;
+      cancelAnimationFrame(revealFrame.current);
+      revealFrame.current = requestAnimationFrame(() => {
+        if (handle.editor.isDestroyed || !handle.editor.view.hasFocus()) return;
+        const { state, view } = handle.editor;
+        const first = TextSelection.atStart(state.doc);
+        // Include the divider when the caret reaches the first visual line.
+        if (state.selection.empty && state.selection.$head.sameParent(first.$head) &&
+            view.coordsAtPos(state.selection.head).top <= view.coordsAtPos(first.head).top + 1 && scrollRef.current) {
+          scrollRef.current.scrollTop = 0;
+        }
+      });
+    };
     return {
-      scrollRef, activate,
+      scrollRef, activate, focusStart, revealStart,
       register: (handle) => {
         handles.current.set(handle.path, handle);
+        if (pendingStart.current === handle.path) {
+          cancelAnimationFrame(startFrame.current);
+          startFrame.current = requestAnimationFrame(() => {
+            if (pendingStart.current === handle.path && ordered.current[0]?.path === handle.path) focusStart();
+          });
+        }
         if (!active.current || handle.path === preferred.current) activate(handle);
         return () => {
           handles.current.delete(handle.path);
@@ -78,7 +122,9 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
           while (first > 0 && handles.current.has(ordered.current[first - 1].path)) first--;
           while (last + 1 < ordered.current.length && handles.current.has(ordered.current[last + 1].path)) last++;
           const available = ordered.current.slice(first, last + 1).map((note) => handles.current.get(note.path)!);
-          return moveBetweenEditors(available, handle, direction, count, mode, goal.current);
+          const moved = moveBetweenEditors(available, handle, direction, count, mode, goal.current);
+          if (active.current) revealStart(active.current);
+          return moved;
         } finally { moving.current = false; }
       },
     };
@@ -141,9 +187,10 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
           return (
             <article key={note.path} className="note-editor-section" data-active={activePath === note.path} aria-label={note.title}>
               <header className="note-editor-divider" contentEditable={false}>
+                {multiple ? <RecordingNotePlayback notePath={note.path} preview={preview} /> : null}
                 <time>{formatEditorDate(preview?.createdMs ?? preview?.updatedMs ?? null)}</time>
               </header>
-              <RecordingNoteHeader notePath={note.path} preview={preview} />
+              {!multiple ? <RecordingNoteHeader notePath={note.path} preview={preview} /> : null}
               <HandwritingNoteHeader notePath={note.path} preview={preview} />
               {document?.error ? <div role="alert" className="note-editor-error">{document.error} <button type="button" onClick={() => void (document.loaded && document.dirty ? session.flush(note.path) : session.load(note.path, true)).catch(() => {})}>Retry</button></div> : null}
               {document?.loaded ? <NoteEditor documentKey={note.path} markdown={note.isRecording ? sanitizeRecordingEditorContent(markdown, note.transcriptionStatus) : markdown} onChange={(content) => session.change(note.path, content)} surface={surface} />

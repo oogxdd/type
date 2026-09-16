@@ -43,6 +43,7 @@ export type VimCursorRect = {
 
 type UseVimOptions = {
   scrollRef: React.RefObject<HTMLDivElement | null>;
+  onDocumentStart?: () => boolean;
   onVerticalMove?: (direction: -1 | 1, count: number, mode: VimMode) => boolean;
 };
 
@@ -53,7 +54,9 @@ const MODE_LABELS: Record<VimMode, string> = {
   "visual-line": "V-LINE",
 };
 
-export function useVim({ scrollRef, onVerticalMove }: UseVimOptions) {
+export function useVim({ scrollRef, onVerticalMove, onDocumentStart }: UseVimOptions) {
+  const documentStartRef = useRef(onDocumentStart);
+  documentStartRef.current = onDocumentStart;
   const verticalMoveRef = useRef(onVerticalMove);
   verticalMoveRef.current = onVerticalMove;
   const [mode, setModeState] = useState<VimMode>("normal");
@@ -386,6 +389,7 @@ export function useVim({ scrollRef, onVerticalMove }: UseVimOptions) {
       try {
         const command = result.command;
         if (modeRef.current === "normal" && command.type === "motion" && !command.operator) {
+          if (command.motion.type === "gotoLine" && command.motion.line === 1 && documentStartRef.current?.()) return true;
           const motion = command.motion.type;
           const halfPage = motion === "halfPageDown" || motion === "halfPageUp";
           if (motion === "down" || motion === "up" || halfPage) {

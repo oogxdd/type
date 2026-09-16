@@ -6,9 +6,10 @@ type Playback = { key: string; src: string | null; error: string | null };
 export function useRecordingPlayback(
   notePath: string | null,
   audioPath: string | null,
-  resolve: (path: string) => Promise<string>
+  resolve: (path: string) => Promise<string>,
+  attempt = 0
 ) {
-  const key = JSON.stringify([notePath, audioPath]);
+  const key = JSON.stringify([notePath, audioPath, attempt]);
   const [playback, setPlayback] = useState<Playback | null>(null);
   useEffect(() => {
     let cancelled = false;

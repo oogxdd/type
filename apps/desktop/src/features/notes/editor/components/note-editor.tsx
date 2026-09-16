@@ -63,7 +63,7 @@ export function NoteEditor({ documentKey, markdown, onChange, surface }: NoteEdi
     noteSelectionChanged,
     resetForDocument,
     setVimMode,
-  } = useVim({ scrollRef, onVerticalMove: (direction, count, mode) => {
+  } = useVim({ scrollRef, onDocumentStart: () => surfaceRef.current?.focusStart(true) ?? false, onVerticalMove: (direction, count, mode) => {
     const handle = handleRef.current;
     return !!(handle && surfaceRef.current?.moveVertical(handle, direction, count, mode));
   } });
@@ -142,6 +142,7 @@ export function NoteEditor({ documentKey, markdown, onChange, surface }: NoteEdi
     onBlur: () => clearCursor(),
     onSelectionUpdate: ({ editor: currentEditor }) => {
       noteSelectionChanged();
+      if (handleRef.current) surfaceRef.current?.revealStart(handleRef.current);
       updateCursor(currentEditor.view);
     },
     onUpdate: ({ editor: currentEditor }) => {
@@ -288,10 +289,11 @@ export function NoteEditor({ documentKey, markdown, onChange, surface }: NoteEdi
       // Run after the list click / context-menu focus restoration has finished.
       frame = requestAnimationFrame(() => {
         if (editor.isDestroyed || !consumeNoteEditorFocusRequest(documentKey)) return;
+        if (surfaceRef.current?.focusStart()) return;
         focusModeRef.current = "normal";
         editor.view.focus();
         resetForDocument("normal");
-        editor.view.dispatch(editor.state.tr.setSelection(TextSelection.near(editor.state.selection.$head)).scrollIntoView());
+        editor.view.dispatch(editor.state.tr.setSelection(TextSelection.atStart(editor.state.doc)).scrollIntoView());
         setActiveNoteEditor(editor, documentKey);
         if (handleRef.current) surfaceRef.current?.activate(handleRef.current);
         updateCursor(editor.view);

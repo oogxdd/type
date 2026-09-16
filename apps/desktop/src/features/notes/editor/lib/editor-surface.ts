@@ -13,6 +13,8 @@ export type EditorSurface = {
   scrollRef: RefObject<HTMLDivElement | null>;
   register: (handle: EditorSurfaceHandle) => () => void;
   activate: (handle: EditorSurfaceHandle) => void;
+  focusStart: (multipleOnly?: boolean) => boolean;
+  revealStart: (handle: EditorSurfaceHandle) => void;
   status: (handle: EditorSurfaceHandle, mode: string, pending: string) => void;
   moveVertical: (handle: EditorSurfaceHandle, direction: -1 | 1, count: number, mode: VimMode) => boolean;
 };
