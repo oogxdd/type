@@ -119,8 +119,25 @@ Camera and gallery photos use `saveHandwritingAttachment` through the same
 UniFFI/typed-core boundary as recordings. This creates a note that points to a
 file under `Attachments/` and remains pending on mobile. Desktop scans pending
 handwriting notes after sync and dispatches them to the selected local or cloud
-OCR provider. See `docs/ATTACHMENT_RETENTION.md` before adding device cleanup:
+OCR provider. See [attachment retention](../../docs/ATTACHMENT_RETENTION.md) before adding device cleanup:
 removing a tracked attachment directly would sync that deletion to desktop.
+
+## Sync and audio retention
+
+The phone runs one pull → push workflow at a time, followed by separate Iroh
+audio transfer. Offline connection failures leave note edits on disk without
+creating a commit per attempt. Manual checkpoints remain available offline.
+
+For Iroh working folders, new audio stays outside Git, including when pairing
+fails. The phone may evict untracked audio after seven days only after completed
+transcription and a matching desktop durability receipt. Photos and legacy
+Git-tracked audio are not covered by that eviction policy.
+
+See [retention rules](../../docs/ATTACHMENT_RETENTION.md) and the
+[audio history migration handoff](../../docs/AUDIO_HISTORY_MIGRATION.md). After
+rewriting desktop history, pair a **new empty phone working folder**; reusing the
+old repository can restore the removed audio history. Core sync fixes require a
+native app rebuild, not only a JavaScript OTA update.
 
 ## Backups
 

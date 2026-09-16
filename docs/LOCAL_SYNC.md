@@ -8,12 +8,17 @@ The desktop hosts the active notes root as a normal non-bare Git repository. The
 phone is a Git client. Pulls and pushes go directly against the desktop's live
 working tree, so there is no separate server copy of the notes.
 
-There are two supported sync shapes:
+There are three supported sync shapes:
 
 | Setup | Remote URL | Server |
 | --- | --- | --- |
 | Internet remote | `https://...` / `ssh://...` | GitHub, Gitea, another Git host |
 | Local network | `ssh://pair-<token>@<desktop-ip>:9418/<repo>` | Type's embedded SSH Git server |
+| Iroh direct/relay | Phone loopback SSH URL plus an Iroh ticket | Iroh tunnel to the same embedded SSH server |
+
+The Iroh path and separate audio transfer are described in
+[IROH_SYNC_EXPERIMENT.md](IROH_SYNC_EXPERIMENT.md). The LAN addresses below
+describe the direct SSH path.
 
 The old local `git://` daemon flow has been replaced by embedded SSH. The local
 flow no longer requires macOS Remote Login, `sshd`, or editing
@@ -65,9 +70,9 @@ When the phone scans the QR:
 4. The desktop accepts an unknown key only when the username matches the current
    pairing token, then stores the phone key in app data as an authorized device.
 
-After pairing, the saved remote URL can keep the old token username. Known keys
-are accepted regardless of username, so server restarts do not break paired
-devices.
+After pairing, the phone saves a durable remote URL with the pairing username
+removed. Known keys are accepted regardless of username, so legacy saved URLs
+that still contain a token also survive server restarts.
 
 ## Host-Key Verification
 
@@ -95,6 +100,28 @@ The mobile UI maps those errors to local-sync guidance: keep Type open on the
 desktop, stay on the same Wi-Fi or hotspot, and allow Local Network access in
 iOS Settings. A leftover `git://<lan-ip>/...` remote from the pre-SSH design is
 rejected up front with a prompt to re-scan the QR code.
+
+## Sync ordering and offline edits
+
+The phone owns one complete pull → push workflow at a time. Concurrent Sync now
+calls join the existing operation; status refreshes cannot interrupt it. Audio
+transfer and cache maintenance follow the notes push without delaying it.
+
+The core fetches from the real peer before committing pending local edits for a
+pull. A standalone push authenticates before committing and reuses that connection
+for transmission. An unreachable desktop therefore does not create a new commit
+for each offline save. Manual checkpoints still work offline. A later transfer
+failure can leave a local commit, so successful syncs are not guaranteed to map
+to exactly one commit.
+
+A successful TCP probe of an Iroh loopback proxy only proves the phone proxy is
+listening; it does not establish desktop availability. Native timings distinguish
+fetch, push authentication, local commit, and total push duration. Mobile timings
+also identify status/history reads, note refresh, and cache maintenance.
+
+For recording storage and the seven-day phone policy, see
+[Attachment retention](ATTACHMENT_RETENTION.md). To remove old audio from Git
+while preserving text history, follow [Audio history migration](AUDIO_HISTORY_MIGRATION.md).
 
 ## Device-Local Settings
 

@@ -1,49 +1,71 @@
 # Device-local attachment retention
 
-Photo and audio files currently live inside the notes Git working tree. This is
-simple and durable, but it means deleting a tracked file on a phone is a synced
-deletion. An age rule must not call `remove_file` directly or the next mobile
-push can remove the desktop copy too.
+## Current storage and transport
 
-## Safe rollout
+Audio files remain on disk under `Recordings/` inside the notes root, but new
+recordings in an Iroh working folder are excluded from Git. Notes and transcripts
+sync through Git first; recordings transfer separately over Iroh afterward.
+Failed audio pairing leaves recordings on the phone for retry, without silently
+putting them into Git. Manual checkpoints also respect the exclusion when the
+working folder has an Iroh ticket.
 
-1. Give every binary a content hash and stable attachment id in note
-   frontmatter. Keep the note as the user-visible record even when a device no
-   longer caches the bytes.
-2. Have desktop write a synced durability receipt after it has fetched and
-   verified the binary. The receipt identifies the attachment hash, desktop
-   device, and verification time. A successful mobile push alone is not enough:
-   it proves the remote accepted data, not that a desktop has retained it.
-3. Store retention policy in the existing device-local settings surface, for
-   example `audio_retention_days` and `photo_retention_days`. Never sync these
-   preferences through `.type/settings.json`.
-4. On mobile, prune only binaries older than the policy that have a valid
-   desktop receipt. Notes, OCR/transcription text, and frontmatter remain.
-5. Represent pruned binaries as a device cache miss, not a Git deletion. The UI
-   can offer download-on-demand and show a quiet unavailable-offline state.
+Ordinary Git-only connections still carry recordings through Git. Handwriting
+photos under `Attachments/` also remain tracked; the audio retention policy does
+not apply to them. Deleting a tracked attachment is a synced deletion and does
+not remove its bytes from historical Git objects.
 
-## Storage transition
+## Seven-day phone audio cache
 
-The robust end state is a content-addressed binary store outside the Git
-working tree. Git syncs small pointer metadata; local sync transfers missing
-blobs separately and each device maintains its own cache. Desktop can use a
-keep-forever policy while mobile uses an LRU/age policy.
+`crates/type-core/src/adapters/attachment_retention.rs` implements a fixed
+seven-day minimum age. There is currently no configurable retention setting.
+A recording is eligible for removal from the phone only when:
 
-An incremental interim implementation can keep today's Git layout and mark
-acknowledged mobile paths `skip-worktree` before deleting their local bytes.
-Every commit/status path must then honor that index flag, and pull must restore
-the file only on explicit download. This is workable but more fragile than a
-separate blob store, so it should be treated as a migration step rather than the
-final storage contract.
+1. Its creation time (or audio modification time when creation time is missing)
+   is at least seven days old.
+2. Its transcription status is `completed`.
+3. The desktop durability receipt matches the local file's SHA-256 and length.
+4. The audio path is not tracked in the current Git index.
 
-## Cleanup invariants
+The Markdown note, transcript, and frontmatter remain. Missing audio with cache
+or receipt metadata is represented as archived on the desktop. This is not a
+promise of automatic download-on-demand.
 
-- Never prune a binary while its note is pending upload or lacks a desktop
-  durability receipt.
-- Never use OCR/transcription completion as proof the original reached desktop;
-  a cloud provider may complete before sync.
-- Retention runs after sync and is idempotent. A failed delete remains eligible
-  for the next pass.
-- Panic wipe remains authoritative and removes both metadata and cached bytes.
-- Restoring or downloading a pruned binary verifies its content hash before it
-  becomes available to the note.
+The tracked `.type/audio-durability-receipts.json` records verified desktop
+copies. `.type/audio-cache.json` stores device-local upload acknowledgements and
+cache eviction records, and is excluded from Git. A direct upload acknowledgement
+alone does not authorize deletion: the tracked desktop receipt is required.
+An empty desktop receipt manifest is authoritative and can revoke prior receipts.
+
+Maintenance runs while the app is active, after a standalone pull or after notes
+push/audio archiving. The combined sync does not wait for pruning before pushing
+notes. Seven days is a minimum age, not a guaranteed background deletion deadline;
+untranscribed, unacknowledged, and legacy tracked recordings remain longer.
+
+Receipt manifests are read once per archive/prune pass. Audio content is still
+hashed before trusting a match; the optimization does not remove integrity checks.
+
+## Legacy recordings and history cleanup
+
+Audio already tracked by Git is not untracked merely by adding an exclude rule.
+The cache pruner retains it and reports `waiting_for_git_migration`. Removing
+only its working-tree copy would leave historical audio bytes in `.git`.
+
+Use [Audio history migration](AUDIO_HISTORY_MIGRATION.md) for the verified-copy
+tool and coordinated desktop/phone procedure. It preserves text history while
+removing recording storage directories from historical trees. Old phone clones
+must not merge into the cleaned history afterward.
+
+Do not use `skip-worktree` as the new retention mechanism. Compatibility handling
+for old index flags is not a substitute for keeping recordings outside Git.
+
+## Cleanup invariants and future work
+
+- Never evict audio without completed transcription and a matching tracked
+  desktop receipt; transcription alone does not prove desktop durability.
+- Retention changes device-local cache state, not the note's existence or the
+  desktop's recording file. A failed deletion is retried on a later pass.
+- Photo retention, configurable age policies, and download-on-demand are separate
+  work; do not assume they exist because audio eviction is implemented.
+- Panic wipe remains a separate explicit local-data removal flow.
+
+See [Iroh sync](IROH_SYNC_EXPERIMENT.md) for transport and receipt behavior.
