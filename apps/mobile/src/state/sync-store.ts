@@ -103,6 +103,8 @@ type SyncState = {
 };
 
 export const useSyncStore = create<SyncState>((set, get) => {
+  let syncInFlight: Promise<void> | null = null;
+
   const savedGitConnection = (): SavedGitConnection | null => {
     const profile = activeProfile(useSettingsStore.getState().snapshot);
     const settings = profile?.settings;
@@ -158,9 +160,11 @@ export const useSyncStore = create<SyncState>((set, get) => {
 
   let audioArchiveInFlight = false;
   const archiveAudioBestEffort = (connection: SavedGitConnection | null) => {
-    if (!connection?.irohTicket || audioArchiveInFlight) {
+    if (!connection?.irohTicket) {
+      pruneAudioBestEffort();
       return;
     }
+    if (audioArchiveInFlight) return;
     audioArchiveInFlight = true;
     set({ audioArchiveState: "archiving" });
     void (async () => {
@@ -193,14 +197,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
         logSync(`audio archive: skipped this run - ${getErrorMessage(error)}`);
         set({ audioArchiveState: "error" });
       }
-      try {
-        const prune = await core.pruneMobileAudioCache();
-        if (prune.evicted > 0) {
-          logSync(`audio cache: evicted ${prune.evicted} verified week-old recording(s)`);
-        }
-      } catch (error) {
-        logSync(`audio cache: prune skipped - ${getErrorMessage(error)}`);
-      }
+      pruneAudioBestEffort();
       audioArchiveInFlight = false;
     })();
   };
@@ -266,6 +263,15 @@ export const useSyncStore = create<SyncState>((set, get) => {
     return core.connectGitRepo(connection);
   };
 
+  const timed = async <T>(phase: string, work: () => Promise<T>): Promise<T> => {
+    const startedAt = Date.now();
+    try {
+      return await work();
+    } finally {
+      logSync(`${phase}: finished in ${Date.now() - startedAt}ms`);
+    }
+  };
+
   const run = async (
     action: SyncAction,
     work: () => Promise<GitSyncStatus | null>
@@ -284,7 +290,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
           }, 250);
     try {
       const status = await work();
-      const history = await core.getGitHistory({ limit: 30 }).catch(() => []);
+      const history = await timed("git history", () => core.getGitHistory({ limit: 30 })).catch(() => []);
       logSync(`${action}: done in ${Date.now() - startedAt}ms; ${statusForLog(status)}`);
       set({ ...(status ? { status } : {}), history, action: "idle" });
     } catch (error) {
@@ -302,7 +308,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
   };
 
   const isBusy = (requestedAction: string): boolean => {
-    const active = get().action;
+    const active = syncInFlight ? "sync" : get().action;
     if (active === "idle") {
       return false;
     }
@@ -311,7 +317,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
   };
 
   const requireIdle = (requestedAction: string) => {
-    const active = get().action;
+    const active = syncInFlight ? "sync" : get().action;
     if (active === "idle") {
       return;
     }
@@ -349,8 +355,8 @@ export const useSyncStore = create<SyncState>((set, get) => {
         logSync(`auto: skipped ${reason}; no saved remote`);
         return;
       }
-      if (get().action !== "idle") {
-        logSync(`auto: delayed ${reason}; ${get().action} is running`);
+      if (syncInFlight || get().action !== "idle") {
+        logSync(`auto: delayed ${reason}; ${syncInFlight ? "sync" : get().action} is running`);
         scheduleAutoSyncAttempt(reason, AUTO_SYNC_BUSY_RETRY_MS);
         return;
       }
@@ -376,6 +382,104 @@ export const useSyncStore = create<SyncState>((set, get) => {
           scheduleAutoSyncAttempt("computer unavailable", retryMs);
         });
     }, Math.max(0, delayMs));
+  };
+
+  let pruneInFlight = false;
+  const pruneAudioBestEffort = () => {
+    if (pruneInFlight) return;
+    pruneInFlight = true;
+    const startedAt = Date.now();
+    void (async () => {
+      await core
+        .pruneMobileAudioCache()
+        .then((prune) => {
+          if (prune.evicted > 0) {
+            logSync(`audio cache: evicted ${prune.evicted} verified week-old recording(s)`);
+          }
+        })
+        .catch((error) => {
+          logSync(`audio cache: prune skipped - ${getErrorMessage(error)}`);
+        });
+      logSync(`audio cache: maintenance done in ${Date.now() - startedAt}ms`);
+    })().finally(() => {
+      pruneInFlight = false;
+    });
+  };
+
+  const performPull = async () => {
+    await run("pull", async () => {
+      const headBefore = await headCommitId();
+      const savedConnection = savedGitConnection();
+      const connection = await prepareIrohConnection(savedConnection);
+      await applyAudioGitExclusionFast(savedConnection);
+      logSync(
+        `pull: saved connection remote=${redactRemoteForLog(connection?.remote_url)} branch=${
+          connection?.branch ?? "main"
+        }`
+      );
+      const status = await ensureSavedRemote(
+        await timed("pull status", () => core.getGitStatus()),
+        connection
+      );
+      const pulledStatus = await timed("git pull", () =>
+        core.gitPull({
+          branch: connection?.branch,
+          username: connection?.username,
+          password: connection?.password,
+        })
+      ).catch((error) => {
+        if (status) {
+          set({ status });
+        }
+        throw error;
+      });
+      // Remote edits may have changed the notes on disk — but only if the
+      // pull moved HEAD. Refreshing unconditionally re-read and re-decrypted
+      // every note in the root after every captured page.
+      const headAfter = await headCommitId();
+      if (headBefore === null || headAfter === null || headAfter !== headBefore) {
+        await timed("pull notes refresh", () => useNotesStore.getState().refresh());
+        logSync("pull: notes refreshed after remote changes");
+      } else {
+        logSync("pull: nothing arrived; notes left untouched");
+      }
+      return pulledStatus;
+    });
+  };
+
+  const performPush = async (message?: string, knownStatus?: GitSyncStatus | null) => {
+    const savedConnection = savedGitConnection();
+    await run("push", async () => {
+      const connection = await prepareIrohConnection(savedConnection);
+      await applyAudioGitExclusionFast(savedConnection);
+      logSync(
+        `push: saved connection remote=${redactRemoteForLog(connection?.remote_url)} branch=${
+          connection?.branch ?? "main"
+        } message=${message ? "custom" : "default"}`
+      );
+      // Reuse pull's connection metadata in a combined sync. gitPush itself
+      // checks the current working tree and commits any newly saved edits.
+      const status = await ensureSavedRemote(
+        knownStatus ?? await core.getGitStatus(),
+        connection
+      );
+      return timed("git push", () =>
+        core.gitPush({
+          ...(message ? { message } : {}),
+          branch: connection?.branch,
+          username: connection?.username,
+          password: connection?.password,
+        })
+      ).catch((error) => {
+        if (status) {
+          set({ status });
+        }
+        throw error;
+      });
+    });
+    // Notes are on the computer now — phase two (recordings) runs in the
+    // background and never re-blocks this push or the "synced" state.
+    archiveAudioBestEffort(savedConnection);
   };
 
   return {
@@ -406,11 +510,17 @@ export const useSyncStore = create<SyncState>((set, get) => {
       }
     },
 
-    refresh: () => run("refresh", () => core.getGitStatus()),
+    refresh: async () => {
+      if (isBusy("refresh")) return;
+      await run("refresh", () => core.getGitStatus());
+    },
 
     connect: async (args) => {
-      await core.setMobileAudioGitExclusion(false);
-      await run("connect", () => core.connectGitRepo(args));
+      requireIdle("connect");
+      await run("connect", async () => {
+        await core.setMobileAudioGitExclusion(false);
+        return core.connectGitRepo(args);
+      });
     },
 
     connectFromLink: async (link) => {
@@ -524,51 +634,9 @@ export const useSyncStore = create<SyncState>((set, get) => {
     },
 
     pull: async () => {
-      if (isBusy("pull")) {
-        return;
-      }
-      const headBefore = await headCommitId();
-      await run("pull", async () => {
-        const savedConnection = savedGitConnection();
-        const connection = await prepareIrohConnection(savedConnection);
-        await applyAudioGitExclusionFast(savedConnection);
-        logSync(
-          `pull: saved connection remote=${redactRemoteForLog(connection?.remote_url)} branch=${
-            connection?.branch ?? "main"
-          }`
-        );
-        const status = await ensureSavedRemote(await core.getGitStatus(), connection);
-        return core.gitPull({
-          branch: connection?.branch,
-          username: connection?.username,
-          password: connection?.password,
-        }).catch((error) => {
-          if (status) {
-            set({ status });
-          }
-          throw error;
-        });
-      });
-      // Remote edits may have changed the notes on disk — but only if the
-      // pull moved HEAD. Refreshing unconditionally re-read and re-decrypted
-      // every note in the root after every captured page.
-      const headAfter = await headCommitId();
-      if (headBefore === null || headAfter === null || headAfter !== headBefore) {
-        await useNotesStore.getState().refresh();
-        logSync("pull: notes refreshed after remote changes");
-      } else {
-        logSync("pull: nothing arrived; notes left untouched");
-      }
-      await core
-        .pruneMobileAudioCache()
-        .then((prune) => {
-          if (prune.evicted > 0) {
-            logSync(`audio cache: evicted ${prune.evicted} verified week-old recording(s)`);
-          }
-        })
-        .catch((error) => {
-          logSync(`audio cache: prune skipped - ${getErrorMessage(error)}`);
-        });
+      if (isBusy("pull")) return;
+      await performPull();
+      pruneAudioBestEffort();
     },
 
     commit: async (message = "Checkpoint") => {
@@ -584,22 +652,28 @@ export const useSyncStore = create<SyncState>((set, get) => {
       });
     },
 
-    syncNow: async () => {
-      if (isBusy("sync now")) {
-        return;
-      }
-      logSync("sync now: starting pull then push");
-      set({ autoSyncState: "syncing" });
-      try {
-        await get().pull();
-        logSync("sync now: pull complete; starting push");
-        await get().push();
-        autoSyncFailureCount = 0;
-        set({ autoSyncState: "synced", lastAutoSyncedAt: Date.now() });
-      } catch (error) {
-        set({ autoSyncState: "waiting_for_computer" });
-        throw error;
-      }
+    syncNow: () => {
+      // Own the whole pull → push workflow, including note refreshes between
+      // phases. Concurrent callers join it instead of starting another pull.
+      if (syncInFlight) return syncInFlight;
+      if (isBusy("sync now")) return Promise.resolve();
+      syncInFlight = Promise.resolve().then(async () => {
+        logSync("sync now: starting pull then push");
+        set({ autoSyncState: "syncing" });
+        try {
+          await performPull();
+          logSync("sync now: pull complete; starting push");
+          await performPush(undefined, get().status);
+          autoSyncFailureCount = 0;
+          set({ autoSyncState: "synced", lastAutoSyncedAt: Date.now() });
+        } catch (error) {
+          set({ autoSyncState: "waiting_for_computer" });
+          throw error;
+        }
+      }).finally(() => {
+        syncInFlight = null;
+      });
+      return syncInFlight;
     },
 
     scheduleAutoSync: (reason, delayMs = AUTO_SYNC_DELAY_MS) => {
@@ -611,36 +685,8 @@ export const useSyncStore = create<SyncState>((set, get) => {
     },
 
     push: async (message) => {
-      if (isBusy("push")) {
-        return;
-      }
-      const savedConnection = savedGitConnection();
-      await run("push", async () => {
-        const connection = await prepareIrohConnection(savedConnection);
-        await applyAudioGitExclusionFast(savedConnection);
-        logSync(
-          `push: saved connection remote=${redactRemoteForLog(connection?.remote_url)} branch=${
-            connection?.branch ?? "main"
-          } message=${message ? "custom" : "default"}`
-        );
-        const status = await ensureSavedRemote(await core.getGitStatus(), connection);
-        return core
-          .gitPush({
-            ...(message ? { message } : {}),
-            branch: connection?.branch,
-            username: connection?.username,
-            password: connection?.password,
-          })
-          .catch((error) => {
-            if (status) {
-              set({ status });
-            }
-            throw error;
-          });
-      });
-      // Notes are on the computer now — phase two (recordings) runs in the
-      // background and never re-blocks this push or the "synced" state.
-      archiveAudioBestEffort(savedConnection);
+      if (isBusy("push")) return;
+      await performPush(message);
     },
   };
 });
