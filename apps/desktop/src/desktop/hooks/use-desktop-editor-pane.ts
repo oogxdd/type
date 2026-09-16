@@ -96,7 +96,15 @@ export function useDesktopEditorPane() {
     ]
   );
 
+  const selectionOrder = useRef<{ key: string; paths: string[]; session: typeof session } | null>(null);
   const selectedNotePaths = useMemo(() => {
+    const selected = selectedNotes.size ? [...selectedNotes] : activeNote ? [activeNote] : [];
+    const key = JSON.stringify([activeFolder, selected.sort()]);
+    // Preview loads / autosaves may reorder the Feed. The open reading surface
+    // keeps its order until the user changes the selected set.
+    if (selectionOrder.current?.key === key && selectionOrder.current.session === session) {
+      return selectionOrder.current.paths;
+    }
     const orderedByMiddleList = (activeFolder === FEED_FOLDER_PATH ? feedNotes : notes)
       .map((note) => note.path)
       .filter((path) => selectedNotes.has(path));
@@ -104,11 +112,10 @@ export function useDesktopEditorPane() {
       (path) => !orderedByMiddleList.includes(path)
     );
     const mergedSelection = [...orderedByMiddleList, ...remainingSelected];
-    if (mergedSelection.length > 0) {
-      return mergedSelection;
-    }
-    return activeNote ? [activeNote] : [];
-  }, [activeFolder, activeNote, feedNotes, notes, selectedNotes]);
+    const paths = mergedSelection.length > 0 ? mergedSelection : activeNote ? [activeNote] : [];
+    selectionOrder.current = { key, paths, session };
+    return paths;
+  }, [activeFolder, activeNote, feedNotes, notes, selectedNotes, session]);
 
   useEffect(() => {
     if (APP_EXTENSIONS.multiLens && selectedNotes.size > 1) {

@@ -128,7 +128,11 @@ export function NoteEditor({ documentKey, markdown, onChange, surface }: NoteEdi
         class: "tiptap-content",
         "aria-label": "Note editor",
       },
-      handleKeyDown: handleKeyDown,
+      handleKeyDown: (view, event) => {
+        const handled = handleKeyDown(view, event);
+        if (handleRef.current) surfaceRef.current?.revealStart(handleRef.current);
+        return handled;
+      },
       handleTextInput: () => vimModeRef.current !== "insert",
       handlePaste: () => vimModeRef.current !== "insert",
     },
@@ -142,7 +146,6 @@ export function NoteEditor({ documentKey, markdown, onChange, surface }: NoteEdi
     onBlur: () => clearCursor(),
     onSelectionUpdate: ({ editor: currentEditor }) => {
       noteSelectionChanged();
-      if (handleRef.current) surfaceRef.current?.revealStart(handleRef.current);
       updateCursor(currentEditor.view);
     },
     onUpdate: ({ editor: currentEditor }) => {
@@ -283,6 +286,7 @@ export function NoteEditor({ documentKey, markdown, onChange, surface }: NoteEdi
 
   useEffect(() => {
     if (!editor || editor.isDestroyed || !documentKey) return;
+    if (surfaceRef.current) return; // The group consumes selection focus once, before child editors load.
     let frame = 0;
     const focusRequested = () => {
       cancelAnimationFrame(frame);
@@ -342,6 +346,7 @@ export function NoteEditor({ documentKey, markdown, onChange, surface }: NoteEdi
             editor.view.focus();
           }
           setVimMode("insert");
+          if (handleRef.current) surfaceRef.current?.revealStart(handleRef.current);
         }}
       >
         <EditorContent editor={editor} />

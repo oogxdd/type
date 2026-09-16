@@ -2507,7 +2507,7 @@ body {
 
 /* Ordinary editors composed into one scrolling surface. */
 .note-editor-group { flex: 1; width: 100%; }
-.note-editor-group-scroll { padding-bottom: 20vh; }
+.note-editor-group-scroll { padding-bottom: 20vh; overflow-anchor: none; }
 .note-editor-section { min-width: 0; }
 .note-editor-divider {
   display: flex; align-items: center; justify-content: flex-end; gap: 8px;

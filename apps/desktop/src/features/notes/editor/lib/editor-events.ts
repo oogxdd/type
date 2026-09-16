@@ -23,3 +23,10 @@ export const consumeNoteEditorFocusRequest = (notePath: string) => {
   pendingFocus = null;
   return true;
 };
+
+/** The group owns initial focus; do not wait for the clicked note to load. */
+export const consumeNoteEditorGroupFocusRequest = (paths: readonly string[]) => {
+  if (!pendingFocus || !paths.includes(pendingFocus)) return false;
+  pendingFocus = null;
+  return true;
+};

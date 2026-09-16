@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TextSelection } from "@tiptap/pm/state";
 import { formatEditorDate } from "../lib/editor-date";
 import type { Editor } from "@tiptap/react";
 import { useEditor } from "../hooks/editor-context";
 import { useAppearance } from "@/app/state/appearance-store";
-import { useSelection } from "@/app/state/selection-store";
+import { consumeNoteEditorGroupFocusRequest, NOTE_EDITOR_FOCUS_EVENT } from "../lib/editor-events";
+import { useReadingScrollAnchor } from "../hooks/use-reading-scroll-anchor";
 import { NoteEditor } from "./note-editor";
 import { EditorToolbar } from "./editor-toolbar";
 import { constrainSelection, moveBetweenEditors, type EditorSurface, type EditorSurfaceHandle } from "../lib/editor-surface";
@@ -21,15 +22,12 @@ type EditorNote = { path: string; title: string; dateLabel: string; isRecording:
 export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
   const { session } = useEditor();
   const { notePreviews, allNotePreviews } = useNotesTree();
-  const activeNote = useSelection((state) => state.activeNote);
   const showMode = useAppearance((state) => state.showVimModeIndicator);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const handles = useRef(new Map<string, EditorSurfaceHandle>());
   const active = useRef<EditorSurfaceHandle | null>(null);
   const ordered = useRef(notes);
   ordered.current = notes;
-  const preferred = useRef(activeNote);
-  preferred.current = activeNote;
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   const [activePath, setActivePath] = useState<string | null>(null);
   const [status, setStatus] = useState({ mode: "NORMAL", pending: "" });
@@ -40,12 +38,13 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
   const pendingStart = useRef<string | null>(null);
   const startFrame = useRef(0);
   const revealFrame = useRef(0);
-  const selectedPathsKey = JSON.stringify(notes.map((note) => note.path));
-  useEffect(() => {
+  const selectedPathsKey = JSON.stringify(notes.map((note) => note.path).sort());
+  useLayoutEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
     if (pendingStart.current && pendingStart.current !== ordered.current[0]?.path) pendingStart.current = null;
   }, [selectedPathsKey]);
   useEffect(() => () => { cancelAnimationFrame(startFrame.current); cancelAnimationFrame(revealFrame.current); }, []);
+  useReadingScrollAnchor(scrollRef, selectedPathsKey);
   const surface = useMemo<EditorSurface>(() => {
     const activate = (handle: EditorSurfaceHandle) => {
       active.current = handle;
@@ -92,7 +91,7 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
             if (pendingStart.current === handle.path && ordered.current[0]?.path === handle.path) focusStart();
           });
         }
-        if (!active.current || handle.path === preferred.current) activate(handle);
+        if (!active.current) activate(handle);
         return () => {
           handles.current.delete(handle.path);
           statuses.current.delete(handle.path);
@@ -129,6 +128,34 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
       },
     };
   }, []);
+  useEffect(() => {
+    const root = scrollRef.current;
+    if (!root) return;
+    let focusFrame = 0;
+    const focusRequested = () => {
+      cancelAnimationFrame(focusFrame);
+      focusFrame = requestAnimationFrame(() => {
+        if (consumeNoteEditorGroupFocusRequest(ordered.current.map((note) => note.path))) surface.focusStart();
+      });
+    };
+    const cancelDeferredFocus = () => {
+      pendingStart.current = null;
+      cancelAnimationFrame(startFrame.current);
+      cancelAnimationFrame(revealFrame.current);
+      cancelAnimationFrame(focusFrame);
+      consumeNoteEditorGroupFocusRequest(ordered.current.map((note) => note.path));
+    };
+    window.addEventListener(NOTE_EDITOR_FOCUS_EVENT, focusRequested);
+    // A manual action wins over an initial focus waiting on disk or layout.
+    const events = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+    events.forEach((event) => root.addEventListener(event, cancelDeferredFocus, { capture: true, passive: true }));
+    focusRequested();
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      window.removeEventListener(NOTE_EDITOR_FOCUS_EVENT, focusRequested);
+      events.forEach((event) => root.removeEventListener(event, cancelDeferredFocus, true));
+    };
+  }, [selectedPathsKey, surface]);
   useEffect(() => {
     if (!activeEditor) return;
     const update = () => {
@@ -185,7 +212,7 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
           const preview = notePreviews[note.path] ?? allNotePreviews[note.path];
           const markdown = document?.content ?? "";
           return (
-            <article key={note.path} className="note-editor-section" data-active={activePath === note.path} aria-label={note.title}>
+            <article key={note.path} className="note-editor-section" data-note-path={note.path} data-active={activePath === note.path} aria-label={note.title}>
               <header className="note-editor-divider" contentEditable={false}>
                 {multiple ? <RecordingNotePlayback notePath={note.path} preview={preview} /> : null}
                 <time>{formatEditorDate(preview?.createdMs ?? preview?.updatedMs ?? null)}</time>

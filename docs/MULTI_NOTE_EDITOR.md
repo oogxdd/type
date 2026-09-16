@@ -9,7 +9,9 @@ reveals the date divider. Audio notes use a compact play/pause control beside th
 elapsed/total time while playing; audio resolves only when requested. Feed month/week/day context
 menus select every note below that group, including collapsed descendants. Each note has its own Tiptap document and Undo/Redo history;
 remaining editors stay mounted when the selection grows or shrinks, including the transition
-to one note.
+to one note. Preview refreshes retain the open selection order. Initial focus belongs to the
+group and is cancelled by manual interaction; late-loading children never reclaim it. The
+visible note anchors the viewport when preceding placeholders grow during loading.
 
 Bare j/k (including counts), Up/Down, and Ctrl+D/U half-page motions cross boundaries while retaining the mode and desired
 column. Visual mode, Shift selections, mouse selections, text operators and Select All stay
