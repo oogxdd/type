@@ -29,3 +29,13 @@ export const autoSyncLabel = (state: AutoSyncState | null): string | null => {
 
 export const saveReasonHasLocalChanges = (reason: string): boolean =>
   /saved|deleted/i.test(reason);
+
+/** Git success does not mean the separate audio transfer has finished. */
+export const audioSyncLabel = (state: "archiving" | "done" | "error" | null): string => {
+  switch (state) {
+    case "archiving": return "Transferring — keep Type open";
+    case "done": return "Transferred";
+    case "error": return "Not finished — retry Sync";
+    default: return "Not checked this session";
+  }
+};

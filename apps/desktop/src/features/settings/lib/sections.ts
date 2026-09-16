@@ -29,7 +29,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "sync", title: "Sync" },
   { id: "updates", title: "Updates" },
   { id: "appearance", title: "Appearance" },
-  { id: "transcription", title: "Transcription" },
+  { id: "transcription", title: "Transcription queue" },
   { id: "recordings", title: "Recordings" },
   ...SECURITY_SETTINGS_SECTIONS,
 ];

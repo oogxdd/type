@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRecordingPlayback } from "../hooks/use-recording-playback";
+import { transcriptionState, transcriptionErrorSummary, transcriptionErrorDetails } from "../lib/transcription-presentation";
 import { Mic } from "lucide-react";
 import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import {
-  formatRecordingStatus,
   formatRecordingStatusLabel,
   type NotePreview,
 } from "@typenotes/shared/format";
@@ -17,13 +18,10 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
     recordingsList,
     recordingsQueue,
     recordingsError,
-    transcriptionQueueBusy,
     refreshRecordings,
-    queueRecordingTranscriptions,
     retriggerTranscription,
     resolveAudioSrc,
   } = useRecordings();
-  const [audioSrc, setAudioSrc] = useState<string | null>(null);
   const [retriggerBusy, setRetriggerBusy] = useState(false);
 
   const recordingItem = useMemo(
@@ -33,7 +31,7 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
   const isRecording = Boolean(notePath && (preview?.isRecording || recordingItem));
 
   const effectiveStatus = recordingItem
-    ? formatRecordingStatus(recordingItem)
+    ? transcriptionState(recordingItem)
     : preview?.transcriptionStatus || "pending";
 
   const isProcessing = recordingItem?.is_processing ?? effectiveStatus === "processing";
@@ -42,12 +40,13 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
   const queuePosition = queueIndex >= 0 ? queueIndex + 1 : null;
   const queuePositionLabel = isProcessing ? "in progress" : isQueued ? queuePosition || "queued" : "-";
 
-  const audioPath = recordingItem?.audio_path || preview?.recordingAudioPath || null;
+  const audioPath = recordingItem ? recordingItem.audio_path : preview?.recordingAudioPath || null;
+  const { src: audioSrc, error: playbackError } = useRecordingPlayback(notePath, audioPath, resolveAudioSrc);
   const showTranscribeNow =
     Boolean(audioPath) && !isQueued && !isProcessing && effectiveStatus !== "completed";
   const showRetrigger =
     Boolean(audioPath) && !isQueued && !isProcessing &&
-    (effectiveStatus === "completed" || effectiveStatus === "failed");
+    effectiveStatus === "completed";
 
   const handleRetrigger = useCallback(async () => {
     if (!notePath) return;
@@ -71,22 +70,6 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
     return () => window.clearInterval(timer);
   }, [isRecording, refreshRecordings]);
 
-  useEffect(() => {
-    if (!isRecording || !audioPath) {
-      setAudioSrc(null);
-      return;
-    }
-    let cancelled = false;
-    void resolveAudioSrc(audioPath).then((src) => {
-      if (!cancelled) {
-        setAudioSrc(src);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [audioPath, isRecording, resolveAudioSrc]);
-
   if (!isRecording || !notePath) {
     return null;
   }
@@ -103,7 +86,7 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
       <div className="recording-note-metrics">
         <div className="recording-note-metric">
           <span className="label">Status</span>
-          <span className="value">{formatRecordingStatusLabel(effectiveStatus)}</span>
+          <span className="value">{effectiveStatus === "waiting" ? "Awaiting audio" : formatRecordingStatusLabel(effectiveStatus)}</span>
         </div>
         <div className="recording-note-metric">
           <span className="label">Queued</span>
@@ -137,15 +120,10 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
           <button
             type="button"
             className="recording-note-btn"
-            onClick={() => {
-              void (async () => {
-                await queueRecordingTranscriptions("manual");
-                await refreshRecordings();
-              })();
-            }}
-            disabled={transcriptionQueueBusy}
+            onClick={() => void handleRetrigger()}
+            disabled={retriggerBusy}
           >
-            {transcriptionQueueBusy ? "Queueing..." : "Transcribe now"}
+            {retriggerBusy ? "Queueing..." : "Transcribe now"}
           </button>
         ) : null}
         {showRetrigger ? (
@@ -162,14 +140,23 @@ export function RecordingNoteHeader({ notePath, preview }: RecordingNoteHeaderPr
 
       {audioPath ? (
         audioSrc ? (
-          <audio className="recording-note-player" controls preload="metadata" src={audioSrc} />
+          <audio key={notePath} className="recording-note-player" controls preload="metadata" src={audioSrc} />
         ) : null
       ) : (
-        <p className="recording-note-message">Audio file is missing for this note.</p>
+        <p className="recording-note-message">Audio has not arrived on this device. Open Sync on your phone to transfer it.</p>
       )}
 
-      {recordingItem?.error ? (
-        <p className="recording-note-message error">{recordingItem.error}</p>
+      {playbackError ? <p className="recording-note-message">{playbackError}</p> : null}
+      {effectiveStatus === "failed" && recordingItem?.error ? (
+        <div className="recording-note-message error">
+          <p>{transcriptionErrorSummary(recordingItem.error)}</p>
+          <details className="mt-2">
+            <summary className="cursor-pointer">Technical details</summary>
+            <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all text-xs">
+              {transcriptionErrorDetails(recordingItem.error)}
+            </pre>
+          </details>
+        </div>
       ) : null}
       {recordingsError ? <p className="recording-note-message error">{recordingsError}</p> : null}
     </div>

@@ -35,6 +35,7 @@ pub use whisper::{
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const AUDIO_FILE_NAME_PREFIX: &str = "audio";
+const MISSING_AUDIO_ERROR: &str = "Audio file is missing.";
 pub const RECORDING_FRONTMATTER_TYPE: &str = "audio_recording";
 
 pub const DEFAULT_WHISPER_MODEL: &str = "large-v3";
@@ -386,12 +387,12 @@ impl RecordingsGateway for RecordingsAdapter {
             .into_iter()
             .map(|recording| {
                 let folder_path = note_parent_folder_path(&recording.note_rel);
-                let audio_exists = recording.audio_path.exists();
+                let audio_exists = recording.audio_path.is_file();
                 let archived_on_desktop = !audio_exists
                     && crate::is_audio_evicted_locally(&root, &recording.audio_rel);
                 let mut error = recording.error.clone();
                 if !audio_exists && !archived_on_desktop {
-                    error = Some("Audio file is missing.".to_string());
+                    error = Some(MISSING_AUDIO_ERROR.to_string());
                 }
                 RecordingListItem {
                     note_path: recording.note_rel.clone(),
@@ -960,22 +961,16 @@ fn queue_recordings_with_method(
 
     for recording in recordings {
         scanned += 1;
-        if !recording.audio_path.exists() {
-            let _ = update_recording_note_status(
-                &recording.note_path,
-                RECORDING_STATUS_FAILED,
-                Some("Audio file is missing.".to_string()),
-                None,
-                None,
-            );
+        // Notes and audio can arrive in separate sync phases. A scan must not
+        // persist a failure (or erase a completed transcript) while audio is
+        // still transferring. The read-only list reports unavailable files.
+        if !recording.audio_path.is_file() {
             skipped += 1;
             continue;
         }
 
-        let status = recording.status.as_str();
         let is_active = active_recordings.contains(&recording.note_rel);
-
-        if !should_auto_queue_recording(status, is_active) {
+        if !should_auto_queue_recording(&recording.status, is_active, recording.error.as_deref()) {
             skipped += 1;
             continue;
         }
@@ -1022,18 +1017,18 @@ fn queue_recordings_with_method(
 }
 
 /// Decide whether a recording discovered by a bulk/automatic scan should be
-/// queued. Failed recordings remain terminal until the user explicitly asks
+/// queued. Legacy missing-audio failures recover once the file arrives. Other
+/// failed recordings remain terminal until the user explicitly asks
 /// for a retry through `retrigger_single_transcription`; otherwise the desktop
 /// auto-queue timer would retry a permanently malformed audio file forever.
-fn should_auto_queue_recording(status: &str, is_active: bool) -> bool {
-    if matches!(status, RECORDING_STATUS_COMPLETED | RECORDING_STATUS_FAILED) {
+fn should_auto_queue_recording(status: &str, is_active: bool, error: Option<&str>) -> bool {
+    if is_active || status == RECORDING_STATUS_COMPLETED {
         return false;
     }
-
-    !(matches!(
-        status,
-        crate::RECORDING_STATUS_QUEUED | RECORDING_STATUS_PROCESSING
-    ) && is_active)
+    if status == RECORDING_STATUS_FAILED {
+        return error == Some(MISSING_AUDIO_ERROR);
+    }
+    true
 }
 
 /// Reset a single recording's status and re-queue it with `method`.
@@ -1051,19 +1046,20 @@ pub fn retrigger_single_transcription(
     let info = recording_info_from_note_meta(root, &note_path, note_rel, &meta)
         .ok_or_else(|| format!("Not a recording note: {}", note_rel))?;
 
-    if !info.audio_path.exists() {
-        return Err("Audio file is missing.".to_string());
+    if !info.audio_path.is_file() {
+        return Err(MISSING_AUDIO_ERROR.to_string());
     }
 
-    // Reset status to queued
-    update_recording_note_status(&note_path, crate::RECORDING_STATUS_QUEUED, None, None, None)?;
-
+    // Reserve under the same lock as enqueueing so repeated retries cannot
+    // duplicate a pending/running job or clear its processing status.
     // Add to queue
     {
         let queue = transcription_queue_state();
         let mut state = queue.lock().expect("transcription queue poisoned");
-        // Remove from known so it can be re-queued
-        state.known_recordings.remove(note_rel);
+        if state.known_recordings.contains(note_rel) {
+            return Ok(());
+        }
+        update_recording_note_status(&note_path, crate::RECORDING_STATUS_QUEUED, None, None, None)?;
         state.known_recordings.insert(note_rel.to_string());
         state.pending.push_back(QueuedTranscriptionJob {
             note_rel: note_rel.to_string(),
@@ -1089,24 +1085,126 @@ mod tests {
     fn automatic_scan_leaves_completed_and_failed_recordings_terminal() {
         assert!(!should_auto_queue_recording(
             RECORDING_STATUS_COMPLETED,
-            false
+            false,
+            None
         ));
-        assert!(!should_auto_queue_recording(RECORDING_STATUS_FAILED, false));
-        assert!(should_auto_queue_recording(RECORDING_STATUS_PENDING, false));
+        assert!(!should_auto_queue_recording(
+            RECORDING_STATUS_FAILED,
+            false,
+            None
+        ));
+        assert!(should_auto_queue_recording(
+            RECORDING_STATUS_PENDING,
+            false,
+            None
+        ));
     }
 
     #[test]
     fn automatic_scan_only_recovers_stale_in_flight_statuses() {
-        assert!(!should_auto_queue_recording(RECORDING_STATUS_QUEUED, true));
+        assert!(!should_auto_queue_recording(
+            RECORDING_STATUS_QUEUED,
+            true,
+            None
+        ));
         assert!(!should_auto_queue_recording(
             RECORDING_STATUS_PROCESSING,
-            true
+            true,
+            None
         ));
-        assert!(should_auto_queue_recording(RECORDING_STATUS_QUEUED, false));
+        assert!(should_auto_queue_recording(
+            RECORDING_STATUS_QUEUED,
+            false,
+            None
+        ));
         assert!(should_auto_queue_recording(
             RECORDING_STATUS_PROCESSING,
-            false
+            false,
+            None
         ));
+    }
+
+    #[test]
+    fn automatic_scan_recovers_only_missing_audio_failures() {
+        assert!(should_auto_queue_recording(
+            RECORDING_STATUS_FAILED,
+            false,
+            Some(super::MISSING_AUDIO_ERROR)
+        ));
+        assert!(!should_auto_queue_recording(
+            RECORDING_STATUS_FAILED,
+            false,
+            Some("Invalid audio")
+        ));
+        assert!(!should_auto_queue_recording(
+            RECORDING_STATUS_FAILED,
+            true,
+            Some(super::MISSING_AUDIO_ERROR)
+        ));
+        assert!(!should_auto_queue_recording(
+            RECORDING_STATUS_COMPLETED,
+            false,
+            Some(super::MISSING_AUDIO_ERROR)
+        ));
+        assert!(!should_auto_queue_recording(
+            RECORDING_STATUS_PENDING,
+            true,
+            None
+        ));
+    }
+
+    #[test]
+    fn scan_before_audio_arrives_preserves_notes_and_recovers_after_transfer() {
+        use super::*;
+        let root = std::env::temp_dir().join(format!("type-recording-sync-{}", Uuid::now_v7()));
+        fs::create_dir_all(root.join("Feed")).unwrap();
+        fs::create_dir_all(root.join("Recordings")).unwrap();
+        // No worker should start until the audio has arrived.
+        let method = TranscriptionMethod::AssemblyAi {
+            api_key: String::new(),
+        };
+        for status in [
+            RECORDING_STATUS_PENDING,
+            RECORDING_STATUS_COMPLETED,
+            RECORDING_STATUS_FAILED,
+        ] {
+            let path = root.join("Feed").join(format!("{status}.md"));
+            // Use plaintext fixtures so this test does not depend on the global
+            // security runtime other tests may configure.
+            fs::write(&path, format!(
+                "---\ntype: audio_recording\nrecording_audio_path: Recordings/synced.m4a\ntranscription_status: {status}\n{}---\nKeep this transcript.\n",
+                if status == RECORDING_STATUS_FAILED {
+                    "transcription_error: Audio file is missing.\n"
+                } else { "" }
+            )).unwrap();
+        }
+        let before = collect_recording_notes(&root).unwrap();
+        assert_eq!(before.len(), 3);
+        let originals: Vec<_> = before
+            .iter()
+            .map(|item| fs::read(&item.note_path).unwrap())
+            .collect();
+        let result = queue_recordings_with_method(&root, &method).unwrap();
+        assert_eq!(result.queued, 0);
+        assert_eq!(result.skipped, 3);
+        for (item, original) in before.iter().zip(originals) {
+            assert_eq!(fs::read(&item.note_path).unwrap(), original);
+        }
+        fs::write(root.join("Recordings/synced.m4a"), b"synced audio").unwrap();
+        let after = collect_recording_notes(&root).unwrap();
+        let eligible: Vec<_> = after
+            .iter()
+            .filter(|item| {
+                item.audio_path.is_file()
+                    && should_auto_queue_recording(&item.status, false, item.error.as_deref())
+            })
+            .collect();
+        assert_eq!(
+            eligible.len(),
+            2,
+            "pending and legacy missing-audio failure recover"
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

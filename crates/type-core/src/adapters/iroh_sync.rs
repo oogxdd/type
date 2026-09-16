@@ -793,13 +793,57 @@ impl IrohDialer {
     }
 }
 
+/// Keep the listener task with its owner. A runtime/router can remain alive
+/// after accept() fails, so their existence does not prove the proxy is running.
+struct PhoneProxy {
+    task: tokio::task::JoinHandle<()>,
+    port: u16,
+}
+
+impl PhoneProxy {
+    async fn bind(port: u16, dialer: IrohDialer) -> Result<Self, String> {
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", port))
+            .await
+            .map_err(|error| format!("Failed to start the phone sync proxy on port {port}: {error}"))?;
+        let port = listener.local_addr().map_err(|error| error.to_string())?.port();
+        let task = tokio::spawn(async move {
+            loop {
+                let (tcp, peer) = match listener.accept().await {
+                    Ok(value) => value,
+                    Err(error) => {
+                        dialer.record_error(&format!("Phone sync proxy stopped: {error}"));
+                        eprintln!("[iroh-sync] phone proxy stopped accepting connections: {error}");
+                        break;
+                    }
+                };
+                let dialer = dialer.clone();
+                tokio::spawn(async move {
+                    if let Err(error) = forward_tcp_to_iroh(tcp, dialer).await {
+                        eprintln!("[iroh-sync] phone tunnel for {peer} failed: {error}");
+                    }
+                });
+            }
+        });
+        Ok(Self { task, port })
+    }
+
+    async fn ensure_running(&mut self, dialer: IrohDialer) -> Result<(), String> {
+        if self.task.is_finished() {
+            // The finished task has dropped its listener. Rebind only this
+            // socket; keep the endpoint, blob store and pairing identity alive.
+            *self = Self::bind(self.port, dialer).await?;
+        }
+        Ok(())
+    }
+}
+
 struct IrohClientHandle {
     runtime: tokio::runtime::Runtime,
     router: Router,
     blobs: BlobStore,
     dialer: IrohDialer,
     local_endpoint_id: String,
-    local_port: u16,
+    proxy: PhoneProxy,
 }
 
 impl IrohClientHandle {
@@ -807,9 +851,9 @@ impl IrohClientHandle {
         let diagnostics = self.dialer.diagnostics();
         let target = self.dialer.target()?;
         Ok(IrohClientStatus {
-            running: true,
-            local_port: self.local_port,
-            local_remote_url: rewrite_ssh_remote_to_loopback(remote_url, self.local_port)?,
+            running: !self.proxy.task.is_finished(),
+            local_port: self.proxy.port,
+            local_remote_url: rewrite_ssh_remote_to_loopback(remote_url, self.proxy.port)?,
             endpoint_id: target.id.to_string(),
             local_endpoint_id: self.local_endpoint_id.clone(),
             paired: diagnostics.paired,
@@ -926,8 +970,9 @@ pub fn start_iroh_sync_client(
         *guard = Some(create_iroh_client(app, target.clone())?);
     }
     let client = guard
-        .as_ref()
+        .as_mut()
         .ok_or_else(|| "The Iroh sync client is unavailable.".to_string())?;
+    client.runtime.block_on(client.proxy.ensure_running(client.dialer.clone()))?;
     client.set_target(target);
     client.refresh_pairing(&pairing_token);
     let status = client.status_for_remote(&args.remote_url)?;
@@ -970,7 +1015,7 @@ fn create_iroh_client(app: &AppEnv, target: RemoteTarget) -> Result<IrohClientHa
     let secret = load_or_create_secret(app, "client.key")?;
     let blobs_path = blob_store_path(app, "client-blobs-v103")?;
     let runtime = runtime("Iroh sync client")?;
-    let (router, blobs, listener) = runtime.block_on(async {
+    let (router, blobs) = runtime.block_on(async {
         let endpoint = Endpoint::builder(presets::N0)
             .secret_key(secret)
             .bind()
@@ -984,14 +1029,7 @@ fn create_iroh_client(app: &AppEnv, target: RemoteTarget) -> Result<IrohClientHa
         let router = Router::builder(endpoint)
             .accept(iroh_blobs::ALPN, blobs)
             .spawn();
-        let listener = tokio::net::TcpListener::bind(("127.0.0.1", IROH_CLIENT_PROXY_PORT))
-            .await
-            .map_err(|error| {
-                format!(
-                "Failed to start the phone sync proxy on port {IROH_CLIENT_PROXY_PORT}: {error}"
-            )
-            })?;
-        Ok::<_, String>((router, store, listener))
+        Ok::<_, String>((router, store))
     })?;
 
     let local_endpoint_id = router.endpoint().id().to_string();
@@ -1002,24 +1040,7 @@ fn create_iroh_client(app: &AppEnv, target: RemoteTarget) -> Result<IrohClientHa
         diagnostics: Arc::new(Mutex::new(ClientDiagnostics::default())),
     };
 
-    let accept_dialer = dialer.clone();
-    runtime.spawn(async move {
-        loop {
-            let (tcp, peer) = match listener.accept().await {
-                Ok(value) => value,
-                Err(error) => {
-                    eprintln!("[iroh-sync] phone proxy stopped accepting connections: {error}");
-                    break;
-                }
-            };
-            let dialer = accept_dialer.clone();
-            tokio::spawn(async move {
-                if let Err(error) = forward_tcp_to_iroh(tcp, dialer).await {
-                    eprintln!("[iroh-sync] phone tunnel for {peer} failed: {error}");
-                }
-            });
-        }
-    });
+    let proxy = runtime.block_on(PhoneProxy::bind(IROH_CLIENT_PROXY_PORT, dialer.clone()))?;
 
     Ok(IrohClientHandle {
         runtime,
@@ -1027,7 +1048,7 @@ fn create_iroh_client(app: &AppEnv, target: RemoteTarget) -> Result<IrohClientHa
         blobs,
         dialer,
         local_endpoint_id,
-        local_port: IROH_CLIENT_PROXY_PORT,
+        proxy,
     })
 }
 
@@ -1677,6 +1698,34 @@ mod tests {
         );
         assert!(connection.close_reason().is_none());
 
+        let _ = desktop.router.shutdown().await;
+        fs::remove_dir_all(folder).ok();
+    }
+
+    #[tokio::test]
+    async fn a_stopped_phone_proxy_is_rebound_without_replacing_the_endpoint() {
+        let folder = temp_folder("proxy-recovery");
+        let desktop = spawn_test_desktop(&folder, test_auth(&folder, "deadbeef"), 0).await;
+        let dialer = test_dialer(desktop.addr.clone()).await;
+        let mut proxy = PhoneProxy::bind(0, dialer.clone()).await.unwrap();
+        let original_port = proxy.port;
+        let endpoint_id = dialer.endpoint.id();
+        // Simulate the listener task exiting while the runtime remains alive.
+        proxy.task.abort();
+        let _ = (&mut proxy.task).await;
+        assert!(proxy.task.is_finished());
+        assert!(tokio::net::TcpStream::connect(("127.0.0.1", original_port)).await.is_err());
+
+        proxy.ensure_running(dialer.clone()).await.unwrap();
+        assert!(!proxy.task.is_finished());
+        assert_eq!(proxy.port, original_port);
+        assert_eq!(dialer.endpoint.id(), endpoint_id);
+        let connection = tokio::net::TcpStream::connect(("127.0.0.1", original_port)).await.unwrap();
+        // A healthy listener must be reused; rebinding would fail on this port.
+        proxy.ensure_running(dialer.clone()).await.unwrap();
+        drop(connection);
+        proxy.task.abort();
+        let _ = (&mut proxy.task).await;
         let _ = desktop.router.shutdown().await;
         fs::remove_dir_all(folder).ok();
     }

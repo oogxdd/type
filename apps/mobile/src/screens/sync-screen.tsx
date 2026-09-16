@@ -33,7 +33,7 @@ import { parseSyncDeepLink, type SyncDeepLinkParams } from "@typenotes/shared/sy
 import type { IrohClientStatus } from "@typenotes/shared/types";
 
 import { useClearInstantParam } from "../navigation";
-import { autoSyncLabel } from "../lib/sync-experience";
+import { autoSyncLabel, audioSyncLabel } from "../lib/sync-experience";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
@@ -243,9 +243,12 @@ export const SyncScreen = () => {
         {status ? (
           <View style={styles.statusGrid}>
             {automaticStatus ? (
-              <StatusLine label="Automatic sync" value={automaticStatus} />
+              <StatusLine label="Notes sync" value={automaticStatus} />
             ) : null}
-            <StatusLine label="Connection" value={connected ? "connected" : "not paired"} />
+            {sync.irohStatus ? (
+              <StatusLine label="Audio sync" value={audioSyncLabel(sync.audioArchiveState)} />
+            ) : null}
+            <StatusLine label="Setup" value={connected ? "configured" : "not paired"} />
             <StatusLine label="Remote" value={status.remote_url ?? (savedRemote || "—")} />
             <StatusLine label="Branch" value={status.current_branch ?? "—"} />
             <StatusLine

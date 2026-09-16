@@ -186,7 +186,9 @@ export const useSyncStore = create<SyncState>((set, get) => {
             }; will retry next sync`
           );
         }
-        set({ audioArchiveState: archive.failed > 0 ? "error" : "done" });
+        // A fallback only changes what the *next* Git push includes.
+        // This push already finished, so skipped audio is not transferred yet.
+        set({ audioArchiveState: archive.failed > 0 || archive.skipped > 0 ? "error" : "done" });
       } catch (error) {
         logSync(`audio archive: skipped this run - ${getErrorMessage(error)}`);
         set({ audioArchiveState: "error" });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   autoSyncLabel,
+  audioSyncLabel,
   autoSyncRetryDelayMs,
   saveReasonHasLocalChanges,
 } from "./sync-experience";
@@ -31,4 +32,12 @@ describe("sync experience", () => {
     expect(saveReasonHasLocalChanges("capture deleted")).toBe(true);
     expect(saveReasonHasLocalChanges("app foregrounded")).toBe(false);
   });
+});
+
+
+it("does not present unfinished audio as successfully synced notes", () => {
+  expect(audioSyncLabel("archiving")).toBe("Transferring — keep Type open");
+  expect(audioSyncLabel("error")).toBe("Not finished — retry Sync");
+  expect(audioSyncLabel(null)).toBe("Not checked this session");
+  expect(audioSyncLabel("done")).toBe("Transferred");
 });
