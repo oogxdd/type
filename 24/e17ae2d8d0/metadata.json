@@ -1,0 +1,31 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "24e17ae2d8d0",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "apps/desktop/src/features/recording/components/recording-note-header.tsx",
+    "apps/desktop/src/features/recording/lib/transcription-presentation.test.ts",
+    "apps/desktop/src/features/recording/lib/transcription-presentation.ts",
+    "apps/desktop/src/features/settings/components/desktop/transcription-section.tsx",
+    "apps/desktop/src/features/settings/lib/sections.ts",
+    "crates/type-core/src/adapters/recordings/mod.rs"
+  ],
+  "sessions": [
+    {
+      "metadata": "/24/e17ae2d8d0/0/metadata.json",
+      "transcript": "/24/e17ae2d8d0/0/full.jsonl",
+      "context": "/24/e17ae2d8d0/0/context.md",
+      "content_hash": "/24/e17ae2d8d0/0/content_hash.txt",
+      "prompt": "/24/e17ae2d8d0/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 126,
+    "cache_creation_tokens": 202955,
+    "cache_read_tokens": 7687320,
+    "output_tokens": 39309,
+    "api_call_count": 64
+  }
+}
