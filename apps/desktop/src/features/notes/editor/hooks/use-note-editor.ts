@@ -1,226 +1,69 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { deleteItems, readNote, renameItem, writeNote } from "@/features/notes/api/notes-api";
-import { getAutoRenameTarget } from "@/features/notes/editor/lib/note-autoname";
+import { getAutoRenameTarget } from "../lib/note-autoname";
+import { DocumentSession } from "../lib/document-session";
 import type { NoteFileNameFormat } from "@typenotes/shared/types";
-import { getErrorMessage } from "@typenotes/shared/errors";
-
-const emitTreeInvalidated = () => {
-  window.dispatchEvent(new CustomEvent("notes-tree-invalidated"));
-};
-
-const emitNotePreviewsInvalidated = (notePath: string) => {
-  window.dispatchEvent(
-    new CustomEvent<string>("note-previews-invalidated", {
-      detail: notePath,
-    })
-  );
-};
 
 export function useNoteEditor(
   activeNote: string | null,
-  noteFileNameFormat: NoteFileNameFormat
+  noteFileNameFormat: NoteFileNameFormat,
+  selectedPaths: string[],
+  profileKey: string,
 ) {
-  const [noteContent, setNoteContent] = useState("");
-  const [loadedNotePath, setLoadedNotePath] = useState<string | null>(null);
   const [draftNoteContent, setDraftNoteContent] = useState("");
-  const [noteDirty, setNoteDirty] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const saveTimer = useRef<number | null>(null);
-  const noteContentRef = useRef(noteContent);
-  const activeNoteRef = useRef(activeNote);
-  const noteDirtyRef = useRef(noteDirty);
-
-  useEffect(() => {
-    noteContentRef.current = noteContent;
-  }, [noteContent]);
-
-  useEffect(() => {
-    noteDirtyRef.current = noteDirty;
-  }, [noteDirty]);
-
-  const saveNow = useCallback(
-    async (targetNote: string | null, content: string) => {
-      if (!targetNote) {
-        return;
-      }
-      setIsSaving(true);
-      setSaveError(null);
-      try {
-        await writeNote(targetNote, content);
-        // Preview refresh is intentionally asynchronous: typing and saving do
-        // not wait for the navigation title to be recomputed.
-        emitNotePreviewsInvalidated(targetNote);
-        if (activeNoteRef.current === targetNote && noteContentRef.current === content) {
-          setNoteDirty(false);
-          noteDirtyRef.current = false;
+  const session = useMemo(() => new DocumentSession({
+    read: readNote,
+    write: writeNote,
+    saved: (path) => window.dispatchEvent(new CustomEvent("note-previews-invalidated", { detail: path })),
+    leave: async (path, content, edited) => {
+      if (edited && !content.trim()) {
+        await deleteItems([path]);
+        window.dispatchEvent(new CustomEvent("notes-tree-invalidated"));
+      } else {
+        const target = getAutoRenameTarget(path, content, noteFileNameFormat);
+        if (target) {
+          await renameItem(path, target);
+          window.dispatchEvent(new CustomEvent("notes-tree-invalidated"));
         }
-      } catch (error) {
-        const message = getErrorMessage(error);
-        setSaveError(message);
-        throw error;
-      } finally {
-        setIsSaving(false);
       }
     },
-    []
-  );
-
-  // Load note content when activeNote changes
+  }), [profileKey, noteFileNameFormat]);
+  useSyncExternalStore(session.subscribe, session.snapshot);
+  // Profile workflows flush before switching the backend root. Obsolete timers stop here.
+  useEffect(() => { session.activate(); return () => session.dispose(); }, [session]);
+  const pathKey = JSON.stringify(selectedPaths);
+  useEffect(() => { session.select(JSON.parse(pathKey) as string[]); }, [session, pathKey]);
   useEffect(() => {
-    let cancelled = false;
-    const previousNote = activeNoteRef.current;
-    const previousContent = noteContentRef.current;
-    const previousDirty = noteDirtyRef.current;
-    activeNoteRef.current = activeNote;
-    setLoadedNotePath(null);
-
-    const run = async () => {
-      if (previousNote && previousNote !== activeNote) {
-        try {
-          const trimmed = previousContent.trim();
-          if (previousDirty && !trimmed) {
-            await deleteItems([previousNote]);
-            emitTreeInvalidated();
-          } else {
-            if (previousDirty) {
-              await saveNow(previousNote, previousContent);
-            }
-            if (trimmed) {
-              // The editor owns the timing of the flush; the notes domain owns
-              // the filename policy.
-              const renameTarget = getAutoRenameTarget(
-                previousNote,
-                previousContent,
-                noteFileNameFormat
-              );
-              if (renameTarget) {
-                await renameItem(previousNote, renameTarget);
-                emitTreeInvalidated();
-              }
-            }
-          }
-        } catch (error) {
-          console.error("[notes] failed to flush previous note", error);
-        }
-      }
-
-      if (!activeNote) {
-        if (!cancelled) {
-          setNoteDirty(false);
-        }
-        return;
-      }
-
-      const content = await readNote(activeNote);
-      if (!cancelled) {
-        setNoteContent(content);
-        setLoadedNotePath(activeNote);
-        setNoteDirty(false);
-        setSaveError(null);
-        noteContentRef.current = content;
-      }
+    const refresh = (event: Event) => {
+      const path = (event as CustomEvent<unknown>).detail;
+      session.refresh(typeof path === "string" ? path : undefined);
     };
-
-    void run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeNote, noteFileNameFormat, saveNow]);
-
-  // Autosave with debounce
-  useEffect(() => {
-    if (!activeNote || !noteDirty) {
-      return;
-    }
-    if (saveTimer.current) {
-      window.clearTimeout(saveTimer.current);
-    }
-    saveTimer.current = window.setTimeout(() => {
-      void saveNow(activeNote, noteContent);
-    }, 400);
-    return () => {
-      if (saveTimer.current) {
-        window.clearTimeout(saveTimer.current);
-      }
-    };
-  }, [activeNote, noteContent, noteDirty, saveNow]);
-
-  const handleEditorChange = useCallback(
-    (markdown: string) => {
-      if (!activeNote) {
-        setDraftNoteContent((prev) => (prev === markdown ? prev : markdown));
-        return;
-      }
-      setNoteContent((prev) => (prev === markdown ? prev : markdown));
-      noteContentRef.current = markdown;
-      setNoteDirty(true);
-      noteDirtyRef.current = true;
-      setSaveError(null);
-    },
-    [activeNote]
-  );
-
-  const clearNote = useCallback(() => {
-    setNoteContent("");
-    setNoteDirty(false);
-    noteDirtyRef.current = false;
-  }, []);
-
-  const clearDraft = useCallback(() => {
-    setDraftNoteContent("");
-  }, []);
-
+    window.addEventListener("note-previews-invalidated", refresh);
+    return () => window.removeEventListener("note-previews-invalidated", refresh);
+  }, [session]);
+  useEffect(() => { setDraftNoteContent(""); }, [profileKey]);
+  const current = activeNote ? session.documents.get(activeNote) : undefined;
+  const handleEditorChange = useCallback((markdown: string) => {
+    if (activeNote) session.change(activeNote, markdown);
+    else setDraftNoteContent(markdown);
+  }, [activeNote, session]);
+  // Existing navigation callers can clear their pane without erasing another note's draft.
+  const clearNote = useCallback(() => {}, []);
+  const clearDraft = useCallback(() => setDraftNoteContent(""), []);
   const primeNoteContent = useCallback((markdown: string) => {
-    setNoteContent(markdown);
-    noteContentRef.current = markdown;
-    setNoteDirty(false);
-    noteDirtyRef.current = false;
-    setSaveError(null);
-  }, []);
-
-  const flushSave = useCallback(async () => {
-    if (saveTimer.current) {
-      window.clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-    }
-    if (!activeNoteRef.current || !noteDirtyRef.current) {
-      return;
-    }
-    await saveNow(activeNoteRef.current, noteContentRef.current);
-  }, [saveNow]);
-
-  const retrySave = useCallback(async () => {
-    if (!activeNoteRef.current) {
-      return;
-    }
-    await saveNow(activeNoteRef.current, noteContentRef.current);
-  }, [saveNow]);
-
-  useEffect(() => {
-    return () => {
-      if (saveTimer.current) {
-        window.clearTimeout(saveTimer.current);
-      }
-    };
-  }, []);
-
-  const isSaved = !noteDirty && !isSaving && !saveError;
-
+    if (activeNote) session.prime(activeNote, markdown);
+  }, [activeNote, session]);
+  const entries = [...session.documents.values()];
   return {
-    noteContent,
-    loadedNotePath,
+    session,
+    noteContent: current?.content ?? "",
+    loadedNotePath: current?.loaded ? activeNote : null,
     draftNoteContent,
-    noteDirty,
-    isSaving,
-    saveError,
-    isSaved,
-    handleEditorChange,
-    clearNote,
-    clearDraft,
-    primeNoteContent,
-    flushSave,
-    retrySave,
+    noteDirty: entries.some((entry) => entry.dirty),
+    isSaving: entries.some((entry) => entry.saving),
+    saveError: entries.find((entry) => entry.error)?.error ?? null,
+    handleEditorChange, clearNote, clearDraft, primeNoteContent,
+    flushSave: session.flushAll,
+    retrySave: session.flushAll,
   };
 }

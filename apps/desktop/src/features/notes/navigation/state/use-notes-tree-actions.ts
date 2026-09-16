@@ -14,7 +14,7 @@ import {
 import { confirmAction, focusNoScroll } from "@/shared/lib/dom";
 import { getNoteParentPath } from "@typenotes/shared/notes";
 import { requestNoteEditorInsertMode } from "@/features/notes/editor/lib/editor-events";
-import { getActiveNoteEditor } from "@/features/notes/editor/lib/editor-bridge";
+import { getActiveEditorPath, getActiveNoteEditor } from "@/features/notes/editor/lib/editor-bridge";
 import { getNoteSplitAtCursor } from "@/features/notes/editor/lib/note-split";
 import { getUntitledRenameTarget } from "@/features/notes/editor/lib/note-autoname";
 import { applyFolderRenameToSelection, collectNotesForFlattening } from "../model/notes-tree-model";
@@ -143,10 +143,11 @@ export function useNotesTreeActions({
    */
   const splitNoteAtCursor = useCallback(async () => {
     const noteEditor = getActiveNoteEditor();
-    if (!noteEditor || !activeNote) {
+    const editorPath = getActiveEditorPath();
+    if (!noteEditor || !editorPath) {
       return null;
     }
-    if (getNoteParentPath(activeNote) !== FEED_FOLDER_PATH) {
+    if (getNoteParentPath(editorPath) !== FEED_FOLDER_PATH) {
       return null;
     }
     const split = getNoteSplitAtCursor(noteEditor);
@@ -155,7 +156,7 @@ export function useNotesTreeActions({
     }
     let createdMs: number | undefined;
     try {
-      const meta = await api.getNoteMeta(activeNote);
+      const meta = await api.getNoteMeta(editorPath);
       createdMs = meta.created_ms ?? undefined;
     } catch (error) {
       console.error("[notes] failed to read note meta before split", error);

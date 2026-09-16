@@ -27,7 +27,7 @@ import { useAppearance } from "@/app/state/appearance-store";
 import { FEED_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
 import { collectFolderPaths, getNoteParentPath } from "@typenotes/shared/notes";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
-import { getActiveNoteEditor } from "@/features/notes/editor/lib/editor-bridge";
+import { getActiveEditorPath, getActiveNoteEditor } from "@/features/notes/editor/lib/editor-bridge";
 import { canSplitNoteAtCursor } from "@/features/notes/editor/lib/note-split";
 import { getUntitledRenameTarget } from "@/features/notes/editor/lib/note-autoname";
 import {
@@ -157,7 +157,8 @@ export function useCommandPaletteCommands({
   // caret, the note's file name), but neither can change while the palette is
   // open — so evaluating them on open is enough.
   const canSplitActiveNote = (() => {
-    if (!open || !activeNote || getNoteParentPath(activeNote) !== FEED_FOLDER_PATH) {
+    const editorPath = getActiveEditorPath();
+    if (!open || !editorPath || getNoteParentPath(editorPath) !== FEED_FOLDER_PATH) {
       return false;
     }
     const noteEditor = getActiveNoteEditor();

@@ -43,6 +43,7 @@ export type VimCursorRect = {
 
 type UseVimOptions = {
   scrollRef: React.RefObject<HTMLDivElement | null>;
+  onVerticalMove?: (direction: -1 | 1, count: number, mode: VimMode) => boolean;
 };
 
 const MODE_LABELS: Record<VimMode, string> = {
@@ -52,7 +53,9 @@ const MODE_LABELS: Record<VimMode, string> = {
   "visual-line": "V-LINE",
 };
 
-export function useVim({ scrollRef }: UseVimOptions) {
+export function useVim({ scrollRef, onVerticalMove }: UseVimOptions) {
+  const verticalMoveRef = useRef(onVerticalMove);
+  verticalMoveRef.current = onVerticalMove;
   const [mode, setModeState] = useState<VimMode>("normal");
   const [pendingLabel, setPendingLabel] = useState("");
   const [cursorRect, setCursorRect] = useState<VimCursorRect | null>(null);
@@ -87,7 +90,7 @@ export function useVim({ scrollRef }: UseVimOptions) {
   const updateCursor = useCallback(
     (view: EditorView) => {
       const scrollElement = scrollRef.current;
-      if (!scrollElement || !view.hasFocus()) {
+      if (!scrollElement || view.isDestroyed || !view.hasFocus()) {
         setCursorRect(null);
         return;
       }
@@ -332,8 +335,15 @@ export function useVim({ scrollRef }: UseVimOptions) {
         return true;
       }
       if (modeRef.current === "insert") {
+        if (!event.shiftKey && !event.metaKey && !event.altKey && !event.ctrlKey &&
+            (event.key === "ArrowDown" || event.key === "ArrowUp") &&
+            verticalMoveRef.current?.(event.key === "ArrowDown" ? 1 : -1, 1, "insert")) {
+          event.preventDefault();
+          return true;
+        }
         return false;
       }
+      if (event.shiftKey && event.key.startsWith("Arrow")) return false;
       // Leave OS and browser shortcuts (⌘C, ⌥→, …) to the platform.
       if (event.metaKey || event.altKey) {
         return false;
@@ -374,7 +384,11 @@ export function useVim({ scrollRef }: UseVimOptions) {
       event.stopPropagation();
       setPending(result.pending);
       try {
-        executeVimCommand(result.command, buildHost(view));
+        const command = result.command;
+        if (modeRef.current === "normal" && command.type === "motion" && !command.operator &&
+            (command.motion.type === "down" || command.motion.type === "up") &&
+            verticalMoveRef.current?.(command.motion.type === "down" ? 1 : -1, command.count, "normal")) return true;
+        executeVimCommand(command, buildHost(view));
       } finally {
         isVerticalMotionRef.current = false;
       }

@@ -2,6 +2,10 @@ import { TagColors } from "@/features/tags/lib/tag-colors";
 import { useTagColors } from "@/features/tags/hooks/use-tag-colors";
 import { useEffect, useMemo, useRef } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
+import { createPortal } from "react-dom";
+import type { VimMode } from "../lib/vim/keys";
+import { EditorToolbar } from "./editor-toolbar";
+import type { EditorSurface, EditorSurfaceHandle } from "../lib/editor-surface";
 import { TextSelection } from "@tiptap/pm/state";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -11,8 +15,8 @@ import {
   appendRawLensBackmatterBlock,
   splitLensBackmatterBlock,
 } from "@typenotes/shared/lens-backmatter";
-import { NOTE_EDITOR_ENTER_INSERT_EVENT } from "../lib/editor-events";
-import { setActiveNoteEditor } from "../lib/editor-bridge";
+import { consumeNoteEditorInsertRequest, NOTE_EDITOR_ENTER_INSERT_EVENT } from "../lib/editor-events";
+import { getActiveNoteEditor, setActiveNoteEditor } from "../lib/editor-bridge";
 import { htmlToMarkdown, markdownToHtml } from "../lib/markdown-editor";
 import { useVim } from "../hooks/use-vim";
 import { useAppearance } from "@/app/state/appearance-store";
@@ -23,10 +27,8 @@ type NoteEditorProps = {
   documentKey: string | null;
   markdown: string;
   onChange: (markdown: string) => void;
+  surface?: EditorSurface;
 };
-
-const toolbarButton =
-  "rounded-md border border-transparent px-2 py-1 text-xs font-medium text-[var(--ui-muted)] transition-colors hover:border-[var(--ui-border)] hover:bg-[var(--ui-select)] hover:text-[var(--ui-text)]";
 
 const splitEditorMarkdown = (markdown: string) => {
   const split = splitFrontmatter(markdown);
@@ -38,11 +40,16 @@ const splitEditorMarkdown = (markdown: string) => {
   };
 };
 
-export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps) {
+export function NoteEditor({ documentKey, markdown, onChange, surface }: NoteEditorProps) {
   const showVimModeIndicator = useAppearance(
     (state) => state.showVimModeIndicator
   );
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const ownScrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollRef = surface?.scrollRef ?? ownScrollRef;
+  const surfaceRef = useRef(surface);
+  surfaceRef.current = surface;
+  const handleRef = useRef<EditorSurfaceHandle | null>(null);
+  const focusModeRef = useRef<VimMode | null>(null);
   const {
     mode: vimMode,
     modeRef: vimModeRef,
@@ -56,10 +63,12 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
     noteSelectionChanged,
     resetForDocument,
     setVimMode,
-  } = useVim({ scrollRef });
+  } = useVim({ scrollRef, onVerticalMove: (direction, count, mode) => {
+    const handle = handleRef.current;
+    return !!(handle && surfaceRef.current?.moveVertical(handle, direction, count, mode));
+  } });
 
   const lastDocumentKeyRef = useRef<string | null>(null);
-  const pendingInsertDocumentKeyRef = useRef<string | null>(null);
   const isSyncing = useRef(false);
   const latestMarkdown = useRef(markdown);
   const initialContentRef = useRef(splitEditorMarkdown(markdown));
@@ -109,6 +118,7 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
   );
 
   const editor = useEditor({
+    immediatelyRender: false,
     extensions,
     autofocus: false,
     enableInputRules: false,
@@ -123,8 +133,11 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
       handlePaste: () => vimModeRef.current !== "insert",
     },
     onFocus: ({ editor: currentEditor }) => {
-      setVimMode("normal");
-      requestAnimationFrame(() => updateCursor(currentEditor.view));
+      setVimMode(focusModeRef.current ?? "normal");
+      focusModeRef.current = null;
+      setActiveNoteEditor(currentEditor, documentKey);
+      if (handleRef.current) surfaceRef.current?.activate(handleRef.current);
+      requestAnimationFrame(() => { if (!currentEditor.isDestroyed) updateCursor(currentEditor.view); });
     },
     onBlur: () => clearCursor(),
     onSelectionUpdate: ({ editor: currentEditor }) => {
@@ -154,21 +167,44 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
   useTagColors(editor);
 
   useEffect(() => {
-    if (!editor || !documentKey) return;
+    if (!editor || editor.isDestroyed || !documentKey) return;
     return registerTagSurface({ editor, path: documentKey, editable: true });
   }, [documentKey, editor]);
 
   useEffect(() => {
     attachEditor(editor ?? null);
-    setActiveNoteEditor(editor ?? null);
+    if (!surfaceRef.current) setActiveNoteEditor(editor ?? null, documentKey);
     return () => {
       attachEditor(null);
-      setActiveNoteEditor(null);
+      if (getActiveNoteEditor() === editor) setActiveNoteEditor(null);
     };
-  }, [attachEditor, editor]);
+  }, [attachEditor, editor, documentKey]);
 
   useEffect(() => {
-    if (!editor) {
+    if (!editor || editor.isDestroyed || !documentKey || !surface) return;
+    const handle: EditorSurfaceHandle = {
+      editor, path: documentKey,
+      focus: (position, mode) => {
+        if (!editor.view.hasFocus()) focusModeRef.current = mode;
+        editor.view.focus();
+        setVimMode(mode);
+        editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, position)).scrollIntoView());
+        setActiveNoteEditor(editor, documentKey);
+        surfaceRef.current?.activate(handle);
+        requestAnimationFrame(() => { if (!editor.isDestroyed) updateCursor(editor.view); });
+      },
+    };
+    handleRef.current = handle;
+    const unregister = surface.register(handle);
+    return () => { handleRef.current = null; unregister(); };
+  }, [editor, documentKey, surface, setVimMode, updateCursor]);
+
+  useEffect(() => {
+    if (handleRef.current) surfaceRef.current?.status(handleRef.current, modeLabel, pendingLabel);
+  }, [modeLabel, pendingLabel]);
+
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) {
       return;
     }
     if (markdown === latestMarkdown.current) {
@@ -191,30 +227,27 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
   }, [editor, markdown]);
 
   useEffect(() => {
-    const handleInsertRequest = (event: Event) => {
-      const notePath = (event as CustomEvent<string>).detail;
-      if (notePath) {
-        pendingInsertDocumentKeyRef.current = notePath;
-      }
+    const handleInsertRequest = () => {
+      if (!editor || editor.isDestroyed || !documentKey) return;
+      const request = consumeNoteEditorInsertRequest(documentKey);
+      if (!request) return;
+      focusModeRef.current = "insert";
+      editor.view.focus();
+      const selection = request === "end" ? TextSelection.atEnd(editor.state.doc) : TextSelection.atStart(editor.state.doc);
+      editor.view.dispatch(editor.state.tr.setSelection(selection).scrollIntoView());
+      setVimMode("insert");
     };
     window.addEventListener(NOTE_EDITOR_ENTER_INSERT_EVENT, handleInsertRequest);
-    return () =>
-      window.removeEventListener(
-        NOTE_EDITOR_ENTER_INSERT_EVENT,
-        handleInsertRequest
-      );
-  }, []);
+    return () => window.removeEventListener(NOTE_EDITOR_ENTER_INSERT_EVENT, handleInsertRequest);
+  }, [editor, documentKey, setVimMode]);
 
   useEffect(() => {
-    if (!editor || !documentKey || documentKey === lastDocumentKeyRef.current) {
+    if (!editor || editor.isDestroyed || !documentKey || documentKey === lastDocumentKeyRef.current) {
       return;
     }
     lastDocumentKeyRef.current = documentKey;
-    const shouldEnterInsertMode =
-      pendingInsertDocumentKeyRef.current === documentKey;
-    if (shouldEnterInsertMode) {
-      pendingInsertDocumentKeyRef.current = null;
-    }
+    const insertRequest = consumeNoteEditorInsertRequest(documentKey);
+    const shouldEnterInsertMode = Boolean(insertRequest);
 
     // Promoting a focused draft to a persisted note is not navigation: keep
     // the insertion point so background note creation never interrupts typing.
@@ -227,18 +260,20 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
     }
 
     resetForDocument(shouldEnterInsertMode ? "insert" : "normal");
-    editor.view.dispatch(
-      editor.view.state.tr
-        .setSelection(TextSelection.atStart(editor.view.state.doc))
-        .scrollIntoView()
-    );
-    if (scrollRef.current) {
+    const transaction = editor.state.tr.setSelection(TextSelection.atStart(editor.state.doc));
+    editor.view.dispatch(surfaceRef.current && !shouldEnterInsertMode ? transaction : transaction.scrollIntoView());
+    if (scrollRef.current && !surfaceRef.current) {
       scrollRef.current.scrollTop = 0;
       scrollRef.current.scrollLeft = 0;
     }
     requestAnimationFrame(() => {
+      if (editor.isDestroyed) return;
       if (shouldEnterInsertMode) {
-        editor.commands.focus("start");
+        focusModeRef.current = "insert";
+        editor.view.focus();
+        const selection = insertRequest === "end" ? TextSelection.atEnd(editor.state.doc) : TextSelection.atStart(editor.state.doc);
+        editor.view.dispatch(editor.state.tr.setSelection(selection).scrollIntoView());
+        setVimMode("insert");
       } else {
         updateCursor(editor.view);
       }
@@ -246,7 +281,7 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
   }, [documentKey, editor, resetForDocument, updateCursor, vimModeRef]);
 
   useEffect(() => {
-    if (!editor || !scrollRef.current) {
+    if (!editor || editor.isDestroyed || !scrollRef.current) {
       return;
     }
     const observer = new ResizeObserver(() => updateCursor(editor.view));
@@ -254,7 +289,7 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
     return () => observer.disconnect();
   }, [editor, updateCursor]);
 
-  if (!editor) {
+  if (!editor || editor.isDestroyed) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-[var(--ui-muted)]">
         Loading editor...
@@ -263,85 +298,33 @@ export function NoteEditor({ documentKey, markdown, onChange }: NoteEditorProps)
   }
 
   return (
-    <div className="tiptap-editor" data-vim-mode={vimMode}>
-      <div className="tiptap-toolbar">
-        <button
-          type="button"
-          className={`${toolbarButton}${editor.isActive("bold") ? " is-active" : ""}`}
-          onClick={() => editor.chain().focus().toggleBold().run()}
-        >
-          Bold
-        </button>
-        <button
-          type="button"
-          className={`${toolbarButton}${editor.isActive("italic") ? " is-active" : ""}`}
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-        >
-          Italic
-        </button>
-        <button
-          type="button"
-          className={`${toolbarButton}${editor.isActive("heading", { level: 1 }) ? " is-active" : ""}`}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-        >
-          H1
-        </button>
-        <button
-          type="button"
-          className={`${toolbarButton}${editor.isActive("heading", { level: 2 }) ? " is-active" : ""}`}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        >
-          H2
-        </button>
-        <button
-          type="button"
-          className={`${toolbarButton}${editor.isActive("bulletList") ? " is-active" : ""}`}
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-        >
-          List
-        </button>
-        <button
-          type="button"
-          className={`${toolbarButton}${editor.isActive("blockquote") ? " is-active" : ""}`}
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
-        >
-          Quote
-        </button>
-        <button
-          type="button"
-          className={toolbarButton}
-          onClick={() => editor.chain().focus().undo().run()}
-        >
-          Undo
-        </button>
-        <button
-          type="button"
-          className={toolbarButton}
-          onClick={() => editor.chain().focus().redo().run()}
-        >
-          Redo
-        </button>
-      </div>
+    <div className={`tiptap-editor${surface ? " tiptap-editor-embedded" : ""}`} data-note-editor={documentKey ?? undefined} data-vim-mode={vimMode}>
+      {!surface ? <EditorToolbar editor={editor} /> : null}
       <div
-        className="tiptap-scroll"
+        className={surface ? "tiptap-embedded-body" : "tiptap-scroll"}
         ref={(node) => {
-          scrollRef.current = node;
+          if (!surface) ownScrollRef.current = node;
         }}
-        onClick={() => {
-          editor.commands.focus();
+        onMouseDownCapture={() => {
+          if (!editor.view.hasFocus()) focusModeRef.current = "insert";
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (!editor.view.hasFocus()) {
+            focusModeRef.current = "insert";
+            editor.view.focus();
+          }
           setVimMode("insert");
         }}
       >
         <EditorContent editor={editor} />
         {vimMode !== "insert" && cursorRect ? (
-          <span
-            className="vim-block-cursor"
-            aria-hidden="true"
-            style={cursorRect}
-          />
+          surface && scrollRef.current ? createPortal(
+            <span className="vim-block-cursor" aria-hidden="true" style={cursorRect} />, scrollRef.current
+          ) : <span className="vim-block-cursor" aria-hidden="true" style={cursorRect} />
         ) : null}
       </div>
-      {showVimModeIndicator ? (
+      {!surface && showVimModeIndicator ? (
         <div className="vim-mode-indicator" aria-live="polite">
           {modeLabel}
           {pendingLabel ? (

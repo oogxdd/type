@@ -1,6 +1,9 @@
 import { lazy, Suspense } from "react";
 import { Menu } from "lucide-react";
 
+import { getActiveNoteEditor } from "@/features/notes/editor/lib/editor-bridge";
+import { useEditor } from "@/features/notes/editor/hooks/editor-context";
+import { useSelection } from "@/app/state/selection-store";
 import { NoteEditor } from "@/features/notes/editor/components/note-editor";
 import { RecordingNoteHeader } from "@/features/recording/components/recording-note-header";
 import { HandwritingNoteHeader } from "@/features/handwriting/components/handwriting-note-header";
@@ -23,9 +26,9 @@ const MultiNoteLens = lazy(() =>
   }))
 );
 
-const MultiNoteReview = lazy(() =>
-  import("@/features/lens/components/multi-note-review").then((module) => ({
-    default: module.MultiNoteReview,
+const NoteEditorGroup = lazy(() =>
+  import("@/features/notes/editor/components/note-editor-group").then((module) => ({
+    default: module.NoteEditorGroup,
   }))
 );
 
@@ -40,6 +43,8 @@ export function DesktopRightPane({
   activeSettingsSection,
   onOpenTrash,
 }: DesktopRightPaneProps) {
+  const { session } = useEditor();
+  const selectNote = useSelection((state) => state.selectNote);
   const {
     activeNote,
     loadedNotePath,
@@ -48,7 +53,6 @@ export function DesktopRightPane({
     editorMarkdown,
     handleEditorChange,
     flushSave,
-    prepareReview,
     rightPaneRef,
     canOpenLens,
     shouldShowLens,
@@ -71,16 +75,28 @@ export function DesktopRightPane({
             if (shouldShowLens || selectedNotePaths.length > 1) {
               return;
             }
-            const editorElement =
+            const editorElement = getActiveNoteEditor()?.view.dom ||
               rightPaneRef.current?.querySelector<HTMLElement>(
                 ".tiptap-content[contenteditable='true']"
               ) || rightPaneRef.current;
             focusNoScroll(editorElement);
           }}
         >
-          {selectedNotePaths.length > 1 ? (
+          {[...session.documents].filter(([path, entry]) => entry.error && !selectedNotePaths.includes(path)).map(([path, entry]) => (
+            <div className="note-editor-error" role="alert" key={path}>
+              {path}: {entry.error}
+              <button type="button" onClick={() => void session.flush(path).catch(() => {})}>Retry save</button>
+              <button type="button" onClick={() => selectNote(path)}>Open draft</button>
+            </div>
+          ))}
+          {selectedNotePaths.length > 0 && (selectedNotePaths.length > 1 || !shouldShowLens) ? (
             <Suspense fallback={<div className="empty">Loading selected notes...</div>}>
-              <MultiNoteReview notes={lensNotes} onBeforeRead={prepareReview} />
+              <div className="editor-single">
+                <div className="editor-top-row" data-tauri-drag-region>
+                  {canOpenLens ? <button type="button" className="editor-lens-menu-trigger" onClick={openLens} aria-label="Open Lens"><Menu aria-hidden="true" /></button> : null}
+                </div>
+                <NoteEditorGroup notes={lensNotes} />
+              </div>
             </Suspense>
           ) : shouldShowLens ? (
             <Suspense fallback={<div className="empty">Loading lens...</div>}>

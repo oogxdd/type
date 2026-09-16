@@ -1,15 +1,16 @@
 import {
   createContext,
   useContext,
-  useEffect,
   useRef,
   type ReactNode,
 } from "react";
+import type { DocumentSession } from "../lib/document-session";
 import { useNoteEditor } from "./use-note-editor";
 import { useSelection } from "@/app/state/selection-store";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 
 type EditorContextValue = {
+  session: DocumentSession;
   noteContent: string;
   loadedNotePath: string | null;
   draftNoteContent: string;
@@ -33,8 +34,10 @@ export function EditorProvider({
 }) {
   const { activeProfileId, activeProfileNotesRoot, syncSettings } = useProfiles();
   const activeNote = useSelection((state) => state.activeNote);
+  const selectedNotes = useSelection((state) => state.selectedNotes);
 
   const {
+    session,
     noteContent,
     loadedNotePath,
     draftNoteContent,
@@ -46,21 +49,16 @@ export function EditorProvider({
     primeNoteContent,
     flushSave,
     retrySave,
-  } = useNoteEditor(activeNote, syncSettings.noteFileNameFormat);
+  } = useNoteEditor(activeNote, syncSettings.noteFileNameFormat,
+    selectedNotes.size ? [...selectedNotes] : activeNote ? [activeNote] : [],
+    JSON.stringify([activeProfileId, activeProfileNotesRoot]));
 
   const rightPaneRef = useRef<HTMLDivElement | null>(null);
-
-  // Clear editor state when profile identity or notes root changes
-  useEffect(() => {
-    if (activeProfileId) {
-      clearNote();
-      clearDraft();
-    }
-  }, [activeProfileId, activeProfileNotesRoot, clearNote, clearDraft]);
 
   return (
     <EditorContext.Provider
       value={{
+        session,
         noteContent,
         loadedNotePath,
         draftNoteContent,

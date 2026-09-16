@@ -6,9 +6,13 @@
 import type { Editor } from "@tiptap/react";
 
 let activeEditor: Editor | null = null;
+let activePath: string | null = null;
 
-export const setActiveNoteEditor = (editor: Editor | null) => {
+export const setActiveNoteEditor = (editor: Editor | null, path: string | null = null) => {
   activeEditor = editor;
+  activePath = path;
 };
 
 export const getActiveNoteEditor = () => activeEditor;
+
+export const getActiveEditorPath = () => activePath;

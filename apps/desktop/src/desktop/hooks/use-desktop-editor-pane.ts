@@ -3,7 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { useSelection } from "@/app/state/selection-store";
 import { APP_EXTENSIONS } from "@/features/extensions/registry";
-import { writeNote } from "@/features/notes/api/notes-api";
+import { requestNoteEditorInsertMode } from "@/features/notes/editor/lib/editor-events";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import type { LensNote } from "@/features/lens/hooks/use-lens-annotations";
 import { getLatestFeedTargetTimestamp } from "@/features/notes/navigation/model/feed-tree-model";
@@ -27,7 +27,7 @@ export function useDesktopEditorPane() {
     draftNoteContent,
     handleEditorChange: updateEditorContent,
     flushSave,
-    primeNoteContent,
+    session,
     rightPaneRef,
   } = useEditor();
   const {
@@ -70,10 +70,11 @@ export function useDesktopEditorPane() {
           }
           const latestContent = pendingDraftRef.current;
           if (latestContent !== initialContent) {
-            await writeNote(path, latestContent);
-            primeNoteContent(latestContent);
+            session.change(path, latestContent);
+            await session.flush(path);
             window.dispatchEvent(new CustomEvent("note-previews-invalidated"));
           }
+          requestNoteEditorInsertMode(path, "end");
           return path;
         })
         .catch((error) => {
@@ -90,7 +91,7 @@ export function useDesktopEditorPane() {
       activeFolder,
       activeNote,
       createNewNote,
-      primeNoteContent,
+      session,
       updateEditorContent,
     ]
   );
@@ -167,14 +168,6 @@ export function useDesktopEditorPane() {
     [activeNote, handleEditorChange]
   );
 
-  const prepareReview = useCallback(async () => {
-    // During a selection change the editor's navigation effect owns the old
-    // draft save. Do not flush that draft against the newly selected path.
-    if (loadedNotePath === activeNote) {
-      await flushSave();
-    }
-  }, [activeNote, flushSave, loadedNotePath]);
-
   return {
     activeNote,
     loadedNotePath,
@@ -183,7 +176,6 @@ export function useDesktopEditorPane() {
     editorMarkdown,
     handleEditorChange,
     flushSave,
-    prepareReview,
     rightPaneRef,
     canOpenLens,
     shouldShowLens,
