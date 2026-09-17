@@ -25,7 +25,7 @@
 }
 
 .tree-pane .nav-scroll-area {
-  padding: 0 8px 10px;
+  padding: 0 0 10px;
 }
 
 .sidebar-folders-section .pane-body {
@@ -334,7 +334,7 @@
 
 .tree-pane .item-row.selected {
   background: #f4f8ff;
-  box-shadow: inset 2px 0 0 var(--ui-accent);
+  box-shadow: none;
 }
 
 .tree-pane .item-row.selected .item-label {

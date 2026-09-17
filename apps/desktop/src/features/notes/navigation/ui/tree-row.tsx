@@ -94,10 +94,13 @@ export function TreeRow({
       data-folder={node.id}
       onClick={(event) => {
         const target = event.target as HTMLElement | null;
-        if (target && target.closest(".tree-toggle, .rename-input")) {
+        if (target && target.closest(".rename-input")) {
           return;
         }
         onSelect(event, node.id);
+        if (hasNestedItems) {
+          onToggle(event, node.id);
+        }
       }}
       onContextMenu={(event) => {
         onContextMenu(event, node.id);
@@ -109,10 +112,6 @@ export function TreeRow({
         <button
           type="button"
           className={`icon-btn tree-toggle${isCollapsed ? " is-collapsed" : ""}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggle(event, node.id);
-          }}
           onPointerDown={(event) => event.stopPropagation()}
           onMouseDown={(event) => event.stopPropagation()}
           aria-label={isCollapsed ? "Expand folder" : "Collapse folder"}

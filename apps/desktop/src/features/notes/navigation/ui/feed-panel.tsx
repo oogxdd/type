@@ -244,9 +244,6 @@ export function FeedPanel({
                 onSelect={(event, id) => {
                   event.stopPropagation();
                   selectFeedGroup(id);
-                  if (feedNodeById.get(id)?.kind === "month") {
-                    setExpanded((previous) => new Set(previous).add(id));
-                  }
                 }}
                 onToggle={handleToggle}
                 onNoteSelect={handleNoteSelect}
