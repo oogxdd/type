@@ -15,6 +15,7 @@ export function useNoteEditor(
     read: readNote,
     write: writeNote,
     saved: (path) => window.dispatchEvent(new CustomEvent("note-previews-invalidated", { detail: path })),
+    needsFinalization: (path, content, edited) => (edited && !content.trim()) || Boolean(getAutoRenameTarget(path, content, noteFileNameFormat)),
     leave: async (path, content, edited) => {
       if (edited && !content.trim()) {
         await deleteItems([path]);
@@ -28,7 +29,8 @@ export function useNoteEditor(
       }
     },
   }), [profileKey, noteFileNameFormat]);
-  useSyncExternalStore(session.subscribe, session.snapshot);
+  const snapshot = useCallback(() => session.editorSnapshot(activeNote), [session, activeNote]);
+  useSyncExternalStore(session.subscribe, snapshot);
   // Profile workflows flush before switching the backend root. Obsolete timers stop here.
   useEffect(() => { session.activate(); return () => session.dispose(); }, [session]);
   const pathKey = JSON.stringify(selectedPaths);

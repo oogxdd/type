@@ -1,7 +1,8 @@
 import { TagColors } from "@/features/tags/lib/tag-colors";
 import { useTagColors } from "@/features/tags/hooks/use-tag-colors";
 import { useEffect, useMemo, useRef } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, type Editor } from "@tiptap/react";
+import { useRetainedEditor } from "../hooks/use-retained-editor";
 import { createPortal } from "react-dom";
 import type { VimMode } from "../lib/vim/keys";
 import { EditorToolbar } from "./editor-toolbar";
@@ -28,6 +29,7 @@ type NoteEditorProps = {
   markdown: string;
   onChange: (markdown: string) => void;
   surface?: EditorSurface;
+  loadingHeight?: number;
 };
 
 const splitEditorMarkdown = (markdown: string) => {
@@ -40,7 +42,7 @@ const splitEditorMarkdown = (markdown: string) => {
   };
 };
 
-export function NoteEditor({ documentKey, markdown, onChange, surface }: NoteEditorProps) {
+export function NoteEditor({ documentKey, markdown, onChange, surface, loadingHeight }: NoteEditorProps) {
   const showVimModeIndicator = useAppearance(
     (state) => state.showVimModeIndicator
   );
@@ -70,17 +72,20 @@ export function NoteEditor({ documentKey, markdown, onChange, surface }: NoteEdi
 
   const lastDocumentKeyRef = useRef<string | null>(null);
   const isSyncing = useRef(false);
-  const latestMarkdown = useRef(markdown);
-  const initialContentRef = useRef(splitEditorMarkdown(markdown));
+  const initialMarkdown = useRef(documentKey ? surface?.editorPool.get(documentKey)?.markdown ?? markdown : markdown);
+  const restored = useRef(Boolean(documentKey && surface?.editorPool.get(documentKey)));
+  const latestMarkdown = useRef(initialMarkdown.current);
+  const initialContent = useMemo(() => splitEditorMarkdown(initialMarkdown.current), []);
+  const initialHtml = useMemo(() => restored.current ? "" : markdownToHtml(initialContent.body), [initialContent]);
   const frontmatterRef = useRef<string | null>(
-    initialContentRef.current.frontmatterBlock
+    initialContent.frontmatterBlock
   );
   const backmatterRef = useRef<string | null>(
-    initialContentRef.current.backmatterBlock
+    initialContent.backmatterBlock
   );
 
   const keepCaretBreathingRoom = (
-    currentEditor: NonNullable<ReturnType<typeof useEditor>>
+    currentEditor: Editor
   ) => {
     const scrollEl = scrollRef.current;
     if (!scrollEl) {
@@ -117,12 +122,11 @@ export function NoteEditor({ documentKey, markdown, onChange, surface }: NoteEdi
     []
   );
 
-  const editor = useEditor({
-    immediatelyRender: false,
+  const editor = useRetainedEditor({
     extensions,
     autofocus: false,
     enableInputRules: false,
-    content: markdownToHtml(initialContentRef.current.body),
+    content: initialHtml,
     editorProps: {
       attributes: {
         class: "tiptap-content",
@@ -166,7 +170,7 @@ export function NoteEditor({ documentKey, markdown, onChange, surface }: NoteEdi
       onChange(nextMarkdown);
       requestAnimationFrame(() => keepCaretBreathingRoom(currentEditor));
     },
-  });
+  }, surface?.editorPool, documentKey, () => latestMarkdown.current);
 
   useTagColors(editor);
 
@@ -264,7 +268,10 @@ export function NoteEditor({ documentKey, markdown, onChange, surface }: NoteEdi
     }
 
     resetForDocument(shouldEnterInsertMode ? "insert" : "normal");
-    const transaction = editor.state.tr.setSelection(TextSelection.atStart(editor.state.doc));
+    const transaction = restored.current && !shouldEnterInsertMode
+      ? editor.state.tr
+      : editor.state.tr.setSelection(TextSelection.atStart(editor.state.doc));
+    restored.current = false;
     editor.view.dispatch(surfaceRef.current && !shouldEnterInsertMode ? transaction : transaction.scrollIntoView());
     if (scrollRef.current && !surfaceRef.current) {
       scrollRef.current.scrollTop = 0;
@@ -322,7 +329,7 @@ export function NoteEditor({ documentKey, markdown, onChange, surface }: NoteEdi
 
   if (!editor || editor.isDestroyed) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-[var(--ui-muted)]">
+      <div style={{ minHeight: loadingHeight }} className="flex h-full items-center justify-center text-sm text-[var(--ui-muted)]">
         Loading editor...
       </div>
     );

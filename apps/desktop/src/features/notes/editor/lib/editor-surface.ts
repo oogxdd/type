@@ -1,3 +1,4 @@
+import type { EditorPool } from "../hooks/use-retained-editor";
 import type { Editor } from "@tiptap/react";
 import type { RefObject } from "react";
 import { TextSelection } from "@tiptap/pm/state";
@@ -10,6 +11,7 @@ export type EditorSurfaceHandle = {
   focus: (position: number, mode: VimMode) => void;
 };
 export type EditorSurface = {
+  editorPool: EditorPool;
   scrollRef: RefObject<HTMLDivElement | null>;
   register: (handle: EditorSurfaceHandle) => () => void;
   activate: (handle: EditorSurfaceHandle) => void;
@@ -23,6 +25,7 @@ export type EditorSurface = {
 export function moveBetweenEditors(
   handles: EditorSurfaceHandle[], start: EditorSurfaceHandle,
   direction: -1 | 1, count: number, mode: VimMode, goalLeft: number,
+  onBoundary?: (remaining: number) => void,
 ) {
   let index = handles.indexOf(start);
   if (index < 0 || (mode !== "normal" && mode !== "insert")) return false;
@@ -35,7 +38,7 @@ export function moveBetweenEditors(
     const edge = direction > 0 ? TextSelection.atEnd(state.doc) : TextSelection.atStart(state.doc);
     if (state.selection.$head.sameParent(edge.$head) && view.endOfTextblock(direction > 0 ? "down" : "up")) {
       const next = handles[index + direction];
-      if (!next) break;
+      if (!next) { onBoundary?.(count - step); break; }
       index += direction;
       const landing = direction > 0 ? TextSelection.atStart(next.editor.state.doc) : TextSelection.atEnd(next.editor.state.doc);
       next.focus(landing.head, mode);

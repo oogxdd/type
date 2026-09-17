@@ -9,7 +9,13 @@ export function useReadingScrollAnchor(scrollRef: RefObject<HTMLDivElement | nul
     let anchor: { element: HTMLElement; top: number; scrollTop: number } | null = null;
     const remember = () => {
       const viewport = root.getBoundingClientRect();
-      const element = sections.find((section) => section.getBoundingClientRect().bottom > viewport.top);
+      let low = 0, high = sections.length;
+      while (low < high) {
+        const mid = (low + high) >>> 1;
+        if (sections[mid].getBoundingClientRect().bottom > viewport.top) high = mid;
+        else low = mid + 1;
+      }
+      const element = sections[low];
       anchor = element ? {
         element,
         top: element.getBoundingClientRect().top - viewport.top,

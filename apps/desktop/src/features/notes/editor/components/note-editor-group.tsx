@@ -1,20 +1,18 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TextSelection } from "@tiptap/pm/state";
-import { formatEditorDate } from "../lib/editor-date";
+import { EditorPool } from "../hooks/use-retained-editor";
+import { useEditorWindow } from "../hooks/use-editor-window";
+import { NoteEditorSection } from "./note-editor-section";
+import type { VimMode } from "../lib/vim/keys";
 import type { Editor } from "@tiptap/react";
 import { useEditor } from "../hooks/editor-context";
 import { useAppearance } from "@/app/state/appearance-store";
 import { consumeNoteEditorGroupFocusRequest, NOTE_EDITOR_FOCUS_EVENT } from "../lib/editor-events";
 import { useReadingScrollAnchor } from "../hooks/use-reading-scroll-anchor";
-import { NoteEditor } from "./note-editor";
 import { EditorToolbar } from "./editor-toolbar";
 import { constrainSelection, moveBetweenEditors, type EditorSurface, type EditorSurfaceHandle } from "../lib/editor-surface";
 import { getActiveNoteEditor, setActiveNoteEditor } from "../lib/editor-bridge";
-import { RecordingNotePlayback } from "@/features/recording/components/recording-note-playback";
-import { RecordingNoteHeader } from "@/features/recording/components/recording-note-header";
-import { HandwritingNoteHeader } from "@/features/handwriting/components/handwriting-note-header";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
-import { sanitizeRecordingEditorContent } from "@typenotes/shared/format";
 
 type EditorNote = { path: string; title: string; dateLabel: string; isRecording: boolean; transcriptionStatus: string | null };
 
@@ -26,10 +24,25 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const handles = useRef(new Map<string, EditorSurfaceHandle>());
   const active = useRef<EditorSurfaceHandle | null>(null);
+  const editorPool = useMemo(() => new EditorPool(), [session]);
+  useEffect(() => { editorPool.activate(); return () => editorPool.dispose(); }, [editorPool]);
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
   const ordered = useRef(notes);
   ordered.current = notes;
   const [activeEditor, setActiveEditor] = useState<Editor | null>(null);
   const [activePath, setActivePath] = useState<string | null>(null);
+  const windowed = useEditorWindow(scrollRef, notes.map((note) => note.path), activePath);
+  const ensureRef = useRef(windowed.ensure);
+  ensureRef.current = windowed.ensure;
+  const pendingMotion = useRef<{ from: string; head: number; to: string; direction: -1 | 1; count: number; mode: VimMode } | null>(null);
+  const pendingTarget = useRef<string | null>(null);
+  const motionFrame = useRef(0);
+  const requestNote = useCallback((path: string) => {
+    pendingTarget.current = path;
+    ensureRef.current(path);
+    void sessionRef.current.load(path, false, true);
+  }, []);
   const [status, setStatus] = useState({ mode: "NORMAL", pending: "" });
   const statuses = useRef(new Map<string, typeof status>());
   const [, redrawToolbar] = useState(0);
@@ -43,7 +56,8 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
     if (pendingStart.current && pendingStart.current !== ordered.current[0]?.path) pendingStart.current = null;
   }, [selectedPathsKey]);
-  useEffect(() => () => { cancelAnimationFrame(startFrame.current); cancelAnimationFrame(revealFrame.current); }, []);
+  useEffect(() => { editorPool.retain(new Set(notes.map((note) => note.path))); }, [editorPool, selectedPathsKey]);
+  useEffect(() => () => { cancelAnimationFrame(startFrame.current); cancelAnimationFrame(revealFrame.current); cancelAnimationFrame(motionFrame.current); }, []);
   useReadingScrollAnchor(scrollRef, selectedPathsKey);
   const surface = useMemo<EditorSurface>(() => {
     const activate = (handle: EditorSurfaceHandle) => {
@@ -58,6 +72,8 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
       const path = ordered.current[0]?.path;
       if (!path) return false;
       pendingStart.current = path;
+      ensureRef.current(path);
+      void sessionRef.current.load(path, false, true);
       if (scrollRef.current) scrollRef.current.scrollTop = 0;
       const first = handles.current.get(path);
       if (first) {
@@ -82,13 +98,28 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
       });
     };
     return {
-      scrollRef, activate, focusStart, revealStart,
+      scrollRef, editorPool, activate, focusStart, revealStart,
       register: (handle) => {
         handles.current.set(handle.path, handle);
         if (pendingStart.current === handle.path) {
           cancelAnimationFrame(startFrame.current);
           startFrame.current = requestAnimationFrame(() => {
             if (pendingStart.current === handle.path && ordered.current[0]?.path === handle.path) focusStart();
+          });
+        }
+        if (pendingTarget.current === handle.path || pendingMotion.current?.to === handle.path) {
+          cancelAnimationFrame(motionFrame.current);
+          motionFrame.current = requestAnimationFrame(() => {
+            if (pendingTarget.current === handle.path) {
+              pendingTarget.current = null;
+              handle.focus(TextSelection.atStart(handle.editor.state.doc).head, "normal");
+            }
+            const motion = pendingMotion.current;
+            const origin = motion && handles.current.get(motion.from);
+            if (motion?.to === handle.path && origin && active.current === origin && origin.editor.state.selection.head === motion.head) {
+              pendingMotion.current = null;
+              surface.moveVertical(origin, motion.direction, motion.count, motion.mode);
+            }
           });
         }
         if (!active.current) activate(handle);
@@ -121,13 +152,21 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
           while (first > 0 && handles.current.has(ordered.current[first - 1].path)) first--;
           while (last + 1 < ordered.current.length && handles.current.has(ordered.current[last + 1].path)) last++;
           const available = ordered.current.slice(first, last + 1).map((note) => handles.current.get(note.path)!);
-          const moved = moveBetweenEditors(available, handle, direction, count, mode, goal.current);
+          const moved = moveBetweenEditors(available, handle, direction, count, mode, goal.current, (remaining) => {
+            const edge = direction > 0 ? available[available.length - 1] : available[0];
+            const edgeIndex = ordered.current.findIndex((note) => note.path === edge.path);
+            const next = ordered.current[edgeIndex + direction];
+            if (!next || sessionRef.current.documents.get(next.path)?.error) return;
+            pendingMotion.current = { from: edge.path, head: edge.editor.state.selection.head, to: next.path, direction, count: remaining, mode };
+            ensureRef.current(next.path);
+            void sessionRef.current.load(next.path, false, true);
+          });
           if (active.current) revealStart(active.current);
           return moved;
         } finally { moving.current = false; }
       },
     };
-  }, []);
+  }, [editorPool]);
   useEffect(() => {
     const root = scrollRef.current;
     if (!root) return;
@@ -140,6 +179,9 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
     };
     const cancelDeferredFocus = () => {
       pendingStart.current = null;
+      pendingMotion.current = null;
+      pendingTarget.current = null;
+      cancelAnimationFrame(motionFrame.current);
       cancelAnimationFrame(startFrame.current);
       cancelAnimationFrame(revealFrame.current);
       cancelAnimationFrame(focusFrame);
@@ -207,26 +249,11 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
           last.focus(TextSelection.atEnd(last.editor.state.doc).head, "insert");
         }
       }}>
-        {notes.map((note) => {
-          const document = session.documents.get(note.path);
-          const preview = notePreviews[note.path] ?? allNotePreviews[note.path];
-          const markdown = document?.content ?? "";
-          return (
-            <article key={note.path} className="note-editor-section" data-note-path={note.path} data-active={activePath === note.path} aria-label={note.title}>
-              {multiple ? (
-                <header className="note-editor-divider" contentEditable={false}>
-                  <RecordingNotePlayback notePath={note.path} preview={preview} />
-                  <time>{formatEditorDate(preview?.createdMs ?? preview?.updatedMs ?? null)}</time>
-                </header>
-              ) : null}
-              {!multiple ? <RecordingNoteHeader notePath={note.path} preview={preview} /> : null}
-              <HandwritingNoteHeader notePath={note.path} preview={preview} />
-              {document?.error ? <div role="alert" className="note-editor-error">{document.error} <button type="button" onClick={() => void (document.loaded && document.dirty ? session.flush(note.path) : session.load(note.path, true)).catch(() => {})}>Retry</button></div> : null}
-              {document?.loaded ? <NoteEditor documentKey={note.path} markdown={note.isRecording ? sanitizeRecordingEditorContent(markdown, note.transcriptionStatus) : markdown} onChange={(content) => session.change(note.path, content)} surface={surface} />
-                : !document?.error ? <p className="note-editor-loading" role="status">Loading note…</p> : null}
-            </article>
-          );
-        })}
+        {notes.map((note) => <NoteEditorSection key={note.path}
+          path={note.path} title={note.title}
+          preview={notePreviews[note.path] ?? allNotePreviews[note.path]}
+          multiple={multiple} mounted={windowed.mounted.has(note.path)} active={activePath === note.path}
+          session={session} surface={surface} onRequest={requestNote} />)}
       </div>
       {showMode ? <div className="vim-mode-indicator" aria-live="polite">{status.mode}{status.pending ? <span className="vim-pending-keys">{status.pending}</span> : null}</div> : null}
     </section>
