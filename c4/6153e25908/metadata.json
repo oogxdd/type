@@ -1,0 +1,29 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "c46153e25908",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "apps/desktop/src/app/app.css",
+    "apps/desktop/src/features/notes/navigation/ui/feed-panel.tsx",
+    "apps/desktop/src/features/notes/navigation/ui/tree-row.tsx",
+    "apps/desktop/src/features/notes/navigation/ui/tree.css"
+  ],
+  "sessions": [
+    {
+      "metadata": "/c4/6153e25908/0/metadata.json",
+      "transcript": "/c4/6153e25908/0/full.jsonl",
+      "context": "/c4/6153e25908/0/context.md",
+      "content_hash": "/c4/6153e25908/0/content_hash.txt",
+      "prompt": "/c4/6153e25908/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 4,
+    "cache_creation_tokens": 68651,
+    "cache_read_tokens": 66492,
+    "output_tokens": 760,
+    "api_call_count": 2
+  }
+}
