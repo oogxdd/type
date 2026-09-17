@@ -455,6 +455,15 @@ const finalizeBuilder = (builder: FeedNodeBuilder): FeedTreeNode => {
     .map((child) => finalizeBuilder(child))
     .filter(shouldKeepNode)
     .sort((left, right) => {
+      if (
+        builder.kind === "month" &&
+        left.kind === "week" &&
+        right.kind === "week" &&
+        left.rangeStartMs != null &&
+        right.rangeStartMs != null
+      ) {
+        return left.rangeStartMs - right.rangeStartMs;
+      }
       if (left.rank !== right.rank) {
         return left.rank - right.rank;
       }

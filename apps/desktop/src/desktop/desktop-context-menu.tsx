@@ -150,7 +150,7 @@ export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) 
         },
         {
           id: "folder.flatten",
-          label: state.targetPaths.length > 1 ? "Move notes in folders to Feed" : "Move notes in folder to Feed",
+          label: state.targetPaths.length > 1 ? "Move notes in folders to Stream" : "Move notes in folder to Stream",
           disabled: state.targetPaths.length === 0,
           run: () => {
             void flattenIntoFeed(state.targetPaths, []);

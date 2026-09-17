@@ -213,10 +213,12 @@ export function NoteEditorGroup({ notes }: { notes: EditorNote[] }) {
           const markdown = document?.content ?? "";
           return (
             <article key={note.path} className="note-editor-section" data-note-path={note.path} data-active={activePath === note.path} aria-label={note.title}>
-              <header className="note-editor-divider" contentEditable={false}>
-                {multiple ? <RecordingNotePlayback notePath={note.path} preview={preview} /> : null}
-                <time>{formatEditorDate(preview?.createdMs ?? preview?.updatedMs ?? null)}</time>
-              </header>
+              {multiple ? (
+                <header className="note-editor-divider" contentEditable={false}>
+                  <RecordingNotePlayback notePath={note.path} preview={preview} />
+                  <time>{formatEditorDate(preview?.createdMs ?? preview?.updatedMs ?? null)}</time>
+                </header>
+              ) : null}
               {!multiple ? <RecordingNoteHeader notePath={note.path} preview={preview} /> : null}
               <HandwritingNoteHeader notePath={note.path} preview={preview} />
               {document?.error ? <div role="alert" className="note-editor-error">{document.error} <button type="button" onClick={() => void (document.loaded && document.dirty ? session.flush(note.path) : session.load(note.path, true)).catch(() => {})}>Retry</button></div> : null}

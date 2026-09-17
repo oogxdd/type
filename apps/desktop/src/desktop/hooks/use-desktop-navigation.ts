@@ -94,7 +94,7 @@ export function useDesktopNavigation({
   );
 
   const [activeNavigationTab, setActiveNavigationTab] = useState<"feed" | "folders">(
-    "folders"
+    "feed"
   );
   // Feed is a transient view. Remember the last real folder so "back to folders"
   // has a stable place to land instead of guessing from the current tree.
@@ -112,9 +112,6 @@ export function useDesktopNavigation({
     if (activeFolder === FEED_FOLDER_PATH && activeNavigationTab !== "feed") {
       setActiveNavigationTab("feed");
       return;
-    }
-    if (activeFolder !== FEED_FOLDER_PATH && activeNavigationTab === "feed") {
-      setActiveNavigationTab("folders");
     }
   }, [activeFolder, activeNavigationTab]);
 
@@ -259,7 +256,7 @@ export function useDesktopNavigation({
   const middlePaneTitle = useMemo(
     () =>
       activeNavigationTab === "feed"
-        ? activeFeedNode?.name || "Feed"
+        ? activeFeedNode?.name || "Stream"
         : activeNode?.name || activeFolder || "Notes",
     [activeFeedNode?.name, activeFolder, activeNavigationTab, activeNode?.name]
   );

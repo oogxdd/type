@@ -296,10 +296,10 @@ export function DesktopAppShell({
           <div className="pane-section-title pane-tabs-wrap pane-tabs-header">
             <TabsList className="folders-tabs-list">
               <TabsTrigger value="feed" className="folders-tab-trigger">
-                Feed
+                Stream
               </TabsTrigger>
               <TabsTrigger value="folders" className="folders-tab-trigger">
-                Folders
+                Structure
               </TabsTrigger>
             </TabsList>
             <Popover open={feedFilterOpen} onOpenChange={setFeedFilterOpen}>
@@ -308,8 +308,8 @@ export function DesktopAppShell({
                   type="button"
                   className="feed-filter-trigger"
                   data-active={feedNoteFilter !== "all"}
-                  aria-label="Filter Feed notes"
-                  title="Filter Feed notes"
+                  aria-label="Filter Stream notes"
+                  title="Filter Stream notes"
                 >
                   <ListFilter aria-hidden="true" />
                 </button>
@@ -320,7 +320,7 @@ export function DesktopAppShell({
                 className="feed-filter-popover"
               >
                 <div className="feed-filter-popover-title">Show</div>
-                <div className="feed-filter-options" role="radiogroup" aria-label="Feed filter">
+                <div className="feed-filter-options" role="radiogroup" aria-label="Stream filter">
                   {FEED_FILTER_OPTIONS.map((option) => (
                     <button
                       key={option.value}

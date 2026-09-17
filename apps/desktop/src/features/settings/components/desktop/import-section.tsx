@@ -109,9 +109,9 @@ export function SettingsImportSection() {
                 disabled={importing}
               />
               <span>
-                <span className="font-medium">Flatten everything into Feed</span>
+                <span className="font-medium">Flatten everything into Stream</span>
                 <span className="block text-xs leading-relaxed text-muted-foreground">
-                  Drop every note straight into Feed, discarding the folders.
+                  Drop every note straight into Stream, discarding the folders.
                 </span>
               </span>
             </label>

@@ -317,8 +317,8 @@ export function useCommandPaletteCommands({
       id: "flatten-into-feed",
       label:
         removableFolders.length > 0
-          ? `Flatten ${removableFolders.length} folder${removableFolders.length > 1 ? "s" : ""} into Feed`
-          : `Move ${notesOutsideFeed.length} note${notesOutsideFeed.length > 1 ? "s" : ""} into Feed`,
+          ? `Flatten ${removableFolders.length} folder${removableFolders.length > 1 ? "s" : ""} into Stream`
+          : `Move ${notesOutsideFeed.length} note${notesOutsideFeed.length > 1 ? "s" : ""} into Stream`,
       icon: FolderInputIcon,
       keywords: ["flatten", "move", "feed", "collapse"],
       run: () => void flattenIntoFeed(folderTargets, noteTargets),
@@ -377,9 +377,9 @@ export function useCommandPaletteCommands({
   const navigateCommands: PaletteCommand[] = [
     {
       id: "go-feed",
-      label: "Go to Feed",
+      label: "Go to Stream",
       icon: InboxIcon,
-      keywords: ["home", "notes"],
+      keywords: ["home", "notes", "stream", "feed"],
       run: onOpenFeed,
     },
     {

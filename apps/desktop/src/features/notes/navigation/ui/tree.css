@@ -463,6 +463,10 @@
   padding: 0;
 }
 
+.tree-pane .tree-toggle:hover {
+  background: transparent;
+}
+
 .tree-pane .tree-toggle svg {
   width: 12px;
   height: 12px;

@@ -289,7 +289,7 @@ export function useNotesTreeActions({
     async (paths: string[]) => {
       if (paths.length === 0) return;
       if (paths.some(isSystemFolder)) {
-        window.alert(`"Feed" and "Archieve" are fixed folders and cannot be deleted.`);
+        window.alert(`"Stream" and "Archieve" are fixed folders and cannot be deleted.`);
         return;
       }
       const confirmed = await confirmAction(`Delete ${paths.length} folder(s)?`);
@@ -490,7 +490,7 @@ export function useNotesTreeActions({
           ? ` and remove ${foldersToRemove.length} folder(s)`
           : "";
       const confirmed = await confirmAction(
-        `Move ${notesToMove.length} note(s) into Feed${folderSuffix}?`
+        `Move ${notesToMove.length} note(s) into Stream${folderSuffix}?`
       );
       if (!confirmed) return;
 

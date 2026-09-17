@@ -266,7 +266,7 @@ export function SettingsAppearanceSection() {
             }
           >
             <option value="separate">Separate notes panel</option>
-            <option value="nested">Inside folders navigation</option>
+            <option value="nested">Inside Structure navigation</option>
           </SettingsSelect>
         </SettingsField>
 
@@ -279,9 +279,9 @@ export function SettingsAppearanceSection() {
             className="mt-0.5"
           />
           <span className="grid gap-1">
-            <span className="font-medium text-foreground">Hide archived feed notes</span>
+            <span className="font-medium text-foreground">Hide archived Stream notes</span>
             <span className="text-xs leading-relaxed text-muted-foreground">
-              Archived notes stay in Feed, but they are hidden from the main list.
+              Archived notes stay in Stream, but they are hidden from the main list.
             </span>
           </span>
         </label>

@@ -97,7 +97,7 @@ describe("buildFeedTree Earlier hierarchy", () => {
     });
     const august = findFeedNode(treeData, "feed:month:2026:8");
     expect(august?.children.map((week) => week.name)).toEqual([
-      "Week 4 (24–30 aug)", "Week 2 (10–16 aug)", "Week 1 (3–9 aug)",
+      "Week 1 (3–9 aug)", "Week 2 (10–16 aug)", "Week 4 (24–30 aug)",
     ]);
     expect(findFeedNode(treeData, "feed:month:2026:8:week:32")?.noteCount).toBe(2);
   });
