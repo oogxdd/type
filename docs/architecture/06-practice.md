@@ -9,9 +9,9 @@
 
 - проверить, что app unlocked;
 - распарсить frontmatter;
-- запретить создание заметки внутри `Recordings`;
+- запретить создание заметки внутри `_system/_recordings`;
 - вызвать `git2::Repository::open`;
-- выбрать default folder `Feed`;
+- выбрать default folder `_system/stream`;
 - закодировать audio bytes в base64;
 - вернуть `CreateNoteResult`;
 - показать file export sheet на iOS.
@@ -20,9 +20,9 @@
 
 - app unlocked — `commands` boundary / security adapter;
 - frontmatter parsing — adapter через document codec;
-- запрет `Recordings` — application rule;
+- запрет `_system/_recordings` — application rule;
 - `git2::Repository::open` — adapter;
-- default `Feed` — application/domain rule;
+- default `_system/stream` — application/domain rule;
 - base64 audio — adapter/edge DTO work;
 - `CreateNoteResult` — domain DTO;
 - iOS export sheet — platform adapter.

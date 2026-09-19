@@ -45,8 +45,9 @@ The output contains:
 
 - `original/`: a verified complete backup, including current edits, ignored
   files, audio, Git config, and the original Git object database.
-- `migrated/`: current files plus the rewritten Git database. `Recordings/` and
-  legacy `_Recordings/` are removed from every historical tree, but their current
+- `migrated/`: current files plus the rewritten Git database. Every audio
+  directory — `_system/_recordings/` and the legacy `Recordings/` and
+  `_Recordings/` — is removed from every historical tree, but their current
   files remain on disk. Those storage directories include transcription sidecars;
   note bodies and transcripts stored in Markdown remain in history.
 - `report.json`: produced only after verification succeeds, with commit counts
@@ -153,12 +154,13 @@ or an app stopped. Do not switch the live history while these facts are unknown.
    backup **outside the notes root**, then rename the staged Git directory to
    the live `.git` path. Do not delete the old database; if the second rename
    fails, immediately move the old one back before doing anything else.
-   Do not overwrite the live Markdown files, `Recordings/`, `.type/`, or other
-   working-tree files with those from the prepared copy.
+   Do not overwrite the live Markdown files, the audio directory, `.type/`, or
+   other working-tree files with those from the prepared copy.
 6. **Validate before reopening.** Run `git fsck --full --strict`, confirm the
-   new HEAD/refs match the prepared copy, ensure `git ls-files -- Recordings
-   _Recordings` is empty, and check the expected current edits/deletions remain.
-   Verify `/Recordings/` and `/_Recordings/` are in `.git/info/exclude`. Hash
+   new HEAD/refs match the prepared copy, ensure `git ls-files --
+   _system/_recordings Recordings _Recordings` is empty, and check the
+   expected current edits/deletions remain. Verify those three paths are
+   in `.git/info/exclude` (the script writes whichever ones apply). Hash
    current notes/audio against the backup to confirm the Git swap changed no
    working-tree content.
 

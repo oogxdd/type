@@ -72,7 +72,7 @@ Rust ↔ JavaScript живёт сериализация.
 ## Что на самом деле делает кодген
 
 JavaScript на телефоне не умеет звать Rust напрямую. Между
-`readNote("Feed/x.md")` в React Native и Rust-функцией лежит обвязка:
+`readNote("_system/stream/x.md")` в React Native и Rust-функцией лежит обвязка:
 превратить JS-строку в Rust-`String` через C-интерфейс и обратно, прокинуть
 асинхронность (tokio ↔ Promise), превратить `Err(CoreError)` в JS-исключение,
 зарегистрировать функции в рантайме React Native (JSI). Это сотни строк

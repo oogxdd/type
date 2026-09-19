@@ -57,7 +57,7 @@ src-tauri/src/application/notes.rs
 ```rust
 pub(crate) fn create_note(&self, args: CreateNoteArgs) -> Result<CreateNoteResult, String> {
     self.repository.ensured_root()?;
-    let folder_rel = args.folder_path ... unwrap_or(FEED_FOLDER);
+    let folder_rel = args.folder_path ... unwrap_or(STREAM_FOLDER);
     let folder_full = self.repository.resolve_path(folder_rel)?;
 
     if self.repository.is_storage_folder_path(&folder_full) {
@@ -78,7 +78,7 @@ pub(crate) fn create_note(&self, args: CreateNoteArgs) -> Result<CreateNoteResul
 - выбрать filename;
 - собрать frontmatter;
 - записать note;
-- обновить order file, если это не Feed.
+- обновить order file, если это не `_system/stream`.
 
 ## 4. Ports: application просит возможности
 
@@ -143,7 +143,7 @@ workflow `create_note` можно оставить похожим. Нужно б
 
 ```text
 Проверить lock screen         -> command boundary
-Запретить Recordings folder   -> application rule
+Запретить storage folders     -> application rule
 Сгенерировать UUID            -> id port / adapter
 Записать файл                 -> adapter
 Сформировать NoteFrontMatter  -> domain/application
