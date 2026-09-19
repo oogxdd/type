@@ -32,7 +32,7 @@ describe("body tag assignment", () => {
     const editor = make("first\n\nsecond\n\nthird");
     assignEditorTag(editor, [{ from: 1, to: 14, block: true }], tag);
     expect(editor.state.doc.firstChild?.type.name).toBe("tagBlock");
-    expect(editor.state.doc.firstChild?.childCount).toBe(2);
+    expect(editor.state.doc.firstChild?.childCount).toBe(3); // Two text paragraphs and their blank line.
     const reopened = make(htmlToMarkdown(editor.getHTML()));
     expect(reopened.getJSON()).toEqual(editor.getJSON());
   });

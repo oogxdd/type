@@ -1169,11 +1169,17 @@ body {
   font-weight: 650;
 }
 
-.tiptap-content p,
 .tiptap-content ul,
 .tiptap-content ol,
 .tiptap-content blockquote {
   margin: 0.4em 0;
+}
+
+/* Blank source lines are explicit empty paragraphs, not paragraph margins.
+   Each occupies exactly one text line, including at the document edges. */
+.tiptap-content p {
+  margin: 0;
+  min-height: 1lh;
 }
 
 .tiptap-content blockquote {

@@ -90,20 +90,49 @@ const turndown = new TurndownService({
   bulletListMarker: "-",
 });
 
+// Editor paragraphs are text lines. Visible blank lines are explicit empty
+// paragraphs, so Enter and typing into a blank line cannot add hidden spacing.
+turndown.addRule("paragraph", {
+  // Turndown's list-item rule relies on the standard paragraph delimiters.
+  filter: (node) => node.nodeName === "P" && node.parentNode?.nodeName !== "LI",
+  replacement: (content) => `\n${content}\n`,
+});
+turndown.addRule("lineBreak", {
+  filter: "br",
+  replacement: () => "\n",
+});
+turndown.addRule("list", {
+  filter: ["ul", "ol"],
+  replacement(content, node) {
+    // Turndown indents a list item's final newline with spaces. Remove that
+    // generated padding before adding delimiters, or it becomes a blank line.
+    const body = content.replace(/(?:\n[ \t]*)+$/g, "");
+    if (node.parentNode?.nodeName === "LI" && node.parentNode.lastChild === node) return `\n${body}`;
+    return `\n\n${body}\n\n`;
+  },
+});
+
 turndown.addRule("tagContainer", {
   filter: (node) => node.nodeName === "DIV" && node.hasAttribute("data-tag-attrs"),
   replacement(content, node) {
     const element = node as HTMLElement;
     const attrs = parseTagAttrs(element.getAttribute("data-tag-attrs") ?? "");
     if (!attrs) return content;
-    const body = content.replace(/^\n+|\n+$/g, "");
+    // List serialization can leave indentation on its final empty line.
+    // Explicit empty paragraphs are tokens, so trimming delimiters is safe.
+    const body = content.replace(/^(?:[ \t]*\n)+|(?:\n[ \t]*)+$/g, "");
     const onlyParagraph = element.children.length === 1 && element.firstElementChild?.tagName === "P";
-    if (onlyParagraph && !element.hasAttribute("data-tag-unterminated") && !Object.keys(attrs.flags).length && body.trim()) {
-      return `\n\n${formatTagAttrs(attrs)} ${body}\n\n`;
+    const next = element.nextElementSibling;
+    // A leading tag also covers subsequent soft lines. Fence a tagged line
+    // next to ordinary text so saving cannot extend its scope to that text.
+    const sugarEndsHere = !next || next.hasAttribute("data-tag-attrs") ||
+      (next.tagName === "P" && next.textContent === EMPTY_LINE_TOKEN);
+    if (onlyParagraph && sugarEndsHere && !element.hasAttribute("data-tag-unterminated") && !Object.keys(attrs.flags).length && body.trim()) {
+      return `\n${formatTagAttrs(attrs)} ${body}\n`;
     }
     const lengths = [...body.matchAll(/^(:{3,})/gm)].map((match) => match[1].length);
     const fence = ":".repeat(Math.max(2, ...lengths) + 1);
-    return `\n\n${fence} ${formatTagAttrs(attrs)}\n${body}\n${fence}\n\n`;
+    return `\n${fence} ${formatTagAttrs(attrs)}\n${body}\n${fence}\n`;
   },
 });
 turndown.addRule("tagSpan", {
@@ -117,21 +146,47 @@ turndown.addRule("tagSpan", {
 const stripEmptyLineTokens = (markdown: string) =>
   markdown.replace(EMPTY_LINE_TOKEN_MARKDOWN_RE, "");
 
-const expandExtraBlankLines = (markdown: string) =>
-  markdown.replace(/\n{3,}/g, (match) => {
-    // Turndown separates every paragraph with two newlines. An empty editor
-    // paragraph therefore adds another *pair* ("a\n\n\n\nb"), not one token
-    // per newline. Counting individual newlines here made every empty
-    // paragraph multiply whenever a note was reopened.
-    const extraBlankLines = Math.floor(Math.max(0, match.length - 2) / 2);
-    if (extraBlankLines === 0) {
-      return match;
-    }
-    return `\n\n${`${EMPTY_LINE_TOKEN}\n\n`.repeat(extraBlankLines)}`;
+const expandExtraBlankLines = (markdown: string) => {
+  // Literal and structured Markdown blocks own their internal whitespace.
+  const literals: Array<{ start: number; end: number }> = [];
+  let cursor = 0;
+  marked.walkTokens(marked.lexer(markdown), (token) => {
+    if (!["code", "codespan", "html", "list", "blockquote"].includes(token.type)) return;
+    const start = markdown.indexOf(token.raw, cursor);
+    if (start < 0) return;
+    const raw = token.type === "code" && token.codeBlockStyle === "indented"
+      ? token.raw.trimEnd()
+      : token.raw;
+    const end = start + raw.length;
+    literals.push({ start, end });
+    cursor = end;
   });
 
+  return markdown.replace(/\n(?:[ \t]*\n)*/g, (match, offset: number) => {
+    if (literals.some(({ start, end }) => offset >= start && offset < end)) return match;
+    const count = (match.match(/\n/g) ?? []).length;
+    const leading = offset === 0;
+    const trailing = offset + match.length === markdown.length;
+    // Each blank source line becomes one empty editor paragraph. At the
+    // document edges there is no newline separating two nonempty lines.
+    const emptyCount = leading && trailing ? count + 1 : leading || trailing ? count : count - 1;
+    if (emptyCount <= 0) return match;
+    return `${leading ? "" : "\n\n"}${Array(emptyCount).fill(EMPTY_LINE_TOKEN).join("\n\n")}${trailing ? "" : "\n\n"}`;
+  });
+};
+
+const restoreBlankLines = (markdown: string) => {
+  const token = EMPTY_LINE_TOKEN_MARKDOWN_RE.source;
+  return markdown.replace(new RegExp(`\\n*${token}(?:\\n+${token})*\\n*`, "g"), (run, offset: number) => {
+    const count = (run.match(EMPTY_LINE_TOKEN_MARKDOWN_RE) ?? []).length;
+    const leading = offset === 0;
+    const trailing = offset + run.length === markdown.length;
+    return "\n".repeat(leading && trailing ? count - 1 : leading || trailing ? count : count + 1);
+  });
+};
+
 const restoreEmptyLineTokens = (html: string) =>
-  html.replace(EMPTY_LINE_TOKEN_HTML_RE, "<p><br></p>");
+  html.replace(EMPTY_LINE_TOKEN_HTML_RE, "<p></p>");
 
 export const markdownToHtml = (markdown: string) => {
   const parsed = marked.parse(expandExtraBlankLines(stripEmptyLineTokens((markdown || "").replace(/\r\n?/g, "\n"))), {
@@ -146,5 +201,5 @@ export const htmlToMarkdown = (html: string) => {
     /<p>\s*(?:<br\s*\/?>|&nbsp;)?\s*<\/p>/gi,
     `<p>${EMPTY_LINE_TOKEN}</p>`
   );
-  return stripEmptyLineTokens(turndown.turndown(normalized));
+  return restoreBlankLines(turndown.turndown(normalized));
 };

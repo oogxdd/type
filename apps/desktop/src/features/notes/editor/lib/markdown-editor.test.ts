@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { htmlToMarkdown, markdownToHtml } from "./markdown-editor";
 
 const emptyParagraphCount = (html: string) =>
-  (html.match(/<p><br><\/p>/g) ?? []).length;
+  (html.match(/<p><\/p>/g) ?? []).length;
 
 describe("markdown editor conversion", () => {
   it("keeps one plain-text blank line across repeated reloads", () => {
@@ -20,7 +20,7 @@ describe("markdown editor conversion", () => {
     const markdown = htmlToMarkdown(originalHtml);
     let restoredHtml = markdownToHtml(markdown);
 
-    expect(markdown).toBe("first\n\n\n\nsecond");
+    expect(markdown).toBe("first\n\nsecond");
     for (let reopen = 0; reopen < 10; reopen += 1) {
       expect(emptyParagraphCount(restoredHtml)).toBe(1);
       expect(htmlToMarkdown(restoredHtml)).toBe(markdown);
