@@ -29,7 +29,7 @@ packages/mobile-core/  @typenotes/mobile-core — typed TS bridge to type-ffi
 
 `apps/notes-mcp` is a standalone Node/stdio shell for Codex and Claude Code.
 It exposes filtered reads against an explicitly selected notes root and scoped
-CRUD operations exclusively inside `<root>/agent` (see `agent-workspace.ts`). All
+CRUD operations exclusively inside `<root>/_system/agent` (see `agent-workspace.ts`). All
 outputs pass through `src/projection.ts`. Leading hashtag runs and `:::` containers
 are tags; mid-line hashtags are prose. `skip-ai` hides a container's whole subtree
 or a span's text; note-wide `tags: [skip-ai]` hides the whole note. Unterminated containers extend through EOF; malformed opener
@@ -136,14 +136,14 @@ longer own workflows; their deeper persistence/worker logic remains in adapters.
 
 Key symbols live in `adapters/<domain>.rs`:
 
-- **notes** — a folder module (`notes/mod.rs` + `front_matter.rs` + `naming.rs` + `tree.rs`) for filesystem notes, front-matter, tree, ordering. `mod.rs` is the hub: shared constants (`ORDER_FILE`, `FEED_FOLDER`, `ARCHIEVE_FOLDER`, `RECORDINGS_STORAGE_FOLDER`, `ATTACHMENTS_STORAGE_FOLDER`, `PROTECTED_SYSTEM_FOLDERS`) + root/path resolution (`ensured_notes_root` resolves the active profile's root, `resolve_path`, `strip_root`) + concrete port adapters (`FilesystemNotesRepository`, `FrontMatterNoteDocumentCodec`, `RuntimeNoteBodyCrypto`, `UuidNoteIdGenerator`, `SystemNoteClock`). Note DTOs live in `domain/notes.rs`. `front_matter.rs`: `parse/render/write_note_with_front_matter`. `naming.rs`: `allocate_note_file_name` (UTC-slug / uuid_v7 / uuid_v7_prefix_slug) + Unicode-aware `slug_from_content`. `tree.rs`: `build_folder_node`, `ensure_system_folders`, `migrate_legacy_system_folders`, order helpers, `collect_markdown_note_files`.
+- **notes** — a folder module (`notes/mod.rs` + `front_matter.rs` + `naming.rs` + `tree.rs`) for filesystem notes, front-matter, tree, ordering. `mod.rs` is the hub: the `_system` layout constants (`ORDER_FILE`, `SYSTEM_FOLDER`, `STREAM_FOLDER`, `ARCHIVE_FOLDER`, `AGENT_FOLDER`, `ME_FOLDER`, `RECORDINGS_STORAGE_FOLDER`, `HANDWRITING_STORAGE_FOLDER`, `ATTACHMENTS_STORAGE_FOLDER`, `PROTECTED_SYSTEM_FOLDERS`, and the private `REQUIRED_SYSTEM_FOLDERS` / `STORAGE_FOLDERS` / `TREE_HIDDEN_FOLDERS` sets that decide what gets created, what counts as storage, and what stays out of the tree) + root/path resolution (`ensured_notes_root` resolves the active profile's root, `resolve_path`, `strip_root`) + concrete port adapters (`FilesystemNotesRepository`, `FrontMatterNoteDocumentCodec`, `RuntimeNoteBodyCrypto`, `UuidNoteIdGenerator`, `SystemNoteClock`). Note DTOs live in `domain/notes.rs`. `front_matter.rs`: `parse/render/write_note_with_front_matter`. `naming.rs`: `allocate_note_file_name` (UTC-slug / uuid_v7 / uuid_v7_prefix_slug) + Unicode-aware `slug_from_content`. `tree.rs`: `build_folder_node`, `ensure_system_folders`, `is_storage_folder_path` / `is_system_folder_path` / `is_stream_folder_path`, order helpers, `collect_markdown_note_files`.
 - **profiles** — a folder module (`profiles/mod.rs` + `state.rs` + `settings.rs` + `backup.rs`) for multi-profile ("working folder") support. `settings.rs`: per-folder `.type/settings.json` (`ProfileSettings` — legacy mobile auto flags and the optional `transcription_mode` with `effective_transcription_mode()` fallback; this file is tracked and syncs with the notes), the per-folder **device-local** `.type/device.json` (the git connection: remote/branch/credentials/pinned host key — split out by `save_profile_settings`, merged back by `load_profile_settings`, excluded from sync via `.git/info/exclude`), plus the device-local `config.json` (`AppConfig` — API keys etc., never synced). `update_settings` preserves a persisted `transcription_mode` (and the pinned host key) when a writer omits them. `mod.rs`: `.notes-profiles.json` constants + DTO types + `profiles_file_path`/`profile_root_for_id`. `state.rs`: filesystem discovery, normalization, persistence, legacy `.notes-sessions.json` migration, and the `ensure_profiles_state`/`find_profile`/`*_state` CRUD (+ `normalize_notes_root_path`, dir copy/move helpers). `backup.rs`: profile backup zip + Documents export.
 - **security** — XChaCha20-Poly1305 at-rest body encryption with an Argon2id-derived key. `SECURITY_RUNTIME` (OnceLock<Mutex>) holds the in-memory key after unlock. `.notes-security.json` config. `encrypt_note_body_for_write`, `decrypt_note_body_for_read`, `ensure_security_unlocked_for_app` (the lock gate most commands call), panic flow `panic_reset_local_data`.
 - **recordings** — a folder module (`recordings/mod.rs` + `whisper.rs` + `assembly.rs`): save audio → note with metadata. `mod.rs` owns the transcription queue worker (which dispatches on `TranscriptionMethod`), types, queue state, note scanning, and file naming. Backends: `whisper.rs` (desktop, managed-Python `faster-whisper` via `whisper_env`; `check_whisper_availability`, `transcribe_audio_local_whisper`), `assembly.rs` (AssemblyAI cloud, used on mobile), and `TranscriptionMethod::Provider` — a shell-registered `ports::recordings::TranscriptionProvider` (how the mobile FFI plugs native speech recognition into the same queue). `queue_recordings_with_method` is the shared scan-and-enqueue; `collect_recording_notes`, queue snapshot for the UI.
 - **whisper_env** — desktop only. Provisions and owns an isolated CPython + faster-whisper under app-data using [`uv`](https://docs.astral.sh/uv/) (downloading `uv` itself on first use if absent), so the user installs nothing. `whisper_env_ready`, `managed_python`, `ensure_whisper_env`.
 - **ocr_env** — desktop-local EasyOCR provisioning in its own managed Python environment. Model weights default under app data, but `AppConfig.local_ocr_model_path` may point to an absolute external-volume folder.
-- **handwriting** — a folder module (`handwriting/mod.rs` + `local.rs` + `openai.rs` + `huggingface.rs`): save image attachment → pending note; `HANDWRITING_OCR_QUEUE` worker. Mobile only saves; desktop scans after sync and dispatches through `HandwritingOcrMethod`. `local.rs` runs EasyOCR in the managed `ocr_env` with configurable model storage, while `openai.rs` (Responses vision) and `huggingface.rs` (Inference API, 503 retry) are cloud options. `collect_handwriting_notes`.
-- **import** — Apple Notes folder importer. Walks an *exported* Apple Notes tree (Markdown/HTML/plain-text — Apple Notes has no native bulk export), creating notes in the active root. Auto-detects note files, converts HTML→Markdown best-effort, strips foreign front-matter, and preserves the original creation date (front-matter `created`/`created_ms`/… → epoch ms / RFC 3339 / date-only, else filesystem time). `preserve` mirrors the source hierarchy under one target folder; `flatten` drops everything into `Feed`. Runs on a worker thread writing to a process-global progress snapshot the UI polls (no Tauri events); `scan_apple_import_source`, `run_apple_notes_import`, `apple_import_snapshot`. Notes are written via `write_note_with_front_matter`, so encryption is transparent (import requires unlock).
+- **handwriting** — images land in `_system/_handwriting`. A folder module (`handwriting/mod.rs` + `local.rs` + `openai.rs` + `huggingface.rs`): save image attachment → pending note; `HANDWRITING_OCR_QUEUE` worker. Mobile only saves; desktop scans after sync and dispatches through `HandwritingOcrMethod`. `local.rs` runs EasyOCR in the managed `ocr_env` with configurable model storage, while `openai.rs` (Responses vision) and `huggingface.rs` (Inference API, 503 retry) are cloud options. `collect_handwriting_notes`.
+- **import** — Apple Notes folder importer. Walks an *exported* Apple Notes tree (Markdown/HTML/plain-text — Apple Notes has no native bulk export), creating notes in the active root. Auto-detects note files, converts HTML→Markdown best-effort, strips foreign front-matter, and preserves the original creation date (front-matter `created`/`created_ms`/… → epoch ms / RFC 3339 / date-only, else filesystem time). `preserve` mirrors the source hierarchy under one target folder; `flatten` drops everything into `_system/stream`. Runs on a worker thread writing to a process-global progress snapshot the UI polls (no Tauri events); `scan_apple_import_source`, `run_apple_notes_import`, `apple_import_snapshot`. Notes are written via `write_note_with_front_matter`, so encryption is transparent (import requires unlock).
 - **git** (the `git_sync` domain) — libgit2 sync. `ensure_git_repo`/`open_repo`, `perform_fetch`/`fast_forward_to`/`merge_fetched_commit`/`commit_all_changes`, `resolve_target_branch`/`switch_or_prepare_branch`. Conflicts keep "ours" and write "theirs" as `.conflict.md` siblings — merge never blocks. `build_git_status`, `build_git_history`. `build_callbacks` auth order: app SSH key file → SSH agent → username/password. Ed25519 keypair under `<app_data_dir>/ssh/`. Bootstrap-artifact detection for first sync.
 - **local_sync** — desktop hosts an **embedded SSH Git server** (russh; `ssh_server.rs` + `devices.rs`) so a phone on the same Wi-Fi / hotspot can push/pull with no external host, encrypted and key-authenticated. Pairing rides the QR: the `ssh://pair-<token>@ip:9418/<folder>` URL carries a per-run token in the username; an unknown key authenticating with it gets registered in the authorized-devices store (host key + devices under `<app_data_dir>/local_sync/`). Starting never commits — pending desktop edits are committed just before each serve. mDNS advertises a token-less URL (`_typenotes-sync._tcp`). State lives in a process-global `Mutex<Option<RunningDaemon>>`, killed on app exit. `receive.denyCurrentBranch=updateInstead` lets phone pushes update the live working tree. See `docs/LOCAL_SYNC.md`.
 
@@ -173,16 +173,40 @@ module-internal helpers stay private.
 ## System folders and storage
 
 - Profile notes root is configurable per profile (`notes_root`). It can live in app data or any user-selected absolute path.
-- Required system folders inside each `notes_root`:
-  - `Feed` — default notes folder
-  - `Archieve` — archive folder (typo is intentional and persisted)
-  - `Recordings` — audio file storage folder
-- `Recordings` is hidden from folder tree/navigation and used as backend storage.
+- **Everything the app owns lives under one `_system` folder**, so a notes root
+  contains nothing but `_system` and the user's own folders:
+
+```
+<notes root>/
+  _system/
+    _attachments/    reserved: attachments embedded in a note body (empty today)
+    _handwriting/    handwriting source images
+    _recordings/     recorded audio
+    agent/           the agent's own notes — the notes-MCP write boundary
+    me/              the app's representation of the user
+    stream/          default capture folder; the UI calls it "Feed"
+    archive/         archived notes; the UI calls it "Trash"
+  <user folders>/
+```
+
+- The names live in one place per language: `crates/type-core/src/adapters/notes/mod.rs`
+  (`SYSTEM_FOLDER`, `STREAM_FOLDER`, …) and `packages/shared/src/constants.ts`
+  (`SYSTEM_FOLDER_PATH`, `STREAM_FOLDER_PATH`, …). Keep the two in sync.
+- **`_system` is not browsable.** `get_tree` returns it with only `stream` and
+  `archive` under it — `agent`, `me` and the three underscore-prefixed storage
+  folders never reach a shell (`TREE_HIDDEN_FOLDERS`). The shells then drop the
+  `_system` node itself from the folder panel (`isSystemFolder`) and reach
+  stream/archive through their pinned entries. Agent notes are therefore
+  invisible to both apps by design; the MCP is how they are read and written.
+- Underscore-prefixed children are binary storage and never hold notes;
+  `is_storage_folder_path` is the one predicate that decides this.
 - **Dot-entries are never shown.** `build_folder_node` skips anything whose name starts with `.` — `.git`, `.type`, `.DS_Store`, dot-prefixed `.md` files — matching what `collect_markdown_note_files` already did. A notes root that is a git repo would otherwise surface `.git` as a browsable folder.
-- Legacy migrations are handled by backend:
-  - `Unsorted` -> `Feed`
-  - `_Recordings` -> `Recordings`
-- `Feed` does not keep `.notes-order.json`.
+- `_system/stream` does not keep `.notes-order.json`.
+- **There is no automatic migration from the old flat layout** (`Feed/`,
+  `Archieve/`, `Recordings/`, `Attachments/` at the root). An older notes root
+  opens with those as ordinary user folders. Migrating is a deliberate,
+  scripted step: `scripts/migrate-notes-root-layout.mjs` plus
+  [docs/FOLDER_STRUCTURE_MIGRATION.md](docs/FOLDER_STRUCTURE_MIGRATION.md).
 
 ## Security and encryption
 
@@ -197,7 +221,7 @@ module-internal helpers stay private.
 - Panic flow:
   - entering panic password on lock screen triggers backend local wipe
   - notes/profile/security files are reset
-  - backend seeds 3 dummy notes in `Feed`
+  - backend seeds 3 dummy notes in `_system/stream`
   - frontend clears localStorage and reloads
 
 ## How the desktop frontend is structured
@@ -478,21 +502,21 @@ The React Native app (Expo) reuses the Rust core through
 
 ## Gotchas
 
-- **"Archieve" typo**: The archive folder is spelled "Archieve" in the codebase and in persisted data. Do not "fix" this — it would break existing user data.
+- **"Archieve" typo is gone from the current layout.** The archive folder is now `_system/archive`. The misspelling survives only in `scripts/migrate-notes-root-layout.mjs` and in the command palette's reserved-name list, both of which read *old* roots — do not "fix" it there.
 - **Never run the desktop app against production data.** `tauri dev` / `tauri build` with the *default* config uses identifier `com.digital.type2`, whose app-data directory holds the maintainer's real notes — a dev run there edits, renames, and auto-deletes actual content. Use `npm run desktop:app` (or `desktop:dmg:dev`), which layers `src-tauri/tauri.dev.conf.json`: identifier `com.digital.type2.dev`, its own app-data directory, product name "Type Dev", and `plugins.updater.endpoints: []` so a dev build can't replace itself with a production release. `npm run desktop:app:prod-data` is the deliberate escape hatch; back up first (`docs/RELEASING.md` §2b).
-- **Feed folder semantics**: `Feed` is the default notes folder and does not keep `.notes-order.json`. Everywhere else the order the core returns *is* `.notes-order.json` and must be preserved — re-sorting a folder's notes by timestamp in a shell is how the mobile lists used to disagree with the desktop over identical data (`feedNoteRows` vs `folderNoteRows` in `apps/mobile/src/lib/feed.ts`).
+- **Stream folder semantics**: `_system/stream` (the UI's "Feed") is the default notes folder and does not keep `.notes-order.json`. Everywhere else the order the core returns *is* `.notes-order.json` and must be preserved — re-sorting a folder's notes by timestamp in a shell is how the mobile lists used to disagree with the desktop over identical data (`feedNoteRows` vs `folderNoteRows` in `apps/mobile/src/lib/feed.ts`).
 - **There is no create-folder command.** Not in `type-core`, not in `type-ffi`, not on the desktop. `move_items` and `create_note` both `create_dir_all` their destination, so "make a new folder" always means "put something into a path that does not exist yet" — which is what the desktop's move dialog means by *"Missing folders will be created"*, and what the phone's folder picker does.
-- **Two different archives**: the `Archieve` *folder* (a real move, `move_items`) and the `archived_ms` *marker* in front matter (`update_note_markers`, the note stays put). The desktop context menu offers both; the phone's note sheet writes the marker and its feed filter reads it. There is a matching `reviewed_ms` marker with no mobile UI yet.
+- **Two different archives**: the `_system/archive` *folder* (a real move, `move_items`) and the `archived_ms` *marker* in front matter (`update_note_markers`, the note stays put). The desktop context menu offers both; the phone's note sheet writes the marker and its feed filter reads it. There is a matching `reviewed_ms` marker with no mobile UI yet.
 - **The native back gesture cannot be arbitrated with — only zoned.** react-native-screens' full-screen pop recognizer is a bare `UIPanGestureRecognizer` with no direction check, so it fires on ~10pt of movement in *any* direction (including straight up) and cancels the touch; both libraries return `NO` for each other in every simultaneity/failure delegate, and RNGH's `simultaneousWithExternalGesture` silently drops a recognizer that has no handler tag. The only working lever is `gestureResponseDistance`, which gates the native recognizer by where the touch *started* — hence the height split on Capture (`nativeBackBandBottom` in `apps/mobile/src/lib/capture-gesture.ts`, applied in `App.tsx`). Corollary: `manager.fail()` is terminal for the whole touch and is only worth its cost where a foreign recognizer is actually waiting; everywhere else, decline to activate instead. Full write-up, including the alternatives that were rejected and why, in [apps/mobile/GESTURES.md](./apps/mobile/GESTURES.md).
 - **Capture-screen gestures must stay memoized.** `GestureDetector` re-runs `updateAttachedGestures` on every render (its effect depends on `props`), so an unmemoized `Gesture.*` re-serializes its whole closure graph into the UI runtime on every keystroke — including mid-commit, while the spring still holds the callback it was serialized with. Anything a gesture worklet calls needs one identity for the life of the screen (the `run*` ref proxies in `capture-screen.tsx`), and window dimensions belong in shared values, not captured props. On the new architecture the UI runtime is the iOS main thread, so a throw there is an uncatchable `abort`, not a caught JS error.
 - **`onEnd` gets a `success` argument.** RNGH also calls END when the system takes the touch (`State.CANCELLED`/`FAILED` from `ACTIVE`), with `success = false` and whatever velocity was left. Ignoring it made a cancelled swipe-up file a note.
-- **Recordings storage**: audio files live under hidden `Recordings/`; notes created from recordings can be in `Feed` or the selected folder and reference audio via frontmatter.
+- **Media storage**: audio lives under hidden `_system/_recordings/`, handwriting images under `_system/_handwriting/`; the notes created from them go to `_system/stream` or the selected folder and reference the file via frontmatter. `_system/_attachments/` is reserved for attachments embedded in a note body and is empty today.
 - **Filename lifecycle**: per-profile setting controls new note file names:
   - `utc_timestamp_slug` (default): `YYYY-MM-DDTHH-mm-ssZ-<slug>.md`
   - `uuid_v7`: `<uuidv7>.md` (no auto-rename to slug)
   - `uuid_v7_prefix_slug`: `<uuidv7-prefix>-<slug>.md`
   New notes may start with placeholder suffixes (`-note-...`, `-recording-...`, etc.) and then auto-rename to content slug when enough text is available in slug-capable modes. Slug extraction is Unicode-aware (keeps Cyrillic/Latin letters and digits) and ignores `NV_EMPTY_LINE_TOKEN_*` noise.
-- **Splitting a note is an editor operation, not a file operation.** The palette's "Split note at cursor" truncates the open ProseMirror doc (`features/notes/editor/lib/note-split.ts`, reaching the live editor through the `editor-bridge` module registry), flushes the save, then creates the tail as a new Feed note carrying the original's `created_ms` — so the doc, the autosave buffer and the file can never disagree. Feed-only for now.
+- **Splitting a note is an editor operation, not a file operation.** The palette's "Split note at cursor" truncates the open ProseMirror doc (`features/notes/editor/lib/note-split.ts`, reaching the live editor through the `editor-bridge` module registry), flushes the save, then creates the tail as a new stream note carrying the original's `created_ms` — so the doc, the autosave buffer and the file can never disagree. Feed-only for now.
 - **"untitled" is a chosen file name, never a generated one.** `getUntitledRenameTarget` swaps a note's slug for `untitled`, and `PLACEHOLDER_SUFFIX_RE` in `note-autoname.ts` deliberately omits `untitled` so auto-renaming does not immediately slug it again. Don't add it back to that regex.
 - **Empty note cleanup**: if a dirty note is emptied and then focus/selection moves away, it is auto-deleted.
 - **Mobile appearance is device-local and derived**: the phone's background / text color / editor text size live in `appearance.json` beside the core's app data — *not* in `ProfileSettings`, so they never reach a notes root and never sync. `apps/mobile/src/theme.ts` is no longer two fixed palettes: `lib/appearance.ts` derives surface/border/secondary text from the chosen background and picks the dark variant from its luminance. Don't remove `readableOn`'s WCAG-AA floor on body text — an unreadable combination would lock the user out of the settings screen that fixes it. Text size intentionally applies only to the capture page and the note editor, not to lists or chrome.

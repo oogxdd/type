@@ -8,7 +8,7 @@ import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import type { LensNote } from "@/features/lens/hooks/use-lens-annotations";
 import { getLatestFeedTargetTimestamp } from "@/features/notes/navigation/model/feed-tree-model";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
-import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { STREAM_FOLDER_PATH } from "@typenotes/shared/constants";
 import { sanitizeRecordingEditorContent } from "@typenotes/shared/format";
 
 export function useDesktopEditorPane() {
@@ -53,9 +53,9 @@ export function useDesktopEditorPane() {
         return;
       }
 
-      const folderPath = activeFolder || FEED_FOLDER_PATH;
+      const folderPath = activeFolder || STREAM_FOLDER_PATH;
       const targetTimestampMs =
-        folderPath === FEED_FOLDER_PATH
+        folderPath === STREAM_FOLDER_PATH
           ? getLatestFeedTargetTimestamp(activeFeedNode) ?? undefined
           : undefined;
       const initialContent = nextMarkdown;
@@ -105,7 +105,7 @@ export function useDesktopEditorPane() {
     if (selectionOrder.current?.key === key && selectionOrder.current.session === session) {
       return selectionOrder.current.paths;
     }
-    const orderedByMiddleList = (activeFolder === FEED_FOLDER_PATH ? feedNotes : notes)
+    const orderedByMiddleList = (activeFolder === STREAM_FOLDER_PATH ? feedNotes : notes)
       .map((note) => note.path)
       .filter((path) => selectedNotes.has(path));
     const remainingSelected = Array.from(selectedNotes).filter(

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Finds (and optionally deletes) audio files under a notes root's Recordings/
-// folder that no note's front matter references anymore. These accumulate
+// Finds (and optionally deletes) audio files under a notes root's
+// _system/_recordings/ folder that no note's front matter references anymore. These accumulate
 // from notes deleted before NotesService::delete_items (see
 // crates/type-core/src/application/notes.rs) started cascading to their
 // linked audio file, or from any other manual cleanup of a recording note.
@@ -9,8 +9,8 @@
 //   node scripts/cleanup-orphan-recordings.mjs <notes-root>            (dry run, lists orphans)
 //   node scripts/cleanup-orphan-recordings.mjs <notes-root> --delete   (actually deletes them)
 //
-// <notes-root> is a profile's notes root folder (the one containing Feed/,
-// Archieve/, Recordings/, .type/, …) — not the app-data directory.
+// <notes-root> is a profile's notes root folder (the one containing _system/,
+// .type/, and the user's own folders) — not the app-data directory.
 //
 // Safe to run repeatedly, and safe with encryption on: only the note body is
 // encrypted, front matter (including recording_audio_path) is always
@@ -20,8 +20,14 @@ import { readFileSync, readdirSync } from "node:fs";
 import { unlinkSync } from "node:fs";
 import { join, relative, extname, basename } from "node:path";
 
-const HIDDEN_ROOT_FOLDERS = new Set(["Attachments", "Recordings", "_Recordings"]);
-const RECORDINGS_STORAGE_FOLDER = "Recordings";
+// Storage folders hold media, never notes. Matched per path segment so a root
+// that predates the `_system` layout (see scripts/migrate-notes-root-layout.mjs)
+// is still walked correctly.
+const STORAGE_FOLDERS = new Set([
+  "_recordings", "_handwriting", "_attachments",
+  "Attachments", "Recordings", "_Recordings",
+]);
+const RECORDINGS_STORAGE_FOLDER = "_system/_recordings";
 // Word-level transcript sidecar next to an audio file, e.g.
 // audio-xxxx.webm -> audio-xxxx.transcription.json (see
 // save_word_level_json in adapters/recordings/whisper.rs). It shares the
@@ -45,7 +51,7 @@ function collectMarkdownFiles(root, dir, files) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       if (entry.name.startsWith(".")) continue;
-      if (dir === root && HIDDEN_ROOT_FOLDERS.has(entry.name)) continue;
+      if (STORAGE_FOLDERS.has(entry.name)) continue;
       collectMarkdownFiles(root, full, files);
       continue;
     }

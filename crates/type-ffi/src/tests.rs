@@ -59,11 +59,11 @@ async fn ffi_end_to_end() {
         .find(|p| p["id"].as_str() == Some(profile_id.as_str()))
         .expect("active profile is listed");
     let notes_root = PathBuf::from(profile["notes_root"].as_str().unwrap());
-    assert!(notes_root.join("Feed").is_dir());
+    assert!(notes_root.join("_system/stream").is_dir());
 
     // ── Notes: create → read → write → rename → tree → previews ──────────────
     let created = parse(
-        &crate::create_note(r#"{"folder_path":"Feed","content":"hello from ffi"}"#.to_string())
+        &crate::create_note(r#"{"folder_path":"_system/stream","content":"hello from ffi"}"#.to_string())
             .await
             .unwrap(),
     );
@@ -84,13 +84,19 @@ async fn ffi_end_to_end() {
     );
 
     let tree = parse(&crate::get_tree().await.unwrap());
-    let feed = tree["children"]
+    let system = tree["children"]
         .as_array()
         .unwrap()
         .iter()
-        .find(|f| f["name"] == "Feed")
-        .expect("Feed folder in tree");
-    assert!(!feed["notes"].as_array().unwrap().is_empty());
+        .find(|f| f["path"] == "_system")
+        .expect("_system folder in tree");
+    let stream = system["children"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["path"] == "_system/stream")
+        .expect("stream folder in tree");
+    assert!(!stream["notes"].as_array().unwrap().is_empty());
 
     let previews = parse(&crate::list_note_previews(vec![note_path.clone()]).await.unwrap());
     assert_eq!(previews[0]["path"], note_path.as_str());
@@ -158,7 +164,7 @@ async fn ffi_end_to_end() {
     let save_args = serde_json::json!({
         "audio_base64": FAKE_AUDIO_BASE64,
         "mime_type": "audio/mp4",
-        "folder_path": "Feed"
+        "folder_path": "_system/stream"
     });
     let saved = parse(&crate::save_audio_recording(save_args.to_string()).await.unwrap());
     let recording_note_rel = saved["note_path"].as_str().unwrap().to_string();
@@ -193,7 +199,7 @@ async fn ffi_end_to_end() {
         "image_base64": FAKE_IMAGE_BASE64,
         "mime_type": "image/jpeg",
         "file_name": "page.jpg",
-        "folder_path": "Feed"
+        "folder_path": "_system/stream"
     });
     let handwriting = parse(
         &crate::save_handwriting_attachment(handwriting_args.to_string())

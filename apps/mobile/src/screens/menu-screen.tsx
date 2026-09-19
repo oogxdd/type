@@ -32,8 +32,8 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  ARCHIEVE_FOLDER_PATH,
-  FEED_FOLDER_PATH,
+  ARCHIVE_FOLDER_PATH,
+  STREAM_FOLDER_PATH,
 } from "@typenotes/shared/constants";
 import { matchesFeedFilter, type FeedNoteFilter } from "@typenotes/shared/note-filter";
 
@@ -245,12 +245,12 @@ export const MenuScreen = () => {
     return <View style={[styles.root, { backgroundColor: theme.colors.background }]} />;
   }
 
-  const feedRows = feedNoteRows(findFolder(tree, FEED_FOLDER_PATH), previews, {
+  const feedRows = feedNoteRows(findFolder(tree, STREAM_FOLDER_PATH), previews, {
     keep: (preview) => matchesFeedFilter(preview, filter),
   });
   const feedSections = groupNoteRowsByDate(feedRows);
   const folderRows = flattenFolderTree(tree, expanded);
-  const archive = findFolder(tree, ARCHIEVE_FOLDER_PATH);
+  const archive = findFolder(tree, ARCHIVE_FOLDER_PATH);
 
   // Pull down on either tab to re-read the tree + previews. Only one list is
   // mounted at a time, so sharing the control element is safe.
@@ -398,7 +398,7 @@ export const MenuScreen = () => {
                 <Pressable
                   onPress={() =>
                     openScreen("Folder", {
-                      path: ARCHIEVE_FOLDER_PATH,
+                      path: ARCHIVE_FOLDER_PATH,
                       title: "Archive",
                     })
                   }

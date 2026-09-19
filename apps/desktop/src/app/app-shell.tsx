@@ -9,7 +9,7 @@ import { useRecordings } from "@/features/recording/hooks/recordings-context";
 import { useGlobalShortcutDispatcher } from "@/shared/keyboard/use-global-shortcuts";
 import { focusNoScroll } from "@/shared/lib/dom";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
-import { ARCHIEVE_FOLDER_PATH, FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { ARCHIVE_FOLDER_PATH, STREAM_FOLDER_PATH } from "@typenotes/shared/constants";
 import type { AppMode } from "@typenotes/shared/types";
 
 export function AppShell() {
@@ -55,8 +55,8 @@ export function AppShell() {
           setActiveSettingsSection(section);
           setDesktopAppMode("settings");
         }}
-        onOpenFeed={() => openPinnedFolder(FEED_FOLDER_PATH)}
-        onOpenArchive={() => openPinnedFolder(ARCHIEVE_FOLDER_PATH)}
+        onOpenFeed={() => openPinnedFolder(STREAM_FOLDER_PATH)}
+        onOpenArchive={() => openPinnedFolder(ARCHIVE_FOLDER_PATH)}
         onMoveFocusRestore={restoreNavigationFocus}
         onNewRecording={() => {
           if (!isRecordingAudio) {

@@ -1,5 +1,13 @@
 # Removing legacy recording audio from Git history
 
+> **Folder layout.** Audio now lives in `_system/_recordings/`; it lived in
+> `Recordings/` (and once `_Recordings/`) before
+> [FOLDER_STRUCTURE_MIGRATION.md](FOLDER_STRUCTURE_MIGRATION.md). The paths
+> written out below are the pre-`_system` ones, because that is what the history
+> being rewritten contains. `scripts/prepare-audio-history-migration.py` strips
+> all three, so it is correct either way — but run the folder migration first if
+> you are doing both, so the prepared copy already has the layout you will keep.
+
 New recordings for an Iroh working folder travel outside Git. Failed pairing
 leaves audio on the phone for retry; it never enables a Git fallback. Ordinary
 Git-only connections still carry audio in Git because they have no independent

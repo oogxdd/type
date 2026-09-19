@@ -9,8 +9,7 @@ use crate::{
         NotesRepository,
     },
     CreateNoteArgs, CreateNoteResult, FolderNode, NoteFrontMatter, NoteMeta, NotePreviewEntry,
-    OrderFile, SetNoteTimestampArgs, SetOrderArgs, ATTACHMENTS_STORAGE_FOLDER, FEED_FOLDER,
-    RECORDINGS_STORAGE_FOLDER,
+    OrderFile, SetNoteTimestampArgs, SetOrderArgs, STREAM_FOLDER,
 };
 
 /// Note use cases. This layer owns workflow and policy while persistence,
@@ -63,7 +62,7 @@ where
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .unwrap_or(FEED_FOLDER);
+            .unwrap_or(STREAM_FOLDER);
         let folder_full = self.repository.resolve_path(folder_rel)?;
         if self.repository.is_storage_folder_path(&folder_full) {
             return Err(
@@ -96,7 +95,7 @@ where
         meta.created_ms = Some(timestamp);
         meta.updated_ms = Some(timestamp);
         self.repository.write_note(&path, &meta, &content)?;
-        if !self.repository.is_feed_folder_path(&folder_full) {
+        if !self.repository.is_stream_folder_path(&folder_full) {
             self.repository
                 .update_order_append(&folder_full, &[file_name], false)?;
         }
@@ -366,7 +365,7 @@ where
     }
 
     pub fn delete_items(&self, items: Vec<String>) -> Result<(), String> {
-        let root = self.repository.ensured_root()?;
+        self.repository.ensured_root()?;
         let mut parent_folder_groups: HashMap<PathBuf, Vec<String>> = HashMap::new();
         let mut parent_note_groups: HashMap<PathBuf, Vec<String>> = HashMap::new();
 
@@ -394,13 +393,13 @@ where
             if kind == NoteStorageEntryKind::Directory {
                 if let Ok(note_files) = self.repository.collect_note_files(&full_path) {
                     for note_path in &note_files {
-                        self.delete_associated_media(&root, note_path);
+                        self.delete_associated_media(note_path);
                     }
                 }
                 self.repository.remove_dir_all(&full_path)?;
                 parent_folder_groups.entry(parent).or_default().push(name);
             } else {
-                self.delete_associated_media(&root, &full_path);
+                self.delete_associated_media(&full_path);
                 self.repository.remove_file(&full_path)?;
                 parent_note_groups.entry(parent).or_default().push(name);
             }
@@ -421,7 +420,7 @@ where
     /// Best-effort: delete the audio recording / handwriting attachment a note
     /// references in its front matter, if any. Failures are ignored — a
     /// missing or already-deleted media file must never block note deletion.
-    fn delete_associated_media(&self, root: &Path, note_path: &Path) {
+    fn delete_associated_media(&self, note_path: &Path) {
         let Ok(raw) = self.repository.read_to_string(note_path) else {
             return;
         };
@@ -437,9 +436,7 @@ where
             let Ok(full_path) = self.repository.resolve_path(rel) else {
                 continue;
             };
-            let allowed = full_path.starts_with(root.join(RECORDINGS_STORAGE_FOLDER))
-                || full_path.starts_with(root.join(ATTACHMENTS_STORAGE_FOLDER));
-            if allowed {
+            if self.repository.is_storage_folder_path(&full_path) {
                 let _ = self.repository.remove_file(&full_path);
             }
         }
@@ -495,7 +492,7 @@ where
     pub fn set_order(&self, args: SetOrderArgs) -> Result<(), String> {
         self.repository.ensured_root()?;
         let parent_path = self.repository.resolve_path(&args.parent)?;
-        if self.repository.is_feed_folder_path(&parent_path) {
+        if self.repository.is_stream_folder_path(&parent_path) {
             return Ok(());
         }
         let order = OrderFile {

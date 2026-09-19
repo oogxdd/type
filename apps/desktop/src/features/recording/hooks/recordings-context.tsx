@@ -9,7 +9,7 @@ import {
 import { convertFileSrc } from "@tauri-apps/api/core";
 import * as api from "../api/recordings-api";
 import type { RecordingListItem, RecordingQueueSnapshot } from "@typenotes/shared/types";
-import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { STREAM_FOLDER_PATH } from "@typenotes/shared/constants";
 import { toBase64 } from "@/shared/lib/notes";
 import { useAudioRecorder } from "./use-audio-recorder";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
@@ -58,7 +58,7 @@ export function RecordingsProvider({
   const [transcriptionQueueBusy, setTranscriptionQueueBusy] = useState(false);
 
   const transcriptionQueueBusyRef = useRef(false);
-  const recordingTargetFolderRef = useRef<string>(FEED_FOLDER_PATH);
+  const recordingTargetFolderRef = useRef<string>(STREAM_FOLDER_PATH);
 
   const loadRecordingsSnapshot = useCallback(async () => {
     const snapshot = await api.listRecordings();
@@ -171,7 +171,7 @@ export function RecordingsProvider({
         return preferred;
       }
       const active = activeFolder.trim();
-      return active || FEED_FOLDER_PATH;
+      return active || STREAM_FOLDER_PATH;
     },
     [activeFolder]
   );
@@ -180,7 +180,7 @@ export function RecordingsProvider({
     async (blob: Blob, mimeType: string) => {
       const buffer = await blob.arrayBuffer();
       const audioBase64 = toBase64(new Uint8Array(buffer));
-      const targetFolder = recordingTargetFolderRef.current || FEED_FOLDER_PATH;
+      const targetFolder = recordingTargetFolderRef.current || STREAM_FOLDER_PATH;
       const result = await api.saveAudioRecording(
         audioBase64,
         mimeType || undefined,

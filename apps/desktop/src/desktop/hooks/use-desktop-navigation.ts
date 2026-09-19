@@ -15,7 +15,7 @@ import type { DesktopContextMenuState } from "@/app/hooks/use-tree-interactions"
 import { useSelection } from "@/app/state/selection-store";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
-import { FEED_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
+import { STREAM_FOLDER_PATH } from "@typenotes/shared/constants";
 import { computeRangeSelection } from "@/shared/lib/selection";
 import type { AppMode } from "@typenotes/shared/types";
 
@@ -88,11 +88,6 @@ export function useDesktopNavigation({
     }))
   );
 
-  const customFoldersTreeData = useMemo(
-    () => treeData.filter((node) => !isSystemFolder(node.id)),
-    [treeData]
-  );
-
   const [activeNavigationTab, setActiveNavigationTab] = useState<"feed" | "folders">(
     "feed"
   );
@@ -103,13 +98,13 @@ export function useDesktopNavigation({
   selectedNotesRef.current = selectedNotes;
 
   useEffect(() => {
-    if (activeFolder && activeFolder !== FEED_FOLDER_PATH) {
+    if (activeFolder && activeFolder !== STREAM_FOLDER_PATH) {
       lastNonFeedFolderRef.current = activeFolder;
     }
   }, [activeFolder]);
 
   useEffect(() => {
-    if (activeFolder === FEED_FOLDER_PATH && activeNavigationTab !== "feed") {
+    if (activeFolder === STREAM_FOLDER_PATH && activeNavigationTab !== "feed") {
       setActiveNavigationTab("feed");
       return;
     }
@@ -145,11 +140,11 @@ export function useDesktopNavigation({
   const openFeedTab = useCallback(() => {
     closeDesktopContextMenu();
     onAppModeChange("notes");
-    if (activeFolder && activeFolder !== FEED_FOLDER_PATH) {
+    if (activeFolder && activeFolder !== STREAM_FOLDER_PATH) {
       lastNonFeedFolderRef.current = activeFolder;
     }
     setActiveNavigationTab("feed");
-    onOpenPinnedFolder(FEED_FOLDER_PATH);
+    onOpenPinnedFolder(STREAM_FOLDER_PATH);
   }, [activeFolder, closeDesktopContextMenu, onAppModeChange, onOpenPinnedFolder]);
 
   const openFoldersTab = useCallback(() => {
@@ -157,7 +152,7 @@ export function useDesktopNavigation({
     onAppModeChange("notes");
     setActiveNavigationTab("folders");
     const fallbackFolder =
-      lastNonFeedFolderRef.current || customFoldersTreeData[0]?.id || "";
+      lastNonFeedFolderRef.current || treeData[0]?.id || "";
     if (fallbackFolder) {
       onOpenPinnedFolder(fallbackFolder);
       return;
@@ -167,10 +162,10 @@ export function useDesktopNavigation({
   }, [
     clearNote,
     closeDesktopContextMenu,
-    customFoldersTreeData,
     onAppModeChange,
     onOpenPinnedFolder,
     resetSelection,
+    treeData,
   ]);
 
   const handleFeedMiddleNoteClick = useCallback(
@@ -178,7 +173,7 @@ export function useDesktopNavigation({
       const notePaths = feedNotes.map((note) => note.path);
       selectNote(
         notePath,
-        FEED_FOLDER_PATH,
+        STREAM_FOLDER_PATH,
         computeRangeSelection(event, selectedNotes, notePaths, lastSelectedNote, notePath)
       );
       const nextSelection = useSelection.getState().selectedNotes;
@@ -207,9 +202,9 @@ export function useDesktopNavigation({
         selectedNotes.size > 1 && selectedNotes.has(notePath)
           ? Array.from(selectedNotes)
           : [notePath];
-      setSelectedFolders(new Set([FEED_FOLDER_PATH]));
-      setLastSelectedFolder(FEED_FOLDER_PATH);
-      setActiveFolder(FEED_FOLDER_PATH);
+      setSelectedFolders(new Set([STREAM_FOLDER_PATH]));
+      setLastSelectedFolder(STREAM_FOLDER_PATH);
+      setActiveFolder(STREAM_FOLDER_PATH);
       // Keeps the existing multi-selection (and its range anchor) when the
       // target note is already part of it.
       if (!selectedNotes.has(notePath)) {
@@ -224,7 +219,7 @@ export function useDesktopNavigation({
         x: event.clientX,
         y: event.clientY,
         path: notePath,
-        parentPath: activeFeedGroup || activeFeedNode?.id || FEED_FOLDER_PATH,
+        parentPath: activeFeedGroup || activeFeedNode?.id || STREAM_FOLDER_PATH,
         targetPaths: targetPaths.length > 0 ? targetPaths : notePaths,
       });
     },
@@ -285,7 +280,8 @@ export function useDesktopNavigation({
 
   return {
     activeNavigationTab,
-    customFoldersTreeData,
+    // Already free of `_system` — use-notes-tree-state drops it from treeData.
+    customFoldersTreeData: treeData,
     moveSelectedNotesToTrashByShortcut,
     deleteSelectedNotesByShortcut,
     openFeedTab,

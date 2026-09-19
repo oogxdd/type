@@ -40,7 +40,7 @@ try {
   const own = await call('read_agent_note',{path:created.path});
   await call('update_note',{path:own.path,content:'Revised draft',expectedRevision:own.revision});
   await call('move_note',{source:own.path,destination:'ideas/final.md'});
-  assert.equal(await readFile(join(root,'agent/ideas/final.md'),'utf8'),'Revised draft');
+  assert.equal(await readFile(join(root,'_system/agent/ideas/final.md'),'utf8'),'Revised draft');
   const denied = await client.callTool({name:'create_note',arguments:{path:'../outside.md',content:'BAD'}});
   assert.equal(denied.isError,true);
   await call('delete_folder',{path:'ideas',recursive:true});

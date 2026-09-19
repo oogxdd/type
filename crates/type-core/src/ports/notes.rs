@@ -77,7 +77,7 @@ pub trait NotesRepository {
         fallback_slug: &str,
         file_name_format: NoteFileNameFormat,
     ) -> Result<String, String>;
-    fn is_feed_folder_path(&self, path: &std::path::Path) -> bool;
+    fn is_stream_folder_path(&self, path: &std::path::Path) -> bool;
     fn is_storage_folder_path(&self, path: &std::path::Path) -> bool;
     fn is_system_folder_path(&self, path: &std::path::Path) -> bool;
     fn update_order_append(
@@ -132,19 +132,19 @@ pub trait NoteClock {
 //   - Hidden storage folders (Recordings/, Attachments/) are excluded from the tree
 //   - Each folder contains its child folders and the notes inside it
 //   - Folders are sorted by a persisted order file (.notes-order.json), alphabetical fallback
-//   - The "Feed" folder sorts notes newest-first by file name (names are
+//   - The "_system/stream" folder sorts notes newest-first by file name (names are
 //     timestamp/UUIDv7-prefixed); authoritative timestamp ordering happens in
 //     the UI from note previews, so get_tree never reads note bodies
 //
 // read_note(path)
-//   in:  path — relative to notes root, e.g. "Feed/my-note.md"
+//   in:  path — relative to notes root, e.g. "_system/stream/my-note.md"
 //   out: String — the note body text (markdown)
 //   - Parses front-matter but only returns the body
 //   - If encryption is active, the body must be decrypted transparently
 //   - The caller never sees ciphertext
 //
 // create_note(folder_path, content, timestamp_ms, file_name_format)
-//   in:  folder_path — where to create it, defaults to "Feed"
+//   in:  folder_path — where to create it, defaults to "_system/stream"
 //        content — initial body text, defaults to empty
 //        timestamp_ms — creation time in unix ms, defaults to now
 //        file_name_format — how to name the file (timestamp slug, uuid, or uuid-prefix slug)
@@ -184,7 +184,7 @@ pub trait NoteClock {
 //   in:  items — list of relative paths (notes or folders)
 //        destination — relative path to target folder
 //   out: nothing
-//   - Cannot move system folders (Feed, Archieve, Recordings, Attachments)
+//   - Cannot move `_system` or any of the folders it owns (PROTECTED_SYSTEM_FOLDERS)
 //   - Updates ordering files in both source and destination folders
 //
 // delete_items(items)
@@ -207,7 +207,7 @@ pub trait NoteClock {
 //        note_order — ordered list of note filenames
 //   out: nothing
 //   - Persists to .notes-order.json inside the folder
-//   - Feed folder ignores custom order (always sorted by timestamp)
+//   - _system/stream ignores custom order (always sorted by timestamp)
 //
 // Key assumptions for any implementation:
 //   - Paths are always relative to a "notes root" directory
@@ -216,4 +216,4 @@ pub trait NoteClock {
 //   - Encryption is transparent: encrypt on write, decrypt on read
 //   - The note ID is a UUID v7 string, generated once at creation
 //   - Timestamps are Unix milliseconds
-//   - System folders (Feed, Archieve, Recordings, Attachments) are protected from move/delete/rename
+//   - `_system` and the folders it owns are protected from move/delete/rename

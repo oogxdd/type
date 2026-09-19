@@ -9,7 +9,10 @@ const revision = (raw: string) => createHash('sha256').update(raw).digest('hex')
 const fail = (message: string): never => { throw new ProjectionError(message); };
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 
-/** Write boundary is always <configured notes root>/agent; clients cannot choose it.
+/** The agent folder's location inside a notes root, as path segments. */
+const AGENT_PREFIX = ['_system', 'agent'] as const;
+
+/** Write boundary is always <configured notes root>/_system/agent; clients cannot choose it.
  * No user path is passed to fs until every component has been validated.
  * As with the read repository, this does not sandbox hostile concurrent OS processes.
  * Line-tag migration belongs in projection.ts, not in this filesystem boundary.
@@ -29,15 +32,20 @@ export class AgentWorkspace {
     const parts = this.parts(path, allowRoot);
     if (await realpath(this.notesRoot) !== this.notesRoot) fail('Notes root changed.');
     let current = this.notesRoot;
-    for (const [index, part] of ['agent', ...parts].entries()) {
+    const segments = [...AGENT_PREFIX, ...parts];
+    for (const [index, part] of segments.entries()) {
       current = join(current, part);
-      const parent = index < parts.length;
+      const parent = index < segments.length - 1;
       let stat;
       try { stat = await lstat(current); }
       catch (error) {
         if (!missing(error)) throw error;
-        if (createParents && (parent || index === 0)) { await mkdir(current); stat = await lstat(current); }
-        else if (!parent) return current;
+        // The prefix is ours to create even when it is the requested entry.
+        if (createParents && (parent || index < AGENT_PREFIX.length)) { await mkdir(current); stat = await lstat(current); }
+        // A missing prefix segment means nothing below it exists either, so
+        // hand back the full target and let the caller's own open/readdir
+        // report it — that is what makes list('') on a fresh root empty.
+        else if (!parent || index < AGENT_PREFIX.length) return join(this.notesRoot, ...segments);
         else throw error;
       }
       if (stat.isSymbolicLink() || await realpath(current) !== current) fail('Links are not allowed inside agent.');

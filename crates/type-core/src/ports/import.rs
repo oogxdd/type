@@ -9,7 +9,7 @@
 //! - `AppleImportScan` — preview of a chosen folder (note/folder/skipped counts,
 //!   suggested target name, a few sample titles).
 //! - `AppleImportArgs` — `{ source_path, mode, target_folder?, file_name_format }`.
-//! - `AppleImportMode` — `preserve` (mirror hierarchy) | `flatten` (all into Feed).
+//! - `AppleImportMode` — `preserve` (mirror hierarchy) | `flatten` (all into `_system/stream`).
 //! - `AppleImportState` — pollable progress snapshot.
 //!
 //! # Operations
@@ -35,7 +35,7 @@
 //! - **HTML** is converted to Markdown best-effort (headings, paragraphs,
 //!   `<br>`/`<div>` breaks, bold/italic, lists, links, entities).
 //! - **preserve** places notes under `target_folder/<relative dirs>`; **flatten**
-//!   places every note directly in `Feed`. Path segments are sanitized; a target
+//!   places every note directly in `_system/stream`. Path segments are sanitized; a target
 //!   that resolves into reserved storage (Recordings/attachments) is rejected.
 //! - **Encryption** is transparent: notes are written via
 //!   `write_note_with_front_matter`, which encrypts the body when security is

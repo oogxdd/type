@@ -129,9 +129,16 @@ Notes live in a local folder tree. The app uses the first existing root:
 4. App-data fallback (`<app-data>/notes`)
 
 Each folder keeps its own `.notes-order.json` to persist the order of its child folders and
-notes. A few system folders are maintained automatically inside every root: `Feed` (default
-notes), `Archieve` (archive — the spelling is intentional and persisted), and the hidden
-`Recordings/` (audio storage).
+notes. Everything the app owns lives under a single `_system/` folder inside every root, so
+the root itself holds nothing but `_system` and your own folders: `_system/stream` (default
+notes — the sidebar calls it Feed), `_system/archive` (the sidebar's Trash), `_system/agent`
+and `_system/me` (the agent's working set, reachable through the notes MCP), and the hidden
+storage folders `_system/_recordings`, `_system/_handwriting` and `_system/_attachments`.
+`_system` never appears in the folder tree.
+
+Notes roots created by older builds keep the flat `Feed/` + `Archieve/` + `Recordings/` +
+`Attachments/` layout and are **not** migrated automatically — see
+[docs/FOLDER_STRUCTURE_MIGRATION.md](docs/FOLDER_STRUCTURE_MIGRATION.md).
 
 ## Security mode extension (encryption + lock + panic)
 
@@ -165,7 +172,7 @@ The app uses embedded **libgit2** from Tauri commands — you do not need shell 
   frontmatter references its audio and tracks transcription state (`recording_audio_path`,
   `transcription_status`, `transcription_id`, `transcription_error`); the transcript text is
   written into the note body once it completes (no separate transcript file).
-- Recording audio, stored flat in the hidden `Recordings/` folder as `Recordings/audio-<id>.<ext>`.
+- Recording audio, stored flat in the hidden `_system/_recordings/` folder as `_system/_recordings/audio-<id>.<ext>`.
 - Folder structure and every `.notes-order.json`.
 
 ### One-time setup per device
@@ -222,7 +229,7 @@ Push; Desktop Pull.
 
 ## Audio recording + transcription
 
-- Recordings are saved under `Recordings/` with a unique audio file each.
+- Recordings are saved under `_system/_recordings/` with a unique audio file each.
 - Start/stop from the left panel (desktop) or the recording screen (mobile).
 
 ### Desktop — local Whisper (faster-whisper)

@@ -164,11 +164,11 @@ MCP-конфигурацию указанным файлом. `--allowedTools` �
 - [Claude Code CLI](https://code.claude.com/docs/en/cli-reference)
 - [MCP stdio specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)
 
-## Запись только в root/agent
+## Запись только в root/_system/agent
 
 Сервер создаёт папку `agent` при первой операции записи. Регистр имени — строчный.
 Все пути следующих инструментов относительны этой папке: `ideas/plan.md` означает
-`<notes-root>/agent/ideas/plan.md`, а не `<notes-root>/ideas/plan.md`.
+`<notes-root>/_system/agent/ideas/plan.md`, а не `<notes-root>/ideas/plan.md`.
 
 - `list_agent_folder({path?: "ideas"})`: содержимое папки; пустой path — корень agent.
 - `read_agent_note({path})`: очищенный текст и `revision` текущего файла.

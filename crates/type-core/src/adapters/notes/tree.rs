@@ -1,4 +1,4 @@
-//! Folder tree construction, system folders, legacy migration, and order files.
+//! Folder tree construction, system folders, and order files.
 
 use std::{
     collections::HashMap,
@@ -28,10 +28,8 @@ pub fn collect_markdown_note_files(
             if name.starts_with('.') {
                 continue;
             }
-            if dir == root {
-                if HIDDEN_ROOT_FOLDERS.iter().any(|hidden| *hidden == name) {
-                    continue;
-                }
+            if is_storage_folder_path(root, &path) {
+                continue;
             }
             collect_markdown_note_files(root, &path, files)?;
             continue;
@@ -63,81 +61,42 @@ pub fn sort_by_order(mut names: Vec<String>, order: &[String]) -> Vec<String> {
 
 // ── Folder classification ──────────────────────────────────────────────────────
 
-/// True if the folder name matches a protected system folder.
-pub fn is_system_folder_name(name: &str) -> bool {
+/// True if the root-relative path is a protected system folder.
+pub fn is_system_folder_rel_path(rel_path: &str) -> bool {
     PROTECTED_SYSTEM_FOLDERS
         .iter()
-        .any(|folder| *folder == name)
+        .any(|folder| *folder == rel_path)
 }
 
-/// True if the folder should be hidden from the tree at root level.
-pub fn is_hidden_root_folder_name(name: &str) -> bool {
-    HIDDEN_ROOT_FOLDERS.iter().any(|folder| *folder == name)
+/// True if the root-relative path is kept out of the rendered folder tree.
+pub fn is_tree_hidden_rel_path(rel_path: &str) -> bool {
+    TREE_HIDDEN_FOLDERS.iter().any(|folder| *folder == rel_path)
 }
 
-/// True if the path is the Feed folder.
-pub fn is_feed_folder_path(root: &Path, path: &Path) -> bool {
-    path == root.join(FEED_FOLDER)
-}
-
-// ── Legacy migration ───────────────────────────────────────────────────────────
-
-fn migrate_legacy_folder_name(root: &Path, from_name: &str, to_name: &str) -> Result<(), String> {
-    let from = root.join(from_name);
-    if !from.exists() {
-        return Ok(());
-    }
-    let to = root.join(to_name);
-    if !to.exists() {
-        fs::rename(&from, &to).map_err(|err| err.to_string())?;
-        return Ok(());
-    }
-    for entry in fs::read_dir(&from).map_err(|err| err.to_string())? {
-        let entry = entry.map_err(|err| err.to_string())?;
-        let source = entry.path();
-        let target = to.join(entry.file_name());
-        if target.exists() {
-            continue;
-        }
-        fs::rename(&source, &target).map_err(|err| err.to_string())?;
-    }
-    fs::remove_dir_all(&from).map_err(|err| err.to_string())?;
-    Ok(())
-}
-
-fn migrate_legacy_system_folders(root: &Path) -> Result<(), String> {
-    migrate_legacy_folder_name(root, LEGACY_UNSORTED_FOLDER, FEED_FOLDER)?;
-    migrate_legacy_folder_name(root, LEGACY_RECORDINGS_FOLDER, RECORDINGS_STORAGE_FOLDER)?;
-    let feed_order = root.join(FEED_FOLDER).join(ORDER_FILE);
-    if feed_order.exists() {
-        let _ = fs::remove_file(feed_order);
-    }
-    Ok(())
+/// True if the path is the stream folder (the UI's "Feed").
+pub fn is_stream_folder_path(root: &Path, path: &Path) -> bool {
+    path == root.join(STREAM_FOLDER)
 }
 
 // ── System folders ─────────────────────────────────────────────────────────────
 
-/// True if the path is a direct child of root and a system folder.
+/// True if the path is one of the app-owned folders under `_system`.
 pub fn is_system_folder_path(root: &Path, path: &Path) -> bool {
-    if path.parent() != Some(root) {
-        return false;
-    }
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(is_system_folder_name)
+    PROTECTED_SYSTEM_FOLDERS
+        .iter()
+        .any(|folder| path == root.join(folder))
 }
 
-/// Check if a path falls inside a storage folder (recordings/attachments).
+/// True if the path falls inside a binary storage folder.
 pub fn is_storage_folder_path(root: &Path, path: &Path) -> bool {
-    path.starts_with(root.join(RECORDINGS_STORAGE_FOLDER))
-        || path.starts_with(root.join(LEGACY_RECORDINGS_FOLDER))
-        || path.starts_with(root.join(ATTACHMENTS_STORAGE_FOLDER))
+    STORAGE_FOLDERS
+        .iter()
+        .any(|folder| path.starts_with(root.join(folder)))
 }
 
-/// Create required system folders and ensure visible ones appear in the order file.
+/// Create the `_system` layout. Idempotent, and the only place that decides
+/// which folders a notes root is guaranteed to have.
 pub fn ensure_system_folders(root: &Path) -> Result<(), String> {
-    migrate_legacy_system_folders(root)?;
-
     for folder in REQUIRED_SYSTEM_FOLDERS {
         let path = root.join(folder);
         if path.exists() {
@@ -151,20 +110,6 @@ pub fn ensure_system_folders(root: &Path) -> Result<(), String> {
             )
         })?;
     }
-
-    let mut order = read_order_file(root);
-    let mut changed = false;
-    for folder in VISIBLE_SYSTEM_FOLDERS {
-        if !order.folder_order.iter().any(|name| name == folder) {
-            order.folder_order.push(folder.to_string());
-            changed = true;
-        }
-    }
-
-    if changed {
-        write_order_file(root, &order)?;
-    }
-
     Ok(())
 }
 
@@ -188,7 +133,12 @@ pub fn build_folder_node(dir: &Path, rel_path: &str) -> Result<FolderNode, Strin
         if name.starts_with('.') {
             continue;
         }
-        if rel_path.is_empty() && is_hidden_root_folder_name(&name) {
+        let child_rel = if rel_path.is_empty() {
+            name.clone()
+        } else {
+            format!("{}/{}", rel_path, name)
+        };
+        if is_tree_hidden_rel_path(&child_rel) {
             continue;
         }
         let meta = entry.metadata().map_err(|err| err.to_string())?;
@@ -202,14 +152,14 @@ pub fn build_folder_node(dir: &Path, rel_path: &str) -> Result<FolderNode, Strin
     }
 
     let folder_names = sort_by_order(folders, &order.folder_order);
-    let note_names = if rel_path == FEED_FOLDER {
-        // Feed folder: newest-first by file name. Every naming mode prefixes a
+    let note_names = if rel_path == STREAM_FOLDER {
+        // Stream folder: newest-first by file name. Every naming mode prefixes a
         // timestamp (UTC slug or UUIDv7), so descending name order approximates
         // creation order without reading any note bodies; the feed UI re-sorts
         // by real front-matter timestamps once previews load.
-        let mut feed_notes = notes;
-        feed_notes.sort_by(|a, b| b.to_lowercase().cmp(&a.to_lowercase()));
-        feed_notes
+        let mut stream_notes = notes;
+        stream_notes.sort_by(|a, b| b.to_lowercase().cmp(&a.to_lowercase()));
+        stream_notes
     } else {
         sort_by_order(notes, &order.note_order)
     };
@@ -266,13 +216,16 @@ pub fn read_order_file(dir: &Path) -> OrderFile {
     OrderFile::default()
 }
 
-/// Persist the order file to disk (no-op for Feed folder, which sorts by date).
+/// Persist the order file to disk (no-op for the stream folder, which sorts by
+/// date). Checked on the path tail because callers hand over a directory
+/// without a notes root to compare it against.
 pub fn write_order_file(dir: &Path, order: &OrderFile) -> Result<(), String> {
-    if dir
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name == FEED_FOLDER)
-    {
+    let dir_name = dir.file_name().and_then(|name| name.to_str());
+    let parent_name = dir
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|name| name.to_str());
+    if dir_name == Some(STREAM_FOLDER_NAME) && parent_name == Some(SYSTEM_FOLDER) {
         return Ok(());
     }
     let file_path = dir.join(ORDER_FILE);
@@ -352,7 +305,7 @@ mod tests {
     #[test]
     fn build_folder_node_skips_dot_entries() {
         let root = scratch_dir("dot-entries");
-        fs::create_dir_all(root.join("Feed")).unwrap();
+        fs::create_dir_all(root.join("Work")).unwrap();
         fs::create_dir_all(root.join(".git")).unwrap();
         fs::create_dir_all(root.join(".type")).unwrap();
         fs::write(root.join("visible.md"), "body").unwrap();
@@ -361,9 +314,78 @@ mod tests {
         let node = build_folder_node(&root, "").expect("build tree");
 
         let folders: Vec<&str> = node.children.iter().map(|f| f.name.as_str()).collect();
-        assert_eq!(folders, vec!["Feed"]);
+        assert_eq!(folders, vec!["Work"]);
         let notes: Vec<&str> = node.notes.iter().map(|n| n.name.as_str()).collect();
         assert_eq!(notes, vec!["visible.md"]);
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn tree_exposes_stream_and_archive_but_hides_the_rest_of_system() {
+        let root = scratch_dir("system-layout");
+        ensure_system_folders(&root).expect("create system folders");
+        fs::create_dir_all(root.join("Work")).unwrap();
+
+        let node = build_folder_node(&root, "").expect("build tree");
+        let roots: Vec<&str> = node.children.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(roots, vec![SYSTEM_FOLDER, "Work"]);
+
+        let system = node
+            .children
+            .iter()
+            .find(|child| child.path == SYSTEM_FOLDER)
+            .expect("_system in tree");
+        let mut visible: Vec<&str> = system.children.iter().map(|f| f.path.as_str()).collect();
+        visible.sort_unstable();
+        // agent/me and the three storage folders never reach a shell.
+        assert_eq!(visible, vec![ARCHIVE_FOLDER, STREAM_FOLDER]);
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn stream_folder_never_gets_an_order_file() {
+        let root = scratch_dir("stream-order");
+        ensure_system_folders(&root).expect("create system folders");
+
+        let stream = root.join(STREAM_FOLDER);
+        write_order_file(&stream, &OrderFile::default()).expect("write order");
+        assert!(!stream.join(ORDER_FILE).exists());
+
+        // A user folder that merely happens to be called "stream" still keeps one.
+        let lookalike = root.join("stream");
+        fs::create_dir_all(&lookalike).unwrap();
+        write_order_file(&lookalike, &OrderFile::default()).expect("write order");
+        assert!(lookalike.join(ORDER_FILE).exists());
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn storage_folders_are_excluded_from_note_collection() {
+        let root = scratch_dir("storage-collect");
+        ensure_system_folders(&root).expect("create system folders");
+        fs::write(root.join(STREAM_FOLDER).join("kept.md"), "body").unwrap();
+        fs::write(
+            root.join(HANDWRITING_STORAGE_FOLDER).join("stray.md"),
+            "body",
+        )
+        .unwrap();
+        fs::write(root.join(AGENT_FOLDER).join("thought.md"), "body").unwrap();
+
+        let mut files = Vec::new();
+        collect_markdown_note_files(&root, &root, &mut files).expect("collect");
+        let mut names: Vec<String> = files
+            .iter()
+            .map(|path| strip_root(&root, path))
+            .collect();
+        names.sort();
+        // Storage is binary-only; agent notes are real notes and stay collectable.
+        assert_eq!(
+            names,
+            vec!["_system/agent/thought.md", "_system/stream/kept.md"]
+        );
 
         fs::remove_dir_all(&root).ok();
     }

@@ -139,7 +139,7 @@ pub trait RecordingsGateway {
 // save_recording(audio_base64, mime_type, folder_path, file_name_format)
 //   in:  audio_base64 — base64-encoded audio bytes (may have data URI prefix)
 //        mime_type — e.g. "audio/webm", "audio/mp4". Defaults to webm
-//        folder_path — where to create the note, defaults to "Feed"
+//        folder_path — where to create the note, defaults to "_system/stream"
 //        file_name_format — how to name the note file
 //   out: RecordingWriteResult — folder_path, note_path, audio_path (all relative)
 //   - Decodes the base64 audio and saves to Recordings/ storage folder

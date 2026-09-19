@@ -10,8 +10,20 @@ const tree: FolderNode = {
   name: "",
   path: "",
   children: [
-    { name: "Feed", path: "Feed", children: [], notes: [note("Feed/a.md")] },
-    { name: "Archieve", path: "Archieve", children: [], notes: [] },
+    {
+      name: "_system",
+      path: "_system",
+      children: [
+        {
+          name: "stream",
+          path: "_system/stream",
+          children: [],
+          notes: [note("_system/stream/a.md")],
+        },
+        { name: "archive", path: "_system/archive", children: [], notes: [] },
+      ],
+      notes: [],
+    },
     { name: ".type", path: ".type", children: [], notes: [] },
     {
       name: "Work",
@@ -67,8 +79,9 @@ describe("flattenFolderTree", () => {
   it("never lists system or dot folders", () => {
     const rows = flattenFolderTree(tree, new Set(["Work", "Work/Q3"]));
     const paths = rows.map((row) => row.folder.path);
-    expect(paths).not.toContain("Feed");
-    expect(paths).not.toContain("Archieve");
+    expect(paths).not.toContain("_system");
+    expect(paths).not.toContain("_system/stream");
+    expect(paths).not.toContain("_system/archive");
     expect(paths).not.toContain(".type");
   });
 
@@ -88,10 +101,11 @@ describe("toggleExpanded", () => {
 });
 
 describe("allFolderPaths", () => {
-  it("lists every folder as a move destination, system folders included", () => {
+  it("lists every folder, system ones included — the picker filters them", () => {
     expect(allFolderPaths(tree)).toEqual([
-      "Feed",
-      "Archieve",
+      "_system",
+      "_system/stream",
+      "_system/archive",
       "Work",
       "Work/Q3",
       "Work/Q3/Deep",

@@ -18,7 +18,11 @@ use std::{
 pub const AUDIO_RECEIPTS_REL_PATH: &str = ".type/audio-durability-receipts.json";
 pub const AUDIO_CACHE_REL_PATH: &str = ".type/audio-cache.json";
 pub const AUDIO_CACHE_EXCLUDE_PATTERN: &str = "/.type/audio-cache.json";
-pub const AUDIO_GIT_EXCLUDE_PATTERNS: [&str; 2] = ["/Recordings/", "/_Recordings/"];
+/// Written to `.git/info/exclude` while audio is kept out of Git.
+pub const AUDIO_GIT_EXCLUDE_PATTERNS: [&str; 1] = ["/_system/_recordings/"];
+/// Also stripped when that file is rewritten, so a root that predates the
+/// `_system` layout stops ignoring a folder the user may now own.
+pub const LEGACY_AUDIO_GIT_EXCLUDE_PATTERNS: [&str; 2] = ["/Recordings/", "/_Recordings/"];
 pub const MOBILE_AUDIO_RETENTION_DAYS: i64 = 7;
 const DAY_MS: i64 = 24 * 60 * 60 * 1_000;
 
@@ -351,13 +355,13 @@ mod tests {
             "type-audio-retention-{tag}-{}",
             uuid::Uuid::now_v7()
         ));
-        fs::create_dir_all(root.join("Feed")).unwrap();
-        fs::create_dir_all(root.join("Recordings")).unwrap();
-        fs::write(root.join("Recordings/audio.m4a"), b"audio bytes").unwrap();
+        fs::create_dir_all(root.join("_system/stream")).unwrap();
+        fs::create_dir_all(root.join("_system/_recordings")).unwrap();
+        fs::write(root.join("_system/_recordings/audio.m4a"), b"audio bytes").unwrap();
         fs::write(
-            root.join("Feed/recording.md"),
+            root.join("_system/stream/recording.md"),
             format!(
-                "---\ncreated_ms: {created_ms}\ntype: audio_recording\nrecording_audio_path: Recordings/audio.m4a\ntranscription_status: {status}\n---\ntranscript\n"
+                "---\ncreated_ms: {created_ms}\ntype: audio_recording\nrecording_audio_path: _system/_recordings/audio.m4a\ntranscription_status: {status}\n---\ntranscript\n"
             ),
         )
         .unwrap();
@@ -370,11 +374,11 @@ mod tests {
     #[test]
     fn archive_receipt_snapshot_respects_desktop_revocation() {
         let root = recording_fixture("ack-snapshot", "completed", 0);
-        record_desktop_audio_ack(&root, "Recordings/audio.m4a".into(), "hash".into(), 12).unwrap();
-        assert!(AudioArchiveReceipts::load(&root).matches("Recordings/audio.m4a", "hash", 12));
-        assert!(!AudioArchiveReceipts::load(&root).matches("Recordings/audio.m4a", "changed", 12));
+        record_desktop_audio_ack(&root, "_system/_recordings/audio.m4a".into(), "hash".into(), 12).unwrap();
+        assert!(AudioArchiveReceipts::load(&root).matches("_system/_recordings/audio.m4a", "hash", 12));
+        assert!(!AudioArchiveReceipts::load(&root).matches("_system/_recordings/audio.m4a", "changed", 12));
         write_json(&root.join(AUDIO_RECEIPTS_REL_PATH), &AudioReceiptManifest::default()).unwrap();
-        assert!(!AudioArchiveReceipts::load(&root).matches("Recordings/audio.m4a", "hash", 12));
+        assert!(!AudioArchiveReceipts::load(&root).matches("_system/_recordings/audio.m4a", "hash", 12));
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -386,14 +390,14 @@ mod tests {
         assert!(repo
             .index()
             .unwrap()
-            .get_path(Path::new("Recordings/audio.m4a"), 0)
+            .get_path(Path::new("_system/_recordings/audio.m4a"), 0)
             .is_none());
         assert!(repo
             .head()
             .unwrap()
             .peel_to_tree()
             .unwrap()
-            .get_path(Path::new("Recordings/audio.m4a"))
+            .get_path(Path::new("_system/_recordings/audio.m4a"))
             .is_err());
         drop(repo);
         let issued = issue_desktop_audio_receipts(&root).unwrap();
@@ -403,8 +407,8 @@ mod tests {
         drop(repo);
         let result = prune_mobile_audio_cache_at(&root, now).unwrap();
         assert_eq!(result.evicted, 1);
-        assert!(!root.join("Recordings/audio.m4a").exists());
-        assert!(is_audio_evicted_locally(&root, "Recordings/audio.m4a"));
+        assert!(!root.join("_system/_recordings/audio.m4a").exists());
+        assert!(is_audio_evicted_locally(&root, "_system/_recordings/audio.m4a"));
         assert!(!crate::git_has_changes(&Repository::open(&root).unwrap()));
         fs::remove_dir_all(root).unwrap();
     }
@@ -420,7 +424,7 @@ mod tests {
             issue_desktop_audio_receipts(&root).unwrap();
             let result = prune_mobile_audio_cache_at(&root, now).unwrap();
             assert_eq!(result.evicted, 0);
-            assert!(root.join("Recordings/audio.m4a").exists());
+            assert!(root.join("_system/_recordings/audio.m4a").exists());
             fs::remove_dir_all(root).unwrap();
         }
     }
@@ -430,11 +434,11 @@ mod tests {
         let now = 2_000_000_000_000i64;
         let root = recording_fixture("changed", "completed", now - 8 * DAY_MS);
         issue_desktop_audio_receipts(&root).unwrap();
-        fs::write(root.join("Recordings/audio.m4a"), b"different bytes").unwrap();
+        fs::write(root.join("_system/_recordings/audio.m4a"), b"different bytes").unwrap();
         let result = prune_mobile_audio_cache_at(&root, now).unwrap();
         assert_eq!(result.evicted, 0);
         assert_eq!(result.waiting_for_desktop_receipt, 1);
-        assert!(root.join("Recordings/audio.m4a").exists());
+        assert!(root.join("_system/_recordings/audio.m4a").exists());
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -443,7 +447,7 @@ mod tests {
         let now = 2_000_000_000_000i64;
         let root = recording_fixture("revoked", "completed", now - 8 * DAY_MS);
         assert_eq!(issue_desktop_audio_receipts(&root).unwrap().issued, 1);
-        fs::remove_file(root.join("Recordings/audio.m4a")).unwrap();
+        fs::remove_file(root.join("_system/_recordings/audio.m4a")).unwrap();
 
         let result = issue_desktop_audio_receipts(&root).unwrap();
         assert_eq!(result.revoked, 1);
@@ -461,7 +465,7 @@ mod tests {
         let repo = Repository::open(&root).unwrap();
         crate::set_audio_git_exclusion(&repo, false).unwrap();
         let mut index = repo.index().unwrap();
-        index.add_path(Path::new("Recordings/audio.m4a")).unwrap();
+        index.add_path(Path::new("_system/_recordings/audio.m4a")).unwrap();
         index.write().unwrap();
         commit_all_changes(&repo, "legacy tracked audio", "main").unwrap();
         issue_desktop_audio_receipts(&root).unwrap();
@@ -469,7 +473,7 @@ mod tests {
         let result = prune_mobile_audio_cache_at(&root, now).unwrap();
         assert_eq!(result.evicted, 0);
         assert_eq!(result.waiting_for_git_migration, 1);
-        assert!(root.join("Recordings/audio.m4a").exists());
+        assert!(root.join("_system/_recordings/audio.m4a").exists());
         fs::remove_dir_all(root).unwrap();
     }
 }

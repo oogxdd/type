@@ -19,10 +19,10 @@ it('creates, reads, updates, moves, lists and deletes nested notes and folders',
  await agent.move(read.path,'ideas/b.md','note');
  await agent.move('ideas','archive','folder');
  expect((await agent.list('archive')).entries.map(e=>e.path)).toEqual(['archive/b.md','archive/nested']);
- expect(await readFile(join(root,'agent/archive/b.md'),'utf8')).toBe('# Second');
+ expect(await readFile(join(root,'_system/agent/archive/b.md'),'utf8')).toBe('# Second');
  await expect(agent.deleteFolder('archive',false)).rejects.toThrow();
  await agent.deleteNote('archive/b.md');await agent.deleteFolder('archive',true);
- expect(await readdir(join(root,'agent'))).toEqual([]);
+ expect(await readdir(join(root,'_system/agent'))).toEqual([]);
 });
 it('cannot escape agent with source, destination, reads, updates or deletes',async()=>{
  const {root,agent}=await fixture();await writeFile(join(root,'outside.md'),'KEEP');
@@ -35,12 +35,12 @@ it('cannot escape agent with source, destination, reads, updates or deletes',asy
 });
 it('rejects symlinked agent root, nested links, file links and hardlinks',async()=>{
  const {root,agent}=await fixture();const outside=join(root,'outside');await mkdir(outside);await writeFile(join(outside,'private.md'),'KEEP');
- await symlink(outside,join(root,'agent'));await expect(agent.createNote('private.md','BAD')).rejects.toThrow();await expect(agent.deleteFolder('nested',true)).rejects.toThrow();await rm(join(root,'agent'));
- await agent.createFolder('nested');await symlink(outside,join(root,'agent/nested/link'));
+ await mkdir(join(root,'_system'));await symlink(outside,join(root,'_system/agent'));await expect(agent.createNote('private.md','BAD')).rejects.toThrow();await expect(agent.deleteFolder('nested',true)).rejects.toThrow();await rm(join(root,'_system/agent'));
+ await agent.createFolder('nested');await symlink(outside,join(root,'_system/agent/nested/link'));
  await expect(agent.createNote('nested/link/private.md','BAD')).rejects.toThrow();
  await expect(agent.deleteFolder('nested',true)).rejects.toThrow();
- await symlink(join(outside,'private.md'),join(root,'agent/link.md'));
- await link(join(outside,'private.md'),join(root,'agent/hard.md'));
+ await symlink(join(outside,'private.md'),join(root,'_system/agent/link.md'));
+ await link(join(outside,'private.md'),join(root,'_system/agent/hard.md'));
  for(const path of ['link.md','hard.md']){
   await expect(agent.read(path)).rejects.toThrow();await expect(agent.deleteNote(path)).rejects.toThrow();await expect(agent.move(path,'moved.md','note')).rejects.toThrow();
  }

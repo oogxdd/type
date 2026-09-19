@@ -24,7 +24,7 @@ import { captureTagSelection, isTagSurfaceCurrent, type CapturedTagSelection } f
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { useAppearance } from "@/app/state/appearance-store";
-import { FEED_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
+import { STREAM_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
 import { collectFolderPaths, getNoteParentPath } from "@typenotes/shared/notes";
 import type { SettingsSectionId } from "@/features/settings/lib/sections";
 import { getActiveEditorPath, getActiveNoteEditor } from "@/features/notes/editor/lib/editor-bridge";
@@ -143,7 +143,7 @@ export function useCommandPaletteCommands({
   const folderTargets = Array.from(selectedFolders);
   const removableFolders = folderTargets.filter((path) => !isSystemFolder(path));
   const notesOutsideFeed = noteTargets.filter(
-    (path) => getNoteParentPath(path) !== FEED_FOLDER_PATH
+    (path) => getNoteParentPath(path) !== STREAM_FOLDER_PATH
   );
   const canFlatten = removableFolders.length > 0 || notesOutsideFeed.length > 0;
   const allArchived =
@@ -158,7 +158,7 @@ export function useCommandPaletteCommands({
   // open — so evaluating them on open is enough.
   const canSplitActiveNote = (() => {
     const editorPath = getActiveEditorPath();
-    if (!open || !editorPath || getNoteParentPath(editorPath) !== FEED_FOLDER_PATH) {
+    if (!open || !editorPath || getNoteParentPath(editorPath) !== STREAM_FOLDER_PATH) {
       return false;
     }
     const noteEditor = getActiveNoteEditor();

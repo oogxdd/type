@@ -6,7 +6,12 @@ import { randomUUID } from 'node:crypto';
 import { projectNote, ProjectionError } from './projection';
 
 const MAX_BYTES = 1024 * 1024;
-const excluded = new Set(['Recordings', 'Attachments', '_Recordings']);
+// Binary storage, matched per path segment. The legacy root-level names stay
+// listed because a notes root predating the `_system` layout still has them.
+const excluded = new Set([
+  '_recordings', '_handwriting', '_attachments',
+  'Recordings', 'Attachments', '_Recordings',
+]);
 export class NotesRepository {
   private paths = new Map<string, string>();
   private ids = new Map<string, string>();

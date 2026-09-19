@@ -21,8 +21,8 @@ use crate::{
     allocate_note_file_name, collect_markdown_note_files, decode_image_base64, generate_note_id,
     is_storage_folder_path, note_parent_folder_path, notes_root, now_ms, parse_note_front_matter,
     resolve_path, sanitize_relative, strip_root, uuid_tail_without_timestamp_prefix,
-    write_note_with_front_matter, NoteFileNameFormat, NoteFrontMatter, ATTACHMENTS_STORAGE_FOLDER,
-    FEED_FOLDER, RECORDING_STATUS_COMPLETED, RECORDING_STATUS_FAILED, RECORDING_STATUS_PENDING,
+    write_note_with_front_matter, NoteFileNameFormat, NoteFrontMatter, HANDWRITING_STORAGE_FOLDER,
+    STREAM_FOLDER, RECORDING_STATUS_COMPLETED, RECORDING_STATUS_FAILED, RECORDING_STATUS_PENDING,
     RECORDING_STATUS_PROCESSING,
 };
 
@@ -224,7 +224,7 @@ impl HandwritingGateway for HandwritingAdapter {
         meta.ocr_updated_ms = Some(now);
 
         write_note_with_front_matter(&note_path, &meta, &handwriting_initial_body())?;
-        if !crate::is_feed_folder_path(&root, &target_folder_path) {
+        if !crate::is_stream_folder_path(&root, &target_folder_path) {
             crate::update_order_append(&target_folder_path, &[note_file_name], false)?;
         }
 
@@ -568,7 +568,7 @@ fn handwriting_note_body(status: &str, text: Option<&str>) -> String {
 }
 
 fn handwriting_storage_root(root: &Path) -> PathBuf {
-    root.join(ATTACHMENTS_STORAGE_FOLDER)
+    root.join(HANDWRITING_STORAGE_FOLDER)
 }
 
 fn is_handwriting_attachment_path_allowed(root: &Path, attachment_path: &Path) -> bool {
@@ -815,7 +815,7 @@ pub fn handwriting_attachment_file_path(root: &Path, extension: &str) -> Result<
     Err("Failed to allocate attachment filename.".to_string())
 }
 
-/// Resolve the target folder for a new handwriting note, falling back to Feed.
+/// Resolve the target folder for a new handwriting note, falling back to the stream.
 pub fn resolve_handwriting_target_folder(
     app: &AppEnv,
     requested: Option<&str>,
@@ -828,8 +828,8 @@ pub fn resolve_handwriting_target_folder(
             return Ok((strip_root(&root, &path), path));
         }
     }
-    let fallback = root.join(FEED_FOLDER);
-    Ok((FEED_FOLDER.to_string(), fallback))
+    let fallback = root.join(STREAM_FOLDER);
+    Ok((STREAM_FOLDER.to_string(), fallback))
 }
 
 #[cfg(test)]

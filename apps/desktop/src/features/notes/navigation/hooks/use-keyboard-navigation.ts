@@ -2,7 +2,7 @@ import { useCallback, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import type { AppMode } from "@typenotes/shared/types";
-import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { STREAM_FOLDER_PATH } from "@typenotes/shared/constants";
 import { useSelection } from "@/app/state/selection-store";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
@@ -219,7 +219,7 @@ export function useKeyboardNavigation({
       const selectFolder = (id: string) => {
         if (isFeed) {
           setActiveFeedGroup(id);
-          selectFolderState(FEED_FOLDER_PATH);
+          selectFolderState(STREAM_FOLDER_PATH);
         } else {
           selectFolderState(id);
         }
@@ -231,7 +231,7 @@ export function useKeyboardNavigation({
       const selectNote = (id: string, parentId: string) => {
         if (isFeed) {
           setActiveFeedGroup(parentId);
-          selectNoteState(id, FEED_FOLDER_PATH);
+          selectNoteState(id, STREAM_FOLDER_PATH);
         } else {
           selectNoteState(id, parentId);
         }
