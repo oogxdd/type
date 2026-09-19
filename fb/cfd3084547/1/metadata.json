@@ -1,13 +1,13 @@
 {
   "cli_version": "0.4.9",
   "checkpoint_id": "fbcfd3084547",
+  "session_id": "c5e66028-82c7-4820-a760-bdefaed5c924",
   "strategy": "manual-commit",
+  "created_at": "2026-09-19T13:14:30.495952Z",
   "branch": "main",
-  "checkpoints_count": 5,
+  "checkpoints_count": 2,
   "files_touched": [
     "crates/type-core/src/adapters/git/mod.rs",
-    "crates/type-core/src/adapters/recordings/mod.rs",
-    "crates/type-core/src/adapters/recordings/whisper.rs",
     "docs/AUDIO_HISTORY_MIGRATION.md",
     "docs/architecture/02-layers.md",
     "docs/architecture/12-architecture-map.md",
@@ -26,27 +26,22 @@
     "output/architecture/shared-stores-proposed.png",
     "sweep.timestamp"
   ],
-  "sessions": [
-    {
-      "metadata": "/fb/cfd3084547/0/metadata.json",
-      "transcript": "/fb/cfd3084547/0/full.jsonl",
-      "context": "/fb/cfd3084547/0/context.md",
-      "content_hash": "/fb/cfd3084547/0/content_hash.txt",
-      "prompt": "/fb/cfd3084547/0/prompt.txt"
-    },
-    {
-      "metadata": "/fb/cfd3084547/1/metadata.json",
-      "transcript": "/fb/cfd3084547/1/full.jsonl",
-      "context": "/fb/cfd3084547/1/context.md",
-      "content_hash": "/fb/cfd3084547/1/content_hash.txt",
-      "prompt": "/fb/cfd3084547/1/prompt.txt"
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "6f6220f256df",
   "token_usage": {
-    "input_tokens": 318,
-    "cache_creation_tokens": 446667,
-    "cache_read_tokens": 17635636,
-    "output_tokens": 83513,
-    "api_call_count": 160
+    "input_tokens": 242,
+    "cache_creation_tokens": 318033,
+    "cache_read_tokens": 14181155,
+    "output_tokens": 58323,
+    "api_call_count": 122
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-19T13:14:28.862147Z",
+    "agent_lines": 1791,
+    "human_added": 832,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 2623,
+    "agent_percentage": 68.28059473884865
   }
 }
