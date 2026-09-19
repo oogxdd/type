@@ -8,3 +8,5 @@ pub mod recordings;
 pub mod security;
 
 pub mod tag_registry;
+
+pub mod mailbox_sync;

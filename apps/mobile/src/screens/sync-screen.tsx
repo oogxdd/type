@@ -1,3 +1,4 @@
+import { MailboxSection } from "../ui/mailbox-section";
 // Git sync for the active working folder — fully compatible with the desktop
 // app: same libgit2 core, same .type/settings.json, same conflict rule
 // (conflicts keep local and write the remote as a .conflict.md sibling).
@@ -143,6 +144,12 @@ export const SyncScreen = () => {
     if (handledScanRef.current) {
       return;
     }
+    if (data.startsWith("type-peer-v1:")) {
+      handledScanRef.current = true;
+      setScannerOpen(false);
+      void sync.mailboxAction({ action: "configure", secret_code: data }).catch(() => {});
+      return;
+    }
     const link = parseSyncDeepLink(data);
     if (!link) {
       console.log("[sync:qr] scanned QR was not a Type sync link");
@@ -216,6 +223,8 @@ export const SyncScreen = () => {
           />
         }
       >
+      <MailboxSection scan={() => void openScanner()} />
+      {!sync.mailboxStatus?.enabled ? <>
       {!connected ? (
         <Section title="Sync with your computer">
           {SETUP_STEPS.map((step, index) => (
@@ -429,6 +438,7 @@ export const SyncScreen = () => {
         )}
       </Section>
 
+      </> : null}
       </ScrollView>
 
       <Modal

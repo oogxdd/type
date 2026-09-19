@@ -245,6 +245,13 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
 
   return {
     initCore: () => {},
+    mailboxSync: async (argsJson) => {
+      const args = JSON.parse(argsJson) as { action: string };
+      if (args.action !== "status" && args.action !== "disconnect") {
+        throw new Error("Sync peer needs a native build; it is unavailable in demo mode.");
+      }
+      return JSON.stringify({ enabled: false, endpoint: null, revision: 0, last_sync_ms: null });
+    },
 
     // ── Notes ──
     getTree: async () => JSON.stringify(buildTree()),

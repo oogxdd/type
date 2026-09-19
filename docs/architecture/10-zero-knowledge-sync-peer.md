@@ -1,6 +1,10 @@
 # Zero-knowledge sync peer
 
-This is an optional future topology for syncing while the phone and computer
+The first working implementation is documented in [ENCRYPTED_SYNC_PEER.md](../ENCRYPTED_SYNC_PEER.md).
+The design below remains the longer-term target (including per-device signing,
+receipts, and garbage collection not yet implemented in v1).
+
+This is an optional topology for syncing while the phone and computer
 are never online at the same time. It is deliberately not part of the direct
 phone-to-Mac experiment.
 

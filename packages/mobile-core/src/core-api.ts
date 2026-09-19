@@ -318,3 +318,8 @@ export const readTagRegistry = async (): Promise<{ version: 1; tags: import("@ty
   parse(await getRawCore().readTagRegistry());
 export const writeTagRegistry = (registry: { version: 1; tags: import("@typenotes/shared/tags").TagDefinition[] }): Promise<void> =>
   getRawCore().writeTagRegistry(JSON.stringify(registry));
+
+export const mailboxSync = async (
+  args: import("@typenotes/shared/types").MailboxAction
+): Promise<import("@typenotes/shared/types").MailboxStatus> =>
+  parse(await getRawCore().mailboxSync(JSON.stringify(args)));

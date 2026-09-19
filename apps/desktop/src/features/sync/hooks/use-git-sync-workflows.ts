@@ -1,3 +1,5 @@
+import { useProfiles } from "@/features/profiles/hooks/profiles-context";
+import { mailboxSync } from "../api/mailbox-api";
 import { useCallback } from "react";
 
 import * as api from "@/features/sync/api/git-api";
@@ -46,6 +48,7 @@ export function useGitSyncWorkflows({
   updateSyncSettings,
   onSuccessfulSync,
 }: UseGitSyncWorkflowsArgs) {
+  const { flushSaveRef } = useProfiles();
   const gitSyncBusy = gitSyncAction !== "idle";
 
   const refreshGitStatus = useCallback(async () => {
@@ -254,6 +257,27 @@ export function useGitSyncWorkflows({
       branch?: string;
       onAfterPull?: () => Promise<void>;
     }) => {
+      if (!opts?.remote) {
+        setGitSyncAction("sync");
+        try {
+          const peer = await mailboxSync({ action: "status" });
+          if (peer.enabled) {
+            await flushSaveRef.current?.();
+            await mailboxSync({ action: "sync" });
+            setGitSyncError(null);
+            window.dispatchEvent(new CustomEvent("note-previews-invalidated"));
+            window.dispatchEvent(new CustomEvent("tag-registry-invalidated"));
+            await opts?.onAfterPull?.();
+            void refreshGitHistory();
+            return;
+          }
+        } catch (error) {
+          setGitSyncError(getErrorMessage(error));
+          return;
+        } finally {
+          setGitSyncAction("idle");
+        }
+      }
       // An explicit remote from discovery wins over the stored setting.
       const remoteUrl = (opts?.remote ?? syncSettings.gitRemoteUrl).trim();
       if (!remoteUrl) {
@@ -322,6 +346,7 @@ export function useGitSyncWorkflows({
     },
     [
       gitStatus,
+      flushSaveRef,
       refreshGitHistory,
       setGitStatus,
       setGitSyncAction,

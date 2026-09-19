@@ -32,3 +32,5 @@ pub use security::*;
 pub use whisper_env::*;
 
 pub mod tag_registry;
+
+pub mod mailbox_sync;

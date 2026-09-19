@@ -132,4 +132,36 @@ describe("mobile sync coordination", () => {
     expect(core.gitPull).toHaveBeenCalledTimes(1);
     expect(useNotesStore.getState().refresh).toHaveBeenCalledTimes(1);
   });
+  it("uses the encrypted peer without contacting the old Git remote or evicting audio", async () => {
+    const peer = { enabled: true, endpoint: "peer", revision: 2, last_sync_ms: 123 };
+    const exchange = deferred();
+    const entered = deferred();
+    const mailbox = vi.spyOn(core, "mailboxSync").mockImplementation(async (args) => {
+      if (args.action === "sync") { entered.resolve(); await exchange.promise; }
+      return peer;
+    });
+    const first = useSyncStore.getState().syncNow();
+    const second = useSyncStore.getState().syncNow();
+    expect(first).toBe(second);
+    await entered.promise;
+    expect(core.gitPull).not.toHaveBeenCalled();
+    expect(core.gitPush).not.toHaveBeenCalled();
+    exchange.resolve();
+    await first;
+    expect(mailbox.mock.calls.map(([args]) => args.action)).toEqual(["status", "sync"]);
+    expect(useSyncStore.getState().autoSyncState).toBe("uploaded_to_peer");
+    expect(core.pruneMobileAudioCache).not.toHaveBeenCalled();
+  });
+
+  it("does not fall back to plaintext Git when the configured encrypted peer fails", async () => {
+    vi.spyOn(core, "mailboxSync").mockImplementation(async (args) => {
+      if (args.action === "sync") throw new Error("Peer is offline");
+      return { enabled: true, endpoint: "peer", revision: 1, last_sync_ms: null };
+    });
+    await expect(useSyncStore.getState().syncNow()).rejects.toThrow("Peer is offline");
+    expect(core.gitPull).not.toHaveBeenCalled();
+    expect(core.gitPush).not.toHaveBeenCalled();
+    expect(useSyncStore.getState().autoSyncState).toBe("waiting_for_peer");
+  });
+
 });

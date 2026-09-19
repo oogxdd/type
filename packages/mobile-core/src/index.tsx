@@ -13,6 +13,7 @@ export const __isDemoCore = true;
 
 export const {
   initCore,
+  mailboxSync,
   getTree,
   readNote,
   createNote,

@@ -1,3 +1,5 @@
+import { MailboxCard } from "@/features/sync/components/mailbox-card";
+import { useMailbox } from "@/features/sync/hooks/mailbox-context";
 import { useEffect, useMemo } from "react";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { useGitSync } from "@/features/sync/hooks/git-sync-context";
@@ -22,6 +24,7 @@ import {
 } from "../settings-ui";
 
 export function SettingsSyncSection() {
+  const mailbox = useMailbox();
   const { syncSettings } = useProfiles();
   const {
     gitStatus,
@@ -56,6 +59,8 @@ export function SettingsSyncSection() {
 
   return (
     <SettingsSection title="Sync">
+      <MailboxCard />
+      {!mailbox.status?.enabled ? <>
       <SettingsCard>
         <SettingsInfoGrid>
           <SettingsInfoRow label="Status">
@@ -150,6 +155,7 @@ export function SettingsSyncSection() {
       </SettingsCard>
 
       <LocalSyncServerCard />
+      </> : null}
 
       {visibleCommits.length > 0 || gitHistoryBusy ? (
         <SettingsCard title="Recent commits">

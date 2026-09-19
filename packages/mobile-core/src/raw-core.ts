@@ -20,6 +20,7 @@ export interface RawTranscriptionProvider {
 }
 
 export interface RawCore {
+  mailboxSync(argsJson: string): Promise<string>;
   /** Must be called before anything else. Idempotent across JS reloads. */
   initCore(appDataDir: string, documentsDir: string | undefined): void | Promise<void>;
 

@@ -1,0 +1,23 @@
+[Unit]
+Description=Type encrypted sync peer
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=type-sync
+Group=type-sync
+StateDirectory=type-sync-peer
+StateDirectoryMode=0700
+ExecStart=/usr/local/bin/type-sync-peer serve /var/lib/type-sync-peer
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

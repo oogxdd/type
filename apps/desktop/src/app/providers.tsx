@@ -1,3 +1,4 @@
+import { MailboxProvider } from "@/features/sync/hooks/mailbox-context";
 import { TagsProvider } from "@/features/tags/hooks/tags-context";
 import { useRef, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -82,7 +83,7 @@ function UnlockedAppProviders({
               <FlushSaveBridge flushSaveRef={flushSaveRef} />
               <AppLifecycle />
               <AppReadinessGate>
-                <CaptureFeatureProviders>{children}</CaptureFeatureProviders>
+                <MailboxProvider><CaptureFeatureProviders>{children}</CaptureFeatureProviders></MailboxProvider>
               </AppReadinessGate>
             </NotesTreeProvider>
           </EditorProvider>

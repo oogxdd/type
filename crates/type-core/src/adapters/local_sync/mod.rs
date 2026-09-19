@@ -135,7 +135,7 @@ pub fn set_local_sync_push_listener(listener: Box<dyn Fn() + Send + Sync>) {
 }
 
 #[cfg(desktop)]
-fn notify_local_sync_push_received() {
+pub(crate) fn notify_local_sync_push_received() {
     if let Ok(guard) = PUSH_LISTENER.lock() {
         if let Some(listener) = guard.as_ref() {
             listener();

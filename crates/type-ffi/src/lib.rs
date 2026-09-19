@@ -125,3 +125,6 @@ pub(crate) fn to_json<T: serde::Serialize>(value: &T) -> Result<String, String> 
 pub(crate) fn from_json<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, String> {
     serde_json::from_str(json).map_err(|error| format!("Invalid arguments: {error}"))
 }
+
+mod mailbox_sync;
+pub use mailbox_sync::*;

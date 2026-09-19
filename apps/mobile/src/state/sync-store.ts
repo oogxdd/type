@@ -13,6 +13,8 @@ import type {
   GitSyncStatus,
   GitTransferProgress,
   IrohClientStatus,
+  MailboxAction,
+  MailboxStatus,
 } from "@typenotes/shared/types";
 
 import {
@@ -68,6 +70,9 @@ const logSync = (message: string) => {
 };
 
 type SyncState = {
+  mailboxStatus: MailboxStatus | null;
+  mailboxAction: (args: MailboxAction) => Promise<MailboxStatus>;
+
   status: GitSyncStatus | null;
   history: GitCommitHistoryEntry[];
   action: SyncAction;
@@ -274,7 +279,8 @@ export const useSyncStore = create<SyncState>((set, get) => {
 
   const run = async (
     action: SyncAction,
-    work: () => Promise<GitSyncStatus | null>
+    work: () => Promise<GitSyncStatus | null>,
+    gitTransport = true,
   ) => {
     const startedAt = Date.now();
     logSync(`${action}: started`);
@@ -282,7 +288,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
     // Surface libgit2's transfer progress (objects/bytes) while the network
     // action runs; the core publishes a snapshot that is cheap to poll.
     const progressTimer =
-      action === "refresh" || action === "commit"
+      !gitTransport || action === "refresh" || action === "commit"
         ? null
         : setInterval(() => {
             const progress = core.getGitSyncProgress();
@@ -296,7 +302,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
     } catch (error) {
       const raw = getErrorMessage(error);
       logSync(`${action}: failed after ${Date.now() - startedAt}ms - ${raw}`);
-      const message = await explainWithTransport(raw);
+      const message = gitTransport ? await explainWithTransport(raw) : raw;
       set({ action: "idle", error: message, hint: getSyncHint(message) });
       throw error;
     } finally {
@@ -349,9 +355,11 @@ export const useSyncStore = create<SyncState>((set, get) => {
       clearTimeout(autoSyncTimer);
     }
     logSync(`auto: scheduled after ${reason} in ${delayMs}ms`);
-    autoSyncTimer = setTimeout(() => {
+    autoSyncTimer = setTimeout(async () => {
       autoSyncTimer = null;
-      if (!savedGitConnection()) {
+      const mailbox = await core.mailboxSync({ action: "status" }).catch(() => null);
+      set({ mailboxStatus: mailbox });
+      if (!savedGitConnection() && !mailbox?.enabled) {
         logSync(`auto: skipped ${reason}; no saved remote`);
         return;
       }
@@ -366,7 +374,8 @@ export const useSyncStore = create<SyncState>((set, get) => {
         .syncNow()
         .then(() => {
           autoSyncFailureCount = 0;
-          set({ autoSyncState: "synced", lastAutoSyncedAt: Date.now() });
+          set({ autoSyncState: get().mailboxStatus?.enabled ? "uploaded_to_peer" : "synced", lastAutoSyncedAt: Date.now() });
+          if (get().mailboxStatus?.enabled) scheduleAutoSyncAttempt("peer check", 30_000);
         })
         .catch((error) => {
           autoSyncFailureCount += 1;
@@ -375,7 +384,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
             `auto: ${reason} failed silently - ${getErrorMessage(error)}; retry in ${retryMs}ms`
           );
           set({
-            autoSyncState: "waiting_for_computer",
+            autoSyncState: get().mailboxStatus?.enabled ? "waiting_for_peer" : "waiting_for_computer",
             error: null,
             hint: null,
           });
@@ -510,9 +519,26 @@ export const useSyncStore = create<SyncState>((set, get) => {
       }
     },
 
+    mailboxStatus: null,
+    mailboxAction: async (args) => {
+      requireIdle("sync peer");
+      let result: MailboxStatus | null = null;
+      await run("connect", async () => {
+        result = await core.mailboxSync(args);
+        const { pairing_secret: _secret, ...publicStatus } = result;
+        set({ mailboxStatus: publicStatus });
+        return null;
+      }, false);
+      if (args.action === "configure") get().scheduleAutoSync("peer connected", 0);
+      return result!;
+    },
+
     refresh: async () => {
       if (isBusy("refresh")) return;
-      await run("refresh", () => core.getGitStatus());
+      await run("refresh", async () => {
+        set({ mailboxStatus: await core.mailboxSync({ action: "status" }) });
+        return core.getGitStatus();
+      });
     },
 
     connect: async (args) => {
@@ -661,13 +687,34 @@ export const useSyncStore = create<SyncState>((set, get) => {
         logSync("sync now: starting pull then push");
         set({ autoSyncState: "syncing" });
         try {
+          const mailbox = await core.mailboxSync({ action: "status" });
+          set({ mailboxStatus: mailbox });
+          if (mailbox.enabled) {
+            await run("pull", async () => {
+              const headBefore = await headCommitId();
+              try {
+                const result = await core.mailboxSync({ action: "sync" });
+                set({ mailboxStatus: result });
+                return await core.getGitStatus();
+              } finally {
+                // A pull may have applied before an upload failed. Reflect
+                // those disk changes even when the full exchange rejects.
+                if (await headCommitId() !== headBefore) {
+                  await useNotesStore.getState().refresh().catch(() => {});
+                }
+              }
+            }, false);
+            autoSyncFailureCount = 0;
+            set({ autoSyncState: "uploaded_to_peer", lastAutoSyncedAt: Date.now() });
+            return;
+          }
           await performPull();
           logSync("sync now: pull complete; starting push");
           await performPush(undefined, get().status);
           autoSyncFailureCount = 0;
-          set({ autoSyncState: "synced", lastAutoSyncedAt: Date.now() });
+          set({ autoSyncState: get().mailboxStatus?.enabled ? "uploaded_to_peer" : "synced", lastAutoSyncedAt: Date.now() });
         } catch (error) {
-          set({ autoSyncState: "waiting_for_computer" });
+          set({ autoSyncState: get().mailboxStatus?.enabled ? "waiting_for_peer" : "waiting_for_computer" });
           throw error;
         }
       }).finally(() => {

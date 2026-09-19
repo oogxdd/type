@@ -2,7 +2,9 @@ export type AutoSyncState =
   | "saved_locally"
   | "syncing"
   | "waiting_for_computer"
-  | "synced";
+  | "synced"
+  | "uploaded_to_peer"
+  | "waiting_for_peer";
 
 const RETRY_DELAYS_MS = [2_000, 5_000, 10_000, 30_000, 60_000, 5 * 60_000] as const;
 
@@ -20,6 +22,10 @@ export const autoSyncLabel = (state: AutoSyncState | null): string | null => {
       return "Syncing…";
     case "waiting_for_computer":
       return "Waiting for computer";
+    case "uploaded_to_peer":
+      return "Uploaded to peer";
+    case "waiting_for_peer":
+      return "Waiting for sync peer";
     case "synced":
       return "Synced";
     default:

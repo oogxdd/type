@@ -8218,6 +8218,7 @@ dependencies = [
  "subtle",
  "time",
  "tokio",
+ "type-sync-peer",
  "uuid",
  "zeroize",
  "zip 0.6.6",
@@ -8233,6 +8234,21 @@ dependencies = [
  "tokio",
  "type-core",
  "uniffi",
+]
+
+[[package]]
+name = "type-sync-peer"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "chacha20poly1305",
+ "iroh",
+ "rand_core 0.6.4",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "subtle",
+ "tokio",
 ]
 
 [[package]]

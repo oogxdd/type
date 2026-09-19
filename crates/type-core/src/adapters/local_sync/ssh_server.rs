@@ -305,6 +305,14 @@ impl Handler for ClientHandler {
             return Ok(());
         }
 
+        let operation = match crate::adapters::git::lock_git_sync_operation(&self.shared.repo_path) {
+            Ok(lock) => lock,
+            Err(error) => {
+                session.channel_success(channel)?;
+                fail_channel(session, channel, &error);
+                return Ok(());
+            }
+        };
         eprintln!("[local-sync] serving {service} for '{requested_path}'");
         // Serve the latest notes: the desktop edits its working tree without
         // committing, so pending changes are committed here — right before a
@@ -345,6 +353,7 @@ impl Handler for ClientHandler {
             child,
             service,
             self.shared.repo_path.clone(),
+            operation,
         );
         Ok(())
     }
@@ -392,9 +401,11 @@ fn pump_child_io(
     mut child: Child,
     service: &'static str,
     repo_path: PathBuf,
+    operation: crate::adapters::git::GitSyncOperationGuard,
 ) {
     let handle = session.handle();
     tokio::spawn(async move {
+        let _operation = operation;
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
 

@@ -514,3 +514,15 @@ export type ProfilesSnapshot = {
   profiles: NotesProfile[];
   app_config: AppConfig;
 };
+
+/** Secrets are returned only by the explicit pairing action, never by status. */
+export type MailboxStatus = {
+  enabled: boolean;
+  endpoint: string | null;
+  revision: number;
+  last_sync_ms: number | null;
+  pairing_secret?: string;
+};
+export type MailboxAction =
+  | { action: "status" | "pairing" | "sync" | "disconnect" }
+  | { action: "configure"; secret_code: string };

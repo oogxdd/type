@@ -4,6 +4,7 @@ mod git_sync;
 mod handwriting;
 mod import;
 mod local_sync;
+mod mailbox_sync;
 mod notes;
 mod profiles;
 mod recordings;
@@ -66,6 +67,7 @@ pub(super) fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            mailbox_sync::mailbox_sync,
             app_icon::set_app_icon,
             security::get_security_state,
             security::enable_security,

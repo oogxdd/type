@@ -516,3 +516,14 @@ The React Native app (Expo) reuses the Rust core through
 - **Vim mode splits visual and logical lines on purpose.** `j`/`k` move by *visual* line (layout geometry, effectively Vim's `gj`/`gk`) because one prose paragraph is one logical line and jumping whole paragraphs would be useless. Everything linewise — `dd`, `V`, `dj`, `yy`, `cc` — operates on *logical* lines, so `dd` deletes the paragraph. Don't "fix" one to match the other. Related: charwise Visual selects the character under the cursor, so the ProseMirror selection head sits one past it — `VimHost.visualHead` is the authoritative cursor while Visual is active, never `selection.head`. Command keys are normalised to the US layout via `event.code` (so `dd` works on a Cyrillic layout) while `f{c}`/`r{c}` read `event.key`. Full keymap and rationale: [docs/VIM_MODE.md](./docs/VIM_MODE.md).
 - **`shouldNestNotesInNavigation`**: When `notesListMode === "nested"`, notes appear inline inside the folder tree instead of in a separate middle pane. This affects keyboard navigation, rendering, and the visible navigation items computation.
 - **Context split ordering matters**: SelectionContext and EditorContext are above NotesTreeContext in the provider tree. NotesTreeContext consumes both to update selection/editor after CRUD ops. Don't reorder providers without understanding these dependencies.
+
+## Encrypted sync peer
+
+`crates/type-sync-peer` is the standalone Linux Iroh mailbox and shared envelope/
+wire implementation. It must never receive a vault encryption key or plaintext.
+`type-core`'s `mailbox_sync` domain owns per-root app-data credentials, incremental
+Git pack encryption/merge, audio encryption, and rollback pins. Local Markdown
+stays plaintext. Tauri/UniFFI expose `mailbox_sync`; both apps configure it in
+Sync settings. See `docs/ENCRYPTED_SYNC_PEER.md` for Linux/systemd deployment,
+pairing, limits, and retention. Do not log device pairing codes. “Uploaded to
+peer” is not a desktop durability receipt and must not authorize audio pruning.

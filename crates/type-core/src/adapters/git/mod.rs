@@ -149,6 +149,7 @@ impl GitSyncGateway for GitSyncAdapter {
 
     fn connect(&self, args: Self::ConnectArgs) -> Result<Self::Status, String> {
         let (root, settings) = self.resolve_settings();
+        let _operation = lock_git_sync_operation(&root)?;
 
         let remote_url = args
             .remote_url
@@ -234,6 +235,7 @@ impl GitSyncGateway for GitSyncAdapter {
 
     fn pull(&self, args: Self::PullArgs) -> Result<Self::Status, String> {
         let (root, settings) = self.resolve_settings();
+        let _operation = lock_git_sync_operation(&root)?;
         if !git_repo_initialized(&root) {
             return Err("Repository is not initialized. Connect a remote first.".to_string());
         }
@@ -317,6 +319,7 @@ impl GitSyncGateway for GitSyncAdapter {
 
     fn commit(&self, args: Self::CommitArgs) -> Result<Self::Status, String> {
         let (root, settings) = self.resolve_settings();
+        let _operation = lock_git_sync_operation(&root)?;
         let repo = ensure_git_repo(&root)?;
         let branch = args
             .branch
@@ -341,6 +344,7 @@ impl GitSyncGateway for GitSyncAdapter {
 
     fn push(&self, args: Self::PushArgs) -> Result<Self::Status, String> {
         let (root, settings) = self.resolve_settings();
+        let _operation = lock_git_sync_operation(&root)?;
         if !git_repo_initialized(&root) {
             return Err("Repository is not initialized. Connect a remote first.".to_string());
         }
@@ -852,6 +856,25 @@ pub fn ensure_git_repo(root: &Path) -> Result<Repository, String> {
         set_audio_git_exclusion(&repo, true)?;
     }
     Ok(repo)
+}
+
+/// Serialize mailbox, manual Git and embedded SSH operations on one working
+/// tree, including across processes. The lock lives inside .git and never syncs.
+pub(crate) struct GitSyncOperationGuard(fs::File);
+impl Drop for GitSyncOperationGuard {
+    fn drop(&mut self) {
+        // Release explicitly: on Unix a concurrently forked child can inherit
+        // the open file description until exec, even with FD_CLOEXEC set.
+        let _ = self.0.unlock();
+    }
+}
+
+pub(crate) fn lock_git_sync_operation(root: &Path) -> Result<GitSyncOperationGuard, String> {
+    let repo = ensure_git_repo(root)?;
+    let lock = fs::OpenOptions::new().create(true).truncate(false).write(true)
+        .open(repo.path().join("type-sync-operation.lock")).map_err(|e| e.to_string())?;
+    lock.try_lock().map_err(|_| "Another sync is using this notes folder. Retry shortly.".to_string())?;
+    Ok(GitSyncOperationGuard(lock))
 }
 
 /// Append device-only metadata to `.git/info/exclude` (repo-local, not synced)
