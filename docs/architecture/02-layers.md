@@ -3,19 +3,22 @@
 Backend сейчас устроен так:
 
 ```text
-src-tauri/src/
+crates/type-core/src/
   domain/
   application/
   ports/
   adapters/
-  commands/
+
+apps/desktop/src-tauri/src/commands/  # Tauri-оболочка
+crates/type-ffi/src/                 # UniFFI-оболочка
 ```
 
 Можно думать об этом как о пяти разных ролях в команде.
 
 ## `commands/`: входная дверь
 
-Файлы: `src-tauri/src/commands/*.rs`
+Файлы: `apps/desktop/src-tauri/src/commands/*.rs`.
+Параллельный мобильный вход — экспорты `crates/type-ffi/src/*.rs`.
 
 Это Tauri IPC слой. Он похож на controller в Express/Nest/Rails:
 
@@ -33,7 +36,7 @@ Command не должен сам решать, как создать замет�
 ```rust
 #[tauri::command]
 pub(super) fn read_note(app: tauri::AppHandle, path: String) -> Result<String, String> {
-    ensure_security_unlocked_for_app(&app)?;
+    ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     notes_service(&app)?.read_note(&path)
 }
 ```
@@ -42,7 +45,7 @@ pub(super) fn read_note(app: tauri::AppHandle, path: String) -> Result<String, S
 
 ## `application/`: сценарии приложения
 
-Файлы: `src-tauri/src/application/*.rs`
+Файлы: `crates/type-core/src/application/*.rs`
 
 Здесь живут use cases:
 
@@ -71,7 +74,8 @@ Application слой отвечает на вопрос:
 
 ## `domain/`: язык предметной области
 
-Файлы: `src-tauri/src/domain/*.rs`
+Файлы: `crates/type-core/src/domain/*.rs`. Кроме note-типов, здесь есть модели
+реестра тегов. Это не полный список функциональных доменов приложения.
 
 Сейчас туда вынесены note-типы:
 
@@ -88,7 +92,7 @@ Domain — это словарь приложения. Он не должен з
 
 ## `ports/`: контракты
 
-Файлы: `src-tauri/src/ports/*.rs`
+Файлы: `crates/type-core/src/ports/*.rs`
 
 Port — это trait, который говорит:
 
@@ -107,7 +111,7 @@ Application знает: "мне нужно расшифровать body". Но 
 
 ## `adapters/`: реальный мир
 
-Файлы: `src-tauri/src/adapters/*.rs` и папки внутри `adapters/`
+Файлы: `crates/type-core/src/adapters/*.rs` и папки внутри `adapters/`
 
 Adapter реализует port через конкретную технологию:
 
@@ -116,8 +120,10 @@ Adapter реализует port через конкретную технолог
 - security runtime;
 - `git2`;
 - `reqwest`;
-- Tauri app data;
-- iOS Objective-C interop.
+- пути и окружение, переданные через `AppEnv`.
+
+Tauri и native UI интеграции находятся в оболочках; core не принимает
+`tauri::AppHandle`.
 
 Например:
 

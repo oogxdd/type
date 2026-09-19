@@ -1,0 +1,130 @@
+Create a very high resolution landscape architectural reference image in a clean Excalidraw style. OPAQUE SOLID WHITE BACKGROUND everywhere, absolutely NO TRANSPARENCY, no black background. Slightly hand-drawn charcoal container outlines, muted pastel fills, hand-lettered domain headings, crisp readable monospace function identifiers. User needs both conceptual architecture AND complete detailed functions grouped by purpose. Do not oversimplify.
+
+Architecture flows horizontally: large Rust Core on LEFT, platforms on RIGHT. Rust Core contains nine domain boxes in three columns with variable heights: column1 notes/profiles/tag_registry; column2 recordings/git_sync; column3 local_sync/security/handwriting/import. Within each domain show named SUBGROUPS with a clear small heading and a thin separator. Each function under its subgroup is on its own line with two right-aligned status columns labeled "API" and "Вызовы". The matrix below is exact: function | API | Вызовы. Use every row once. 70 unique functions total: 68 in nine domain boxes, 2 shell functions beside platforms. No infrastructure panel. Domain grouping is semantic, not physical module boundaries.
+
+Every subgroup heading is visible, with breathing room, subtle rule or indentation separating subgroups. The user specifically wants to see subdivisions, especially notes: tree, reads/writes, metadata, tags, files/folders. Preserve all exact function identifiers and status values. Avoid wrapping identifiers. Request canvas around 3840x2560 or similarly high resolution to hold all the text. No decorative icons or extra explanations. Never replace lists with examples, 'etc', or ellipses.
+
+Footer in clear readable text:
+"D — Desktop · M — Mobile · DM — обе платформы"
+"API — доступно через оболочку. Вызовы — обращения найдены в frontend. — = не найдено."
+"Группы — по назначению, не по структуре файлов. Проверка исходников, не трассировка."
+Do not print incorrect counts. If counts printed: 63 Tauri, 52 UniFFI, 70 unique names.
+Data:
+
+DOMAIN: notes
+SUBGROUP: Дерево
+get_tree | DM | DM
+SUBGROUP: Чтение и запись
+read_note | DM | DM
+create_note | DM | DM
+write_note | DM | DM
+SUBGROUP: Метаданные
+get_note_meta | DM | DM
+list_note_previews | DM | DM
+set_note_timestamp | DM | —
+update_note_markers | DM | DM
+SUBGROUP: Теги
+update_note_tags | DM | —
+SUBGROUP: Файлы и папки
+get_absolute_path | D | D
+move_items | DM | DM
+delete_items | DM | DM
+rename_item | DM | D
+set_order | DM | D
+
+DOMAIN: profiles
+SUBGROUP: Рабочие папки
+get_profiles | DM | DM
+create_profile | DM | DM
+set_active_profile | DM | DM
+set_profile_notes_root | DM | DM
+update_profile | DM | D
+delete_profile | DM | D
+SUBGROUP: Настройки
+update_profile_settings | DM | DM
+update_app_config | DM | DM
+SUBGROUP: Бэкап и экспорт
+create_profiles_backup_zip | DM | M
+export_profiles_to_documents | DM | —
+
+DOMAIN: security
+SUBGROUP: Состояние и доступ
+get_security_state | DM | DM
+lock_security | DM | DM
+unlock_security | DM | DM
+SUBGROUP: Настройка защиты
+enable_security | DM | D
+set_security_preferences | DM | D
+
+DOMAIN: recordings
+SUBGROUP: Аудио и кэш
+save_audio_recording | DM | DM
+list_recordings | DM | D
+read_recording_audio | DM | M
+resolve_recording_audio_path | D | D
+prune_mobile_audio_cache | M | M
+SUBGROUP: Транскрипция
+queue_recording_transcriptions | DM | DM
+queue_local_transcriptions | D | D
+queue_provider_transcriptions | M | M
+retrigger_transcription | D | D
+check_whisper_status | D | D
+SUBGROUP: Импорт аудио
+import_audio_files | D | D
+audio_import_status | D | D
+
+DOMAIN: handwriting
+SUBGROUP: Вложения
+save_handwriting_attachment | DM | DM
+SUBGROUP: OCR
+queue_handwriting_ocr | D | D
+list_handwriting_ocr_jobs | D | D
+check_local_ocr_status | D | D
+
+DOMAIN: import
+SUBGROUP: Импорт Apple Notes
+scan_apple_notes_folder | D | D
+start_apple_notes_import | D | D
+apple_import_status | D | D
+
+DOMAIN: git_sync
+SUBGROUP: SSH-ключи
+generate_ssh_key | DM | DM
+get_ssh_public_key | DM | DM
+delete_ssh_key | DM | DM
+SUBGROUP: Состояние и история
+get_git_status | DM | DM
+get_git_sync_progress | DM | M
+get_git_history | DM | DM
+SUBGROUP: Подключение и обмен
+connect_git_repo | DM | DM
+git_pull | DM | DM
+git_commit | DM | DM
+git_push | DM | DM
+
+DOMAIN: local_sync
+SUBGROUP: Desktop-сервер
+get_local_sync_server_status | D | D
+start_local_sync_server | D | D
+stop_local_sync_server | D | D
+discover_local_sync_servers | D | —
+SUBGROUP: Mobile / Iroh
+start_iroh_sync_client | M | M
+iroh_client_status | M | M
+SUBGROUP: Перенос аудио
+archive_mobile_audio_with_iroh | M | M
+set_mobile_audio_git_exclusion | M | M
+
+DOMAIN: tag_registry
+SUBGROUP: Справочник тегов
+read_tag_registry | DM | D
+write_tag_registry | DM | D
+
+DOMAIN: shell
+SUBGROUP: Служебные функции
+set_app_icon | D | D
+init_core | M | M
+
+
+Variants: current architecture with two arrows labeled Tauri commands / FFI to Desktop / Mobile; proposed architecture adds shared store factories behind CoreApi and keeps separate runtime instances.
+Final targeted edit: profiles count 10; save_handwriting_attachment usage DM; arrow label Tauri commands.

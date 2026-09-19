@@ -178,11 +178,42 @@ or an app stopped. Do not switch the live history while these facts are unknown.
    branch/audio objects reappeared. The new phone folder may show recordings as
    archived on the desktop; old phone-local audio cache files are not copied
    into it automatically.
-10. **Retire old clones.** Only after verification, remove the old phone working
-    folder through the app if its deletion behavior is understood. Never sync it
-    again. Keep the full desktop backup until every device has migrated and the
-    user is satisfied. Removing the old phone folder, including its Git database,
-    is what reclaims that old history's phone storage.
+10. **Keep old clones inactive; cleanup is not yet a mobile UI feature.**
+    The mobile Working Folders screen supports creation and selection, but has
+    no delete action. The core `delete_profile_state` removes the profile entry
+    only; it does not delete its notes root or Git database. Do not claim this
+    frees storage. A separate verified cleanup implementation or a full app-data
+    reset is required to reclaim the old phone repository. Keep the full desktop
+    backup until every device has migrated and the user is satisfied.
+
+### Verified phone UI and alternatives (2026-09-17)
+
+The current route is **Settings → Working Folders → New working folder → name →
+Create**. Creation automatically selects the new profile, whose sync settings
+are initially empty. Then open **Sync → Scan QR code**, pair, and run **Sync now**.
+Do not switch profiles during an active sync. Prefer creating/selecting the fresh
+phone folder immediately after the last successful old-history sync and before
+replacing the desktop `.git`; this avoids foreground auto-sync from the old
+profile after the swap. Close the apps afterward and continue the desktop steps.
+
+The core regression test
+`new_phone_profile_connects_to_existing_history_without_old_commits` covers actual
+profile creation, selection, exclusion setup, connection and pull from a local
+Git peer, and absence of old-profile commits in the new repository. This is not
+an on-device camera/SSH/Iroh end-to-end test or verification of the installed app.
+
+A fresh working folder is not the only possible migration:
+
+- Reinitializing only the phone's `.git` while preserving its profile and files
+  could provide a simpler user flow, but no such command/UI exists today. It
+  needs a guarded reset/reclone implementation and unsynced-data safeguards.
+- Removing and reinstalling the phone app (not offloading it on iOS) can give a
+  fresh app container and reclaim old history, but removes all local working
+  folders, settings and keys. Consider it only after verified backups and full
+  desktop receipt of every device's data; do not recommend it as harmless cleanup.
+- Retaining the old history needs no migration at all. The fixes prevent new
+  Iroh audio from entering Git; old blobs remain. This is reasonable if reclaiming
+  the measured roughly 79 MB is not worth the one-time device migration.
 
 If activation fails before new edits exist, stop every peer and restore the old
 Git database and any changed device-local connection settings from the backup.

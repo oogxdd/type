@@ -246,3 +246,213 @@ pub fn save_word_level_json(
         .map_err(|e| format!("Failed to write transcription JSON: {}", e))?;
     Ok(json_path)
 }
+
+// ── Word-gap reflow ───────────────────────────────────────────────────────
+//
+// Local whisper is the only backend with word-level timestamps, so it's the
+// only one that can lay out a pause as whitespace instead of a plain space.
+// Tune the two thresholds here — nothing else needs to change.
+
+/// A pause at or above this many seconds becomes a single line break.
+pub const LINE_BREAK_GAP_SECONDS: f64 = 0.2;
+/// A pause at or above this many seconds becomes a blank-line paragraph break.
+pub const PARAGRAPH_GAP_SECONDS: f64 = 2.0;
+
+#[derive(Deserialize)]
+struct TimedWord {
+    word: String,
+    start: f64,
+    end: f64,
+}
+
+#[derive(Deserialize)]
+struct WordsPayload {
+    words: Option<Vec<TimedWord>>,
+}
+
+fn no_space_before(c: char) -> bool {
+    // '-' is included because faster-whisper splits a hyphenated compound
+    // into separate word tokens with the hyphen glued onto the continuation
+    // (e.g. "кого" + "-то", "по" + "-любому") rather than as its own token.
+    matches!(
+        c,
+        ',' | '.' | '!' | '?' | ';' | ':' | ')' | ']' | '}' | '-' | '\u{2019}' | '\u{201D}'
+    )
+}
+
+fn no_space_after(c: char) -> bool {
+    matches!(c, '(' | '[' | '{' | '\u{2018}' | '\u{201C}')
+}
+
+/// A word ending a sentence (trailing quotes/brackets stripped first) makes
+/// any pause after it — even one under `PARAGRAPH_GAP_SECONDS` — read as a
+/// paragraph break rather than a mid-sentence line break.
+fn ends_sentence(token: &str) -> bool {
+    let trimmed = token.trim_end_matches(['"', '\'', ')', ']', '\u{2019}', '\u{201D}']);
+    matches!(trimmed.chars().last(), Some('.') | Some('!') | Some('?'))
+}
+
+/// Rebuild transcript text from the word-level timestamps in `full_json`
+/// (the same payload `save_word_level_json` persists): a pause >=
+/// `LINE_BREAK_GAP_SECONDS` wraps to a new line inside the same paragraph,
+/// and a pause >= `PARAGRAPH_GAP_SECONDS` (or any pause at all right after a
+/// sentence-ending word — see `ends_sentence`) starts a new paragraph.
+/// Returns `None` when `full_json` carries no usable word timestamps, so
+/// callers can fall back to the plain transcript untouched.
+pub fn reformat_transcript_with_word_gaps(full_json: &str) -> Option<String> {
+    let payload: WordsPayload = serde_json::from_str(full_json).ok()?;
+    let words = payload.words?;
+    if words.is_empty() {
+        return None;
+    }
+
+    let mut out = String::new();
+    let mut prev_end: Option<f64> = None;
+    let mut prev_token: Option<&str> = None;
+    for w in &words {
+        let token = w.word.trim();
+        if token.is_empty() {
+            continue;
+        }
+        if let Some(prev) = prev_end {
+            // A hyphen-glued continuation (faster-whisper splits a hyphenated
+            // compound into e.g. "кого" + "-то") must never get a line/paragraph
+            // break or a space, no matter the gap — it's one word, not a pause.
+            let is_hyphen_continuation = token.starts_with('-');
+            let gap = w.start - prev;
+            let after_sentence_end = prev_token.is_some_and(ends_sentence);
+            if is_hyphen_continuation {
+                // glued directly below
+            } else if gap >= PARAGRAPH_GAP_SECONDS
+                || (after_sentence_end && gap >= LINE_BREAK_GAP_SECONDS)
+            {
+                out.push_str("\n\n");
+            } else if gap >= LINE_BREAK_GAP_SECONDS {
+                out.push('\n');
+            } else {
+                let skip_space = token.chars().next().is_some_and(no_space_before)
+                    || out.chars().last().is_some_and(no_space_after);
+                if !skip_space {
+                    out.push(' ');
+                }
+            }
+        }
+        out.push_str(token);
+        prev_end = Some(w.end);
+        prev_token = Some(token);
+    }
+    let trimmed = out.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::reformat_transcript_with_word_gaps;
+
+    fn words_json(words: &[(&str, f64, f64)]) -> String {
+        let entries: Vec<String> = words
+            .iter()
+            .map(|(word, start, end)| {
+                format!(
+                    r#"{{"word":"{}","start":{},"end":{},"probability":0.9}}"#,
+                    word, start, end
+                )
+            })
+            .collect();
+        format!(r#"{{"type":"result","words":[{}]}}"#, entries.join(","))
+    }
+
+    #[test]
+    fn short_gap_stays_a_space() {
+        let json = words_json(&[("Hello", 0.0, 0.5), ("there", 0.55, 1.0)]);
+        assert_eq!(
+            reformat_transcript_with_word_gaps(&json),
+            Some("Hello there".to_string())
+        );
+    }
+
+    #[test]
+    fn gap_at_or_above_line_threshold_wraps_within_the_same_paragraph() {
+        let json = words_json(&[("Hello", 0.0, 0.5), ("there", 0.8, 1.0)]);
+        assert_eq!(
+            reformat_transcript_with_word_gaps(&json),
+            Some("Hello\nthere".to_string())
+        );
+    }
+
+    #[test]
+    fn gap_at_or_above_paragraph_threshold_starts_a_new_paragraph() {
+        let json = words_json(&[("Hello", 0.0, 0.5), ("there", 2.5, 3.0)]);
+        assert_eq!(
+            reformat_transcript_with_word_gaps(&json),
+            Some("Hello\n\nthere".to_string())
+        );
+    }
+
+    #[test]
+    fn punctuation_never_gets_a_leading_space() {
+        let json = words_json(&[("Hello", 0.0, 0.5), (",", 0.5, 0.5), ("world", 0.55, 1.0)]);
+        assert_eq!(
+            reformat_transcript_with_word_gaps(&json),
+            Some("Hello, world".to_string())
+        );
+    }
+
+    #[test]
+    fn hyphenated_compound_split_across_tokens_stays_glued_even_across_a_gap() {
+        // faster-whisper emits "кого" then "-то" as two word entries for
+        // "кого-то" — regression test for the note that showed up as
+        // "кого -то" (space) instead of "кого-то" (glued).
+        let json = words_json(&[
+            ("кого", 42.66, 43.28),
+            ("-то", 43.28, 43.46),
+            ("по", 43.46, 43.64),
+            ("-любому", 3.0, 3.64), // artificial large "gap" before it
+        ]);
+        assert_eq!(
+            reformat_transcript_with_word_gaps(&json),
+            Some("кого-то по-любому".to_string())
+        );
+    }
+
+    #[test]
+    fn pause_after_sentence_end_starts_a_new_paragraph_even_under_the_paragraph_threshold() {
+        // Gap here (0.68s) is well under PARAGRAPH_GAP_SECONDS (2.0s), but the
+        // previous word ends the sentence, so it should still start a new
+        // paragraph rather than just wrap within the same one.
+        let json = words_json(&[("ты.", 0.0, 0.5), ("Поэтому,", 1.18, 1.5)]);
+        assert_eq!(
+            reformat_transcript_with_word_gaps(&json),
+            Some("ты.\n\nПоэтому,".to_string())
+        );
+    }
+
+    #[test]
+    fn pause_mid_sentence_stays_a_wrapped_line() {
+        let json = words_json(&[("возможно,", 0.0, 0.5), ("это", 0.8, 1.0)]);
+        assert_eq!(
+            reformat_transcript_with_word_gaps(&json),
+            Some("возможно,\nэто".to_string())
+        );
+    }
+
+    #[test]
+    fn missing_words_field_returns_none() {
+        assert_eq!(
+            reformat_transcript_with_word_gaps(r#"{"type":"result","text":"hi"}"#),
+            None
+        );
+    }
+
+    #[test]
+    fn empty_words_array_returns_none() {
+        assert_eq!(
+            reformat_transcript_with_word_gaps(r#"{"type":"result","words":[]}"#),
+            None
+        );
+    }
+}

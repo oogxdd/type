@@ -1,0 +1,532 @@
+{
+  "get_tree": {
+    "desktop": [
+      "apps/desktop/src/features/notes/navigation/state/use-notes-tree-actions.ts:95",
+      "apps/desktop/src/features/notes/navigation/state/use-notes-tree-state.ts:95"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/notes-store.ts:82",
+      "apps/mobile/src/state/notes-store.ts:124",
+      "apps/mobile/src/state/notes-store.ts:150"
+    ]
+  },
+  "read_note": {
+    "desktop": [
+      "apps/desktop/src/features/lens/components/multi-note-review.tsx:41",
+      "apps/desktop/src/features/lens/hooks/use-lens-annotations.ts:125",
+      "apps/desktop/src/features/lens/hooks/use-lens-annotations.ts:298",
+      "apps/desktop/src/features/notes/editor/hooks/use-note-editor.ts:115",
+      "apps/desktop/src/features/selection-tags/lib/persist-selection-tag.ts:13"
+    ],
+    "mobile": [
+      "apps/mobile/src/screens/editor-screen.tsx:50"
+    ]
+  },
+  "get_absolute_path": {
+    "desktop": [
+      "apps/desktop/src/desktop/desktop-context-menu.tsx:53"
+    ],
+    "mobile": []
+  },
+  "create_note": {
+    "desktop": [
+      "apps/desktop/src/features/notes/navigation/state/use-notes-tree-actions.ts:101",
+      "apps/desktop/src/features/notes/navigation/state/use-notes-tree-actions.ts:551"
+    ],
+    "mobile": [
+      "apps/mobile/src/screens/capture-screen.tsx:207"
+    ]
+  },
+  "write_note": {
+    "desktop": [
+      "apps/desktop/src/desktop/hooks/use-desktop-editor-pane.ts:73",
+      "apps/desktop/src/features/lens/hooks/use-lens-annotations.ts:300",
+      "apps/desktop/src/features/notes/editor/hooks/use-note-editor.ts:50",
+      "apps/desktop/src/features/selection-tags/lib/persist-selection-tag.ts:21"
+    ],
+    "mobile": [
+      "apps/mobile/src/screens/capture-screen.tsx:212",
+      "apps/mobile/src/screens/editor-screen.tsx:80"
+    ]
+  },
+  "set_note_timestamp": {
+    "desktop": [],
+    "mobile": []
+  },
+  "update_note_markers": {
+    "desktop": [
+      "apps/desktop/src/features/notes/navigation/state/use-notes-tree-actions.ts:443"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/notes-store.ts:183"
+    ]
+  },
+  "get_note_meta": {
+    "desktop": [
+      "apps/desktop/src/features/notes/navigation/state/use-notes-tree-actions.ts:158",
+      "apps/desktop/src/features/notes/navigation/state/use-notes-tree-actions.ts:517"
+    ],
+    "mobile": [
+      "apps/mobile/src/screens/editor-screen.tsx:59"
+    ]
+  },
+  "list_note_previews": {
+    "desktop": [
+      "apps/desktop/src/features/notes/list/hooks/use-note-previews.ts:111",
+      "apps/desktop/src/features/notes/list/hooks/use-note-previews.ts:183"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/notes-store.ts:29"
+    ]
+  },
+  "move_items": {
+    "desktop": [
+      "apps/desktop/src/features/notes/navigation/hooks/use-drag-drop.ts:323",
+      "apps/desktop/src/features/notes/navigation/hooks/use-drag-drop.ts:388",
+      "apps/desktop/src/features/notes/navigation/hooks/use-drag-drop.ts:406",
+      "apps/desktop/src/features/notes/navigation/state/use-notes-tree-actions.ts:373",
+      "apps/desktop/src/features/notes/navigation/state/use-notes-tree-actions.ts:403",
+      "apps/desktop/src/features/notes/navigation/state/use-notes-tree-actions.ts:489"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/notes-store.ts:166"
+    ]
+  },
+  "delete_items": {
+    "desktop": [
+      "apps/desktop/src/features/notes/editor/hooks/use-note-editor.ts:83",
+      "apps/desktop/src/features/notes/navigation/state/use-notes-tree-actions.ts:308",
+      "apps/desktop/src/features/notes/navigation/state/use-notes-tree-actions.ts:337",
+      "apps/desktop/src/features/notes/navigation/state/use-notes-tree-actions.ts:492"
+    ],
+    "mobile": [
+      "apps/mobile/src/screens/capture-screen.tsx:216",
+      "apps/mobile/src/state/notes-store.ts:176"
+    ]
+  },
+  "rename_item": {
+    "desktop": [
+      "apps/desktop/src/features/notes/editor/hooks/use-note-editor.ts:98",
+      "apps/desktop/src/features/notes/navigation/state/use-notes-tree-actions.ts:186",
+      "apps/desktop/src/features/notes/navigation/state/use-notes-tree-actions.ts:276"
+    ],
+    "mobile": []
+  },
+  "set_order": {
+    "desktop": [
+      "apps/desktop/src/features/notes/navigation/hooks/use-drag-drop.ts:347",
+      "apps/desktop/src/features/notes/navigation/hooks/use-drag-drop.ts:444"
+    ],
+    "mobile": []
+  },
+  "update_note_tags": {
+    "desktop": [],
+    "mobile": []
+  },
+  "get_profiles": {
+    "desktop": [
+      "apps/desktop/src/features/profiles/hooks/use-profile-actions.ts:35"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/settings-store.ts:94"
+    ]
+  },
+  "create_profile": {
+    "desktop": [
+      "apps/desktop/src/features/profiles/hooks/use-profile-actions.ts:121"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/settings-store.ts:99"
+    ]
+  },
+  "set_active_profile": {
+    "desktop": [
+      "apps/desktop/src/features/profiles/hooks/use-profile-actions.ts:103"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/settings-store.ts:104"
+    ]
+  },
+  "set_profile_notes_root": {
+    "desktop": [
+      "apps/desktop/src/features/profiles/hooks/use-profile-actions.ts:156"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/settings-store.ts:109"
+    ]
+  },
+  "update_profile": {
+    "desktop": [
+      "apps/desktop/src/features/profiles/hooks/use-profile-actions.ts:132"
+    ],
+    "mobile": []
+  },
+  "delete_profile": {
+    "desktop": [
+      "apps/desktop/src/features/profiles/hooks/use-profile-actions.ts:143"
+    ],
+    "mobile": []
+  },
+  "update_profile_settings": {
+    "desktop": [
+      "apps/desktop/src/features/profiles/hooks/use-legacy-profile-sync-migration.ts:60",
+      "apps/desktop/src/features/profiles/hooks/use-profile-actions.ts:73"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/settings-store.ts:69"
+    ]
+  },
+  "update_app_config": {
+    "desktop": [
+      "apps/desktop/src/features/profiles/hooks/use-legacy-profile-sync-migration.ts:44",
+      "apps/desktop/src/features/profiles/hooks/use-profile-actions.ts:64"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/settings-store.ts:160"
+    ]
+  },
+  "create_profiles_backup_zip": {
+    "desktop": [],
+    "mobile": [
+      "apps/mobile/src/screens/settings-screen.tsx:197"
+    ]
+  },
+  "export_profiles_to_documents": {
+    "desktop": [],
+    "mobile": []
+  },
+  "get_security_state": {
+    "desktop": [
+      "apps/desktop/src/features/security/hooks/security-context.tsx:47"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/security-store.ts:30",
+      "apps/mobile/src/state/security-store.ts:43",
+      "apps/mobile/src/state/security-store.ts:52"
+    ]
+  },
+  "enable_security": {
+    "desktop": [
+      "apps/desktop/src/features/security/hooks/security-context.tsx:66"
+    ],
+    "mobile": []
+  },
+  "lock_security": {
+    "desktop": [
+      "apps/desktop/src/features/security/hooks/security-context.tsx:120"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/security-store.ts:64"
+    ]
+  },
+  "unlock_security": {
+    "desktop": [
+      "apps/desktop/src/features/security/hooks/security-context.tsx:85"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/security-store.ts:39"
+    ]
+  },
+  "set_security_preferences": {
+    "desktop": [
+      "apps/desktop/src/features/security/hooks/security-context.tsx:135"
+    ],
+    "mobile": []
+  },
+  "save_audio_recording": {
+    "desktop": [
+      "apps/desktop/src/features/recording/hooks/recordings-context.tsx:184"
+    ],
+    "mobile": [
+      "apps/mobile/src/ui/dictation-button.tsx:190"
+    ]
+  },
+  "queue_recording_transcriptions": {
+    "desktop": [
+      "apps/desktop/src/features/recording/hooks/recordings-context.tsx:116"
+    ],
+    "mobile": [
+      "apps/mobile/src/ui/dictation-button.tsx:199"
+    ]
+  },
+  "queue_local_transcriptions": {
+    "desktop": [
+      "apps/desktop/src/features/recording/hooks/recordings-context.tsx:118"
+    ],
+    "mobile": []
+  },
+  "retrigger_transcription": {
+    "desktop": [
+      "apps/desktop/src/features/recording/hooks/recordings-context.tsx:147"
+    ],
+    "mobile": []
+  },
+  "check_whisper_status": {
+    "desktop": [
+      "apps/desktop/src/features/settings/components/desktop/whisper-engine-card.tsx:26",
+      "apps/desktop/src/features/settings/components/desktop/whisper-engine-card.tsx:39"
+    ],
+    "mobile": []
+  },
+  "list_recordings": {
+    "desktop": [
+      "apps/desktop/src/features/recording/hooks/recordings-context.tsx:64"
+    ],
+    "mobile": []
+  },
+  "read_recording_audio": {
+    "desktop": [],
+    "mobile": [
+      "apps/mobile/src/ui/audio-player.tsx:48"
+    ]
+  },
+  "resolve_recording_audio_path": {
+    "desktop": [
+      "apps/desktop/src/features/recording/hooks/recordings-context.tsx:88"
+    ],
+    "mobile": []
+  },
+  "import_audio_files": {
+    "desktop": [
+      "apps/desktop/src/features/recording/hooks/use-audio-import.ts:103"
+    ],
+    "mobile": []
+  },
+  "audio_import_status": {
+    "desktop": [
+      "apps/desktop/src/features/recording/hooks/use-audio-import.ts:50",
+      "apps/desktop/src/features/recording/hooks/use-audio-import.ts:74"
+    ],
+    "mobile": []
+  },
+  "queue_provider_transcriptions": {
+    "desktop": [],
+    "mobile": [
+      "apps/mobile/src/ui/dictation-button.tsx:205"
+    ]
+  },
+  "save_handwriting_attachment": {
+    "desktop": [
+      "apps/desktop/src/features/handwriting/hooks/handwriting-context.tsx:174"
+    ],
+    "mobile": [
+      "apps/mobile/src/ui/dictation-button.tsx:284"
+    ]
+  },
+  "queue_handwriting_ocr": {
+    "desktop": [
+      "apps/desktop/src/features/handwriting/hooks/handwriting-context.tsx:146"
+    ],
+    "mobile": []
+  },
+  "list_handwriting_ocr_jobs": {
+    "desktop": [
+      "apps/desktop/src/features/handwriting/hooks/handwriting-context.tsx:104"
+    ],
+    "mobile": []
+  },
+  "check_local_ocr_status": {
+    "desktop": [
+      "apps/desktop/src/features/settings/components/desktop/local-ocr-engine-card.tsx:31",
+      "apps/desktop/src/features/settings/components/desktop/local-ocr-engine-card.tsx:49"
+    ],
+    "mobile": []
+  },
+  "scan_apple_notes_folder": {
+    "desktop": [
+      "apps/desktop/src/features/import/hooks/use-apple-import.ts:112"
+    ],
+    "mobile": []
+  },
+  "start_apple_notes_import": {
+    "desktop": [
+      "apps/desktop/src/features/import/hooks/use-apple-import.ts:128"
+    ],
+    "mobile": []
+  },
+  "apple_import_status": {
+    "desktop": [
+      "apps/desktop/src/features/import/hooks/use-apple-import.ts:58",
+      "apps/desktop/src/features/import/hooks/use-apple-import.ts:83"
+    ],
+    "mobile": []
+  },
+  "generate_ssh_key": {
+    "desktop": [
+      "apps/desktop/src/features/sync/hooks/use-ssh-key.ts:51"
+    ],
+    "mobile": [
+      "apps/mobile/src/screens/sync-screen.tsx:402",
+      "apps/mobile/src/state/sync-store.ts:584"
+    ]
+  },
+  "get_ssh_public_key": {
+    "desktop": [
+      "apps/desktop/src/features/sync/hooks/use-ssh-key.ts:36"
+    ],
+    "mobile": [
+      "apps/mobile/src/screens/sync-screen.tsx:93",
+      "apps/mobile/src/screens/sync-screen.tsx:109",
+      "apps/mobile/src/state/sync-store.ts:581"
+    ]
+  },
+  "delete_ssh_key": {
+    "desktop": [
+      "apps/desktop/src/features/sync/hooks/use-ssh-key.ts:67"
+    ],
+    "mobile": [
+      "apps/mobile/src/screens/sync-screen.tsx:390"
+    ]
+  },
+  "get_git_status": {
+    "desktop": [
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:55",
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:144",
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:207",
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:278",
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:285",
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:294",
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:305"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/sync-store.ts:421",
+      "apps/mobile/src/state/sync-store.ts:463",
+      "apps/mobile/src/state/sync-store.ts:515"
+    ]
+  },
+  "get_git_sync_progress": {
+    "desktop": [],
+    "mobile": [
+      "apps/mobile/src/state/sync-store.ts:288"
+    ]
+  },
+  "get_git_history": {
+    "desktop": [
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:70"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/sync-store.ts:293",
+      "apps/mobile/src/state/sync-store.ts:340"
+    ]
+  },
+  "connect_git_repo": {
+    "desktop": [
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:93",
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:126",
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:280"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/sync-store.ts:263",
+      "apps/mobile/src/state/sync-store.ts:522",
+      "apps/mobile/src/state/sync-store.ts:601",
+      "apps/mobile/src/state/sync-store.ts:613"
+    ]
+  },
+  "git_pull": {
+    "desktop": [
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:145",
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:297"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/sync-store.ts:425"
+    ]
+  },
+  "git_commit": {
+    "desktop": [
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:183"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/sync-store.ts:648"
+    ]
+  },
+  "git_push": {
+    "desktop": [
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:219",
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:287",
+      "apps/desktop/src/features/sync/hooks/use-git-sync-workflows.ts:308"
+    ],
+    "mobile": [
+      "apps/mobile/src/state/sync-store.ts:467"
+    ]
+  },
+  "get_local_sync_server_status": {
+    "desktop": [
+      "apps/desktop/src/features/sync/hooks/use-local-sync-server.ts:35",
+      "apps/desktop/src/features/sync/hooks/use-local-sync-server.ts:54"
+    ],
+    "mobile": []
+  },
+  "start_local_sync_server": {
+    "desktop": [
+      "apps/desktop/src/features/sync/hooks/use-local-sync-server.ts:65"
+    ],
+    "mobile": []
+  },
+  "stop_local_sync_server": {
+    "desktop": [
+      "apps/desktop/src/features/sync/hooks/use-local-sync-server.ts:64"
+    ],
+    "mobile": []
+  },
+  "discover_local_sync_servers": {
+    "desktop": [],
+    "mobile": []
+  },
+  "read_tag_registry": {
+    "desktop": [
+      "apps/desktop/src/features/tags/hooks/tags-context.tsx:23"
+    ],
+    "mobile": []
+  },
+  "write_tag_registry": {
+    "desktop": [
+      "apps/desktop/src/features/tags/hooks/tags-context.tsx:39"
+    ],
+    "mobile": []
+  },
+  "start_iroh_sync_client": {
+    "desktop": [],
+    "mobile": [
+      "apps/mobile/src/state/sync-store.ts:132",
+      "apps/mobile/src/state/sync-store.ts:536"
+    ]
+  },
+  "iroh_client_status": {
+    "desktop": [],
+    "mobile": [
+      "apps/mobile/src/state/sync-store.ts:216",
+      "apps/mobile/src/state/sync-store.ts:507"
+    ]
+  },
+  "archive_mobile_audio_with_iroh": {
+    "desktop": [],
+    "mobile": [
+      "apps/mobile/src/state/sync-store.ts:175"
+    ]
+  },
+  "set_mobile_audio_git_exclusion": {
+    "desktop": [],
+    "mobile": [
+      "apps/mobile/src/state/sync-store.ts:155",
+      "apps/mobile/src/state/sync-store.ts:521"
+    ]
+  },
+  "prune_mobile_audio_cache": {
+    "desktop": [],
+    "mobile": [
+      "apps/mobile/src/state/sync-store.ts:393"
+    ]
+  },
+  "set_app_icon": {
+    "desktop": [
+      "apps/desktop/src/app/state/app-icon-store.tsx:36"
+    ],
+    "mobile": []
+  },
+  "init_core": {
+    "desktop": [],
+    "mobile": [
+      "apps/mobile/src/core/boot.ts:39"
+    ]
+  }
+}

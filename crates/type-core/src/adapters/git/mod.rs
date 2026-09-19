@@ -1957,6 +1957,45 @@ mod tests {
     }
 
     #[test]
+    fn new_phone_profile_connects_to_existing_history_without_old_commits() {
+        let app_dir = std::env::temp_dir().join(format!("type-new-phone-profile-{}", uuid::Uuid::now_v7()));
+        let app = AppEnv::new(&app_dir);
+        let old_root = crate::ensured_notes_root(&app).unwrap();
+        fs::write(old_root.join("Feed/old-only.md"), "old phone history").unwrap();
+        let old_repo = ensure_git_repo(&old_root).unwrap();
+        let old_head = commit_all_changes(&old_repo, "old", "main").unwrap().unwrap();
+
+        let desktop = app_dir.join("desktop");
+        fs::create_dir_all(desktop.join("Feed")).unwrap();
+        fs::write(desktop.join("Feed/synced.md"), "desktop note").unwrap();
+        let desktop_repo = ensure_git_repo(&desktop).unwrap();
+        let desktop_head = commit_all_changes(&desktop_repo, "desktop", "main").unwrap().unwrap();
+
+        crate::create_profile_state(&app, "Fresh phone", None).unwrap();
+        let fresh_root = crate::ensured_notes_root(&app).unwrap();
+        assert_ne!(fresh_root, old_root);
+        assert!(crate::load_profile_settings(&fresh_root).git_remote_url.is_empty());
+        // Same exclusion setup used by the QR flow before connect.
+        crate::set_mobile_audio_git_exclusion(&app, true).unwrap();
+        let adapter = GitSyncAdapter::new(app);
+        adapter.connect(ConnectGitArgs {
+            remote_url: Some(desktop.to_string_lossy().into_owned()),
+            branch: Some("main".into()), username: None, password: None,
+        }).unwrap();
+        adapter.pull(GitSyncArgs { branch: Some("main".into()), username: None, password: None }).unwrap();
+        let fresh_repo = open_repo(&fresh_root).unwrap();
+        let fresh_head = fresh_repo.head().unwrap().target().unwrap();
+        // Fresh profile metadata may produce a local bootstrap/merge commit.
+        assert!(fresh_head == desktop_head || fresh_repo.graph_descendant_of(fresh_head, desktop_head).unwrap());
+        assert!(fresh_repo.find_commit(old_head).is_err());
+        assert_eq!(fs::read_to_string(fresh_root.join("Feed/synced.md")).unwrap(), "desktop note");
+        assert!(!fresh_root.join("Feed/old-only.md").exists());
+        assert_eq!(old_repo.head().unwrap().target(), Some(old_head));
+        assert!(old_root.join("Feed/old-only.md").is_file());
+        fs::remove_dir_all(app_dir).unwrap();
+    }
+
+    #[test]
     fn failed_first_connection_leaves_captured_notes_uncommitted() {
         let app_dir =
             std::env::temp_dir().join(format!("type-git-offline-connect-{}", uuid::Uuid::now_v7()));

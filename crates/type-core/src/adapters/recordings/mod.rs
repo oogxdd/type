@@ -29,7 +29,8 @@ mod assembly;
 mod whisper;
 pub use assembly::transcribe_audio_bytes_with_assembly;
 pub use whisper::{
-    check_whisper_availability, save_word_level_json, transcribe_audio_local_whisper,
+    check_whisper_availability, reformat_transcript_with_word_gaps, save_word_level_json,
+    transcribe_audio_local_whisper,
 };
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -830,15 +831,21 @@ fn process_transcription_job(job: QueuedTranscriptionJob) {
     match result {
         Ok((transcript, id_or_json)) => {
             // For local whisper, id_or_json is the full JSON with word timestamps.
-            // Save word-level JSON alongside the audio file.
-            if matches!(job.method, TranscriptionMethod::LocalWhisper { .. }) {
+            // Save word-level JSON alongside the audio file, and reflow the saved
+            // transcript's line breaks from those same timestamps (pauses become
+            // line/paragraph breaks — see whisper::LINE_BREAK_GAP_SECONDS /
+            // PARAGRAPH_GAP_SECONDS).
+            let transcript = if matches!(job.method, TranscriptionMethod::LocalWhisper { .. }) {
                 if let Err(e) = save_word_level_json(&job.audio_path, &id_or_json) {
                     eprintln!(
                         "[recordings] failed to save word-level JSON for {}: {}",
                         job.note_rel, e
                     );
                 }
-            }
+                reformat_transcript_with_word_gaps(&id_or_json).unwrap_or(transcript)
+            } else {
+                transcript
+            };
 
             let transcript_id = match &job.method {
                 TranscriptionMethod::AssemblyAi { .. } => Some(id_or_json),
