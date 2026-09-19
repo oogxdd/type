@@ -1,0 +1,20 @@
+# Session Context
+
+## User Prompts
+
+### Prompt 1
+
+hi. notes which were transcribed with whisper - do they keep the copy of a file with transcription data?
+
+### Prompt 2
+
+can you please modify the existing notes so you insert a line break if there's a second delay between words. and one empty line gap if delay is more than 5 seconds (i might change it tho, make it as constants. eg i might change from 1 second to 3 seconds and from 5 to 10
+
+### Prompt 3
+
+save instruction to another agent potentially who might want to change it from 1/5 to eg 3/10
+
+### Prompt 4
+
+а сделай так line > 0.2s, paragraph > 2s
+

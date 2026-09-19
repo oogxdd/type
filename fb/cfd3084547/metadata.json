@@ -1,0 +1,45 @@
+{
+  "cli_version": "0.4.9",
+  "checkpoint_id": "fbcfd3084547",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 3,
+  "files_touched": [
+    "crates/type-core/src/adapters/git/mod.rs",
+    "crates/type-core/src/adapters/recordings/mod.rs",
+    "crates/type-core/src/adapters/recordings/whisper.rs",
+    "docs/AUDIO_HISTORY_MIGRATION.md",
+    "docs/architecture/02-layers.md",
+    "docs/architecture/12-architecture-map.md",
+    "docs/architecture/13-shared-stores-proposal.md",
+    "docs/architecture/14-exposed-api-catalog.md",
+    "docs/architecture/README.md",
+    "docs/architecture/diagrams/current-full-api.md",
+    "docs/architecture/diagrams/current-full-api.mmd",
+    "docs/architecture/diagrams/proposed-full-api.md",
+    "docs/architecture/diagrams/proposed-full-api.mmd",
+    "output/architecture/api-usage-audit.json",
+    "output/architecture/api-usage.md",
+    "output/architecture/current-grouped.png",
+    "output/architecture/image-prompts.txt",
+    "output/architecture/rust-domain-map.html",
+    "output/architecture/shared-stores-proposed.png",
+    "sweep.timestamp"
+  ],
+  "sessions": [
+    {
+      "metadata": "/fb/cfd3084547/0/metadata.json",
+      "transcript": "/fb/cfd3084547/0/full.jsonl",
+      "context": "/fb/cfd3084547/0/context.md",
+      "content_hash": "/fb/cfd3084547/0/content_hash.txt",
+      "prompt": "/fb/cfd3084547/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 76,
+    "cache_creation_tokens": 128634,
+    "cache_read_tokens": 3454481,
+    "output_tokens": 25190,
+    "api_call_count": 38
+  }
+}
