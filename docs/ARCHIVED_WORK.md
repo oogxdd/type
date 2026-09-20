@@ -39,7 +39,9 @@ archive/<YYYY-MM>/<name>      grouped by when it was shelved
 ```
 
 Use a theme when several attempts belong together (`archive/alternative-sync/*`
-holds the sync transports that lost). Use the date otherwise. Either way the
+holds the sync transports that lost). When one branch fully contains another,
+one tag preserves both — name the inner commit in the message so the earlier
+state stays retrievable, as `archive/alternative-sync/iroh-without-git` does. Use the date otherwise. Either way the
 `archive/` prefix is what matters — every listing below globs on it.
 
 Drop noise from the old branch name: `worktree-`, a duplicated `archive/`, an
@@ -137,6 +139,7 @@ the index.
 |---|---|---|---|
 | `archive/writemd-styling` | 20 Sep | 11 files, +1039/−1270 | The desktop reskin on native window vibrancy, Write.md's visual language |
 | `archive/alternative-sync/icloud` | 29 Aug | 8 files, +150/−67 | Notes root in an iCloud folder, letting the drive sync it instead of Git |
+| `archive/alternative-sync/iroh-without-git` | 12 Aug | 31 files, +3342/−179 | Dropping Git as the sync engine (iroh-docs + gossip), plus the standalone zero-knowledge sync peer at `9dac9d77` — two approaches in one tag |
 | `archive/tui` | 17 Aug | 27 files, +9193 | A full terminal shell, `crates/type-tui` (ratatui), 19 commits |
 | `archive/2026-09/mobile-audio-transcription` | 10 Aug | 18 files, +1164 | Importing existing phone audio as recording notes (Rust half later landed in `main` separately) |
 | `archive/2026-09/mobile-assemblyai` | 8 Aug | 18 files, +1460 | Verifiable, opt-in AssemblyAI setup on the phone, with a stub-server test suite |
