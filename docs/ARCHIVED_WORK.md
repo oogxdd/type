@@ -45,29 +45,56 @@ holds the sync transports that lost). Use the date otherwise. Either way the
 Drop noise from the old branch name: `worktree-`, a duplicated `archive/`, an
 `agent/` or `codex/` prefix that only records which tool produced it.
 
+A flat `archive/<name>` is fine too when the work belongs to no group.
+
 Release tags are `desktop-v*` and `mobile-v*`, and the release workflows trigger
 on exactly those two patterns — so an `archive/*` tag never starts a build.
+
+## Every archive tag is annotated
+
+Archive tags are created with `-a -m` so each one **carries its own description**
+— what the work was and why it was shelved. That message is the point: a bare
+SHA six months from now tells you nothing. Keep it to a few sentences, and say
+explicitly if part of the work already reached `main` by another route.
 
 ## Listing them
 
 The GitHub web UI has no tag search, so use the CLI.
 
 ```bash
-# every archived item, newest commit first
-git tag -l 'archive/*' --sort=-creatordate \
-  --format='%(refname:short)  %(objectname:short)  %(creatordate:short)'
+# everything archived, with its description, newest work first
+git tag -l -n 'archive/*' --sort='-*committerdate'
 
-# straight from the remote, without a local clone being up to date
-gh api repos/oogxdd/type/git/matching-refs/tags/archive \
-  --jq '.[] | "\(.ref | sub("refs/tags/";""))  \(.object.sha[0:8])"'
+# just names and the date of the work itself
+git tag -l 'archive/*' --sort='-*committerdate' \
+  --format='%(*committerdate:short)  %(refname:short)'
 
-# what is in one of them
-git show --stat archive/alternative-sync/s3
-git log --oneline main..archive/alternative-sync/s3
+# what is inside one of them
+git show archive/alternative-sync/s3          # the tag message, then the diff
+git log --oneline main..archive/tui
 ```
 
-`gh` needs no special flags here — `matching-refs` does prefix matching, so
-`.../tags/archive` returns the whole namespace.
+Quote `'-*committerdate'` — unquoted, the shell expands the `*` as a glob. It
+sorts by the date of the **tagged commit**; plain `creatordate` would sort by
+when the tag was made, which is the same day for everything archived in a
+sweep.
+
+From the remote, without the local clone being current:
+
+```bash
+# names only
+gh api repos/oogxdd/type/git/matching-refs/tags/archive \
+  --jq '.[] | .ref | sub("refs/tags/";"")'
+
+# names plus the first line of each description
+gh api repos/oogxdd/type/git/matching-refs/tags/archive --jq '.[].object.sha' \
+  | xargs -I{} gh api repos/oogxdd/type/git/tags/{} \
+      --jq '"\(.tag)\n    \(.message | split("\n")[0])"'
+```
+
+`matching-refs` does prefix matching, so `.../tags/archive` returns the whole
+namespace in one call. The second form needs the extra hop because a ref only
+carries the tag object's SHA — the message lives in the tag object itself.
 
 ## Archiving something
 
@@ -79,11 +106,12 @@ to push is how work actually disappears.
 BRANCH=feat/whatever
 TAG=archive/2026-09/whatever
 
-git tag "$TAG" "$BRANCH"
+git tag -a "$TAG" "$BRANCH" -m "What this was, and why it is shelved."
 git push origin "$TAG"
 
 # confirm before deleting anything
-test "$(git ls-remote --tags origin "$TAG" | cut -f1)" = "$(git rev-parse "$BRANCH")" \
+# note the ^{} — an annotated tag's own SHA is not the commit's
+test "$(git ls-remote origin "refs/tags/$TAG^{}" | cut -f1)" = "$(git rev-parse "$BRANCH")" \
   && echo ok || echo "STOP — tag did not land"
 
 git branch -D "$BRANCH"
@@ -102,15 +130,20 @@ main..<tag>` and the age before planning a merge.
 
 ## What is archived now
 
-| Tag | Commits | Size | What it was |
+Descriptions live on the tags themselves (`git tag -l -n 'archive/*'`); this is
+the index.
+
+| Tag | Work dated | Size | What it was |
 |---|---|---|---|
-| `archive/alternative-sync/s3` | 5 | 42 files, +7211 | Sync over S3-compatible object storage, end-to-end encrypted |
-| `archive/alternative-sync/icloud` | 1 | 8 files, +150/−67 | Sync by putting the notes root in an iCloud folder instead of Git |
-| `archive/2026-09/approval-on-sync` | 5 | 28 files, +1741/−162 | "Ask before syncing": a request-only daemon that hands port 9418 to the real Git server once the desktop approves |
-| `archive/2026-09/ios-app` | 10 | 64 files, +10231 | The native Swift iOS app, before the React Native mobile app |
-| `archive/2026-09/mobile-assemblyai` | 1 | 18 files, +1460 | Making AssemblyAI setup on the phone verifiable and opt-in, with a stub-server test suite |
-| `archive/2026-09/mobile-audio-transcription` | 1 | 18 files, +1164 | Importing existing audio (Voice Memos, Files) as recording notes on the phone |
-| `archive/react-native-monorepo-v1.0.0` | — | — | Pre-existing: the monorepo at the React Native cutover |
+| `archive/writemd-styling` | 20 Sep | 11 files, +1039/−1270 | The desktop reskin on native window vibrancy, Write.md's visual language |
+| `archive/alternative-sync/icloud` | 29 Aug | 8 files, +150/−67 | Notes root in an iCloud folder, letting the drive sync it instead of Git |
+| `archive/tui` | 17 Aug | 27 files, +9193 | A full terminal shell, `crates/type-tui` (ratatui), 19 commits |
+| `archive/2026-09/mobile-audio-transcription` | 10 Aug | 18 files, +1164 | Importing existing phone audio as recording notes (Rust half later landed in `main` separately) |
+| `archive/2026-09/mobile-assemblyai` | 8 Aug | 18 files, +1460 | Verifiable, opt-in AssemblyAI setup on the phone, with a stub-server test suite |
+| `archive/alternative-sync/s3` | 7 Aug | 42 files, +7211 | Sync over S3-compatible object storage, end-to-end encrypted |
+| `archive/2026-09/approval-on-sync` | 10 Jul | 28 files, +1741/−162 | "Ask before syncing": a request-only daemon that hands port 9418 to the Git server after approval |
+| `archive/react-native-monorepo-v1.0.0` | 10 Jul | — | Pre-existing: the monorepo at the React Native cutover |
+| `archive/2026-09/ios-app` | 24 Jun | 64 files, +10231 | The native Swift iOS app, before React Native |
 
 ## Not this scheme
 

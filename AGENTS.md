@@ -503,7 +503,8 @@ The React Native app (Expo) reuses the Rust core through
 - **The Iroh ticket is a snapshot; the endpoint id is not.** The desktop recomputes its ticket on every status poll so the QR picks up the relay and survives a network change, and the phone dials the ticket's addresses first then retries with the bare `EndpointId` (published to n0's pkarr/DNS by `presets::N0`). Never gate starting the server on `endpoint.online()` — that is a WAN round trip, and failing it used to publish a QR with no Iroh ticket at all, silently downgrading the phone to LAN-only.
 - **Shelved work lives in tags, not branches.** Anything abandoned-but-worth-keeping
   is tagged under `archive/` and its branch deleted, so the branch list only holds
-  work that is actually going to merge. List them with `git tag -l 'archive/*'` or
+  work that is actually going to merge. Each tag is annotated and carries its own
+  description — `git tag -l -n 'archive/*'` — or read them from the remote with
   `gh api repos/oogxdd/type/git/matching-refs/tags/archive` — GitHub's web UI has no
   tag search. Restoring is `git branch <name> <tag>`. Release tags (`desktop-v*`,
   `mobile-v*`) are a separate namespace and are the only ones that trigger builds.
