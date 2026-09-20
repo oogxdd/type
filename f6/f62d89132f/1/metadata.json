@@ -1,7 +1,9 @@
 {
   "cli_version": "0.4.9",
   "checkpoint_id": "f6f62d89132f",
+  "session_id": "fbb700ad-62c2-4e16-8e9b-efdb82bc4708",
   "strategy": "manual-commit",
+  "created_at": "2026-09-20T20:26:17.945306Z",
   "branch": "mobile/home-gesture-shell",
   "checkpoints_count": 14,
   "files_touched": [
@@ -15,30 +17,24 @@
     "apps/mobile/src/lib/gesture-trace.ts",
     "apps/mobile/src/screens/capture-screen.tsx",
     "apps/mobile/src/screens/settings-screen.tsx",
-    "package-lock.json",
-    "packages/mobile-core/src/index.tsx"
+    "package-lock.json"
   ],
-  "sessions": [
-    {
-      "metadata": "/f6/f62d89132f/0/metadata.json",
-      "transcript": "/f6/f62d89132f/0/full.jsonl",
-      "context": "/f6/f62d89132f/0/context.md",
-      "content_hash": "/f6/f62d89132f/0/content_hash.txt",
-      "prompt": "/f6/f62d89132f/0/prompt.txt"
-    },
-    {
-      "metadata": "/f6/f62d89132f/1/metadata.json",
-      "transcript": "/f6/f62d89132f/1/full.jsonl",
-      "context": "/f6/f62d89132f/1/context.md",
-      "content_hash": "/f6/f62d89132f/1/content_hash.txt",
-      "prompt": "/f6/f62d89132f/1/prompt.txt"
-    }
-  ],
+  "agent": "Claude Code",
+  "turn_id": "d42cd894aad1",
   "token_usage": {
     "input_tokens": 564,
     "cache_creation_tokens": 1220053,
     "cache_read_tokens": 93542435,
     "output_tokens": 311229,
     "api_call_count": 282
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-09-20T20:26:17.322103Z",
+    "agent_lines": 0,
+    "human_added": 7992,
+    "human_modified": 2131,
+    "human_removed": 0,
+    "total_committed": 8322,
+    "agent_percentage": 0
   }
 }

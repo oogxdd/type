@@ -1,0 +1,550 @@
+make worktree. create a flutter app. look, i want to test the interactions on flutter app. create a minimal (very very minimal) reprodction of this app. what i want to do is
+
+main screen. i swipe right (like almost anywhere on the screen, not just from the left edge) - the menu appears. i swipe back to the left - i land back on the capture screen (ideally on the same note and same scroll position so like dont unmount the main screen)
+
+main screen is the capture screen
+
+and i can write notes. and i can swipe up - and i start a new note (like first - i should be able to scroll to the end of the current note. and then it's like a "pull-to-refresh" mechanics - i see some indicator that i'm "starting an action to move to the next note", then i kinda "pull" (here from the bottom to up not from the up to bottom as in usual pull-to-refresh mechanics) - я вижу например ярлычок который тянется - then i need to "pull" up to a certain treshold (like certain distance from when the action "started"). and when i done it - i can release so it moves to the next note (fresh screen where i can start a new note)
+
+it *kinda* works in existing react native app but it doesn't capture my geastures well
+
+so yep. very minimal just to test those actions interaction
+
+---
+
+[Image: original 1206x2622, displayed at 920x2000. Multiply coordinates by 1.31 to map to original image.]
+
+---
+
+[Request interrupted by user]
+
+---
+
+key. i tested it manually. it works nicely. 
+
+
+
+
+if i asked you how you can instead make it better on my original react native app - what would you do?
+
+---
+
+кратко по русски - получилось бы?
+
+---
+
+вот просто щас этот жест снизу вверх да и слева направо (даже если мы не берем в расчет моменты по типу маунтинга или релиза после тресхолда - все равно) как-то хуево распознаются на телефоне. через раз получается (твой флаттер прототип на реальном телефоне я пока не тестил но на симуляторе работает прямо очень smooth)
+
+---
+
+ладно. попробуй теперь улучшить мой rn версию
+
+---
+
+а можешь ее тоже на айос симулятор установить? сделаю сравнение
+
+---
+
+[Request interrupted by user]
+
+---
+
+"  2. Нативный pop ужат до левого жёлоба — App.tsx
+
+  gestureResponseDistance: NATIVE_BACK_RESPONSE_DISTANCE  // { end: 24 }
+
+  Вместо полосы по высоте (52%). Теперь разбиение стыкуется с hitSlop({ left: -24 }) пана: x <= 24 — навигации, всё остальное — наше, спорной зоны нет. Побочный эффект, который
+  важнее самого свайпа вправо: в верхней половине экрана нативный recognizer больше не съедает свайпы вверх."
+
+подожди. значит я из capture в menu могу войти только если начал жест при y < 24?
+
+---
+
+то есть будет в целом идентично с тем как у меня на флаттере? (кингстон вернул)
+
+---
+
+сначала закомить текущее (как эксперемент, на отдельной ветке) а потом сделай как надо
+
+---
+
+давай
+
+---
+
+<task-notification>
+<task-id>bnbpq0ck8</task-id>
+<tool-use-id>toolu_018UizspfpF8ffk5MPx1GSRu</tool-use-id>
+<output-file>/private/tmp/claude-501/-Volumes-KINGSTON-Projects-type-app/fbb700ad-62c2-4e16-8e9b-efdb82bc4708/tasks/bnbpq0ck8.output</output-file>
+<status>completed</status>
+<summary>Background command "Install workspace dependencies in the worktree" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+[Image: original 1206x2622, displayed at 920x2000. Multiply coordinates by 1.31 to map to original image.]
+
+---
+
+<task-notification>
+<task-id>b9olphuni</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Volumes-KINGSTON-Projects-type-app/fbb700ad-62c2-4e16-8e9b-efdb82bc4708/tasks/b9olphuni.output</output-file>
+<status>completed</status>
+<summary>Background command "Wait for the bundle to finish" completed (exit code 0)</summary>
+</task-notification>
+
+---
+
+[Image: original 1206x2622, displayed at 920x2000. Multiply coordinates by 1.31 to map to original image.]
+
+---
+
+слушай. я прошу тебя хорошо подумать. то что я вижу щас в симуляторе
+
+свайп снизу вверх - ваще не работает
+свайп слево направо. он не такой "АДАПТИВНЫЙ" как во флаттере. во флаттере ты можешь дойти до 40% - потом вернуть обратно. тут как только ты на 1% двигаешь - все - транзишн проходит
+
+---
+
+бля. я не понимаю. что от меня то требуется?
+
+---
+
+[Image: original 1206x2622, displayed at 920x2000. Multiply coordinates by 1.31 to map to original image.]
+
+---
+
+слушай. у меня external ssd ненадолго отключился. до сих пор все ранится?
+
+---
+
+[Request interrupted by user for tool use]
+
+---
+
+и как оно?
+
+---
+
+и как оно
+
+---
+
+[Request interrupted by user for tool use]
+
+---
+
+1
+
+---
+
+[Image: original 1206x2622, displayed at 920x2000. Multiply coordinates by 1.31 to map to original image.]
+
+---
+
+ок приступай к Б
+
+---
+
+[Request interrupted by user]
+
+---
+
+ладно продолжай
+
+---
+
+вот. например последний
+
+---
+
+делай
+
+---
+
+[Image: original 1206x2622, displayed at 920x2000. Multiply coordinates by 1.31 to map to original image.]
+
+---
+
+[Image: original 1206x2622, displayed at 920x2000. Multiply coordinates by 1.31 to map to original image.]
+
+---
+
+<task-notification>
+<task-id>bczhui3ng</task-id>
+<tool-use-id>toolu_017GrjwcfybWu6RiUxW6UiZR</tool-use-id>
+<output-file>/private/tmp/claude-501/-Volumes-KINGSTON-Projects-type-app/fbb700ad-62c2-4e16-8e9b-efdb82bc4708/tasks/bczhui3ng.output</output-file>
+<status>killed</status>
+<summary>Background command "Wait for Metro to come up" was stopped</summary>
+</task-notification>
+
+---
+
+<task-notification>
+<task-id>bm8361uhq</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Volumes-KINGSTON-Projects-type-app/fbb700ad-62c2-4e16-8e9b-efdb82bc4708/tasks/bm8361uhq.output</output-file>
+<status>killed</status>
+<summary>Background command "Restart Metro" was stopped</summary>
+</task-notification>
+
+---
+
+The fork runs as its own separate session — nothing it does arrives in this conversation, and it does not see what happens here after the fork point. If you need to coordinate with it, it appears in the ListAgents listing as 'Flutter app gesture interactions test ⑂' (it may be renamed later) and SendMessage can message it there; it can message this session the same way.
+
+---
+
+/compact
+
+---
+
+This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.
+
+Summary:
+## 1. Primary Request and Intent
+
+The user's requests evolved across distinct phases:
+
+**Phase 1 — Build a Flutter prototype.** "make worktree. create a flutter app... i want to test the interactions on flutter app. create a minimal (very very minimal) reprodction of this app." Three interactions:
+- Main screen = capture screen, type immediately
+- Swipe right **anywhere** (not just left edge) → menu appears; swipe left → back to the *same note and same scroll position*, "so like dont unmount the main screen"
+- Swipe up → first scroll to end of current note, then inverted pull-to-refresh: an indicator appears, "я вижу например ярлычок который тянется", pull past a threshold, release → move to a fresh blank note
+
+Rationale: "it *kinda* works in existing react native app but it doesn't capture my geastures well"
+
+**Phase 2 — Advise on the RN app.** "if i asked you how you can instead make it better on my original react native app - what would you do?"
+
+**Phase 3 — Fix the RN app.** "попробуй теперь улучшить мой rn версию" — after reporting swipe-up and swipe-right are recognized "через раз" (every other time).
+
+**Phase 4 — Install RN app on simulator for comparison.** "а можешь ее тоже на айос симулятор установить? сделаю сравнение"
+
+**Phase 5 — Global rework.** After seeing the RN version was not adaptive ("как только ты на 1% двигаешь - все - транзишн проходит"): "как мне добиться такого же в моем рн? я не против более глобального реворка если он поможет". Then "ок приступай к Б" / "делай".
+
+**Explicit process instructions from the user:**
+- "сначала закомить текущее (как эксперемент, на отдельной ветке) а потом сделай как надо"
+- "но закомиться перед этим" (before starting Part B)
+- "возможно добавим логгинг. и я буду тестить. и когда не пройдет - я тебе скажу и ты чекнешь последний swipe attempt и поймешь почему"
+- "тока убери щас ошибку в симуляторе. я прошлую версию тоже тестану"
+
+## 2. Key Technical Concepts
+
+**Flutter:** GestureArena, `GestureDisposition`, `HorizontalDragGestureRecognizer`, `TapAndHorizontalDragGestureRecognizer`, `eagerVictoryOnDrag`, `DeviceGestureSettings`/`gestureSettings`, `debugPrintGestureArenaDiagnostics`, `HitTestBehavior.translucent`, Stack topmost-first hit-testing, `BouncingScrollPhysics` + `AlwaysScrollableScrollPhysics`, `ScrollNotification.depth`, `TestGesture.moveBy(timeStamp:)`.
+
+**React Native:** react-native-gesture-handler (`Gesture.Pan`, `Gesture.Race`, `Gesture.Simultaneous`, `manualActivation`, `manager.activate()/fail()`, `activeOffsetX`, `failOffsetX`, `failOffsetY`, `hitSlop`), react-native-screens (`RNSPanGestureRecognizer`, `gestureResponseDistance`, `fullScreenGestureEnabled`, `isInGestureResponseDistance`), Reanimated (`useSharedValue`, `useAnimatedStyle`, `useAnimatedScrollHandler` with `onScroll`/`onEndDrag`, `runOnJS`, `withTiming`, `interpolateColor`, worklets on the UI runtime = iOS main thread), React Navigation native-stack, `BackHandler`.
+
+**Core architectural insight (stated repeatedly):** The Flutter prototype is reliable not because Flutter arbitrates better, but because its design has **nothing to arbitrate** — the menu is a sibling layer (not a navigation transition) and the pull is the scroll view's own overscroll (not a competing recognizer). The RN app had a competitor at every step. "реворк — это не «выиграть лучше», а «убрать соперника»."
+
+## 3. Files and Code Sections
+
+### Flutter prototype (`experiments/gesture_lab/`) — committed `c01cecf3`
+
+**`lib/gestures.dart`** — the custom recognizer that replaces first-past-the-post with an explicit directional verdict:
+```dart
+class DirectionalHorizontalDragRecognizer extends HorizontalDragGestureRecognizer {
+  DirectionalHorizontalDragRecognizer({
+    super.debugOwner,
+    this.verticalBailout = 8.0,
+    this.horizontalCommit = 12.0,
+    this.dominanceRatio = 1.2,
+  });
+  final Map<int, Offset> _travel = <int, Offset>{};
+
+  @override
+  void handleEvent(PointerEvent event) {
+    if (event is PointerMoveEvent) {
+      final Offset total = (_travel[event.pointer] ?? Offset.zero) + event.delta;
+      _travel[event.pointer] = total;
+      gestureDebug.axis.value = '${total.dx.toStringAsFixed(0)},${total.dy.toStringAsFixed(0)}';
+      if (total.dy.abs() > verticalBailout &&
+          total.dy.abs() > total.dx.abs() * dominanceRatio) {
+        _travel.remove(event.pointer);
+        resolve(GestureDisposition.rejected);   // concede to the scrollable
+        return;
+      }
+      if (total.dx.abs() > horizontalCommit &&
+          total.dx.abs() > total.dy.abs() * dominanceRatio) {
+        resolve(GestureDisposition.accepted);   // acceptGesture replays pending offset
+      }
+    }
+    super.handleEvent(event);
+  }
+}
+```
+Also holds `GestureDebug` (ValueNotifiers for the HUD: `visible`, `axis`, `menu`, `pull`, `armed`, `phase`).
+
+**`lib/capture_page.dart`** — `NoteModel` (index + `TextEditingController` + `FocusNode`, owned by the shell so state survives), `kPullThreshold = 80.0`, `kTabHeight = 44.0`. The pull rides overscroll:
+```dart
+bool _onScroll(ScrollNotification n) {
+  if (n.depth != 0 || n.metrics.axis != Axis.vertical) return false;
+  final double over = n.metrics.pixels - n.metrics.maxScrollExtent;
+  _pull.value = over > 0 ? over : 0;
+  ...
+}
+void _onRelease(PointerEvent _) {   // raw Listener, not ScrollEndNotification
+  if (!widget.live || !_armed) return;
+  _armed = false; HapticFeedback.mediumImpact(); widget.onPullCommit();
+}
+```
+TextField uses `scrollPhysics: const NeverScrollableScrollPhysics()` so the outer `SingleChildScrollView` owns every vertical drag; physics is `AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics())`.
+
+**`lib/main.dart`** — `_ShellState` with `_menu` and `_commit` AnimationControllers. **The critical fix** — the swipe layer is the second-to-last Stack child, not an ancestor:
+```dart
+Positioned.fill(
+  child: RawGestureDetector(
+    behavior: HitTestBehavior.translucent,
+    gestures: <Type, GestureRecognizerFactory>{
+      DirectionalHorizontalDragRecognizer: GestureRecognizerFactoryWithHandlers<...>(...)
+    },
+  ),
+),
+const _Hud(),
+```
+
+**`test/widget_test.dart`** — 4 tests, all passing. `dragInSteps` threads a real clock because `TestGesture.moveBy` defaults `timeStamp: Duration.zero`.
+
+**`experiments/gesture_lab/README.md`** — documents the arena finding, the rejected alternatives (gestureSettings never plumbed; `enableInteractiveSelection: false` doesn't remove the recognizer; Listener-outside-the-arena still lets the field move the caret), tunables table, known limits.
+
+### RN app (`apps/mobile/`)
+
+**`src/lib/capture-gesture.ts`** — rewritten twice. Final state (after Part B) exports only: `PULL_THRESHOLD = 80`, `PULL_TAB_HEIGHT = 44`, `PULL_TAB_MAX_STRETCH = 96`, `TOP_SLACK = 4`, `SYNC_RIGHTWARD_FAIL = 8`, `ESCAPE_DRAG = 14`, plus:
+```ts
+export const overscrollPastEnd = (offsetY, contentHeight, viewportHeight): number => {
+  "worklet";
+  const maxScroll = Math.max(0, contentHeight - viewportHeight);
+  return Math.max(0, offsetY - maxScroll);
+};
+export const shouldCommitPull = (pull: number): boolean => { "worklet"; return pull >= PULL_THRESHOLD; };
+export const pullProgress = (pull: number): number => { "worklet"; return Math.min(1, Math.max(0, pull / PULL_THRESHOLD)); };
+export const pullTabReveal = (pull: number): number => {
+  "worklet";
+  return Math.min(Math.max(0, pull), PULL_TAB_HEIGHT + PULL_TAB_MAX_STRETCH);
+};
+export const visiblePageHeight = (windowHeight, keyboardHeight): number => { "worklet"; return Math.max(1, windowHeight - keyboardHeight); };
+```
+Deleted: `COMMIT_FRACTION`, `COMMIT_VELOCITY`, `ACTIVATE_PULL`, `BOTTOM_SLACK`, `isAtScrollBottom`, `RIGHTWARD_FAIL`, `RIGHTWARD_FAIL_RATIO`, `LEFTWARD_FAIL`, `VERTICAL_LATCH`, `VERTICAL_LATCH_RATIO`, `isVerticalCommitted`, `horizontalVerdict`, `HorizontalVerdict`, `shouldCommitFiling`, `BACK_SWIPE_GUTTER`, `NATIVE_BACK_RESPONSE_DISTANCE`, `NATIVE_BACK_BAND_FRACTION`, `nativeBackBandBottom`, `isInNativeBackBand`.
+
+**`src/screens/home-shell.tsx`** (new) — context seam:
+```ts
+export type HomeShell = {
+  menuProgress: SharedValue<number>;  // 0 = capture, 1 = menu
+  openMenu: () => void;
+  openCapture: () => void;
+};
+export const useHomeShell = (): HomeShell => { ... throws if outside HomeScreen }
+```
+
+**`src/screens/home-screen.tsx`** (new) — root screen mounting both layers permanently. `MENU_PARALLAX = 0.3`, `MENU_DIM = 0.08`, `SETTLE = { duration: 220, easing: Easing.out(Easing.cubic) }`. Contains the Android BackHandler:
+```ts
+useEffect(() => {
+  const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+    if (menuProgress.value > 0.5) return false;   // menu showing: let the OS exit
+    openMenu();
+    return true;
+  });
+  return () => subscription.remove();
+}, [menuProgress, openMenu]);
+```
+Renders `<MenuScreen/>` (parallax), a dim layer (`pointerEvents="none"`), then `<CaptureScreen/>` translated by `windowW * menuProgress`.
+
+**`src/screens/capture-screen.tsx`** — heavily modified. Key current content:
+
+The hoisted declarations (this ordering is load-bearing):
+```ts
+const pull = useSharedValue(0);
+const runLog = useCallback((line: string) => { console.log(`[gesture] ${line}`); }, []);
+// Both of the above must stay ABOVE the scroll handler.
+// useAnimatedScrollHandler serializes its worklet at call time and captures
+// whatever these names hold at that moment. Declared below it they capture
+// undefined, and the first scroll event dies with "Cannot set property
+// 'value' of undefined" on the UI runtime.
+// ---- Scroll plumbing ----
+```
+
+The scroll handler that replaced `swipeToFile`:
+```ts
+const onScroll = useAnimatedScrollHandler({
+  onScroll: (event) => {
+    offsetY.value = event.contentOffset.y;
+    contentH.value = event.contentSize.height;
+    viewportH.value = event.layoutMeasurement.height;
+    indicatorOpacity.value = 1;
+    indicatorOpacity.value = withDelay(600, withTiming(0, { duration: 350 }));
+    if (!transitioning.value) {
+      pull.value = overscrollPastEnd(
+        event.contentOffset.y, event.contentSize.height, event.layoutMeasurement.height
+      );
+    }
+  },
+  onEndDrag: () => {
+    if (transitioning.value || !shouldCommitPull(pull.value)) return;
+    const pageHeight = visiblePageHeight(windowH.value, keyboard.height.value);
+    transitioning.value = true;
+    runOnJS(runLog)(`pull:commit at=${Math.round(pull.value)}`);
+    pull.value = 0;
+    pageY.value = withTiming(-pageHeight, { duration: 260, easing: Easing.out(Easing.cubic) },
+      (finished) => { if (finished) { runOnJS(runFinishCommit)(); } else { transitioning.value = false; } });
+  },
+});
+```
+
+`swipeToMenu` (added in Part A, mirror of `swipeToSync`):
+```ts
+Gesture.Pan()
+  .activeOffsetX(16).failOffsetX(-24).failOffsetY([-24, 24])
+  .onBegin(() => { runOnJS(runLog)("menu:begin"); })
+  .onStart(() => { runOnJS(runLog)("menu:start"); runOnJS(dismissKeyboard)(); })
+  .onUpdate((event) => {
+    menuProgress.value = Math.min(1, Math.max(0, event.translationX / Math.max(windowW.value, 1)));
+  })
+  .onEnd((event, success) => {
+    if (!success) { runOnJS(runLog)("menu:cancelled"); menuProgress.value = withTiming(0, {duration:180}); return; }
+    const shouldOpen = menuProgress.value > MENU_OPEN_PROGRESS || event.velocityX > MENU_OPEN_VELOCITY;
+    runOnJS(runLog)(`menu:end p=${menuProgress.value.toFixed(2)} vx=${Math.round(event.velocityX)} open=${shouldOpen}`);
+    menuProgress.value = withTiming(shouldOpen ? 1 : 0, { duration: shouldOpen ? 160 : 180, easing: Easing.out(Easing.cubic) });
+  })
+  .onFinalize((_event, success) => { runOnJS(runLog)(`menu:finalize success=${success}`); })
+```
+Constants: `MENU_OPEN_PROGRESS = 0.3`, `MENU_OPEN_VELOCITY = 500`.
+
+Gesture composition is now `Gesture.Simultaneous(keyboardEscape, Gesture.Race(swipeToMenu, swipeToSync))`.
+
+Pull tab styles + JSX (styles `pullPill`, `pullLabel`, `pullLabelOverlay`, `pullStem`), using `interpolateColor(pullProgress(pull.value), [0,1], [theme.colors.surface, theme.colors.accent])` and `translateY: PULL_TAB_HEIGHT - reveal - keyboard.height.value`.
+
+`keyboardEscape`'s `horizontalVerdict` call was replaced with an inline check: `if (Math.abs(dx) > 24 && Math.abs(dx) > Math.abs(dy)) { manager.fail(); return; }`.
+
+**`src/screens/menu-screen.tsx`** — `captureProgress`, `menuDepthStyle`, `dimStyle`, `capturePreviewStyle`, `openCaptureBehindPreview`, `runOpenCapture`, `MENU_PARALLAX`, the whole capture-replica JSX and its styles (`dim`, `capturePreview`, `previewPlaceholder`, `previewButton`, `previewMic`) all deleted. `swipeToCapture` now writes `menuProgress.value = 1 - closed`. `pressWasSwipe()` now reads `menuProgress.value < 0.999`. `openCapture` → `closeMenu` calling shell's `openCapture`.
+
+**`src/App.tsx`** — `Menu` + `Capture` screens replaced by one `Home` screen with `headerShown: false`; `BOOT_NAVIGATION_STATE` and `initialState` removed; `initialRouteName="Home"`. Also the demo banner bug fix:
+```jsx
+{demoMode ? (
+  // Purely informational, and it sits across the bottom edge — exactly
+  // where a swipe up to file starts. Without this it swallows those
+  // touches and the gesture silently never begins.
+  <View pointerEvents="none" style={[styles.demoBanner, { backgroundColor: theme.colors.accent }]}>
+```
+
+**`src/navigation.ts`** — `RootStackParamList` lost `Menu` and `Capture`, gained `Home: undefined`. `useClearInstantParam` now typed for `"Sync"` only.
+
+**`apps/mobile/GESTURES.md`** — updated three times: Round 2 findings section, "What the screen does now" rewritten twice, alternative A retitled "**adopted**", gestures table now lists two pans with a note that filing is not a gesture.
+
+## 4. Errors and fixes
+
+1. **Flutter: horizontal swipe test failed (capture x = 0).** Wrong hypotheses twice. Fixed by instrumenting (`debugPrintGestureArenaDiagnostics`) which showed `TapAndHorizontalDragGestureRecognizer` "Self-declared winner". Real fix: swipe layer as a translucent `Positioned.fill` Stack sibling above the pages instead of an ancestor.
+
+2. **Flutter bisect harness returned `[]` for every case** — the harness child sized to zero under loose Scaffold constraints. Fixed with `SizedBox.expand` + `Stack(fit: StackFit.expand)`.
+
+3. **Flutter: `MediaQuery` + `DeviceGestureSettings(touchSlop: 44)` was inert** — confirmed from Flutter source that `TextSelectionGestureDetector` never assigns `gestureSettings`. Reverted.
+
+4. **Flutter tests: velocity always zero** — `TestGesture.moveBy` defaults `timeStamp: Duration.zero`. Fixed `dragInSteps` to pass an incrementing clock.
+
+5. **Flutter test: close-swipe started off-screen** — used `find.byType(MenuPage)` as the start point instead.
+
+6. **Ran prettier with no repo config → 162 lines of churn in `settings-screen.tsx`.** Detected via `git diff --stat`. Verified the repo isn't prettier-formatted (neither default nor `--trailing-comma es5` matched untouched files). Reverted all 7 source files with `git checkout --` and re-applied only semantic edits via python. **Lesson: don't run formatters the project doesn't use.**
+
+7. **Python edit script anchor spanned two non-adjacent blocks** (`NATIVE_BACK_BAND_FRACTION` block + `isVerticalCommitted`) → `MISS`. Split into separate replacements. The `edit()` helper is atomic (writes only after all pairs match), so nothing was half-applied.
+
+8. **Regex deleting dead styles mangled `StyleSheet.create`** in menu-screen — `\n  key: \{\n(?:.*\n)*?  \},` ate across entries. Repaired the specific damaged region by hand.
+
+9. **`Animated.View` still used after removing the `Animated` default import** — converted the two static wrappers to plain `View`.
+
+10. **RN runtime: `Cannot set property 'value' of undefined`** at `pull.value = overscrollPastEnd(...)`. Cause: `pull` and `runLog` declared *below* `useAnimatedScrollHandler`, which serializes its worklet at call time. Fixed by hoisting both above the handler with a warning comment.
+
+11. **Metro: `Unable to resolve "expo"`** → worktree had no `node_modules` (npx was fetching on the fly). Ran `npm install` at worktree root.
+
+12. **Metro wouldn't start: port 8081 busy** → my own stale `expo run:ios` process. Verified ownership via `ps` before killing.
+
+13. **External SSD unmounted twice.** First time: disk present but encrypted+locked; handed the user `! diskutil apfs unlockVolume disk5s1` to run themselves — "Пароль я у тебя не спрашиваю и в сессию не тяну." Second time: Metro died (exit 7), commits verified intact.
+
+**User feedback that changed my approach:**
+- "бля. я не понимаю. что от меня то требуется?" — I was dumping analysis and offloading diagnosis onto them. I switched to "Ничего. Делаю сам."
+- "я не против более глобального реворка если он поможет" — authorized the architectural rework over threshold tuning.
+- "сначала закомить текущее (как эксперемент, на отдельной ветке)" and "но закомиться перед этим" — commit checkpoints before invasive work.
+- The user rejected my `git fsck` investigation twice and chose "1" (just restart Metro).
+
+## 5. Problem Solving
+
+**Solved:** Flutter arena conflict (hit-test ordering); Flutter test harness velocity trap; RN asymmetric `horizontalVerdict` killing arcing swipe-ups; RN back-swipe being two implementations split by height; the demo banner swallowing swipe-up touches; the `node_modules` / Metro setup; the non-adaptive back swipe (Part A); the `manualActivation` blocker causing 2-in-10 horizontal swipe loss (Part B, diagnosed from the real Metro log).
+
+**Diagnosed from the live `[gesture]` log** — the decisive evidence:
+```
+menu:begin
+file:down x=241 y=299
+file:release->menu dx=37 dy=1
+menu:finalize success=false     ← no menu:start
+```
+vs a success at `dx=33`. Conclusion: not a threshold, a race — `manager.fail()` is terminal for the whole touch, so whether `swipeToMenu` survives depends on whether one more pointer move arrives. Also the 8pt window between `activeOffsetX(16)` and release at `dx > 24` where `swipeToMenu` is eligible but blocked.
+
+**Open/unresolved:**
+- `git fsck` reported `empty filename in tree entry` / `badTree`. Not investigated (user declined). I advised that a `git clone` or push to a remote is a better integrity check than fsck.
+- Android has no ScrollView bounce, so **the pull gesture does not exist on Android** after Part B. Flagged explicitly as an unpaid cost.
+- `gesture-trace.ts` + its Settings → Diagnostics readout are orphaned (no producer) after Part B. Flagged; offered to delete or keep.
+- `package-lock.json` (2 lines), `ios/Podfile.lock`, `ios/Type.xcodeproj/project.pbxproj` are dirty and deliberately uncommitted.
+
+## 6. All user messages
+
+1. "make worktree. create a flutter app. look, i want to test the interactions on flutter app. create a minimal (very very minimal) reprodction of this app. what i want to do is / main screen. i swipe right (like almost anywhere on the screen, not just from the left edge) - the menu appears. i swipe back to the left - i land back on the capture screen (ideally on the same note and same scroll position so like dont unmount the main screen) / main screen is the capture screen / and i can write notes. and i can swipe up - and i start a new note (like first - i should be able to scroll to the end of the current note. and then it's like a "pull-to-refresh" mechanics - i see some indicator that i'm "starting an action to move to the next note", then i kinda "pull" (here from the bottom to up not from the up to bottom as in usual pull-to-refresh mechanics) - я вижу например ярлычок который тянется - then i need to "pull" up to a certain treshold (like certain distance from when the action "started"). and when i done it - i can release so it moves to the next note (fresh screen where i can start a new note) / it *kinda* works in existing react native app but it doesn't capture my geastures well / so yep. very minimal just to test those actions interaction"
+2. "key. i tested it manually. it works nicely. / if i asked you how you can instead make it better on my original react native app - what would you do?"
+3. "кратко по русски - получилось бы?"
+4. "вот просто щас этот жест снизу вверх да и слева направо (даже если мы не берем в расчет моменты по типу маунтинга или релиза после тресхолда - все равно) как-то хуево распознаются на телефоне. через раз получается (твой флаттер прототип на реальном телефоне я пока не тестил но на симуляторе работает прямо очень smooth)"
+5. "ладно. попробуй теперь улучшить мой rn версию"
+6. "а можешь ее тоже на айос симулятор установить? сделаю сравнение"
+7. "подожди. значит я из capture в menu могу войти только если начал жест при y < 24?" (quoting my own summary of the `gestureResponseDistance` change)
+8. "то есть будет в целом идентично с тем как у меня на флаттере? (кингстон вернул)"
+9. "сначала закомить текущее (как эксперемент, на отдельной ветке) а потом сделай как надо"
+10. "что ты имеешь ввиду под альтернативой А?"
+11. "давай"
+12. "тока убери щас ошибку в симуляторе. я прошлую версию тоже тестану"
+13. "слушай. я прошу тебя хорошо подумать. то что я вижу щас в симуляторе / свайп снизу вверх - ваще не работает / свайп слево направо. он не такой "АДАПТИВНЫЙ" как во флаттере. во флаттере ты можешь дойти до 40% - потом вернуть обратно. тут как только ты на 1% двигаешь - все - транзишн проходит"
+14. "при этом во флаттере именно прям хорошо все работает. / как мне добиться такого же в моем рн? / я не против более глобального реворка если он поможет"
+15. "бля. я не понимаю. что от меня то требуется?"
+16. "слушай. у меня external ssd ненадолго отключился. до сих пор все ранится?"
+17. "и как оно?"
+18. "и как оно"
+19. "1"  (choosing: just restart Metro)
+20. "ок приступай к Б" then "ладно продолжай"
+21. "но на самом деле у меня иногда в редких случаях (2 из 10) не капчерится жест будто. но норм если потом к этому вернемся?"
+22. "возможно добавим логгинг. и я буду тестить. и когда не пройдет - я тебе скажу и ты чекнешь последний swipe attempt и поймешь почему"
+23. "вот. например последний"
+24. "но закомиться перед этим"
+25. "делай"
+
+## 7. Pending Tasks
+
+- **Android pull gesture** — `ScrollView` doesn't bounce on Android, so filing by pull does not work there at all after Part B. Needs either a `Platform.select` fallback pan or an emulated rubber-band. Flagged to the user; no decision yet.
+- **Orphaned gesture trace** — `src/lib/gesture-trace.ts`, `src/lib/gesture-trace.test.ts`, the Settings → Diagnostics readout, and the `traceGestures` flag in `src/state/diagnostics-store.ts` have no producer. Offered to delete or keep; awaiting the user's call.
+- **User testing of Part B** — the pull tab and overscroll filing have never been exercised by a human; I only verified it boots without a red screen.
+- **`PULL_THRESHOLD` tuning** — told the user this is the first knob if the pull feels long or short.
+
+## 8. Current Work
+
+Immediately before the summary request, Part B had just been committed as `c1f480f2` ("File the page from the scroll view's overscroll, not a gesture", 4 files changed, 322 insertions, 548 deletions). `tsc` was clean, 102 vitest tests passed, and the app relaunched on the simulator showing the capture page with no red screen.
+
+The branch `experiment/capture-gestures` now holds:
+- `c1f480f2` — Part B (overscroll filing + pull tab)
+- `602f4e06` — Metro `[gesture]` logging
+- `17d4b109` — Part A (Capture + Menu as two layers of one screen)
+- `acb870fd` — threshold/partition fixes
+- `c01cecf3` — Flutter prototype
+- `be8f3d2f` — pre-existing main HEAD
+
+I had just delivered the Part B summary to the user, including the two flagged loose ends (Android has no pull; the gesture trace is orphaned).
+
+Then two system notifications arrived reporting that background tasks `bczhui3ng` (a stale Metro waiter) and `bm8361uhq` (the Metro dev server) were **killed**. I ran one verification command confirming:
+- port 8081 is free ("пусто = Metro не слушает")
+- the simulator app is not running ("приложение на симуляторе: не запущено")
+
+These were automated notifications, **not** user input — no human instruction has been received since "делай".
+
+## 9. Optional Next Step
+
+Report to the user that Metro and the simulator app both stopped, and offer to restart them — without restarting unprompted, since the user may have stopped them deliberately (they had earlier chosen to stop an investigation with a bare "1", and have twice interrupted tool calls).
+
+This follows directly from the last user instruction ("делай" → Part B), which is now complete and committed, and from the fact that the user's stated workflow is hands-on testing: "возможно добавим логгинг. и я буду тестить. и когда не пройдет - я тебе скажу и ты чекнешь последний swipe attempt и поймешь почему". Testing Part B requires Metro to be running, so the natural next step is to offer to bring it back up, then wait for their verdict on the pull gesture and on the two open questions I flagged:
+
+> "**Android.** `ScrollView` там не баунсит, так что тяги на Android сейчас **нет вообще**. Это тот самый размен, о котором я предупреждал, и он не бесплатный — нужен отдельный путь. Скажи, если Android в приоритете."
+>
+> "**Gesture trace осиротел.** `gesture-trace.ts` и раздел в Settings → Diagnostics больше никто не наполняет — жест, за которым они следили, удалён. ... Могу удалить трейс отдельным коммитом или оставить — скажи."
+
+If you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: /Users/digital/.claude/projects/-Volumes-KINGSTON-Projects-type-app--claude-worktrees-flutter-gesture-proto/fbb700ad-62c2-4e16-8e9b-efdb82bc4708.jsonl
+Continue the conversation from where it left off without asking the user any further questions. Resume directly — do not acknowledge the summary, do not recap what was happening, do not preface with "I'll continue" or similar. Pick up the last task as if the break never happened.
