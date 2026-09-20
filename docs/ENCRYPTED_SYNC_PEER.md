@@ -94,6 +94,10 @@ is append-only and missing local audio is downloaded again. A peer receipt does
 not count as the existing desktop audio-durability receipt, so it never authorizes
 phone audio eviction. OCR/transcription still runs on a device with the key.
 
+Future snapshot compaction and garbage collection are outlined in the
+[retention implementation plan](ENCRYPTED_SYNC_PEER_RETENTION_PLAN.md).
+That proposal is not implemented in v1.
+
 Back up the entire peer data directory, preferably with the service stopped for
 an atomic filesystem snapshot. Restore it together, including `peer.json` and
 `head.json`; changing the endpoint identity requires pairing again. A restored
