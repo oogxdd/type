@@ -34,16 +34,23 @@ The native ScrollView's bottom overscroll supplies the pull distance. Scrolling
 through a long note contributes zero to the threshold. The same continuous
 finger movement can scroll to the end and continue into a pull.
 
-- At 12pt overscroll the label starts appearing: **Pull up for a new note**.
-- At 80pt overscroll it changes to **Release to start a new note**, with a light
-  selection haptic. These are rubber-banded content points, not finger travel.
-- Readiness remains until the pull retreats below 64pt, avoiding label/haptic
+- The overscroll opens a strip below the page whose height *is* the pull, so the
+  paper lifts off a slightly darker surface instead of a control flying in.
+  The strip tints from `surface` toward `border` as the threshold approaches —
+  both derived from the background, so it reads the same in either theme.
+- At 52pt the label fades in, centered in the strip, reaching full opacity at
+  72pt: **Pull up to start a new note**. It is held back until the strip can
+  hold a line of text.
+- At 100pt it changes to **Release to start a new note** and its color goes from
+  secondary to primary, with a light selection haptic. These are rubber-banded
+  content points, not finger travel.
+- Readiness remains until the pull retreats below 83pt, avoiding label/haptic
   flicker at the boundary. Retreat farther and release to cancel.
 - Only a successful upward pan release while ready starts the new-page
   transition. Speed is deliberately absent from this decision.
 - Momentum, cancelled touches and layout-only scroll events cannot commit.
   Overscroll updates readiness only while the shared pan is actively vertical.
-- The label stays above the keyboard. The fresh page receives typing focus.
+- The strip sits above the keyboard. The fresh page receives typing focus.
 
 Capture retains the old draft until its save succeeds. If storage fails, the
 old page returns with its text. Opening the menu flushes without clearing it.

@@ -1,7 +1,6 @@
 // Capture keeps its draft mounted while the menu is open. HomeScreen owns
 // direction/release; this native scroll view supplies only bottom overscroll.
 
-import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -18,6 +17,7 @@ import {
 } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  interpolateColor,
   runOnJS,
   useAnimatedKeyboard,
   useAnimatedProps,
@@ -39,8 +39,9 @@ import { registerCaptureDraft } from "../lib/capture-draft";
 import {
   isPullReady,
   overscrollPastEnd,
-  PULL_REVEAL,
-  PULL_TAB_HEIGHT,
+  PULL_READY,
+  pullLabelOpacity,
+  pullZoneHeight,
   visiblePageHeight,
 } from "../lib/capture-gesture";
 import * as Haptics from "expo-haptics";
@@ -372,10 +373,27 @@ export const CaptureScreen = () => {
     }
   };
 
-  const pullPillStyle = useAnimatedStyle(() => ({
-    bottom: Math.max(keyboard.height.value, insets.bottom) + 8,
-    opacity: transitioning.value ? 0 : Math.min(1, Math.max(0, (pull.value - PULL_REVEAL) / 16)),
-    transform: [{ translateY: PULL_TAB_HEIGHT + 12 - Math.min(Math.max(0, pull.value - PULL_REVEAL), 150) }],
+  // The strip is the gap the page leaves behind: its height is the overscroll
+  // itself, so nothing slides in over the paper. It darkens slightly on the way
+  // to the threshold (surface → border, both derived from the background, so
+  // this reads the same in either theme) and stays deliberately faint.
+  const pullZoneStyle = useAnimatedStyle(() => ({
+    // Flush to the screen edge, *not* above the home indicator: the strip is
+    // what lies under the page, so any inset below it reads as a stray band of
+    // paper beneath the gap. Only the keyboard actually shortens the page.
+    bottom: keyboard.height.value,
+    height: pullZoneHeight(pull.value),
+    opacity: transitioning.value ? 0 : 1,
+    backgroundColor: interpolateColor(
+      Math.min(pull.value, PULL_READY),
+      [0, PULL_READY],
+      [theme.colors.surface, theme.colors.border]
+    ),
+  }));
+
+  // Held back until the strip can actually hold a centered line of text.
+  const pullLabelStyle = useAnimatedStyle(() => ({
+    opacity: pullLabelOpacity(pull.value),
   }));
 
   // The page rides the swipe and its bottom padding tracks the keyboard so
@@ -565,15 +583,18 @@ export const CaptureScreen = () => {
           <DictationButton onRecordingChange={setRecordingActive} />
         </Animated.View>
       </View>
-      <Animated.View pointerEvents="none" style={[
-        styles.pullPill,
-        { backgroundColor: theme.colors.surface, borderColor: readyLabel ? theme.colors.text : theme.colors.border },
-        pullPillStyle,
-      ]}>
-        <Ionicons name={readyLabel ? "add-outline" : "arrow-up-outline"} size={18} color={theme.colors.text} />
-        <Text accessibilityLiveRegion="polite" style={{ color: theme.colors.text, fontSize: 13 }}>
-          {readyLabel ? "Release to start a new note" : "Pull up for a new note"}
-        </Text>
+      <Animated.View pointerEvents="none" style={[styles.pullZone, pullZoneStyle]}>
+        <Animated.Text
+          accessibilityLiveRegion="polite"
+          numberOfLines={1}
+          style={[
+            styles.pullLabel,
+            { color: readyLabel ? theme.colors.text : theme.colors.secondaryText },
+            pullLabelStyle,
+          ]}
+        >
+          {readyLabel ? "Release to start a new note" : "Pull up to start a new note"}
+        </Animated.Text>
       </Animated.View>
     </View>
   );
@@ -582,11 +603,14 @@ export const CaptureScreen = () => {
 const styles = StyleSheet.create({
   root: { flex: 1, overflow: "hidden" },
   depth: { flex: 1 },
-  pullPill: {
-    position: "absolute", alignSelf: "center", minHeight: PULL_TAB_HEIGHT,
-    paddingHorizontal: 16, borderRadius: 22, borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: "row", alignItems: "center", gap: 8,
+  // Full-bleed and bottom-anchored: the strip grows upward out of the bottom
+  // edge as the page lifts. overflow:hidden keeps the label clipped while the
+  // strip is still shorter than the text.
+  pullZone: {
+    position: "absolute", left: 0, right: 0,
+    alignItems: "center", justifyContent: "center", overflow: "hidden",
   },
+  pullLabel: { fontSize: 13, paddingHorizontal: 20 },
   gestureHost: { flex: 1 },
   page: { flex: 1, paddingHorizontal: 20 },
   scroll: { flex: 1 },

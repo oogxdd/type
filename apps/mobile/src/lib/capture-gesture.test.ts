@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   isPullReady, menuReleaseTarget, overscrollPastEnd,
+  PULL_DISARM, PULL_LABEL_FULL, PULL_LABEL_REVEAL, PULL_READY, PULL_ZONE_MAX,
+  pullLabelOpacity, pullZoneHeight,
   resolveSwipeDirection, shouldCommitPull, visiblePageHeight,
 } from "./capture-gesture";
 
@@ -36,10 +38,12 @@ describe("pull after the end of a note", () => {
     expect(overscrollPastEnd(80, 200, 0)).toBe(0);
   });
   it("arms, tolerates jitter, and lets the user retract to cancel", () => {
-    expect(isPullReady(79, false)).toBe(false);
-    expect(isPullReady(80, false)).toBe(true);
-    expect(isPullReady(76, true)).toBe(true);
-    expect(isPullReady(63, true)).toBe(false);
+    // Expressed against the constants, not literals: the threshold is tuned by
+    // feel and these cases describe the hysteresis, not one particular value.
+    expect(isPullReady(PULL_READY - 1, false)).toBe(false);
+    expect(isPullReady(PULL_READY, false)).toBe(true);
+    expect(isPullReady(PULL_DISARM, true)).toBe(true);
+    expect(isPullReady(PULL_DISARM - 1, true)).toBe(false);
     expect(isPullReady(76, false)).toBe(false);
   });
   it("only files an armed upward release; cancellation never files", () => {
@@ -68,5 +72,30 @@ describe("menu release", () => {
     expect(menuReleaseTarget(0.9, -600, true, true)).toBe(0);
     expect(menuReleaseTarget(0.8, 900, false, false)).toBe(0);
     expect(menuReleaseTarget(0.2, -900, true, false)).toBe(1);
+  });
+});
+
+describe("pull strip geometry", () => {
+  it("grows with the pull and caps so a hard fling stays sane", () => {
+    expect(pullZoneHeight(0)).toBe(0);
+    expect(pullZoneHeight(-30)).toBe(0);
+    expect(pullZoneHeight(60)).toBe(60);
+    expect(pullZoneHeight(PULL_ZONE_MAX + 400)).toBe(PULL_ZONE_MAX);
+  });
+
+  it("keeps the label hidden until the strip can hold a centered line", () => {
+    // The label must not appear while the strip is shorter than the text: at
+    // the old reveal point (12pt) it would have been clipped to a sliver.
+    expect(pullLabelOpacity(12)).toBe(0);
+    expect(pullLabelOpacity(PULL_LABEL_REVEAL)).toBe(0);
+    expect(pullLabelOpacity(PULL_LABEL_FULL)).toBe(1);
+    expect(pullLabelOpacity(PULL_LABEL_FULL + 60)).toBe(1);
+  });
+
+  it("is fully legible by the time the release threshold is reachable", () => {
+    // Otherwise the wording could still be fading in as it swaps to
+    // "Release to start a new note".
+    expect(PULL_LABEL_FULL).toBeLessThanOrEqual(PULL_READY);
+    expect(pullLabelOpacity(PULL_READY)).toBe(1);
   });
 });
