@@ -104,6 +104,13 @@ MOBILE_VERSION=0.2.6 IOS_BUILD_NUMBER=2026090101 npx expo prebuild --platform io
 `apps/mobile/ios/` is tracked, so inspect the diff after a prebuild. Only use
 `--clean` after changing Expo config, plugins, or native dependencies.
 
+> **Restore `ios/Podfile.properties.json` afterwards.** Prebuild rewrites it
+> from the Expo config and drops the committed
+> `"EXPO_USE_PRECOMPILED_MODULES": "false"`, which brings Expo's precompiled
+> xcframeworks back and reintroduces the `facebook::react::Props` segfault at
+> launch. `git checkout -- ios/Podfile.properties.json`, then re-run §1.4.
+> A correct `pod install` prints no `[Expo-precompiled]` lines.
+
 ### 1.3 Regenerate the Rust core with a device slice
 
 The checked-in `packages/mobile-core/src/index.tsx` is a mock fallback so clean
