@@ -139,6 +139,7 @@ the index.
 |---|---|---|---|
 | `archive/writemd-styling` | 20 Sep | 11 files, +1039/−1270 | The desktop reskin on native window vibrancy, Write.md's visual language |
 | `archive/alternative-sync/icloud` | 29 Aug | 8 files, +150/−67 | Notes root in an iCloud folder, letting the drive sync it instead of Git |
+| `archive/desktop-state-rehaul` | 8 Aug | 154 files, +3677/−4618 | Desktop frontend without the provider tree: every domain a zustand store, kind-based layout instead of feature slices. Main went the other way |
 | `archive/alternative-sync/iroh-without-git` | 12 Aug | 31 files, +3342/−179 | Dropping Git as the sync engine (iroh-docs + gossip), plus the standalone zero-knowledge sync peer at `9dac9d77` — two approaches in one tag |
 | `archive/tui` | 17 Aug | 27 files, +9193 | A full terminal shell, `crates/type-tui` (ratatui), 19 commits |
 | `archive/2026-09/mobile-audio-transcription` | 10 Aug | 18 files, +1164 | Importing existing phone audio as recording notes (Rust half later landed in `main` separately) |
