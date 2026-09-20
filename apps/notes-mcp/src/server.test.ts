@@ -20,8 +20,8 @@ it('serves the MCP lifecycle and filtered reads and scoped mutation tools withou
   await server.connect(a); await client.connect(b);
   try {
     const tools = await client.listTools();
-    expect(tools.tools.map(tool=>tool.name).sort()).toEqual(['create_folder','create_note','delete_folder','delete_note','list_agent_folder','list_notes','move_folder','move_note','read_agent_note','read_note','search_notes','update_note']);
-    expect(tools.tools.filter(tool=>tool.annotations?.readOnlyHint)).toHaveLength(5);
+    expect(tools.tools.map(tool=>tool.name).sort()).toEqual(['create_folder','create_note','delete_folder','delete_note','list_agent_folder','list_changes','list_notes','move_folder','move_note','prepare_context','read_agent_note','read_memory','read_note','save_artifact','search_notes','update_note','write_memory'].sort());
+    expect(tools.tools.filter(tool=>tool.annotations?.readOnlyHint)).toHaveLength(7);
     const list = await client.callTool({name:'list_notes',arguments:{}});
     expect(JSON.stringify(list)).not.toContain('CANARY');
     const payload = JSON.parse((list.content as {text:string}[])[0].text);
@@ -50,7 +50,7 @@ it('excludes hidden/storage files, symlinks and hard links, and rechecks old IDs
   await writeFile(join(root,'safe.md'),'Visible');
   const repo = await NotesRepository.create(root);
   const page = await repo.list();
-  expect(page.notes).toHaveLength(1); expect(page.unavailableCount).toBe(1);
+  expect(page.notes).toHaveLength(1); expect(page.unavailableCount).toBe(0);
   await rm(join(root,'safe.md')); await symlink(join(outside,'private.md'),join(root,'safe.md'));
   await expect(repo.read(page.notes[0].id)).rejects.toThrow('unavailable');
 });
@@ -62,5 +62,5 @@ it('refreshes filtered reads and paginates', async () => {
   const second = await repo.list(undefined,Number(first.nextCursor),1);
   expect(second.nextCursor).toBeNull(); expect(second.notes[0].preview).toBe('second');
   await writeFile(join(root,'a.md'),'#skip-ai first');
-  expect((await repo.read(first.notes[0].id)).content).toBe('');
+  await expect(repo.read(first.notes[0].id)).rejects.toThrow();
 });

@@ -16,7 +16,7 @@ try {
   let errors = '';
   transport.stderr?.on('data', chunk => { errors += chunk; });
   await client.connect(transport);
-  assert.deepEqual((await client.listTools()).tools.map(tool=>tool.name).sort(),['create_folder','create_note','delete_folder','delete_note','list_agent_folder','list_notes','move_folder','move_note','read_agent_note','read_note','search_notes','update_note']);
+  assert.deepEqual((await client.listTools()).tools.map(tool=>tool.name).sort(),['create_folder','create_note','delete_folder','delete_note','list_agent_folder','list_changes','list_notes','move_folder','move_note','prepare_context','read_agent_note','read_memory','read_note','save_artifact','search_notes','update_note','write_memory'].sort());
   const call = async (name,args={}) => {
     const result = await client.callTool({name,arguments:args});
     assert.ok(!result.isError,JSON.stringify(result));
@@ -45,8 +45,20 @@ try {
   assert.equal(denied.isError,true);
   await call('delete_folder',{path:'ideas',recursive:true});
   assert.equal(await readFile(join(root,'PRIVATE_CANARY_9482.md'),'utf8'),original);
+  const context = await call('prepare_context',{mode:'conversation'});
+  assert.equal(context.overview,null);
+  const memory = await call('write_memory',{area:'me',path:'overview.md',markdown:'# About me\nA user-confirmed preference.',sources:[],reason:'Direct clarification in this synthetic test.'});
+  const editable = await call('read_memory',{area:'me',path:'overview.md',editable:true});
+  assert.ok(editable.markdown.includes('user-confirmed'));
+  await call('write_memory',{area:'me',path:'overview.md',markdown:'# About me\nAn updated preference.',sources:[],reason:'Correction.',expectedRevision:memory.revision});
+  const artifact = {key:'smoke-observation',kind:'observation',body:'One tentative observation.',sources:[],partial:true};
+  const saved = await call('save_artifact',artifact);
+  assert.equal((await call('save_artifact',artifact)).replayed,true);
+  assert.ok(saved.path.startsWith('artifacts/'));
+  const snapshot = await call('list_changes');
+  assert.deepEqual((await call('list_changes',{since:snapshot.snapshot})).changes,[]);
   assert.equal(errors,'');
-  console.log('PASS: stdio initialize, tool catalog, read/search redaction, no filename leak, scoped CRUD, original unchanged.');
+  console.log('PASS: stdio initialize, tool catalog, read/search redaction, no filename leak, scoped CRUD, observer context, memory history, idempotent artifacts, snapshots, original unchanged.');
 } finally {
   await client.close();
   await rm(root,{recursive:true,force:true});

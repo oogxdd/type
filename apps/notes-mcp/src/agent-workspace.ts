@@ -3,6 +3,8 @@ import { lstat, realpath, mkdir, open, readdir, rename, unlink, rmdir, link } fr
 import { join, dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { projectNote, ProjectionError } from './projection';
+import { splitFrontmatter, joinFrontmatter } from '@typenotes/shared/frontmatter';
+import { stripInlineAnnotationMetadata } from '@typenotes/shared/annotation-metadata';
 
 const MAX_BYTES = 1024 * 1024;
 const revision = (raw: string) => createHash('sha256').update(raw).digest('hex');
@@ -12,14 +14,19 @@ const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'E
 /** The agent folder's location inside a notes root, as path segments. */
 const AGENT_PREFIX = ['_system', 'agent'] as const;
 
-/** Write boundary is always <configured notes root>/_system/agent; clients cannot choose it.
+/** Write boundary is a trusted configured memory area; tool callers cannot choose it.
  * No user path is passed to fs until every component has been validated.
  * As with the read repository, this does not sandbox hostile concurrent OS processes.
  * Line-tag migration belongs in projection.ts, not in this filesystem boundary.
  */
 export class AgentWorkspace {
   private queue: Promise<unknown> = Promise.resolve();
-  constructor(private notesRoot: string) {}
+  private prefix: string[];
+  constructor(private notesRoot: string, prefix: readonly string[] = AGENT_PREFIX) {
+    if (!['_system/agent', '_system/me', 'agent', 'me'].includes(prefix.join('/')) ||
+        prefix.some(part => part.includes('/'))) fail('Unsupported memory workspace.');
+    this.prefix = [...prefix];
+  }
   private parts(path: string, allowRoot = false): string[] {
     if (path === '' && allowRoot) return [];
     const parts = path.split('/');
@@ -32,7 +39,7 @@ export class AgentWorkspace {
     const parts = this.parts(path, allowRoot);
     if (await realpath(this.notesRoot) !== this.notesRoot) fail('Notes root changed.');
     let current = this.notesRoot;
-    const segments = [...AGENT_PREFIX, ...parts];
+    const segments = [...this.prefix, ...parts];
     for (const [index, part] of segments.entries()) {
       current = join(current, part);
       const parent = index < segments.length - 1;
@@ -41,11 +48,11 @@ export class AgentWorkspace {
       catch (error) {
         if (!missing(error)) throw error;
         // The prefix is ours to create even when it is the requested entry.
-        if (createParents && (parent || index < AGENT_PREFIX.length)) { await mkdir(current); stat = await lstat(current); }
+        if (createParents && (parent || index < this.prefix.length)) { await mkdir(current); stat = await lstat(current); }
         // A missing prefix segment means nothing below it exists either, so
         // hand back the full target and let the caller's own open/readdir
         // report it — that is what makes list('') on a fresh root empty.
-        else if (!parent || index < AGENT_PREFIX.length) return join(this.notesRoot, ...segments);
+        else if (!parent || index < this.prefix.length) return join(this.notesRoot, ...segments);
         else throw error;
       }
       if (stat.isSymbolicLink() || await realpath(current) !== current) fail('Links are not allowed inside agent.');
@@ -86,7 +93,41 @@ export class AgentWorkspace {
   }
   async read(path: string) {
     const raw = await this.raw(path);
-    return {path, content: projectNote(raw), revision: revision(raw)};
+    // nontake is a legacy whole-note privacy marker.
+    if (/nontake/i.test(raw)) fail('Private note withheld.');
+    return {path, content: projectNote(raw), revision: revision(raw), editable: this.editable(raw)};
+  }
+  // Full Markdown is exposed only in memory workspaces and only when it is
+  // safe to round-trip. Conservative false positives (including prose/code
+  // mentioning privacy markers or HTML) deliberately require filesystem edits.
+  private editable(raw: string): boolean {
+    const normalized = raw.replace(/\r\n/g, '\n');
+    return !/skip-ai|nontake/i.test(raw) && !/<[a-z!/?]/i.test(raw) &&
+      stripInlineAnnotationMetadata(normalized) === normalized;
+  }
+  async readEditable(path: string) {
+    const raw = await this.raw(path);
+    projectNote(raw); // Reject encrypted notes, malformed tags and frontmatter.
+    if (!this.editable(raw)) fail('Note contains private or hidden markup; edit it directly in the filesystem.');
+    return {path, markdown: raw, revision: revision(raw), editable: true as const};
+  }
+  private preserveMetadata(original: string, replacement: string): string {
+    const oldHeader = splitFrontmatter(original.replace(/^\uFEFF/, '')).frontmatterBlock;
+    const newHeader = splitFrontmatter(replacement.replace(/^\uFEFF/, '')).frontmatterBlock;
+    if (!oldHeader) return replacement;
+    if (!newHeader) return joinFrontmatter(oldHeader, replacement);
+    if (oldHeader === newHeader) return replacement;
+    const keys = (header: string): string[] => {
+      const lines = header.split('\n').slice(1, -1);
+      // This boundary supports flat scalar/list metadata. For richer YAML,
+      // retain the header exactly rather than guessing at its structure.
+      if (lines.some(line => line.trim() && !/^[A-Za-z0-9_-]+\s*:/.test(line)))
+        fail('Preserve complex frontmatter unchanged.');
+      return lines.filter(line => line.trim()).map(line => line.slice(0, line.indexOf(':')).trim());
+    };
+    const nextKeys = keys(newHeader);
+    if (keys(oldHeader).some(key => !nextKeys.includes(key))) fail('Replacement must retain existing frontmatter keys.');
+    return replacement;
   }
   async list(path = '') {
     const full = await this.path(path, false, true);
@@ -113,8 +154,12 @@ export class AgentWorkspace {
     this.content(content);
     const original = await this.raw(path);
     if (revision(original) !== expectedRevision) fail('Revision conflict; read the note again.');
-    // Full replacement is explicitly authorized only inside agent. This replaces
-    // frontmatter/tags too; do not reuse this method for user-owned notes elsewhere.
+    projectNote(original);
+    if (!this.editable(original)) fail('Note contains private or hidden markup; edit it directly in the filesystem.');
+    projectNote(content);
+    content = this.preserveMetadata(original, content);
+    this.content(content);
+    // Safe full replacement only within the configured memory workspace.
     const full = await this.path(path);
     const temporary = join(dirname(full), `.agent-write-${randomUUID()}`);
     const handle = await open(temporary, 'wx', 0o600);

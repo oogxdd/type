@@ -540,3 +540,15 @@ The React Native app (Expo) reuses the Rust core through
 - **Vim mode splits visual and logical lines on purpose.** `j`/`k` move by *visual* line (layout geometry, effectively Vim's `gj`/`gk`) because one prose paragraph is one logical line and jumping whole paragraphs would be useless. Everything linewise — `dd`, `V`, `dj`, `yy`, `cc` — operates on *logical* lines, so `dd` deletes the paragraph. Don't "fix" one to match the other. Related: charwise Visual selects the character under the cursor, so the ProseMirror selection head sits one past it — `VimHost.visualHead` is the authoritative cursor while Visual is active, never `selection.head`. Command keys are normalised to the US layout via `event.code` (so `dd` works on a Cyrillic layout) while `f{c}`/`r{c}` read `event.key`. Full keymap and rationale: [docs/VIM_MODE.md](./docs/VIM_MODE.md).
 - **`shouldNestNotesInNavigation`**: When `notesListMode === "nested"`, notes appear inline inside the folder tree instead of in a separate middle pane. This affects keyboard navigation, rendering, and the visible navigation items computation.
 - **Context split ordering matters**: SelectionContext and EditorContext are above NotesTreeContext in the provider tree. NotesTreeContext consumes both to update selection/editor after CRUD ops. Don't reorder providers without understanding these dependencies.
+
+## Personal observer MCP
+
+See `docs/OBSERVER_MCP.md` for the user workflow. `apps/notes-mcp/src/layout.ts`
+resolves legacy Feed/me/agent vs _system/stream/me/agent without migration;
+mixed layouts require an explicit choice. `repository.ts` owns filtered sources,
+identity/metadata and discovery. `observer.ts` owns context, delta snapshots,
+artifacts and versioned memory writes; there is no model in the server.
+Stream is read-only. `AgentWorkspace.readEditable` is a separate full-Markdown
+capability for safe memory round-trips, refused on private/hidden markup.
+Generated material/internal history must never become independent primary
+source evidence. Use synthetic fixtures for tests, never the maintainer's notes.
