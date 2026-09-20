@@ -9,7 +9,7 @@
 //! Two modes:
 //!   * `preserve` — recreate the source folder hierarchy under a single target
 //!                  folder in the notes root.
-//!   * `flatten`  — drop every note directly into `Feed`, discarding hierarchy.
+//!   * `flatten`  — drop every note directly into the stream, discarding hierarchy.
 //!
 //! Creation dates come from YAML front-matter (`created` / `date` / `created_ms`
 //! …) when present, otherwise the source file's filesystem timestamps.
@@ -73,7 +73,7 @@ impl ImportGateway for ImportAdapter {
     fn start(&self, args: Self::Args) -> Result<(), String> {
         let notes_root = ensured_notes_root(&self.app)?;
         let target_label = match args.mode {
-            AppleImportMode::Flatten => "Feed".to_string(),
+            AppleImportMode::Flatten => STREAM_FOLDER.to_string(),
             AppleImportMode::Preserve => args
                 .target_folder
                 .as_deref()
@@ -109,7 +109,7 @@ pub struct AppleImportScan {
     pub sample_titles: Vec<String>,
 }
 
-/// Whether to mirror the source hierarchy or collapse everything into Feed.
+/// Whether to mirror the source hierarchy or collapse everything into the stream.
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AppleImportMode {
@@ -315,7 +315,7 @@ fn import_inner(notes_root: &Path, args: &AppleImportArgs) -> Result<(), String>
     }
 
     let base_target = match args.mode {
-        AppleImportMode::Flatten => FEED_FOLDER.to_string(),
+        AppleImportMode::Flatten => STREAM_FOLDER.to_string(),
         AppleImportMode::Preserve => resolve_preserve_target(&source, args),
     };
 
@@ -361,7 +361,7 @@ fn import_one(
     let parsed = read_and_parse_note(file)?;
 
     let folder_rel = match args.mode {
-        AppleImportMode::Flatten => FEED_FOLDER.to_string(),
+        AppleImportMode::Flatten => STREAM_FOLDER.to_string(),
         AppleImportMode::Preserve => {
             let sub = sanitize_rel_path(&file.rel_dir);
             if sub.is_empty() {
@@ -398,7 +398,7 @@ fn import_one(
         ..Default::default()
     };
     write_note_with_front_matter(&path, &meta, &parsed.body)?;
-    if !is_feed_folder_path(notes_root, &folder_full) {
+    if !is_stream_folder_path(notes_root, &folder_full) {
         update_order_append(&folder_full, std::slice::from_ref(&file_name), false)?;
     }
     Ok(Imported::Created)

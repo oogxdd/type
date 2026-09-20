@@ -89,7 +89,7 @@ pub trait HandwritingGateway {
 //   in:  image_base64 — base64-encoded image bytes (may have data URI prefix)
 //        mime_type — e.g. "image/png", "image/jpeg". Used to detect format
 //        file_name — original filename, used as fallback for format detection
-//        folder_path — where to create the note, defaults to "Feed"
+//        folder_path — where to create the note, defaults to "_system/stream"
 //        file_name_format — how to name the note file
 //   out: HandwritingWriteResult — folder_path, note_path, attachment_path (all relative)
 //   - Decodes base64, determines image format from mime or filename

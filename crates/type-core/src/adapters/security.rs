@@ -27,7 +27,7 @@ use crate::{
     app_data_dir, collect_markdown_note_files, default_profiles_state, ensure_profiles_state,
     ensure_system_folders, find_profile, generate_note_id, legacy_profiles_file_path, now_ms,
     parse_note_front_matter, profiles_file_path, render_note_with_front_matter,
-    write_profiles_state, NoteFrontMatter, NotesProfilesFile, FEED_FOLDER,
+    write_profiles_state, NoteFrontMatter, NotesProfilesFile, STREAM_FOLDER,
 };
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -389,7 +389,7 @@ fn migrate_root_note_bodies_to_encrypted(
 
 /// Seed a reset root with sample notes so the user has something to see.
 fn seed_dummy_notes(root: &Path) -> Result<(), String> {
-    let feed = root.join(FEED_FOLDER);
+    let feed = root.join(STREAM_FOLDER);
     fs::create_dir_all(&feed).map_err(|error| error.to_string())?;
     let now = now_ms().unwrap_or(0);
     let templates = [

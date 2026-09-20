@@ -2,7 +2,7 @@
 
 ## Current storage and transport
 
-Audio files remain on disk under `Recordings/` inside the notes root, but new
+Audio files remain on disk under `_system/_recordings/` inside the notes root, but new
 recordings in an Iroh working folder are excluded from Git. Notes and transcripts
 sync through Git first; recordings transfer separately over Iroh afterward.
 Failed audio pairing leaves recordings on the phone for retry, without silently
@@ -10,7 +10,7 @@ putting them into Git. Manual checkpoints also respect the exclusion when the
 working folder has an Iroh ticket.
 
 Ordinary Git-only connections still carry recordings through Git. Handwriting
-photos under `Attachments/` also remain tracked; the audio retention policy does
+photos under `_system/_handwriting/` also remain tracked; the audio retention policy does
 not apply to them. Deleting a tracked attachment is a synced deletion and does
 not remove its bytes from historical Git objects.
 

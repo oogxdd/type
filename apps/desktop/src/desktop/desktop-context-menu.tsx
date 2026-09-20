@@ -1,7 +1,7 @@
 import { useSelection } from "@/app/state/selection-store";
 import { collectFeedNotes } from "@/features/notes/navigation/model/feed-tree-model";
 import { requestNoteEditorFocus } from "@/features/notes/editor/lib/editor-events";
-import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { STREAM_FOLDER_PATH } from "@typenotes/shared/constants";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
@@ -117,7 +117,7 @@ export function DesktopContextMenu({ state, onClose }: DesktopContextMenuProps) 
         run: () => {
           if (!paths.length) return;
           setActiveFeedGroup(state.path);
-          selectNote(paths[0], FEED_FOLDER_PATH, new Set(paths));
+          selectNote(paths[0], STREAM_FOLDER_PATH, new Set(paths));
           focusEditorOnClose.current = true;
           closeAll();
           requestNoteEditorFocus(paths[0]);

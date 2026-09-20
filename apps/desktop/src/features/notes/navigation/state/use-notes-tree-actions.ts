@@ -7,8 +7,8 @@ import { useSelection } from "@/app/state/selection-store";
 import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import {
-  ARCHIEVE_FOLDER_PATH,
-  FEED_FOLDER_PATH,
+  ARCHIVE_FOLDER_PATH,
+  STREAM_FOLDER_PATH,
   isSystemFolder,
 } from "@typenotes/shared/constants";
 import { confirmAction, focusNoScroll } from "@/shared/lib/dom";
@@ -93,9 +93,9 @@ export function useNotesTreeActions({
       targetTimestampMs?: number
     ) => {
       const treeSnapshot = tree ?? (await api.getTree());
-      const initialFolderPath = preferredFolderPath?.trim() || FEED_FOLDER_PATH;
+      const initialFolderPath = preferredFolderPath?.trim() || STREAM_FOLDER_PATH;
       const targetNode =
-        findNode(treeSnapshot, initialFolderPath) || findNode(treeSnapshot, FEED_FOLDER_PATH);
+        findNode(treeSnapshot, initialFolderPath) || findNode(treeSnapshot, STREAM_FOLDER_PATH);
       if (!targetNode) return null;
       const folderPath = targetNode.path;
       const created = await api.createNote(
@@ -147,7 +147,7 @@ export function useNotesTreeActions({
     if (!noteEditor || !editorPath) {
       return null;
     }
-    if (getNoteParentPath(editorPath) !== FEED_FOLDER_PATH) {
+    if (getNoteParentPath(editorPath) !== STREAM_FOLDER_PATH) {
       return null;
     }
     const split = getNoteSplitAtCursor(noteEditor);
@@ -169,7 +169,7 @@ export function useNotesTreeActions({
       .deleteRange({ from: split.from, to: split.to })
       .run();
     await flushSave();
-    return createNewNote(FEED_FOLDER_PATH, split.markdown, createdMs);
+    return createNewNote(STREAM_FOLDER_PATH, split.markdown, createdMs);
   }, [activeNote, createNewNote, flushSave]);
 
   /** Drops a note's generated filename slug in favour of "untitled". */
@@ -208,7 +208,7 @@ export function useNotesTreeActions({
       if (target.type === "folder") {
         if (fromFeed) {
           setActiveFeedGroup(target.id);
-          selectFolder(FEED_FOLDER_PATH);
+          selectFolder(STREAM_FOLDER_PATH);
         } else {
           selectFolder(target.id);
         }
@@ -217,7 +217,7 @@ export function useNotesTreeActions({
       }
       if (fromFeed) {
         setActiveFeedGroup(target.parentId);
-        selectNote(target.id, FEED_FOLDER_PATH);
+        selectNote(target.id, STREAM_FOLDER_PATH);
       } else {
         selectNote(target.id, target.parentId);
       }
@@ -289,7 +289,7 @@ export function useNotesTreeActions({
     async (paths: string[]) => {
       if (paths.length === 0) return;
       if (paths.some(isSystemFolder)) {
-        window.alert(`"Stream" and "Archieve" are fixed folders and cannot be deleted.`);
+        window.alert(`"Stream" and "Archive" are fixed folders and cannot be deleted.`);
         return;
       }
       const confirmed = await confirmAction(`Delete ${paths.length} folder(s)?`);
@@ -318,7 +318,7 @@ export function useNotesTreeActions({
       if (paths.length === 0) return false;
       const confirmed = await confirmAction(`Delete ${paths.length} note(s)?`);
       if (!confirmed) return false;
-      const fromFeed = activeFolder === FEED_FOLDER_PATH;
+      const fromFeed = activeFolder === STREAM_FOLDER_PATH;
       const nestedNavigationItems = fromFeed
         ? feedVisibleNavigationItems
         : visibleNavigationItems;
@@ -329,7 +329,7 @@ export function useNotesTreeActions({
         : (fromFeed ? feedNotes : notes).map((note) => ({
             type: "note" as const,
             id: note.path,
-            parentId: fromFeed ? FEED_FOLDER_PATH : activeFolder,
+            parentId: fromFeed ? STREAM_FOLDER_PATH : activeFolder,
           }));
       const nextTarget = findPostDeletionNavigationTarget(
         navigationItems,
@@ -356,7 +356,7 @@ export function useNotesTreeActions({
   const moveNotesToArchive = useCallback(
     async (paths: string[]) => {
       if (paths.length === 0) return;
-      const fromFeed = activeFolder === FEED_FOLDER_PATH;
+      const fromFeed = activeFolder === STREAM_FOLDER_PATH;
       const nestedNavigationItems = fromFeed
         ? feedVisibleNavigationItems
         : visibleNavigationItems;
@@ -367,14 +367,14 @@ export function useNotesTreeActions({
         : (fromFeed ? feedNotes : notes).map((note) => ({
             type: "note" as const,
             id: note.path,
-            parentId: fromFeed ? FEED_FOLDER_PATH : activeFolder,
+            parentId: fromFeed ? STREAM_FOLDER_PATH : activeFolder,
           }));
       const nextTarget = findPostDeletionNavigationTarget(
         navigationItems,
         new Set(paths)
       );
       await flushSave();
-      await api.moveItems(paths, ARCHIEVE_FOLDER_PATH);
+      await api.moveItems(paths, ARCHIVE_FOLDER_PATH);
       await refreshTree();
       selectPostDeletionTarget(nextTarget, fromFeed);
     },
@@ -397,8 +397,8 @@ export function useNotesTreeActions({
         return;
       }
       const movesOutOfFeed =
-        activeFolder === FEED_FOLDER_PATH &&
-        normalizedDestination !== FEED_FOLDER_PATH;
+        activeFolder === STREAM_FOLDER_PATH &&
+        normalizedDestination !== STREAM_FOLDER_PATH;
       const nextTarget = movesOutOfFeed
         ? findPostDeletionNavigationTarget(
             feedVisibleNavigationItems,
@@ -436,7 +436,7 @@ export function useNotesTreeActions({
         return;
       }
       const removesNotesFromCurrentFeed =
-        activeFolder === FEED_FOLDER_PATH &&
+        activeFolder === STREAM_FOLDER_PATH &&
         feedNoteFilter === "active" &&
         markers.archived === true;
       const nextTarget = removesNotesFromCurrentFeed
@@ -481,7 +481,7 @@ export function useNotesTreeActions({
       );
 
       const notesToMove = notePathsToMove.filter(
-        (path) => getNoteParentPath(path) !== FEED_FOLDER_PATH
+        (path) => getNoteParentPath(path) !== STREAM_FOLDER_PATH
       );
       if (notesToMove.length === 0 && foldersToRemove.length === 0) return;
 
@@ -496,7 +496,7 @@ export function useNotesTreeActions({
 
       await flushSave();
       if (notesToMove.length > 0) {
-        await api.moveItems(notesToMove, FEED_FOLDER_PATH);
+        await api.moveItems(notesToMove, STREAM_FOLDER_PATH);
       }
       if (foldersToRemove.length > 0) {
         await api.deleteItems(foldersToRemove);
@@ -504,9 +504,9 @@ export function useNotesTreeActions({
 
       // Deliberately keeps the active note open (it may have just moved into
       // Feed), so this only redirects the folder selection.
-      setSelectedFolders(new Set([FEED_FOLDER_PATH]));
-      setLastSelectedFolder(FEED_FOLDER_PATH);
-      setActiveFolder(FEED_FOLDER_PATH);
+      setSelectedFolders(new Set([STREAM_FOLDER_PATH]));
+      setLastSelectedFolder(STREAM_FOLDER_PATH);
+      setActiveFolder(STREAM_FOLDER_PATH);
       setSelectedNotes(new Set());
       setLastSelectedNote("");
       await refreshTree();

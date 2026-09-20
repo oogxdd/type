@@ -2,7 +2,7 @@
 
 The React Native version of Type. Same Rust core as the desktop app
 (`crates/type-core` via `crates/type-ffi`), same on-disk format, same git
-sync — a folder of markdown files with front matter, `Feed`/`Archieve`
+sync — a folder of markdown files with front matter, `_system/stream`/`_system/archive`
 system folders, and per-folder `.type/settings.json`.
 
 ## The one interaction that matters
@@ -117,7 +117,7 @@ it. Text size applies to the capture page and the note editor only.
 
 Camera and gallery photos use `saveHandwritingAttachment` through the same
 UniFFI/typed-core boundary as recordings. This creates a note that points to a
-file under `Attachments/` and remains pending on mobile. Desktop scans pending
+file under `_system/_handwriting/` and remains pending on mobile. Desktop scans pending
 handwriting notes after sync and dispatches them to the selected local or cloud
 OCR provider. See [attachment retention](../../docs/ATTACHMENT_RETENTION.md) before adding device cleanup:
 removing a tracked attachment directly would sync that deletion to desktop.

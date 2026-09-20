@@ -22,8 +22,9 @@ Delete this file when the branch is ready for review.
       files in Settings → Transcription and getting one note per file, dated
       to the source file's real mtime/birthtime, auto-queued for
       transcription. Also sanity-check the new asset-protocol scope actually
-      narrows to `<notes_root>/Recordings` per profile (e.g. switch profiles
-      and confirm the old profile's folder is no longer asset-servable).
+      narrows to `<notes_root>/_system/_recordings` per profile (e.g. switch
+      profiles and confirm the old profile's folder is no longer
+      asset-servable).
 - [ ] Full `cargo check --workspace` + `cargo test --workspace --lib` after M4
       (type-ffi crate added). Killed locally to save time — desktop crate does
       not depend on type-ffi, so risk is low. **CI on push covers this.**

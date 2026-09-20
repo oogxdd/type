@@ -604,9 +604,9 @@ mod tests {
             devices::generate_pairing_token()
         ));
         let repo_path = base.join("notes");
-        fs::create_dir_all(repo_path.join("Feed")).unwrap();
+        fs::create_dir_all(repo_path.join("_system/stream")).unwrap();
         fs::write(
-            repo_path.join("Feed").join("note.md"),
+            repo_path.join("_system/stream").join("note.md"),
             "hello from desktop\n",
         )
         .unwrap();
@@ -690,7 +690,7 @@ mod tests {
 
         // Clone pairs the unknown key via the token username.
         run_git(&["clone", &remote, clone_path.to_str().unwrap()], &base);
-        assert!(clone_path.join("Feed").join("note.md").exists());
+        assert!(clone_path.join("_system/stream").join("note.md").exists());
         assert!(
             devices::is_authorized(
                 &devices_path,
@@ -753,19 +753,19 @@ mod tests {
         // Uncommitted desktop edits are committed at serve time, so a pull
         // picks them up without anyone pressing a button on the desktop.
         fs::write(
-            repo_path.join("Feed").join("fresh.md"),
+            repo_path.join("_system/stream").join("fresh.md"),
             "typed after clone\n",
         )
         .unwrap();
         run_git(&["pull", "origin", &branch], &clone_path);
         assert!(
-            clone_path.join("Feed").join("fresh.md").exists(),
+            clone_path.join("_system/stream").join("fresh.md").exists(),
             "pull should receive desktop edits committed at serve time"
         );
 
         // Push from the clone updates the served working tree (updateInstead).
         fs::write(
-            clone_path.join("Feed").join("phone.md"),
+            clone_path.join("_system/stream").join("phone.md"),
             "hello from phone\n",
         )
         .unwrap();
@@ -784,7 +784,7 @@ mod tests {
         );
         run_git(&["push", "origin", &branch], &clone_path);
         assert!(
-            repo_path.join("Feed").join("phone.md").exists(),
+            repo_path.join("_system/stream").join("phone.md").exists(),
             "push should update the desktop working tree in place"
         );
 

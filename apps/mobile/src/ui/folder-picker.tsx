@@ -20,14 +20,19 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  ARCHIEVE_FOLDER_PATH,
-  FEED_FOLDER_PATH,
+  ARCHIVE_FOLDER_PATH,
+  STREAM_FOLDER_PATH,
+  SYSTEM_FOLDER_PATH,
 } from "@typenotes/shared/constants";
 import type { FolderNode } from "@typenotes/shared/types";
 
 import { allFolderPaths } from "../lib/folder-tree";
 import { useTheme } from "../theme";
 import { Button } from "./controls";
+
+/** True for `_system` itself and anything under it. */
+const isInsideSystemFolder = (path: string): boolean =>
+  path === SYSTEM_FOLDER_PATH || path.startsWith(`${SYSTEM_FOLDER_PATH}/`);
 
 /** Trim and collapse a typed path so "  Work / Q3 / " reads as "Work/Q3". */
 export const normalizeFolderPath = (value: string): string =>
@@ -55,13 +60,18 @@ export const FolderPickerModal = ({
   const [typed, setTyped] = useState("");
 
   const existing = useMemo(() => allFolderPaths(tree), [tree]);
-  const pinned = [FEED_FOLDER_PATH, ARCHIEVE_FOLDER_PATH].filter((path) =>
+  const pinned = [STREAM_FOLDER_PATH, ARCHIVE_FOLDER_PATH].filter((path) =>
     existing.includes(path)
   );
-  const browsable = existing.filter((path) => !pinned.includes(path));
+  // `_system` and its children are the app's own; only the two pinned entries
+  // above are reachable, and a typed path can never land inside it.
+  const browsable = existing.filter(
+    (path) => !pinned.includes(path) && !isInsideSystemFolder(path)
+  );
 
   const typedPath = normalizeFolderPath(typed);
-  const typedIsNew = typedPath.length > 0 && !existing.includes(typedPath);
+  const typedIsValid = typedPath.length > 0 && !isInsideSystemFolder(typedPath);
+  const typedIsNew = typedIsValid && !existing.includes(typedPath);
 
   const choose = (destination: string) => {
     setTyped("");
@@ -113,7 +123,7 @@ export const FolderPickerModal = ({
               },
             ]}
           />
-          {typedPath ? (
+          {typedIsValid ? (
             <Pressable
               onPress={() => choose(typedPath)}
               style={({ pressed }) => [

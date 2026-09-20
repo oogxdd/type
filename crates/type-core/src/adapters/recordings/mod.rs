@@ -17,8 +17,8 @@ use crate::{
     allocate_note_file_name, collect_markdown_note_files, decode_audio_base64, generate_note_id,
     is_storage_folder_path, note_parent_folder_path, notes_root, now_ms, parse_note_front_matter,
     resolve_path, sanitize_relative, strip_root, uuid_tail_without_timestamp_prefix,
-    write_note_with_front_matter, NoteFileNameFormat, NoteFrontMatter, BASE64, FEED_FOLDER,
-    LEGACY_RECORDINGS_FOLDER, RECORDINGS_STORAGE_FOLDER, RECORDING_STATUS_COMPLETED,
+    write_note_with_front_matter, NoteFileNameFormat, NoteFrontMatter, BASE64, STREAM_FOLDER,
+    RECORDINGS_STORAGE_FOLDER, RECORDING_STATUS_COMPLETED,
     RECORDING_STATUS_FAILED, RECORDING_STATUS_PENDING, RECORDING_STATUS_PROCESSING,
 };
 use base64::Engine as _;
@@ -666,10 +666,9 @@ fn recording_storage_root(root: &Path) -> PathBuf {
     root.join(RECORDINGS_STORAGE_FOLDER)
 }
 
-/// Verify that an audio path resolves inside the allowed storage folders.
+/// Verify that an audio path resolves inside the recordings storage folder.
 pub fn is_recording_audio_path_allowed(root: &Path, audio_path: &Path) -> bool {
     audio_path.starts_with(recording_storage_root(root))
-        || audio_path.starts_with(root.join(LEGACY_RECORDINGS_FOLDER))
 }
 
 /// Resolve a root-relative recording audio path to an absolute path, checking
@@ -1164,8 +1163,8 @@ mod tests {
     fn scan_before_audio_arrives_preserves_notes_and_recovers_after_transfer() {
         use super::*;
         let root = std::env::temp_dir().join(format!("type-recording-sync-{}", Uuid::now_v7()));
-        fs::create_dir_all(root.join("Feed")).unwrap();
-        fs::create_dir_all(root.join("Recordings")).unwrap();
+        fs::create_dir_all(root.join("_system/stream")).unwrap();
+        fs::create_dir_all(root.join("_system/_recordings")).unwrap();
         // No worker should start until the audio has arrived.
         let method = TranscriptionMethod::AssemblyAi {
             api_key: String::new(),
@@ -1175,11 +1174,11 @@ mod tests {
             RECORDING_STATUS_COMPLETED,
             RECORDING_STATUS_FAILED,
         ] {
-            let path = root.join("Feed").join(format!("{status}.md"));
+            let path = root.join("_system/stream").join(format!("{status}.md"));
             // Use plaintext fixtures so this test does not depend on the global
             // security runtime other tests may configure.
             fs::write(&path, format!(
-                "---\ntype: audio_recording\nrecording_audio_path: Recordings/synced.m4a\ntranscription_status: {status}\n{}---\nKeep this transcript.\n",
+                "---\ntype: audio_recording\nrecording_audio_path: _system/_recordings/synced.m4a\ntranscription_status: {status}\n{}---\nKeep this transcript.\n",
                 if status == RECORDING_STATUS_FAILED {
                     "transcription_error: Audio file is missing.\n"
                 } else { "" }
@@ -1197,7 +1196,7 @@ mod tests {
         for (item, original) in before.iter().zip(originals) {
             assert_eq!(fs::read(&item.note_path).unwrap(), original);
         }
-        fs::write(root.join("Recordings/synced.m4a"), b"synced audio").unwrap();
+        fs::write(root.join("_system/_recordings/synced.m4a"), b"synced audio").unwrap();
         let after = collect_recording_notes(&root).unwrap();
         let eligible: Vec<_> = after
             .iter()
@@ -1266,7 +1265,7 @@ fn write_recording_note(
     meta.transcription_id = None;
 
     write_note_with_front_matter(&note_path, &meta, &recording_initial_body())?;
-    if !crate::is_feed_folder_path(root, target_folder_path) {
+    if !crate::is_stream_folder_path(root, target_folder_path) {
         crate::update_order_append(target_folder_path, &[note_file_name], false)?;
     }
 
@@ -1313,7 +1312,7 @@ pub fn recording_audio_file_path(root: &Path, extension: &str) -> Result<PathBuf
     Err("Failed to allocate recording audio filename.".to_string())
 }
 
-/// Resolve the target folder for a new recording, falling back to Feed.
+/// Resolve the target folder for a new recording, falling back to the stream.
 pub fn resolve_recording_target_folder(
     app: &AppEnv,
     requested: Option<&str>,
@@ -1326,8 +1325,8 @@ pub fn resolve_recording_target_folder(
             return Ok((strip_root(&root, &path), path));
         }
     }
-    let fallback = root.join(FEED_FOLDER);
-    Ok((FEED_FOLDER.to_string(), fallback))
+    let fallback = root.join(STREAM_FOLDER);
+    Ok((STREAM_FOLDER.to_string(), fallback))
 }
 
 // ── Bulk audio import ────────────────────────────────────────────────────────

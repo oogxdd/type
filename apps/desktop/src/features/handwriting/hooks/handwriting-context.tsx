@@ -11,7 +11,7 @@ import type {
   HandwritingOcrListItem,
   HandwritingOcrQueueSnapshot,
 } from "@typenotes/shared/types";
-import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { STREAM_FOLDER_PATH } from "@typenotes/shared/constants";
 import { toBase64 } from "@/shared/lib/notes";
 import { useProfiles } from "@/features/profiles/hooks/profiles-context";
 import { useAutoQueueLoop } from "@/features/processing/hooks/use-auto-queue-loop";
@@ -63,7 +63,7 @@ export function HandwritingProvider({
         return preferred;
       }
       const active = activeFolder.trim();
-      return active || FEED_FOLDER_PATH;
+      return active || STREAM_FOLDER_PATH;
     },
     [activeFolder]
   );

@@ -106,6 +106,8 @@ describe("buildFolderSuggestions", () => {
 
 describe("isMoveDestination", () => {
   it("rejects system roots and anything nested beneath them", () => {
+    expect(isMoveDestination("_system")).toBe(false);
+    expect(isMoveDestination("_system/stream")).toBe(false);
     expect(isMoveDestination("Feed")).toBe(false);
     expect(isMoveDestination("Feed/")).toBe(false);
     expect(isMoveDestination("Archieve/Old")).toBe(false);

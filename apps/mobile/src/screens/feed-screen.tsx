@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 
-import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { STREAM_FOLDER_PATH } from "@typenotes/shared/constants";
 import { formatRecordingStatusLabel } from "@typenotes/shared/format";
 
 import { feedNoteRows, findFolder, groupNoteRowsByDate, type NoteRow } from "../lib/feed";
@@ -105,7 +105,7 @@ export const FeedScreen = () => {
   const loading = useNotesStore((s) => s.loading);
   const refresh = useNotesStore((s) => s.refresh);
 
-  const rows = feedNoteRows(findFolder(tree, FEED_FOLDER_PATH), previews);
+  const rows = feedNoteRows(findFolder(tree, STREAM_FOLDER_PATH), previews);
   const sections = groupNoteRowsByDate(rows);
 
   return (

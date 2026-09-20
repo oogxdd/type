@@ -2,7 +2,7 @@
 
 Реализован локальный stdio-сервер `apps/notes-mcp`. Клиент запускает процесс сам;
 HTTP-порта и токена нет. Сервер читает только одну явно указанную папку.
-Вне подпапки `agent` исходные файлы не меняет; внутри разрешено управление заметками. Node.js >=22.13, зависимости устанавливаются из корня репозитория.
+Исходные записи не меняет. Generic CRUD ограничен agent; observer API позволяет также версионное обновление me (см. OBSERVER_MCP.md). Node.js >=22.13, зависимости устанавливаются из корня репозитория.
 
 ## Что скрывает skip-ai
 
@@ -10,7 +10,7 @@ HTTP-порта и токена нет. Сервер читает только �
 `[секрет]{#skip-ai}` — только его текст. Ведущий `#skip-ai секрет` скрывает
 блок. Note-wide `tags: [skip-ai]` во frontmatter скрывает всю заметку;
 `мысль #skip-ai` в середине строки остаётся обычным текстом. Регистр имени
-несущественен; наличие тега в реестре не требуется. Другие теги не скрывают текст.
+несущественен; наличие тега в реестре не требуется. Дополнительно legacy-маркер nontake консервативно скрывает заметку целиком; прочие теги текст не скрывают.
 
 Сервер использует общие с редактором Markdown-парсер и узлы TagBlock/TagSpan из
 `packages/note-document`. Незакрытый контейнер распространяется до конца тела.
@@ -24,12 +24,12 @@ HTTP-порта и токена нет. Сервер читает только �
 Возвращается полный разрешённый **обычный текст**, с пустой строкой между блоками,
 без Markdown-оформления, frontmatter, аннотаций, HTML-атрибутов и адресов ссылок.
 Имена файлов тоже не выдаются: автоматический slug мог содержать скрытую мысль.
-ID случайные, действуют в рамках процесса; после перезапуска заново вызовите list_notes.
+ID — непрозрачные стабильные ссылки для записей с уникальным UUID. Ограничения для копий и переездов описаны в OBSERVER_MCP.md. Разрешённые даты, происхождение и версии возвращаются отдельно; сырой frontmatter не выдаётся.
 
 Инструменты чтения всей папки:
 
 - `list_notes({cursor?, limit?})`: ID и очищенные превью.
-- `read_note({id})`: `{id, content}` — весь разрешённый текст.
+- `read_note({id})`: разрешённый текст, непрозрачная ссылка, версия и безопасные метаданные.
 - `search_notes({query, cursor?, limit?})`: буквальный поиск без учёта регистра
   только по очищенному тексту, с превью совпавшей строки.
 
@@ -39,7 +39,9 @@ ID случайные, действуют в рамках процесса; по
 Лимит страницы 1–100 (по умолчанию 25), сканирования — 200 заметок за вызов,
 размер файла — 1 MiB, глубина — 64, записей дерева — 100 000.
 
-Не выдаются dot-файлы/папки, Recordings, Attachments, _Recordings и не-Markdown-файлы.
+Не выдаются dot-файлы/папки, storage-папки (`_recordings`, `_handwriting`,
+`_attachments`, плюс легаси `Recordings`, `Attachments`, `_Recordings`) и
+не-Markdown-файлы.
 Символические и жёсткие ссылки на файлы отклоняются. Сервер проверяет пути повторно
 при чтении. Это защита от обычных подмен и выхода за выбранный корень, не полноценная
 изоляция от враждебного локального процесса, одновременно меняющего файловую систему.
@@ -164,18 +166,17 @@ MCP-конфигурацию указанным файлом. `--allowedTools` �
 - [Claude Code CLI](https://code.claude.com/docs/en/cli-reference)
 - [MCP stdio specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)
 
-## Запись только в root/agent
+## Запись только в root/_system/agent
 
 Сервер создаёт папку `agent` при первой операции записи. Регистр имени — строчный.
 Все пути следующих инструментов относительны этой папке: `ideas/plan.md` означает
-`<notes-root>/agent/ideas/plan.md`, а не `<notes-root>/ideas/plan.md`.
+`<notes-root>/_system/agent/ideas/plan.md`, а не `<notes-root>/ideas/plan.md`.
 
 - `list_agent_folder({path?: "ideas"})`: содержимое папки; пустой path — корень agent.
 - `read_agent_note({path})`: очищенный текст и `revision` текущего файла.
 - `create_note({path, content})`: новый `.md`, создаёт родителей, отказывается перезаписывать.
 - `create_folder({path})`: создаёт подпапку и родителей.
-- `update_note({path, content, expectedRevision})`: полная замена файла, включая frontmatter
-  и теги, только при совпадении revision из чтения. Это не патч очищенного текста.
+- `update_note({path, content, expectedRevision})`: обновление полностью доступного файла при совпадении revision. Скрытые документы не перезаписываются; body-only правка сохраняет frontmatter, полный header не может удалить прежние ключи. Для редактирования с историей использовать read_memory(editable=true) и write_memory.
 - `move_note({source, destination})`, `move_folder({source, destination})`: перенос/переименование
   только внутри agent, без перезаписи назначения.
 - `delete_note({path})`: окончательное удаление.
@@ -204,3 +205,14 @@ MCP-конфигурацию указанным файлом. `--allowedTools` �
 `../Feed/test.md` должна вернуть ошибку. Делайте эту проверку на тестовой папке.
 Изменения сохраняются на диск; если открытое приложение не обновило список сразу,
 обновите дерево/переоткройте рабочую папку.
+
+## Observer extension
+
+The personal-session workflow, legacy/system layout selection, safe metadata,
+stable source references, delta snapshots, editable me/agent memory and generated
+artifacts are documented in [OBSERVER_MCP.md](OBSERVER_MCP.md). Prefer that guide's
+tool allowlist for personal sessions. The older generic CRUD examples above stay
+agent-scoped; observer `write_memory` additionally supports me. Source reads now
+include allowlisted metadata and stable identity information; raw source
+frontmatter/filenames are still not returned. Partially private agent files can
+be read as projections but cannot be replaced through update_note.

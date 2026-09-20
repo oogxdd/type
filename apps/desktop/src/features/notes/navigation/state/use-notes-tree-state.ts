@@ -6,7 +6,7 @@ import { useSecurity } from "@/features/security/hooks/security-context";
 import * as api from "@/features/notes/api/notes-api";
 import { useNotePreviews } from "@/features/notes/list/hooks/use-note-previews";
 import type { FolderNode, NoteEntry, VisibleNavigationItem } from "@typenotes/shared/types";
-import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { isSystemFolder, STREAM_FOLDER_PATH } from "@typenotes/shared/constants";
 import { collectAllNotes, getNoteParentPath } from "@typenotes/shared/notes";
 import { buildTreeItems, findNode, flattenTree } from "@/features/notes/navigation/model/tree-ops";
 import { removeChildrenOf } from "@/features/notes/navigation/model/dnd-tree";
@@ -96,9 +96,15 @@ export function useNotesTreeState({
     setTree(data);
   }, []);
 
+  // The one place `_system` is dropped. The core keeps its own subtree out of
+  // reach of the sidebar by hiding agent/me/storage from the tree entirely, but
+  // it still returns `_system` itself so stream and archive can be found by
+  // path. Everything derived below — the folders panel, keyboard order, drag
+  // targets — must see only folders the user made; `findNode(tree, …)` still
+  // reads the raw tree, so the pinned Feed and Trash entries keep working.
   const treeData = useMemo(() => {
     if (!tree) return [] as TreeItem[];
-    return buildTreeItems(tree);
+    return buildTreeItems(tree).filter((item) => !isSystemFolder(item.id));
   }, [tree]);
 
   const flatItems = useMemo(() => flattenTree(treeData), [treeData]);
@@ -120,7 +126,7 @@ export function useNotesTreeState({
   const notes = useMemo(() => activeNode?.notes || [], [activeNode]);
   const allNotes = useMemo(() => collectAllNotes(tree), [tree]);
   const feedSourceNotes = useMemo(
-    () => allNotes.filter((note) => getNoteParentPath(note.path) === FEED_FOLDER_PATH),
+    () => allNotes.filter((note) => getNoteParentPath(note.path) === STREAM_FOLDER_PATH),
     [allNotes]
   );
   const previewSourceNotes = useMemo<NoteEntry[]>(

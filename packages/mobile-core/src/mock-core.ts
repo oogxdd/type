@@ -19,10 +19,31 @@ type MockNote = {
   meta: NoteMeta;
 };
 
-const FEED = "Feed";
-const ARCHIEVE = "Archieve"; // intentional typo, matches persisted data
-const RECORDINGS = "Recordings"; // hidden storage folder
-const ATTACHMENTS = "Attachments"; // hidden storage folder
+// The `_system` layout, mirroring crates/type-core. Shared constants are not
+// imported here because the mock also stands in for folders the shells never
+// see — the ones the real core keeps out of the tree it returns.
+const SYSTEM = "_system";
+const STREAM = "_system/stream"; // the UI's "Feed"
+const ARCHIVE = "_system/archive";
+const AGENT = "_system/agent";
+const ME = "_system/me";
+const RECORDINGS = "_system/_recordings";
+const HANDWRITING = "_system/_handwriting";
+const ATTACHMENTS = "_system/_attachments";
+
+const SYSTEM_FOLDERS = [
+  SYSTEM,
+  STREAM,
+  ARCHIVE,
+  AGENT,
+  ME,
+  RECORDINGS,
+  HANDWRITING,
+  ATTACHMENTS,
+];
+
+/** Folders the core builds a tree without: storage plus the agent's own notes. */
+const HIDDEN_FROM_TREE = new Set([AGENT, ME, RECORDINGS, HANDWRITING, ATTACHMENTS]);
 
 const defaultProfileSettings = (): ProfileSettings => ({
   git_remote_url: "",
@@ -74,7 +95,7 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
   const now = options.now ?? Date.now;
   let tagRegistry = JSON.stringify({ version: 1, tags: [] });
 
-  let folders = new Set<string>([FEED, ARCHIEVE, RECORDINGS, ATTACHMENTS]);
+  let folders = new Set<string>(SYSTEM_FOLDERS);
   let notes = new Map<string, MockNote>();
   let audio = new Map<string, { base64: string; mimeType: string }>();
   let images = new Map<string, { base64: string; mimeType: string }>();
@@ -110,8 +131,8 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       return;
     }
     const base = now();
-    newNote(FEED, "Welcome to Type\n\nThis build is running the in-memory demo core — notes are not persisted.", base - 3 * 86_400_000);
-    newNote(FEED, "Swipe up on this page to file it away and get a fresh blank page.", base - 86_400_000);
+    newNote(STREAM, "Welcome to Type\n\nThis build is running the in-memory demo core — notes are not persisted.", base - 3 * 86_400_000);
+    newNote(STREAM, "Swipe up on this page to file it away and get a fresh blank page.", base - 86_400_000);
     newNote("Ideas", "Ship the mobile app.", base - 3_600_000);
   };
   seed();
@@ -136,17 +157,17 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
     };
 
     for (const folder of folders) {
-      if (folder !== RECORDINGS && folder !== ATTACHMENTS) {
+      if (!HIDDEN_FROM_TREE.has(folder)) {
         ensureFolderNode(folder);
       }
     }
     for (const path of notes.keys()) {
       const parent = parentOf(path);
-      if (parent === RECORDINGS) {
+      if (HIDDEN_FROM_TREE.has(parent)) {
         continue;
       }
-      ensureFolderNode(parent || FEED);
-      children.get(parent || FEED)!.notes.push({ name: nameOf(path), path });
+      ensureFolderNode(parent || STREAM);
+      children.get(parent || STREAM)!.notes.push({ name: nameOf(path), path });
     }
 
     const sortNode = (node: FolderNode) => {
@@ -256,7 +277,7 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
         timestamp_ms?: number | null;
       };
       const path = newNote(
-        args.folder_path || FEED,
+        args.folder_path || STREAM,
         args.content ?? "",
         args.timestamp_ms ?? now()
       );
@@ -495,14 +516,14 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
         base64: args.audio_base64,
         mimeType: args.mime_type ?? "audio/mp4",
       });
-      const notePath = newNote(args.folder_path || FEED, "", now(), {
+      const notePath = newNote(args.folder_path || STREAM, "", now(), {
         note_type: "audio_recording",
         recording_audio_path: audioPath,
         transcription_status: "pending",
         transcription_updated_ms: now(),
       });
       return JSON.stringify({
-        folder_path: args.folder_path || FEED,
+        folder_path: args.folder_path || STREAM,
         note_path: notePath,
         audio_path: audioPath,
       });
@@ -563,12 +584,12 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
         folder_path?: string | null;
       };
       counter += 1;
-      const attachmentPath = `${ATTACHMENTS}/attachment-${counter}.jpg`;
+      const attachmentPath = `${HANDWRITING}/attachment-${counter}.jpg`;
       images.set(attachmentPath, {
         base64: args.image_base64,
         mimeType: args.mime_type ?? "image/jpeg",
       });
-      const folder = args.folder_path || FEED;
+      const folder = args.folder_path || STREAM;
       const notePath = newNote(folder, "", now(), {
         note_type: "handwriting_attachment",
         handwriting_attachment_path: attachmentPath,
@@ -604,7 +625,7 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       const args = JSON.parse(argsJson) as { password: string };
       if (security.encryption_enabled && args.password === panicPassword) {
         // Panic wipe: reset everything and reseed, like the real core.
-        folders = new Set([FEED, ARCHIEVE, RECORDINGS, ATTACHMENTS]);
+        folders = new Set(SYSTEM_FOLDERS);
         notes = new Map();
         audio = new Map();
         images = new Map();

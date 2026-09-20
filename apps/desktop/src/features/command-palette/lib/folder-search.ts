@@ -26,6 +26,7 @@ export type ParsedMoveCommand = {
 // Keep the aliases here because older notes roots can still contain the legacy
 // names, while "Folders" is the navigation pane's synthetic root label.
 const RESERVED_ROOT_NAMES = new Set([
+  "_system",
   "feed",
   "archieve",
   "archive",

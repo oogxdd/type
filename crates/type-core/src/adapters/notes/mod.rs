@@ -30,32 +30,82 @@ pub use tree::*;
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 pub const ORDER_FILE: &str = ".notes-order.json";
-pub const FEED_FOLDER: &str = "Feed";
-pub const ARCHIEVE_FOLDER: &str = "Archieve";
-const LEGACY_UNSORTED_FOLDER: &str = "Unsorted";
-pub const RECORDINGS_STORAGE_FOLDER: &str = "Recordings";
-pub const ATTACHMENTS_STORAGE_FOLDER: &str = "Attachments";
-pub const LEGACY_RECORDINGS_FOLDER: &str = "_Recordings";
 
-const VISIBLE_SYSTEM_FOLDERS: [&str; 2] = [FEED_FOLDER, ARCHIEVE_FOLDER];
-const REQUIRED_SYSTEM_FOLDERS: [&str; 4] = [
-    FEED_FOLDER,
-    ARCHIEVE_FOLDER,
+// ── System folder layout ───────────────────────────────────────────────────────
+//
+// Everything the app owns inside a notes root lives under a single `_system`
+// container, so the root itself holds nothing but the user's own folders:
+//
+//     <notes root>/
+//       _system/
+//         _attachments/    inline note attachments (reserved; see below)
+//         _handwriting/    handwriting source images
+//         _recordings/     recorded audio
+//         agent/           the agent's own notes (MCP write boundary)
+//         me/              the app's representation of the user
+//         stream/          the default capture folder ("Feed" in the UI)
+//         archive/         archived notes
+//       <user folders>/
+//
+// Underscore-prefixed children hold binary storage and never contain notes;
+// `_attachments` is reserved for attachments embedded in a note body and is
+// empty until that exists. `_system` is not browsable: shells drop it from the
+// folder tree and reach `stream`/`archive` through their pinned entries.
+
+/// The one root-level folder the app owns. Everything below is relative to the
+/// notes root and uses forward slashes, matching `FolderNode::path`.
+pub const SYSTEM_FOLDER: &str = "_system";
+/// Basename of [`STREAM_FOLDER`], for path-tail checks without a root handle.
+const STREAM_FOLDER_NAME: &str = "stream";
+
+pub const STREAM_FOLDER: &str = "_system/stream";
+pub const ARCHIVE_FOLDER: &str = "_system/archive";
+pub const AGENT_FOLDER: &str = "_system/agent";
+pub const ME_FOLDER: &str = "_system/me";
+pub const RECORDINGS_STORAGE_FOLDER: &str = "_system/_recordings";
+pub const HANDWRITING_STORAGE_FOLDER: &str = "_system/_handwriting";
+pub const ATTACHMENTS_STORAGE_FOLDER: &str = "_system/_attachments";
+
+/// Created in every notes root by `ensure_system_folders`.
+const REQUIRED_SYSTEM_FOLDERS: [&str; 7] = [
+    STREAM_FOLDER,
+    ARCHIVE_FOLDER,
+    AGENT_FOLDER,
+    ME_FOLDER,
     ATTACHMENTS_STORAGE_FOLDER,
+    HANDWRITING_STORAGE_FOLDER,
     RECORDINGS_STORAGE_FOLDER,
 ];
-pub const PROTECTED_SYSTEM_FOLDERS: [&str; 6] = [
-    FEED_FOLDER,
-    ARCHIEVE_FOLDER,
-    LEGACY_UNSORTED_FOLDER,
+
+/// Binary storage: media lives here, notes never do.
+const STORAGE_FOLDERS: [&str; 3] = [
     ATTACHMENTS_STORAGE_FOLDER,
+    HANDWRITING_STORAGE_FOLDER,
     RECORDINGS_STORAGE_FOLDER,
-    LEGACY_RECORDINGS_FOLDER,
 ];
-const HIDDEN_ROOT_FOLDERS: [&str; 3] = [
+
+/// Left out of the tree the shells render. Storage folders hold no notes, and
+/// `agent`/`me` are the agent's working set rather than app content — the
+/// shells reach them through the MCP, not the sidebar. `_system` itself stays
+/// in the tree because `stream` and `archive` hang off it.
+const TREE_HIDDEN_FOLDERS: [&str; 5] = [
+    AGENT_FOLDER,
+    ME_FOLDER,
     ATTACHMENTS_STORAGE_FOLDER,
+    HANDWRITING_STORAGE_FOLDER,
     RECORDINGS_STORAGE_FOLDER,
-    LEGACY_RECORDINGS_FOLDER,
+];
+
+/// Cannot be renamed, moved or deleted through the notes commands.
+pub const PROTECTED_SYSTEM_FOLDERS: [&str; 8] = [
+    SYSTEM_FOLDER,
+    STREAM_FOLDER,
+    ARCHIVE_FOLDER,
+    AGENT_FOLDER,
+    ME_FOLDER,
+    ATTACHMENTS_STORAGE_FOLDER,
+    HANDWRITING_STORAGE_FOLDER,
+    RECORDINGS_STORAGE_FOLDER,
 ];
 
 // ── Root resolution ────────────────────────────────────────────────────────────
@@ -231,8 +281,8 @@ impl NotesRepository for FilesystemNotesRepository {
         )
     }
 
-    fn is_feed_folder_path(&self, path: &Path) -> bool {
-        is_feed_folder_path(&self.root, path)
+    fn is_stream_folder_path(&self, path: &Path) -> bool {
+        is_stream_folder_path(&self.root, path)
     }
 
     fn is_storage_folder_path(&self, path: &Path) -> bool {

@@ -16,7 +16,7 @@ use std::{
 };
 
 use crate::ports::git_sync::GitSyncGateway;
-use crate::{is_system_folder_name, ORDER_FILE, PROTECTED_SYSTEM_FOLDERS};
+use crate::{is_system_folder_rel_path, ORDER_FILE, PROTECTED_SYSTEM_FOLDERS, SYSTEM_FOLDER};
 
 mod ssh_keys;
 pub use ssh_keys::{
@@ -611,7 +611,14 @@ fn git_head_has_commit(repo: &Repository) -> bool {
     repo.head().ok().and_then(|head| head.target()).is_some()
 }
 
-/// Check if a worktree contains only empty system folders and the order file.
+fn dir_is_empty(path: &Path) -> Result<bool, String> {
+    let mut items = fs::read_dir(path).map_err(|err| err.to_string())?;
+    Ok(items.next().is_none())
+}
+
+/// True when the root holds nothing but what `ensure_system_folders` just
+/// created: the `_system` container with empty children, plus a root order
+/// file. Anything else means the device has real local content.
 fn worktree_has_only_bootstrap_artifacts(root: &Path) -> Result<bool, String> {
     for entry in fs::read_dir(root).map_err(|err| err.to_string())? {
         let entry = entry.map_err(|err| err.to_string())?;
@@ -627,13 +634,17 @@ fn worktree_has_only_bootstrap_artifacts(root: &Path) -> Result<bool, String> {
             }
             continue;
         }
-        if metadata.is_dir() {
-            if !is_system_folder_name(&name) {
-                return Ok(false);
-            }
-            let mut items = fs::read_dir(path).map_err(|err| err.to_string())?;
-            if items.next().is_some() {
-                return Ok(false);
+        if metadata.is_dir() && name == SYSTEM_FOLDER {
+            for child in fs::read_dir(&path).map_err(|err| err.to_string())? {
+                let child = child.map_err(|err| err.to_string())?;
+                let child_name = child.file_name().to_string_lossy().to_string();
+                if child_name == ORDER_FILE {
+                    continue;
+                }
+                let child_rel = format!("{}/{}", SYSTEM_FOLDER, child_name);
+                if !is_system_folder_rel_path(&child_rel) || !dir_is_empty(&child.path())? {
+                    return Ok(false);
+                }
             }
             continue;
         }
@@ -647,13 +658,14 @@ fn clear_bootstrap_artifacts(root: &Path) -> Result<(), String> {
     if order_path.exists() {
         fs::remove_file(&order_path).map_err(|err| err.to_string())?;
     }
-    for folder in PROTECTED_SYSTEM_FOLDERS {
+    // Deepest first, so `_system` itself is empty by the time it is reached.
+    for folder in PROTECTED_SYSTEM_FOLDERS
+        .iter()
+        .filter(|folder| **folder != SYSTEM_FOLDER)
+        .chain(std::iter::once(&SYSTEM_FOLDER))
+    {
         let path = root.join(folder);
-        if !path.exists() {
-            continue;
-        }
-        let mut items = fs::read_dir(&path).map_err(|err| err.to_string())?;
-        if items.next().is_none() {
+        if path.exists() && dir_is_empty(&path)? {
             fs::remove_dir(&path).map_err(|err| err.to_string())?;
         }
     }
@@ -891,7 +903,10 @@ pub fn set_audio_git_exclusion(repo: &Repository, enabled: bool) -> Result<(), S
     let patterns = crate::AUDIO_GIT_EXCLUDE_PATTERNS;
     let mut lines = existing
         .lines()
-        .filter(|line| !patterns.contains(&line.trim()))
+        .filter(|line| {
+            let line = line.trim();
+            !patterns.contains(&line) && !crate::LEGACY_AUDIO_GIT_EXCLUDE_PATTERNS.contains(&line)
+        })
         .map(ToOwned::to_owned)
         .collect::<Vec<_>>();
     if enabled {
@@ -1781,15 +1796,15 @@ mod tests {
         let base = std::env::temp_dir().join(format!("type-first-sync-{}", uuid::Uuid::now_v7()));
 
         let desktop = base.join("desktop");
-        fs::create_dir_all(desktop.join("Feed")).unwrap();
-        fs::write(desktop.join("Feed").join("desktop-note.md"), "desktop\n").unwrap();
+        fs::create_dir_all(desktop.join("_system/stream")).unwrap();
+        fs::write(desktop.join("_system/stream").join("desktop-note.md"), "desktop\n").unwrap();
         let desktop_repo = ensure_git_repo(&desktop).unwrap();
         commit_all_changes(&desktop_repo, "init", "main").unwrap();
 
         let phone = base.join("phone");
-        fs::create_dir_all(phone.join("Feed")).unwrap();
-        fs::create_dir_all(phone.join("Archieve")).unwrap();
-        fs::write(phone.join("Feed").join("phone-note.md"), "phone\n").unwrap();
+        fs::create_dir_all(phone.join("_system/stream")).unwrap();
+        fs::create_dir_all(phone.join("_system/archive")).unwrap();
+        fs::write(phone.join("_system/stream").join("phone-note.md"), "phone\n").unwrap();
         let phone_repo = ensure_git_repo(&phone).unwrap();
 
         prepare_bootstrap_worktree_for_sync(&phone, &phone_repo, "main").unwrap();
@@ -1808,9 +1823,9 @@ mod tests {
         );
         merge_fetched_commit(&phone_repo, "main", &fetched).unwrap();
 
-        assert!(phone.join("Feed").join("phone-note.md").exists());
+        assert!(phone.join("_system/stream").join("phone-note.md").exists());
         assert!(
-            phone.join("Feed").join("desktop-note.md").exists(),
+            phone.join("_system/stream").join("desktop-note.md").exists(),
             "first pull should bring the desktop notes in"
         );
 
@@ -1843,8 +1858,8 @@ mod tests {
         let mut settings = crate::load_profile_settings(&root);
         settings.git_iroh_ticket = "paired-ticket".into();
         crate::save_profile_settings(&root, &settings).unwrap();
-        fs::write(root.join("Feed/note.md"), "recording note\n").unwrap();
-        fs::write(root.join("Recordings/audio.m4a"), "audio bytes").unwrap();
+        fs::write(root.join("_system/stream/note.md"), "recording note\n").unwrap();
+        fs::write(root.join("_system/_recordings/audio.m4a"), "audio bytes").unwrap();
         GitSyncAdapter::new(app)
             .commit(GitCommitArgs {
                 message: None,
@@ -1853,9 +1868,9 @@ mod tests {
             .unwrap();
         let repo = open_repo(&root).unwrap();
         let tree = repo.head().unwrap().peel_to_tree().unwrap();
-        assert!(tree.get_path(Path::new("Feed/note.md")).is_ok());
-        assert!(tree.get_path(Path::new("Recordings/audio.m4a")).is_err());
-        assert!(root.join("Recordings/audio.m4a").is_file());
+        assert!(tree.get_path(Path::new("_system/stream/note.md")).is_ok());
+        assert!(tree.get_path(Path::new("_system/_recordings/audio.m4a")).is_err());
+        assert!(root.join("_system/_recordings/audio.m4a").is_file());
         fs::remove_dir_all(app_dir).unwrap();
     }
 
@@ -1866,7 +1881,7 @@ mod tests {
         let app = AppEnv::new(&app_dir);
         let root = crate::ensured_notes_root(&app).unwrap();
         let repo = ensure_git_repo(&root).unwrap();
-        fs::write(root.join("Feed/note.md"), "initial\n").unwrap();
+        fs::write(root.join("_system/stream/note.md"), "initial\n").unwrap();
         let initial = commit_all_changes(&repo, "initial", "main")
             .unwrap()
             .unwrap();
@@ -1874,7 +1889,7 @@ mod tests {
         ensure_origin_remote(&repo, app_dir.join("offline.git").to_str().unwrap()).unwrap();
         let adapter = GitSyncAdapter::new(app);
         for text in ["edit one\n", "edit two\n"] {
-            fs::write(root.join("Feed/note.md"), text).unwrap();
+            fs::write(root.join("_system/stream/note.md"), text).unwrap();
             assert!(adapter
                 .pull(GitSyncArgs {
                     branch: None,
@@ -1891,7 +1906,7 @@ mod tests {
                 })
                 .is_err());
             assert_eq!(repo.head().unwrap().target(), Some(initial));
-            assert_eq!(fs::read_to_string(root.join("Feed/note.md")).unwrap(), text);
+            assert_eq!(fs::read_to_string(root.join("_system/stream/note.md")).unwrap(), text);
             assert!(git_has_changes(&repo));
         }
         // Once the peer exists, accumulated edits become one local commit.
@@ -1920,12 +1935,12 @@ mod tests {
         let app = AppEnv::new(&app_dir);
         let root = crate::ensured_notes_root(&app).unwrap();
         let repo = ensure_git_repo(&root).unwrap();
-        fs::write(root.join("Feed/local.md"), "original\n").unwrap();
+        fs::write(root.join("_system/stream/local.md"), "original\n").unwrap();
         commit_all_changes(&repo, "local", "main").unwrap();
-        fs::write(root.join("Feed/local.md"), "edited offline\n").unwrap();
+        fs::write(root.join("_system/stream/local.md"), "edited offline\n").unwrap();
         let desktop = app_dir.join("desktop");
-        fs::create_dir_all(desktop.join("Feed")).unwrap();
-        fs::write(desktop.join("Feed/desktop.md"), "remote note\n").unwrap();
+        fs::create_dir_all(desktop.join("_system/stream")).unwrap();
+        fs::write(desktop.join("_system/stream/desktop.md"), "remote note\n").unwrap();
         let remote = ensure_git_repo(&desktop).unwrap();
         commit_all_changes(&remote, "remote", "main").unwrap();
         ensure_origin_remote(&repo, desktop.to_str().unwrap()).unwrap();
@@ -1937,11 +1952,11 @@ mod tests {
             })
             .unwrap();
         assert_eq!(
-            fs::read_to_string(root.join("Feed/local.md")).unwrap(),
+            fs::read_to_string(root.join("_system/stream/local.md")).unwrap(),
             "edited offline\n"
         );
         assert_eq!(
-            fs::read_to_string(root.join("Feed/desktop.md")).unwrap(),
+            fs::read_to_string(root.join("_system/stream/desktop.md")).unwrap(),
             "remote note\n"
         );
         assert_eq!(
@@ -1961,13 +1976,13 @@ mod tests {
         let app_dir = std::env::temp_dir().join(format!("type-new-phone-profile-{}", uuid::Uuid::now_v7()));
         let app = AppEnv::new(&app_dir);
         let old_root = crate::ensured_notes_root(&app).unwrap();
-        fs::write(old_root.join("Feed/old-only.md"), "old phone history").unwrap();
+        fs::write(old_root.join("_system/stream/old-only.md"), "old phone history").unwrap();
         let old_repo = ensure_git_repo(&old_root).unwrap();
         let old_head = commit_all_changes(&old_repo, "old", "main").unwrap().unwrap();
 
         let desktop = app_dir.join("desktop");
-        fs::create_dir_all(desktop.join("Feed")).unwrap();
-        fs::write(desktop.join("Feed/synced.md"), "desktop note").unwrap();
+        fs::create_dir_all(desktop.join("_system/stream")).unwrap();
+        fs::write(desktop.join("_system/stream/synced.md"), "desktop note").unwrap();
         let desktop_repo = ensure_git_repo(&desktop).unwrap();
         let desktop_head = commit_all_changes(&desktop_repo, "desktop", "main").unwrap().unwrap();
 
@@ -1988,10 +2003,10 @@ mod tests {
         // Fresh profile metadata may produce a local bootstrap/merge commit.
         assert!(fresh_head == desktop_head || fresh_repo.graph_descendant_of(fresh_head, desktop_head).unwrap());
         assert!(fresh_repo.find_commit(old_head).is_err());
-        assert_eq!(fs::read_to_string(fresh_root.join("Feed/synced.md")).unwrap(), "desktop note");
-        assert!(!fresh_root.join("Feed/old-only.md").exists());
+        assert_eq!(fs::read_to_string(fresh_root.join("_system/stream/synced.md")).unwrap(), "desktop note");
+        assert!(!fresh_root.join("_system/stream/old-only.md").exists());
         assert_eq!(old_repo.head().unwrap().target(), Some(old_head));
-        assert!(old_root.join("Feed/old-only.md").is_file());
+        assert!(old_root.join("_system/stream/old-only.md").is_file());
         fs::remove_dir_all(app_dir).unwrap();
     }
 
@@ -2001,7 +2016,7 @@ mod tests {
             std::env::temp_dir().join(format!("type-git-offline-connect-{}", uuid::Uuid::now_v7()));
         let app = AppEnv::new(&app_dir);
         let root = crate::ensured_notes_root(&app).unwrap();
-        fs::write(root.join("Feed/captured.md"), "keep this\n").unwrap();
+        fs::write(root.join("_system/stream/captured.md"), "keep this\n").unwrap();
         let adapter = GitSyncAdapter::new(app);
         assert!(adapter
             .connect(ConnectGitArgs {
@@ -2014,7 +2029,7 @@ mod tests {
         let repo = open_repo(&root).unwrap();
         assert!(!git_head_has_commit(&repo));
         assert_eq!(
-            fs::read_to_string(root.join("Feed/captured.md")).unwrap(),
+            fs::read_to_string(root.join("_system/stream/captured.md")).unwrap(),
             "keep this\n"
         );
         fs::remove_dir_all(app_dir).unwrap();
@@ -2026,7 +2041,7 @@ mod tests {
             std::env::temp_dir().join(format!("type-git-checkpoint-{}", uuid::Uuid::now_v7()));
         let app = AppEnv::new(&app_dir);
         let root = crate::ensured_notes_root(&app).unwrap();
-        fs::write(root.join("Feed").join("checkpoint.md"), "before editing\n").unwrap();
+        fs::write(root.join("_system/stream").join("checkpoint.md"), "before editing\n").unwrap();
 
         let adapter = GitSyncAdapter::new(app);
         let status = adapter

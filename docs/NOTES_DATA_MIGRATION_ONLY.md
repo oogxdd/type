@@ -1,5 +1,11 @@
 # Notes Data Migration (Only)
 
+> **Superseded, kept as a record.** The three `.cjs` scripts below were written
+> for another repository and are not in this one. Their target layout
+> (`Feed` / `Archieve` / `Recordings` at the root) has since moved inside
+> `_system` — see [FOLDER_STRUCTURE_MIGRATION.md](FOLDER_STRUCTURE_MIGRATION.md)
+> and `scripts/migrate-notes-root-layout.mjs` for the current migration.
+
 Только про миграцию данных. Без изменений кода приложения.
 
 ## Какие скрипты нужно заинклюдить в другое репо

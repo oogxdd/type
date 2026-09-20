@@ -1,5 +1,13 @@
 # Notes Migration Playbook (Feed/Recordings + UTC filenames)
 
+> **Superseded, kept as a record.** The `Feed` / `Archieve` / `Recordings`
+> layout this playbook targets is no longer what the app creates: those folders
+> now live inside `_system` as `stream` / `archive` / `_recordings`. The UTC
+> filename and frontmatter work below still holds. To move a notes root onto the
+> current layout, use [FOLDER_STRUCTURE_MIGRATION.md](FOLDER_STRUCTURE_MIGRATION.md)
+> and `scripts/migrate-notes-root-layout.mjs` instead of the scripts named here,
+> which no longer exist in this repository.
+
 Этот файл описывает все миграции, которые были сделаны, чтобы повторить их в другом репозитории.
 
 ## 1) Целевое состояние

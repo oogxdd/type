@@ -42,7 +42,7 @@ import { FoldersPanel } from "@/features/notes/navigation/ui/folders-panel";
 import { FeedPanel } from "@/features/notes/navigation/ui/feed-panel";
 import { useDragDrop } from "@/features/notes/navigation/hooks/use-drag-drop";
 import { useKeyboardNavigation } from "@/features/notes/navigation/hooks/use-keyboard-navigation";
-import { ARCHIEVE_FOLDER_PATH } from "@typenotes/shared/constants";
+import { ARCHIVE_FOLDER_PATH } from "@typenotes/shared/constants";
 import { indentationWidth } from "@/shared/constants";
 import { focusNoScroll } from "@/shared/lib/dom";
 import type { AppMode } from "@typenotes/shared/types";
@@ -420,7 +420,7 @@ export function DesktopAppShell({
         onToggleSidebar={() => setSidebarCollapsed((previous) => !previous)}
         showMiddlePane={
           appMode === "settings" ||
-          activeFolder === ARCHIEVE_FOLDER_PATH ||
+          activeFolder === ARCHIVE_FOLDER_PATH ||
           !shouldNestNotesInNavigation
         }
         twoPaneLayout={twoPaneLayout}
@@ -449,7 +449,7 @@ export function DesktopAppShell({
           <DesktopRightPane
             appMode={appMode}
             activeSettingsSection={activeSettingsSection}
-            onOpenTrash={() => onOpenPinnedFolder(ARCHIEVE_FOLDER_PATH)}
+            onOpenTrash={() => onOpenPinnedFolder(ARCHIVE_FOLDER_PATH)}
           />
         }
       />

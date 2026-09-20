@@ -14,7 +14,11 @@ import shutil
 import subprocess
 import sys
 
-AUDIO_DIRS = (b"Recordings", b"_Recordings")
+# Every folder recorded audio has ever lived in, as path prefixes relative to
+# the notes root. `_system/_recordings` is the current one; the two bare names
+# are where it lived before scripts/migrate-notes-root-layout.mjs. History
+# predating that move still carries them, so all three must be stripped.
+AUDIO_DIRS = (b"_system/_recordings/", b"Recordings/", b"_Recordings/")
 
 
 def git(root, *args, data=None):
@@ -57,7 +61,7 @@ def manifest(root):
 def text_tree(root, commit):
     entries = git(root, "ls-tree", "-rz", "--full-tree", commit).split(b"\0")
     return [entry for entry in entries if entry and
-            entry.split(b"\t", 1)[1].split(b"/", 1)[0] not in AUDIO_DIRS]
+            not entry.split(b"\t", 1)[1].startswith(AUDIO_DIRS)]
 
 
 def commit_parts(root, oid):
@@ -158,7 +162,8 @@ def prepare(source, destination, apps_stopped=False):
     # Force applies ONLY to this newly created independent copy, after moving
     # remote refs to recovery branches. The source is never filtered.
     subprocess.run([sys.executable, spec.origin, "--force", "--invert-paths",
-                    "--path", "Recordings/", "--path", "_Recordings/",
+                    *[argument for directory in AUDIO_DIRS
+                      for argument in ("--path", directory.decode())],
                     "--prune-empty", "never", "--prune-degenerate", "never",
                     "--preserve-commit-hashes", "--preserve-commit-encoding"],
                    cwd=migrated / ".git", check=True, capture_output=True)
@@ -169,7 +174,8 @@ def prepare(source, destination, apps_stopped=False):
     exclude.parent.mkdir(exist_ok=True)
     previous = original / ".git/info/exclude"
     exclude.write_bytes((previous.read_bytes() if previous.exists() else b"") +
-                        b"\n/Recordings/\n/_Recordings/\n/.type/device.json\n/.type/audio-cache.json\n")
+                        b"\n" + b"".join(b"/" + directory + b"\n" for directory in AUDIO_DIRS) +
+                        b"/.type/device.json\n/.type/audio-cache.json\n")
     # Deliberately keep this prepared copy disconnected from the old history.
     # Git-filter-repo removes origin; remove any other remotes as well.
     for remote in git(migrated, "remote").decode().splitlines():
@@ -192,7 +198,7 @@ def prepare(source, destination, apps_stopped=False):
         raise RuntimeError("Source changed during migration; do not activate this copy.")
     report = {"verified": True, "commits_preserved": count,
               "source_unchanged": True, "current_files_preserved": True,
-              "audio_removed_from_history": [name.decode() for name in AUDIO_DIRS],
+              "audio_removed_from_history": [name.decode().rstrip("/") for name in AUDIO_DIRS],
               "original_git_bytes": sum(p.stat().st_size for p in (original / ".git").rglob("*") if p.is_file()),
               "migrated_git_bytes": sum(p.stat().st_size for p in (migrated / ".git").rglob("*") if p.is_file()),
               "activation": "NOT ACTIVATED. Recreate phone working folders from the new desktop history; never merge old clones."}

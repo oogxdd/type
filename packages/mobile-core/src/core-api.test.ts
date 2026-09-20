@@ -11,7 +11,7 @@ describe("core-api over the mock core", () => {
 
   it("creates, writes, reads, and lists notes through the JSON boundary", async () => {
     const created = await core.createNote({ content: "hello" });
-    expect(created.path.startsWith("Feed/")).toBe(true);
+    expect(created.path.startsWith("_system/stream/")).toBe(true);
     expect(created.path.endsWith(".md")).toBe(true);
 
     await core.writeNote(created.path, "hello world");
@@ -23,10 +23,14 @@ describe("core-api over the mock core", () => {
     expect(previews[0].meta.created_ms).toBe(1_750_000_000_000);
 
     const tree = await core.getTree();
-    const feed = tree.children.find((child) => child.path === "Feed");
-    expect(feed?.notes.map((note) => note.path)).toContain(created.path);
-    // The hidden Recordings storage folder is not part of the tree.
-    expect(tree.children.map((child) => child.path)).not.toContain("Recordings");
+    const system = tree.children.find((child) => child.path === "_system");
+    const stream = system?.children.find((child) => child.path === "_system/stream");
+    expect(stream?.notes.map((note) => note.path)).toContain(created.path);
+    // Storage and the agent's own folders are not part of the tree.
+    expect(system?.children.map((child) => child.path)).toEqual([
+      "_system/archive",
+      "_system/stream",
+    ]);
   });
 
   it("round-trips registry and note-wide tags independently of the body", async () => {
@@ -76,7 +80,7 @@ describe("core-api over the mock core", () => {
       audio_base64: "QUJD",
       mime_type: "audio/mp4",
     });
-    expect(saved.audio_path.startsWith("Recordings/")).toBe(true);
+    expect(saved.audio_path.startsWith("_system/_recordings/")).toBe(true);
     expect((await core.getNoteMeta(saved.note_path)).transcription_status).toBe(
       "pending"
     );
@@ -101,7 +105,7 @@ describe("core-api over the mock core", () => {
       file_name: "page.jpg",
     });
 
-    expect(saved.attachment_path.startsWith("Attachments/")).toBe(true);
+    expect(saved.attachment_path.startsWith("_system/_handwriting/")).toBe(true);
     expect(await core.readNote(saved.note_path)).toBe("");
     const meta = await core.getNoteMeta(saved.note_path);
     expect(meta.note_type).toBe("handwriting_attachment");

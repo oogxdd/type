@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { STREAM_FOLDER_PATH } from "@typenotes/shared/constants";
 import type { NoteEntry } from "@typenotes/shared/types";
 import { selectPreviewSourceNotes } from "./notes-tree-model";
 
@@ -10,13 +10,16 @@ const note = (path: string): NoteEntry => ({
 });
 
 describe("selectPreviewSourceNotes", () => {
-  it("loads only Feed notes while Feed is selected", () => {
-    const feedNotes = [note("Feed/one.md"), note("Feed/two.md")];
+  it("loads only stream notes while the stream is selected", () => {
+    const feedNotes = [
+      note(`${STREAM_FOLDER_PATH}/one.md`),
+      note(`${STREAM_FOLDER_PATH}/two.md`),
+    ];
     const allNotes = [...feedNotes, note("Projects/three.md")];
 
     expect(
       selectPreviewSourceNotes({
-        activeFolder: FEED_FOLDER_PATH,
+        activeFolder: STREAM_FOLDER_PATH,
         notes: feedNotes,
         feedNotes,
         allNotes,

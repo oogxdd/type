@@ -8,7 +8,7 @@ import { useEditor } from "@/features/notes/editor/hooks/editor-context";
 import { useNotesTree } from "@/features/notes/navigation/state/notes-tree-context";
 import { type DesktopContextMenuState } from "@/app/hooks/use-tree-interactions";
 import { useSelection } from "@/app/state/selection-store";
-import { FEED_FOLDER_PATH } from "@typenotes/shared/constants";
+import { STREAM_FOLDER_PATH } from "@typenotes/shared/constants";
 import { indentationWidth } from "@/shared/constants";
 import { focusNoScroll } from "@/shared/lib/dom";
 import { computeRangeSelection } from "@/shared/lib/selection";
@@ -74,7 +74,7 @@ export function FeedPanel({
     (groupId: string) => {
       onNavigateToNotes?.();
       setActiveFeedGroup(groupId);
-      selectFolder(FEED_FOLDER_PATH);
+      selectFolder(STREAM_FOLDER_PATH);
       clearDraft();
       clearNote();
       focusNoScroll(paneBodyRef.current);
@@ -96,7 +96,7 @@ export function FeedPanel({
       const notePaths = parentNode?.notes.map((note) => note.path) || [];
       selectNote(
         notePath,
-        FEED_FOLDER_PATH,
+        STREAM_FOLDER_PATH,
         computeRangeSelection(event, selectedNotes, notePaths, lastSelectedNote, notePath)
       );
       const nextSelection = useSelection.getState().selectedNotes;
@@ -149,9 +149,9 @@ export function FeedPanel({
       const notePaths = parentNode?.notes.map((note) => note.path) || [];
       const targetPaths =
         selectedNotes.size > 1 && selectedNotes.has(notePath) ? Array.from(selectedNotes) : [notePath];
-      setSelectedFolders(new Set([FEED_FOLDER_PATH]));
-      setLastSelectedFolder(FEED_FOLDER_PATH);
-      setActiveFolder(FEED_FOLDER_PATH);
+      setSelectedFolders(new Set([STREAM_FOLDER_PATH]));
+      setLastSelectedFolder(STREAM_FOLDER_PATH);
+      setActiveFolder(STREAM_FOLDER_PATH);
       if (!selectedNotes.has(notePath)) {
         setSelectedNotes(new Set([notePath]));
         setLastSelectedNote(notePath);

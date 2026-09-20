@@ -36,8 +36,8 @@ paths, relays, and the sync logs fit together, see
   to the desktop by BLAKE3 `BlobTicket`. Type's small control stream carries
   only the destination path, SHA-256 retention identity, blob ticket, and
   acknowledgement. `iroh-blobs` performs verified, resumable transfer.
-  `Recordings/` is excluded in that device's local Git config, so new audio
-  never leaves a hidden blob in the phone's `.git/objects` database.
+  `_system/_recordings/` is excluded in that device's local Git config, so
+  new audio never leaves a hidden blob in the phone's `.git/objects` database.
 - SSH host-key pinning and the existing paired-device allowlist remain the Git
   authentication boundary. During QR setup the same one-time token also binds
   the phone's authenticated Iroh Endpoint ID into a desktop allowlist; audio

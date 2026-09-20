@@ -1,4 +1,4 @@
-import { FEED_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
+import { STREAM_FOLDER_PATH, isSystemFolder } from "@typenotes/shared/constants";
 import type { FolderNode, NoteEntry } from "@typenotes/shared/types";
 import type { FlattenedItem } from "@/features/notes/navigation/model/types";
 import { collectAllNotes } from "@typenotes/shared/notes";
@@ -22,7 +22,7 @@ export function selectPreviewSourceNotes({
   allNotes,
   shouldNestNotesInNavigation,
 }: PreviewSourceInput): NoteEntry[] {
-  if (activeFolder === FEED_FOLDER_PATH) {
+  if (activeFolder === STREAM_FOLDER_PATH) {
     return feedNotes;
   }
   if (!shouldNestNotesInNavigation) {

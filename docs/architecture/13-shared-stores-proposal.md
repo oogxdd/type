@@ -238,7 +238,7 @@ Composition root собирает зависимости, а общие workflow
 
 Похожий workflow нужен для `setNotesRoot` и удаления активного профиля.
 Scope — как минимум profile ID и notes root, а не только относительный путь:
-`Feed/a.md` в двух папках — две разные заметки.
+`_system/stream/a.md` в двух рабочих папках — две разные заметки.
 
 ### `lockWorkspace()` / `unlockWorkspace(args)`
 
@@ -268,8 +268,8 @@ panic-result сбросить все stores и выполнить платфор
   механизм storage платформенный. Подробности — [глава 07](./07-frontend-caching.md).
 - Ошибки мутаций пробрасываются вызывающему workflow после обновления error state.
   Не поглощать ошибку сохранения, после которой caller продолжит переключение.
-- Сохранять порядок папок от Rust; Feed и остальные папки имеют разные правила.
-  Не смешивать move в `Archieve` с `archived_ms` marker.
+- Сохранять порядок папок от Rust; `_system/stream` и остальные папки имеют
+  разные правила. Не смешивать move в `_system/archive` с `archived_ms` marker.
 - Не переносить в JS шифрование, файловые инварианты, разрешение Git-конфликтов
   или исполнение OCR/transcription workers: ими владеет Rust.
 
