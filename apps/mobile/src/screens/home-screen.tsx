@@ -40,6 +40,7 @@ const HomeWorkspace = () => {
   const pullReady = useSharedValue(false);
   const transitioning = useSharedValue(false);
   const commitRequest = useSharedValue(0);
+  const commitVelocity = useSharedValue(0);
   const suppressPressUntil = useSharedValue(0);
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
@@ -172,6 +173,7 @@ const HomeWorkspace = () => {
         direction.value, pullReady.value, success, transitioning.value
       )) {
         transitioning.value = true;
+        commitVelocity.value = event.velocityY;
         commitRequest.value += 1;
         outcome.value = "filed";
       } else {
@@ -192,7 +194,7 @@ const HomeWorkspace = () => {
       pullReady.value = false;
       if (!transitioning.value) pull.value = withTiming(0, { duration: 180 });
     }), [focused, captureScroll, feedScroll, folderScroll, direction, dragging, pull,
-      pullReady, transitioning, commitRequest, suppressPressUntil, startX, startY,
+      pullReady, transitioning, commitRequest, commitVelocity, suppressPressUntil, startX, startY,
       startProgress, startedOpen, startTime, maxDx, maxDy, maxPull, outcome,
       traceEnabled, traceEmitted, menuProgress, windowW, settled]);
 
@@ -205,11 +207,11 @@ const HomeWorkspace = () => {
   const dimStyle = useAnimatedStyle(() => ({ opacity: 0.08 * (1 - menuProgress.value) }));
   const shell = useMemo<HomeShell>(() => ({
     menuVisible, menuProgress, direction, dragging, pull, pullReady, transitioning,
-    commitRequest, suppressPressUntil, captureScroll, feedScroll, folderScroll,
-    openMenu, openCapture,
+    commitRequest, commitVelocity, suppressPressUntil, captureScroll, feedScroll,
+    folderScroll, openMenu, openCapture,
   }), [menuVisible, menuProgress, direction, dragging, pull, pullReady, transitioning,
-    commitRequest, suppressPressUntil, captureScroll, feedScroll, folderScroll,
-    openMenu, openCapture]);
+    commitRequest, commitVelocity, suppressPressUntil, captureScroll, feedScroll,
+    folderScroll, openMenu, openCapture]);
 
   return (
     <HomeShellProvider value={shell}>

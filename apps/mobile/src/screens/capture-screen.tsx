@@ -101,7 +101,8 @@ export const CaptureScreen = () => {
   const { height } = useWindowDimensions();
   const {
     menuVisible, menuProgress, direction, dragging, pull, pullReady,
-    transitioning, commitRequest, captureScroll, openMenu, suppressPressUntil,
+    transitioning, commitRequest, commitVelocity, captureScroll, openMenu,
+    suppressPressUntil,
   } = useHomeShell();
   const [readyLabel, setReadyLabel] = useState(false);
   const [committing, setCommitting] = useState(false);
@@ -285,8 +286,12 @@ export const CaptureScreen = () => {
   useAnimatedReaction(() => commitRequest.value, (request, previous) => {
     if (previous === null || request === previous) return;
     runOnJS(setCommitting)(true);
+    // Start where the finger left off. Without the release velocity the spring
+    // begins at rest, so a fast throw visibly stalls at the hand-off before the
+    // page starts moving.
     pageY.value = withSpring(-visiblePageHeight(windowH.value, keyboard.height.value),
-      COMMIT_SPRING, (finished) => { if (finished) runOnJS(runFinishCommit)(); });
+      { ...COMMIT_SPRING, velocity: commitVelocity.value },
+      (finished) => { if (finished) runOnJS(runFinishCommit)(); });
   });
   useAnimatedReaction(() => pullReady.value, (ready, previous) => {
     if (ready === previous) return;

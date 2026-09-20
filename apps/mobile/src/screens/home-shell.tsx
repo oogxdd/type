@@ -14,6 +14,9 @@ export type HomeShell = {
   pullReady: SharedValue<boolean>;
   transitioning: SharedValue<boolean>;
   commitRequest: SharedValue<number>;
+  // The finger's vertical speed at the moment of release, handed to the commit
+  // spring so the page keeps moving at the speed it was thrown.
+  commitVelocity: SharedValue<number>;
   suppressPressUntil: SharedValue<number>;
   captureScroll: NativeGesture;
   feedScroll: NativeGesture;
