@@ -8,7 +8,7 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, minimum-scale=1, user-scalable=no"
     />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#14171b" data-app-theme-color="true" />
+    <meta name="theme-color" content="#1c1c22" data-app-theme-color="true" />
     <title>Type</title>
     <script>
       (() => {
@@ -18,13 +18,23 @@
         document.documentElement.setAttribute("data-launch-theme", launchTheme);
         document.documentElement.classList.toggle("dark", launchTheme === "dark");
         document.documentElement.style.colorScheme = launchTheme;
-        const themeColor = launchTheme === "dark" ? "#14171b" : "#f5f6fb";
+        const themeColor = launchTheme === "dark" ? "#1c1c22" : "#f2f2f5";
         const themeColorMeta = document.querySelector(
           'meta[name="theme-color"][data-app-theme-color="true"]'
         );
         if (themeColorMeta) {
           themeColorMeta.setAttribute("content", themeColor);
         }
+
+        // Guess whether the native window got a translucent material so the
+        // very first paint is already glass on macOS instead of flashing an
+        // opaque floor. The Tauri shell overwrites this attribute with the
+        // truth as soon as it has tried to apply one (see lib.rs).
+        const looksLikeMac = /Mac/i.test(window.navigator.userAgent);
+        document.documentElement.setAttribute(
+          "data-window-material",
+          looksLikeMac ? "blur" : "none"
+        );
       })();
     </script>
     <style>
@@ -36,11 +46,22 @@
       }
 
       body {
-        background: #14171b;
+        background: #1c1c22;
       }
 
       html[data-launch-theme="light"] body {
-        background: #f5f6fb;
+        background: #f2f2f5;
+      }
+
+      /* With a translucent window material the app has no opaque floor — the
+         splash must not paint one either, or launching flashes a solid slab
+         before the glass appears. */
+      html[data-window-material="blur"] body {
+        background: rgba(24, 24, 32, 0.4);
+      }
+
+      html[data-window-material="blur"][data-launch-theme="light"] body {
+        background: rgba(255, 255, 255, 0.28);
       }
 
       #launch-splash {
@@ -49,14 +70,18 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #14171b;
+        background: #1c1c22;
         opacity: 1;
         transition: opacity 140ms ease-out, visibility 140ms ease-out;
         z-index: 9999;
       }
 
       html[data-launch-theme="light"] #launch-splash {
-        background: #f5f6fb;
+        background: #f2f2f5;
+      }
+
+      html[data-window-material="blur"] #launch-splash {
+        background: transparent;
       }
 
       #launch-splash.launch-splash-hidden {

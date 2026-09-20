@@ -59,9 +59,21 @@ pub(super) fn run() {
                     error
                 );
             }
-            #[cfg(target_os = "macos")]
             if let Some(window) = _app.get_webview_window("main") {
+                #[cfg(target_os = "macos")]
                 let _ = crate::apply_macos_window_alpha(&window, crate::MACOS_WINDOW_ALPHA);
+
+                // index.html guesses the material from the platform so the very
+                // first paint is already right on macOS; this corrects the guess
+                // once we know whether the material actually took.
+                let material = if crate::apply_window_material(&window) {
+                    "blur"
+                } else {
+                    "none"
+                };
+                let _ = window.eval(&format!(
+                    "document.documentElement.setAttribute('data-window-material','{material}')"
+                ));
             }
             Ok(())
         })

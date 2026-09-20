@@ -6,34 +6,66 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* DESIGN ATOMS — edit these values to retheme the desktop UI. */
-  --design-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --design-light-bg: #fafafa;
-  --design-light-text: #292421;
-  --design-light-muted: rgba(41, 36, 33, 0.62);
-  --design-light-border: rgba(41, 36, 33, 0.1);
-  --design-light-selection: rgba(41, 36, 33, 0.065);
-  --design-dark-bg: #0b0a09;
-  --design-dark-text: oklch(82% 0.006 67.8);
-  --design-dark-muted: oklch(57% 0.008 67.8);
-  --design-dark-border: rgba(255, 255, 255, 0.1);
-  --design-dark-selection: rgba(255, 255, 255, 0.075);
+  /* DESIGN ATOMS — edit these values to retheme the desktop UI.
+     The palette is Write.md's macOS-glass one: Apple system type, warm-white
+     text floating on vibrancy, thin luminous borders, an indigo accent, and
+     Apple's system status colours. `*-base` is the opaque floor used when the
+     window has no translucent material; `*-tint` is the sheer wash painted
+     over the material when it does. Consumed by the skin at the end of this
+     file — see the block comment there. */
+  --design-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    system-ui, "Helvetica Neue", sans-serif;
+  --design-font-mono: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace,
+    "SFMono-Regular", Menlo, Monaco, monospace;
+  --design-editor-line-height: 1.75;
+  --design-content-width: 720px;
+  --design-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.18);
 
-  font-family: "Avenir Next", "SF Pro Text", "Segoe UI", "Noto Sans", Arial, sans-serif;
+  --design-light-base: #f2f2f5;
+  --design-light-tint: rgba(250, 250, 252, 0.58);
+  --design-light-pane: rgba(0, 0, 0, 0.025);
+  --design-light-elevated: rgba(255, 255, 255, 0.55);
+  --design-light-popover: rgba(255, 255, 255, 0.82);
+  --design-light-text: rgba(28, 28, 30, 0.95);
+  --design-light-muted: rgba(28, 28, 30, 0.55);
+  --design-light-faint: rgba(28, 28, 30, 0.35);
+  --design-light-border: rgba(0, 0, 0, 0.06);
+  --design-light-border-strong: rgba(0, 0, 0, 0.1);
+  --design-light-selection: rgba(79, 70, 229, 0.1);
+  --design-light-hover: rgba(0, 0, 0, 0.055);
+  --design-light-accent: #4f46e5;
+  --design-light-code: rgba(0, 0, 0, 0.04);
+  --design-light-success: #34c759;
+  --design-light-warning: #ff9500;
+  --design-light-error: #ff3b30;
+  --design-light-info: #0a84ff;
+
+  --design-dark-base: #1c1c22;
+  --design-dark-tint: rgba(22, 22, 28, 0.62);
+  --design-dark-pane: rgba(255, 255, 255, 0.025);
+  --design-dark-elevated: rgba(255, 255, 255, 0.06);
+  --design-dark-popover: rgba(34, 34, 42, 0.86);
+  --design-dark-text: rgba(235, 235, 245, 0.95);
+  --design-dark-muted: rgba(235, 235, 245, 0.6);
+  --design-dark-faint: rgba(235, 235, 245, 0.38);
+  --design-dark-border: rgba(255, 255, 255, 0.07);
+  --design-dark-border-strong: rgba(255, 255, 255, 0.12);
+  --design-dark-selection: rgba(124, 131, 255, 0.18);
+  --design-dark-hover: rgba(255, 255, 255, 0.075);
+  --design-dark-accent: #7c83ff;
+  --design-dark-code: rgba(255, 255, 255, 0.06);
+  --design-dark-success: #30d158;
+  --design-dark-warning: #ff9f0a;
+  --design-dark-error: #ff453a;
+  --design-dark-info: #64d2ff;
+
+  font-family: var(--design-font);
   font-size: 14px;
-  line-height: 1.35;
-  color: #101418;
-  background-color: #ffffff;
+  line-height: 1.5;
+  color: var(--design-dark-text);
+  background-color: transparent;
   --titlebar-height: 40px;
   --left-panels-drag-height: 28px;
-  --ui-bg: #ffffff;
-  --ui-pane: #ffffff;
-  --ui-border: #d3d9df;
-  --ui-border-strong: #9ba6b1;
-  --ui-text: #101418;
-  --ui-muted: #66717c;
-  --ui-select: #f2f5f7;
-  --ui-accent: #1f6feb;
   --vim-visual-blue: #4b8fff;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
@@ -197,6 +229,18 @@ body {
   background: color-mix(in srgb, var(--ui-border-strong) 22%, transparent);
 }
 
+/* The notes-list/editor handle is deliberately invisible and has no grab
+   band — the editor pane is sized from the layout, not dragged. */
+.app-resize-handle-editor::before,
+.app-resize-handle-editor:hover::before {
+  width: 0;
+  background: transparent;
+}
+
+.app-resize-handle-editor::after {
+  width: 0;
+}
+
 .tree-pane .pane-top {
   padding-top: calc(10px + var(--left-panels-drag-height));
 }
@@ -291,29 +335,6 @@ body {
   border-color: color-mix(in srgb, var(--sidebar-accent) 65%, transparent);
 }
 
-.app.theme-light .app-sidebar-recording-button[data-active="false"] {
-  background: rgba(38, 57, 74, 0.04);
-  border-color: rgba(38, 57, 74, 0.1);
-  color: rgba(38, 57, 74, 0.7);
-}
-
-.app.theme-light .app-sidebar-recording-button[data-active="false"]:hover {
-  background: rgba(38, 57, 74, 0.09);
-  border-color: rgba(38, 57, 74, 0.16);
-  color: #1e2732;
-}
-
-.app.theme-dark .app-sidebar-recording-button[data-active="false"] {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.11);
-  color: rgba(232, 236, 242, 0.72);
-}
-
-.app.theme-dark .app-sidebar-recording-button[data-active="false"]:hover {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.16);
-  color: #e8ecf2;
-}
 
 .pane-header {
   padding: 6px 10px;
@@ -1201,525 +1222,6 @@ body {
   color: #7a8593;
 }
 
-.app.theme-light {
-  --ui-bg: rgba(243, 245, 248, 0.55);
-  --ui-pane: rgba(255, 255, 255, 0.56);
-  --ui-border: #dbe2e9;
-  --ui-border-strong: #a3afbb;
-  --ui-text: #11181f;
-  --ui-muted: #687684;
-  --ui-select: #eef3f8;
-  --ui-accent: #2b6ff0;
-  background: radial-gradient(
-    1200px 600px at -220px -90px,
-    rgba(217, 224, 234, 0.74) 0%,
-    rgba(243, 245, 248, 0.32) 54%
-  );
-}
-
-.app.theme-light .nav-pane {
-  display: flex;
-  flex-direction: column;
-  background: linear-gradient(180deg, #e7ebf0 0%, #dde3ea 46%, #d6dde7 100%);
-  border-right: 1px solid #c8d2dc;
-}
-
-.app.theme-light .pane-top {
-  padding: 10px 10px 8px;
-}
-
-.app.theme-light .tree-pane .pane-top {
-  padding-top: calc(10px + var(--left-panels-drag-height));
-}
-
-.app.theme-light .pane-section {
-  min-height: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.app.theme-light .pane-section-title {
-  padding: 10px 14px 6px;
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  color: #5f6b79;
-}
-
-.app.theme-light .app-sidebar-content [data-sidebar="group-label"] {
-  color: #5f6b79;
-}
-
-.app.theme-light .pane-footer {
-  background: #dce3ec;
-  border-top: 1px solid rgba(77, 96, 114, 0.15);
-  padding: 10px;
-}
-
-.app.theme-light .nav-action {
-  width: 100%;
-  border: 1px solid transparent;
-  background: transparent;
-  color: #1e2732;
-  padding: 8px 10px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  text-align: left;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-.app.theme-light .nav-action-icon {
-  width: 18px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  line-height: 1;
-  opacity: 0.9;
-}
-
-.app.theme-light .nav-action:hover {
-  background: rgba(38, 57, 74, 0.08);
-  border-color: rgba(38, 57, 74, 0.12);
-}
-
-.app.theme-light .nav-action.active {
-  background: rgba(43, 111, 240, 0.12);
-  border-color: rgba(43, 111, 240, 0.18);
-}
-
-.app.theme-light .nav-action-combined-primary {
-  width: auto;
-  background: linear-gradient(180deg, #3f6fbf 0%, #345da0 100%);
-  border-color: rgba(38, 57, 74, 0.24);
-  color: #f4f8ff;
-}
-
-.app.theme-light .nav-action-combined-primary:hover {
-  background: linear-gradient(180deg, #4778cb 0%, #3a63a8 100%);
-  border-color: rgba(38, 57, 74, 0.26);
-}
-
-.app.theme-light .nav-action-combined-side {
-  width: 40px;
-  min-width: 40px;
-  flex: 0 0 40px;
-  gap: 0;
-  padding-left: 0;
-  padding-right: 0;
-  background: rgba(38, 57, 74, 0.08);
-  border-color: rgba(38, 57, 74, 0.14);
-}
-
-.app.theme-light .nav-action-combined-side:hover {
-  background: rgba(38, 57, 74, 0.12);
-  border-color: rgba(38, 57, 74, 0.2);
-}
-
-.app.theme-light .nav-action-combined-side.active {
-  background: rgba(43, 111, 240, 0.2);
-  border-color: rgba(43, 111, 240, 0.24);
-  color: #1a3666;
-}
-
-.app.theme-dark {
-  --ui-bg: #14171b;
-  --ui-pane: rgba(29, 31, 35, 0.93);
-  --ui-pane-right: rgba(20, 24, 30, 0.78);
-  --ui-editor-surface: rgba(23, 28, 34, 0.86);
-  --ui-editor-border: #343c47;
-  --ui-border: #3b3e45;
-  --ui-border-strong: #484d56;
-  --ui-text: #e6ebf2;
-  --ui-muted: #9da6b2;
-  --ui-select: #373b43;
-  --ui-accent: #84a7ff;
-  background: radial-gradient(
-    1400px 700px at -200px -80px,
-    rgba(54, 58, 66, 0.7) 0%,
-    rgba(21, 24, 30, 0.58) 56%
-  );
-}
-
-.app.theme-dark .pane {
-  background: var(--ui-pane);
-  border-right: none;
-}
-
-.app.theme-dark .app-panels [data-slot="resizable-panel"]:not(:last-child) .pane {
-  border-right: none;
-}
-
-.app.theme-dark .sidebar-toggle-btn {
-  color: rgba(184, 192, 201, 0.92);
-}
-
-.app.theme-dark .sidebar-toggle-btn:hover {
-  background: rgba(236, 243, 252, 0.1);
-  color: rgba(228, 234, 242, 0.95);
-}
-
-.app.theme-dark .app-resize-handle:hover {
-  background: transparent;
-}
-
-.app.theme-dark .app-resize-handle::before {
-  background: rgba(157, 166, 178, 0.09);
-}
-
-.app.theme-dark .app-resize-handle:hover::before {
-  background: rgba(188, 196, 206, 0.18);
-}
-
-.app-resize-handle-editor::before {
-  width: 0;
-  background: transparent;
-}
-
-.app-resize-handle-editor:hover::before {
-  width: 0;
-  background: transparent;
-}
-
-.app.theme-dark .app-resize-handle-editor::before {
-  width: 0;
-  background: transparent;
-}
-
-.app.theme-dark .app-resize-handle-editor:hover::before {
-  width: 0;
-  background: transparent;
-}
-
-.app-resize-handle-editor::after {
-  width: 0;
-}
-
-.app.theme-dark .pane-header {
-  background: transparent;
-  color: var(--ui-muted);
-  border-bottom: 1px solid var(--ui-border);
-}
-
-.app.theme-dark .pane-body {
-  color: var(--ui-text);
-}
-
-.app.theme-dark .nav-pane {
-  display: flex;
-  flex-direction: column;
-  background: linear-gradient(
-    180deg,
-    rgba(40, 44, 52, 0.95) 0%,
-    rgba(35, 39, 46, 0.94) 46%,
-    rgba(30, 34, 40, 0.93) 100%
-  );
-  border-right: 1px solid #474c56;
-  backdrop-filter: blur(2px) saturate(110%);
-  -webkit-backdrop-filter: blur(2px) saturate(110%);
-}
-
-.app.theme-dark .pane-top {
-  padding: 10px 10px 8px;
-}
-
-.app.theme-dark .tree-pane .pane-top {
-  padding-top: calc(10px + var(--left-panels-drag-height));
-}
-
-.app.theme-dark .pane-section {
-  min-height: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.app.theme-dark .pane-section-title {
-  padding: 10px 14px 6px;
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  color: #c2cbd7;
-}
-
-.app.theme-dark .app-sidebar-content [data-sidebar="group-label"] {
-  color: #c2cbd7;
-}
-
-.app.theme-dark .recent-row:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.app.theme-dark .pane-footer {
-  background: transparent;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 10px;
-}
-
-.app.theme-dark .nav-action {
-  width: 100%;
-  border: 1px solid transparent;
-  background: transparent;
-  color: #e8ecf2;
-  padding: 8px 10px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  text-align: left;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-.app.theme-dark .nav-action-icon {
-  width: 18px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  line-height: 1;
-  opacity: 0.9;
-}
-
-.app.theme-dark .nav-action:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
-.app.theme-dark .nav-action.active {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.app.theme-dark .nav-action-combined-primary {
-  width: auto;
-  background: linear-gradient(180deg, rgba(110, 145, 215, 0.34) 0%, rgba(85, 118, 183, 0.3) 100%);
-  border-color: rgba(139, 165, 219, 0.34);
-  color: #edf2ff;
-}
-
-.app.theme-dark .nav-action-combined-primary:hover {
-  background: linear-gradient(180deg, rgba(124, 157, 224, 0.4) 0%, rgba(95, 128, 193, 0.34) 100%);
-  border-color: rgba(152, 176, 229, 0.4);
-}
-
-.app.theme-dark .nav-action-combined-side {
-  width: 40px;
-  min-width: 40px;
-  flex: 0 0 40px;
-  gap: 0;
-  padding-left: 0;
-  padding-right: 0;
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
-.app.theme-dark .nav-action-combined-side:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.16);
-}
-
-.app.theme-dark .nav-action-combined-side.active {
-  background: rgba(132, 167, 255, 0.28);
-  border-color: rgba(132, 167, 255, 0.36);
-  color: #edf2ff;
-}
-
-.app.theme-dark .notes-pane {
-  background: rgba(33, 35, 40, 0.74);
-}
-
-.app.theme-dark .editor-pane {
-  background: rgba(26, 28, 33, 0.8);
-}
-
-.app.theme-dark .notes-pane .pane-body {
-  background: rgba(34, 36, 41, 0.9);
-  padding: calc(8px + var(--left-panels-drag-height)) 8px 10px;
-}
-
-.app.theme-dark .note-row {
-  border: none;
-  border-radius: 10px;
-  margin: 1px 0;
-  background: transparent;
-  color: #dfe5ee;
-}
-
-.app.theme-dark .note-row:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.app.theme-dark .note-row.selected {
-  background: rgba(255, 255, 255, 0.12);
-  box-shadow: none;
-}
-
-.app.theme-dark .note-row-title {
-  color: #f1f4f8;
-}
-
-.app.theme-dark .note-row-recording-icon {
-  color: #b0bcc9;
-}
-
-.app.theme-dark .note-row-date,
-.app.theme-dark .note-row-snippet {
-  color: #a9b2be;
-}
-
-.app.theme-dark .editor-body {
-  background: rgba(24, 26, 30, 0.92);
-  padding: 0;
-}
-
-.app.theme-dark .recording-note-header {
-  border-bottom-color: #2f3946;
-  background: rgba(29, 31, 36, 0.94);
-}
-
-.app.theme-dark .recording-note-chip,
-.app.theme-dark .recording-note-metric .value {
-  color: #e6ebf2;
-}
-
-.app.theme-dark .recording-note-metric .label,
-.app.theme-dark .recording-note-message {
-  color: #a8b2be;
-}
-
-.app.theme-dark .recording-note-btn {
-  border-color: #3a4554;
-  background: rgba(255, 255, 255, 0.05);
-  color: #dde4ee;
-}
-
-.app.theme-dark .recording-note-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.app.theme-dark .editor-lens-menu-trigger {
-  border-color: rgba(90, 103, 122, 0.85);
-  color: rgba(219, 227, 238, 0.62);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.app.theme-dark .editor-lens-menu-trigger:hover {
-  border-color: #63748b;
-  color: #e3eaf3;
-  background: rgba(116, 143, 191, 0.2);
-}
-
-.app.theme-dark .multi-lens-toolbar {
-  background: rgba(20, 25, 31, 0.75);
-}
-
-.app.theme-dark .multi-lens-text-composer {
-  background: rgba(20, 25, 31, 0.75);
-}
-
-.app.theme-dark .multi-lens-btn {
-  border-color: #485261;
-  color: #dbe3ee;
-}
-
-.app.theme-dark .multi-lens-btn:hover {
-  background: rgba(116, 143, 191, 0.2);
-}
-
-.app.theme-dark .multi-lens-btn.active {
-  border-color: #5f7ca9;
-  background: rgba(98, 132, 192, 0.26);
-}
-
-.app.theme-dark .multi-lens-note-stage {
-  background: rgba(18, 22, 28, 0.78);
-}
-
-.app.theme-dark .multi-lens-text-note {
-  background: rgba(128, 113, 65, 0.86);
-  border-color: rgba(194, 172, 103, 0.56);
-  color: #f8f1dd;
-}
-
-.app.theme-dark .multi-lens-inline-text-editor {
-  background: rgba(126, 111, 64, 0.9);
-  border-color: rgba(194, 172, 103, 0.58);
-  color: #f8f1dd;
-}
-
-.app.theme-dark .multi-lens-inline-text-editor-input::placeholder {
-  color: rgba(248, 241, 221, 0.72);
-}
-
-.app.theme-dark .multi-lens-inline-text-editor-action {
-  border-color: rgba(225, 206, 145, 0.24);
-  background: rgba(40, 35, 18, 0.26);
-  color: rgba(248, 241, 221, 0.92);
-}
-
-.app.theme-dark .multi-lens-inline-text-editor-action.primary {
-  border-color: rgba(225, 206, 145, 0.34);
-  background: rgba(74, 62, 30, 0.44);
-}
-
-.app.theme-dark .multi-lens-inline-text-editor-action:hover {
-  background: rgba(32, 27, 13, 0.42);
-}
-
-.app.theme-dark .multi-lens-inline-text-editor-action.primary:hover {
-  background: rgba(86, 72, 33, 0.6);
-}
-
-.app.theme-dark .multi-lens-text-composer-input {
-  border-color: #485261;
-  color: #dbe3ee;
-}
-
-.app.theme-dark .multi-lens-note-readonly .tiptap-content {
-  padding-top: 12px;
-}
-
-.app.theme-dark .tiptap-editor {
-  background: rgba(28, 30, 34, 0.95);
-}
-
-.app.theme-dark .tiptap-toolbar {
-  background: rgba(28, 30, 34, 0.95);
-  border-bottom-color: #3a3a3e;
-}
-
-.app.theme-dark .tiptap-content {
-  padding-top: calc(24px + var(--left-panels-drag-height));
-}
-
-/* The editor pane keeps the same blur as every other pane. Disabling it here
-   let the native macOS overlay titlebar show through as a hard 3-4px band at
-   the top edge, since nothing was left to diffuse it. */
-
-.app.theme-dark .tiptap-content pre {
-  background: rgba(255, 255, 255, 0.09);
-}
-
-.app.theme-dark .tiptap-content code {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.app.theme-dark .empty {
-  color: #a0a9b7;
-}
-
-.app.theme-dark .tiptap-content p.is-editor-empty:first-child::before {
-  color: #a0a9b7;
-}
 
 @media (max-width: 1000px) {
   .pane-drag-region {
@@ -1729,11 +1231,6 @@ body {
   .sidebar-toggle-btn {
     display: none;
   }
-
-  .app.theme-dark .tiptap-content {
-    padding-top: 24px;
-  }
-
 }
 
 @theme inline {
@@ -1842,11 +1339,11 @@ body {
 }
 
 .startup-screen-light {
-  background: #f5f6fb;
+  background: var(--design-light-base);
 }
 
 .startup-screen-dark {
-  background: #14171b;
+  background: var(--design-dark-base);
 }
 
 .startup-logo {
@@ -1916,658 +1413,733 @@ body {
   color: #b23838;
 }
 
-/* The Network-inspired desktop skin: warm paper, ink-brown type, and the
-   restrained hierarchy of a personal email. Kept at the end so these rules
-   form one easy-to-remove presentation layer over the existing app. */
+/* ─────────────────────────────────────────────────────────────────────────
+   The Write.md-inspired glass skin.
+
+   One removable presentation layer, kept last in this file so it wins over
+   everything above it. The visual language is borrowed from Daniel Bilek's
+   Write.md: a translucent macOS-glass window, Apple system type, warm-white
+   text on vibrancy, thin luminous borders, an indigo accent, and a single
+   centred writing column with generous leading.
+
+   It leans on two things the rest of the app already provides:
+     - the `--design-*` atoms at the top of this file (the palette),
+     - `data-window-material` on <html>, which says whether the native window
+       actually got a translucent material. "blur" → paint sheer tints and let
+       the vibrancy through; "none" → paint the opaque base instead, because a
+       sheer tint over a `transparent: true` window would show the raw desktop.
+   ───────────────────────────────────────────────────────────────────────── */
+
 .app {
   font-family: var(--design-font);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.app.theme-light {
-  --ui-bg: var(--design-light-bg);
-  --ui-pane: var(--design-light-bg);
+/* ── 1. Document-level tokens ───────────────────────────────────────────── */
+
+/* Everything inside the app reads the theme block below, but the lock screen
+   and the startup splash gate `.app` and so never see it — they get the
+   palette here, keyed off the `dark` class `applyThemeToDocument` maintains. */
+:root {
+  --ui-bg: var(--design-light-base);
+  --ui-pane: var(--design-light-pane);
   --ui-border: var(--design-light-border);
-  --ui-border-strong: rgba(41, 36, 33, 0.24);
+  --ui-border-strong: var(--design-light-border-strong);
   --ui-text: var(--design-light-text);
   --ui-muted: var(--design-light-muted);
+  --ui-faint: var(--design-light-faint);
   --ui-select: var(--design-light-selection);
-  --ui-accent: var(--design-light-text);
-  --background: var(--design-light-bg);
+  --ui-accent: var(--design-light-accent);
+  --ui-error: var(--design-light-error);
+  --glass-elevated: var(--design-light-elevated);
+  --glass-hover: var(--design-light-hover);
+
+  --background: var(--design-light-base);
   --foreground: var(--design-light-text);
-  --card: var(--design-light-bg);
+  --card: var(--design-light-elevated);
   --card-foreground: var(--design-light-text);
-  --popover: var(--design-light-bg);
+  --popover: var(--design-light-popover);
   --popover-foreground: var(--design-light-text);
-  --primary: var(--design-light-text);
-  --primary-foreground: #f5eee6;
-  --secondary: rgba(255, 255, 255, 0.75);
-  --secondary-foreground: var(--design-light-text);
-  --muted: rgba(255, 255, 255, 0.65);
+  --primary: var(--design-light-accent);
+  --primary-foreground: #ffffff;
   --muted-foreground: var(--design-light-muted);
-  --accent: rgba(255, 255, 255, 0.75);
-  --accent-foreground: var(--design-light-text);
+  --destructive: var(--design-light-error);
   --border: var(--design-light-border);
-  --input: var(--design-light-border);
-  --ring: rgba(41, 36, 33, 0.22);
-  --sidebar: var(--design-light-bg);
+
+  color: var(--ui-text);
+}
+
+:root.dark {
+  --ui-bg: var(--design-dark-base);
+  --ui-pane: var(--design-dark-pane);
+  --ui-border: var(--design-dark-border);
+  --ui-border-strong: var(--design-dark-border-strong);
+  --ui-text: var(--design-dark-text);
+  --ui-muted: var(--design-dark-muted);
+  --ui-faint: var(--design-dark-faint);
+  --ui-select: var(--design-dark-selection);
+  --ui-accent: var(--design-dark-accent);
+  --ui-error: var(--design-dark-error);
+  --glass-elevated: var(--design-dark-elevated);
+  --glass-hover: var(--design-dark-hover);
+
+  --background: var(--design-dark-base);
+  --foreground: var(--design-dark-text);
+  --card: var(--design-dark-elevated);
+  --card-foreground: var(--design-dark-text);
+  --popover: var(--design-dark-popover);
+  --popover-foreground: var(--design-dark-text);
+  --primary: var(--design-dark-accent);
+  --primary-foreground: #ffffff;
+  --muted-foreground: var(--design-dark-muted);
+  --destructive: var(--design-dark-error);
+  --border: var(--design-dark-border);
+}
+
+/* ── 2. Window base ─────────────────────────────────────────────────────── */
+
+.window-shell {
+  background: var(--ui-bg);
+}
+
+html[data-window-material="blur"] .window-shell {
+  background: transparent;
+}
+
+/* ── 3. Theme tokens ────────────────────────────────────────────────────── */
+
+.app.theme-light {
+  --glass-tint: var(--design-light-tint);
+  --glass-pane: var(--design-light-pane);
+  --glass-elevated: var(--design-light-elevated);
+  --glass-hover: var(--design-light-hover);
+  --glass-code: var(--design-light-code);
+
+  --ui-bg: var(--design-light-base);
+  --ui-pane: var(--design-light-pane);
+  --ui-border: var(--design-light-border);
+  --ui-border-strong: var(--design-light-border-strong);
+  --ui-text: var(--design-light-text);
+  --ui-muted: var(--design-light-muted);
+  --ui-faint: var(--design-light-faint);
+  --ui-select: var(--design-light-selection);
+  --ui-accent: var(--design-light-accent);
+  --ui-success: var(--design-light-success);
+  --ui-warning: var(--design-light-warning);
+  --ui-error: var(--design-light-error);
+  --ui-info: var(--design-light-info);
+
+  --background: var(--design-light-base);
+  --foreground: var(--design-light-text);
+  --card: var(--design-light-elevated);
+  --card-foreground: var(--design-light-text);
+  --popover: var(--design-light-popover);
+  --popover-foreground: var(--design-light-text);
+  --primary: var(--design-light-accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--design-light-elevated);
+  --secondary-foreground: var(--design-light-text);
+  --muted: var(--design-light-elevated);
+  --muted-foreground: var(--design-light-muted);
+  --accent: var(--design-light-selection);
+  --accent-foreground: var(--design-light-text);
+  --destructive: var(--design-light-error);
+  --border: var(--design-light-border);
+  --input: var(--design-light-border-strong);
+  --ring: color-mix(in srgb, var(--design-light-accent) 45%, transparent);
+  --sidebar: transparent;
   --sidebar-foreground: var(--design-light-text);
   --sidebar-accent: var(--design-light-selection);
   --sidebar-accent-foreground: var(--design-light-text);
   --sidebar-border: var(--design-light-border);
-  background: var(--design-light-bg);
-}
 
-.app.theme-light .pane,
-.app.theme-light .nav-pane,
-.app.theme-light .notes-pane,
-.app.theme-light .editor-pane,
-.app.theme-light .notes-pane .pane-body,
-.app.theme-light .editor-body {
-  background: var(--design-light-bg);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
+  --vim-visual-blue: var(--design-light-accent);
 
-.app.theme-light .nav-pane {
-  border-right-color: var(--design-light-border);
-}
-
-.app.theme-light .app-resize-handle::before,
-.app.theme-light .app-resize-handle-editor::before {
-  width: 1px;
-  background: var(--design-light-border);
-}
-
-.app.theme-light .app-resize-handle:hover::before,
-.app.theme-light .app-resize-handle-editor:hover::before {
-  width: 1px;
-  background: color-mix(in srgb, var(--design-light-border) 55%, var(--design-light-text));
-}
-
-.app.theme-light
-  .desktop-navigation-pane:focus-within
-  + .app-resize-handle::before {
-  width: 2px;
-  background: color-mix(
-    in srgb,
-    var(--design-light-selection) 72%,
-    var(--design-light-text)
-  );
-  box-shadow: 0 0 6px
-    color-mix(in srgb, var(--design-light-selection) 45%, transparent);
-}
-
-.app.theme-light .app-sidebar-header {
-  padding: calc(18px + var(--left-panels-drag-height)) 14px 14px;
-}
-
-.app.theme-light .app-sidebar-header [data-sidebar="menu-item"] {
-  gap: 6px;
-}
-
-.app.theme-light .app-sidebar-header [data-sidebar="menu-button"],
-.app.theme-light .app-sidebar-header button,
-.app.theme-light .app-sidebar-content > [data-sidebar="group"]:last-child [data-sidebar="menu-button"] {
-  border: 0;
-  border-radius: 999px;
-  background: rgba(41, 36, 33, 0.05);
-  color: rgba(41, 36, 33, 0.72);
-  box-shadow: none;
-}
-
-.app.theme-light .app-sidebar-header [data-sidebar="menu-button"]:hover,
-.app.theme-light .app-sidebar-header button:hover,
-.app.theme-light .app-sidebar-content > [data-sidebar="group"]:last-child [data-sidebar="menu-button"]:hover {
-  background: rgba(41, 36, 33, 0.09);
-  color: #292421;
-}
-
-.app.theme-light .app-sidebar-content > [data-sidebar="group"]:last-child {
-  padding: 12px 14px 16px;
-}
-
-.app.theme-light .pane-tabs-wrap {
-  padding: 12px 14px 10px;
-}
-
-.app.theme-light .folders-tabs-list {
-  gap: 18px;
-}
-
-.app.theme-light .folders-tab-trigger {
-  color: rgba(41, 36, 33, 0.5);
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.app.theme-light .folders-tab-trigger[data-state="active"] {
-  color: #292421;
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.2em;
-}
-
-.app.theme-light .sidebar-folders-section .nav-scroll-area {
-  padding-inline: 8px;
-}
-
-.app.theme-light .tree-pane .item-row,
-.app.theme-light .note-row {
-  min-height: 34px;
-  margin: 1px 4px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  box-shadow: none;
-  transition: background-color 160ms cubic-bezier(0.22, 1, 0.36, 1),
-    color 160ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.app.theme-light .tree-pane .item-row:hover,
-.app.theme-light .note-row:hover {
-  background: rgba(41, 36, 33, 0.035);
-}
-
-.app.theme-light .tree-pane .item-row.selected {
-  border-radius: 0;
-  background: var(--design-light-selection);
-  box-shadow: inset 2px 0 0 var(--design-light-text);
-}
-
-.app.theme-light .note-row.selected {
-  background: var(--design-light-selection);
-  box-shadow: none;
-}
-
-.app.theme-light .tree-pane .item-row.selected .item-label,
-.app.theme-light .note-row-title {
-  font-weight: 400;
-}
-
-.app.theme-light .tree-pane .item-label,
-.app.theme-light .note-row-title {
-  color: #292421;
-  font-size: 13px;
-}
-
-.app.theme-light .tree-pane .folder-glyph,
-.app.theme-light .tree-pane .nav-note-glyph,
-.app.theme-light .tree-pane .nav-note-recording-icon,
-.app.theme-light .note-row-recording-icon {
-  color: rgba(41, 36, 33, 0.5);
-}
-
-.app.theme-light .tree-pane .note-count,
-.app.theme-light .note-row-date,
-.app.theme-light .note-row-snippet {
-  color: rgba(41, 36, 33, 0.55);
-  font-weight: 400;
-}
-
-.app.theme-light .notes-pane .pane-body {
-  padding: calc(12px + var(--left-panels-drag-height)) 8px 12px;
-}
-
-.app.theme-light .note-row {
-  padding: 9px 10px;
-}
-
-.app.theme-light .note-row-subline {
-  margin-top: 3px;
-}
-
-.editor-top-row {
-  min-height: calc(12px + var(--left-panels-drag-height));
-  padding: calc(8px + var(--left-panels-drag-height)) clamp(22px, 5vw, 64px) 0;
-  align-items: flex-start;
-}
-
-.editor-lens-menu-area {
-  margin-left: auto;
-}
-
-.app.theme-light .editor-lens-menu-trigger {
-  border: 0;
-  border-radius: 999px;
-  background: rgba(41, 36, 33, 0.05);
-  color: rgba(41, 36, 33, 0.62);
-}
-
-.app.theme-light .editor-lens-menu-trigger:hover {
-  border: 0;
-  background: rgba(41, 36, 33, 0.09);
-  color: #292421;
-}
-
-.app.theme-light .tiptap-content {
-  width: min(100%, calc(40rem + clamp(44px, 10vw, 128px)));
-  margin: 0;
-  padding: 14px clamp(22px, 5vw, 64px) 16px;
-  color: var(--design-light-text);
-  font-family: var(--design-font);
-  font-size: clamp(var(--editor-font-size, 14px), 1.1vw, 16px);
-  line-height: 1.52;
-}
-
-.app.theme-light .tiptap-content p.is-editor-empty:first-child::before {
-  color: rgba(41, 36, 33, 0.45);
-  font-family: var(--design-font);
-}
-
-.app.theme-light .tiptap-content blockquote {
-  border-left-color: rgba(41, 36, 33, 0.2);
-  color: rgba(41, 36, 33, 0.68);
-}
-
-.app.theme-light .tiptap-content code,
-.app.theme-light .tiptap-content pre {
-  background: rgba(41, 36, 33, 0.06);
-}
-
-.app.sidebar-collapsed .editor-top-row {
-  padding-inline: clamp(56px, 20vw, 380px) clamp(22px, 5vw, 64px);
-}
-
-.app.sidebar-collapsed.theme-light .tiptap-content {
-  width: 100%;
-  max-width: none;
-  padding-left: clamp(56px, 20vw, 380px);
-  padding-right: clamp(56px, 20vw, 380px);
+  color-scheme: light;
+  background: var(--design-light-base);
 }
 
 .app.theme-dark {
-  --ui-bg: var(--design-dark-bg);
-  --ui-pane: var(--design-dark-bg);
+  --glass-tint: var(--design-dark-tint);
+  --glass-pane: var(--design-dark-pane);
+  --glass-elevated: var(--design-dark-elevated);
+  --glass-hover: var(--design-dark-hover);
+  --glass-code: var(--design-dark-code);
+
+  --ui-bg: var(--design-dark-base);
+  --ui-pane: var(--design-dark-pane);
   --ui-border: var(--design-dark-border);
-  --ui-border-strong: rgba(255, 255, 255, 0.18);
+  --ui-border-strong: var(--design-dark-border-strong);
   --ui-text: var(--design-dark-text);
   --ui-muted: var(--design-dark-muted);
+  --ui-faint: var(--design-dark-faint);
   --ui-select: var(--design-dark-selection);
-  --ui-accent: var(--design-dark-text);
-  --background: var(--design-dark-bg);
+  --ui-accent: var(--design-dark-accent);
+  --ui-success: var(--design-dark-success);
+  --ui-warning: var(--design-dark-warning);
+  --ui-error: var(--design-dark-error);
+  --ui-info: var(--design-dark-info);
+
+  --background: var(--design-dark-base);
   --foreground: var(--design-dark-text);
-  --card: var(--design-dark-bg);
+  --card: var(--design-dark-elevated);
   --card-foreground: var(--design-dark-text);
-  --popover: var(--design-dark-bg);
+  --popover: var(--design-dark-popover);
   --popover-foreground: var(--design-dark-text);
-  --primary: var(--design-dark-text);
+  --primary: var(--design-dark-accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--design-dark-elevated);
+  --secondary-foreground: var(--design-dark-text);
+  --muted: var(--design-dark-elevated);
   --muted-foreground: var(--design-dark-muted);
+  --accent: var(--design-dark-selection);
+  --accent-foreground: var(--design-dark-text);
+  --destructive: var(--design-dark-error);
   --border: var(--design-dark-border);
-  --input: var(--design-dark-border);
-  --sidebar: var(--design-dark-bg);
+  --input: var(--design-dark-border-strong);
+  --ring: color-mix(in srgb, var(--design-dark-accent) 45%, transparent);
+  --sidebar: transparent;
   --sidebar-foreground: var(--design-dark-text);
   --sidebar-accent: var(--design-dark-selection);
   --sidebar-accent-foreground: var(--design-dark-text);
   --sidebar-border: var(--design-dark-border);
-  background: var(--design-dark-bg);
+
+  --vim-visual-blue: var(--design-dark-accent);
+
+  color-scheme: dark;
+  background: var(--design-dark-base);
 }
 
-.app.theme-dark .pane,
-.app.theme-dark .nav-pane,
-.app.theme-dark .notes-pane,
-.app.theme-dark .editor-pane,
-.app.theme-dark .notes-pane .pane-body,
-.app.theme-dark .editor-body,
-.app.theme-dark .tiptap-editor {
-  background: var(--design-dark-bg);
+/* With a real material behind the webview the app itself stops painting a
+   floor: the vibrancy is the background, exactly as Write.md does it. */
+html[data-window-material="blur"] .app.theme-light,
+html[data-window-material="blur"] .app.theme-dark {
+  background: var(--glass-tint);
+}
+
+/* ── 4. Chrome ──────────────────────────────────────────────────────────── */
+
+.app .pane,
+.app .tree-pane,
+.app .notes-pane,
+.app .editor-pane,
+.app .editor-body,
+.app .tiptap-editor,
+.app .multi-lens-shell {
+  background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 
-.app.theme-dark .nav-pane {
-  border-right-color: var(--design-dark-border);
+/* The two left columns sit a shade deeper than the page they frame — the only
+   value difference in the whole window, and it is barely there on purpose. */
+.app .tree-pane,
+.app .notes-pane > .pane-body,
+.app .notes-pane .pane-body {
+  background: var(--glass-pane);
 }
 
-.app.theme-dark .app-resize-handle::before,
-.app.theme-dark .app-resize-handle-editor::before {
-  width: 1px;
-  background: var(--design-dark-border);
+.app .tree-pane {
+  border-right: 1px solid var(--ui-border);
 }
 
-.app.theme-dark .app-resize-handle:hover::before,
-.app.theme-dark .app-resize-handle-editor:hover::before {
-  width: 1px;
-  background: color-mix(in srgb, var(--design-dark-border) 55%, var(--design-dark-text));
+.app .nav-pane {
+  background: var(--glass-pane);
+  border-right: 1px solid var(--ui-border);
 }
 
-.app.theme-dark
-  .desktop-navigation-pane:focus-within
-  + .app-resize-handle::before {
-  width: 2px;
-  background: color-mix(
-    in srgb,
-    var(--design-dark-selection) 72%,
-    var(--design-dark-text)
-  );
-  box-shadow: 0 0 6px
-    color-mix(in srgb, var(--design-dark-selection) 45%, transparent);
-}
-
-.app.theme-dark .tree-pane .item-row,
-.app.theme-dark .note-row {
-  margin: 1px 4px;
-  border-radius: 7px;
-}
-
-.app.theme-dark .tree-pane .item-row.selected {
-  border-radius: 0;
-  background: var(--design-dark-selection);
-  box-shadow: inset 2px 0 0 var(--design-dark-text);
-}
-
-.app.theme-dark .note-row.selected {
-  background: var(--design-dark-selection);
-  box-shadow: none;
-}
-
-.app.theme-dark .tiptap-content {
-  padding: 14px clamp(22px, 5vw, 64px) 16px;
-  font-family: var(--design-font);
-  font-size: clamp(var(--editor-font-size, 14px), 1.1vw, 16px);
-  line-height: 1.52;
-}
-
-@media (max-width: 760px) {
-  .editor-top-row {
-    padding: 8px 18px 0;
-  }
-
-  .app.theme-light .tiptap-content,
-  .app.theme-dark .tiptap-content {
-    padding-inline: 18px;
-  }
-}
-
-/* Settings use dedicated classes because the unlayered `.pane-body` rule wins
-   over Tailwind spacing utilities in this stylesheet. */
-.settings-nav-pane {
-  border-right: 0;
-}
-
-.app.theme-light {
-  --settings-pane-top: 18px;
-}
-
-.app.theme-dark {
-  --settings-pane-top: 10px;
-}
-
-.settings-nav-pane .settings-nav-body {
-  display: block;
-  padding: calc(var(--settings-pane-top) + var(--left-panels-drag-height)) 0 12px;
-  background: var(--ui-pane);
-}
-
-.settings-nav-list {
-  display: grid;
-  gap: 1px;
-}
-
-.settings-nav-row {
-  position: relative;
-  width: 100%;
-  min-height: 34px;
-  border: 0;
-  border-radius: 0;
-  padding: 7px 14px;
+.app .pane-header,
+.app .tree-pane .pane-header {
   background: transparent;
-  color: var(--ui-text);
-  font-family: var(--design-font);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1.25;
-  letter-spacing: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.settings-nav-row:hover {
-  background: color-mix(in srgb, var(--ui-text) 3.5%, transparent);
-}
-
-.settings-nav-row.is-selected {
-  background: var(--ui-select);
-  font-weight: 500;
-}
-
-.settings-nav-row.is-selected::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 2px;
-  background: var(--ui-text);
-}
-
-.settings-nav-row:focus-visible {
-  outline: 2px solid var(--ui-border-strong);
-  outline-offset: -2px;
-}
-
-.settings-detail-pane .settings-detail-body {
-  padding: calc(var(--settings-pane-top) + var(--left-panels-drag-height)) 28px 28px;
-  background: var(--ui-pane);
-}
-
-.app.theme-light .tree-pane .item-row,
-.app.theme-dark .tree-pane .item-row {
-  margin: 0;
-}
-
-@media (max-width: 1320px) {
-  .settings-detail-pane .settings-detail-body {
-    padding: calc(var(--settings-pane-top) + var(--left-panels-drag-height)) 22px 24px;
-  }
-}
-
-.settings-color-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.settings-color-field {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border: 1px solid var(--ui-border);
-  border-radius: 7px;
-  padding: 8px 10px;
-  color: var(--ui-text);
-  font-size: 13px;
-}
-
-.settings-color-control {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-}
-
-.settings-color-control input[type="color"] {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  padding: 2px;
-  border: 1px solid var(--ui-border);
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.settings-color-control code {
-  color: var(--ui-muted);
-  font-size: 11px;
-}
-
-@media (max-width: 900px) {
-  .settings-color-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Multi-selection review shares one scroll, with quiet boundaries between notes. */
-.note-review {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  color: var(--ui-text);
-}
-
-.note-review-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 24px;
   border-bottom: 1px solid var(--ui-border);
-  font-size: 12px;
+  color: var(--ui-faint);
+  font-family: var(--design-font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.note-review-toolbar span,
-.note-review-heading p,
-.note-review-placeholder {
-  color: var(--ui-muted);
-}
-
-.note-review-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 0 24px 40px;
-  user-select: text;
-}
-
-.note-review-note {
-  max-width: 760px;
-  margin-inline: auto;
-  padding-block: 28px;
-}
-
-.note-review-note + .note-review-note {
+.app .pane-footer {
+  background: transparent;
   border-top: 1px solid var(--ui-border);
 }
 
-.note-review-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 16px;
+.app .app-resize-handle::before {
+  width: 1px;
+  background: var(--ui-border);
 }
 
-.note-review-heading > div { min-width: 0; }
-.note-review-heading button { flex-shrink: 0; }
-.note-review-heading h2 { margin: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
-.note-review-heading p { margin: 4px 0 0; font-size: 11px; overflow-wrap: anywhere; }
-.note-review-placeholder { font-size: 13px; }
-.note-review-error { padding: 12px 24px; color: var(--destructive); font-size: 13px; }
-
-.note-review .tiptap-content,
-.app.sidebar-collapsed .note-review .tiptap-content {
-  min-height: 0;
-  padding: 0;
-  font-size: var(--editor-font-size, 14px);
+.app .app-resize-handle:hover::before {
+  width: 1px;
+  background: var(--ui-border-strong);
 }
 
-.note-review .tiptap-content::after { display: none; }
-
-/* A tagged block reads as a full-bleed band across the pane, with the tag names
-   sitting on its top rule. The band is a pseudo-element rather than the block's
-   own background so it can escape the editor's text padding: it stretches far
-   past the left edge (overflow to the left of the content box is clipped and
-   never scrollable in LTR, so no scrollbar appears) and exactly to the pane's
-   right edge, which is also where the badge is anchored. Colours come entirely
-   from the inline `--selection-tag-*` gradients that the tag-color plugin supplies. */
-.tiptap-content {
-  --selection-tag-bleed-right: 12px;
+.app .desktop-navigation-pane:focus-within + .app-resize-handle::before {
+  width: 1px;
+  background: color-mix(in srgb, var(--ui-accent) 55%, transparent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--ui-accent) 30%, transparent);
 }
 
-.tiptap-content div[data-tag-attrs] {
-  position: relative;
-  /* Own stacking context: without it the band (z-index -1) would sink below the
-     opaque background of whichever pane ancestor happens to paint one. */
-  isolation: isolate;
-  border-radius: 0;
+/* Left rail — pill buttons over glass, no chrome of their own until hovered. */
+.app .app-sidebar-header {
+  padding: calc(16px + var(--left-panels-drag-height)) 12px 12px;
 }
 
-.tiptap-content div[data-tag-attrs]:not(.is-editor-empty)::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  top: 0;
-  bottom: 0;
-  left: -9999px;
-  right: calc(-1 * var(--selection-tag-bleed-right));
-  background:
-    var(--selection-tag-line) top / 100% 1px no-repeat,
-    var(--selection-tag-line) bottom / 100% 1px no-repeat,
-    var(--selection-tag-fill);
-  pointer-events: none;
+.app .app-sidebar-header [data-sidebar="menu-item"] {
+  gap: 6px;
 }
 
-/* A code block paints its own surface, so the band has to go through it. */
-.tiptap-content div[data-tag-attrs] pre {
-  background-image: var(--selection-tag-fill);
-}
-
-.tiptap-content div[data-tag-attrs]::after {
-  content: attr(data-tag-names);
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  right: calc(-1 * var(--selection-tag-bleed-right));
-  transform: translateY(-50%);
-  max-width: 70%;
-  overflow: hidden;
-  padding: 0 5px;
-  /* Same wash and same rule colour as the block it labels; with several tags
-     both are split into equal bands, so the badge mirrors the row's colours in
-     the same order. `border-image` is what lets one border carry them all. */
-  background: var(--selection-tag-fill);
+.app .app-sidebar-header [data-sidebar="menu-button"],
+.app .app-sidebar-header button,
+.app .app-sidebar-content > [data-sidebar="group"]:last-child [data-sidebar="menu-button"],
+.app .sidebar-toggle-btn,
+.app .editor-lens-menu-trigger,
+.app .app-sidebar-recording-button[data-active="false"] {
   border: 1px solid transparent;
-  border-image: var(--selection-tag-line) 1;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ui-muted);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: background-color 140ms ease, color 140ms ease,
+    border-color 140ms ease;
+}
+
+.app .app-sidebar-header [data-sidebar="menu-button"]:hover,
+.app .app-sidebar-header button:hover,
+.app .app-sidebar-content > [data-sidebar="group"]:last-child [data-sidebar="menu-button"]:hover,
+.app .sidebar-toggle-btn:hover,
+.app .editor-lens-menu-trigger:hover,
+.app .app-sidebar-recording-button[data-active="false"]:hover {
+  background: var(--glass-hover);
+  border-color: transparent;
   color: var(--ui-text);
-  font: 600 10px / 1.6 "Avenir Next", "SF Pro Text", "Segoe UI", "Noto Sans",
-    Arial, sans-serif;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  pointer-events: none;
-  user-select: none;
 }
 
-.selection-tag-form { display: grid; gap: 14px; }
-.selection-tag-form label, .selection-tag-form legend { font-size: 12px; font-weight: 600; }
-.selection-tag-catalog { display: flex; flex-wrap: wrap; gap: 6px; max-height: 160px; overflow: auto; }
-.selection-tag-catalog p, .selection-tag-hint { font-size: 12px; color: var(--ui-muted); }
-.selection-tag-option { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; border: 1px solid var(--ui-border); border-radius: 16px; font-size: 12px; overflow-wrap: anywhere; }
-.selection-tag-option[aria-pressed="true"] { background: var(--ui-select); border-color: var(--ui-muted); }
-.selection-tag-option span { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; }
-.selection-tag-colors { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding-top: 10px; }
-.selection-tag-colors button { width: 24px; height: 24px; border-radius: 50%; }
-.selection-tag-colors button[aria-pressed="true"] { outline: 2px solid var(--ui-text); outline-offset: 3px; }
-.selection-tag-colors input { width: 30px; height: 30px; padding: 0; border: 0; background: transparent; }
-.selection-tag-preview { border-block: 1px solid; padding: 14px 10px; font-size: 14px; overflow-wrap: anywhere; }
+.app .app-sidebar-recording-button[data-active="true"] {
+  background: color-mix(in srgb, var(--ui-accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--ui-accent) 32%, transparent);
+  color: var(--ui-accent);
+}
 
-/* Inline tags keep their frame within the phrase, including wrapped lines. */
-.tiptap-content span[data-tag-inline] {
-  position: relative;
-  background: var(--selection-tag-fill, #8b5cf61a);
-  border: 1px solid var(--selection-tag-color, #8b5cf6);
+.app .app-sidebar-content > [data-sidebar="group"]:last-child {
+  padding: 12px 12px 16px;
+}
+
+.app .app-sidebar-content [data-sidebar="group-label"],
+.app .pane-section-title {
+  color: var(--ui-faint);
+  font-family: var(--design-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Feed / Folders tabs — an underline, not a segmented control. */
+.app .pane-tabs-wrap {
+  padding: 12px 14px 10px;
+}
+
+.app .folders-tabs-list {
+  gap: 18px;
+}
+
+.app .folders-tab-trigger {
+  color: var(--ui-faint);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.app .folders-tab-trigger[data-state="active"] {
+  color: var(--ui-text);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.25em;
+}
+
+/* ── 5. Lists ───────────────────────────────────────────────────────────── */
+
+.app .tree-pane .item-row,
+.app .note-row {
+  min-height: 32px;
+  margin: 1px 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  box-shadow: none;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.app .tree-pane .item-row:hover,
+.app .note-row:hover {
+  background: var(--glass-hover);
+  border-color: transparent;
+}
+
+.app .tree-pane .item-row.selected,
+.app .note-row.selected {
+  border-radius: 7px;
+  background: var(--ui-select);
+  box-shadow: none;
+}
+
+.app .tree-pane .item-label,
+.app .note-row-title {
+  color: var(--ui-text);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.app .tree-pane .item-row.selected .item-label,
+.app .note-row.selected .note-row-title {
+  font-weight: 500;
+}
+
+.app .tree-pane .folder-glyph,
+.app .tree-pane .nav-note-glyph,
+.app .tree-pane .nav-note-recording-icon,
+.app .note-row-recording-icon,
+.app .tree-pane .tree-toggle {
+  color: var(--ui-faint);
+}
+
+.app .tree-pane .note-count,
+.app .note-row-date,
+.app .note-row-snippet,
+.app .note-row-dot::before,
+.app .feed-section-label,
+.app .feed-secondary-label {
+  color: var(--ui-muted);
+  font-weight: 400;
+}
+
+.app .notes-pane .pane-body {
+  padding: calc(12px + var(--left-panels-drag-height)) 6px 12px;
+}
+
+.app .note-row {
+  padding: 8px 10px;
+  border-bottom: 0;
+}
+
+.app .note-row-subline {
+  margin-top: 3px;
+}
+
+/* ── 6. The writing column ──────────────────────────────────────────────── */
+
+.app .editor-top-row {
+  min-height: calc(12px + var(--left-panels-drag-height));
+  padding: calc(8px + var(--left-panels-drag-height)) 24px 0;
+  align-items: flex-start;
+}
+
+.app .editor-lens-menu-area {
+  margin-left: auto;
+}
+
+/* One centred measure, the same on every window width — the single most
+   Write.md-ish thing here. Nothing reflows as the panes resize; the column
+   just gets more air around it. */
+.app .tiptap-content,
+.app.sidebar-collapsed .tiptap-content {
+  width: 100%;
+  max-width: var(--design-content-width);
+  margin: 0 auto;
+  /* ~200px of runway below the last line, like Write.md — but the shared
+     `.tiptap-content::after` spacer already contributes 18vh of it. */
+  padding: 56px 40px 80px;
+  color: var(--ui-text);
+  font-family: var(--design-font);
+  font-size: var(--editor-font-size, 16px);
+  line-height: var(--design-editor-line-height);
+  letter-spacing: 0;
+}
+
+.app .tiptap-content p,
+.app .tiptap-content ul,
+.app .tiptap-content ol {
+  margin: 0.6em 0;
+}
+
+.app .tiptap-content h1 {
+  margin: 1.2em 0 0.5em;
+  font-size: 2em;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.app .tiptap-content h2 {
+  margin: 1em 0 0.5em;
+  font-size: 1.5em;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+.app .tiptap-content h3 {
+  margin: 1em 0 0.5em;
+  font-size: 1.25em;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.app .tiptap-content blockquote {
+  margin: 0.8em 0;
+  padding-left: 1.2em;
+  border-left: 3px solid var(--ui-accent);
+  color: var(--ui-muted);
+}
+
+.app .tiptap-content code {
+  padding: 2px 6px;
   border-radius: 4px;
-  padding: 1px 3px;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
+  background: var(--glass-code);
+  font-family: var(--design-font-mono);
+  font-size: 0.88em;
 }
-.tiptap-content span[data-tag-inline]::after {
-  content: attr(data-tag-inline);
-  font: 9px/1.2 system-ui;
-  vertical-align: super;
-  margin-left: 4px;
-  color: var(--selection-tag-color, #8b5cf6);
+
+.app .tiptap-content pre {
+  margin: 0.8em 0;
+  padding: 1rem 1.2rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--glass-elevated);
+  font-family: var(--design-font-mono);
+  font-size: 0.85em;
+}
+
+.app .tiptap-content pre code {
+  padding: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+.app .tiptap-content a {
+  color: var(--ui-accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 120ms ease;
+}
+
+.app .tiptap-content a:hover {
+  border-bottom-color: var(--ui-accent);
+}
+
+.app .tiptap-content hr {
+  margin: 1.8em 0;
+  border: none;
+  border-top: 1px solid var(--ui-border-strong);
+}
+
+.app .tiptap-content img {
+  max-width: 100%;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+}
+
+.app .tiptap-content p.is-editor-empty:first-child::before {
+  color: var(--ui-faint);
+  font: italic 400 var(--editor-font-size, 16px) / var(--design-editor-line-height)
+    var(--design-font);
+  letter-spacing: 0;
+}
+
+.app .tiptap-content ::selection {
+  background: color-mix(in srgb, var(--ui-accent) 22%, transparent);
+}
+
+/* The lens renders notes as cards, not as the page — it keeps its own snug
+   measure instead of the writing column's. */
+.app .multi-lens-note-readonly .tiptap-content {
+  max-width: none;
+  padding: 12px 16px 14px 18px;
+}
+
+/* ── 7. Accessories ─────────────────────────────────────────────────────── */
+
+/* Write.md's status-bar badge: small, monospaced, wide-tracked. */
+.app .vim-mode-indicator {
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 4px;
+  padding: 2px 6px 1px;
+  background: var(--glass-elevated);
+  color: var(--ui-muted);
+  font-family: var(--design-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.app .tiptap-editor[data-vim-mode="insert"] .vim-mode-indicator {
+  border-color: color-mix(in srgb, var(--ui-info) 40%, transparent);
+  background: color-mix(in srgb, var(--ui-info) 12%, transparent);
+  color: var(--ui-info);
+}
+
+.app .tiptap-editor[data-vim-mode="visual"] .vim-mode-indicator,
+.app .tiptap-editor[data-vim-mode="visual-line"] .vim-mode-indicator {
+  border-color: color-mix(in srgb, var(--ui-warning) 40%, transparent);
+  background: color-mix(in srgb, var(--ui-warning) 12%, transparent);
+  color: var(--ui-warning);
+}
+
+.app .vim-pending-keys {
+  color: var(--ui-text);
+}
+
+/* Tint the block cursor from the text colour so it reads on both palettes —
+   the hard-coded white one only ever showed up on a dark background. */
+.app .vim-block-cursor {
+  background: color-mix(in srgb, var(--ui-text) 32%, transparent);
+}
+
+.app .recording-note-header,
+.app .multi-lens-toolbar,
+.app .multi-lens-text-composer {
+  background: var(--glass-elevated);
+  border-color: var(--ui-border);
+}
+
+.app .recording-note-btn,
+.app .multi-lens-btn {
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ui-text);
+  font-weight: 500;
+}
+
+.app .recording-note-btn:hover,
+.app .multi-lens-btn:hover {
+  background: var(--glass-hover);
+}
+
+.app .multi-lens-btn.active {
+  border-color: color-mix(in srgb, var(--ui-accent) 45%, transparent);
+  background: var(--ui-select);
+  color: var(--ui-accent);
+}
+
+.app .multi-lens-note-stage {
+  border-color: var(--ui-border);
+  background: var(--glass-elevated);
+}
+
+.app .recording-note-message.error,
+.app .multi-lens-status-row .error,
+.app .security-lock-error {
+  color: var(--ui-error);
+}
+
+.app .empty,
+.app .feed-section-empty {
+  color: var(--ui-faint);
+}
+
+/* Thin, unobtrusive scrollbars — Write.md's 6px thumb. */
+.app .tiptap-scroll::-webkit-scrollbar,
+.app .nav-scroll-area::-webkit-scrollbar,
+.app .pane-body::-webkit-scrollbar,
+.app .multi-lens-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.app .tiptap-scroll::-webkit-scrollbar-thumb,
+.app .nav-scroll-area::-webkit-scrollbar-thumb,
+.app .pane-body::-webkit-scrollbar-thumb,
+.app .multi-lens-scroll::-webkit-scrollbar-thumb {
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--ui-faint);
+  background-clip: padding-box;
+}
+
+.app .tiptap-scroll::-webkit-scrollbar-thumb:hover,
+.app .nav-scroll-area::-webkit-scrollbar-thumb:hover,
+.app .pane-body::-webkit-scrollbar-thumb:hover,
+.app .multi-lens-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--ui-muted);
+}
+
+/* Popovers, dialogs and the command palette float as their own glass sheets
+   rather than borrowing a pane background. */
+.app [data-slot="popover-content"],
+.app [data-slot="dropdown-menu-content"],
+.app [data-slot="dialog-content"],
+.app [data-slot="command"],
+.app .feed-filter-popover {
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 12px;
+  background: var(--popover);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  box-shadow: var(--design-shadow-lg);
+}
+
+/* The lock and startup screens render *outside* `.app` (they gate it), so they
+   read the `:root` tokens above rather than a theme class. */
+.security-lock-screen {
+  background: var(--ui-bg);
+}
+
+.security-lock-card {
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+  background: var(--glass-elevated);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+}
+
+.security-lock-title,
+.security-lock-input-wrap input {
+  color: var(--ui-text);
+}
+
+.security-lock-subtitle,
+.security-lock-input-wrap {
+  color: var(--ui-muted);
+}
+
+.security-lock-btn {
+  border-radius: 10px;
+  background: var(--ui-accent);
+  color: #ffffff;
+}
+
+.security-lock-error {
+  color: var(--ui-error);
+}
+
+/* Settings reads as prose, not as a form. */
+.app .settings-nav-pane,
+.app .settings-detail-pane {
+  background: transparent;
+}
+
+.app .settings-nav-row {
+  border-radius: 7px;
+}
+
+.app .settings-nav-row:hover {
+  background: var(--glass-hover);
+}
+
+@media (max-width: 1000px) {
+  .app .tiptap-content,
+  .app.sidebar-collapsed .tiptap-content {
+    padding-inline: 28px;
+  }
+
+  .app .editor-top-row {
+    padding-inline: 18px;
+  }
 }

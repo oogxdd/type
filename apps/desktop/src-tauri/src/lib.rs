@@ -88,6 +88,44 @@ pub(crate) fn apply_macos_window_alpha(
 }
 
 // ---------------------------------------------------------------------------
+// Translucent window material
+// ---------------------------------------------------------------------------
+
+/// Put a real translucent material behind the webview so the frosted surfaces
+/// the frontend paints have something to frost. Without it the window is only
+/// `transparent: true`, and a semi-opaque pane would show the raw desktop
+/// through it — so the CSS keeps an opaque fallback base for every platform
+/// this is a no-op on (`html[data-window-material="none"]` in app.css).
+///
+/// macOS mirrors AppKit's `under-window` vibrancy; Windows tries Mica first
+/// (Windows 11) and falls back to Acrylic. Linux has no equivalent.
+#[allow(unused_variables)]
+pub(crate) fn apply_window_material(window: &tauri::WebviewWindow) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
+
+        apply_vibrancy(
+            window,
+            NSVisualEffectMaterial::UnderWindowBackground,
+            Some(NSVisualEffectState::Active),
+            None,
+        )
+        .is_ok()
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use window_vibrancy::{apply_acrylic, apply_mica};
+
+        apply_mica(window, None).is_ok() || apply_acrylic(window, None).is_ok()
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    false
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 

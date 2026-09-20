@@ -1,7 +1,7 @@
 import type { ThemeMode } from "@typenotes/shared/types";
 
-export const LIGHT_LAUNCH_BACKGROUND = "#f5f6fb";
-export const DARK_LAUNCH_BACKGROUND = "#14171b";
+export const LIGHT_LAUNCH_BACKGROUND = "#f2f2f5";
+export const DARK_LAUNCH_BACKGROUND = "#1c1c22";
 const LAUNCH_SPLASH_FADE_MS = 140;
 
 const launchBackgroundForTheme = (theme: ThemeMode) =>
@@ -21,7 +21,13 @@ export const applyThemeToDocument = (theme: ThemeMode) => {
   root.style.colorScheme = theme;
 
   if (document.body) {
-    document.body.style.backgroundColor = background;
+    // An inline background would beat the stylesheet's sheer wash, so on a
+    // window that actually has a translucent material we leave the body to
+    // index.html's `[data-window-material="blur"]` rules and only paint the
+    // opaque floor where there is nothing to be translucent against.
+    const hasWindowMaterial =
+      root.getAttribute("data-window-material") === "blur";
+    document.body.style.backgroundColor = hasWindowMaterial ? "" : background;
   }
 
   const themeColorMeta = document.querySelector<HTMLMetaElement>(

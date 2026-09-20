@@ -409,6 +409,28 @@ shadcn breakpoint hook (used by the sidebar primitive; not a mobile shell).
 Domain types (`FolderNode`, `NoteEntry`, `GitSyncStatus`, `ProfileSyncSettings`, …),
 `format`, `frontmatter`, and `jobs` live in `@typenotes/shared`.
 
+### Styling (`src/app/app.css`)
+
+One file, three layers, cascade order significant:
+
+1. the `:root` **DESIGN ATOMS** block — the whole palette as `--design-*` custom
+   properties (fonts, the light/dark ramps, the accent, Apple status colours);
+2. the unstyled base rules for every component;
+3. **the skin at the end of the file**, which maps the atoms onto `--ui-*` plus
+   the shadcn tokens and restyles chrome, lists, and the writing column.
+
+Retheming means editing the atoms; a bigger change means replacing layer 3,
+which is why it is kept last and self-contained. Don't stack a fourth skin on
+top — the last one was deleted rather than out-specified, because a `.app x`
+rule silently loses to an older `.app.theme-dark x` one.
+
+The current look is Write.md's macOS glass: system sans at 16px/1.75 in a
+centred 720px column, sheer washes over native window vibrancy, hairline
+borders, indigo accent. The vibrancy itself comes from the Rust shell
+(`apply_window_material`), which reports back through `data-window-material` on
+`<html>` so the CSS knows whether it may be translucent. Full rationale and the
+rejected alternatives: [docs/DESKTOP_SKIN.md](./docs/DESKTOP_SKIN.md).
+
 ### Desktop shell (`src/desktop/`)
 
 - `desktop-app-shell.tsx` — desktop interaction state (pane refs, DnD wiring, keyboard
@@ -511,6 +533,20 @@ The React Native app (Expo) reuses the Rust core through
 - **Annotation cleanup is shared**: `@typenotes/shared/annotation-metadata` owns the lens/inline annotation stripping used by previews, slugging, and the editor.
 - **Sync history UX**: settings now show commit history from real git log. This cannot reliably encode which device performed push/pull for every commit.
 - **Note previews are persisted per profile** in localStorage (`notes-viewer-note-previews-v1:<profileId>`) and hydrated on launch for an instant first paint, then revalidated via the bulk `list_note_previews` command (stale-while-revalidate). Persistence is disabled while encryption is on, and enabling encryption purges the snapshots (`clearPersistedNotePreviews` in `shared/lib/storage`). `get_tree` never reads note bodies — Feed is name-sorted (file names are time-prefixed) and the UI re-sorts by front-matter timestamps from previews. The full cache/invalidation design (and the deferred TanStack Query decision) is documented in `docs/architecture/07-frontend-caching.md`.
+- **The window has no background of its own.** The desktop window is
+  `transparent: true`, and the skin paints only sheer washes over a *native*
+  translucent material (macOS vibrancy / Windows Mica). Whether that material
+  exists is reported to the frontend as `data-window-material` on `<html>`:
+  `blur` means paint the wash, `none` means paint the opaque `--design-*-base`
+  floor instead, because a wash over a transparent window shows the raw desktop.
+  Anything that paints a background outside the stylesheet has to respect this —
+  that is why `applyThemeToDocument` leaves `body.style.backgroundColor` unset
+  under `blur` (an inline style would outrank the CSS) and why `index.html`
+  guesses the value from the user agent before React mounts.
+- **The lock screen and startup splash render outside `.app`**, so they never see
+  the `.app.theme-light` / `.app.theme-dark` token blocks. They read `:root` /
+  `:root.dark` at the top of the skin. A `.app .security-lock-*` rule does
+  nothing.
 - **Editor saves are debounced** (400ms). `flushSave()` must be called before navigation away, profile switching, or app backgrounding.
 - **Vim mode splits visual and logical lines on purpose.** `j`/`k` move by *visual* line (layout geometry, effectively Vim's `gj`/`gk`) because one prose paragraph is one logical line and jumping whole paragraphs would be useless. Everything linewise — `dd`, `V`, `dj`, `yy`, `cc` — operates on *logical* lines, so `dd` deletes the paragraph. Don't "fix" one to match the other. Related: charwise Visual selects the character under the cursor, so the ProseMirror selection head sits one past it — `VimHost.visualHead` is the authoritative cursor while Visual is active, never `selection.head`. Command keys are normalised to the US layout via `event.code` (so `dd` works on a Cyrillic layout) while `f{c}`/`r{c}` read `event.key`. Full keymap and rationale: [docs/VIM_MODE.md](./docs/VIM_MODE.md).
 - **`shouldNestNotesInNavigation`**: When `notesListMode === "nested"`, notes appear inline inside the folder tree instead of in a separate middle pane. This affects keyboard navigation, rendering, and the visible navigation items computation.
