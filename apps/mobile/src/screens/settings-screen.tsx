@@ -577,10 +577,7 @@ const GestureTraceList = () => {
     <View>
       <Text style={[styles.traceSummary, { color: theme.colors.text }]}>
         {summary.total} upward {summary.total === 1 ? "swipe" : "swipes"}:{" "}
-        {summary.filed} filed, {summary.stolen} taken away
-        {summary.stolen > 0
-          ? ` (started at y=${summary.stolenStartY.join(", ")})`
-          : ""}
+        {summary.filed} filed, {summary.cancelled} cancelled
       </Text>
       {attempts.map((attempt, index) => (
         <Text
@@ -591,7 +588,7 @@ const GestureTraceList = () => {
             styles.traceRow,
             {
               color:
-                outcomeOf(attempt) === "stolen"
+                outcomeOf(attempt) === "cancelled"
                   ? theme.colors.danger
                   : theme.colors.secondaryText,
             },
@@ -599,8 +596,8 @@ const GestureTraceList = () => {
         >
           {`x=${Math.round(attempt.startX)} y=${Math.round(attempt.startY)}  `}
           {`dx=${Math.round(attempt.maxDx)} dy=${Math.round(attempt.maxDy)} `}
-          {attempt.activated ? `pull=${Math.round(attempt.maxPull)} ` : ""}
-          {`${attempt.durationMs}ms ${attempt.band ? "band" : "free"}`}
+          {`pull=${Math.round(attempt.maxPull)} `}
+          {`${attempt.durationMs}ms ${attempt.direction}`}
           {` → ${outcomeOf(attempt)}`}
         </Text>
       ))}
@@ -681,7 +678,7 @@ export const SettingsDiagnosticsScreen = () => {
 
       <SettingsGroup
         header="Gesture trace"
-        footer="Records one line per touch on the capture page: where it started, how far it travelled, and what became of it. `stolen` means the finger clearly went up but something outside the app took the touch — the native back gesture, or the system's home-indicator swipe at the very bottom edge. Kept in memory only, cleared when the app restarts."
+        footer="Records the shared menu/page gesture: starting point, direction, pull distance and result. Diagonal means no navigation was chosen; scroll means the text/list kept the gesture. No note text is recorded. Kept in memory until the app restarts."
       >
         <SettingsToggleRow
           title="Record swipes"

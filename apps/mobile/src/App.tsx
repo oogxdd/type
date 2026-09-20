@@ -11,7 +11,6 @@ import {
   Linking,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -22,12 +21,11 @@ import { parseSyncDeepLink } from "@typenotes/shared/sync-link";
 
 import { bootCore } from "./core/boot";
 import { navigateToScreen, navigationRef, Stack } from "./navigation";
-import { CaptureScreen } from "./screens/capture-screen";
+import { HomeScreen } from "./screens/home-screen";
 import { EditorScreen } from "./screens/editor-screen";
 import { FeedScreen } from "./screens/feed-screen";
 import { FolderScreen } from "./screens/folder-screen";
 import { LockScreen } from "./screens/lock-screen";
-import { MenuScreen } from "./screens/menu-screen";
 import {
   SettingsAppearanceScreen,
   SettingsDiagnosticsScreen,
@@ -44,19 +42,10 @@ import { useRecordingSessionStore } from "./state/recording-session-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
 import { useSettingsStore } from "./state/settings-store";
 import { useSyncStore } from "./state/sync-store";
-import { nativeBackBandBottom } from "./lib/capture-gesture";
 import { useTheme } from "./theme";
 import { ErrorBoundary } from "./ui/error-boundary";
 
 type BootPhase = { state: "booting" } | { state: "ready" } | { state: "failed"; error: string };
-
-// Boot with Capture pushed on top of Menu so the blank page is what you see
-// first, while the menu is already behind it. Capture can then use the native
-// interactive back gesture to reveal Menu without keeping all three primary
-// screens mounted in a pager.
-const BOOT_NAVIGATION_STATE = {
-  routes: [{ name: "Menu" as const }, { name: "Capture" as const }],
-};
 
 const BUNDLED_FONTS = {
   TypeUnbounded: require("../assets/fonts/Unbounded.ttf"),
@@ -67,20 +56,15 @@ const BUNDLED_FONTS = {
 
 const RootStack = () => {
   const theme = useTheme();
-  const { height } = useWindowDimensions();
   return (
     <Stack.Navigator
-      initialRouteName="Capture"
+      initialRouteName="Home"
       screenOptions={{
         headerStyle: { backgroundColor: theme.colors.background },
         headerTintColor: theme.colors.text,
         headerShadowVisible: false,
         contentStyle: { backgroundColor: theme.colors.background },
-        // Swipe back from anywhere on the screen, not just the left edge —
-        // still the native UIKit pop transition, driven natively by
-        // react-native-screens' pan recognizer. Ordinary pushed screens have
-        // no gestures of their own, so this is free there. Capture keeps it
-        // too, but only over its upper band (see below).
+        // Pushed detail screens retain native back navigation.
         fullScreenGestureEnabled: true,
         // Chevron-only back everywhere: Sync has more than one entry point,
         // so naming the previous screen in the label would be noise.
@@ -88,36 +72,9 @@ const RootStack = () => {
       }}
     >
       <Stack.Screen
-        name="Menu"
-        component={MenuScreen}
-        options={{ gestureEnabled: false, headerShown: false, title: "Menu" }}
-      />
-      <Stack.Screen
-        name="Capture"
-        component={CaptureScreen}
-        options={({ route }) => ({
-          headerShown: false,
-          // Capture is the one screen whose whole surface is a gesture target,
-          // and the native pop recognizer checks nothing but where a touch
-          // started — it fires on ~10pt in *any* direction, including straight
-          // up, and cancels our touch (see apps/mobile/GESTURES.md). It cannot
-          // be arbitrated with; the two libraries refuse each other's
-          // recognizers outright.
-          //
-          // So the screen is split by height instead. Above this line the
-          // native interactive pop is untouched, which is where a back swipe
-          // naturally starts anyway. Below it the recognizer is never offered
-          // the touch, so swiping up to file is uncontested; a decisive
-          // rightward drag down there pops from the capture screen itself.
-          //
-          // The values are absolute point coordinates, not edge distances —
-          // react-native-screens passes them straight through to
-          // isInGestureResponseDistance.
-          gestureResponseDistance: { bottom: nativeBackBandBottom(height) },
-          // A gesture-driven preview already played this push when instant
-          // is set; attach the real screen underneath without replaying it.
-          animation: route.params?.instant ? "none" : "default",
-        })}
+        name="Home"
+        component={HomeScreen}
+        options={{ gestureEnabled: false, fullScreenGestureEnabled: false, headerShown: false }}
       />
       <Stack.Screen name="Feed" component={FeedScreen} />
       <Stack.Screen
@@ -136,11 +93,7 @@ const RootStack = () => {
       <Stack.Screen
         name="Sync"
         component={SyncScreen}
-        options={({ route }) => ({
-          title: "Sync",
-          // Same preview-to-real-screen handoff as Menu -> Capture.
-          animation: route.params?.instant ? "none" : "default",
-        })}
+        options={{ title: "Sync" }}
       />
       <Stack.Screen
         name="Settings"
@@ -354,7 +307,6 @@ export default function App() {
         <NavigationContainer
           ref={navigationRef}
           theme={navigationTheme}
-          initialState={BOOT_NAVIGATION_STATE}
           onReady={() => {
             if (!initialUrlHandled.current) {
               initialUrlHandled.current = true;

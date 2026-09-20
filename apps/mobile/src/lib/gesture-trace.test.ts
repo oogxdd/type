@@ -1,84 +1,27 @@
 import { describe, expect, it } from "vitest";
-
 import {
-  clearGestureAttempts,
-  type GestureAttempt,
-  getGestureAttempts,
-  outcomeOf,
-  recordGestureAttempt,
-  summarizeGestureAttempts,
+  clearGestureAttempts, type GestureAttempt, getGestureAttempts,
+  recordGestureAttempt, summarizeGestureAttempts,
 } from "./gesture-trace";
 
 const attempt = (patch: Partial<GestureAttempt> = {}): GestureAttempt => ({
-  at: 1,
-  startX: 200,
-  startY: 600,
-  maxDx: 0,
-  maxDy: 0,
-  maxPull: 0,
-  durationMs: 120,
-  latchedVertical: false,
-  activated: false,
-  failedByVerdict: false,
-  failedToSync: false,
-  blockedByTransitioning: false,
-  gotEnd: false,
-  endSuccess: false,
-  filed: false,
-  band: false,
-  ...patch,
+  at: 1, startX: 200, startY: 600, maxDx: 0, maxDy: -100, maxPull: 0,
+  durationMs: 120, direction: "up", outcome: "scroll", ...patch,
 });
 
-describe("outcomeOf", () => {
-  it("reports a clear upward drag we never claimed as stolen", () => {
-    // The signature this whole trace exists for: the finger went up, we neither
-    // activated nor handed the touch over, and it ended anyway — so something
-    // outside the screen took it.
-    expect(outcomeOf(attempt({ maxDy: -90 }))).toBe("stolen");
+describe("gesture diagnostics", () => {
+  it("does not mistake a normal long-note scroll or diagonal for a stolen gesture", () => {
+    expect(summarizeGestureAttempts([
+      attempt(), attempt({ outcome: "filed", maxPull: 85 }),
+      attempt({ outcome: "cancelled" }),
+      attempt({ direction: "diagonal", outcome: "diagonal" }),
+    ])).toEqual({ total: 3, filed: 1, cancelled: 1 });
   });
-
-  it("does not call a tap or a scroll stolen", () => {
-    expect(outcomeOf(attempt({ maxDy: -4 }))).toBe("idle");
-    expect(outcomeOf(attempt({ maxDy: 120 }))).toBe("idle");
-  });
-
-  it("separates the handovers we chose from the ones we lost", () => {
-    expect(outcomeOf(attempt({ maxDy: -90, failedByVerdict: true }))).toBe("back");
-    expect(outcomeOf(attempt({ maxDy: -90, failedToSync: true }))).toBe("sync");
-    expect(
-      outcomeOf(attempt({ maxDy: -90, blockedByTransitioning: true }))
-    ).toBe("blocked");
-  });
-
-  it("distinguishes a claimed swipe that filed from one released short", () => {
-    expect(outcomeOf(attempt({ maxDy: -200, activated: true, filed: true }))).toBe(
-      "filed"
-    );
-    expect(outcomeOf(attempt({ maxDy: -30, activated: true }))).toBe("released");
-  });
-});
-
-describe("summarizeGestureAttempts", () => {
-  it("counts only upward attempts and lists where the lost ones started", () => {
-    const summary = summarizeGestureAttempts([
-      attempt({ maxDy: -80, startY: 740 }),
-      attempt({ maxDy: -80, startY: 610 }),
-      attempt({ maxDy: -80, activated: true, filed: true }),
-      attempt({ maxDy: -2 }),
-    ]);
-    expect(summary.total).toBe(3);
-    expect(summary.filed).toBe(1);
-    expect(summary.stolen).toBe(2);
-    expect(summary.stolenStartY).toEqual([610, 740]);
-  });
-});
-
-describe("the ring buffer", () => {
-  it("keeps the newest attempt first", () => {
+  it("keeps only the newest 40 attempts and can clear them", () => {
     clearGestureAttempts();
-    recordGestureAttempt(attempt({ at: 1 }));
-    recordGestureAttempt(attempt({ at: 2 }));
-    expect(getGestureAttempts().map((entry) => entry.at)).toEqual([2, 1]);
+    for (let i = 0; i < 45; i++) recordGestureAttempt(attempt({ at: i }));
+    expect(getGestureAttempts()).toHaveLength(40);
+    expect(getGestureAttempts()[0].at).toBe(44);
     clearGestureAttempts();
     expect(getGestureAttempts()).toEqual([]);
   });

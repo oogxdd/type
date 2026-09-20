@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { flushCaptureDraft } from "../lib/capture-draft";
 
 import * as core from "@typenotes/mobile-core/core-api";
 import { getErrorMessage } from "@typenotes/shared/errors";
@@ -96,16 +97,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
 
     createWorkingFolder: (name) =>
       guarded(async () => {
+        await flushCaptureDraft();
         apply(await core.createProfile({ name }));
       }),
 
     switchWorkingFolder: (profileId) =>
       guarded(async () => {
+        await flushCaptureDraft();
         apply(await core.setActiveProfile(profileId));
       }),
 
     setNotesRoot: (profileId, notesRoot) =>
       guarded(async () => {
+        await flushCaptureDraft();
         apply(await core.setProfileNotesRoot(profileId, notesRoot));
       }),
 

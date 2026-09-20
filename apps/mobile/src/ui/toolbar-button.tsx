@@ -17,6 +17,8 @@ export const ToolbarButton = ({
   const theme = useTheme();
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={icon === "menu-outline" ? "Open menu" : icon === "close-outline" ? "Return to note" : icon}
       onPress={onPress}
       hitSlop={10}
       style={({ pressed }) => [

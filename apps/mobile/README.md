@@ -8,10 +8,15 @@ system folders, and per-folder `.type/settings.json`.
 ## The one interaction that matters
 
 The app opens on a **blank page** — start typing immediately. **Swipe up**
-and the page files itself into Feed while a fresh blank page slides in
-underneath. **Swipe from the left edge** (or tap the hamburger) and the menu
-slides in — feed and folders on top, sync and settings at the bottom; swipe
-left from the menu's right edge or tap close to return to a fresh blank page. The floating mic
+to scroll; after reaching the end, keep pulling to reveal a label. Pull until
+it says **Release to start a new note**, then let go to save the page into Feed
+and focus a fresh blank page. Pull back before releasing to cancel. A short
+fast flick cannot create a note.
+
+**Swipe right** (or tap the hamburger) to reveal the menu; **swipe left** in
+the menu (or tap close) to return to the same draft and scroll position. The
+menu and draft stay mounted, and one directional coordinator owns both.
+The floating mic
 button in the bottom-right dictates a voice note: tap to start and tap again
 to stop. Long-press the mic to reveal camera and photo-library actions for a
 handwritten page. The phone saves the image-backed note as `ocr_status:
@@ -56,8 +61,8 @@ working folder is a later step.
 ```
 src/
   App.tsx                 boot + navigation container + demo banner
-  navigation.ts           typed native-stack route table (menu is the root,
-                          capture boots pushed on top of it)
+  navigation.ts           typed native-stack route table (Home owns the
+                          menu and capture layers)
   theme.ts                the useTheme hook (system scheme + appearance prefs)
   core/boot.ts            wires RawCore (generated native module or mock) + initCore
   lib/appearance.ts       palette + theme derivation (pure, tested)

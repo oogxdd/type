@@ -7,29 +7,68 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0D3AEBE3E2317883726C7CEF /* libPods-Type.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B446B4D9F912F28CE2F03D87 /* libPods-Type.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		178DE47EEF7C45788FC25A1C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6619A3C805564FBD8F9FCB92 /* WidgetKit.framework */; };
+		21E53901D75E47D69C5E094B /* RecordingLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1C5B3408F2E47528CCF40A9 /* RecordingLiveActivityWidget.swift */; };
+		352E50C25EE240EF91B3422D /* RecordingActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39F0C2E471494246AB7699C1 /* RecordingActivityAttributes.swift */; };
+		3C48982372C746B3A7EC0E8A /* StopRecordingIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E183E1822184BB5B51C21AD /* StopRecordingIntent.swift */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
-		AFAE38C703A81057928349C1 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E9D4EB4663CE3DB2DDF79B8B /* PrivacyInfo.xcprivacy */; };
-		B222251FAA20EBB9106170D8 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3004262B30633E16615EBC35 /* ExpoModulesProvider.swift */; };
+		575A43CBFB59383F11E1EC9F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5D0FFA89244066EEA6DA2B59 /* PrivacyInfo.xcprivacy */; };
+		6B58D5669A57E341F7DECB9B /* libPods-Type.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 89AC671D61F4C0FD92C6A15A /* libPods-Type.a */; };
+		AA7A695942AB450DACC13009 /* RecordingWidget.appex in Copy Files */ = {isa = PBXBuildFile; fileRef = 8F89DBC87B9A44B0A56E3364 /* RecordingWidget.appex */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
+		C3932691FCC1372B35E8232C /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C27CF1C1E204305A8D75C9C3 /* ExpoModulesProvider.swift */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
+		F4A17B5335BE4B07AEA0DFB4 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 598BF8BFDDF3453F9F6E4361 /* SwiftUI.framework */; };
+		FFB57018A21C49F0AB4821E7 /* RecordingActivityWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93E8085B40F349EA8A0783AC /* RecordingActivityWidgetBundle.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		882290660BD0413D8CBA6B57 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9E058FBA12CB41DF93ED2961;
+			remoteInfo = RecordingWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		7274C6D41B87444E8087C067 /* Copy Files */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				AA7A695942AB450DACC13009 /* RecordingWidget.appex in Copy Files */,
+			);
+			name = "Copy Files";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		13B07F961A680F5B00A75B9A /* Type.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Type.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Type/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Type/Info.plist; sourceTree = "<group>"; };
-		3004262B30633E16615EBC35 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Type/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		3BD8E2147743DF7850B60018 /* Pods-Type.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Type.debug.xcconfig"; path = "Target Support Files/Pods-Type/Pods-Type.debug.xcconfig"; sourceTree = "<group>"; };
-		8A0B6C6148F86E1C2666915B /* Pods-Type.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Type.release.xcconfig"; path = "Target Support Files/Pods-Type/Pods-Type.release.xcconfig"; sourceTree = "<group>"; };
+		273B967ABB464AAD87DBE7F7 /* Info.plist */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = text.plist.xml; name = Info.plist; path = Info.plist; sourceTree = "<group>"; };
+		39F0C2E471494246AB7699C1 /* RecordingActivityAttributes.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = RecordingActivityAttributes.swift; path = RecordingActivityAttributes.swift; sourceTree = "<group>"; };
+		3E183E1822184BB5B51C21AD /* StopRecordingIntent.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = StopRecordingIntent.swift; path = StopRecordingIntent.swift; sourceTree = "<group>"; };
+		598BF8BFDDF3453F9F6E4361 /* SwiftUI.framework */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		5C4CD155A7B2EEAB4F58BB86 /* Pods-Type.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Type.release.xcconfig"; path = "Target Support Files/Pods-Type/Pods-Type.release.xcconfig"; sourceTree = "<group>"; };
+		5D0FFA89244066EEA6DA2B59 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Type/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		6619A3C805564FBD8F9FCB92 /* WidgetKit.framework */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		687C45D3A1C7C5E3DD09FF36 /* Pods-Type.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Type.debug.xcconfig"; path = "Target Support Files/Pods-Type/Pods-Type.debug.xcconfig"; sourceTree = "<group>"; };
+		89AC671D61F4C0FD92C6A15A /* libPods-Type.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Type.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		8F89DBC87B9A44B0A56E3364 /* RecordingWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = undefined; name = RecordingWidget.appex; path = RecordingWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		93E8085B40F349EA8A0783AC /* RecordingActivityWidgetBundle.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = RecordingActivityWidgetBundle.swift; path = RecordingActivityWidgetBundle.swift; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = Type/SplashScreen.storyboard; sourceTree = "<group>"; };
-		B446B4D9F912F28CE2F03D87 /* libPods-Type.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Type.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		E9D4EB4663CE3DB2DDF79B8B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Type/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		C27CF1C1E204305A8D75C9C3 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Type/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Type/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* Type-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Type-Bridging-Header.h"; path = "Type/Type-Bridging-Header.h"; sourceTree = "<group>"; };
+		F1C5B3408F2E47528CCF40A9 /* RecordingLiveActivityWidget.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = RecordingLiveActivityWidget.swift; path = RecordingLiveActivityWidget.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -37,7 +76,16 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0D3AEBE3E2317883726C7CEF /* libPods-Type.a in Frameworks */,
+				6B58D5669A57E341F7DECB9B /* libPods-Type.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		206F827FE2714CCE99E4D3A4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F4A17B5335BE4B07AEA0DFB4 /* SwiftUI.framework in Frameworks */,
+				178DE47EEF7C45788FC25A1C /* WidgetKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -53,26 +101,49 @@
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				E9D4EB4663CE3DB2DDF79B8B /* PrivacyInfo.xcprivacy */,
+				5D0FFA89244066EEA6DA2B59 /* PrivacyInfo.xcprivacy */,
 			);
 			name = Type;
 			sourceTree = "<group>";
 		};
-		2533CF8DB4201D85CF372A88 /* Type */ = {
+		233B92567B493564CB0C2881 /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				3004262B30633E16615EBC35 /* ExpoModulesProvider.swift */,
+				687C45D3A1C7C5E3DD09FF36 /* Pods-Type.debug.xcconfig */,
+				5C4CD155A7B2EEAB4F58BB86 /* Pods-Type.release.xcconfig */,
 			);
-			name = Type;
+			name = Pods;
+			path = Pods;
 			sourceTree = "<group>";
 		};
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				B446B4D9F912F28CE2F03D87 /* libPods-Type.a */,
+				89AC671D61F4C0FD92C6A15A /* libPods-Type.a */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		2F91B9BD313E4064B225F0A5 /* RecordingWidget */ = {
+			isa = PBXGroup;
+			children = (
+				93E8085B40F349EA8A0783AC /* RecordingActivityWidgetBundle.swift */,
+				F1C5B3408F2E47528CCF40A9 /* RecordingLiveActivityWidget.swift */,
+				39F0C2E471494246AB7699C1 /* RecordingActivityAttributes.swift */,
+				3E183E1822184BB5B51C21AD /* StopRecordingIntent.swift */,
+				273B967ABB464AAD87DBE7F7 /* Info.plist */,
+			);
+			name = RecordingWidget;
+			path = RecordingWidget;
+			sourceTree = "<group>";
+		};
+		6A276BEB09528E710257FE4F /* Type */ = {
+			isa = PBXGroup;
+			children = (
+				C27CF1C1E204305A8D75C9C3 /* ExpoModulesProvider.swift */,
+			);
+			name = Type;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -89,8 +160,9 @@
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				F1D434500ADDA876C8A272F2 /* Pods */,
-				AC3A6116D921E8154ABFE947 /* ExpoModulesProviders */,
+				2F91B9BD313E4064B225F0A5 /* RecordingWidget */,
+				233B92567B493564CB0C2881 /* Pods */,
+				F146C762C41DB5EEAC2C5314 /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -101,16 +173,9 @@
 			isa = PBXGroup;
 			children = (
 				13B07F961A680F5B00A75B9A /* Type.app */,
+				8F89DBC87B9A44B0A56E3364 /* RecordingWidget.appex */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		AC3A6116D921E8154ABFE947 /* ExpoModulesProviders */ = {
-			isa = PBXGroup;
-			children = (
-				2533CF8DB4201D85CF372A88 /* Type */,
-			);
-			name = ExpoModulesProviders;
 			sourceTree = "<group>";
 		};
 		BB2F792B24A3F905000567C9 /* Supporting */ = {
@@ -122,14 +187,12 @@
 			path = Type/Supporting;
 			sourceTree = "<group>";
 		};
-		F1D434500ADDA876C8A272F2 /* Pods */ = {
+		F146C762C41DB5EEAC2C5314 /* ExpoModulesProviders */ = {
 			isa = PBXGroup;
 			children = (
-				3BD8E2147743DF7850B60018 /* Pods-Type.debug.xcconfig */,
-				8A0B6C6148F86E1C2666915B /* Pods-Type.release.xcconfig */,
+				6A276BEB09528E710257FE4F /* Type */,
 			);
-			name = Pods;
-			path = Pods;
+			name = ExpoModulesProviders;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -140,22 +203,41 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "Type" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				D0960EC0E4A16F75E91D0609 /* [Expo] Configure project */,
+				CEE0FCC9825E5287E5FB9B21 /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				8DF8959E0D97ADB715C88D62 /* [CP] Embed Pods Frameworks */,
+				7274C6D41B87444E8087C067 /* Copy Files */,
+				3E13E7F19D8326E02F94B4C7 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				02AE3C54AB4D4352B6E82C9C /* PBXTargetDependency */,
 			);
 			name = Type;
 			productName = Type;
 			productReference = 13B07F961A680F5B00A75B9A /* Type.app */;
 			productType = "com.apple.product-type.application";
+		};
+		9E058FBA12CB41DF93ED2961 /* RecordingWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 25AB0C997446498EA0BF6AB0 /* Build configuration list for PBXNativeTarget "RecordingWidget" */;
+			buildPhases = (
+				9BB69DD252C64467B72AEFDC /* Sources */,
+				9615001FCEF14FBE80411483 /* Resources */,
+				206F827FE2714CCE99E4D3A4 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RecordingWidget;
+			productName = RecordingWidget;
+			productReference = 8F89DBC87B9A44B0A56E3364 /* RecordingWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -166,9 +248,7 @@
 				LastUpgradeCheck = 1130;
 				TargetAttributes = {
 					13B07F861A680F5B00A75B9A = {
-						DevelopmentTeam = Y377P5XKGJ;
 						LastSwiftMigration = 1250;
-						ProvisioningStyle = Automatic;
 					};
 				};
 			};
@@ -186,6 +266,7 @@
 			projectRoot = "";
 			targets = (
 				13B07F861A680F5B00A75B9A /* Type */,
+				9E058FBA12CB41DF93ED2961 /* RecordingWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -198,7 +279,14 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				AFAE38C703A81057928349C1 /* PrivacyInfo.xcprivacy in Resources */,
+				575A43CBFB59383F11E1EC9F /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9615001FCEF14FBE80411483 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -244,6 +332,30 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
+		3E13E7F19D8326E02F94B4C7 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Type/Pods-Type-frameworks.sh",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoModulesJSI/ExpoModulesJSI.framework/ExpoModulesJSI",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework/React",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework/ReactNativeDependencies",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermesvm.framework/hermesvm",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoModulesJSI.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/React.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ReactNativeDependencies.framework",
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermesvm.framework",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Type/Pods-Type-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
 		800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -272,45 +384,7 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Type/Pods-Type-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		8DF8959E0D97ADB715C88D62 /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Type/Pods-Type-frameworks.sh",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoCamera/ExpoCamera.framework/ExpoCamera",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoCameraBarcodeScanning/ExpoCameraBarcodeScanning.framework/ExpoCameraBarcodeScanning",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoCameraBarcodeScanning/ZXingObjC.framework/ZXingObjC",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoFileSystem/ExpoFileSystem.framework/ExpoFileSystem",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoFont/ExpoFont.framework/ExpoFont",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoModulesCore/ExpoModulesCore.framework/ExpoModulesCore",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoModulesJSI/ExpoModulesJSI.framework/ExpoModulesJSI",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ExpoModulesWorklets/ExpoModulesWorklets.framework/ExpoModulesWorklets",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/React-Core-prebuilt/React.framework/React",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/ReactNativeDependencies/ReactNativeDependencies.framework/ReactNativeDependencies",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermesvm.framework/hermesvm",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputPaths = (
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoCamera.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoCameraBarcodeScanning.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ZXingObjC.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoFileSystem.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoFont.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoModulesCore.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoModulesJSI.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ExpoModulesWorklets.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/React.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/ReactNativeDependencies.framework",
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermesvm.framework",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Type/Pods-Type-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		D0960EC0E4A16F75E91D0609 /* [Expo] Configure project */ = {
+		CEE0FCC9825E5287E5FB9B21 /* [Expo] Configure project */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -342,24 +416,40 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				B222251FAA20EBB9106170D8 /* ExpoModulesProvider.swift in Sources */,
+				C3932691FCC1372B35E8232C /* ExpoModulesProvider.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9BB69DD252C64467B72AEFDC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FFB57018A21C49F0AB4821E7 /* RecordingActivityWidgetBundle.swift in Sources */,
+				21E53901D75E47D69C5E094B /* RecordingLiveActivityWidget.swift in Sources */,
+				352E50C25EE240EF91B3422D /* RecordingActivityAttributes.swift in Sources */,
+				3C48982372C746B3A7EC0E8A /* StopRecordingIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		02AE3C54AB4D4352B6E82C9C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9E058FBA12CB41DF93ED2961 /* RecordingWidget */;
+			targetProxy = 882290660BD0413D8CBA6B57 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 3BD8E2147743DF7850B60018 /* Pods-Type.debug.xcconfig */;
+			baseConfigurationReference = 687C45D3A1C7C5E3DD09FF36 /* Pods-Type.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Type/Type.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Y377P5XKGJ;
 				ENABLE_BITCODE = NO;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
@@ -391,15 +481,12 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 8A0B6C6148F86E1C2666915B /* Pods-Type.release.xcconfig */;
+			baseConfigurationReference = 5C4CD155A7B2EEAB4F58BB86 /* Pods-Type.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Type/Type.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = Y377P5XKGJ;
 				INFOPLIST_FILE = Type/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -420,6 +507,30 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+		175AB110C4DC4D55BF56D032 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RecordingWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
+				PRODUCT_BUNDLE_IDENTIFIER = com.typenotes.mobile.RecordingWidget;
+				PRODUCT_NAME = RecordingWidget;
+				SKIP_INSTALL = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -559,6 +670,34 @@
 			};
 			name = Release;
 		};
+		A59BF024A53542BDAD0345C9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RecordingWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
+				PRODUCT_BUNDLE_IDENTIFIER = com.typenotes.mobile.RecordingWidget;
+				PRODUCT_NAME = RecordingWidget;
+				SKIP_INSTALL = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -567,6 +706,15 @@
 			buildConfigurations = (
 				13B07F941A680F5B00A75B9A /* Debug */,
 				13B07F951A680F5B00A75B9A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		25AB0C997446498EA0BF6AB0 /* Build configuration list for PBXNativeTarget "RecordingWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A59BF024A53542BDAD0345C9 /* Debug */,
+				175AB110C4DC4D55BF56D032 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

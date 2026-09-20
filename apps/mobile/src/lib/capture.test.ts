@@ -132,3 +132,22 @@ describe("CaptureSession", () => {
     }
   });
 });
+
+describe("resuming a saved capture draft", () => {
+  it("does not recreate the note after editing it through the menu", async () => {
+    const writes: Array<[string, string]> = [];
+    const storage = {
+      createNote: async () => { throw new Error("must reuse the saved path"); },
+      writeNote: async (path: string, content: string) => { writes.push([path, content]); },
+      deleteNote: async () => {},
+    };
+    const session = new CaptureSession(storage, 60_000, {
+      path: "_system/stream/existing.md", content: "Edited in the menu",
+    });
+    await session.flush();
+    expect(writes).toEqual([]);
+    session.onChange("Continued writing");
+    expect(await session.commit()).toBe("_system/stream/existing.md");
+    expect(writes).toEqual([["_system/stream/existing.md", "Continued writing"]]);
+  });
+});

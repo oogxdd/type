@@ -1,34 +1,21 @@
-// The app menu — the root of the stack: close button + Feed / Folders tabs
-// on top (inline note + folder lists), Sync and Settings pinned at the
-// bottom. The capture page sits pushed above it, so its hamburger or a
-// swipe-back pops here; the close button pushes a fresh capture page back
-// in, and a leftward swipe anywhere drags a preview of it in with the finger
-// (see swipeToCapture below). Everything else is pushed from here, so
-// swipe-back from Sync/Settings/Folder/Editor lands back on the menu.
+// Persistent menu layer. HomeScreen owns all directional gestures.
 
 import { Ionicons } from "@expo/vector-icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  FlatList,
+  Alert,
   InteractionManager,
   Pressable,
   RefreshControl,
   SectionList,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  Easing,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated, { useAnimatedProps } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
@@ -42,12 +29,15 @@ import {
   findFolder,
   folderNoteCount,
   groupNoteRowsByDate,
+  type NoteRow,
+  type NoteRowSection,
 } from "../lib/feed";
 import {
   flattenFolderTree,
   toggleExpanded,
   type FolderTreeRow,
 } from "../lib/folder-tree";
+import { flushCaptureDraft } from "../lib/capture-draft";
 import { formatRelativeTime } from "../lib/relative-time";
 import { autoSyncLabel } from "../lib/sync-experience";
 import type { RootStackParamList } from "../navigation";
@@ -57,6 +47,9 @@ import { useTheme } from "../theme";
 import { useNoteOrganizer } from "../ui/note-organizer";
 import { ToolbarButton } from "../ui/toolbar-button";
 import { NoteListRow } from "./feed-screen";
+import { useHomeShell } from "./home-shell";
+
+const AnimatedSectionList = Animated.createAnimatedComponent(SectionList<NoteRow, NoteRowSection>);
 
 type MenuTab = "feed" | "folders";
 
@@ -68,20 +61,15 @@ const FEED_FILTERS: Array<{ id: FeedNoteFilter; label: string }> = [
   { id: "archived", label: "Archived" },
 ];
 
-// Releasing the drag past this fraction of the screen (or flicking faster
-// than this, px/s leftward) commits to the capture page.
-const OPEN_CAPTURE_PROGRESS = 0.3;
-const OPEN_CAPTURE_VELOCITY = -500;
-// How far the menu slides left behind the incoming page — the depth effect
-// of a native iOS push.
-const MENU_PARALLAX = 0.3;
-
 export const MenuScreen = () => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { width } = useWindowDimensions();
+  const { openCapture, suppressPressUntil, direction, dragging, feedScroll, folderScroll } = useHomeShell();
+  const scrollProps = useAnimatedProps(() => ({
+    scrollEnabled: !(dragging.value && (direction.value === "left" || direction.value === "right")),
+  }));
   const [tab, setTab] = useState<MenuTab>("feed");
   // "Active" first: reviewing a feed means looking at what is not filed yet.
   const [filter, setFilter] = useState<FeedNoteFilter>("active");
@@ -96,35 +84,8 @@ export const MenuScreen = () => {
   // the contentReady early return, because it is a hook.
   const organizer = useNoteOrganizer(tree);
 
-  // 0..1 — how far the capture-page preview has slid in over the menu.
-  // Driven on the UI thread by the pan below; at 1 the real Capture screen
-  // is pushed underneath it with animation:none (there is no native
-  // interactive *push* gesture, so this hand-rolls one — the preview is a
-  // pixel replica of the blank capture page, and the swap is invisible).
-  const captureProgress = useSharedValue(0);
-
-  const menuDepthStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: -width * MENU_PARALLAX * captureProgress.value }],
-  }));
-  const dimStyle = useAnimatedStyle(() => ({
-    opacity: 0.08 * captureProgress.value,
-  }));
-  const capturePreviewStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: width * (1 - captureProgress.value) }],
-    // At rest the preview sits exactly one screen-width to the right — but
-    // during a native pop the whole menu view (preview included) slides in
-    // from -30% parallax, which would poke the preview's left edge (its
-    // hamburger replica) into the top-right of the frame. Hide it whenever
-    // the menu's own gesture isn't driving it.
-    opacity: captureProgress.value > 0 ? 1 : 0,
-  }));
-
-  // RNGH's pan activating does not reliably cancel React Native's own
-  // responder (and by claiming the gesture it also keeps the lists' scroll
-  // from doing that cancelling), so a swipe that starts on a row/button can
-  // still fire its onPress on release. A genuine tap never moves the pan, so
-  // any preview progress at press time means the touch was a swipe: drop it.
-  const pressWasSwipe = () => captureProgress.value > 0.001;
+  // The pan and native lists run simultaneously; do not treat a swipe as a tap.
+  const pressWasSwipe = () => Date.now() < suppressPressUntil.value;
 
   const openScreen = <Screen extends keyof RootStackParamList>(
     screen: Screen,
@@ -133,7 +94,9 @@ export const MenuScreen = () => {
     if (pressWasSwipe()) {
       return;
     }
-    navigation.dispatch(CommonActions.navigate({ name: screen, params }));
+    void flushCaptureDraft().then(() => {
+      navigation.dispatch(CommonActions.navigate({ name: screen, params }));
+    }).catch(() => Alert.alert("Could not save draft", "Return to your note and try again."));
   };
 
   const selectTab = (next: MenuTab) => {
@@ -141,79 +104,6 @@ export const MenuScreen = () => {
       setTab(next);
     }
   };
-
-  const openCapture = () => {
-    if (pressWasSwipe()) {
-      return;
-    }
-    navigation.navigate("Capture");
-  };
-  const openCaptureBehindPreview = useCallback(() => {
-    navigation.navigate("Capture", { instant: true });
-    // Drop the preview once the pushed screen is attached on top of the
-    // menu. There is no native "attached" signal with animation:none; the
-    // delay just has to outlive the mount, and only a back swipe started
-    // within it could glimpse the reset.
-    setTimeout(() => {
-      captureProgress.value = 0;
-    }, 400);
-  }, [captureProgress, navigation]);
-
-  // The gesture below is memoized, so it must not capture a per-render
-  // function: the UI runtime keeps the remote-function handle it was
-  // serialized with for as long as the timing animation runs. Same reason the
-  // window width becomes a shared value.
-  const openCaptureRef = useRef(openCaptureBehindPreview);
-  openCaptureRef.current = openCaptureBehindPreview;
-  const runOpenCapture = useCallback(() => openCaptureRef.current(), []);
-
-  const windowW = useSharedValue(width);
-  useEffect(() => {
-    windowW.value = width;
-  }, [width, windowW]);
-
-  // The whole menu is the gesture surface: a clearly-leftward drag anywhere
-  // (16px of horizontal travel) pulls the capture-page preview in with the
-  // finger. Presses under the swipe are filtered by pressWasSwipe above;
-  // vertical drags fail fast and stay with the note/folder lists.
-  const swipeToCapture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetX(-16)
-        .failOffsetX(24)
-        .failOffsetY([-20, 20])
-        .onUpdate((event) => {
-          captureProgress.value = Math.min(
-            1,
-            Math.max(0, -event.translationX / Math.max(windowW.value, 1))
-          );
-        })
-        .onEnd((event, success) => {
-          // RNGH calls END on cancellation too; opening Capture from a gesture
-          // the system took away is not what the finger asked for.
-          if (!success) {
-            captureProgress.value = withTiming(0, { duration: 180 });
-            return;
-          }
-          const shouldOpen =
-            captureProgress.value > OPEN_CAPTURE_PROGRESS ||
-            event.velocityX < OPEN_CAPTURE_VELOCITY;
-          if (shouldOpen) {
-            captureProgress.value = withTiming(
-              1,
-              { duration: 160, easing: Easing.out(Easing.cubic) },
-              (finished) => {
-                if (finished) {
-                  runOnJS(runOpenCapture)();
-                }
-              }
-            );
-          } else {
-            captureProgress.value = withTiming(0, { duration: 180 });
-          }
-        }),
-    [captureProgress, runOpenCapture, windowW]
-  );
 
   const lastSyncedMs = useSyncStore((s) => s.history[0]?.authored_ms ?? null);
   const autoSyncState = useSyncStore((s) => s.autoSyncState);
@@ -232,10 +122,7 @@ export const MenuScreen = () => {
     });
   };
 
-  // Boot pushes Capture on top of the menu in the same first React commit,
-  // so building the note/folder lists here would sit on the app's
-  // first-paint path. Render an empty page for the first tick and fill in
-  // right after — done long before a swipe can reveal the menu.
+  // Defer menu lists until after the initial blank page is visible.
   const [contentReady, setContentReady] = useState(false);
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => setContentReady(true));
@@ -263,17 +150,15 @@ export const MenuScreen = () => {
   );
 
   return (
-    <GestureDetector gesture={swipeToCapture}>
       <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-        <Animated.View
+        <View
           style={[
             styles.menuContent,
             { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 },
-            menuDepthStyle,
           ]}
         >
         <View style={styles.topBar}>
-          <ToolbarButton icon="close-outline" onPress={openCapture} />
+          <ToolbarButton icon="close-outline" onPress={() => { if (!pressWasSwipe()) openCapture(); }} />
         </View>
 
         <View style={[styles.tabs, { backgroundColor: theme.colors.surface }]}>
@@ -329,7 +214,9 @@ export const MenuScreen = () => {
         ) : null}
 
         {tab === "feed" ? (
-          <SectionList
+          <GestureDetector gesture={feedScroll}>
+          <AnimatedSectionList
+            animatedProps={scrollProps}
             style={styles.list}
             sections={feedSections}
             keyExtractor={(row) => row.path}
@@ -348,8 +235,9 @@ export const MenuScreen = () => {
                 theme={theme}
                 selecting={organizer.selecting}
                 selected={organizer.isSelected(item.path)}
-                onLongPress={() => organizer.onRowLongPress(item)}
+                onLongPress={() => { if (!pressWasSwipe()) organizer.onRowLongPress(item); }}
                 onPress={() => {
+                  if (pressWasSwipe()) return;
                   if (organizer.onRowPress(item)) {
                     return;
                   }
@@ -366,8 +254,11 @@ export const MenuScreen = () => {
               </Text>
             }
           />
+          </GestureDetector>
         ) : (
-          <FlatList
+          <GestureDetector gesture={folderScroll}>
+          <Animated.FlatList
+            animatedProps={scrollProps}
             style={styles.list}
             data={folderRows}
             keyExtractor={(row) => row.folder.path}
@@ -440,6 +331,7 @@ export const MenuScreen = () => {
               </Text>
             }
           />
+          </GestureDetector>
         )}
 
         {/* App-level destinations, visually set apart from the note/folder
@@ -462,60 +354,8 @@ export const MenuScreen = () => {
           />
         </View>
         {organizer.overlay}
-        </Animated.View>
-
-        {/* Native-push depth cues: the menu dims while the preview page
-            rides in above it, casting a shadow over the seam. */}
-        <Animated.View
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFill, styles.dim, dimStyle]}
-        />
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.capturePreview,
-            { backgroundColor: theme.colors.background },
-            capturePreviewStyle,
-          ]}
-        >
-          <Text
-            style={[
-              styles.previewPlaceholder,
-              { color: theme.colors.secondaryText, marginTop: insets.top + 56 },
-            ]}
-          >
-            Start typing…
-          </Text>
-          <View
-            style={[
-              styles.previewButton,
-              {
-                left: 20,
-                top: insets.top + 8,
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-              },
-            ]}
-          >
-            <Ionicons name="menu-outline" size={20} color={theme.colors.text} />
-          </View>
-          <View
-            style={[
-              styles.previewButton,
-              styles.previewMic,
-              {
-                right: 32,
-                bottom: insets.bottom + 36,
-                backgroundColor: theme.colors.surface,
-                borderColor: theme.colors.border,
-              },
-            ]}
-          >
-            <Ionicons name="mic-outline" size={22} color={theme.colors.text} />
-          </View>
-        </Animated.View>
+        </View>
       </View>
-    </GestureDetector>
   );
 };
 
@@ -666,32 +506,6 @@ const BottomItem = ({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   menuContent: { flex: 1 },
-  dim: { backgroundColor: "#000" },
-  capturePreview: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    shadowColor: "#000",
-    shadowOffset: { width: -4, height: 0 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-  },
-  // The preview mirrors the blank capture page (capture-screen.tsx): page
-  // padding top +12 / horizontal 20, input paddingTop 44, 17pt text, and the
-  // toolbar circle geometry from ToolbarButton / DictationButton.
-  previewPlaceholder: { paddingHorizontal: 20, fontSize: 17, lineHeight: 26 },
-  previewButton: {
-    position: "absolute",
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  previewMic: { width: 44, height: 44, borderRadius: 22 },
   topBar: {
     flexDirection: "row",
     justifyContent: "flex-end",

@@ -32,7 +32,6 @@ import {
 import { parseSyncDeepLink, type SyncDeepLinkParams } from "@typenotes/shared/sync-link";
 import type { IrohClientStatus } from "@typenotes/shared/types";
 
-import { useClearInstantParam } from "../navigation";
 import { autoSyncLabel, audioSyncLabel } from "../lib/sync-experience";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useSyncStore } from "../state/sync-store";
@@ -65,10 +64,6 @@ const shortEndpointId = (id: string): string =>
 export const SyncScreen = () => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  // Capture may have pushed this screen without a native animation because
-  // its live preview already played the transition. Restore normal pop/back
-  // behavior once this real screen is attached.
-  useClearInstantParam();
   const sync = useSyncStore();
   const settingsStore = useSettingsStore();
   const profile = activeProfile(settingsStore.snapshot);

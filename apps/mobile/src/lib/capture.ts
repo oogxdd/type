@@ -26,8 +26,12 @@ export class CaptureSession {
 
   constructor(
     private storage: CaptureStorage,
-    private debounceMs: number = CAPTURE_DEBOUNCE_MS
-  ) {}
+    private debounceMs: number = CAPTURE_DEBOUNCE_MS,
+    initial?: { path: string; content: string }
+  ) {
+    this.path = initial?.path ?? null;
+    this.content = initial?.content ?? "";
+  }
 
   /** The path of the note backing the current page, if one exists yet. */
   currentPath(): string | null {

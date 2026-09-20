@@ -1,38 +1,13 @@
-// The home screen and the app's signature interaction: a blank page you can
-// type on immediately. Swiping up slides the page off the top while a fresh
-// blank page rides in from the bottom under the same finger — release past
-// the threshold (or flick) commits it; the keyboard stays up so you can keep
-// typing. Notes land in Feed via the desktop-compatible core.
-//
-// This is the middle screen in the pre-pager native-stack model: Menu sits
-// behind it to the left, while Sync is pushed to the right. Native back
-// reveals Menu; a leftward drag drives a live Sync preview before the real
-// screen is attached underneath it.
-//
-//   swipe UP   → file the page. The pan uses manual activation gated on the
-//                scroll geometry (shared values), so on a long note one
-//                continuous drag scrolls to the bottom and rolls straight
-//                into pulling the next page in; on a short note it claims
-//                immediately. Works with the keyboard up — the fresh page
-//                then enters from the keyboard's top edge.
-//   swipe DOWN → the ScrollView's native interactive keyboardDismissMode
-//                (drag toward/past the keyboard, Apple-Notes style), plus a
-//                quick pull-down at the very top of the note. Both leave the
-//                scroll untouched — the dismiss observer never activates.
-//
-// The TextInput no longer scrolls itself: an outer ScrollView owns scrolling
-// (the input auto-grows), which is what makes interactive keyboard dismissal,
-// UI-thread edge gating, and the custom barely-there scroll indicator
-// possible. The page's bottom padding tracks the keyboard height so the text
-// always sits above it, and content growth keeps the bottom pinned while
-// you're typing at the end (scroll anchoring), like Apple Notes.
+// Capture keeps its draft mounted while the menu is open. HomeScreen owns
+// direction/release; this native scroll view supplies only bottom overscroll.
 
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Keyboard,
+  Alert,
+  AppState,
   type LayoutChangeEvent,
   type ScrollView,
   StyleSheet,
@@ -41,11 +16,12 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  Easing,
   runOnJS,
   useAnimatedKeyboard,
+  useAnimatedProps,
+  useAnimatedReaction,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
@@ -58,40 +34,25 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as core from "@typenotes/mobile-core/core-api";
 
 import { CaptureSession } from "../lib/capture";
+import { collectNotePaths } from "../lib/feed";
+import { registerCaptureDraft } from "../lib/capture-draft";
 import {
-  ACTIVATE_PULL,
-  BACK_SWIPE_GUTTER,
-  ESCAPE_DRAG,
-  horizontalVerdict,
-  isInNativeBackBand,
-  isVerticalCommitted,
-  isAtScrollBottom,
-  shouldCommitFiling,
-  SYNC_RIGHTWARD_FAIL,
-  TOP_SLACK,
+  isPullReady,
+  overscrollPastEnd,
+  PULL_REVEAL,
+  PULL_TAB_HEIGHT,
   visiblePageHeight,
 } from "../lib/capture-gesture";
-import {
-  type GestureAttempt,
-  recordGestureAttempt,
-} from "../lib/gesture-trace";
+import * as Haptics from "expo-haptics";
 import { autoSyncLabel } from "../lib/sync-experience";
-import { useClearInstantParam, type RootStackParamList } from "../navigation";
+import { type RootStackParamList } from "../navigation";
 import { useDiagnosticsStore } from "../state/diagnostics-store";
 import { useNotesStore } from "../state/notes-store";
 import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
 import { DictationButton } from "../ui/dictation-button";
 import { ToolbarButton } from "../ui/toolbar-button";
-
-// The swipe's thresholds and decision arithmetic live in ../lib/capture-gesture
-// so they can be tested without a device; the comments there explain why each
-// one is the value it is.
-
-// Horizontal Capture -> Sync preview mechanics, matching Menu -> Capture.
-const SYNC_OPEN_PROGRESS = 0.3;
-const SYNC_OPEN_VELOCITY = -500;
-const SYNC_PARALLAX = 0.3;
+import { useHomeShell } from "./home-shell";
 
 const PLACEHOLDER = "Start typing…";
 
@@ -100,21 +61,9 @@ const COMMIT_SPRING = {
   stiffness: 320,
   overshootClamping: true,
 } as const;
-const CANCEL_SPRING = {
-  damping: 26,
-  stiffness: 280,
-  overshootClamping: true,
-} as const;
+const thresholdHaptic = () => { void Haptics.selectionAsync().catch(() => {}); };
 
-/**
- * The auto-sync status line, with its own store subscription.
- *
- * Deliberately not a `useSyncStore` call inside CaptureScreen: every state
- * change there re-renders the screen, and a re-render rebuilds the whole
- * gesture graph (see the useMemo comment on captureGestures). Sync flips to
- * "syncing" a second after every filing, i.e. right in the middle of the
- * commit spring.
- */
+// Keep sync status updates local to this label.
 const SyncStatusLabel = ({ top }: { top: number }) => {
   const theme = useTheme();
   const autoSyncState = useSyncStore((state) => state.autoSyncState);
@@ -148,7 +97,14 @@ export const CaptureScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { height, width } = useWindowDimensions();
+  const { height } = useWindowDimensions();
+  const {
+    menuVisible, menuProgress, direction, dragging, pull, pullReady,
+    transitioning, commitRequest, captureScroll, openMenu, suppressPressUntil,
+  } = useHomeShell();
+  const [readyLabel, setReadyLabel] = useState(false);
+  const [committing, setCommitting] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   const [text, setText] = useState("");
   const [iconsVisible, setIconsVisible] = useState(true);
@@ -183,16 +139,12 @@ export const CaptureScreen = () => {
   // The window as shared values. The gesture worklets need these, and a
   // memoized gesture cannot close over a prop that changes on rotation.
   const windowH = useSharedValue(height);
-  const windowW = useSharedValue(width);
   useEffect(() => {
     windowH.value = height;
-    windowW.value = width;
-  }, [height, width, windowH, windowW]);
+  }, [height, windowH]);
 
   // 0..-V — how far the current page has slid up (V = visible page height).
   const pageY = useSharedValue(0);
-  // True from commit-release until the fresh page has swapped in.
-  const transitioning = useSharedValue(false);
 
   const indicatorOpacity = useSharedValue(0);
 
@@ -201,7 +153,7 @@ export const CaptureScreen = () => {
   // that lands while the previous write is still in flight can never be folded
   // into the note being filed.
   const newSession = useCallback(
-    () =>
+    (initial?: { path: string; content: string }) =>
       new CaptureSession({
         createNote: async (content) => {
           const path = (await core.createNote({ content })).path;
@@ -216,7 +168,7 @@ export const CaptureScreen = () => {
           await core.deleteItems([path]);
           useSyncStore.getState().scheduleAutoSync("capture deleted");
         },
-      }),
+      }, undefined, initial),
     []
   );
   const sessionRef = useRef<CaptureSession | null>(null);
@@ -224,26 +176,53 @@ export const CaptureScreen = () => {
     sessionRef.current = newSession();
   }
 
-  // Stack navigation emits blur for Menu, Sync, and all pushed destinations.
-  // Flush before this capture screen becomes hidden or is popped.
-  useEffect(
-    () =>
-      navigation.addListener("blur", () => {
-        // Navigation should never turn a storage rejection into a fatal,
-        // unhandled JS error. CaptureSession keeps the draft dirty for retry.
-        void sessionRef.current?.flush().catch(() => {});
-      }),
-    [navigation]
-  );
+  const persistDraft = useCallback(async () => {
+    const session = sessionRef.current;
+    if (!session) return;
+    await session.flush();
+    const path = session.currentPath();
+    if (path) await useNotesStore.getState().noteFiled(path);
+  }, []);
+  const flushDraft = useCallback(() => { void persistDraft().catch(() => {}); }, [persistDraft]);
+  useEffect(() => registerCaptureDraft(persistDraft), [persistDraft]);
+  useEffect(() => navigation.addListener("blur", flushDraft), [navigation, flushDraft]);
+  useEffect(() => { if (menuVisible) flushDraft(); }, [menuVisible, flushDraft]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state !== "active") flushDraft();
+    });
+    return () => { subscription.remove(); flushDraft(); };
+  }, [flushDraft]);
 
-  // Menu's finger-driven preview can attach Capture with animation disabled;
-  // clear that one-shot flag once mounted so later native back gestures work.
-  useClearInstantParam();
-
-  // Wrap Keyboard.dismiss so the worklet captures this plain closure rather
-  // than the bare method — passing Keyboard.dismiss straight to runOnJS makes
-  // worklets try to copy its owner (KeyboardImpl), which it can't serialize.
-  const dismissKeyboard = useCallback(() => Keyboard.dismiss(), []);
+  // Menu actions may edit, move or delete the saved draft. Reconcile it when
+  // returning, so the persistent input cannot overwrite an edit made in Editor.
+  const wasMenuVisible = useRef(menuVisible);
+  useEffect(() => {
+    const returning = wasMenuVisible.current && !menuVisible;
+    wasMenuVisible.current = menuVisible;
+    if (!returning) return;
+    const session = sessionRef.current;
+    if (!session?.currentPath()) return;
+    let cancelled = false;
+    setRestoring(true);
+    transitioning.value = true;
+    void (async () => {
+      await session.flush();
+      const path = session.currentPath();
+      if (!path) return;
+      const tree = await core.getTree();
+      const exists = collectNotePaths(tree).includes(path);
+      const content = exists ? await core.readNote(path) : "";
+      if (cancelled || sessionRef.current !== session) return;
+      sessionRef.current = newSession(exists ? { path, content } : undefined);
+      setText(content);
+    })().catch(() => {
+      if (!cancelled) Alert.alert("Could not reload note", "Your draft is still here. Try opening it again.");
+    }).finally(() => {
+      if (!cancelled) { setRestoring(false); transitioning.value = false; }
+    });
+    return () => { cancelled = true; transitioning.value = false; };
+  }, [menuVisible, newSession, transitioning]);
 
   const showIcons = useCallback(() => {
     setIconsVisible(true);
@@ -261,51 +240,36 @@ export const CaptureScreen = () => {
     setText("");
     prevContentHRef.current = 0;
     offsetY.value = 0;
-    // No scrollTo here. The fresh page's content is empty, so the reused
-    // ScrollView is already at the top.
+    pull.value = 0;
+    pullReady.value = false;
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+    setCommitting(false);
     showIcons();
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         pageY.value = 0;
         transitioning.value = false;
+        inputRef.current?.focus();
       })
     );
-  }, [offsetY, pageY, showIcons, transitioning]);
+  }, [offsetY, pageY, showIcons, transitioning, pull, pullReady]);
 
-  // The committed page is off-screen; bring the fresh one in at once and let
-  // the write finish behind it.
-  //
-  // This used to wait for storage (bounded at 1200ms) so that a failed write
-  // could spring the original page back. The wait cost far more than it bought:
-  // `transitioning` stays true for its whole length, and every touch that
-  // landed in that window was killed outright — so the natural reaction to a
-  // swipe that "didn't work", swiping again immediately, was guaranteed to fail
-  // too. The window is now just the commit spring, and a touch inside it is
-  // merely declined rather than failed (see swipeToFile.onTouchesMove).
-  //
-  // Handing over early is safe because the fresh session is already installed
-  // below, before anything is awaited: openBlankPage's setText("") reaches the
-  // new session, never the filed one, which keeps its own draft and retries on
-  // its own.
+  // Keep the old draft until storage succeeds. Failure restores the page,
+  // rather than abandoning a dirty session behind a fresh empty input.
   const finishCommit = useCallback(() => {
     const filed = sessionRef.current;
-    if (!filed) {
+    if (!filed) return;
+    void filed.commit().then((path) => {
+      sessionRef.current = newSession();
       openBlankPage();
-      return;
-    }
-    sessionRef.current = newSession();
-    openBlankPage();
-
-    void filed
-      .commit()
-      .then((path) => {
-        if (path) {
-          // Not a full refresh: see notes-store's noteFiled.
-          void useNotesStore.getState().noteFiled(path).catch(() => {});
-        }
-      })
-      .catch(() => {});
-  }, [newSession, openBlankPage]);
+      if (path) void useNotesStore.getState().noteFiled(path).catch(() => {});
+    }).catch(() => {
+      setCommitting(false);
+      transitioning.value = false;
+      pageY.value = withTiming(0, { duration: 220 });
+      Alert.alert("Could not save note", "Your text is still here. Try again before starting a new note.");
+    });
+  }, [newSession, openBlankPage, pageY, transitioning]);
 
   // A worklet that outlives the render that created it must not hold a
   // per-render function. The commit spring's callback runs on the UI runtime
@@ -317,6 +281,22 @@ export const CaptureScreen = () => {
   finishCommitRef.current = finishCommit;
   const runFinishCommit = useCallback(() => finishCommitRef.current(), []);
 
+  useAnimatedReaction(() => commitRequest.value, (request, previous) => {
+    if (previous === null || request === previous) return;
+    runOnJS(setCommitting)(true);
+    pageY.value = withSpring(-visiblePageHeight(windowH.value, keyboard.height.value),
+      COMMIT_SPRING, (finished) => { if (finished) runOnJS(runFinishCommit)(); });
+  });
+  useAnimatedReaction(() => pullReady.value, (ready, previous) => {
+    if (ready === previous) return;
+    runOnJS(setReadyLabel)(ready);
+    if (ready) runOnJS(thresholdHaptic)();
+  });
+  const scrollProps = useAnimatedProps(() => ({
+    scrollEnabled: !transitioning.value &&
+      !(dragging.value && (direction.value === "left" || direction.value === "right")),
+  }));
+
   // ---- Scroll plumbing ------------------------------------------------------
 
   const onScroll = useAnimatedScrollHandler({
@@ -324,6 +304,11 @@ export const CaptureScreen = () => {
       offsetY.value = event.contentOffset.y;
       contentH.value = event.contentSize.height;
       viewportH.value = event.layoutMeasurement.height;
+      // Momentum, keyboard resizing and programmatic scrolls cannot arm it.
+      if (dragging.value && direction.value === "up" && menuProgress.value < 0.001 && !transitioning.value) {
+        pull.value = overscrollPastEnd(event.contentOffset.y, event.contentSize.height, event.layoutMeasurement.height);
+        pullReady.value = isPullReady(pull.value, pullReady.value);
+      }
       // Surface the indicator while scrolling; let it fade shortly after.
       indicatorOpacity.value = 1;
       indicatorOpacity.value = withDelay(600, withTiming(0, { duration: 350 }));
@@ -387,476 +372,10 @@ export const CaptureScreen = () => {
     }
   };
 
-  // ---- Gestures --------------------------------------------------------------
-
-  // Swipe up → file the page. Manual activation, gated on live scroll
-  // geometry: the pan claims the touch only once the note sits at its bottom
-  // edge and the finger keeps moving up — so a long note scrolls first and
-  // the same drag rolls into the page pull the moment it hits the end. While
-  // the note is above the bottom, the arm point trails the finger, so the
-  // extra pull needed once the edge arrives is always the same few px.
-  const touchStartX = useSharedValue(0);
-  const touchStartY = useSharedValue(0);
-  const armY = useSharedValue(0);
-  const dragBase = useSharedValue(0);
-  // Latched once the drag is unmistakably upward; from then on the horizontal
-  // verdict is not consulted, so late thumb wobble cannot lose the swipe.
-  const verticalLatched = useSharedValue(false);
-  // Did this touch start where the native back recognizer is still competing?
-  // Decided at touch-down, because that is the only thing the native side looks
-  // at either (see isInNativeBackBand).
-  const startedInNativeBand = useSharedValue(true);
-  // One back navigation per touch.
-  const backTriggered = useSharedValue(false);
-
-  // ---- Gesture trace (Settings -> Diagnostics) ------------------------------
-  //
-  // Off by default and mirrored into a shared value, so a touch never reads the
-  // store and a disabled trace costs one boolean check per gesture. Everything
-  // is accumulated on the UI thread and emitted once, in onFinalize.
-  const traceEnabled = useSharedValue(false);
-  const traceOn = useDiagnosticsStore((state) => state.diagnostics.traceGestures);
-  useEffect(() => {
-    traceEnabled.value = traceOn;
-  }, [traceEnabled, traceOn]);
-
-  const traceStartMs = useSharedValue(0);
-  const traceMaxDx = useSharedValue(0);
-  const traceMaxDy = useSharedValue(0);
-  const traceActivated = useSharedValue(false);
-  const traceFailedByVerdict = useSharedValue(false);
-  const traceFailedToSync = useSharedValue(false);
-  const traceBlocked = useSharedValue(false);
-  const traceGotEnd = useSharedValue(false);
-  const traceEndSuccess = useSharedValue(false);
-  const traceFiled = useSharedValue(false);
-  const traceMaxPull = useSharedValue(0);
-  // onFinalize can fire twice for one touch: once when manager.fail() resolves
-  // the handler, and again when the finger actually lifts. Without this guard
-  // every handed-over touch showed up as two identical rows.
-  const traceEmitted = useSharedValue(false);
-
-  const runRecordAttempt = useCallback(
-    (attempt: GestureAttempt) => recordGestureAttempt(attempt),
-    []
-  );
-
-  // Below the native back band nothing else is going to pop the screen, so a
-  // decisive rightward drag does it here. Not driven under the finger — the
-  // native animated pop is the same one the band above gets interactively.
-  const goBackToMenu = useCallback(() => {
-    navigation.popTo("Menu");
-  }, [navigation]);
-  const goBackRef = useRef(goBackToMenu);
-  goBackRef.current = goBackToMenu;
-  const runGoBack = useCallback(() => goBackRef.current(), []);
-
-  // Memoized, and every capture in the closures below is a stable identity —
-  // shared values, the useAnimatedKeyboard ref, and the run* proxies. That is
-  // not a micro-optimization: GestureDetector re-runs updateAttachedGestures on
-  // every render (its effect depends on `props`), and an unmemoized gesture
-  // makes it re-serialize all three closure graphs into the UI runtime on every
-  // keystroke — including in the middle of the commit spring, whose callback
-  // the runtime is still holding.
-  const swipeToFile = useMemo(
-    () =>
-      Gesture.Pan()
-        .hitSlop({ left: -BACK_SWIPE_GUTTER })
-        .manualActivation(true)
-        .onTouchesDown((event, manager) => {
-          const touch = event.allTouches[0];
-          // iOS can deliver a terminal/cancel frame with no remaining touches.
-          // Never dereference that sparse frame inside a worklet.
-          if (!touch) {
-            manager.fail();
-            return;
-          }
-          touchStartX.value = touch.x;
-          touchStartY.value = touch.y;
-          armY.value = touch.y;
-          verticalLatched.value = false;
-          backTriggered.value = false;
-          startedInNativeBand.value = isInNativeBackBand(
-            touch.y,
-            windowH.value
-          );
-
-          traceStartMs.value = Date.now();
-          traceMaxDx.value = 0;
-          traceMaxDy.value = 0;
-          traceActivated.value = false;
-          traceFailedByVerdict.value = false;
-          traceFailedToSync.value = false;
-          traceBlocked.value = false;
-          traceGotEnd.value = false;
-          traceEndSuccess.value = false;
-          traceFiled.value = false;
-          traceMaxPull.value = 0;
-          traceEmitted.value = false;
-        })
-        .onTouchesMove((event, manager) => {
-          const touch = event.allTouches[0];
-          if (!touch) {
-            manager.fail();
-            return;
-          }
-          const dx = touch.x - touchStartX.value;
-          const dy = touch.y - touchStartY.value;
-          if (Math.abs(dx) > Math.abs(traceMaxDx.value)) {
-            traceMaxDx.value = dx;
-          }
-          if (Math.abs(dy) > Math.abs(traceMaxDy.value)) {
-            traceMaxDy.value = dy;
-          }
-
-          if (!verticalLatched.value) {
-            if (isVerticalCommitted(dx, dy)) {
-              // Unmistakably upward — stop arbitrating for this touch.
-              verticalLatched.value = true;
-            } else {
-              const verdict = horizontalVerdict(dx, dy);
-              if (verdict === "sync") {
-                // Always give this one up: swipeToSync sits behind us in the
-                // Race and cannot start until we resolve.
-                traceFailedToSync.value = true;
-                manager.fail();
-                return;
-              }
-              if (verdict === "navigation") {
-                if (startedInNativeBand.value) {
-                  // The native pop is competing for this touch; hand it over.
-                  // This is the only place failing is worth its cost.
-                  traceFailedByVerdict.value = true;
-                  manager.fail();
-                  return;
-                }
-                if (!backTriggered.value) {
-                  // Below the band the native recognizer was never offered
-                  // this touch, so going back is ours to do.
-                  backTriggered.value = true;
-                  traceFailedByVerdict.value = true;
-                  runOnJS(runGoBack)();
-                  manager.fail();
-                  return;
-                }
-              }
-              // "undecided" stays ours. Failing is terminal for the whole
-              // touch, and at the start of a swipe up dy is still ~0.
-            }
-          }
-          if (transitioning.value) {
-            // A filed page is still parked off-screen. Decline rather than
-            // fail: the window is short, and a finger that arrives at its tail
-            // should still be able to file once it clears.
-            traceBlocked.value = true;
-            armY.value = touch.y;
-            return;
-          }
-          if (
-            !isAtScrollBottom(offsetY.value, contentH.value, viewportH.value)
-          ) {
-            // Still scrolling — keep the arm point under the finger.
-            armY.value = touch.y;
-            return;
-          }
-          if (armY.value - touch.y > ACTIVATE_PULL) {
-            traceActivated.value = true;
-            manager.activate();
-          }
-        })
-        .onStart((event) => {
-          // Translation accumulated before activation belongs to the scroll;
-          // the page follows 1:1 from the claim point on.
-          dragBase.value = event.translationY;
-        })
-        .onUpdate((event) => {
-          const pull = -(event.translationY - dragBase.value);
-          const pageHeight = visiblePageHeight(
-            windowH.value,
-            keyboard.height.value
-          );
-          pageY.value = -Math.min(Math.max(pull, 0), pageHeight);
-          if (pull > traceMaxPull.value) {
-            traceMaxPull.value = pull;
-          }
-        })
-        .onEnd((event, success) => {
-          traceGotEnd.value = true;
-          traceEndSuccess.value = success;
-          // RNGH calls END on cancellation too, with success = false — when the
-          // native back pan, a system sheet or the scroll takes the touch. The
-          // leftover upward velocity would make that the committing branch, so
-          // a gesture the user never finished would file a note.
-          if (!success) {
-            transitioning.value = false;
-            pageY.value = withSpring(0, CANCEL_SPRING);
-            return;
-          }
-          const pageHeight = visiblePageHeight(
-            windowH.value,
-            keyboard.height.value
-          );
-          if (shouldCommitFiling(pageY.value, pageHeight, event.velocityY)) {
-            traceFiled.value = true;
-            transitioning.value = true;
-            pageY.value = withSpring(
-              -pageHeight,
-              { ...COMMIT_SPRING, velocity: event.velocityY },
-              (finished) => {
-                if (finished) {
-                  runOnJS(runFinishCommit)();
-                } else {
-                  // Interrupted mid-flight. Only clear the flag — do NOT start
-                  // another animation on pageY from in here.
-                  //
-                  // Assigning an animation to a shared value from inside that
-                  // same value's animation callback re-enters cancellation,
-                  // which invokes this callback again, which assigns again:
-                  // recursion until "Maximum call stack size exceeded". In
-                  // worklets 0.10 `runGuarded` is a bare `runSync` with no
-                  // try/catch, so on the UI runtime (the iOS main thread) that
-                  // RangeError escapes as a C++ exception -> std::terminate ->
-                  // SIGABRT. That is the swipe-up crash, and it has been here
-                  // unchanged since mobile-v0.2.2.
-                  //
-                  // Nothing is stranded by leaving pageY alone: the only way to
-                  // interrupt an animation is to assign to the value, so
-                  // whoever interrupted us already owns its target.
-                  transitioning.value = false;
-                }
-              }
-            );
-          } else {
-            pageY.value = withSpring(0, {
-              ...CANCEL_SPRING,
-              velocity: event.velocityY,
-            });
-          }
-        })
-        .onFinalize(() => {
-          // Cancellation without onEnd (system claimed the touch): spring home.
-          if (!transitioning.value && pageY.value !== 0) {
-            pageY.value = withSpring(0, CANCEL_SPRING);
-          }
-          if (traceEnabled.value && !traceEmitted.value) {
-            traceEmitted.value = true;
-            // One hop per touch, after everything has resolved.
-            runOnJS(runRecordAttempt)({
-              at: Date.now(),
-              startX: touchStartX.value,
-              startY: touchStartY.value,
-              maxDx: traceMaxDx.value,
-              maxDy: traceMaxDy.value,
-              maxPull: traceMaxPull.value,
-              durationMs: Date.now() - traceStartMs.value,
-              latchedVertical: verticalLatched.value,
-              activated: traceActivated.value,
-              failedByVerdict: traceFailedByVerdict.value,
-              failedToSync: traceFailedToSync.value,
-              blockedByTransitioning: traceBlocked.value,
-              gotEnd: traceGotEnd.value,
-              endSuccess: traceEndSuccess.value,
-              filed: traceFiled.value,
-              band: startedInNativeBand.value,
-            });
-          }
-        }),
-    [
-      armY,
-      backTriggered,
-      contentH,
-      dragBase,
-      keyboard,
-      offsetY,
-      pageY,
-      runFinishCommit,
-      runGoBack,
-      runRecordAttempt,
-      startedInNativeBand,
-      touchStartX,
-      touchStartY,
-      traceActivated,
-      traceBlocked,
-      traceEmitted,
-      traceEnabled,
-      traceEndSuccess,
-      traceFailedByVerdict,
-      traceFailedToSync,
-      traceFiled,
-      traceGotEnd,
-      traceMaxDx,
-      traceMaxDy,
-      traceMaxPull,
-      traceStartMs,
-      transitioning,
-      verticalLatched,
-      viewportH,
-      windowH,
-    ]
-  );
-
-  // Quick pull-down at the very top of the note tucks the keyboard away.
-  // This observer never activates — it dispatches the dismiss and fails, so
-  // the note's own scroll (top bounce) keeps running untouched. Everywhere
-  // else the ScrollView's interactive keyboardDismissMode covers it.
-  //
-  // Because it never activates it must not sit inside the Race: there it
-  // would have had to wait for swipeToFile to fail, and swipeToFile only
-  // fails on horizontal intent — so on a downward drag it stayed BEGAN and
-  // this never ran at all. It is composed simultaneously instead, where it
-  // can watch every touch without being able to take one.
-  const escapeStartX = useSharedValue(0);
-  const escapeStartY = useSharedValue(0);
-  const escapeDone = useSharedValue(false);
-
-  const keyboardEscape = useMemo(
-    () =>
-      Gesture.Pan()
-        .hitSlop({ left: -BACK_SWIPE_GUTTER })
-        .manualActivation(true)
-        .onTouchesDown((event, manager) => {
-          if (transitioning.value) {
-            manager.fail();
-            return;
-          }
-          const touch = event.allTouches[0];
-          if (!touch) {
-            manager.fail();
-            return;
-          }
-          escapeStartX.value = touch.x;
-          escapeStartY.value = touch.y;
-          escapeDone.value = false;
-        })
-        .onTouchesMove((event, manager) => {
-          if (escapeDone.value) {
-            return;
-          }
-          const touch = event.allTouches[0];
-          if (!touch) {
-            manager.fail();
-            return;
-          }
-          const dx = touch.x - escapeStartX.value;
-          const dy = touch.y - escapeStartY.value;
-          if (horizontalVerdict(dx, dy) !== "undecided") {
-            manager.fail();
-            return;
-          }
-          if (dy < -10) {
-            manager.fail();
-            return;
-          }
-          if (
-            keyboard.height.value > 60 &&
-            offsetY.value <= TOP_SLACK &&
-            dy > ESCAPE_DRAG
-          ) {
-            escapeDone.value = true;
-            runOnJS(dismissKeyboard)();
-            manager.fail();
-          }
-        }),
-    [
-      dismissKeyboard,
-      escapeDone,
-      escapeStartX,
-      escapeStartY,
-      keyboard,
-      offsetY,
-      transitioning,
-    ]
-  );
-
-  // Sync sits to the right of Capture. A clearly-leftward drag pulls in a
-  // lightweight replica of its native header, with the current page moving
-  // in parallax underneath. Once committed, the real Sync screen is pushed
-  // with animation disabled so there is no second transition.
-  const syncProgress = useSharedValue(0);
-
-  const openSyncBehindPreview = useCallback(() => {
-    navigation.navigate("Sync", { instant: true });
-    // `animation: none` has no reliable attached callback. Keep the preview
-    // for long enough to cover the mount, then park it off-screen again.
-    setTimeout(() => {
-      syncProgress.value = 0;
-    }, 400);
-  }, [navigation, syncProgress]);
-
-  const openSyncRef = useRef(openSyncBehindPreview);
-  openSyncRef.current = openSyncBehindPreview;
-  const runOpenSync = useCallback(() => openSyncRef.current(), []);
-
-  const swipeToSync = useMemo(
-    () =>
-      Gesture.Pan()
-        .hitSlop({ left: -BACK_SWIPE_GUTTER })
-        .activeOffsetX(-24)
-        .failOffsetX(SYNC_RIGHTWARD_FAIL)
-        .failOffsetY([-24, 24])
-        .onTouchesDown((_event, manager) => {
-          // Never leave for Sync while a filed page is parked off-screen and
-          // the commit spring is still running. Failing is cheap here: this
-          // gesture sits behind swipeToFile in the Race, so giving it up costs
-          // the swipe up nothing.
-          if (transitioning.value) {
-            manager.fail();
-          }
-        })
-        .onStart(() => {
-          runOnJS(dismissKeyboard)();
-        })
-        .onUpdate((event) => {
-          syncProgress.value = Math.min(
-            1,
-            Math.max(0, -event.translationX / Math.max(windowW.value, 1))
-          );
-        })
-        .onEnd((event, success) => {
-          if (!success) {
-            syncProgress.value = withTiming(0, { duration: 180 });
-            return;
-          }
-          const shouldOpen =
-            syncProgress.value > SYNC_OPEN_PROGRESS ||
-            event.velocityX < SYNC_OPEN_VELOCITY;
-          if (shouldOpen) {
-            syncProgress.value = withTiming(
-              1,
-              { duration: 160, easing: Easing.out(Easing.cubic) },
-              (finished) => {
-                if (finished) {
-                  runOnJS(runOpenSync)();
-                }
-              }
-            );
-          } else {
-            syncProgress.value = withTiming(0, { duration: 180 });
-          }
-        }),
-    [dismissKeyboard, runOpenSync, syncProgress, transitioning, windowW]
-  );
-
-  const captureGestures = useMemo(
-    () =>
-      Gesture.Simultaneous(
-        keyboardEscape,
-        Gesture.Race(swipeToFile, swipeToSync)
-      ),
-    [keyboardEscape, swipeToFile, swipeToSync]
-  );
-
-  // ---- Animated styles --------------------------------------------------------
-
-  const syncDepthStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: -width * SYNC_PARALLAX * syncProgress.value }],
-  }));
-  const syncDimStyle = useAnimatedStyle(() => ({
-    opacity: 0.08 * syncProgress.value,
-  }));
-  const syncPreviewStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: width * (1 - syncProgress.value) }],
-    opacity: syncProgress.value > 0 ? 1 : 0,
+  const pullPillStyle = useAnimatedStyle(() => ({
+    bottom: Math.max(keyboard.height.value, insets.bottom) + 8,
+    opacity: transitioning.value ? 0 : Math.min(1, Math.max(0, (pull.value - PULL_REVEAL) / 16)),
+    transform: [{ translateY: PULL_TAB_HEIGHT + 12 - Math.min(Math.max(0, pull.value - PULL_REVEAL), 150) }],
   }));
 
   // The page rides the swipe and its bottom padding tracks the keyboard so
@@ -932,8 +451,7 @@ export const CaptureScreen = () => {
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      <Animated.View style={[styles.depth, syncDepthStyle]}>
-        <GestureDetector gesture={captureGestures}>
+      <View style={styles.depth}>
           <View style={styles.gestureHost} collapsable={false}>
             <Animated.View
               style={[
@@ -945,7 +463,9 @@ export const CaptureScreen = () => {
                 pageStyle,
               ]}
             >
+              <GestureDetector gesture={captureScroll}>
               <Animated.ScrollView
+                animatedProps={scrollProps}
                 ref={scrollRef}
                 style={styles.scroll}
                 contentContainerStyle={styles.scrollContent}
@@ -970,6 +490,7 @@ export const CaptureScreen = () => {
                       fontFamily: theme.fontFamily,
                     },
                   ]}
+                  editable={!committing && !restoring && !menuVisible}
                   value={text}
                   onChangeText={onChange}
                   onPressIn={showIcons}
@@ -981,6 +502,7 @@ export const CaptureScreen = () => {
                   keyboardAppearance={theme.dark ? "dark" : "light"}
                 />
               </Animated.ScrollView>
+              </GestureDetector>
               <View pointerEvents="none" style={styles.indicatorTrack}>
                 <Animated.View
                   style={[
@@ -1025,7 +547,6 @@ export const CaptureScreen = () => {
               </Text>
             </Animated.View>
           </View>
-        </GestureDetector>
 
         <Animated.View
           pointerEvents={iconsVisible ? "auto" : "none"}
@@ -1033,9 +554,7 @@ export const CaptureScreen = () => {
         >
           <ToolbarButton
             icon="menu-outline"
-            // Menu is the root immediately beneath Capture. popTo avoids
-            // accidentally pushing a duplicate Menu screen.
-            onPress={() => navigation.popTo("Menu")}
+            onPress={() => { if (Date.now() >= suppressPressUntil.value) openMenu(); }}
           />
         </Animated.View>
         <SyncStatusLabel top={insets.top + 18} />
@@ -1045,58 +564,29 @@ export const CaptureScreen = () => {
         >
           <DictationButton onRecordingChange={setRecordingActive} />
         </Animated.View>
-      </Animated.View>
-
-      <Animated.View
-        pointerEvents="none"
-        style={[StyleSheet.absoluteFill, styles.syncDim, syncDimStyle]}
-      />
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.syncPreview,
-          { backgroundColor: theme.colors.background },
-          syncPreviewStyle,
-        ]}
-      >
-        <View style={{ paddingTop: insets.top }}>
-          <View style={styles.syncPreviewBar}>
-            <Ionicons
-              name="chevron-back"
-              size={26}
-              color={theme.colors.text}
-              style={styles.syncPreviewBack}
-            />
-            <Text style={[styles.syncPreviewTitle, { color: theme.colors.text }]}>
-              Sync
-            </Text>
-          </View>
-        </View>
+      </View>
+      <Animated.View pointerEvents="none" style={[
+        styles.pullPill,
+        { backgroundColor: theme.colors.surface, borderColor: readyLabel ? theme.colors.text : theme.colors.border },
+        pullPillStyle,
+      ]}>
+        <Ionicons name={readyLabel ? "add-outline" : "arrow-up-outline"} size={18} color={theme.colors.text} />
+        <Text accessibilityLiveRegion="polite" style={{ color: theme.colors.text, fontSize: 13 }}>
+          {readyLabel ? "Release to start a new note" : "Pull up for a new note"}
+        </Text>
       </Animated.View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { flex: 1, overflow: "hidden" },
   depth: { flex: 1 },
-  syncDim: { backgroundColor: "#000" },
-  syncPreview: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    shadowColor: "#000",
-    shadowOffset: { width: -4, height: 0 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
+  pullPill: {
+    position: "absolute", alignSelf: "center", minHeight: PULL_TAB_HEIGHT,
+    paddingHorizontal: 16, borderRadius: 22, borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row", alignItems: "center", gap: 8,
   },
-  // Replica of the native-stack Sync header used only during the interactive
-  // preview; the real screen takes over after the no-animation push.
-  syncPreviewBar: { height: 44, alignItems: "center", justifyContent: "center" },
-  syncPreviewBack: { position: "absolute", left: 8, top: 9 },
-  syncPreviewTitle: { fontSize: 17, fontWeight: "600" },
   gestureHost: { flex: 1 },
   page: { flex: 1, paddingHorizontal: 20 },
   scroll: { flex: 1 },

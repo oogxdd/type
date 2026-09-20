@@ -37,11 +37,15 @@ PODS:
     - ExpoModulesCore
   - ExpoCameraBarcodeScanning (57.0.1):
     - ExpoCamera
+    - ZXingObjC/OneD
+    - ZXingObjC/PDF417
   - ExpoDomWebView (57.0.0):
     - ExpoModulesCore
   - ExpoFileSystem (57.0.0):
     - ExpoModulesCore
   - ExpoFont (57.0.0):
+    - ExpoModulesCore
+  - ExpoHaptics (57.0.3):
     - ExpoModulesCore
   - ExpoImagePicker (57.0.2):
     - ExpoModulesCore
@@ -2246,6 +2250,11 @@ PODS:
   - uniffi-bindgen-react-native (0.31.0-3):
     - React-Core
   - Yoga (0.0.0)
+  - ZXingObjC/Core (3.6.9)
+  - ZXingObjC/OneD (3.6.9):
+    - ZXingObjC/Core
+  - ZXingObjC/PDF417 (3.6.9):
+    - ZXingObjC/Core
 
 DEPENDENCIES:
   - BackupExport (from `../modules/backup-export`)
@@ -2253,17 +2262,18 @@ DEPENDENCIES:
   - Expo (from `../../../node_modules/expo`)
   - ExpoAsset (from `../../../node_modules/expo-asset/ios`)
   - ExpoAudio (from `../../../node_modules/expo-audio/ios`)
-  - ExpoCamera (from `../../../node_modules/expo-camera/ios/ExpoCamera.podspec`)
-  - ExpoCameraBarcodeScanning (from `../../../node_modules/expo-camera/ios/ExpoCameraBarcodeScanning.podspec`)
+  - ExpoCamera (from `../../../node_modules/expo-camera/ios`)
+  - ExpoCameraBarcodeScanning (from `../../../node_modules/expo-camera/ios`)
   - "ExpoDomWebView (from `../../../node_modules/@expo/dom-webview/ios`)"
-  - ExpoFileSystem (from `../../../node_modules/expo-file-system/ios/ExpoFileSystem.podspec`)
-  - ExpoFont (from `../../../node_modules/expo-font/ios/ExpoFont.podspec`)
+  - ExpoFileSystem (from `../../../node_modules/expo-file-system/ios`)
+  - ExpoFont (from `../../../node_modules/expo-font/ios`)
+  - ExpoHaptics (from `../../../node_modules/expo-haptics/ios`)
   - ExpoImagePicker (from `../../../node_modules/expo-image-picker/ios`)
   - ExpoKeepAwake (from `../../../node_modules/expo-keep-awake/ios`)
   - "ExpoLogBox (from `../../../node_modules/@expo/log-box`)"
-  - ExpoModulesCore (from `../../../node_modules/expo-modules-core/ExpoModulesCore.podspec`)
+  - ExpoModulesCore (from `../../../node_modules/expo-modules-core`)
   - ExpoModulesJSI (from `../../../node_modules/expo-modules-jsi/apple`)
-  - ExpoModulesWorklets (from `../../../node_modules/expo-modules-core/ExpoModulesWorklets.podspec`)
+  - ExpoModulesWorklets (from `../../../node_modules/expo-modules-core`)
   - ExpoModulesWorkletsAdapter (from `../../../node_modules/expo-modules-core`)
   - ExpoSpeechRecognition (from `../../../node_modules/expo-speech-recognition/ios`)
   - FBLazyVector (from `../../../node_modules/react-native/Libraries/FBLazyVector`)
@@ -2351,6 +2361,10 @@ DEPENDENCIES:
   - uniffi-bindgen-react-native (from `../../../node_modules/uniffi-bindgen-react-native`)
   - Yoga (from `../../../node_modules/react-native/ReactCommon/yoga`)
 
+SPEC REPOS:
+  trunk:
+    - ZXingObjC
+
 EXTERNAL SOURCES:
   BackupExport:
     :path: "../modules/backup-export"
@@ -2363,15 +2377,17 @@ EXTERNAL SOURCES:
   ExpoAudio:
     :path: "../../../node_modules/expo-audio/ios"
   ExpoCamera:
-    :podspec: "../../../node_modules/expo-camera/ios/ExpoCamera.podspec"
+    :path: "../../../node_modules/expo-camera/ios"
   ExpoCameraBarcodeScanning:
-    :podspec: "../../../node_modules/expo-camera/ios/ExpoCameraBarcodeScanning.podspec"
+    :path: "../../../node_modules/expo-camera/ios"
   ExpoDomWebView:
     :path: "../../../node_modules/@expo/dom-webview/ios"
   ExpoFileSystem:
-    :podspec: "../../../node_modules/expo-file-system/ios/ExpoFileSystem.podspec"
+    :path: "../../../node_modules/expo-file-system/ios"
   ExpoFont:
-    :podspec: "../../../node_modules/expo-font/ios/ExpoFont.podspec"
+    :path: "../../../node_modules/expo-font/ios"
+  ExpoHaptics:
+    :path: "../../../node_modules/expo-haptics/ios"
   ExpoImagePicker:
     :path: "../../../node_modules/expo-image-picker/ios"
   ExpoKeepAwake:
@@ -2379,11 +2395,11 @@ EXTERNAL SOURCES:
   ExpoLogBox:
     :path: "../../../node_modules/@expo/log-box"
   ExpoModulesCore:
-    :podspec: "../../../node_modules/expo-modules-core/ExpoModulesCore.podspec"
+    :path: "../../../node_modules/expo-modules-core"
   ExpoModulesJSI:
     :path: "../../../node_modules/expo-modules-jsi/apple"
   ExpoModulesWorklets:
-    :podspec: "../../../node_modules/expo-modules-core/ExpoModulesWorklets.podspec"
+    :path: "../../../node_modules/expo-modules-core"
   ExpoModulesWorkletsAdapter:
     :path: "../../../node_modules/expo-modules-core"
   ExpoSpeechRecognition:
@@ -2567,10 +2583,11 @@ SPEC CHECKSUMS:
   ExpoDomWebView: 73ba90107a5acc0017a09b06e66d8eb238e089b8
   ExpoFileSystem: ffcd56066188802f263254b6b2e60f74b6a0bdae
   ExpoFont: 35fd7ad72f697d3a9656545909972d8b9f60d5da
+  ExpoHaptics: 32efd02d88953d30a5c2ff796c0fce692e7bcd2e
   ExpoImagePicker: 27f4e9a5d797abc31c75237362f90ac012d1a8fe
   ExpoKeepAwake: 8a96e2075b75641001f55393d7e6600a5b808f09
   ExpoLogBox: b39a76aab749833d58111c3be1264bb90f3b92d4
-  ExpoModulesCore: 9f9b3ef39842dffdebdb23cf2a74eb9efd937cab
+  ExpoModulesCore: b0db4131afafec046285cbf5005ee4d2fcd1fbab
   ExpoModulesJSI: 0fad44a0464a4469b83a06e34e529c13043f2f69
   ExpoModulesWorklets: f6b71b8ddeb8dceb2ce3504544ecfbd708ba79a2
   ExpoModulesWorkletsAdapter: 639de30e8de038293a0ca7ce95d1d29146a85a3f
@@ -2658,7 +2675,8 @@ SPEC CHECKSUMS:
   TypeCore: badefa30a68cc6d92a6833d50b2983050fed42a3
   uniffi-bindgen-react-native: 5a59022841548d4c890e8f259016bdb8a797208a
   Yoga: fe50ab299e578f397fef753cf309c6703a4db29b
+  ZXingObjC: 8898711ab495761b2dbbdec76d90164a6d7e14c5
 
-PODFILE CHECKSUM: bc312c7663b9c70c87bdbb2cddfbd593dc9eb35b
+PODFILE CHECKSUM: 75238cfeb50223dd508b245f4249aa084e1f35fa
 
 COCOAPODS: 1.16.2

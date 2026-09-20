@@ -1,138 +1,72 @@
 import { describe, expect, it } from "vitest";
-
 import {
-  COMMIT_VELOCITY,
-  horizontalVerdict,
-  isInNativeBackBand,
-  nativeBackBandBottom,
-  isVerticalCommitted,
-  isAtScrollBottom,
-  shouldCommitFiling,
-  visiblePageHeight,
+  isPullReady, menuReleaseTarget, overscrollPastEnd,
+  resolveSwipeDirection, shouldCommitPull, visiblePageHeight,
 } from "./capture-gesture";
 
-describe("horizontalVerdict", () => {
-  it("keeps watching a swipe up that arcs sideways", () => {
-    // The whole point of RIGHTWARD_FAIL being 24 and not 8: at the start of a
-    // swipe up dy is still ~0, and a thumb arcs. These used to fail the
-    // gesture terminally, which is what made it hard to perform.
-    expect(horizontalVerdict(9, -7)).toBe("undecided");
-    expect(horizontalVerdict(20, -4)).toBe("undecided");
-    expect(horizontalVerdict(-18, -6)).toBe("undecided");
-    expect(horizontalVerdict(6, -7)).toBe("undecided");
-    expect(horizontalVerdict(20, -40)).toBe("undecided");
+describe("direction ownership", () => {
+  it("waits through jitter, then uses the same rule for all four directions", () => {
+    expect(resolveSwipeDirection("pending", 8, -5)).toBe("pending");
+    expect(resolveSwipeDirection("pending", 30, 6)).toBe("right");
+    expect(resolveSwipeDirection("pending", -30, 6)).toBe("left");
+    expect(resolveSwipeDirection("pending", 6, -30)).toBe("up");
+    expect(resolveSwipeDirection("pending", 6, 30)).toBe("down");
   });
-
-  it("gives a clearly rightward drag to navigation", () => {
-    expect(horizontalVerdict(40, -10)).toBe("navigation");
-    expect(horizontalVerdict(26, 0)).toBe("navigation");
+  it("rejects a diagonal without later turning it into a command", () => {
+    const direction = resolveSwipeDirection("pending", 20, -20);
+    expect(direction).toBe("diagonal");
+    expect(resolveSwipeDirection(direction, 20, -120)).toBe("diagonal");
   });
-
-  it("does not call a rightward drag navigation while it is mostly vertical", () => {
-    expect(horizontalVerdict(40, -60)).toBe("undecided");
-  });
-
-  it("gives a clearly leftward drag to sync regardless of the vertical part", () => {
-    expect(horizontalVerdict(-30, -5)).toBe("sync");
-    expect(horizontalVerdict(-25, 0)).toBe("sync");
-    // A diagonal used to wedge the race: neither activate nor fail.
-    expect(horizontalVerdict(-30, -200)).toBe("sync");
-  });
-
-  it("ignores jitter around the origin", () => {
-    expect(horizontalVerdict(0, 0)).toBe("undecided");
-    expect(horizontalVerdict(3, 3)).toBe("undecided");
+  it("allows a thumb to arc or reverse after choosing an axis", () => {
+    const direction = resolveSwipeDirection("pending", -5, -20);
+    expect(resolveSwipeDirection(direction, -90, -70)).toBe("up");
+    expect(resolveSwipeDirection(direction, 0, 10)).toBe("up");
   });
 });
 
-describe("isVerticalCommitted", () => {
-  it("latches once the drag is clearly upward", () => {
-    expect(isVerticalCommitted(0, -13)).toBe(true);
-    expect(isVerticalCommitted(-8, -30)).toBe(true);
+describe("pull after the end of a note", () => {
+  it("excludes all travel through a long note", () => {
+    expect(overscrollPastEnd(500, 1800, 600)).toBe(0);
+    expect(overscrollPastEnd(1200, 1800, 600)).toBe(0);
+    expect(overscrollPastEnd(1280, 1800, 600)).toBe(80);
   });
-
-  it("does not latch before the drag has gone far enough up", () => {
-    expect(isVerticalCommitted(0, -11)).toBe(false);
-    expect(isVerticalCommitted(0, 40)).toBe(false);
+  it("handles short notes, top bounce and an unmeasured viewport", () => {
+    expect(overscrollPastEnd(80, 200, 600)).toBe(80);
+    expect(overscrollPastEnd(-80, 200, 600)).toBe(0);
+    expect(overscrollPastEnd(80, 200, 0)).toBe(0);
   });
-
-  it("does not latch a diagonal that is more sideways than up", () => {
-    expect(isVerticalCommitted(30, -20)).toBe(false);
-    expect(isVerticalCommitted(-30, -20)).toBe(false);
+  it("arms, tolerates jitter, and lets the user retract to cancel", () => {
+    expect(isPullReady(79, false)).toBe(false);
+    expect(isPullReady(80, false)).toBe(true);
+    expect(isPullReady(76, true)).toBe(true);
+    expect(isPullReady(63, true)).toBe(false);
+    expect(isPullReady(76, false)).toBe(false);
   });
-
-  it("keeps a swipe that only wobbles sideways after committing", () => {
-    // 60px up, 20px of thumb drift: still filing, and once latched the caller
-    // stops consulting horizontalVerdict — which would say "navigation" here.
-    expect(isVerticalCommitted(20, -60)).toBe(true);
-    expect(horizontalVerdict(20, -60)).toBe("undecided");
-    expect(horizontalVerdict(30, -60)).toBe("undecided");
+  it("only files an armed upward release; cancellation never files", () => {
+    expect(shouldCommitPull("up", true, true, false)).toBe(true);
+    expect(shouldCommitPull("up", false, true, false)).toBe(false);
+    expect(shouldCommitPull("up", true, false, false)).toBe(false);
+    expect(shouldCommitPull("up", true, true, true)).toBe(false);
+    expect(shouldCommitPull("diagonal", true, true, false)).toBe(false);
+    expect(shouldCommitPull("right", true, true, false)).toBe(false);
   });
-});
-
-describe("isAtScrollBottom", () => {
-  it("is true for a note shorter than the viewport", () => {
-    expect(isAtScrollBottom(0, 200, 600)).toBe(true);
-  });
-
-  it("is true within the slack of the real bottom", () => {
-    expect(isAtScrollBottom(396, 1000, 600)).toBe(true);
-  });
-
-  it("is false while there is still note below", () => {
-    expect(isAtScrollBottom(100, 1000, 600)).toBe(false);
-  });
-});
-
-describe("visiblePageHeight", () => {
-  it("subtracts the keyboard", () => {
+  it("keeps the incoming page above the keyboard", () => {
     expect(visiblePageHeight(800, 300)).toBe(500);
-  });
-
-  it("never collapses to zero", () => {
     expect(visiblePageHeight(300, 800)).toBe(1);
   });
 });
 
-describe("shouldCommitFiling", () => {
-  it("commits past COMMIT_FRACTION of the page", () => {
-    // 15% of 500 = 75px. A short deliberate pull should already count.
-    expect(shouldCommitFiling(-150, 500, 0)).toBe(true);
-    expect(shouldCommitFiling(-90, 500, 0)).toBe(true);
-    expect(shouldCommitFiling(-60, 500, 0)).toBe(false);
+describe("menu release", () => {
+  it("supports dragging open and closed, with a reversible preview", () => {
+    expect(menuReleaseTarget(0.4, 0, false, true)).toBe(1);
+    expect(menuReleaseTarget(0.1, 0, false, true)).toBe(0);
+    expect(menuReleaseTarget(0.6, 0, true, true)).toBe(0);
+    expect(menuReleaseTarget(0.9, 0, true, true)).toBe(1);
   });
-
-  it("commits a fast flick regardless of distance", () => {
-    expect(shouldCommitFiling(-10, 500, COMMIT_VELOCITY - 1)).toBe(true);
-  });
-
-  it("does not commit a slow short pull", () => {
-    expect(shouldCommitFiling(-10, 500, -100)).toBe(false);
-  });
-
-  it("does not commit a downward flick", () => {
-    expect(shouldCommitFiling(-10, 500, 900)).toBe(false);
-  });
-});
-
-describe("isInNativeBackBand", () => {
-  const H = 800; // bottom of the native band at 0.52 → 416
-
-  it("puts the line where nativeBackBandBottom says", () => {
-    expect(nativeBackBandBottom(H)).toBe(416);
-  });
-
-  it("leaves the upper screen to the native back gesture", () => {
-    expect(isInNativeBackBand(0, H)).toBe(true);
-    expect(isInNativeBackBand(300, H)).toBe(true);
-    expect(isInNativeBackBand(416, H)).toBe(true);
-  });
-
-  it("keeps the lower screen for the capture gestures", () => {
-    // Where a thumb starts pushing the page up. Nothing may fail the touch
-    // here, because nothing else is competing for it.
-    expect(isInNativeBackBand(417, H)).toBe(false);
-    expect(isInNativeBackBand(700, H)).toBe(false);
-    expect(isInNativeBackBand(H, H)).toBe(false);
+  it("allows a horizontal flick, but never completes a cancelled gesture", () => {
+    expect(menuReleaseTarget(0.1, 600, false, true)).toBe(1);
+    expect(menuReleaseTarget(0.9, -600, true, true)).toBe(0);
+    expect(menuReleaseTarget(0.8, 900, false, false)).toBe(0);
+    expect(menuReleaseTarget(0.2, -900, true, false)).toBe(1);
   });
 });

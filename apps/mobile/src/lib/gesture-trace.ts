@@ -1,106 +1,20 @@
-// A small ring buffer of capture-screen swipe attempts, for the Gesture trace
-// readout in Settings -> Diagnostics.
-//
-// Why this exists: the capture pans compete with a native recognizer that
-// cannot be arbitrated with (see apps/mobile/GESTURES.md), so "the swipe did
-// not register" has several indistinguishable causes — the native back pop took
-// the touch, the system's home-indicator gesture took it before the app saw it
-// at all, we declined to activate, or we deliberately handed it over. Guessing
-// between them is what made the first two rounds of fixes miss. One record per
-// touch turns that into data.
-//
-// Deliberately not zustand and not persisted: this is a debugging readout with
-// a lifetime of one app session, and it must stay cheap enough that recording
-// an attempt can never be the reason a gesture feels slow.
+// Session-only trace of the unified home gesture. No note text is recorded.
+import type { SwipeDirection } from "./capture-gesture";
 
+export type GestureOutcome = "filed" | "released" | "menu-open" | "menu-close" |
+  "cancelled" | "scroll" | "diagonal" | "blocked" | "idle";
 export type GestureAttempt = {
-  /** Wall clock at the end of the touch. */
   at: number;
-  /** Where the finger landed, in the gesture host's coordinates. */
   startX: number;
   startY: number;
-  /**
-   * Signed extremes of travel, in the *touch* stream — which RNGH stops
-   * delivering the moment the handler activates. So on an activated touch this
-   * is the travel up to the claim, not the travel of the swipe; `maxPull` is
-   * the rest of it.
-   */
   maxDx: number;
   maxDy: number;
-  /** How far the page actually came up, in points. Only meaningful once activated. */
   maxPull: number;
   durationMs: number;
-  /** The drag went far enough up that we stopped arbitrating for it. */
-  latchedVertical: boolean;
-  /** We claimed the touch from the scroll. */
-  activated: boolean;
-  /** We handed the touch to the native back recognizer on purpose. */
-  failedByVerdict: boolean;
-  /** We handed the touch to the Sync swipe on purpose. */
-  failedToSync: boolean;
-  /** A commit was still in flight, so we declined to claim this touch. */
-  blockedByTransitioning: boolean;
-  /** The pan reached onEnd rather than only onFinalize. */
-  gotEnd: boolean;
-  /** onEnd's `success` argument: false means something took the touch. */
-  endSuccess: boolean;
-  /** The release committed to filing. */
-  filed: boolean;
-  /**
-   * The touch started where the native back recognizer was still competing for
-   * it. Without this a row cannot be read: the same outcome means very
-   * different things inside and outside the band.
-   */
-  band: boolean;
+  direction: SwipeDirection;
+  outcome: GestureOutcome;
 };
-
-export type GestureOutcome =
-  | "filed"
-  | "released"
-  | "back"
-  | "cancelled"
-  | "sync"
-  | "blocked"
-  | "stolen"
-  | "idle";
-
-/**
- * How far up a touch must travel before "we never claimed it" is evidence of a
- * problem rather than of a tap or a scroll.
- */
-const MEANINGFUL_PULL = 20;
-
-/**
- * What happened to one touch.
- *
- * The interesting verdict is "stolen": the finger clearly went up, we neither
- * claimed it nor gave it away, and it ended anyway — so a recognizer outside
- * this screen took it. That is the signature of the native full-screen pop,
- * and of the system home-indicator gesture at the very bottom edge.
- */
-export const outcomeOf = (attempt: GestureAttempt): GestureOutcome => {
-  if (attempt.filed) {
-    return "filed";
-  }
-  if (attempt.activated) {
-    // We owned the touch and something took it back mid-drag. Distinct from a
-    // pull the user simply did not finish, and far more interesting.
-    return attempt.gotEnd && !attempt.endSuccess ? "cancelled" : "released";
-  }
-  if (attempt.failedByVerdict) {
-    return "back";
-  }
-  if (attempt.failedToSync) {
-    return "sync";
-  }
-  if (attempt.blockedByTransitioning) {
-    return "blocked";
-  }
-  if (attempt.maxDy < -MEANINGFUL_PULL) {
-    return "stolen";
-  }
-  return "idle";
-};
+export const outcomeOf = (attempt: GestureAttempt): GestureOutcome => attempt.outcome;
 
 const CAPACITY = 40;
 
@@ -134,24 +48,11 @@ export const subscribeToGestureAttempts = (listener: () => void) => {
   };
 };
 
-export type GestureTraceSummary = {
-  total: number;
-  filed: number;
-  stolen: number;
-  /** Start heights of the touches that were taken away, lowest first. */
-  stolenStartY: number[];
-};
-
-/** The one-line answer the Diagnostics screen leads with. */
-export const summarizeGestureAttempts = (
-  entries: GestureAttempt[]
-): GestureTraceSummary => {
-  const upward = entries.filter((entry) => entry.maxDy < -MEANINGFUL_PULL);
-  const stolen = upward.filter((entry) => outcomeOf(entry) === "stolen");
+export const summarizeGestureAttempts = (entries: GestureAttempt[]) => {
+  const upward = entries.filter((entry) => entry.direction === "up");
   return {
     total: upward.length,
-    filed: upward.filter((entry) => outcomeOf(entry) === "filed").length,
-    stolen: stolen.length,
-    stolenStartY: stolen.map((entry) => Math.round(entry.startY)).sort((a, b) => a - b),
+    filed: upward.filter((entry) => entry.outcome === "filed").length,
+    cancelled: upward.filter((entry) => entry.outcome === "cancelled").length,
   };
 };
