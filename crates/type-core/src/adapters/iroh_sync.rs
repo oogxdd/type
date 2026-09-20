@@ -1803,6 +1803,84 @@ mod tests {
         fs::remove_dir_all(folder).ok();
     }
 
+
+    /// The phone build already in people's hands (mobile-v0.2.6) speaks the
+    /// pre-fix client protocol: a fresh connection per operation, one stream on
+    /// it, then a drop. This asserts the *desktop* half of the fix is enough for
+    /// that phone — it must pair without any mobile rebuild.
+    ///
+    /// Copied deliberately rather than called: this is the released wire
+    /// behaviour, and it must keep passing even as the current client evolves.
+    async fn pair_like_a_released_phone(
+        endpoint: &Endpoint,
+        remote: EndpointAddr,
+        pairing_token: &str,
+    ) -> Result<(), String> {
+        let connection = endpoint
+            .connect(remote, IROH_ALPN)
+            .await
+            .map_err(|error| format!("Could not reach the desktop for Iroh pairing: {error}"))?;
+        let (mut send, mut recv) = connection
+            .open_bi()
+            .await
+            .map_err(|error| format!("Could not open the Iroh pairing stream: {error}"))?;
+        let token = pairing_token.as_bytes();
+        let token_len = u16::try_from(token.len()).unwrap();
+        send.write_all(IROH_PAIR_HANDSHAKE).await.unwrap();
+        send.write_u16(token_len).await.unwrap();
+        send.write_all(token).await.unwrap();
+        send.finish().unwrap();
+        let answer = recv
+            .read_u8()
+            .await
+            .map_err(|error| format!("The desktop did not acknowledge Iroh pairing: {error}"))?;
+        // The released client drops the connection here, without closing it.
+        match answer {
+            1 => Ok(()),
+            _ => Err("The desktop rejected Iroh pairing. Scan the current QR again.".to_string()),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_released_phone_still_pairs_and_tunnels() {
+        let folder = temp_folder("released-phone");
+        let echo = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let echo_port = echo.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            while let Ok((mut stream, _)) = echo.accept().await {
+                tokio::spawn(async move {
+                    let (mut read, mut write) = stream.split();
+                    let _ = tokio::io::copy(&mut read, &mut write).await;
+                    let _ = write.shutdown().await;
+                });
+            }
+        });
+        let auth = test_auth(&folder, "deadbeef");
+        let desktop = spawn_test_desktop(&folder, auth.clone(), echo_port).await;
+        let phone = localhost_endpoint().await;
+        let phone_id = phone.id().to_string();
+
+        pair_like_a_released_phone(&phone, desktop.addr.clone(), "deadbeef")
+            .await
+            .unwrap();
+        assert!(auth.is_authorized(&phone_id));
+
+        // …and the released client's per-git-connection dial still tunnels.
+        let connection = phone.connect(desktop.addr.clone(), IROH_ALPN).await.unwrap();
+        let (mut send, mut recv) = connection.open_bi().await.unwrap();
+        send.write_all(IROH_SSH_HANDSHAKE).await.unwrap();
+        send.write_all(b"git-upload-pack").await.unwrap();
+        send.finish().unwrap();
+        let mut received = Vec::new();
+        tokio::io::AsyncReadExt::read_to_end(&mut recv, &mut received)
+            .await
+            .unwrap();
+        assert_eq!(received, b"git-upload-pack");
+
+        let _ = desktop.router.shutdown().await;
+        fs::remove_dir_all(folder).ok();
+    }
+
     #[test]
     fn an_unparseable_ticket_is_refused_before_any_dialling() {
         assert!(remote_target_from_args(&StartIrohClientArgs {
