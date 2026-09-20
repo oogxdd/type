@@ -18,7 +18,15 @@ pub fn parse_note_front_matter(raw: &str) -> (NoteFrontMatter, String) {
     };
     let header_end = 4 + close_marker_index;
     let header = &normalized[4..header_end];
-    let body = &normalized[(header_end + 5)..];
+    // `render_note_with_front_matter` writes "---\n\n" before the body, so the
+    // blank line after the closing marker is a separator, not content. Drop one
+    // newline to stay its inverse: without this, every read → write round trip
+    // (the phone reconciling its draft, a sync rewriting a note) prepended
+    // another blank line and the first line of the note drifted down the page.
+    let body_start = header_end + 5;
+    let body = normalized[body_start..]
+        .strip_prefix('\n')
+        .unwrap_or(&normalized[body_start..]);
 
     for line in header.lines() {
         let trimmed = line.trim();
@@ -294,7 +302,36 @@ mod tests {
         assert_eq!(parsed.note_type.as_deref(), Some("recording"));
         assert_eq!(parsed.archived_ms, Some(77));
         assert_eq!(parsed.reviewed_ms, Some(88));
-        assert_eq!(body.trim(), "Body text");
+        // Exact, not trimmed: a trimmed assertion hid the separator newline
+        // that parse used to hand back as content.
+        assert_eq!(body, "Body text");
+    }
+
+    #[test]
+    fn parse_is_the_inverse_of_render_across_repeated_round_trips() {
+        let meta = NoteFrontMatter {
+            id: Some("note-1".to_string()),
+            created_ms: Some(42),
+            ..Default::default()
+        };
+        // Reading a note and writing it back must be a fixed point. It was not:
+        // each pass prepended a blank line, so the note's first line kept
+        // sliding down every time the phone reconciled its capture draft.
+        let mut body = "First line\nsecond line".to_string();
+        for _ in 0..3 {
+            let (_, parsed) = parse_note_front_matter(&render_note_with_front_matter(&meta, &body));
+            body = parsed;
+            assert_eq!(body, "First line\nsecond line");
+        }
+    }
+
+    #[test]
+    fn parse_keeps_a_deliberately_blank_first_body_line() {
+        let meta = NoteFrontMatter { id: Some("n".to_string()), ..Default::default() };
+        // Only the one separator newline is structural; a second blank line is
+        // the user's and must survive.
+        let (_, body) = parse_note_front_matter(&render_note_with_front_matter(&meta, "\nIndented start"));
+        assert_eq!(body, "\nIndented start");
     }
 }
 
