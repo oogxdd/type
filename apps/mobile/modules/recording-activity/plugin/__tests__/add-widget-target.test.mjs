@@ -1,10 +1,14 @@
 /*
- * Validates the pbxproj mutation in withRecordingActivity.js against the app's
- * REAL ios/Type.xcodeproj/project.pbxproj — no Mac, no full prebuild.
+ * Validates the pbxproj mutation in withRecordingActivity.js — no Mac, no full
+ * prebuild.
  *
- * It parses the committed project in memory, adds the widget target, then
- * asserts the target/embed/dependency wiring and that the project still
- * serializes and re-parses. It never writes to the real project file.
+ * The add path runs against fixtures/project-without-widget.pbxproj: a real
+ * pre-widget project, captured before the plugin's output was first committed.
+ * The committed ios/Type.xcodeproj/project.pbxproj is prebuild output and
+ * already carries the widget, so it can only exercise the idempotent path —
+ * which the last describe block below checks separately.
+ *
+ * Neither file is ever written to.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -22,13 +26,14 @@ const {
 } = require("../withRecordingActivity.js");
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const PBXPROJ = path.join(here, "..", "..", "..", "..", "ios", "Type.xcodeproj", "project.pbxproj");
+const PBXPROJ = path.join(here, "fixtures", "project-without-widget.pbxproj");
+const REAL_PBXPROJ = path.join(here, "..", "..", "..", "..", "ios", "Type.xcodeproj", "project.pbxproj");
 const APP_BUNDLE_ID = "com.typenotes.mobile";
 
 const unquote = (v) => (typeof v === "string" ? v.replace(/^"(.*)"$/, "$1") : v);
 
-const parse = () => {
-  const proj = xcode.project(PBXPROJ);
+const parse = (file = PBXPROJ) => {
+  const proj = xcode.project(file);
   proj.parseSync();
   return proj;
 };
@@ -39,7 +44,7 @@ const findTargetByName = (proj, name) =>
     .map(([, v]) => v)
     .find((t) => t && unquote(t.name) === name);
 
-describe("addWidgetTarget against the real project.pbxproj", () => {
+describe("addWidgetTarget against a pre-widget project.pbxproj", () => {
   const proj = parse();
   const added = addWidgetTarget(proj, APP_BUNDLE_ID);
 
@@ -50,7 +55,7 @@ describe("addWidgetTarget against the real project.pbxproj", () => {
   it("creates a RecordingWidget app_extension target", () => {
     const target = findTargetByName(proj, WIDGET_NAME);
     expect(target).toBeTruthy();
-    expect(target.productType).toBe('"com.apple.product-type.app-extension"');
+    expect(unquote(target.productType)).toBe("com.apple.product-type.app-extension");
   });
 
   it("sets INFOPLIST_FILE, bundle id and deployment target on both configs", () => {
@@ -60,9 +65,9 @@ describe("addWidgetTarget against the real project.pbxproj", () => {
     expect(list.buildConfigurations.length).toBeGreaterThanOrEqual(2);
     for (const ref of list.buildConfigurations) {
       const s = xcConfigs[ref.value].buildSettings;
-      expect(s.INFOPLIST_FILE).toBe(`"${WIDGET_NAME}/Info.plist"`);
-      expect(s.PRODUCT_BUNDLE_IDENTIFIER).toBe(`"${APP_BUNDLE_ID}.${WIDGET_NAME}"`);
-      expect(s.IPHONEOS_DEPLOYMENT_TARGET).toBe("16.4");
+      expect(unquote(s.INFOPLIST_FILE)).toBe(`${WIDGET_NAME}/Info.plist`);
+      expect(unquote(s.PRODUCT_BUNDLE_IDENTIFIER)).toBe(`${APP_BUNDLE_ID}.${WIDGET_NAME}`);
+      expect(unquote(s.IPHONEOS_DEPLOYMENT_TARGET)).toBe("16.4");
     }
   });
 
@@ -113,6 +118,27 @@ describe("addWidgetTarget against the real project.pbxproj", () => {
 
   it("is idempotent on a second run", () => {
     expect(addWidgetTarget(proj, APP_BUNDLE_ID)).toBe(false);
+  });
+});
+
+describe("the committed ios project", () => {
+  const real = parse(REAL_PBXPROJ);
+
+  it("already carries the widget target, so the plugin is a no-op", () => {
+    expect(findTargetByName(real, WIDGET_NAME)).toBeTruthy();
+    expect(addWidgetTarget(real, APP_BUNDLE_ID)).toBe(false);
+  });
+
+  it("embeds the appex exactly once", () => {
+    const phases = real.hash.project.objects.PBXCopyFilesBuildPhase || {};
+    const embedding = Object.keys(phases)
+      .filter((k) => !k.endsWith("_comment"))
+      .filter((k) =>
+        (phases[k].files || []).some((f) =>
+          String(f.comment).includes(`${WIDGET_NAME}.appex`)
+        )
+      );
+    expect(embedding).toHaveLength(1);
   });
 });
 
