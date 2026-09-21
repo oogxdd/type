@@ -52,7 +52,7 @@ Other modes:
 
 - `morning_note`: one paragraph to help enter the person's day.
 - `observation`: one grounded observation; no manufactured insight.
-- `conversation`: ask one useful question and follow the answer.
+- `conversation`: free personal dialogue with substantive initiative, useful broader knowledge, grounded patterns and help clarifying or organizing life. No single predefined goal or mandatory interview.
 
 The person need not title or classify their thoughts. One note can contain many
 topics; daily review boundaries can cross midnight. Writing more and analyzing
@@ -61,7 +61,13 @@ every session into more homework.
 
 ## Agent workflow
 
-1. `prepare_context` returns the complete available `me/overview.md`, corrections,
+1. `prepare_context` explicitly returns full filtered `agent/START.md`,
+   `agent/AGENTS.md`, `agent/README.md` and `agent/session-learning.md` in
+   `instructionDocuments`, independently of preview ranking and pagination.
+   Each entry includes its area/path and a document: null means missing;
+   unavailable means it could not be safely read. Read all available instructions
+   before proceeding; current user clarifications take precedence over old memory.
+   It also returns the complete available `me/overview.md`, corrections,
    optional `agent/preferences.md` and `agent/session.md`, recent source previews
    and working-memory references. Read sources with `read_note`. The server does
    not silently shorten overview; missing/unavailable memory is explicit.
@@ -95,6 +101,13 @@ every session into more homework.
    completed artifact paths, actual coverage and what remains. Do not advance a
    "fully reviewed" cursor merely because list_changes produced a snapshot.
    The next fresh agent receives this handoff from prepare_context.
+7. During personal conversations, selectively retain useful clarifications and
+   analyses without waiting for a separate save request; respect requests not to
+   save. Update dated me information only where justified. Refine workflow
+   instructions in agent when the person clarifies expectations, especially
+   AGENTS.md/session-learning.md, which the next session explicitly receives.
+   Do not create a log for every exchange. The connected agent performs this
+   work during the session; the server does not analyze chats after they close.
 
 Useful directories (relative to the resolved memory areas):
 

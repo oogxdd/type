@@ -560,3 +560,9 @@ Stream is read-only. `AgentWorkspace.readEditable` is a separate full-Markdown
 capability for safe memory round-trips, refused on private/hidden markup.
 Generated material/internal history must never become independent primary
 source evidence. Use synthetic fixtures for tests, never the maintainer's notes.
+
+Personal-session bootstrap explicitly returns filtered agent START.md, AGENTS.md,
+README.md and session-learning.md through prepare_context.instructionDocuments.
+Keep these independent of recent-memory preview pagination. Conversation mode
+supports substantive initiative and selective memory/instruction updates, not
+only questions; see docs/OBSERVER_MCP.md.

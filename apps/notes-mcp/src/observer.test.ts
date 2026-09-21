@@ -74,3 +74,27 @@ it('prepares recent context and validates persisted snapshot integrity',async()=
  await writeFile(join(root,'agent','observer-state',snapshot.snapshot+'.md'),JSON.stringify({version:1,records:[]}));
  await expect(observer.changes(snapshot.snapshot)).rejects.toThrow('Invalid snapshot');
 });
+
+for (const layout of ['legacy', 'system'] as const) {
+ it(`loads complete filtered session instructions independently of previews (${layout})`, async () => {
+  const root = await mkdtemp(join(tmpdir(), 'observer-bootstrap-')); roots.push(root);
+  const agent = join(root, layout === 'legacy' ? 'agent' : '_system/agent');
+  await mkdir(agent, {recursive:true});
+  const longInstructions = 'Personal workflow. '.repeat(40) + 'END_OF_INSTRUCTIONS';
+  await writeFile(join(agent, 'AGENTS.md'), longInstructions);
+  await writeFile(join(agent, 'session-learning.md'), 'Public agreement\n\n::: #skip-ai\nPRIVATE_BOOTSTRAP_CANARY\n:::\n');
+  // These would crowd instructions out of the 20 most recent working previews.
+  for (let i = 0; i < 21; i++) await writeFile(join(agent, `recent-${i}.md`), `---\nupdated_ms: ${1900000000000 + i}\n---\nRecent work`);
+  const observer = new Observer(await NotesRepository.create(root));
+  const prepared = await observer.prepare('conversation', 1);
+  expect(prepared.workingMemory.notes).toHaveLength(20);
+  expect(prepared.instructionDocuments.find(item => item.path === 'AGENTS.md')?.document).toMatchObject({content:longInstructions});
+  expect(prepared.instructionDocuments.find(item => item.path === 'START.md')?.document).toBeNull();
+  expect(prepared.instructionDocuments.find(item => item.path === 'session-learning.md')?.document).toMatchObject({content:expect.stringContaining('Public agreement')});
+  expect(JSON.stringify(prepared)).not.toContain('PRIVATE_BOOTSTRAP_CANARY');
+  await writeFile(join(agent, 'START.md'), '::: #bad!!\nUNAVAILABLE_BOOTSTRAP_CANARY');
+  const unavailable = await observer.prepare('conversation');
+  expect(unavailable.instructionDocuments.find(item => item.path === 'START.md')?.document).toEqual({unavailable:true});
+  expect(JSON.stringify(unavailable)).not.toContain('UNAVAILABLE_BOOTSTRAP_CANARY');
+ });
+}
