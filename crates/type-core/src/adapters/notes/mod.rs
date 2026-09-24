@@ -43,6 +43,7 @@ pub const ORDER_FILE: &str = ".notes-order.json";
 //         _recordings/     recorded audio
 //         agent/           the agent's own notes (MCP write boundary)
 //         me/              the app's representation of the user
+//         reviews/         generated period reviews (MCP memory)
 //         stream/          the default capture folder ("Feed" in the UI)
 //         archive/         archived notes
 //       <user folders>/
@@ -62,16 +63,18 @@ pub const STREAM_FOLDER: &str = "_system/stream";
 pub const ARCHIVE_FOLDER: &str = "_system/archive";
 pub const AGENT_FOLDER: &str = "_system/agent";
 pub const ME_FOLDER: &str = "_system/me";
+pub const REVIEWS_FOLDER: &str = "_system/reviews";
 pub const RECORDINGS_STORAGE_FOLDER: &str = "_system/_recordings";
 pub const HANDWRITING_STORAGE_FOLDER: &str = "_system/_handwriting";
 pub const ATTACHMENTS_STORAGE_FOLDER: &str = "_system/_attachments";
 
 /// Created in every notes root by `ensure_system_folders`.
-const REQUIRED_SYSTEM_FOLDERS: [&str; 7] = [
+const REQUIRED_SYSTEM_FOLDERS: [&str; 8] = [
     STREAM_FOLDER,
     ARCHIVE_FOLDER,
     AGENT_FOLDER,
     ME_FOLDER,
+    REVIEWS_FOLDER,
     ATTACHMENTS_STORAGE_FOLDER,
     HANDWRITING_STORAGE_FOLDER,
     RECORDINGS_STORAGE_FOLDER,
@@ -88,21 +91,23 @@ const STORAGE_FOLDERS: [&str; 3] = [
 /// `agent`/`me` are the agent's working set rather than app content — the
 /// shells reach them through the MCP, not the sidebar. `_system` itself stays
 /// in the tree because `stream` and `archive` hang off it.
-const TREE_HIDDEN_FOLDERS: [&str; 5] = [
+const TREE_HIDDEN_FOLDERS: [&str; 6] = [
     AGENT_FOLDER,
     ME_FOLDER,
+    REVIEWS_FOLDER,
     ATTACHMENTS_STORAGE_FOLDER,
     HANDWRITING_STORAGE_FOLDER,
     RECORDINGS_STORAGE_FOLDER,
 ];
 
 /// Cannot be renamed, moved or deleted through the notes commands.
-pub const PROTECTED_SYSTEM_FOLDERS: [&str; 8] = [
+pub const PROTECTED_SYSTEM_FOLDERS: [&str; 9] = [
     SYSTEM_FOLDER,
     STREAM_FOLDER,
     ARCHIVE_FOLDER,
     AGENT_FOLDER,
     ME_FOLDER,
+    REVIEWS_FOLDER,
     ATTACHMENTS_STORAGE_FOLDER,
     HANDWRITING_STORAGE_FOLDER,
     RECORDINGS_STORAGE_FOLDER,

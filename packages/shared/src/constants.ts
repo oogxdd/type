@@ -13,6 +13,7 @@ export const STREAM_FOLDER_PATH = "_system/stream";
 export const ARCHIVE_FOLDER_PATH = "_system/archive";
 export const AGENT_FOLDER_PATH = "_system/agent";
 export const ME_FOLDER_PATH = "_system/me";
+export const REVIEWS_FOLDER_PATH = "_system/reviews";
 
 export const SYSTEM_FOLDER_PATHS = new Set([
   SYSTEM_FOLDER_PATH,
@@ -20,6 +21,7 @@ export const SYSTEM_FOLDER_PATHS = new Set([
   ARCHIVE_FOLDER_PATH,
   AGENT_FOLDER_PATH,
   ME_FOLDER_PATH,
+  REVIEWS_FOLDER_PATH,
 ]);
 
 /** True for a folder the user cannot rename, move, delete or browse into. */

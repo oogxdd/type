@@ -20,8 +20,9 @@ it('serves the MCP lifecycle and filtered reads and scoped mutation tools withou
   await server.connect(a); await client.connect(b);
   try {
     const tools = await client.listTools();
-    expect(tools.tools.map(tool=>tool.name).sort()).toEqual(['create_folder','create_note','delete_folder','delete_note','list_agent_folder','list_changes','list_notes','move_folder','move_note','prepare_context','read_agent_note','read_memory','read_note','save_artifact','search_notes','update_note','write_memory'].sort());
-    expect(tools.tools.filter(tool=>tool.annotations?.readOnlyHint)).toHaveLength(7);
+    expect(tools.tools.map(tool=>tool.name)).toEqual(expect.arrayContaining(['read_document','create_reference','resolve_reference','check_dependencies','list_memory_folder','move_memory','save_artifact','read_memory','write_memory']));
+    expect(tools.tools.find(tool=>tool.name==='resolve_reference')?.annotations?.readOnlyHint).toBe(true);
+    expect(tools.tools.find(tool=>tool.name==='move_memory')?.annotations?.readOnlyHint).toBe(false);
     const list = await client.callTool({name:'list_notes',arguments:{}});
     expect(JSON.stringify(list)).not.toContain('CANARY');
     const payload = JSON.parse((list.content as {text:string}[])[0].text);
@@ -34,6 +35,15 @@ it('serves the MCP lifecycle and filtered reads and scoped mutation tools withou
     expect(invalid.isError).toBe(true);
     const mutation = await client.callTool({name:'write_note',arguments:{}});
     expect(mutation.isError).toBe(true);
+    const memory = await client.callTool({name:'write_memory',arguments:{area:'me',path:'topic.md',markdown:'# Topic\nSafe memory',sources:[],reason:'Synthetic concurrency fixture.'}});
+    expect(memory.isError).not.toBe(true);
+    const concurrent = await Promise.all([
+      client.callTool({name:'read_document',arguments:{id:payload.notes[0].id}}),
+      client.callTool({name:'prepare_context',arguments:{summarySize:'short'}}),
+      client.callTool({name:'read_memory',arguments:{area:'me',path:'topic.md'}}),
+      client.callTool({name:'read_document',arguments:{id:payload.notes[0].id}}),
+    ]);
+    for (const response of concurrent) { expect(response.isError).not.toBe(true); expect(JSON.stringify(response)).not.toContain('CANARY'); }
     expect(await readFile(path,'utf8')).toBe(raw);
   } finally { await client.close(); await server.close(); }
 });

@@ -2,8 +2,8 @@ import { constants } from 'node:fs';
 import { lstat, realpath, mkdir, open, readdir, rename, unlink, rmdir, link } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { projectNote, ProjectionError } from './projection';
-import { splitFrontmatter, joinFrontmatter } from '@typenotes/shared/frontmatter';
+import { projectNote, projectDocument, ProjectionError } from './projection';
+import { splitFrontmatter, joinFrontmatter, readFrontmatterScalar } from '@typenotes/shared/frontmatter';
 import { stripInlineAnnotationMetadata } from '@typenotes/shared/annotation-metadata';
 
 const MAX_BYTES = 1024 * 1024;
@@ -23,7 +23,7 @@ export class AgentWorkspace {
   private queue: Promise<unknown> = Promise.resolve();
   private prefix: string[];
   constructor(private notesRoot: string, prefix: readonly string[] = AGENT_PREFIX) {
-    if (!['_system/agent', '_system/me', 'agent', 'me'].includes(prefix.join('/')) ||
+    if (!['_system/agent', '_system/me', '_system/reviews', 'agent', 'me', 'reviews'].includes(prefix.join('/')) ||
         prefix.some(part => part.includes('/'))) fail('Unsupported memory workspace.');
     this.prefix = [...prefix];
   }
@@ -95,7 +95,7 @@ export class AgentWorkspace {
     const raw = await this.raw(path);
     // nontake is a legacy whole-note privacy marker.
     if (/nontake/i.test(raw)) fail('Private note withheld.');
-    return {path, content: projectNote(raw), revision: revision(raw), editable: this.editable(raw)};
+    return {path, ...projectDocument(raw), revision: revision(raw), editable: this.editable(raw)};
   }
   // Full Markdown is exposed only in memory workspaces and only when it is
   // safe to round-trip. Conservative false positives (including prose/code
@@ -117,6 +117,8 @@ export class AgentWorkspace {
     if (!oldHeader) return replacement;
     if (!newHeader) return joinFrontmatter(oldHeader, replacement);
     if (oldHeader === newHeader) return replacement;
+    const oldId = readFrontmatterScalar(original, 'id');
+    if (oldId && readFrontmatterScalar(replacement, 'id') !== oldId) fail('Document identity must be retained.');
     const keys = (header: string): string[] => {
       const lines = header.split('\n').slice(1, -1);
       // This boundary supports flat scalar/list metadata. For richer YAML,

@@ -7,10 +7,12 @@ import { TagBlock, TagSpan } from '@typenotes/note-document/tagged-blocks';
 import { stripInlineAnnotationMetadata } from '@typenotes/shared/annotation-metadata';
 import { splitFrontmatter } from '@typenotes/shared/frontmatter';
 import { parseTagAttrs, tagKey, validTagName } from '@typenotes/shared/tags';
+import { parseNoteReference, formatNoteReference, type DocumentProjection } from '@typenotes/shared/note-reference';
 
 // No scripts or external resources are enabled when parsing private notes.
 const dom = new JSDOM('');
-const schema = getSchema([StarterKit.configure({ heading: { levels: [1, 2, 3] } }), TagBlock, TagSpan]);
+// Memory files may use every Markdown heading level; tag semantics match the editor.
+const schema = getSchema([StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5, 6] }, link: {protocols: ['type-note']} }), TagBlock, TagSpan]);
 export class ProjectionError extends Error {}
 
 /** Privacy seam. Keep this schema aligned with the desktop body-tag schema.
@@ -18,6 +20,11 @@ export class ProjectionError extends Error {}
  * hashtags remain prose. No registry lookup is required to hide private text.
  */
 export function projectNote(raw: string): string {
+  return projectDocument(raw).content;
+}
+
+export function projectDocument(raw: string): DocumentProjection {
+  const output: DocumentProjection = {content: '', outline: [], links: []};
   const normalized = raw.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
   const { frontmatterBlock, body } = splitFrontmatter(normalized);
   if (normalized.startsWith('---\n') && !frontmatterBlock) throw new ProjectionError('Malformed frontmatter; note withheld.');
@@ -39,7 +46,7 @@ export function projectNote(raw: string): string {
       names = value.slice(1, -1).split(',').map(name => name.trim().replace(/^'|'$/g, '')).filter(Boolean);
     }
     if (!Array.isArray(names) || !names.every(validTagName)) throw new ProjectionError('Invalid note tags; note withheld.');
-    if (names.some(name => tagKey(name) === 'skip-ai')) return '';
+    if (names.some(name => tagKey(name) === 'skip-ai')) return output;
   }
   const container = dom.window.document.createElement('div');
   container.innerHTML = markdownToHtml(stripInlineAnnotationMetadata(body));
@@ -50,19 +57,54 @@ export function projectNote(raw: string): string {
   }
   const doc = DOMParser.fromSchema(schema).parse(container);
   const privateNames = (names: string[]) => names.some(name => tagKey(name) === 'skip-ai');
+  let line = 1;
+  let inlineNewlines = 0;
   const visibleInline = (node: Node): string => {
     if (node.marks.some(mark => mark.type.name === 'tagSpan' && privateNames(mark.attrs.tags))) return '';
-    if (node.isText) return node.text ?? '';
-    if (node.type.name === 'hardBreak') return '\n';
+    if (node.isText) {
+      const text = node.text ?? '';
+      const href = node.marks.find(mark => mark.type.name === 'link')?.attrs.href;
+      const reference = typeof href === 'string' ? parseNoteReference(href) : null;
+      if (reference && text) output.links.push({uri: formatNoteReference(reference), label: text, line: line + inlineNewlines});
+      inlineNewlines += text.split('\n').length - 1;
+      return text;
+    }
+    if (node.type.name === 'hardBreak') { inlineNewlines++; return '\n'; }
     let text = ''; node.forEach(child => { text += visibleInline(child); }); return text;
   };
   const blocks: string[] = [];
+  const anchors = new Set<string>();
+  const nextSuffix = new Map<string, number>();
   const visit = (node: Node) => {
     if (node.type.name === 'tagBlock' && privateNames(node.attrs.tags)) return;
-    if (node.isTextblock) { const text = visibleInline(node); if (text) blocks.push(text); return; }
+    if (node.isTextblock) {
+      inlineNewlines = 0;
+      const text = visibleInline(node);
+      if (!text) return;
+      if (node.type.name === 'heading') {
+        const base = text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 450) || 'section';
+        let anchor = base;
+        let number = nextSuffix.get(base) ?? 2;
+        while (anchors.has(anchor)) anchor = base + '-' + number++;
+        nextSuffix.set(base, number);
+        anchors.add(anchor);
+        output.outline.push({anchor, level: node.attrs.level, title: text, startLine: line, endLine: line});
+      }
+      blocks.push(text);
+      line += text.split('\n').length + 1;
+      return;
+    }
     node.forEach(visit);
   };
   visit(doc);
-  // ALL metadata, URLs, HTML attributes and filenames are excluded from output.
-  return blocks.join('\n\n');
+  output.content = blocks.join('\n\n');
+  const totalLines = output.content ? output.content.split('\n').length : 0;
+  const open: DocumentProjection['outline'] = [];
+  for (const heading of output.outline) {
+    while (open.length && open[open.length - 1].level >= heading.level) open.pop()!.endLine = heading.startLine - 1;
+    open.push(heading);
+  }
+  for (const heading of open) heading.endLine = totalLines;
+  // External URLs, arbitrary attributes, raw metadata and filenames stay excluded.
+  return output;
 }

@@ -25,7 +25,8 @@ it('continues across sessions, distinguishes inventory from review, saves idempo
  await rename(join(root,'Feed','one.md'),join(root,'Feed','renamed.md'));
  expect((await second.changes(changes.snapshot)).changes).toEqual([]);
  const changed=await second.saveArtifact({...input,body:'Expanded review.',expectedRevision:artifact.revision}); expect(changed.replayed).toBe(false);
- expect((await readFile(join(root,'agent',changed.path),'utf8'))).toContain('review_type: day');
+ expect(changed.area).toBe('reviews');
+ expect((await readFile(join(root,changed.area,changed.path),'utf8'))).toContain('review_type: day');
  await writeFile(join(root,'Feed','renamed.md'),'---\nid: 7de0aaab-d9a9-4acf-a931-aa04beee9901\n---\nChanged experience.');
  expect((await second.changes(changes.snapshot)).changes[0].change).toBe('modified');
  await expect(second.saveArtifact({...input,key:'other'})).rejects.toThrow('source changed');

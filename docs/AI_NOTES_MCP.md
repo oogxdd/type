@@ -2,7 +2,7 @@
 
 Реализован локальный stdio-сервер `apps/notes-mcp`. Клиент запускает процесс сам;
 HTTP-порта и токена нет. Сервер читает только одну явно указанную папку.
-Исходные записи не меняет. Generic CRUD ограничен agent; observer API позволяет также версионное обновление me (см. OBSERVER_MCP.md). Node.js >=22.13, зависимости устанавливаются из корня репозитория.
+Исходные записи не меняет. Generic CRUD ограничен agent; observer API поддерживает me и отдельные reviews (см. [OBSERVER_MCP.md](OBSERVER_MCP.md)). Модель продукта: [PERSONAL_AGENT.md](PERSONAL_AGENT.md). Node.js >=22.13, зависимости устанавливаются из корня репозитория.
 
 ## Что скрывает skip-ai
 
@@ -22,7 +22,9 @@ HTTP-порта и токена нет. Сервер читает только �
 приложения. Он видит только сохранённую версию файла, поэтому дождитесь автосохранения.
 
 Возвращается полный разрешённый **обычный текст**, с пустой строкой между блоками,
-без Markdown-оформления, frontmatter, аннотаций, HTML-атрибутов и адресов ссылок.
+без Markdown-оформления, frontmatter, аннотаций, HTML-атрибутов и внешних адресов.
+Отдельные outline/links сохраняют разрешённые заголовки и проверенные внутренние
+ссылки type-note. read_document даёт нумерованные строки и чтение разделов.
 Имена файлов тоже не выдаются: автоматический slug мог содержать скрытую мысль.
 ID — непрозрачные стабильные ссылки для записей с уникальным UUID. Ограничения для копий и переездов описаны в OBSERVER_MCP.md. Разрешённые даты, происхождение и версии возвращаются отдельно; сырой frontmatter не выдаётся.
 
@@ -212,7 +214,8 @@ The personal-session workflow, legacy/system layout selection, safe metadata,
 stable source references, delta snapshots, editable me/agent memory and generated
 artifacts are documented in [OBSERVER_MCP.md](OBSERVER_MCP.md). Prefer that guide's
 tool allowlist for personal sessions. The older generic CRUD examples above stay
-agent-scoped; observer `write_memory` additionally supports me. Source reads now
+agent-scoped; observer `write_memory` additionally supports me and `save_artifact`
+stores new reviews in their dedicated area. Source reads now
 include allowlisted metadata and stable identity information; raw source
 frontmatter/filenames are still not returned. Partially private agent files can
 be read as projections but cannot be replaced through update_note.

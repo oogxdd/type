@@ -338,8 +338,9 @@ mod tests {
             .expect("_system in tree");
         let mut visible: Vec<&str> = system.children.iter().map(|f| f.path.as_str()).collect();
         visible.sort_unstable();
-        // agent/me and the three storage folders never reach a shell.
+        // Agent memory, reviews and the three storage folders never reach a shell.
         assert_eq!(visible, vec![ARCHIVE_FOLDER, STREAM_FOLDER]);
+        assert!(is_system_folder_rel_path(REVIEWS_FOLDER));
 
         fs::remove_dir_all(&root).ok();
     }
@@ -373,6 +374,7 @@ mod tests {
         )
         .unwrap();
         fs::write(root.join(AGENT_FOLDER).join("thought.md"), "body").unwrap();
+        fs::write(root.join(REVIEWS_FOLDER).join("review.md"), "body").unwrap();
 
         let mut files = Vec::new();
         collect_markdown_note_files(&root, &root, &mut files).expect("collect");
@@ -384,7 +386,11 @@ mod tests {
         // Storage is binary-only; agent notes are real notes and stay collectable.
         assert_eq!(
             names,
-            vec!["_system/agent/thought.md", "_system/stream/kept.md"]
+            vec![
+                "_system/agent/thought.md",
+                "_system/reviews/review.md",
+                "_system/stream/kept.md"
+            ]
         );
 
         fs::remove_dir_all(&root).ok();

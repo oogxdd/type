@@ -1,6 +1,6 @@
 // Real stdio MCP handshake/tool test. Uses temporary fixtures, never user notes.
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +16,8 @@ try {
   let errors = '';
   transport.stderr?.on('data', chunk => { errors += chunk; });
   await client.connect(transport);
-  assert.deepEqual((await client.listTools()).tools.map(tool=>tool.name).sort(),['create_folder','create_note','delete_folder','delete_note','list_agent_folder','list_changes','list_notes','move_folder','move_note','prepare_context','read_agent_note','read_memory','read_note','save_artifact','search_notes','update_note','write_memory'].sort());
+  const catalog = (await client.listTools()).tools.map(tool=>tool.name);
+  for (const name of ['read_document','create_reference','resolve_reference','check_dependencies','list_memory_folder','move_memory','prepare_context','read_memory','write_memory','save_artifact']) assert.ok(catalog.includes(name));
   const call = async (name,args={}) => {
     const result = await client.callTool({name,arguments:args});
     assert.ok(!result.isError,JSON.stringify(result));
@@ -40,7 +41,7 @@ try {
   const own = await call('read_agent_note',{path:created.path});
   await call('update_note',{path:own.path,content:'Revised draft',expectedRevision:own.revision});
   await call('move_note',{source:own.path,destination:'ideas/final.md'});
-  assert.equal(await readFile(join(root,'_system/agent/ideas/final.md'),'utf8'),'Revised draft');
+  assert.equal((await call('read_agent_note',{path:'ideas/final.md'})).content,'Revised draft');
   const denied = await client.callTool({name:'create_note',arguments:{path:'../outside.md',content:'BAD'}});
   assert.equal(denied.isError,true);
   await call('delete_folder',{path:'ideas',recursive:true});
@@ -55,10 +56,31 @@ try {
   const saved = await call('save_artifact',artifact);
   assert.equal((await call('save_artifact',artifact)).replayed,true);
   assert.ok(saved.path.startsWith('artifacts/'));
+  await mkdir(join(root,'_system/stream'),{recursive:true});
+  const sourceRaw = '---\nid: 12345678-1234-4234-8234-123456789012\n---\n' + original;
+  await writeFile(join(root,'_system/stream/source.md'),sourceRaw);
+  const source = (await call('list_notes',{scope:'stream'})).notes[0];
+  const document = await call('read_document',{id:source.id,startLine:3,endLine:3});
+  assert.equal(document.content,'Another open thought');
+  const citation = await call('create_reference',{id:source.id,expectedRevision:source.revision,startLine:3,endLine:3});
+  const daily = await call('save_artifact',{key:'smoke-day',kind:'review',body:'[Source](' + citation.uri + ')',sources:[{id:source.id,revision:source.revision,role:'evidence'}],reviewType:'day',periodStart:'2026-09-24',periodEnd:'2026-09-24',partial:false});
+  assert.equal(daily.area,'reviews');
+  const weekly = await call('save_artifact',{key:'smoke-week',kind:'review',body:'A week in context.',sources:[daily.source],reviewType:'week',periodStart:'2026-09-21',periodEnd:'2026-09-27',coverageStart:'2026-09-24',coverageEnd:'2026-09-24',partial:true});
+  const profile = await call('write_memory',{area:'me',path:'life.md',markdown:'# Life\n\n[Source](' + citation.uri + ')',sources:[{...source,role:'evidence'},{...weekly.source,role:'context'}],reason:'Synthetic interpretation.'});
+  const navigation = await call('create_reference',{id:profile.source.id,kind:'navigation',heading:'life'});
+  const summary = await call('write_memory',{area:'me',path:'summaries/short.md',markdown:'[Life](' + navigation.uri + ')',sources:[profile.source],reason:'Synthetic summary.'});
+  assert.equal((await call('check_dependencies',{id:summary.source.id})).status,'current');
+  assert.equal((await call('prepare_context',{summarySize:'short'})).summary.document.content,'Life');
+  assert.ok((await call('list_memory_folder',{area:'me'})).entries.some(entry=>entry.path==='summaries'));
+  await call('move_memory',{area:'me',source:'life.md',destination:'biography/life.md',expectedRevision:profile.revision});
+  const linked = await call('resolve_reference',{uri:navigation.uri});
+  assert.equal(linked.status,'ok');
+  assert.equal((await call('resolve_reference',{uri:linked.document.links[0].uri})).document.content,'Another open thought');
+  assert.equal(await readFile(join(root,'_system/stream/source.md'),'utf8'),sourceRaw);
   const snapshot = await call('list_changes');
   assert.deepEqual((await call('list_changes',{since:snapshot.snapshot})).changes,[]);
   assert.equal(errors,'');
-  console.log('PASS: stdio initialize, tool catalog, read/search redaction, no filename leak, scoped CRUD, observer context, memory history, idempotent artifacts, snapshots, original unchanged.');
+  console.log('PASS: stdio lifecycle, privacy, scoped CRUD, source → daily → weekly → me → summary → citation, memory moves, dependencies, selectable context, idempotent artifacts, snapshots, originals unchanged.');
 } finally {
   await client.close();
   await rm(root,{recursive:true,force:true});

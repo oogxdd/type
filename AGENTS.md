@@ -28,8 +28,9 @@ packages/mobile-core/  @typenotes/mobile-core — typed TS bridge to type-ffi
 ## Notes MCP
 
 `apps/notes-mcp` is a standalone Node/stdio shell for Codex and Claude Code.
-It exposes filtered reads against an explicitly selected notes root and scoped
-CRUD operations exclusively inside `<root>/_system/agent` (see `agent-workspace.ts`). All
+It exposes filtered reads against an explicitly selected notes root and generic
+CRUD inside `<root>/_system/agent` (see `agent-workspace.ts`). The observer also
+supports scoped me memory and a separate reviews area. All
 outputs pass through `src/projection.ts`. Leading hashtag runs and `:::` containers
 are tags; mid-line hashtags are prose. `skip-ai` hides a container's whole subtree
 or a span's text; note-wide `tags: [skip-ai]` hides the whole note. Unterminated containers extend through EOF; malformed opener
@@ -184,6 +185,7 @@ module-internal helpers stay private.
     _recordings/     recorded audio
     agent/           the agent's own notes — the notes-MCP write boundary
     me/              the app's representation of the user
+    reviews/         generated period reviews (MCP memory)
     stream/          default capture folder; the UI calls it "Feed"
     archive/         archived notes; the UI calls it "Trash"
   <user folders>/
@@ -193,7 +195,7 @@ module-internal helpers stay private.
   (`SYSTEM_FOLDER`, `STREAM_FOLDER`, …) and `packages/shared/src/constants.ts`
   (`SYSTEM_FOLDER_PATH`, `STREAM_FOLDER_PATH`, …). Keep the two in sync.
 - **`_system` is not browsable.** `get_tree` returns it with only `stream` and
-  `archive` under it — `agent`, `me` and the three underscore-prefixed storage
+  `archive` under it — `agent`, `me`, `reviews` and the three underscore-prefixed storage
   folders never reach a shell (`TREE_HIDDEN_FOLDERS`). The shells then drop the
   `_system` node itself from the folder panel (`isSystemFolder`) and reach
   stream/archive through their pinned entries. Agent notes are therefore
@@ -551,11 +553,21 @@ The React Native app (Expo) reuses the Rust core through
 
 ## Personal observer MCP
 
+The agreed product model is in `docs/PERSONAL_AGENT.md`; implementation status
+and decisions are in `docs/PERSONAL_AGENT_IMPLEMENTATION.md`. Read them before
+changing personal-memory behavior and update the implementation journal after
+each completed stage (changes, rationale, checks, limitations, next step).
+
 See `docs/OBSERVER_MCP.md` for the user workflow. `apps/notes-mcp/src/layout.ts`
 resolves legacy Feed/me/agent vs _system/stream/me/agent without migration;
 mixed layouts require an explicit choice. `repository.ts` owns filtered sources,
 identity/metadata and discovery. `observer.ts` owns context, delta snapshots,
-artifacts and versioned memory writes; there is no model in the server.
+artifacts and version-checked memory writes; there is no model in the server.
+References use UUID + semantic area, independent of the root path. References to
+fragments pin the filtered source revision; edit revisions are a separate field.
+Structured projection includes headings 1–6 and validated type-note links only.
+Git is the main history; retainHistory is opt-in. See the MCP guide for explicit
+summary selection, dependencies, dedicated reviews and compatibility behavior.
 Stream is read-only. `AgentWorkspace.readEditable` is a separate full-Markdown
 capability for safe memory round-trips, refused on private/hidden markup.
 Generated material/internal history must never become independent primary
