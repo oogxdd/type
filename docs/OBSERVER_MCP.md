@@ -30,6 +30,10 @@ enabled_tools = ["prepare_context", "list_notes", "read_note", "read_document", 
 tool_timeout_sec = 120
 ```
 
+For a local voice conversation with `gpt-live-1` and a separate OpenAI brain
+MCP, see [TYPE_BRAIN.md](TYPE_BRAIN.md). The Notes MCP described below remains
+the filtered source and memory boundary used by that brain.
+
 `--notes-root` is the parent containing Feed/me/agent or `_system`, **not Feed or
 stream itself**. `auto` selects the existing layout without moving anything.
 If both layouts exist, startup refuses ambiguity; use `--layout legacy` while

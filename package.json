@@ -22,7 +22,9 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "mcp:build": "npm run --workspace @typenotes/notes-mcp build",
-    "mcp:test": "npm run --workspace @typenotes/notes-mcp test"
+    "mcp:test": "npm run --workspace @typenotes/notes-mcp test",
+    "brain:start": "npm run --workspace @typenotes/notes-mcp brain:start --",
+    "brain:smoke": "node scripts/test-brain-mcp.mjs"
   },
   "version": "1.0.0",
   "dependencies": {

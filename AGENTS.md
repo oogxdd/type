@@ -28,6 +28,9 @@ packages/mobile-core/  @typenotes/mobile-core — typed TS bridge to type-ffi
 ## Notes MCP
 
 `apps/notes-mcp` is a standalone Node/stdio shell for Codex and Claude Code.
+`src/brain-main.ts` adds a separate OpenAI brain MCP and local GPT-Live voice
+screen; see `docs/TYPE_BRAIN.md`. The brain calls this Notes MCP through the
+MCP client protocol. Keep model API keys on the server.
 It exposes filtered reads against an explicitly selected notes root and generic
 CRUD inside `<root>/_system/agent` (see `agent-workspace.ts`). The observer also
 supports scoped me memory and a separate reviews area. All
@@ -562,7 +565,9 @@ See `docs/OBSERVER_MCP.md` for the user workflow. `apps/notes-mcp/src/layout.ts`
 resolves legacy Feed/me/agent vs _system/stream/me/agent without migration;
 mixed layouts require an explicit choice. `repository.ts` owns filtered sources,
 identity/metadata and discovery. `observer.ts` owns context, delta snapshots,
-artifacts and version-checked memory writes; there is no model in the server.
+artifacts and version-checked memory writes; this Notes MCP has no model.
+`brain.ts` is a separate MCP server with an OpenAI Responses tool loop, and
+`voice-server.ts` connects GPT-Live client delegation to it over loopback HTTP.
 References use UUID + semantic area, independent of the root path. References to
 fragments pin the filtered source revision; edit revisions are a separate field.
 Structured projection includes headings 1–6 and validated type-note links only.
