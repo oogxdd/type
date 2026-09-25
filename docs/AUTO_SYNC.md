@@ -3,6 +3,9 @@
 > **Status:** design notes, not implemented. This captures the options for making
 > sync automatic (no manual "Sync" button) and the trade-offs of each transport,
 > including non-Git backends. Nothing here changes current behavior yet.
+>
+> What the phone actually does today — typing vs. finished-action delays and
+> the sync before suspension — is in [SYNC_TIMING.md](SYNC_TIMING.md).
 
 ## Requirements (fixed for this exploration)
 

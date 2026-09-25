@@ -132,4 +132,25 @@ describe("mobile sync coordination", () => {
     expect(core.gitPull).toHaveBeenCalledTimes(1);
     expect(useNotesStore.getState().refresh).toHaveBeenCalledTimes(1);
   });
+  it("syncs an edit still waiting for its typing pause before suspension", async () => {
+    vi.useFakeTimers();
+    try {
+      useSyncStore.getState().scheduleAutoSync("capture saved", "edit");
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(core.gitPush).not.toHaveBeenCalled();
+      await useSyncStore.getState().syncBeforeSuspend();
+      expect(core.gitPush).toHaveBeenCalledTimes(1);
+      // The owed timer is gone, so nothing syncs again later.
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(core.gitPush).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does nothing before suspension when nothing is owed", async () => {
+    useSyncStore.setState({ autoSyncState: "synced" });
+    await useSyncStore.getState().syncBeforeSuspend();
+    expect(core.gitPull).not.toHaveBeenCalled();
+  });
 });

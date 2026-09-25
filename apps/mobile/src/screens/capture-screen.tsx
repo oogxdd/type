@@ -159,12 +159,12 @@ export const CaptureScreen = () => {
       new CaptureSession({
         createNote: async (content) => {
           const path = (await core.createNote({ content })).path;
-          useSyncStore.getState().scheduleAutoSync("capture saved");
+          useSyncStore.getState().scheduleAutoSync("capture saved", "edit");
           return path;
         },
         writeNote: async (path, content) => {
           await core.writeNote(path, content);
-          useSyncStore.getState().scheduleAutoSync("capture saved");
+          useSyncStore.getState().scheduleAutoSync("capture saved", "edit");
         },
         deleteNote: async (path) => {
           await core.deleteItems([path]);
@@ -264,7 +264,10 @@ export const CaptureScreen = () => {
     void filed.commit().then((path) => {
       sessionRef.current = newSession();
       openBlankPage();
-      if (path) void useNotesStore.getState().noteFiled(path).catch(() => {});
+      if (path) {
+        useSyncStore.getState().scheduleAutoSync("capture filed");
+        void useNotesStore.getState().noteFiled(path).catch(() => {});
+      }
     }).catch(() => {
       setCommitting(false);
       transitioning.value = false;

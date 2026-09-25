@@ -15,6 +15,7 @@ import { getErrorMessage } from "@typenotes/shared/errors";
 import { isRecordingNoteType } from "@typenotes/shared/format";
 import type { NoteMeta } from "@typenotes/shared/types";
 
+import { registerEditorDraft } from "../lib/capture-draft";
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useSyncStore } from "../state/sync-store";
@@ -43,6 +44,9 @@ export const EditorScreen = () => {
 
   const latest = useRef({ text: "", dirty: false });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Leaving the note is a finished action and syncs promptly; while it stays
+  // open, saves only schedule the slower typing sync.
+  const savedThisVisit = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,8 +82,9 @@ export const EditorScreen = () => {
     latest.current.dirty = false;
     try {
       await core.writeNote(path, latest.current.text);
+      savedThisVisit.current = true;
       await useNotesStore.getState().refreshPreviews([path]);
-      useSyncStore.getState().scheduleAutoSync("note saved");
+      useSyncStore.getState().scheduleAutoSync("note saved", "edit");
     } catch (err) {
       setError(getErrorMessage(err));
     }
@@ -99,10 +104,18 @@ export const EditorScreen = () => {
   // stack disable the interactive back swipe for the screen (the native
   // transition can't be paused from JS, so react-navigation turns the
   // gesture off wholesale).
-  useEffect(() => navigation.addListener("blur", () => void flush()), [navigation]);
+  const leave = async () => {
+    await flush();
+    if (savedThisVisit.current) {
+      savedThisVisit.current = false;
+      useSyncStore.getState().scheduleAutoSync("note closed");
+    }
+  };
+  useEffect(() => navigation.addListener("blur", () => void leave()), [navigation]);
+  useEffect(() => registerEditorDraft(flush), []);
   useEffect(
     () => () => {
-      void flush();
+      void leave();
     },
     []
   );

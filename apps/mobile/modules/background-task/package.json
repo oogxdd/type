@@ -1,0 +1,6 @@
+{
+  "name": "background-task",
+  "version": "0.1.0",
+  "description": "Holds a short iOS background task after Type is backgrounded so pending notes can sync.",
+  "private": true
+}

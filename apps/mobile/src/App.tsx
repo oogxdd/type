@@ -36,6 +36,7 @@ import {
 import { SyncScreen } from "./screens/sync-screen";
 import { useAppearanceStore } from "./state/appearance-store";
 import { useBackgroundOperationStore } from "./state/background-operation-store";
+import { runPreSuspendSync } from "./state/pre-suspend-sync";
 import { useDiagnosticsStore } from "./state/diagnostics-store";
 import { useNotesStore } from "./state/notes-store";
 import { useRecordingSessionStore } from "./state/recording-session-store";
@@ -183,7 +184,7 @@ export default function App() {
           // Best-effort — populates the menu's "last synced" label without
           // forcing the user through the Sync screen first.
           void useSyncStore.getState().refresh().catch(() => {});
-          useSyncStore.getState().scheduleAutoSync("app opened", 0);
+          useSyncStore.getState().scheduleAutoSync("app opened", "now");
         }
         if (!cancelled) {
           setPhase({ state: "ready" });
@@ -236,7 +237,12 @@ export default function App() {
       }
       const securityState = useSecurityStore.getState().state;
       if (next === "active" && !isLocked(securityState)) {
-        useSyncStore.getState().scheduleAutoSync("app foregrounded", 0);
+        useSyncStore.getState().scheduleAutoSync("app foregrounded", "now");
+      }
+      // Before the lock check: it opens a background operation, which defers
+      // the auto-lock until the owed sync has pushed.
+      if (next === "background" && !isLocked(securityState)) {
+        runPreSuspendSync();
       }
       if (
         next === "background" &&

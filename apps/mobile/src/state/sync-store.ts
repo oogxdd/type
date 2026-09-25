@@ -20,6 +20,11 @@ import {
   saveReasonHasLocalChanges,
   type AutoSyncState,
 } from "../lib/sync-experience";
+import {
+  nextPendingSync,
+  type PendingSync,
+  type SyncTiming,
+} from "../lib/sync-schedule";
 import { useDiagnosticsStore } from "./diagnostics-store";
 import { useNotesStore } from "./notes-store";
 import { activeProfile, useSettingsStore } from "./settings-store";
@@ -27,9 +32,9 @@ import { useSyncLogStore } from "./sync-log-store";
 
 type SyncAction = "idle" | "refresh" | "connect" | "pull" | "commit" | "push";
 type SavedGitConnection = ConnectGitArgs & { irohTicket: string | null };
-const AUTO_SYNC_DELAY_MS = 1_500;
 const AUTO_SYNC_BUSY_RETRY_MS = 2_000;
 let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingSync: PendingSync | null = null;
 let autoSyncFailureCount = 0;
 
 const sshHostFromRemote = (remote: string): string => {
@@ -98,8 +103,12 @@ type SyncState = {
   push: (message?: string) => Promise<void>;
   /** The one-button flow: pull, then push. */
   syncNow: () => Promise<void>;
-  /** Debounced, best-effort sync used after saves and foregrounding. */
-  scheduleAutoSync: (reason: string, delayMs?: number) => void;
+  /** Best-effort sync after saves and foregrounding; `timing` picks the delay
+   * (see lib/sync-schedule). Defaults to a finished action. */
+  scheduleAutoSync: (reason: string, timing?: SyncTiming) => void;
+  /** Run any owed sync now, because the app is about to be suspended.
+   * Resolves when it finished or failed; never schedules retries. */
+  syncBeforeSuspend: () => Promise<void>;
 };
 
 export const useSyncStore = create<SyncState>((set, get) => {
@@ -344,13 +353,32 @@ export const useSyncStore = create<SyncState>((set, get) => {
     }
   };
 
+  /** Retries and busy waits bypass the schedule policy: a fixed, urgent delay. */
   const scheduleAutoSyncAttempt = (reason: string, delayMs: number) => {
+    pendingSync = { dueAt: Date.now() + delayMs, firstEditAt: null, urgent: true };
+    armAutoSyncTimer(reason);
+  };
+
+  /** Drop the pending timer; true when a sync was owed. */
+  const cancelPendingAutoSync = (): boolean => {
+    const owed = autoSyncTimer !== null;
     if (autoSyncTimer) {
       clearTimeout(autoSyncTimer);
     }
+    autoSyncTimer = null;
+    pendingSync = null;
+    return owed;
+  };
+
+  const armAutoSyncTimer = (reason: string) => {
+    if (autoSyncTimer) {
+      clearTimeout(autoSyncTimer);
+    }
+    const delayMs = Math.max(0, (pendingSync?.dueAt ?? 0) - Date.now());
     logSync(`auto: scheduled after ${reason} in ${delayMs}ms`);
     autoSyncTimer = setTimeout(() => {
       autoSyncTimer = null;
+      pendingSync = null;
       if (!savedGitConnection()) {
         logSync(`auto: skipped ${reason}; no saved remote`);
         return;
@@ -381,7 +409,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
           });
           scheduleAutoSyncAttempt("computer unavailable", retryMs);
         });
-    }, Math.max(0, delayMs));
+    }, delayMs);
   };
 
   let pruneInFlight = false;
@@ -676,12 +704,38 @@ export const useSyncStore = create<SyncState>((set, get) => {
       return syncInFlight;
     },
 
-    scheduleAutoSync: (reason, delayMs = AUTO_SYNC_DELAY_MS) => {
+    scheduleAutoSync: (reason, timing = "action") => {
       autoSyncFailureCount = 0;
       if (saveReasonHasLocalChanges(reason)) {
         set({ autoSyncState: "saved_locally" });
       }
-      scheduleAutoSyncAttempt(reason, delayMs);
+      pendingSync = nextPendingSync(pendingSync, timing, Date.now());
+      armAutoSyncTimer(reason);
+    },
+
+    syncBeforeSuspend: async () => {
+      if (!savedGitConnection()) return;
+      let owed = cancelPendingAutoSync();
+      if (syncInFlight) {
+        // Edits made while it ran may not be in it; its own failure path
+        // re-arms a retry timer, which counts as owed too.
+        await syncInFlight.catch(() => {});
+        owed = cancelPendingAutoSync() || owed;
+      }
+      const state = get().autoSyncState;
+      if (!owed && state !== "saved_locally" && state !== "waiting_for_computer") {
+        return;
+      }
+      if (get().action !== "idle") return;
+      logSync("auto: syncing before the app is suspended");
+      await get()
+        .syncNow()
+        .catch((error) => {
+          // No retry timer: timers do not run while suspended, and the
+          // foreground wakeup syncs anyway.
+          logSync(`auto: pre-suspend sync failed - ${getErrorMessage(error)}`);
+          set({ autoSyncState: "waiting_for_computer", error: null, hint: null });
+        });
     },
 
     push: async (message) => {
