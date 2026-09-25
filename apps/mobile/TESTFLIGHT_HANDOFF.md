@@ -30,9 +30,10 @@ the toolchain (Xcode ≥ 26.6); no source patches are needed.
 
 Run from `apps/mobile/`. Prerequisites: `npm install` at the repo root, and the
 Rust core xcframework generated with a **device** slice
-(`IPHONEOS_DEPLOYMENT_TARGET=16.4 npm run codegen:ios:device` in
+(`IPHONEOS_DEPLOYMENT_TARGET=16.4 npm run codegen:ios:release` in
 `packages/mobile-core` — `codegen:ios` is `--sim-only` and will not link for a
-device/TestFlight build). Before archiving, confirm `src/index.tsx` is the
+device/TestFlight build, and `codegen:ios:device` is the unoptimized debug
+build). Before archiving, confirm `src/index.tsx` is the
 generated UniFFI entry and does not contain `__isDemoCore`.
 
 1. **Bump the build number** in `app.json` → `ios.buildNumber` (must be unique

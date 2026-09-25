@@ -16,10 +16,11 @@ npm run typecheck -w @typenotes/mobile
 npm run test -w @typenotes/mobile
 ```
 
-4. Regenerate the iOS Rust core with a device slice:
+4. Regenerate the iOS Rust core with an optimized device slice
+   (`codegen:ios:device` is the unoptimized debug build — never ship it):
 
 ```sh
-IPHONEOS_DEPLOYMENT_TARGET=16.4 npm run codegen:ios:device -w @typenotes/mobile-core
+IPHONEOS_DEPLOYMENT_TARGET=16.4 npm run codegen:ios:release -w @typenotes/mobile-core
 ```
 
 Fail before continuing if codegen left the package in demo mode:

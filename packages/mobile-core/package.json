@@ -23,6 +23,7 @@
     "test:watch": "vitest",
     "codegen:ios": "ubrn build ios --config ubrn.config.yaml --and-generate --sim-only",
     "codegen:ios:device": "ubrn build ios --config ubrn.config.yaml --and-generate",
+    "codegen:ios:release": "ubrn build ios --config ubrn.config.yaml --and-generate --release",
     "codegen:android": "ubrn build android --config ubrn.config.yaml --and-generate --targets aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android && node scripts/patch-ubrn-android.mjs",
     "codegen:android:release": "ubrn build android --config ubrn.config.yaml --and-generate --release --targets aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android && node scripts/patch-ubrn-android.mjs"
   },

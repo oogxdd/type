@@ -159,7 +159,7 @@ jobs:
           npm run test -w @typenotes/mobile
 
       - name: Generate iOS native core
-        run: npm run --workspace @typenotes/mobile-core codegen:ios:device
+        run: npm run --workspace @typenotes/mobile-core codegen:ios:release
 
       - name: Verify production native core
         run: |

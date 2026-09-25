@@ -111,18 +111,22 @@ MOBILE_VERSION=0.2.6 IOS_BUILD_NUMBER=2026090101 npx expo prebuild --platform io
 > launch. `git checkout -- ios/Podfile.properties.json`, then re-run §1.4.
 > A correct `pod install` prints no `[Expo-precompiled]` lines.
 
-### 1.3 Regenerate the Rust core with a device slice
+### 1.3 Regenerate the Rust core with an optimized device slice
 
 The checked-in `packages/mobile-core/src/index.tsx` is a mock fallback so clean
 clones and Expo Go work. A device build needs the real UniFFI turbo module:
 
 ```sh
-IPHONEOS_DEPLOYMENT_TARGET=16.4 npm run codegen:ios:device -w @typenotes/mobile-core
+IPHONEOS_DEPLOYMENT_TARGET=16.4 npm run codegen:ios:release -w @typenotes/mobile-core
 ```
 
-`codegen:ios` (no `:device`) builds a **simulator-only** slice — it will archive
-and then fail to link or run on hardware. Verify the package did not stay in
-demo mode:
+`codegen:ios` (no suffix) builds a **simulator-only** slice — it will archive
+and then fail to link or run on hardware. `codegen:ios:device` builds a device
+slice in Cargo's **debug** profile: fine while developing on a phone, but
+unoptimized — the Rust code and the C inside it (libgit2) run without
+optimization, and `ios-arm64/libtype_ffi.a` comes out around 700 MB instead of
+about 100 MB. Every build up to 0.4.1 shipped that way. Verify the package did
+not stay in demo mode:
 
 ```sh
 test -f packages/mobile-core/TypeCore.podspec
@@ -341,5 +345,6 @@ opening it from Files does **not** work — iOS will not install it that way.
 | Install starts, then the icon greys out permanently | manifest `bundle-identifier` / `bundle-version` disagree with the payload |
 | Safari shows the manifest as text | host served `.plist` with the wrong content type — `vercel.json` fixes this on Vercel |
 | Phone gets a Vercel login page | Deployment Protection enabled on the project |
-| App launches into demo mode with a banner | `codegen:ios:device` was skipped, or `src/index.tsx` was reverted before archiving (§1.3) |
-| Crash on launch on device only | simulator-only core slice — `codegen:ios` instead of `codegen:ios:device` |
+| App launches into demo mode with a banner | `codegen:ios:release` was skipped, or `src/index.tsx` was reverted before archiving (§1.3) |
+| Crash on launch on device only | simulator-only core slice — `codegen:ios` instead of `codegen:ios:release` |
+| Everything the core does (loading notes, sync) is slow on the phone | the debug core went in — `codegen:ios:device` instead of `codegen:ios:release` (§1.3) |

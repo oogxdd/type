@@ -43,7 +43,9 @@ npm install --no-save uniffi-bindgen-react-native@0.31.0-3
 
 npm run codegen:ios          # simulator slices only — the fast default
 IPHONEOS_DEPLOYMENT_TARGET=16.4 npm run codegen:ios:device
-                             # device + simulator (physical device/TestFlight)
+                             # device + simulator, debug (developing on a phone)
+IPHONEOS_DEPLOYMENT_TARGET=16.4 npm run codegen:ios:release
+                             # device + simulator, optimized (ad-hoc/TestFlight/CI)
 npm run codegen:android
 ```
 
@@ -54,6 +56,10 @@ when generating optimized Rust libraries for a release build.
 
 `codegen:ios` builds `--sim-only`, so the resulting xcframework has no device
 slice — rerun `codegen:ios:device` before installing on a physical phone.
+Anything that ships (ad-hoc, TestFlight, CI) must use `codegen:ios:release`:
+`:device` is Cargo's debug profile — no optimization for the Rust code or the
+C built inside it (libgit2), overflow checks everywhere, and a ~700 MB static
+library against ~100 MB. Every iOS build up to 0.4.1 shipped that way.
 Use `IPHONEOS_DEPLOYMENT_TARGET=16.4` for the device build; this matches the
 app and prevents vendored Rust C dependencies from inheriting an incompatible
 SDK deployment target on newer macOS/Xcode runners.
