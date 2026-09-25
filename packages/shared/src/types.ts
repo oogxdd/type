@@ -4,6 +4,8 @@ export type NotesListMode = "separate" | "nested";
 export type NoteEntry = {
   name: string;
   path: string;
+  /** Opaque; changes whenever the file is rewritten (from the core's stat). */
+  version?: string | null;
 };
 
 export type FolderNode = {
@@ -32,6 +34,8 @@ export type NoteMeta = {
 
 export type NotePreviewEntry = {
   path: string;
+  /** The file's `NoteEntry.version` as of this read. */
+  version?: string | null;
   content: string;
   meta: NoteMeta;
 };

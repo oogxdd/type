@@ -3,7 +3,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { CommonActions, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   InteractionManager,
@@ -128,15 +128,30 @@ export const MenuScreen = () => {
     const task = InteractionManager.runAfterInteractions(() => setContentReady(true));
     return () => task.cancel();
   }, []);
+
+  // Building the rows sorts and date-groups every Feed note. This screen stays
+  // mounted behind the capture page and re-renders on every sync-state change,
+  // so rebuild only when the notes or the list controls actually change.
+  const feedSections = useMemo(
+    () =>
+      contentReady
+        ? groupNoteRowsByDate(
+            feedNoteRows(findFolder(tree, STREAM_FOLDER_PATH), previews, {
+              keep: (preview) => matchesFeedFilter(preview, filter),
+            })
+          )
+        : [],
+    [contentReady, tree, previews, filter]
+  );
+  const folderRows = useMemo(
+    () => (contentReady ? flattenFolderTree(tree, expanded) : []),
+    [contentReady, tree, expanded]
+  );
+
   if (!contentReady) {
     return <View style={[styles.root, { backgroundColor: theme.colors.background }]} />;
   }
 
-  const feedRows = feedNoteRows(findFolder(tree, STREAM_FOLDER_PATH), previews, {
-    keep: (preview) => matchesFeedFilter(preview, filter),
-  });
-  const feedSections = groupNoteRowsByDate(feedRows);
-  const folderRows = flattenFolderTree(tree, expanded);
   const archive = findFolder(tree, ARCHIVE_FOLDER_PATH);
 
   // Pull down on either tab to re-read the tree + previews. Only one list is

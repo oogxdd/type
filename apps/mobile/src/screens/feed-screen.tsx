@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useMemo } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -105,8 +106,10 @@ export const FeedScreen = () => {
   const loading = useNotesStore((s) => s.loading);
   const refresh = useNotesStore((s) => s.refresh);
 
-  const rows = feedNoteRows(findFolder(tree, STREAM_FOLDER_PATH), previews);
-  const sections = groupNoteRowsByDate(rows);
+  const sections = useMemo(
+    () => groupNoteRowsByDate(feedNoteRows(findFolder(tree, STREAM_FOLDER_PATH), previews)),
+    [tree, previews]
+  );
 
   return (
     <SectionList

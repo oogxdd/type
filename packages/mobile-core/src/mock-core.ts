@@ -19,6 +19,19 @@ type MockNote = {
   meta: NoteMeta;
 };
 
+/**
+ * Stands in for the core's stat-based `version`: it changes whenever the note
+ * does, without every mutation below having to remember to bump it.
+ */
+const versionOf = (note: MockNote): string => {
+  const text = JSON.stringify(note);
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193);
+  }
+  return (hash >>> 0).toString(16);
+};
+
 // The `_system` layout, mirroring crates/type-core. Shared constants are not
 // imported here because the mock also stands in for folders the shells never
 // see — the ones the real core keeps out of the tree it returns.
@@ -167,12 +180,17 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
         continue;
       }
       ensureFolderNode(parent || STREAM);
-      children.get(parent || STREAM)!.notes.push({ name: nameOf(path), path });
+      children
+        .get(parent || STREAM)!
+        .notes.push({ name: nameOf(path), path, version: versionOf(notes.get(path)!) });
     }
 
     const sortNode = (node: FolderNode) => {
       node.children.sort((a, b) => a.name.localeCompare(b.name));
-      node.notes.sort((a, b) => a.name.localeCompare(b.name));
+      // Like the core: Feed newest-first by its time-prefixed names.
+      node.notes.sort((a, b) =>
+        node.path === STREAM ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name)
+      );
       node.children.forEach(sortNode);
     };
     const root: FolderNode = {
@@ -320,6 +338,7 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
           .filter((path) => notes.has(path))
           .map((path) => ({
             path,
+            version: versionOf(notes.get(path)!),
             content: notes.get(path)!.content,
             meta: notes.get(path)!.meta,
           }))

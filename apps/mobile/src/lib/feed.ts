@@ -91,6 +91,24 @@ const UTC_SLUG_PREFIX = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z-/;
 const UUID_PREFIX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-?/i;
 const UUID_SHORT_PREFIX = /^[0-9a-f]{8}-/i;
 
+const UTC_SLUG_PARTS = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})Z-/;
+// A uuid v7 opens with its 48-bit Unix-millisecond timestamp.
+const UUID_V7_TIME = /^([0-9a-f]{8})-([0-9a-f]{4})-7[0-9a-f]{3}-/i;
+
+/**
+ * The creation time a file name carries, if any — close enough to order and
+ * date-group a row before its front matter has been read.
+ */
+const timestampFromFileName = (name: string): number | null => {
+  const utc = UTC_SLUG_PARTS.exec(name);
+  if (utc) {
+    const [year, month, day, hours, minutes, seconds] = utc.slice(1).map(Number);
+    return Date.UTC(year, month - 1, day, hours, minutes, seconds);
+  }
+  const uuid = UUID_V7_TIME.exec(name);
+  return uuid ? parseInt(uuid[1] + uuid[2], 16) : null;
+};
+
 const titleFromFileName = (name: string): string => {
   const base = name.replace(/\.md$/i, "");
   const stripped = base
@@ -109,12 +127,15 @@ const titleFromFileName = (name: string): string => {
  * with a sync stayed invisible until a pull-to-refresh, and any single failed
  * preview fetch silently hid a note. A row built from the file name is a much
  * smaller lie than no row at all.
+ *
+ * The time comes from the file name so that, while a large folder's previews
+ * are still loading, the Feed is already in date order and date sections.
  */
 const placeholderPreview = (note: NoteEntry): NotePreview => ({
   title: titleFromFileName(note.name),
   dateLabel: "",
   secondLine: "",
-  createdMs: null,
+  createdMs: timestampFromFileName(note.name),
   updatedMs: null,
   archivedMs: null,
   reviewedMs: null,
@@ -195,6 +216,28 @@ export type NoteRowSection = {
   data: NoteRow[];
 };
 
+// This runs for every Feed row on every list rebuild, and each
+// toLocaleDateString call builds a new Intl formatter — thousands of rows made
+// that the whole cost of opening the menu. The labels only depend on the
+// weekday, month or month-and-year, so each is formatted once and cached.
+const weekdayLabels = new Map<number, string>();
+const monthLabels = new Map<number, string>();
+const monthYearLabels = new Map<number, string>();
+
+const cachedLabel = (
+  cache: Map<number, string>,
+  key: number,
+  format: () => string
+): string => {
+  const cached = cache.get(key);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const label = format();
+  cache.set(key, label);
+  return label;
+};
+
 /** Same day/week bucketing the desktop feed tree uses, flattened into section headers. */
 const dateGroupLabel = (timestampMs: number, now: Date): string => {
   const value = new Date(timestampMs);
@@ -208,12 +251,18 @@ const dateGroupLabel = (timestampMs: number, now: Date): string => {
     return "Yesterday";
   }
   if (diffDays < 7) {
-    return value.toLocaleDateString([], { weekday: "long" });
+    return cachedLabel(weekdayLabels, value.getDay(), () =>
+      value.toLocaleDateString([], { weekday: "long" })
+    );
   }
   if (value.getFullYear() === now.getFullYear()) {
-    return value.toLocaleDateString([], { month: "long" });
+    return cachedLabel(monthLabels, value.getMonth(), () =>
+      value.toLocaleDateString([], { month: "long" })
+    );
   }
-  return value.toLocaleDateString([], { month: "long", year: "numeric" });
+  return cachedLabel(monthYearLabels, value.getFullYear() * 12 + value.getMonth(), () =>
+    value.toLocaleDateString([], { month: "long", year: "numeric" })
+  );
 };
 
 /**
@@ -237,16 +286,20 @@ export const groupNoteRowsByDate = (rows: NoteRow[]): NoteRowSection[] => {
   return sections;
 };
 
-/** Every note path in the tree (for bulk preview fetches). */
-export const collectNotePaths = (root: FolderNode | null): string[] => {
+/** Every note in the tree, in tree order (so the Feed newest-first). */
+export const collectNoteEntries = (root: FolderNode | null): NoteEntry[] => {
   if (!root) {
     return [];
   }
-  const output: string[] = [];
+  const output: NoteEntry[] = [];
   const walk = (node: FolderNode) => {
-    node.notes.forEach((note) => output.push(note.path));
+    output.push(...node.notes);
     node.children.forEach(walk);
   };
   walk(root);
   return output;
 };
+
+/** Every note path in the tree (for bulk preview fetches). */
+export const collectNotePaths = (root: FolderNode | null): string[] =>
+  collectNoteEntries(root).map((note) => note.path);

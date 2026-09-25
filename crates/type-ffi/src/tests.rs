@@ -101,6 +101,17 @@ async fn ffi_end_to_end() {
     let previews = parse(&crate::list_note_previews(vec![note_path.clone()]).await.unwrap());
     assert_eq!(previews[0]["path"], note_path.as_str());
     assert_eq!(previews[0]["content"].as_str().unwrap().trim(), "updated body");
+    // The tree and the preview stat the file on different paths; for an
+    // unchanged note they must agree, or every launch would re-read it.
+    let tree_version = stream["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|note| note["path"] == note_path.as_str())
+        .expect("note in tree")["version"]
+        .clone();
+    assert!(tree_version.is_string());
+    assert_eq!(previews[0]["version"], tree_version);
 
     // Tags use the real header without changing or nesting the body.
     let before_tags = crate::read_note(note_path.clone()).await.unwrap();

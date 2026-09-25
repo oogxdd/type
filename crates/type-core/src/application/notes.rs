@@ -170,9 +170,12 @@ where
             let Ok(full_path) = self.repository.resolve_path(&path) else {
                 continue;
             };
-            if self.repository.entry_kind(&full_path)? != Some(NoteStorageEntryKind::File) {
+            // Stat before the read, never after: if the file changes in
+            // between, the entry carries the older version and the shell's
+            // next comparison reads it again instead of trusting it.
+            let Some(version) = self.repository.file_version(&full_path)? else {
                 continue;
-            }
+            };
             let Ok(raw) = self.repository.read_to_string(&full_path) else {
                 continue;
             };
@@ -185,6 +188,7 @@ where
             };
             entries.push(NotePreviewEntry {
                 path,
+                version: Some(version),
                 content,
                 meta,
             });

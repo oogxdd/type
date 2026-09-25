@@ -8,6 +8,30 @@ use std::{
 
 use super::*;
 
+// ── File versions ──────────────────────────────────────────────────────────────
+
+/// An opaque token for a note file's current contents, from one `stat` and
+/// without reading the file: modification time, size and — on Unix — the
+/// status-change time, which unlike mtime cannot be set back by copy tools
+/// that preserve timestamps. Any rewrite changes it; a metadata-only change
+/// may change it too, which only costs the shell one extra read.
+pub(crate) fn note_file_version(metadata: &fs::Metadata) -> String {
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or(0);
+    #[cfg(unix)]
+    let changed = {
+        use std::os::unix::fs::MetadataExt;
+        i128::from(metadata.ctime()) * 1_000_000_000 + i128::from(metadata.ctime_nsec())
+    };
+    #[cfg(not(unix))]
+    let changed = 0i128;
+    format!("{modified:x}-{changed:x}-{:x}", metadata.len())
+}
+
 // ── File collection ────────────────────────────────────────────────────────────
 
 /// Recursively collect all `.md` files, skipping hidden and storage folders.
@@ -120,6 +144,7 @@ pub fn build_folder_node(dir: &Path, rel_path: &str) -> Result<FolderNode, Strin
     let order = read_order_file(dir);
     let mut folders = Vec::new();
     let mut notes = Vec::new();
+    let mut note_versions = HashMap::new();
 
     for entry in fs::read_dir(dir).map_err(|err| err.to_string())? {
         let entry = entry.map_err(|err| err.to_string())?;
@@ -146,6 +171,7 @@ pub fn build_folder_node(dir: &Path, rel_path: &str) -> Result<FolderNode, Strin
             folders.push(name);
         } else if meta.is_file() {
             if path.extension().and_then(|ext| ext.to_str()) == Some("md") {
+                note_versions.insert(name.clone(), note_file_version(&meta));
                 notes.push(name);
             }
         }
@@ -183,6 +209,7 @@ pub fn build_folder_node(dir: &Path, rel_path: &str) -> Result<FolderNode, Strin
             format!("{}/{}", rel_path, name)
         };
         note_entries.push(NoteEntry {
+            version: note_versions.remove(&name),
             name,
             path: note_rel,
         });
@@ -317,6 +344,29 @@ mod tests {
         assert_eq!(folders, vec!["Work"]);
         let notes: Vec<&str> = node.notes.iter().map(|n| n.name.as_str()).collect();
         assert_eq!(notes, vec!["visible.md"]);
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn note_versions_move_only_when_a_file_is_rewritten() {
+        let root = scratch_dir("versions");
+        fs::write(root.join("kept.md"), "same").unwrap();
+        fs::write(root.join("edited.md"), "before").unwrap();
+        let version_of = |node: &FolderNode, name: &str| {
+            node.notes
+                .iter()
+                .find(|note| note.name == name)
+                .and_then(|note| note.version.clone())
+                .expect("every note carries a version")
+        };
+
+        let first = build_folder_node(&root, "").expect("build tree");
+        fs::write(root.join("edited.md"), "after, and longer").unwrap();
+        let second = build_folder_node(&root, "").expect("build tree");
+
+        assert_eq!(version_of(&first, "kept.md"), version_of(&second, "kept.md"));
+        assert_ne!(version_of(&first, "edited.md"), version_of(&second, "edited.md"));
 
         fs::remove_dir_all(&root).ok();
     }

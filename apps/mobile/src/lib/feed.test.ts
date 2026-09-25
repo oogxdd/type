@@ -9,6 +9,7 @@ import {
   findFolder,
   folderNoteCount,
   folderNoteRows,
+  groupNoteRowsByDate,
   previewsByPath,
 } from "./feed";
 
@@ -184,3 +185,37 @@ describe("feed model", () => {
     );
   });
 });
+
+describe("placeholder rows", () => {
+  it("are dated from the file name until the preview arrives", () => {
+    // While a large folder's previews load in the background, the Feed must
+    // already be in date order and date sections, not one "Undated" heap.
+    const uuidV7 = "01890a5d-ac96-774b-bcce-b302099a8057";
+    const stream: FolderNode = {
+      name: "stream",
+      path: "_system/stream",
+      children: [],
+      notes: [
+        "2024-03-05T10-00-00Z-older.md",
+        "2025-07-01T08-30-00Z-newer.md",
+        `${uuidV7}.md`,
+        "plain.md",
+      ].map((name) => ({ name, path: `_system/stream/${name}` })),
+    };
+
+    const rows = feedNoteRows(stream, new Map());
+
+    expect(rows.every((row) => row.pending)).toBe(true);
+    expect(rows.map((row) => row.preview.createdMs)).toEqual([
+      Date.UTC(2025, 6, 1, 8, 30, 0),
+      Date.UTC(2024, 2, 5, 10, 0, 0),
+      parseInt("01890a5dac96", 16),
+      null,
+    ]);
+    const undated = groupNoteRowsByDate(rows).filter((section) => section.title === "Undated");
+    expect(undated.flatMap((section) => section.data.map((row) => row.path))).toEqual([
+      "_system/stream/plain.md",
+    ]);
+  });
+});
+

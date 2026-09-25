@@ -52,6 +52,9 @@ pub trait NotesRepository {
     /// dot-entries and hidden storage folders, same rules as `build_tree`).
     fn collect_note_files(&self, dir: &std::path::Path) -> Result<Vec<PathBuf>, String>;
     fn entry_kind(&self, path: &std::path::Path) -> Result<Option<NoteStorageEntryKind>, String>;
+    /// The version `build_tree` reports for this file (see `NoteEntry::version`),
+    /// from a single `stat`; `None` unless it is an existing regular file.
+    fn file_version(&self, path: &std::path::Path) -> Result<Option<String>, String>;
     fn file_times(
         &self,
         path: &std::path::Path,
@@ -135,6 +138,9 @@ pub trait NoteClock {
 //   - The "_system/stream" folder sorts notes newest-first by file name (names are
 //     timestamp/UUIDv7-prefixed); authoritative timestamp ordering happens in
 //     the UI from note previews, so get_tree never reads note bodies
+//   - Every note carries a `version` from the stat the walk already does; it
+//     changes whenever the file is rewritten, so a shell can keep previews
+//     across launches and read only the notes whose version moved
 //
 // read_note(path)
 //   in:  path — relative to notes root, e.g. "_system/stream/my-note.md"
@@ -175,9 +181,12 @@ pub trait NoteClock {
 //
 // list_note_previews(paths)
 //   in:  paths — relative paths of the notes to preview
-//   out: Vec<NotePreviewEntry> — per note: path, decrypted body, and NoteMeta
+//   out: Vec<NotePreviewEntry> — per note: path, version, decrypted body, and NoteMeta
 //   - One bulk call so list/feed UIs don't issue per-note IPC round trips
 //   - Reads each file once; meta timestamps resolve like get_note_meta
+//   - `version` is the same token get_tree reports, taken *before* the read: a
+//     change racing the read leaves the older version behind, so the shell's
+//     next comparison reads the note again instead of trusting stale content
 //   - Skips unreadable or vanished notes instead of failing the whole batch
 //
 // move_items(items, destination)

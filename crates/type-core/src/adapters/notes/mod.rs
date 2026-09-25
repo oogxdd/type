@@ -235,6 +235,15 @@ impl NotesRepository for FilesystemNotesRepository {
         Ok(Some(kind))
     }
 
+    fn file_version(&self, path: &Path) -> Result<Option<String>, String> {
+        match fs::metadata(path) {
+            Ok(metadata) if metadata.is_file() => Ok(Some(note_file_version(&metadata))),
+            Ok(_) => Ok(None),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error.to_string()),
+        }
+    }
+
     fn file_times(
         &self,
         path: &Path,

@@ -41,7 +41,7 @@ import { useDiagnosticsStore } from "./state/diagnostics-store";
 import { useNotesStore } from "./state/notes-store";
 import { useRecordingSessionStore } from "./state/recording-session-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
-import { useSettingsStore } from "./state/settings-store";
+import { activeProfile, useSettingsStore } from "./state/settings-store";
 import { useSyncStore } from "./state/sync-store";
 import { useTheme } from "./theme";
 import { ErrorBoundary } from "./ui/error-boundary";
@@ -180,7 +180,11 @@ export default function App() {
         // the lock screen's unlock reloads these stores instead.
         if (!isLocked(useSecurityStore.getState().state)) {
           await useSettingsStore.getState().load();
-          await useNotesStore.getState().refresh();
+          // Not awaited: on a first launch, or after a sync that brought a
+          // lot, it reads thousands of note bodies. The capture page needs
+          // none of it, and the lists show the saved previews (or placeholder
+          // rows) until it is done.
+          void useNotesStore.getState().refresh();
           // Best-effort — populates the menu's "last synced" label without
           // forcing the user through the Sync screen first.
           void useSyncStore.getState().refresh().catch(() => {});
@@ -198,6 +202,28 @@ export default function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Switching (or creating) a working folder changes which notes the lists
+  // should show, and nothing else reloads them: Home remounts, but it renders
+  // whatever the notes store holds. The first profile to arrive is boot's.
+  useEffect(() => {
+    const workingFolder = (state: ReturnType<typeof useSettingsStore.getState>) => {
+      const profile = activeProfile(state.snapshot);
+      return profile ? `${profile.id}:${profile.notes_root}` : null;
+    };
+    let shown = workingFolder(useSettingsStore.getState());
+    return useSettingsStore.subscribe((state) => {
+      const next = workingFolder(state);
+      if (next === shown) {
+        return;
+      }
+      const booting = shown === null;
+      shown = next;
+      if (!booting && !isLocked(useSecurityStore.getState().state)) {
+        void useNotesStore.getState().refresh();
+      }
+    });
   }, []);
 
   // Deep links while the app is running; the initial (cold-start) URL is

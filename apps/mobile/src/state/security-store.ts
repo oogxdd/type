@@ -42,7 +42,7 @@ export const useSecurityStore = create<SecurityStoreState>((set) => ({
         // everything so the UI shows the fresh state.
         set({ state: await core.getSecurityState() });
         await useSettingsStore.getState().load();
-        await useNotesStore.getState().refresh();
+        void useNotesStore.getState().refresh();
         return;
       }
       if (!result.unlocked) {
@@ -51,7 +51,8 @@ export const useSecurityStore = create<SecurityStoreState>((set) => ({
       }
       set({ state: await core.getSecurityState() });
       await useSettingsStore.getState().load();
-      await useNotesStore.getState().refresh();
+      // Not awaited — see the boot sequence in App.tsx.
+      void useNotesStore.getState().refresh();
     } catch (error) {
       set({ error: getErrorMessage(error) });
     } finally {

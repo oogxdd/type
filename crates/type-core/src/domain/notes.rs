@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 pub struct NoteEntry {
     pub name: String,
     pub path: String,
+    /// Opaque token that changes whenever the file is rewritten, taken from
+    /// the `stat` the tree already does. Shells compare it with the version a
+    /// cached preview was read at, so unchanged notes are never read again.
+    pub version: Option<String>,
 }
 
 /// Metadata returned to the frontend for a single note.
@@ -30,6 +34,8 @@ pub struct NoteMeta {
 #[derive(Serialize)]
 pub struct NotePreviewEntry {
     pub path: String,
+    /// The file's version (see [`NoteEntry::version`]) as of this read.
+    pub version: Option<String>,
     pub content: String,
     pub meta: NoteMeta,
 }

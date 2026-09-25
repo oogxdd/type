@@ -106,6 +106,31 @@ export type NotePreview = {
   ocrStatus: string | null;
 };
 
+// Every preview formats one date, and each toLocale*String call builds a new
+// Intl formatter — on the phone's Hermes that is a platform formatter per
+// note, which made loading thousands of previews spend most of its time here.
+// Each label is a pure function of a few local calendar fields, so it is
+// formatted once per distinct value and cached by them (as feed-tree-model
+// does for the desktop feed).
+const noteTimeLabels = new Map<number, string>();
+const noteWeekdayLabels = new Map<number, string>();
+const noteDayMonthLabels = new Map<number, string>();
+const noteFullDateLabels = new Map<number, string>();
+
+const cachedLabel = (
+  cache: Map<number, string>,
+  key: number,
+  format: () => string
+) => {
+  const cached = cache.get(key);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const label = format();
+  cache.set(key, label);
+  return label;
+};
+
 export const formatNoteDateLabel = (timestamp: number | null) => {
   if (!timestamp) {
     return "";
@@ -122,25 +147,41 @@ export const formatNoteDateLabel = (timestamp: number | null) => {
     (todayStart.getTime() - itemStart.getTime()) / 86_400_000
   );
   if (diffDays <= 0) {
-    return value.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return cachedLabel(
+      noteTimeLabels,
+      value.getHours() * 60 + value.getMinutes(),
+      () => value.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    );
   }
   if (diffDays === 1) {
     return "yesterday";
   }
   if (diffDays < 7) {
-    return value.toLocaleDateString([], { weekday: "long" }).toLowerCase();
+    return cachedLabel(noteWeekdayLabels, value.getDay(), () =>
+      value.toLocaleDateString([], { weekday: "long" }).toLowerCase()
+    );
   }
   if (value.getFullYear() === now.getFullYear()) {
-    return value.toLocaleDateString([], {
-      day: "numeric",
-      month: "short",
-    });
+    return cachedLabel(
+      noteDayMonthLabels,
+      value.getMonth() * 32 + value.getDate(),
+      () =>
+        value.toLocaleDateString([], {
+          day: "numeric",
+          month: "short",
+        })
+    );
   }
-  return value.toLocaleDateString([], {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  return cachedLabel(
+    noteFullDateLabels,
+    (value.getFullYear() * 12 + value.getMonth()) * 32 + value.getDate(),
+    () =>
+      value.toLocaleDateString([], {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })
+  );
 };
 
 export const parseNotePreview = (
