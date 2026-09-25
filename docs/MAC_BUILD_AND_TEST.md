@@ -121,7 +121,11 @@ npm run mobile:ios   # с корня: codegen:ios + expo run:ios одной ко
 
 Для реального устройства (не симулятора) —
 `IPHONEOS_DEPLOYMENT_TARGET=16.4 npm run codegen:ios:device -w @typenotes/mobile-core`
-вместо `codegen:ios` (симуляторная сборка не даёт device-слайс).
+вместо `codegen:ios` (симуляторная сборка не даёт device-слайс). Это
+**отладочная** сборка ядра — для разработки. Всё, что ставится на телефон
+для настоящей работы (ad-hoc, TestFlight, CI), собирается
+`codegen:ios:release`: без оптимизаций то же чтение превью в ~3 раза медленнее,
+а библиотека ~700 МБ вместо ~100 МБ. До 0.4.2 все iOS-сборки так и уходили.
 
 Подробности: [`apps/mobile/README.md`](../apps/mobile/README.md),
 [`packages/mobile-core/README.md`](../packages/mobile-core/README.md),

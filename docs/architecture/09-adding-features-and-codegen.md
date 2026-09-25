@@ -121,7 +121,9 @@ Rust-библиотека. Дальше повседневная разрабо�
    `npm install --no-save uniffi-bindgen-react-native@0.31.0-3` там же).
    Скрипт собирает `--sim-only` — только слайсы под симулятор, это вдвое
    меньше cargo-работы; перед установкой на физический телефон нужен
-   `IPHONEOS_DEPLOYMENT_TARGET=16.4 npm run codegen:ios:device`.
+   `IPHONEOS_DEPLOYMENT_TARGET=16.4 npm run codegen:ios:device`. Это
+   отладочный профиль Cargo — для разработки; сборки, которые уходят на
+   телефон (ad-hoc, TestFlight, CI), делаются `codegen:ios:release`.
 2. `ubrn` сам заменяет стабильный package entry `src/index.tsx` реальным
    TurboModule; вручную менять `apps/mobile/src/core/boot.ts` не нужно.
 3. `npm run prebuild -w @typenotes/mobile`, затем

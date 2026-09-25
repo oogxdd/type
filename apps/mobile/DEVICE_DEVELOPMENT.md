@@ -23,7 +23,9 @@ Run from the repo root. Prerequisites: `npm install`, iPhone connected via
 USB/Wi-Fi, Apple Developer account on the machine.
 
 ```sh
-# 1. Generate the Rust core with a device slice (simulator-only will NOT link)
+# 1. Generate the Rust core with a device slice (simulator-only will NOT link).
+#    This is the debug build — right for development, never for a build that
+#    ships (those use codegen:ios:release; see AD_HOC_DISTRIBUTION.md §1.3).
 IPHONEOS_DEPLOYMENT_TARGET=16.4 \
   npm run codegen:ios:device -w @typenotes/mobile-core
 
@@ -73,9 +75,15 @@ follow the normal release flow (see `LOCAL_TESTFLIGHT.md` / `TESTFLIGHT_HANDOFF.
 ```sh
 # Prebuild production (no APP_VARIANT) — restores com.typenotes.mobile
 cd apps/mobile && npx expo prebuild --platform ios --clean && cd -
+
+# The core in the xcframework is still the dev variant's debug build:
+# regenerate it optimized before archiving anything that ships.
+IPHONEOS_DEPLOYMENT_TARGET=16.4 \
+  npm run codegen:ios:release -w @typenotes/mobile-core
 ```
 
-Then continue with the archive → export → upload steps in `LOCAL_TESTFLIGHT.md`.
+Then continue with the pod install → archive → export → upload steps in
+`LOCAL_TESTFLIGHT.md`.
 
 > **Note:** prebuilding production overwrites `apps/mobile/ios/`, replacing the
 > dev-variant bundle ID. To resume device development, re-run
