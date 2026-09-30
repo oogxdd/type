@@ -40,6 +40,7 @@ pub enum Choice {
     Reload,
     Copy,
     Settings,
+    BackToNotes,
     Theme,
     Vim,
     Profile(String),
@@ -87,7 +88,9 @@ impl Choice {
             | Self::Reload => "Selection",
             Self::New | Self::NewProfile => "Create",
             Self::Feed | Self::Folders | Self::TrashView | Self::MoveNote(_) => "Navigate",
-            Self::CommandPalette | Self::Settings | Self::Theme | Self::Vim => "View",
+            Self::CommandPalette | Self::Settings | Self::BackToNotes | Self::Theme | Self::Vim => {
+                "View"
+            }
             Self::Profile(_) | Self::Root => "Working folders",
             Self::Remote
             | Self::Pull
@@ -142,7 +145,7 @@ impl TypeApp {
             }
             cx.notify();
         }));
-        let navigation = self.navigation_focused;
+        let navigation = self.navigation_focus.contains_focused(window, cx);
         let palette = if matches!(kind, ModalKind::Palette) {
             let state = cx.new(|cx| CommandState::new(window, cx));
             state.update(cx, |state, cx| {
@@ -170,7 +173,13 @@ impl TypeApp {
     pub fn close_modal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let navigation = self.modal.take().map(|m| m.navigation).unwrap_or(false);
         self.modal_subscription = None;
-        if navigation {
+        if self.settings {
+            if navigation {
+                self.navigation_focus.focus(window, cx);
+            } else {
+                self.focus.focus(window, cx);
+            }
+        } else if navigation {
             self.tree.update(cx, |s, cx| s.focus(window, cx));
         } else if let Some(editor) = self.notes.get(&self.active).and_then(|n| n.editor.as_ref()) {
             editor.focus_handle(cx).focus(window, cx);
@@ -353,7 +362,13 @@ impl TypeApp {
                     }
                 }
                 Focus | Cycle => {
-                    if self.navigation_focus.contains_focused(window, cx) {
+                    if self.settings {
+                        if self.navigation_focus.contains_focused(window, cx) {
+                            self.focus.focus(window, cx);
+                        } else {
+                            self.navigation_focus.focus(window, cx);
+                        }
+                    } else if self.navigation_focus.contains_focused(window, cx) {
                         self.focus_editor(window, cx);
                     } else {
                         self.prefs.sidebar = true;
@@ -426,6 +441,29 @@ impl TypeApp {
             return;
         }
         if self.locked || self.busy {
+            return;
+        }
+        if self.settings {
+            let stroke = &event.keystroke;
+            if stroke.modifiers.control || stroke.modifiers.platform || stroke.modifiers.alt {
+                return;
+            }
+            match stroke.key.as_str() {
+                "escape" => self.leave_settings(window, cx),
+                "j" | "down" if self.navigation_focus.contains_focused(window, cx) => {
+                    self.settings_section = self.settings_section.adjacent(1);
+                }
+                "k" | "up" if self.navigation_focus.contains_focused(window, cx) => {
+                    self.settings_section = self.settings_section.adjacent(-1);
+                }
+                "enter" | "l" | "right" if self.navigation_focus.contains_focused(window, cx) => {
+                    self.focus.focus(window, cx)
+                }
+                _ => return,
+            }
+            window.prevent_default();
+            cx.stop_propagation();
+            cx.notify();
             return;
         }
         if self.navigation_focus.contains_focused(window, cx) {
@@ -549,6 +587,84 @@ impl TypeApp {
         cx.notify();
     }
 
+    pub fn save_setting(&mut self, field: &str, value: String) -> Result<(), String> {
+        let mut config = self.profiles.app_config.clone();
+        match field {
+            "assemblyai_api_key" => config.assemblyai_api_key = value,
+            "whisper_model" => config.whisper_model = value,
+            "transcription_provider" => {
+                if !matches!(value.as_str(), "whisper" | "assemblyai") {
+                    return Err("Choose whisper or assemblyai.".into());
+                }
+                config.transcription_provider = value;
+            }
+            "handwriting_ocr_provider" => {
+                if !matches!(value.as_str(), "local" | "openai" | "huggingface") {
+                    return Err("Choose local, openai or huggingface.".into());
+                }
+                config.handwriting_ocr_provider = value;
+            }
+            "local_ocr_model_path" => config.local_ocr_model_path = value,
+            "openai_api_key" => config.openai_api_key = value,
+            "openai_model" => config.openai_model = value,
+            "huggingface_api_key" => config.huggingface_api_key = value,
+            "huggingface_model" => config.huggingface_model = value,
+            "note_file_name_format" => {
+                if !matches!(
+                    value.as_str(),
+                    "utc_timestamp_slug" | "uuid_v7" | "uuid_v7_prefix_slug"
+                ) {
+                    return Err("Choose a supported filename format.".into());
+                }
+                config.note_file_name_format = value;
+            }
+            "git_branch" | "git_username" | "git_password" | "git_commit_message"
+            | "transcription_mode" | "profile_name" => {
+                let profile = self.active_profile().ok_or("No working folder.")?;
+                if field == "profile_name" {
+                    self.profiles = self.backend.profiles().update(UpdateProfileArgs {
+                        profile_id: profile.id.clone(),
+                        name: Some(value),
+                        description: None,
+                    })?;
+                    return Ok(());
+                }
+                let mut settings = profile.settings.clone();
+                match field {
+                    "git_branch" => settings.git_branch = value,
+                    "git_username" => settings.git_username = value,
+                    "git_password" => settings.git_password = value,
+                    "git_commit_message" => settings.git_commit_message = value,
+                    _ => {
+                        settings.transcription_mode = Some(match value.as_str() {
+                            "off" => type_core::ports::profiles::TranscriptionMode::Off,
+                            "desktop" => type_core::ports::profiles::TranscriptionMode::Desktop,
+                            "assemblyai" => {
+                                type_core::ports::profiles::TranscriptionMode::AssemblyAi
+                            }
+                            "native" => type_core::ports::profiles::TranscriptionMode::Native,
+                            _ => return Err("Choose off, desktop, assemblyai or native.".into()),
+                        });
+                    }
+                }
+                self.profiles =
+                    self.backend
+                        .profiles()
+                        .update_settings(UpdateProfileSettingsArgs {
+                            profile_id: profile.id.clone(),
+                            settings,
+                        })?;
+                return Ok(());
+            }
+            _ => return Err("Unknown setting.".into()),
+        }
+        self.profiles = self
+            .backend
+            .profiles()
+            .update_app_config(UpdateAppConfigArgs { config })?;
+        Ok(())
+    }
+
     pub fn submit_modal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(modal) = &self.modal else {
             return;
@@ -644,61 +760,7 @@ impl TypeApp {
                     });
                     return Ok(());
                 }
-                ModalKind::Config(field) => {
-                    let mut config = self.profiles.app_config.clone();
-                    match field {
-                        "assemblyai_api_key" => config.assemblyai_api_key = value,
-                        "whisper_model" => config.whisper_model = value,
-                        "transcription_provider" => {
-                            if !matches!(value.as_str(), "whisper" | "assemblyai") {
-                                return Err("Choose whisper or assemblyai.".into());
-                            }
-                            config.transcription_provider = value;
-                        }
-                        "handwriting_ocr_provider" => config.handwriting_ocr_provider = value,
-                        "local_ocr_model_path" => config.local_ocr_model_path = value,
-                        "openai_api_key" => config.openai_api_key = value,
-                        "openai_model" => config.openai_model = value,
-                        "huggingface_api_key" => config.huggingface_api_key = value,
-                        "huggingface_model" => config.huggingface_model = value,
-                        "note_file_name_format" => config.note_file_name_format = value,
-                        "git_branch" | "git_username" | "git_password" | "git_commit_message"
-                        | "transcription_mode" | "profile_name" => {
-                            let profile = self.active_profile().ok_or("No working folder.")?;
-                            if field == "profile_name" {
-                                self.profiles =
-                                    self.backend.profiles().update(UpdateProfileArgs {
-                                        profile_id: profile.id.clone(),
-                                        name: Some(value),
-                                        description: None,
-                                    })?;
-                                return Ok(());
-                            }
-                            let mut settings = profile.settings.clone();
-                            match field {
-                                "git_branch" => settings.git_branch = value,
-                                "git_username" => settings.git_username = value,
-                                "git_password" => settings.git_password = value,
-                                "git_commit_message" => settings.git_commit_message = value,
-                                _ => {
-                                    settings.transcription_mode = Some(match value.as_str() { "off" => type_core::ports::profiles::TranscriptionMode::Off, "desktop" => type_core::ports::profiles::TranscriptionMode::Desktop, "assemblyai" => type_core::ports::profiles::TranscriptionMode::AssemblyAi, "native" => type_core::ports::profiles::TranscriptionMode::Native, _ => return Err("Choose off, desktop, assemblyai or native.".into()) });
-                                }
-                            }
-                            self.profiles = self.backend.profiles().update_settings(
-                                UpdateProfileSettingsArgs {
-                                    profile_id: profile.id.clone(),
-                                    settings,
-                                },
-                            )?;
-                            return Ok(());
-                        }
-                        _ => return Err("Unknown setting.".into()),
-                    }
-                    self.profiles = self
-                        .backend
-                        .profiles()
-                        .update_app_config(UpdateAppConfigArgs { config })?;
-                }
+                ModalKind::Config(field) => self.save_setting(field, value)?,
                 ModalKind::Unlock => {
                     let result = self
                         .backend
@@ -938,9 +1000,10 @@ impl TypeApp {
                 Choice::Settings => {
                     self.flush(false, cx)?;
                     self.settings = true;
-                    self.focus.focus(window, cx);
+                    self.navigation_focus.focus(window, cx);
                     cx.notify();
                 }
+                Choice::BackToNotes => self.leave_settings(window, cx),
                 Choice::Theme => {
                     self.prefs.dark = !self.prefs.dark;
                     Self::apply_theme(self.prefs.dark, window, cx);
@@ -970,17 +1033,7 @@ impl TypeApp {
                 Choice::Lock => self.lock(window, cx),
                 Choice::Enable => self.show_modal(ModalKind::EnablePassword, "", window, cx),
                 Choice::Config(field) => {
-                    let config = serde_json::to_value(&self.profiles.app_config)
-                        .map_err(|e| e.to_string())?;
-                    let settings = self
-                        .active_profile()
-                        .and_then(|p| serde_json::to_value(&p.settings).ok());
-                    let value = config
-                        .get(field)
-                        .or_else(|| settings.as_ref().and_then(|v| v.get(field)))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
+                    let value = self.setting_value(field);
                     self.show_modal(ModalKind::Config(field), &value, window, cx);
                 }
                 choice => self.execute_job(choice, window, cx)?,

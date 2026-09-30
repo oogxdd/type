@@ -2,7 +2,7 @@ use super::*;
 use commands::{Choice, ModalKind};
 
 impl TypeApp {
-    fn command_button(
+    pub(crate) fn command_button(
         &self,
         id: &'static str,
         label: &'static str,
@@ -12,234 +12,6 @@ impl TypeApp {
         Button::new(id).ghost().small().label(label).on_click(
             cx.listener(move |this, _, window, cx| this.execute(choice.clone(), window, cx)),
         )
-    }
-
-    pub fn render_settings(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let profile = self.active_profile();
-        let mut settings = v_flex()
-            .gap_4()
-            .p_6()
-            .w_full()
-            .child(
-                div()
-                    .text_xl()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child("Settings"),
-            )
-            .child(
-                div()
-                    .text_sm()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(format!(
-                        "Working folder: {}\n{}",
-                        profile.map(|p| p.name.as_str()).unwrap_or(""),
-                        self.backend.root.display()
-                    )),
-            )
-            .child(
-                h_flex()
-                    .gap_2()
-                    .child(self.command_button(
-                        "new-profile",
-                        "New working folder",
-                        Choice::NewProfile,
-                        cx,
-                    ))
-                    .child(self.command_button(
-                        "choose-root",
-                        "Move notes root…",
-                        Choice::Root,
-                        cx,
-                    )),
-            );
-        for p in &self.profiles.profiles {
-            let id = p.id.clone();
-            settings = settings.child(
-                Button::new(SharedString::from(format!("profile-{}", p.id)))
-                    .ghost()
-                    .label(p.name.clone())
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.execute(Choice::Profile(id.clone()), window, cx)
-                    })),
-            );
-        }
-        settings = settings
-            .child(div().text_lg().child("Appearance"))
-            .child(
-                h_flex()
-                    .gap_2()
-                    .child(self.command_button("theme", "Light / dark", Choice::Theme, cx))
-                    .child(self.command_button("vim", "Toggle Vim", Choice::Vim, cx)),
-            )
-            .child(div().text_lg().child("Git sync"))
-            .child(
-                div().text_sm().child(
-                    profile
-                        .map(|p| {
-                            format!("{} · {}", p.settings.git_remote_url, p.settings.git_branch)
-                        })
-                        .unwrap_or_default(),
-                ),
-            )
-            .child(
-                h_flex()
-                    .gap_2()
-                    .child(self.command_button("remote", "Connect…", Choice::Remote, cx))
-                    .child(self.command_button("pull", "Pull", Choice::Pull, cx))
-                    .child(self.command_button("push", "Commit + push", Choice::Push, cx))
-                    .child(self.command_button("commit", "Checkpoint", Choice::Commit, cx)),
-            )
-            .child(
-                h_flex()
-                    .gap_2()
-                    .child(self.command_button("ssh", "Copy SSH key", Choice::Ssh, cx))
-                    .child(self.command_button("history", "History", Choice::History, cx)),
-            );
-        for field in [
-            "git_branch",
-            "git_username",
-            "git_password",
-            "git_commit_message",
-        ] {
-            settings = settings.child(self.setting_button(field, cx));
-        }
-        settings = settings.child(div().text_lg().child("Phone sync")).child(
-            h_flex()
-                .gap_2()
-                .child(self.command_button("server-start", "Start server", Choice::Server, cx))
-                .child(self.command_button("server-stop", "Stop server", Choice::StopServer, cx)),
-        );
-        if let Some(status) = &self.local_server {
-            if status.running {
-                if let Some(link) = jobs::pairing_link(
-                    status,
-                    profile.map(|p| p.name.as_str()).unwrap_or("Type"),
-                    &self.backend.env,
-                ) {
-                    if let Ok(code) = qrcode::QrCode::new(link.as_bytes()) {
-                        let width = code.width();
-                        let cells = code.to_colors();
-                        settings = settings.child(
-                            div().size(px(240.)).child(
-                                canvas(
-                                    move |_, _, _| (),
-                                    move |bounds, _, window, _| {
-                                        let scale =
-                                            f32::from(bounds.size.width) / (width + 8) as f32;
-                                        window.paint_quad(fill(bounds, rgb(0xffffff)));
-                                        for y in 0..width {
-                                            for x in 0..width {
-                                                if cells[y * width + x] == qrcode::Color::Dark {
-                                                    window.paint_quad(fill(
-                                                        Bounds::new(
-                                                            point(
-                                                                bounds.origin.x
-                                                                    + px((x + 4) as f32 * scale),
-                                                                bounds.origin.y
-                                                                    + px((y + 4) as f32 * scale),
-                                                            ),
-                                                            size(px(scale + 0.1), px(scale + 0.1)),
-                                                        ),
-                                                        rgb(0x000000),
-                                                    ));
-                                                }
-                                            }
-                                        }
-                                    },
-                                )
-                                .size_full(),
-                            ),
-                        );
-                    }
-                    settings = settings.child(
-                        Button::new("pairing-copy")
-                            .ghost()
-                            .label("Copy phone pairing link")
-                            .on_click(move |_, _, cx| {
-                                cx.write_to_clipboard(ClipboardItem::new_string(link.clone()))
-                            }),
-                    );
-                }
-                settings = settings.child(
-                    div()
-                        .text_sm()
-                        .child(format!("{} paired devices", status.paired_devices.len())),
-                );
-            }
-            if let Some(error) = &status.error {
-                settings = settings.child(
-                    div()
-                        .text_sm()
-                        .text_color(cx.theme().danger)
-                        .child(error.clone()),
-                );
-            }
-        }
-        settings = settings
-            .child(div().text_lg().child("Recording and handwriting"))
-            .child(
-                h_flex()
-                    .gap_2()
-                    .child(self.command_button("recording", "Record / stop", Choice::Record, cx))
-                    .child(self.command_button(
-                        "handwriting",
-                        "Import image",
-                        Choice::Handwriting,
-                        cx,
-                    ))
-                    .child(self.command_button("queue", "Queue processing", Choice::Queue, cx)),
-            );
-        for field in [
-            "transcription_provider",
-            "whisper_model",
-            "assemblyai_api_key",
-            "transcription_mode",
-            "handwriting_ocr_provider",
-            "local_ocr_model_path",
-            "openai_api_key",
-            "openai_model",
-            "huggingface_api_key",
-            "huggingface_model",
-            "note_file_name_format",
-        ] {
-            settings = settings.child(self.setting_button(field, cx));
-        }
-        settings = settings.child(div().text_lg().child("Import and backup"))
-            .child(h_flex().gap_2().child(self.command_button("import", "Import Apple Notes", Choice::Import, cx)).child(self.command_button("backup", "Backup ZIP", Choice::Backup, cx)).child(self.command_button("export", "Export", Choice::Export, cx)))
-            .child(div().text_lg().child("Security"))
-            .child(h_flex().gap_2().child(self.command_button("enable-security", "Enable encryption…", Choice::Enable, cx)).child(self.command_button("lock", "Lock", Choice::Lock, cx)))
-            .child(div().text_lg().child("Keyboard"))
-            .child(div().text_sm().whitespace_normal().child("⌘/Ctrl K: palette · N: new · W: navigation/content (also Ctrl W on macOS) · T: navigation · B: rail\n⌘/Ctrl Backspace: Trash · Shift Backspace: permanent delete · S: save\n⌘/Ctrl +/−/0: font size · ,: settings · Shift L: lock\nNavigation: j/k or arrows · h/l: collapse/expand parent · Enter: open · Tab: Stream/Folders\nVim: i/a/I/A, o/O, v/V, motions, dd/cc/yy, p/P, u, Ctrl R, / search"));
-        if !self.processing_status.is_empty() {
-            settings = settings.child(
-                div()
-                    .text_sm()
-                    .whitespace_normal()
-                    .child(self.processing_status.clone()),
-            );
-        }
-        if !self.job_status.is_empty() {
-            settings = settings.child(
-                div()
-                    .text_sm()
-                    .whitespace_normal()
-                    .child(self.job_status.clone()),
-            );
-        }
-        div()
-            .id("settings-scroll")
-            .size_full()
-            .overflow_y_scroll()
-            .child(settings)
-    }
-
-    fn setting_button(&self, field: &'static str, cx: &mut Context<Self>) -> Button {
-        Button::new(field)
-            .ghost()
-            .label(format!("Edit {}", field.replace('_', " ")))
-            .on_click(cx.listener(move |this, _, window, cx| {
-                this.execute(Choice::Config(field), window, cx)
-            }))
     }
 
     fn render_modal(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -438,8 +210,6 @@ impl TypeApp {
         v_flex()
             .size_full()
             .track_focus(&self.navigation_focus)
-            .border_r_1()
-            .border_color(cx.theme().border)
             .when(self.prefs.rail, |panel| {
                 panel.child(
                     h_flex()
@@ -612,6 +382,11 @@ impl Render for TypeApp {
         } else {
             theme.colors.foreground
         };
+        // Kit's active-line fill depends on native line numbers. Paint ours
+        // independently so the two appearance preferences stay independent.
+        std::sync::Arc::make_mut(&mut theme.highlight_theme)
+            .style
+            .editor_active_line = None;
         let mut body = v_flex()
             .relative()
             .size_full()
@@ -620,16 +395,6 @@ impl Render for TypeApp {
             .track_focus(&self.focus)
             .key_context("Type")
             .on_action(cx.listener(Self::on_quit));
-        // Keep the native traffic lights in a small drag region, without a title
-        // or an application toolbar stretching across the editor.
-        body = body.child(
-            div()
-                .id("window-drag-region")
-                .h(px(28.))
-                .w_full()
-                .flex_none()
-                .window_control_area(WindowControlArea::Drag),
-        );
         let content = if self.locked {
             div().flex_1().into_any_element()
         } else if self.settings {
@@ -637,14 +402,23 @@ impl Render for TypeApp {
         } else if let Some(note) = self.notes.get(&self.active).filter(|n| n.editor.is_some()) {
             let editor = note.editor.as_ref().unwrap();
             div()
+                .id("editor-pane")
+                .relative()
                 .size_full()
-                .px(px(40.))
-                .pt(px(30.))
-                .pb(px(24.))
+                .min_w_0()
+                .min_h_0()
+                .pl(if self.prefs.line_numbers {
+                    self.line_number_width(editor, cx)
+                } else {
+                    px(12.)
+                })
                 .child(
                     div()
                         .relative()
                         .size_full()
+                        .when(self.prefs.current_line_highlight, |pane| {
+                            pane.child(self.render_current_line(editor.clone()))
+                        })
                         .child(
                             Editor::new(editor)
                                 .bordered(false)
@@ -661,6 +435,9 @@ impl Render for TypeApp {
                             pane.child(self.render_cursor(editor.clone(), cx))
                         }),
                 )
+                .when(self.prefs.line_numbers, |pane| {
+                    pane.child(self.render_line_numbers(editor.clone(), cx))
+                })
                 .into_any_element()
         } else {
             div()
@@ -673,27 +450,55 @@ impl Render for TypeApp {
                 })
                 .into_any_element()
         };
-        if self.prefs.sidebar && !self.locked {
+        if (self.prefs.sidebar || self.settings) && !self.locked {
             body = body.child(
-                div().flex_1().min_h_0().child(
+                div().size_full().min_h_0().child(
                     h_resizable("main-panes")
                         .child(
                             resizable_panel()
                                 .size(px(330.))
                                 .size_range(px(240.)..px(600.))
-                                .child(self.render_navigation(cx)),
+                                .child(div().size_full().pt(px(28.)).child(if self.settings {
+                                    self.render_settings_navigation(cx).into_any_element()
+                                } else {
+                                    self.render_navigation(cx).into_any_element()
+                                })),
                         )
                         .child(
-                            resizable_panel()
-                                .size(px(820.))
-                                .size_range(px(380.)..px(1800.))
-                                .child(content),
+                            resizable_panel().size_range(px(380.)..Pixels::MAX).child(
+                                div()
+                                    .id("content-pane")
+                                    .size_full()
+                                    .min_w_0()
+                                    .min_h_0()
+                                    .pt(px(28.))
+                                    .child(content)
+                                    .test_support(),
+                            ),
                         ),
                 ),
             );
         } else {
-            body = body.child(div().flex_1().min_h_0().child(content));
+            body = body.child(
+                div()
+                    .size_full()
+                    .min_h_0()
+                    .pt(px(28.))
+                    .pl(px(250.))
+                    .child(content),
+            );
         }
+        // Overlay the titlebar so pane dividers continue through the top strip.
+        // Kit owns dragging and macOS's configured double-click action.
+        body = body.child(
+            div().absolute().top_0().left_0().w_full().h(px(28.)).child(
+                TitleBar::new()
+                    .h(px(28.))
+                    .w_full()
+                    .border_0()
+                    .bg(transparent_black()),
+            ),
+        );
         body.when_some(
             self.error.clone().filter(|_| self.modal.is_none()),
             |body, error| {

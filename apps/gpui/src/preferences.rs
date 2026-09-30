@@ -10,6 +10,9 @@ pub struct Preferences {
     pub font_size: f32,
     pub sidebar: bool,
     pub rail: bool,
+    pub line_numbers: bool,
+    pub heading_folding: bool,
+    pub current_line_highlight: bool,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -19,6 +22,9 @@ impl Default for Preferences {
             font_size: 17.,
             sidebar: true,
             rail: true,
+            line_numbers: true,
+            heading_folding: true,
+            current_line_highlight: true,
         }
     }
 }
@@ -80,6 +86,16 @@ pub fn environment(args: &[String], data_home: &Path) -> Result<AppEnv, String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn old_preferences_keep_values_and_enable_new_editor_options() {
+        let prefs: Preferences = serde_json::from_str(
+            r#"{"dark":false,"vim":false,"font_size":22,"sidebar":false,"rail":false}"#,
+        )
+        .unwrap();
+        assert!(!prefs.dark && !prefs.vim && !prefs.sidebar && !prefs.rail);
+        assert_eq!(prefs.font_size, 22.);
+        assert!(prefs.line_numbers && prefs.heading_folding && prefs.current_line_highlight);
+    }
     #[test]
     fn development_identity_and_explicit_paths_are_isolated() {
         assert!(

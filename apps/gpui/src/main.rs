@@ -1,6 +1,8 @@
 mod commands;
 mod cursor;
+mod editor;
 mod jobs;
+mod settings;
 mod ui;
 mod workspace;
 use std::{
@@ -18,7 +20,7 @@ use type_gpui::{
 
 use gpui_kit::{
     component::{
-        ActiveTheme, Icon, IconName, Sizable, Theme, ThemeMode,
+        ActiveTheme, Icon, IconName, Sizable, Theme, ThemeMode, TitleBar,
         button::{Button, ButtonVariants},
         command::{Command as CommandPalette, CommandGroup, CommandItem, CommandState},
         h_flex,
@@ -65,6 +67,7 @@ struct TypeApp {
     selected: HashSet<SharedString>,
     saved_selection: HashMap<View, SharedString>,
     settings: bool,
+    settings_section: settings::Section,
     modal: Option<commands::Modal>,
     modal_subscription: Option<Subscription>,
     status: String,
@@ -220,14 +223,19 @@ impl TypeApp {
 
     fn toggle_vim(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.prefs.vim = !self.prefs.vim;
-        let Some(note) = self.notes.get_mut(&self.active) else {
-            return;
-        };
         self.vim.reset();
-        note.editor.as_ref().unwrap().update(cx, |state, cx| {
-            state.set_readonly(self.prefs.vim, cx);
-            state.focus(window, cx);
-        });
+        if let Some(editor) = self
+            .notes
+            .get(&self.active)
+            .and_then(|note| note.editor.as_ref())
+        {
+            editor.update(cx, |state, cx| {
+                state.set_readonly(self.prefs.vim, cx);
+                if !self.settings {
+                    state.focus(window, cx);
+                }
+            });
+        }
         self.persist_preferences();
         cx.notify();
     }
@@ -664,12 +672,7 @@ fn main() {
                 WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(bounds)),
                     window_min_size: Some(size(px(760.), px(480.))),
-                    titlebar: Some(TitlebarOptions {
-                        title: None,
-                        appears_transparent: true,
-                        ..Default::default()
-                    }),
-                    ..Default::default()
+                    ..TitleBar::window_options()
                 },
                 cx,
                 move |window, cx| cx.new(|cx| TypeApp::new(env, window, cx)),

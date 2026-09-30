@@ -25,6 +25,7 @@ impl TypeApp {
             selected: HashSet::new(),
             saved_selection: HashMap::new(),
             settings: false,
+            settings_section: settings::Section::General,
             modal: None,
             modal_subscription: None,
             status: "Ready".into(),
@@ -428,7 +429,9 @@ impl TypeApp {
                 .language("markdown")
                 .auto_close(false)
                 .smart_indent(false)
-                .line_number(true)
+                // The shell paints quieter numbers using the engine's row geometry.
+                .line_number(false)
+                .folding(self.prefs.heading_folding)
                 .soft_wrap(true)
                 .tab_size(TabSize {
                     tab_size: 2,
