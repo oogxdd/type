@@ -1,0 +1,20 @@
+[package]
+name = "type-gpui"
+version = "0.4.5"
+edition = "2024"
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+gpui-kit = { version = "=0.7.0", features = ["tree-sitter-markdown", "tree-sitter-markdown-inline"] }
+type-core = { path = "../../crates/type-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"
+dirs = "6"
+cpal = "0.16"
+hound = "3.5"
+qrcode = { version = "0.14", default-features = false }
+
+[dev-dependencies]
+gpui-kit = { version = "=0.7.0", features = ["test-support", "tree-sitter-markdown", "tree-sitter-markdown-inline"] }
