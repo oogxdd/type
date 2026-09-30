@@ -1,25 +1,33 @@
-mod workspace;
 mod commands;
-mod ui;
+mod cursor;
 mod jobs;
-use type_gpui::{backend::Backend, document, keyboard, navigation::{self, View, Filter}, preferences::{self, Preferences}, vim};
-use type_core::{FolderNode, NotePreviewEntry, NotesProfilesSnapshot};
+mod ui;
+mod workspace;
 use std::{
     collections::{HashMap, HashSet},
     time::{Duration, Instant},
 };
+use type_core::{FolderNode, NotePreviewEntry, NotesProfilesSnapshot};
+use type_gpui::{
+    backend::Backend,
+    document, keyboard,
+    navigation::{self, Filter, View},
+    preferences::{self, Preferences},
+    vim,
+};
 
 use gpui_kit::{
     component::{
-        ActiveTheme, IconName, Sizable, Theme, ThemeMode,
+        ActiveTheme, Icon, IconName, Sizable, Theme, ThemeMode,
         button::{Button, ButtonVariants},
+        command::{Command as CommandPalette, CommandGroup, CommandItem, CommandState},
         h_flex,
         input::{
-            Editor, EditorState, Input, InputState, InputEvent, RangeDecoration, RangeDecorationCollection,
-            RangeDecorationStyle, TabSize, TextDecoration, TextDecorationCollection,
+            Editor, EditorState, Input, InputEvent, InputState, RangeDecoration,
+            RangeDecorationCollection, RangeDecorationStyle, TabSize, TextDecoration,
+            TextDecorationCollection,
         },
         list::ListItem,
-        command::{Command as CommandPalette, CommandItem, CommandState},
         menu::{DropdownMenu, PopupMenu, PopupMenuItem},
         resizable::{h_resizable, resizable_panel},
         tree::{TreeItem, TreeState, tree},
@@ -28,6 +36,8 @@ use gpui_kit::{
     prelude::*,
     *,
 };
+
+actions!(type_app, [Quit]);
 
 struct Note {
     title: SharedString,
@@ -70,6 +80,8 @@ struct TypeApp {
     job_task: Option<Task<()>>,
     recording: bool,
     capture: Option<jobs::Capture>,
+    pending_recording: Option<std::sync::Arc<(Vec<u8>, String)>>,
+    processing_status: String,
     local_server: Option<type_core::LocalSyncServerStatus>,
     job_status: String,
     vim: vim::Vim,
@@ -104,8 +116,12 @@ impl TypeApp {
         if !self.prefs.vim {
             return;
         }
-        let Some(note) = self.notes.get_mut(&self.active) else { return; };
-        let Some(editor) = note.editor.as_ref().cloned() else { return; };
+        let Some(note) = self.notes.get_mut(&self.active) else {
+            return;
+        };
+        let Some(editor) = note.editor.as_ref().cloned() else {
+            return;
+        };
         if !editor.focus_handle(cx).is_focused(window) {
             return;
         }
@@ -114,10 +130,25 @@ impl TypeApp {
             return;
         }
         let key = keyboard::modal_key(stroke);
-        if stroke.modifiers.control && !matches!(key.as_str(), "ctrl-r" | "ctrl-[" | "ctrl-j" | "ctrl-k") { return; }
+        if stroke.modifiers.control
+            && !matches!(key.as_str(), "ctrl-r" | "ctrl-[" | "ctrl-j" | "ctrl-k")
+        {
+            return;
+        }
         if key == "ctrl-j" || key == "ctrl-k" {
-            for _ in 0..5 { window.dispatch_action(if key == "ctrl-j" { Box::new(MoveDown) } else { Box::new(MoveUp) }, cx); }
-            window.prevent_default(); cx.stop_propagation(); return;
+            for _ in 0..5 {
+                window.dispatch_action(
+                    if key == "ctrl-j" {
+                        Box::new(MoveDown)
+                    } else {
+                        Box::new(MoveUp)
+                    },
+                    cx,
+                );
+            }
+            window.prevent_default();
+            cx.stop_propagation();
+            return;
         }
         let value = editor.read(cx).value();
         let cursor = editor.read(cx).cursor();
@@ -189,7 +220,9 @@ impl TypeApp {
 
     fn toggle_vim(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.prefs.vim = !self.prefs.vim;
-        let Some(note) = self.notes.get_mut(&self.active) else { return; };
+        let Some(note) = self.notes.get_mut(&self.active) else {
+            return;
+        };
         self.vim.reset();
         note.editor.as_ref().unwrap().update(cx, |state, cx| {
             state.set_readonly(self.prefs.vim, cx);
@@ -208,7 +241,9 @@ impl TypeApp {
     }
 
     fn refresh_tags(&mut self, cx: &mut Context<Self>) {
-        let Some(note) = self.notes.get(&self.active) else { return; };
+        let Some(note) = self.notes.get(&self.active) else {
+            return;
+        };
         let text = note.editor.as_ref().unwrap().read(cx).value();
         let regions = document::tag_regions(&text);
         self.tag_count = regions.len();
@@ -249,7 +284,12 @@ impl TypeApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(editor) = self.notes.get(&self.active).and_then(|n| n.editor.clone()) else { return; };
+        if self.locked || self.busy {
+            return;
+        }
+        let Some(editor) = self.notes.get(&self.active).and_then(|n| n.editor.clone()) else {
+            return;
+        };
         editor.update(cx, |state, cx| {
             state.set_readonly(false, cx);
             let text = state.value();
@@ -326,7 +366,8 @@ impl TypeApp {
             let id = &entry.item().id;
             let fraction = (content_y % 36.) / 36.;
             let placement = tree_moves::placement_at(fraction, self.folder_ids.contains(id));
-            (!id.starts_with("feed:") && tree_moves::can_move(&self.roots, &source, id)).then(|| (id.clone(), placement))
+            (!id.starts_with("feed:") && tree_moves::can_move(&self.roots, &source, id))
+                .then(|| (id.clone(), placement))
         });
         if candidate != self.drop_target {
             self.hover_since = Instant::now();
@@ -392,13 +433,32 @@ impl TypeApp {
             .has_active_drag()
             .then(|| self.drop_target.clone())
             .flatten();
+        fn count_notes(
+            items: &[navigation::Item],
+            counts: &mut HashMap<SharedString, usize>,
+        ) -> usize {
+            items
+                .iter()
+                .map(|item| {
+                    if item.folder {
+                        let count = count_notes(&item.children, counts);
+                        counts.insert(item.id.clone().into(), count);
+                        count
+                    } else {
+                        1
+                    }
+                })
+                .sum()
+        }
+        let mut counts = HashMap::new();
+        count_notes(&self.nav_items, &mut counts);
+        let menu_view = view.clone();
+        let menu_folders = folders.clone();
         tree(&self.tree, move |ix, entry, selected, _, cx| {
             let id = entry.item().id.clone();
             let is_folder = folders.contains(&id);
             let click_view = view.clone();
             let click_id = id.clone();
-            let menu_view = view.clone();
-            let menu_id = id.clone();
             let drop_view = view.clone();
             let drop_id = id.clone();
             let icon = if is_folder {
@@ -415,8 +475,10 @@ impl TypeApp {
                 .filter(|(target, _)| *target == id)
                 .map(|(_, position)| *position);
             ListItem::new(ix)
-                .selected(selected).when(multi.contains(&id), |row| row.bg(cx.theme().accent))
-                .h(px(36.))
+                .selected(selected)
+                .when(multi.contains(&id), |row| row.bg(cx.theme().accent))
+                .h(px(32.))
+                .text_sm()
                 .px_2()
                 .pl(px(12. + 16. * entry.depth() as f32))
                 .when(placement == Some(tree_moves::Placement::Before), |row| {
@@ -432,7 +494,21 @@ impl TypeApp {
                     h_flex()
                         .w_full()
                         .gap_2()
-                        .child(icon)
+                        .child(div().w(px(12.)).when(is_folder, |cell| {
+                            cell.child(
+                                Icon::new(if entry.is_expanded() {
+                                    IconName::ChevronDown
+                                } else {
+                                    IconName::ChevronRight
+                                })
+                                .size(px(12.)),
+                            )
+                        }))
+                        .child(
+                            Icon::new(icon)
+                                .size(px(15.))
+                                .text_color(cx.theme().muted_foreground),
+                        )
                         .child(
                             div()
                                 .flex_1()
@@ -440,21 +516,20 @@ impl TypeApp {
                                 .text_ellipsis()
                                 .child(entry.item().label.clone()),
                         )
-                        .child(
-                            Button::new(SharedString::from(format!("menu-{id}")))
-                                .ghost()
-                                .xsmall()
-                                .icon(IconName::Ellipsis)
-                                .tooltip("Actions")
-                                .dropdown_menu(move |menu, _, _| {
-                                    Self::menu_for(
-                                        menu_view.clone(),
-                                        menu_id.clone(),
-                                        is_folder,
-                                        menu,
-                                    )
-                                }),
-                        ),
+                        .when(is_folder, |row| {
+                            row.child(
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(
+                                        counts
+                                            .get(&id)
+                                            .filter(|n| **n > 0)
+                                            .map(ToString::to_string)
+                                            .unwrap_or_default(),
+                                    ),
+                            )
+                        }),
                 )
                 .on_drag(
                     DraggedRow {
@@ -479,10 +554,26 @@ impl TypeApp {
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_click(move |event, window, cx| {
                     let _ = click_view.update(cx, |this, cx| {
-                        this.click_row(click_id.clone(), is_folder, event.modifiers().shift || event.modifiers().platform || event.modifiers().control, window, cx)
+                        this.click_row(
+                            click_id.clone(),
+                            is_folder,
+                            event.modifiers().shift
+                                || event.modifiers().platform
+                                || event.modifiers().control,
+                            window,
+                            cx,
+                        )
                     });
                 })
                 .text_color(cx.theme().foreground)
+        })
+        .context_menu(move |_, entry, menu, _, _| {
+            Self::menu_for(
+                menu_view.clone(),
+                entry.item().id.clone(),
+                menu_folders.contains(&entry.item().id),
+                menu,
+            )
         })
     }
 
@@ -545,18 +636,47 @@ fn parent_folder(items: &[TreeItem], target: &SharedString) -> Option<SharedStri
 
 fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
-    let Some(data_home) = dirs::data_local_dir() else { eprintln!("No application-data directory."); return; };
-    let env = match preferences::environment(&args, &data_home) { Ok(env) => env, Err(e) => { eprintln!("{e}"); return; } };
-    gpui_kit::application().with_assets(gpui_kit::assets::Assets).run(move |cx| {
-        gpui_kit::init(cx);
-        cx.on_window_closed(|cx, _| { if cx.windows().is_empty() { cx.quit(); } }).detach();
-        cx.activate(true);
-        let bounds = Bounds::centered(None, size(px(1150.), px(780.)), cx);
-        gpui_kit::open_window(WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
-            window_min_size: Some(size(px(760.), px(480.))),
-            titlebar: Some(TitlebarOptions { title: Some(if env.app_data_dir.ends_with("com.digital.type2") { "Type" } else { "Type GPUI Dev" }.into()), ..Default::default() }),
-            ..Default::default()
-        }, cx, move |window, cx| cx.new(|cx| TypeApp::new(env, window, cx))).expect("Failed to open Type");
-    });
+    let Some(data_home) = dirs::data_local_dir() else {
+        eprintln!("No application-data directory.");
+        return;
+    };
+    let env = match preferences::environment(&args, &data_home) {
+        Ok(env) => env,
+        Err(e) => {
+            eprintln!("{e}");
+            return;
+        }
+    };
+    gpui_kit::application()
+        .with_assets(gpui_kit::assets::Assets)
+        .run(move |cx| {
+            gpui_kit::init(cx);
+            cx.bind_keys([KeyBinding::new("secondary-q", Quit, Some("Type"))]);
+            cx.on_window_closed(|cx, _| {
+                if cx.windows().is_empty() {
+                    cx.quit();
+                }
+            })
+            .detach();
+            cx.activate(true);
+            let bounds = Bounds::centered(None, size(px(1150.), px(780.)), cx);
+            gpui_kit::open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(bounds)),
+                    window_min_size: Some(size(px(760.), px(480.))),
+                    titlebar: Some(TitlebarOptions {
+                        title: None,
+                        appears_transparent: true,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                cx,
+                move |window, cx| cx.new(|cx| TypeApp::new(env, window, cx)),
+            )
+            .expect("Failed to open Type");
+        });
 }
+
+#[cfg(test)]
+mod tests;

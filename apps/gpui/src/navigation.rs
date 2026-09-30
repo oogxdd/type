@@ -1,84 +1,188 @@
-use std::collections::{BTreeMap, HashSet};
 use chrono::{Datelike, Local, NaiveDate, TimeZone};
-use type_core::{FolderNode, NotePreviewEntry, STREAM_FOLDER, ARCHIVE_FOLDER};
+use std::collections::{BTreeMap, HashSet};
+use type_core::{ARCHIVE_FOLDER, FolderNode, NotePreviewEntry, STREAM_FOLDER};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum View { Feed, Folders, Trash }
+pub enum View {
+    Feed,
+    Folders,
+    Trash,
+}
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Filter { All, #[default] Active, Reviewed, Unreviewed, Archived }
+pub enum Filter {
+    All,
+    #[default]
+    Active,
+    Reviewed,
+    Unreviewed,
+    Archived,
+}
 impl Filter {
-    pub const ALL: [Self; 5] = [Self::All, Self::Active, Self::Reviewed, Self::Unreviewed, Self::Archived];
+    pub const ALL: [Self; 5] = [
+        Self::All,
+        Self::Active,
+        Self::Reviewed,
+        Self::Unreviewed,
+        Self::Archived,
+    ];
     pub fn label(self) -> &'static str {
-        match self { Self::All => "All", Self::Active => "Active", Self::Reviewed => "Reviewed", Self::Unreviewed => "Unreviewed", Self::Archived => "Archived" }
+        match self {
+            Self::All => "All",
+            Self::Active => "Active",
+            Self::Reviewed => "Reviewed",
+            Self::Unreviewed => "Unreviewed",
+            Self::Archived => "Archived",
+        }
     }
     pub fn matches(self, note: &NotePreviewEntry) -> bool {
-        match self { Self::All => true, Self::Active => note.meta.archived_ms.is_none(),
-            Self::Reviewed => note.meta.reviewed_ms.is_some(), Self::Unreviewed => note.meta.reviewed_ms.is_none(),
-            Self::Archived => note.meta.archived_ms.is_some() }
+        match self {
+            Self::All => true,
+            Self::Active => note.meta.archived_ms.is_none(),
+            Self::Reviewed => note.meta.reviewed_ms.is_some(),
+            Self::Unreviewed => note.meta.reviewed_ms.is_none(),
+            Self::Archived => note.meta.archived_ms.is_some(),
+        }
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct Item {
-    pub id: String, pub label: String, pub folder: bool, pub synthetic: bool, pub children: Vec<Item>,
+    pub id: String,
+    pub label: String,
+    pub folder: bool,
+    pub synthetic: bool,
+    pub children: Vec<Item>,
 }
 impl Item {
     fn note(note: &NotePreviewEntry) -> Self {
-        Self { id: note.path.clone(), label: title(&note.content), folder: false, synthetic: false, children: vec![] }
+        Self {
+            id: note.path.clone(),
+            label: title(&note.content),
+            folder: false,
+            synthetic: false,
+            children: vec![],
+        }
     }
 }
 
 pub fn title(body: &str) -> String {
-    let line = body.lines().find(|line| !line.trim().is_empty() && !line.starts_with(":::")).unwrap_or("Untitled");
+    let line = body
+        .lines()
+        .find(|line| !line.trim().is_empty() && !line.starts_with(":::"))
+        .unwrap_or("Untitled");
     let text = line.trim().trim_start_matches('#').trim();
-    if text.is_empty() { "Untitled".into() } else { text.chars().take(90).collect() }
+    if text.is_empty() {
+        "Untitled".into()
+    } else {
+        text.chars().take(90).collect()
+    }
 }
 
-pub fn folders(root: &FolderNode, notes: &std::collections::HashMap<String, NotePreviewEntry>) -> Vec<Item> {
-    root.children.iter().filter(|f| f.path != "_system").map(|f| Item {
-        id: f.path.clone(), label: f.name.clone(), folder: true, synthetic: false, children: folders(f, notes)
-    }).chain(root.notes.iter().map(|entry| notes.get(&entry.path).map(Item::note).unwrap_or(Item {
-        id: entry.path.clone(), label: entry.name.clone(), folder: false, synthetic: false, children: vec![]
-    }))).collect()
+pub fn folders(
+    root: &FolderNode,
+    notes: &std::collections::HashMap<String, NotePreviewEntry>,
+) -> Vec<Item> {
+    root.children
+        .iter()
+        .filter(|f| f.path != "_system")
+        .map(|f| Item {
+            id: f.path.clone(),
+            label: f.name.clone(),
+            folder: true,
+            synthetic: false,
+            children: folders(f, notes),
+        })
+        .chain(root.notes.iter().map(|entry| {
+            notes.get(&entry.path).map(Item::note).unwrap_or(Item {
+                id: entry.path.clone(),
+                label: entry.name.clone(),
+                folder: false,
+                synthetic: false,
+                children: vec![],
+            })
+        }))
+        .collect()
 }
 
 pub fn note_paths(root: &FolderNode) -> Vec<String> {
-    root.notes.iter().map(|n| n.path.clone()).chain(root.children.iter().flat_map(note_paths)).collect()
+    root.notes
+        .iter()
+        .map(|n| n.path.clone())
+        .chain(root.children.iter().flat_map(note_paths))
+        .collect()
 }
 
 /// Date groups are projections, never filesystem destinations. Assign a whole
 /// ISO week to its Thursday's month so a month boundary cannot split it.
-pub fn feed(notes: &std::collections::HashMap<String, NotePreviewEntry>, filter: Filter, today: NaiveDate, trash: bool) -> Vec<Item> {
+pub fn feed(
+    notes: &std::collections::HashMap<String, NotePreviewEntry>,
+    filter: Filter,
+    today: NaiveDate,
+    trash: bool,
+) -> Vec<Item> {
     let folder = if trash { ARCHIVE_FOLDER } else { STREAM_FOLDER };
-    let mut ordered: Vec<_> = notes.values().filter(|n| type_core::note_parent_folder_path(&n.path) == folder && (trash || filter.matches(n))).collect();
-    ordered.sort_by(|a, b| b.meta.created_ms.cmp(&a.meta.created_ms).then_with(|| b.path.cmp(&a.path)));
+    let mut ordered: Vec<_> = notes
+        .values()
+        .filter(|n| {
+            type_core::note_parent_folder_path(&n.path) == folder && (trash || filter.matches(n))
+        })
+        .collect();
+    ordered.sort_by(|a, b| {
+        b.meta
+            .created_ms
+            .cmp(&a.meta.created_ms)
+            .then_with(|| b.path.cmp(&a.path))
+    });
     let week = today - chrono::Duration::days(today.weekday().num_days_from_monday() as i64);
     let mut groups = BTreeMap::<String, Item>::new();
     for note in ordered {
-        let date = note.meta.created_ms.and_then(|t| Local.timestamp_millis_opt(t).single()).map(|t| t.date_naive());
+        let date = note
+            .meta
+            .created_ms
+            .and_then(|t| Local.timestamp_millis_opt(t).single())
+            .map(|t| t.date_naive());
         let (key, label) = match date {
             Some(d) if d == today => ("9-today".into(), "Today".into()),
             Some(d) if Some(d) == today.pred_opt() => ("8-yesterday".into(), "Yesterday".into()),
             Some(d) if d >= week && d < today => ("7-week".into(), "This week".into()),
-            Some(d) if d >= week - chrono::Duration::days(7) && d < week => ("6-last-week".into(), "Last week".into()),
+            Some(d) if d >= week - chrono::Duration::days(7) && d < week => {
+                ("6-last-week".into(), "Last week".into())
+            }
             Some(d) => {
                 let monday = d - chrono::Duration::days(d.weekday().num_days_from_monday() as i64);
                 let anchor = monday + chrono::Duration::days(3);
-                (format!("5-{}-{:02}", anchor.year(), anchor.month()), anchor.format("%B %Y").to_string())
+                (
+                    format!("5-{}-{:02}", anchor.year(), anchor.month()),
+                    anchor.format("%B %Y").to_string(),
+                )
             }
             None => ("0-undated".into(), "Undated".into()),
         };
         let group = groups.entry(key.clone()).or_insert_with(|| Item {
-            id: format!("feed:{key}"), label, folder: true, synthetic: true, children: vec![]
+            id: format!("feed:{key}"),
+            label,
+            folder: true,
+            synthetic: true,
+            children: vec![],
         });
         if key.starts_with("5-") {
             let d = date.unwrap();
             let iso = d.iso_week();
             let week_id = format!("feed:week:{}-{:02}", iso.year(), iso.week());
-            let pos = group.children.iter().position(|i| i.id == week_id).unwrap_or_else(|| {
-                group.children.push(Item { id: week_id.clone(), label: format!("Week {}", iso.week()), folder: true, synthetic: true, children: vec![] });
-                group.children.len() - 1
-            });
+            let pos = group
+                .children
+                .iter()
+                .position(|i| i.id == week_id)
+                .unwrap_or_else(|| {
+                    group.children.push(Item {
+                        id: week_id.clone(),
+                        label: format!("Week {}", iso.week()),
+                        folder: true,
+                        synthetic: true,
+                        children: vec![],
+                    });
+                    group.children.len() - 1
+                });
             group.children[pos].children.push(Item::note(note));
         } else {
             group.children.push(Item::note(note));
@@ -87,41 +191,63 @@ pub fn feed(notes: &std::collections::HashMap<String, NotePreviewEntry>, filter:
     groups.into_values().rev().collect()
 }
 
+pub fn contains(items: &[Item], id: &str) -> bool {
+    items
+        .iter()
+        .any(|i| i.id == id || contains(&i.children, id))
+}
+
 pub fn visible<'a>(items: &'a [Item], expanded: &HashSet<String>) -> Vec<&'a Item> {
-    items.iter().flat_map(|i| {
-        let mut rows = vec![i];
-        if expanded.contains(&i.id) { rows.extend(visible(&i.children, expanded)); }
-        rows
-    }).collect()
+    items
+        .iter()
+        .flat_map(|i| {
+            let mut rows = vec![i];
+            if expanded.contains(&i.id) {
+                rows.extend(visible(&i.children, expanded));
+            }
+            rows
+        })
+        .collect()
 }
 
 pub fn destinations(items: &[Item]) -> Vec<String> {
-    items.iter().flat_map(|i| {
-        let mut dirs = vec![];
-        if i.folder && !i.synthetic && !crate::backend::is_protected(&i.id) {
-            dirs.push(i.id.clone()); dirs.extend(destinations(&i.children));
-        }
-        dirs
-    }).collect()
+    items
+        .iter()
+        .flat_map(|i| {
+            let mut dirs = vec![];
+            if i.folder && !i.synthetic && !crate::backend::is_protected(&i.id) {
+                dirs.push(i.id.clone());
+                dirs.extend(destinations(&i.children));
+            }
+            dirs
+        })
+        .collect()
 }
 
 pub fn move_suggestions(folders: &[String], query: &str) -> Vec<String> {
     let query = query.trim().to_lowercase();
-    let mut matches: Vec<_> = folders.iter().filter(|path| {
-        let path = path.to_lowercase();
-        if query.ends_with('/') {
-            let tail = path.strip_prefix(&query);
-            tail.is_some_and(|tail| !tail.is_empty() && !tail.contains('/'))
-        } else if query.contains('/') { path.starts_with(&query) }
-        else {
-            let mut chars = query.chars();
-            let mut next = chars.next();
-            for ch in path.rsplit('/').next().unwrap_or("").chars() {
-                if Some(ch) == next { next = chars.next(); }
+    let mut matches: Vec<_> = folders
+        .iter()
+        .filter(|path| {
+            let path = path.to_lowercase();
+            if query.ends_with('/') {
+                let tail = path.strip_prefix(&query);
+                tail.is_some_and(|tail| !tail.is_empty() && !tail.contains('/'))
+            } else if query.contains('/') {
+                path.starts_with(&query)
+            } else {
+                let mut chars = query.chars();
+                let mut next = chars.next();
+                for ch in path.rsplit('/').next().unwrap_or("").chars() {
+                    if Some(ch) == next {
+                        next = chars.next();
+                    }
+                }
+                next.is_none()
             }
-            next.is_none()
-        }
-    }).cloned().collect();
+        })
+        .cloned()
+        .collect();
     matches.sort();
     matches
 }
@@ -130,44 +256,98 @@ pub fn move_suggestions(folders: &[String], query: &str) -> Vec<String> {
 mod tests {
     use super::*;
     fn note(path: &str, timestamp: i64) -> NotePreviewEntry {
-        NotePreviewEntry { path: path.into(), version: None, content: "hello".into(), meta: type_core::NoteMeta {
-            created_ms: Some(timestamp), updated_ms: None, note_type: None, archived_ms: None, reviewed_ms: None, tags: None,
-            recording_audio_path: None, handwriting_attachment_path: None, transcription_status: None, transcription_error: None, transcription_updated_ms: None,
-            ocr_status: None, ocr_error: None, ocr_updated_ms: None,
-        }}
+        NotePreviewEntry {
+            path: path.into(),
+            version: None,
+            content: "hello".into(),
+            meta: type_core::NoteMeta {
+                created_ms: Some(timestamp),
+                updated_ms: None,
+                note_type: None,
+                archived_ms: None,
+                reviewed_ms: None,
+                tags: None,
+                recording_audio_path: None,
+                handwriting_attachment_path: None,
+                transcription_status: None,
+                transcription_error: None,
+                transcription_updated_ms: None,
+                ocr_status: None,
+                ocr_error: None,
+                ocr_updated_ms: None,
+            },
+        }
     }
     #[test]
     fn feed_groups_iso_week_across_months_once_and_orders_newest_first() {
         let mut notes = std::collections::HashMap::new();
         for date in ["2026-08-31", "2026-09-01", "2026-09-30"] {
             let d = NaiveDate::parse_from_str(date, "%Y-%m-%d").unwrap();
-            let t = Local.from_local_datetime(&d.and_hms_opt(12, 0, 0).unwrap()).unwrap().timestamp_millis();
-            let p = format!("{STREAM_FOLDER}/{date}.md"); notes.insert(p.clone(), note(&p, t));
+            let t = Local
+                .from_local_datetime(&d.and_hms_opt(12, 0, 0).unwrap())
+                .unwrap()
+                .timestamp_millis();
+            let p = format!("{STREAM_FOLDER}/{date}.md");
+            notes.insert(p.clone(), note(&p, t));
         }
-        let groups = feed(&notes, Filter::All, NaiveDate::from_ymd_opt(2026, 9, 30).unwrap(), false);
+        let groups = feed(
+            &notes,
+            Filter::All,
+            NaiveDate::from_ymd_opt(2026, 9, 30).unwrap(),
+            false,
+        );
         assert_eq!(groups[0].label, "Today");
         assert_eq!(groups[1].label, "September 2026");
         assert_eq!(groups[1].children.len(), 1);
         assert_eq!(groups[1].children[0].children.len(), 2);
-        let ids: HashSet<_> = groups.iter().flat_map(|i| std::iter::once(&i.id).chain(i.children.iter().flat_map(|c| std::iter::once(&c.id).chain(c.children.iter().map(|n| &n.id))))).collect();
+        let ids: HashSet<_> =
+            groups
+                .iter()
+                .flat_map(|i| {
+                    std::iter::once(&i.id).chain(i.children.iter().flat_map(|c| {
+                        std::iter::once(&c.id).chain(c.children.iter().map(|n| &n.id))
+                    }))
+                })
+                .collect();
         assert_eq!(ids.iter().filter(|id| id.ends_with(".md")).count(), 3);
     }
     #[test]
     fn filters_are_independent_and_empty_groups_disappear() {
-        let p = format!("{STREAM_FOLDER}/a.md"); let mut n = note(&p, 1);
-        n.meta.archived_ms = Some(2); n.meta.reviewed_ms = Some(3);
-        assert!(Filter::Reviewed.matches(&n)); assert!(Filter::Archived.matches(&n)); assert!(!Filter::Active.matches(&n));
+        let p = format!("{STREAM_FOLDER}/a.md");
+        let mut n = note(&p, 1);
+        n.meta.archived_ms = Some(2);
+        n.meta.reviewed_ms = Some(3);
+        assert!(Filter::Reviewed.matches(&n));
+        assert!(Filter::Archived.matches(&n));
+        assert!(!Filter::Active.matches(&n));
         let map = [(p, n)].into();
         assert!(feed(&map, Filter::Active, Local::now().date_naive(), false).is_empty());
     }
     #[test]
     fn collapsed_descendants_and_system_destinations_are_excluded() {
-        let rows = vec![Item { id: "Work".into(), label: "Work".into(), folder: true, synthetic: false,
-            children: vec![Item { id: "Work/a.md".into(), label: "a".into(), folder: false, synthetic: false, children: vec![] }] }];
+        let rows = vec![Item {
+            id: "Work".into(),
+            label: "Work".into(),
+            folder: true,
+            synthetic: false,
+            children: vec![Item {
+                id: "Work/a.md".into(),
+                label: "a".into(),
+                folder: false,
+                synthetic: false,
+                children: vec![],
+            }],
+        }];
         assert_eq!(visible(&rows, &HashSet::new()).len(), 1);
         assert_eq!(visible(&rows, &["Work".into()].into()).len(), 2);
         assert_eq!(destinations(&rows), vec!["Work"]);
-        assert_eq!(move_suggestions(&["Work/Ideas".into(), "Work/Ideas/Deep".into()], "Work/"), vec!["Work/Ideas"]);
-        assert_eq!(move_suggestions(&["Projects".into(), "Work".into()], "pj"), vec!["Projects"]);
+        assert_eq!(
+            move_suggestions(&["Work/Ideas".into(), "Work/Ideas/Deep".into()], "Work/"),
+            vec!["Work/Ideas"]
+        );
+        assert_eq!(
+            move_suggestions(&["Projects".into(), "Work".into()], "pj"),
+            vec!["Projects"]
+        );
     }
 }
