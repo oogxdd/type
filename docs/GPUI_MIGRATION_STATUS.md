@@ -10,6 +10,7 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 - New shell: `apps/gpui` (`type-gpui`). Existing `experiments/gpui-demo` is untouched.
 - Original worktree has unrelated dirty files (`package.json`, `crates/type-core/examples`, `docs/VOICE_MEMOS_IMPORT.md`). Do not overwrite them.
 - User wants progress committed along the way. No PR or release requested. The user will test UI and feel; agents verify functionality. The user plans to try the separate GPUI bundle with production data after making their own backup.
+- Current priority for this production trial is everyday text notes and the nested Stream. Audio recording and OCR are not important to the user now; automatic transcription matters somewhat but is not essential for cutover. Multi-note viewing and similar extras are outside the requested core scope.
 
 ## User requirements
 
@@ -54,7 +55,18 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 - Stream section labels are muted; note rows include archived/reviewed markers. Expansion is now retained independently when switching Stream and Folders. The old simpler date grouping remains in Trash.
 - `cargo test -p type-gpui --offline -- --test-threads=1` passed: 27 library + 12 binary tests, including calendar boundary/filter tests and a headless UI test for expansion across tab switches. `cargo fmt -p type-gpui` and `git diff --check` passed.
 - Normal debug build and separate `Type GPUI Dev.app` bundle succeeded. Bundle identifier is `com.digital.type2.gpui.dev`; its executable hash matches the freshly built binary. The Tauri production app was untouched. The new bundle was not launched, and production data was not opened.
+- Installed the same build at `/Applications/Type GPUI Dev.app` after confirming no app with that name existed. Its executable SHA-256 matches the build (`2f52f8e5e1c53681424cbb5bf167514c664c0daa0166bac97a6bcc7d4152ba09`); `/Applications/Type.app` remains in place. Installation did not launch GPUI or access notes.
 - Remaining: user review of Stream appearance/feel; real-data smoke test for opening, editing, restarting, and sync if used. Native release signing/updater remain unfinished.
+
+### Production-data trial
+
+After the user makes their own backup, quit Tauri before editing the same notes root in GPUI. A normal double-click on the installed dev app uses its isolated dev data. To open the existing Type app data and configured notes root instead, launch:
+
+```sh
+open -n "/Applications/Type GPUI Dev.app" --args --dev --production
+```
+
+The `--production` argument switches the app-data path to `com.digital.type2`; it does not install over Tauri or change GPUI's separate bundle identifier. This launch has not been exercised on the user's data. Verify opening, editing, quitting/relaunching and any sync workflow used before relying on it exclusively.
 
 ### Editor / window appearance (2026-10-01, implemented and launched for review)
 
@@ -103,7 +115,7 @@ Current bundle: `/Volumes/KINGSTON/Projects/type/app/experiments/gpui-demo/targe
 
 1. Continue functional coverage: editor-only Tab, Normal/Visual paste/IME guards, move/rename after autosave, multi-selection, profile-switch flush, close/quit conflicts. Existing tests cover Ctrl+W, nav Tab, Unicode insert/save, Visual inclusive selection and mode preservation, grouped palette confirmation, backdrop click, filesystem conflicts/collisions, date groups and pure DnD.
 2. Stream/Folders expansion now survives switching views. Confirm the nested Stream presentation with the user; headless tests do not judge appearance.
-3. Finish retaining failed recording bytes + retry: `pending_recording` field exists and blocks close/profile switch, but is not populated on stop. `Capture::finish` and recording save currently consume bytes. No microphone permission/test has been performed. Add automatic processing after capture/import/sync respecting settings; presently only manual Queue is wired. Validate filename format / OCR provider settings.
+3. Lower priority for the user's current text-notes cutover: retain failed recording bytes + retry (`pending_recording` is not populated on stop), and add automatic processing after capture/import/sync respecting settings. Recording/OCR are not important to the user now; transcription is useful later but manual Queue is acceptable for the trial. No microphone permission/test has been performed. Validate filename format / OCR provider settings when revisiting these workflows.
 4. Review profile rename/forget and standalone folder creation. Profile rename is now available under Settings → Working folders; profile deletion and standalone folder creation have no UI. Security panic reset clears profiles via reload, but needs a functional isolated-fixture test. Optional extension policy needs review before production use.
 5. Native macOS bundle/dev launcher exists; normal debug build and unsigned dev bundling passed. Root app/dev/build scripts target GPUI, explicit `desktop:tauri:*` aliases retain Tauri. Validate release bundling before claiming packaging finished. Launcher needs Python >=3.11 (`tomllib`); improve portability if appropriate. `desktop:dmg:dev` remains an explicit legacy alias; native bundling currently emits only unsigned `.app`.
 6. CI adds native macOS tests/bundle; Linux Rust job excludes type-gpui so Tauri/core checks keep their existing dependencies. Remote CI and Linux/Windows runtime remain unverified.
