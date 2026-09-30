@@ -7,7 +7,8 @@ a phone can sync over Wi-Fi or a hotspot with **no external host**.
 
 Two apps share **one Rust core**:
 
-- **Desktop** — Tauri v2 + React 19/TypeScript (macOS, Windows, Linux)
+- **Desktop** — native GPUI Kit + Rust (`apps/gpui`, migration in progress).
+  The Tauri v2 + React shell is retained as an explicit fallback.
 - **Mobile** — React Native (Expo), talking to the same core through UniFFI. Opens on a
   blank page you can type on immediately; swipe up files it away and gives you a fresh page.
 
@@ -16,7 +17,8 @@ Two apps share **one Rust core**:
 npm workspaces + one Cargo workspace:
 
 ```
-apps/desktop/          Tauri app (React frontend + src-tauri shell)
+apps/gpui/             Native GPUI desktop — see apps/gpui/README.md
+apps/desktop/          Legacy Tauri app (React frontend + src-tauri shell)
 apps/mobile/           React Native app (Expo) — see apps/mobile/README.md
 crates/type-core/      Framework-free Rust core (notes, git sync, recordings,
                        transcription queues, security, working folders)
@@ -68,8 +70,8 @@ Cargo selects and installs the same toolchain used by CI and release builds.
 
 ```bash
 npm install                  # once, at the repo root (npm workspaces)
-npm run desktop:dev          # desktop web dev server
-npm run desktop:tauri dev    # desktop app
+npm run desktop:app          # native GPUI desktop, isolated dev data
+npm run desktop:tauri:app    # legacy Tauri desktop, isolated dev data
 npm run mobile:start         # mobile (Expo; runs in demo mode without a native build)
 ```
 
@@ -77,47 +79,28 @@ The mobile app runs against an in-memory mock core until the native module is
 generated on a Mac (Rust cross-build + `uniffi-bindgen-react-native` codegen) —
 see [apps/mobile/README.md](apps/mobile/README.md).
 
-### Isolated desktop dev
+### Native desktop development
 
-If the production macOS app is installed on the same machine, use the isolated
-dev flavor so development does not touch production app data (run inside
-`apps/desktop/`):
-
-```bash
-npm run tauri:dev:isolated -w type
-```
-
-Production uses `com.digital.type2` and stores app data under
-`~/Library/Application Support/com.digital.type2/`. The isolated dev flavor uses
-`com.digital.type2.dev` and stores app data under
-`~/Library/Application Support/com.digital.type2.dev/`.
-
-Run the app against the dev identifier — never the production one, which holds
-real notes:
+`desktop:app` builds and opens the native GPUI app. Debug launches use
+`com.digital.type2.gpui.dev`; `--data-dir /absolute/path` selects an isolated test
+root. `desktop:app:prod-data` explicitly opens the existing production app-data
+folder. macOS is verified locally; Linux/Windows native runtime needs validation.
 
 ```bash
-npm run desktop:app       # dev run, isolated data, updater disabled
-npm run desktop:dmg:dev   # "Type Dev.dmg", installs alongside production
+npm run desktop:build          # native Rust build
+npm run desktop:test           # native unit + headless UI tests
+npm run desktop:bundle         # unsigned macOS dev .app
+npm run desktop:release        # unsigned production .app; no publication
+npm run desktop:tauri:build    # legacy frontend build
+npm run typecheck
+npm test
+cargo test -p type-core --lib
 ```
 
-### Build & checks
-
-```bash
-npm run desktop:build    # tsc + vite build
-cargo check --workspace
-
-npm run typecheck        # tsc --noEmit in every workspace
-npm test                 # Vitest in every workspace (pure logic)
-cargo test --workspace --lib   # Rust unit tests
-```
-
-CI (`.github/workflows/ci.yml`) runs the typecheck and both test suites on every
-pull request and on pushes to `main`.
-
-Manual smoke checks:
-
-- **Desktop** — folder tree, note editing, DnD reorder, context menus, settings, keyboard shortcuts
-- **Mobile (React Native)** — blank-page capture + swipe-up filing, folder browsing, record, sync
+See [native desktop](apps/gpui/README.md) and the live
+[migration handoff](docs/GPUI_MIGRATION_STATUS.md). CI retains TypeScript/core/Tauri
+checks and adds native macOS keyboard-flow tests. Signing/notarization and release
+updater cutover remain pending; existing tag releases still use Tauri.
 
 ## Notes storage
 

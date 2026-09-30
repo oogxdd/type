@@ -8,13 +8,33 @@ A local-first markdown notes app. Notes are stored as `.md` files in a local fol
 
 There are **two apps over one Rust core**: the desktop app is Tauri v2 + React (macOS/Windows/Linux), and the mobile app is React Native (Expo), talking to the same core through UniFFI bindings.
 
+## Native desktop migration
+
+The native shell is now `apps/gpui` (GPUI Kit 0.7.0 + `type-core`). Default
+`desktop:app/dev/build` scripts target it; `desktop:tauri:*` retains the legacy
+shell. Consult `docs/GPUI_MIGRATION_STATUS.md` before continuing this unfinished
+migration. Keep it current with verified results and remaining work.
+
+Native modules: `workspace.rs` owns profiles/tree/editor state and autosave;
+`commands.rs` owns application keyboard dispatch and palette/modal workflows;
+`ui.rs` owns composition; `cursor.rs` draws the Vim cursor; `jobs.rs` adapts core
+background workflows and CPAL audio. Pure backend, navigation, keyboard, document
+and Vim helpers live in the library. Application chords have one owner in
+`keyboard.rs`. Ctrl+W switches panes on macOS too; Tab cycles Stream/Folders only
+in navigation. Native tests use isolated temporary profiles, never production.
+
+The Tauri architecture below documents the retained legacy shell. Mobile/FFI and
+the framework-free core architecture still apply. Do not publish native artifacts
+through the old Tauri updater; release packaging is a separate unfinished cutover.
+
 ## Monorepo layout
 
 npm workspaces (`apps/*`, `packages/*`) + one Cargo workspace at the repo root
 (single `Cargo.lock` and `target/`).
 
 ```
-apps/desktop/          The Tauri app: React frontend (src/) + Tauri shell (src-tauri/)
+apps/gpui/             Native Rust GPUI shell over type-core
+apps/desktop/          The legacy Tauri app: React frontend (src/) + Tauri shell (src-tauri/)
 apps/mobile/           The React Native app (Expo). See apps/mobile/README.md
 crates/type-core/      Framework-free Rust core: domain/application/ports/adapters
 crates/type-ffi/       UniFFI bindings over type-core for non-Tauri shells

@@ -6,10 +6,10 @@ Updated: 2026-09-30. This is an unfinished migration; update this file after eac
 
 - Branch: `codex/gpui-desktop`.
 - Worktree: `/Volumes/KINGSTON/Projects/type/app/.worktrees/gpui-desktop`.
-- Base: `081cc4cb`; initial migration commit: `5ff01346`.
+- Base: `081cc4cb`; initial migration commit: `5ff01346`; handoff note: `6bb5378a`.
 - New shell: `apps/gpui` (`type-gpui`). Existing `experiments/gpui-demo` is untouched.
 - Original worktree has unrelated dirty files (`package.json`, `crates/type-core/examples`, `docs/VOICE_MEMOS_IMPORT.md`). Do not overwrite them.
-- User wants progress committed along the way. No push or PR requested.
+- User wants progress committed along the way and now explicitly requested a push. No PR requested. Latest instruction: test functionally only; the user will test UI and feel. Prepare a clean handoff for a fresh agent.
 
 ## User requirements
 
@@ -34,15 +34,15 @@ Updated: 2026-09-30. This is an unfinished migration; update this file after eac
 - Core workflows exposed in commands/settings: Git connect/pull/push/checkpoint/history/SSH key, phone server/QR, backup/export, Apple Notes import, handwriting, queues, security enable/unlock/lock, per-folder and app configuration.
 - CPAL microphone capture to WAV because core native recorder adapter is unsupported on desktop. Actual microphone/network flows have not been exercised.
 - Debug identity `com.digital.type2.gpui.dev`; `--data-dir /absolute/path` supports isolated fixtures. `--production` opts into existing Type app data.
-- Latest changes (not yet all validated): minimal sidebar/layout, explicit Ctrl+W, preserve mode across pane focus changes, line numbers, palette sections + occluding backdrop, custom cursor overlay. Added native GUI tests.
+- Latest changes (headless flows passed; visual/feel review belongs to the user): minimal sidebar/layout, explicit Ctrl+W, preserve mode across pane focus changes, line numbers, palette sections + occluding backdrop, custom cursor overlay. Added native GUI tests.
 
 ## Verification / current issue
 
 - Earlier `cargo check -p type-gpui --offline`, native build, and **26 library tests** passed.
-- Latest native code check reached only one error (private `render_cursor`); visibility has been fixed.
-- New GUI-test compile currently fails: `#[gpui_kit::test]` recursively resolves `#[test]` because `use super::*` imports the facade macro named `test`. Fix macro/name resolution before rerunning; inspect `.cargo-test.log`.
-- New UI and cursor geometry still need live visual verification, especially soft wrap, scroll, empty lines and Visual inclusive endpoint.
-- Current source includes `apps/gpui/src/tests.rs`; `cargo fmt -p type-gpui` runs now.
+- Latest `cargo test -p type-gpui --offline -- --test-threads=1`: **33 passed** (26 library + 7 binary, including two real headless GUI flows). Test harness macro import issue fixed. Tab interception regression exposed/fixed: Kit bindings dispatch before raw key listeners; a single window-scoped `App::intercept_keystrokes` now owns shortcuts/Vim/navigation before native actions. Backdrop click over New note closes palette without creating a note; filtered group Enter executes the correct action.
+- User will verify appearance/feel. Do not automate visual review unless asked again. Add functional geometry coverage if extending cursors (soft wrap, scroll, empty lines, Visual inclusive endpoint).
+- `cargo build -p type-gpui --features gpui-kit/test-support --offline` passed. `cargo fmt -p type-gpui` and `git diff --check` passed. Two unused UI helper warnings remain (removed tag toolbar / palette button); there is also an upstream `block` future-compatibility warning.
+- Full core/workspace test suite and remote CI were not run for this last milestone.
 
 ## Commands
 
@@ -59,18 +59,25 @@ cargo build -p type-gpui --features gpui-kit/test-support --offline
 
 `test-support` on the build reuses artifacts produced by tests. Logs are ignored `.cargo-*.log` files. GUI launch may require sandbox escalation on macOS. Do not kill production Type.
 
-Synthetic playground exists at `.tmp/gpui-playground` (five Markdown notes, own profiles/root). Temporary `.tmp/Type GPUI Dev.app` bundle with microphone usage description exists, but contains an older binary. Bare `type-gpui` processes may still be running from the earlier launch (one sandbox launch, one unsandboxed). Inspect only those processes, rebuild/copy bundle, then launch with `--data-dir` fixture and verify via CUA. A visible up-to-date bundle has not yet been confirmed.
+Synthetic playground exists at `.tmp/gpui-playground` (five Markdown notes, own profiles/root). The updated native app was bundled and launched via:
+
+```sh
+CARGO_TARGET_DIR=/Volumes/KINGSTON/Projects/type/app/experiments/gpui-demo/target \
+  python3 apps/gpui/scripts/desktop.py dev --no-build --data-dir "$PWD/.tmp/gpui-playground"
+```
+
+Current bundle: `/Volumes/KINGSTON/Projects/type/app/experiments/gpui-demo/target/bundle/Type GPUI Dev.app`. CUA confirmed its standard window exists, but did not inspect its contents. The user then explicitly requested functional testing only. `.tmp/Type GPUI Dev.app` is an obsolete earlier bundle; do not use it. Do not restart/close the current app unnecessarily while the user is playing with it.
 
 ## Next / remaining
 
-1. Fix native test harness, run tests, verify sidebar/focus/Tab/Cmd+K/backdrop/cursors visually. Commit this UI milestone.
-2. Preserve folder expansion across Stream/Folders view switching; verify multiselect and move targets after autosave/remap.
-3. Finish retaining failed recording bytes + retry (field exists, capture stop currently consumes bytes); automatic processing after capture/import/sync respecting routing settings; validate configuration values.
-4. Profile rename/forget and folder creation need explicit UI parity review. Security panic runtime clearing and optional extension policy need review before production use.
-5. Add reproducible native macOS app bundling/dev launcher (Info.plist, icon, microphone permission), then change desktop npm entry points to GPUI while retaining explicit Tauri fallback. Root scripts currently STILL launch Tauri.
-6. CI needs a GPUI native build/test job and Linux dependencies/exclusion decision (CPAL requires ALSA; GPUI requires desktop libraries). Linux/Windows runtime is unverified.
-7. README/AGENTS/release workflow cutover. Do not feed native artifacts to the old Tauri updater or publish a release without an explicit request. Packaging/signing/updater are not finished.
-8. Run appropriate final core/native checks, update this note with exact commits/results, leave runnable app for user.
+1. Continue functional coverage: editor-only Tab, Normal/Visual paste/IME guards, move/rename after autosave, multi-selection, profile-switch flush, close/quit conflicts. Existing tests cover Ctrl+W, nav Tab, Unicode insert/save, Visual inclusive selection and mode preservation, grouped palette confirmation, backdrop click, filesystem conflicts/collisions, date groups and pure DnD.
+2. Preserve folder expansion across Stream/Folders switching. `set_view` clears roots; view-specific expansion is currently lost.
+3. Finish retaining failed recording bytes + retry: `pending_recording` field exists and blocks close/profile switch, but is not populated on stop. `Capture::finish` and recording save currently consume bytes. No microphone permission/test has been performed. Add automatic processing after capture/import/sync respecting settings; presently only manual Queue is wired. Validate filename format / OCR provider settings.
+4. Review profile rename/forget and standalone folder creation. Rename logic exists under `Config("profile_name")` but no obvious settings button; profile deletion and standalone folder creation have no UI. Security panic reset clears profiles via reload, but needs a functional isolated-fixture test. Optional extension policy needs review before production use.
+5. Native macOS bundle/dev launcher exists and was exercised with `--no-build`; root app/dev/build scripts target GPUI, explicit `desktop:tauri:*` aliases retain Tauri. Validate a normal build/launcher and release bundling before claiming packaging finished. Launcher currently needs Python >=3.11 (`tomllib`); improve portability if appropriate. `desktop:dmg:dev` remains an explicit legacy alias; native bundling currently emits only unsigned `.app`.
+6. CI adds native macOS tests/bundle; Linux Rust job excludes type-gpui so Tauri/core checks keep their existing dependencies. Remote CI and Linux/Windows runtime remain unverified.
+7. README/AGENTS are updated for the native entry point. Tag release workflow still targets Tauri. Signing/notarization, installer and native updater are unfinished. Do not publish native artifacts through the old Tauri updater or release anything without an explicit request.
+8. Keep this note current and commit progress in this branch. No merge, PR or release requested.
 
 ## H1/H2/H3 feasibility (investigation only)
 
