@@ -6,7 +6,7 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 
 - Branch: `codex/gpui-desktop`.
 - Worktree: `/Volumes/KINGSTON/Projects/type/app/.worktrees/gpui-desktop`.
-- Base: `081cc4cb`; core shell: `5ff01346`; handoff: `6bb5378a`; UI/keys/tests: `f1efa117`; launcher/CI: `e88e3635`; nested Stream calendar: `6997f7be`.
+- Base: `081cc4cb`; core shell: `5ff01346`; handoff: `6bb5378a`; UI/keys/tests: `f1efa117`; launcher/CI: `e88e3635`; nested Stream calendar: `6997f7be`; Earlier click fix: `9f39b292`.
 - New shell: `apps/gpui` (`type-gpui`). Existing `experiments/gpui-demo` is untouched.
 - Original worktree has unrelated dirty files (`package.json`, `crates/type-core/examples`, `docs/VOICE_MEMOS_IMPORT.md`). Do not overwrite them.
 - User wants progress committed along the way. No PR or release requested. The user will test UI and feel; agents verify functionality. The user plans to try the separate GPUI bundle with production data after making their own backup.
@@ -53,9 +53,11 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 
 - Matched the user's Tauri nested navigation mode: `This week` contains every elapsed day (including empty days); `Earlier` contains month → ISO week → day → note. Weeks crossing months belong to the month containing Thursday. Notes stay inside the left navigation pane.
 - Stream section labels are muted; note rows include archived/reviewed markers. Expansion is now retained independently when switching Stream and Folders. The old simpler date grouping remains in Trash.
+- Follow-up after the user tried the installed app: `Earlier` appeared empty because it was collapsed and its section-row click was disabled. The user prefers it collapsed initially. It now shows a chevron and expands on click, revealing the months; `This week` remains an always-open label. The regression test simulates a real mouse click on `Earlier` with an older synthetic note.
 - `cargo test -p type-gpui --offline -- --test-threads=1` passed: 27 library + 12 binary tests, including calendar boundary/filter tests and a headless UI test for expansion across tab switches. `cargo fmt -p type-gpui` and `git diff --check` passed.
-- Normal debug build and separate `Type GPUI Dev.app` bundle succeeded. Bundle identifier is `com.digital.type2.gpui.dev`; its executable hash matches the freshly built binary. The Tauri production app was untouched. The new bundle was not launched, and production data was not opened.
-- Installed the same build at `/Applications/Type GPUI Dev.app` after confirming no app with that name existed. Its executable SHA-256 matches the build (`2f52f8e5e1c53681424cbb5bf167514c664c0daa0166bac97a6bcc7d4152ba09`); `/Applications/Type.app` remains in place. Installation did not launch GPUI or access notes.
+- Normal debug build and separate `Type GPUI Dev.app` bundle succeeded. Bundle identifier is `com.digital.type2.gpui.dev`; its executable hash matches the freshly built binary. The Tauri production app was untouched. Agents have not launched GPUI against or modified the user's production data.
+- Installed at `/Applications/Type GPUI Dev.app`; then atomically replaced that copy with the `Earlier` fix. Its executable SHA-256 matches the latest build (`b5dad621b04986f33ec277c37da15f97f5e766f7c26eab966feb49352d36828b`); `/Applications/Type.app` remains in place. The update did not restart GPUI or access notes; any already-running GPUI process still has the previous code until relaunched.
+- After the `Earlier` fix, the full GPUI suite passed 27 library + 13 binary tests (40 total). The subsequent test refinement using an actual UI click passed as a focused headless test. Normal debug bundling, formatting, and diff checks passed.
 - Remaining: user review of Stream appearance/feel; real-data smoke test for opening, editing, restarting, and sync if used. Native release signing/updater remain unfinished.
 
 ### Production-data trial
@@ -109,7 +111,7 @@ CARGO_TARGET_DIR=/Volumes/KINGSTON/Projects/type/app/experiments/gpui-demo/targe
   python3 apps/gpui/scripts/desktop.py dev --no-build --data-dir "$PWD/.tmp/gpui-playground"
 ```
 
-Current bundle: `/Volumes/KINGSTON/Projects/type/app/experiments/gpui-demo/target/bundle/Type GPUI Dev.app`. The bundle was refreshed with nested Stream on 2026-10-01 but not relaunched. An older dev process may still be open on the isolated playground; do not restart/close it unnecessarily. `.tmp/Type GPUI Dev.app` is obsolete.
+Current bundle: `/Volumes/KINGSTON/Projects/type/app/experiments/gpui-demo/target/bundle/Type GPUI Dev.app`; the same build is installed at `/Applications/Type GPUI Dev.app`. Both include the clickable, collapsed-by-default `Earlier` fix, but the app was not relaunched after replacement. An older GPUI process may still be open; do not restart/close it unnecessarily while the user is testing. `.tmp/Type GPUI Dev.app` is obsolete.
 
 ## Next / remaining
 
