@@ -66,6 +66,7 @@ struct TypeApp {
     nav_items: Vec<navigation::Item>,
     selected: HashSet<SharedString>,
     saved_selection: HashMap<View, SharedString>,
+    expanded_by_view: HashMap<View, HashSet<SharedString>>,
     settings: bool,
     settings_section: settings::Section,
     modal: Option<commands::Modal>,
@@ -437,6 +438,20 @@ impl TypeApp {
         let view = cx.weak_entity();
         let folders = self.folder_ids.clone();
         let multi = self.selected.clone();
+        let stream = self.view == View::Feed;
+        let note_markers: HashMap<SharedString, (bool, bool)> = self
+            .previews
+            .iter()
+            .map(|(path, preview)| {
+                (
+                    path.clone().into(),
+                    (
+                        preview.meta.archived_ms.is_some(),
+                        preview.meta.reviewed_ms.is_some(),
+                    ),
+                )
+            })
+            .collect();
         let drop_target = cx
             .has_active_drag()
             .then(|| self.drop_target.clone())
@@ -465,6 +480,8 @@ impl TypeApp {
         tree(&self.tree, move |ix, entry, selected, _, cx| {
             let id = entry.item().id.clone();
             let is_folder = folders.contains(&id);
+            let is_section = stream && id.starts_with("feed:section:");
+            let (archived, reviewed) = note_markers.get(&id).copied().unwrap_or_default();
             let click_view = view.clone();
             let click_id = id.clone();
             let drop_view = view.clone();
@@ -485,10 +502,14 @@ impl TypeApp {
             ListItem::new(ix)
                 .selected(selected)
                 .when(multi.contains(&id), |row| row.bg(cx.theme().accent))
-                .h(px(32.))
-                .text_sm()
+                .h(px(if is_section { 29. } else { 32. }))
+                .when(is_section, |row| row.text_xs())
+                .when(!is_section, |row| row.text_sm())
                 .px_2()
-                .pl(px(12. + 16. * entry.depth() as f32))
+                .pl(px(12.
+                    + 16.
+                        * entry.depth().saturating_sub(usize::from(stream))
+                            as f32))
                 .when(placement == Some(tree_moves::Placement::Before), |row| {
                     row.border_t_2().border_color(cx.theme().primary)
                 })
@@ -502,7 +523,7 @@ impl TypeApp {
                     h_flex()
                         .w_full()
                         .gap_2()
-                        .child(div().w(px(12.)).when(is_folder, |cell| {
+                        .child(div().w(px(12.)).when(is_folder && !is_section, |cell| {
                             cell.child(
                                 Icon::new(if entry.is_expanded() {
                                     IconName::ChevronDown
@@ -512,11 +533,13 @@ impl TypeApp {
                                 .size(px(12.)),
                             )
                         }))
-                        .child(
-                            Icon::new(icon)
-                                .size(px(15.))
-                                .text_color(cx.theme().muted_foreground),
-                        )
+                        .when(!is_section, |row| {
+                            row.child(
+                                Icon::new(icon)
+                                    .size(px(15.))
+                                    .text_color(cx.theme().muted_foreground),
+                            )
+                        })
                         .child(
                             div()
                                 .flex_1()
@@ -524,7 +547,7 @@ impl TypeApp {
                                 .text_ellipsis()
                                 .child(entry.item().label.clone()),
                         )
-                        .when(is_folder, |row| {
+                        .when(is_folder && !is_section, |row| {
                             row.child(
                                 div()
                                     .text_xs()
@@ -536,6 +559,14 @@ impl TypeApp {
                                             .map(ToString::to_string)
                                             .unwrap_or_default(),
                                     ),
+                            )
+                        })
+                        .when(archived || reviewed, |row| {
+                            row.child(
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(if archived { "Archived" } else { "Reviewed" }),
                             )
                         }),
                 )
@@ -562,6 +593,10 @@ impl TypeApp {
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_click(move |event, window, cx| {
                     let _ = click_view.update(cx, |this, cx| {
+                        if is_section {
+                            this.tree.update(cx, |tree, cx| tree.focus(window, cx));
+                            return;
+                        }
                         this.click_row(
                             click_id.clone(),
                             is_folder,
@@ -573,7 +608,11 @@ impl TypeApp {
                         )
                     });
                 })
-                .text_color(cx.theme().foreground)
+                .text_color(if is_section {
+                    cx.theme().muted_foreground
+                } else {
+                    cx.theme().foreground
+                })
         })
         .context_menu(move |_, entry, menu, _, _| {
             Self::menu_for(

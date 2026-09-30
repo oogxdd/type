@@ -24,6 +24,7 @@ impl TypeApp {
             nav_items: vec![],
             selected: HashSet::new(),
             saved_selection: HashMap::new(),
+            expanded_by_view: HashMap::new(),
             settings: false,
             settings_section: settings::Section::General,
             modal: None,
@@ -320,7 +321,15 @@ impl TypeApp {
                 self.view == View::Trash,
             ),
         };
-        let mut expanded = HashSet::new();
+        let defaults = self.roots.is_empty() && !self.expanded_by_view.contains_key(&self.view);
+        let mut expanded = if self.roots.is_empty() {
+            self.expanded_by_view
+                .get(&self.view)
+                .cloned()
+                .unwrap_or_default()
+        } else {
+            HashSet::new()
+        };
         fn expansion(items: &[TreeItem], out: &mut HashSet<SharedString>) {
             for i in items {
                 if i.is_expanded() {
@@ -330,21 +339,30 @@ impl TypeApp {
             }
         }
         expansion(&self.roots, &mut expanded);
-        fn convert(items: &[navigation::Item], expanded: &HashSet<SharedString>) -> Vec<TreeItem> {
+        let today_id = format!(
+            "feed:this-week:day:{}",
+            chrono::Local::now().format("%Y-%m-%d")
+        );
+        fn convert(
+            items: &[navigation::Item],
+            expanded: &HashSet<SharedString>,
+            today_id: &str,
+            defaults: bool,
+        ) -> Vec<TreeItem> {
             items
                 .iter()
                 .map(|i| {
                     TreeItem::new(i.id.clone(), i.label.clone())
-                        .children(convert(&i.children, expanded))
+                        .children(convert(&i.children, expanded, today_id, defaults))
                         .expanded(
                             expanded.contains(i.id.as_str())
-                                || i.id == "feed:9-today"
-                                || i.id == "feed:8-yesterday",
+                                || (defaults
+                                    && (i.id == "feed:section:this-week" || i.id == today_id)),
                         )
                 })
                 .collect()
         }
-        self.roots = convert(&self.nav_items, &expanded);
+        self.roots = convert(&self.nav_items, &expanded, &today_id, defaults);
         self.folder_ids.clear();
         fn collect(items: &[navigation::Item], folders: &mut HashSet<SharedString>) {
             for i in items {
@@ -633,6 +651,17 @@ impl TypeApp {
         if self.locked || self.busy || self.flush(true, cx).is_err() {
             return;
         }
+        fn expansion(items: &[TreeItem], out: &mut HashSet<SharedString>) {
+            for item in items {
+                if item.is_expanded() {
+                    out.insert(item.id.clone());
+                }
+                expansion(&item.children, out);
+            }
+        }
+        let mut expanded = HashSet::new();
+        expansion(&self.roots, &mut expanded);
+        self.expanded_by_view.insert(self.view, expanded);
         self.view = view;
         self.settings = false;
         self.selected.clear();

@@ -829,6 +829,7 @@ impl TypeApp {
         self.active = "".into();
         self.folder_tree = None;
         self.roots.clear();
+        self.expanded_by_view.clear();
         self.saved_selection.clear();
         self.selected.clear();
         self.revision += 1;

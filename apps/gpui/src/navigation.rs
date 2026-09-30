@@ -120,6 +120,9 @@ pub fn feed(
     today: NaiveDate,
     trash: bool,
 ) -> Vec<Item> {
+    if !trash {
+        return stream(notes, filter, today);
+    }
     let folder = if trash { ARCHIVE_FOLDER } else { STREAM_FOLDER };
     let mut ordered: Vec<_> = notes
         .values()
@@ -189,6 +192,166 @@ pub fn feed(
         }
     }
     groups.into_values().rev().collect()
+}
+
+fn bucket(id: String, label: String, children: Vec<Item>) -> Item {
+    Item {
+        id,
+        label,
+        folder: true,
+        synthetic: true,
+        children,
+    }
+}
+
+/// Match the calendar hierarchy used by the desktop Stream: the current week
+/// has a row for every elapsed day, and older notes sit under month/week/day.
+fn stream(
+    notes: &std::collections::HashMap<String, NotePreviewEntry>,
+    filter: Filter,
+    today: NaiveDate,
+) -> Vec<Item> {
+    let monday = today - chrono::Duration::days(today.weekday().num_days_from_monday() as i64);
+    let mut days = BTreeMap::<NaiveDate, Vec<&NotePreviewEntry>>::new();
+    let mut earlier = BTreeMap::<
+        (i32, u32),
+        BTreeMap<NaiveDate, BTreeMap<NaiveDate, Vec<&NotePreviewEntry>>>,
+    >::new();
+    let mut undated = Vec::new();
+    for note in notes.values().filter(|note| {
+        type_core::note_parent_folder_path(&note.path) == STREAM_FOLDER && filter.matches(note)
+    }) {
+        let date = note
+            .meta
+            .created_ms
+            .or(note.meta.updated_ms)
+            .and_then(|t| Local.timestamp_millis_opt(t).single())
+            .map(|t| t.date_naive());
+        match date {
+            Some(date) if date >= monday && date <= today => {
+                days.entry(date).or_default().push(note)
+            }
+            Some(date) => {
+                let week =
+                    date - chrono::Duration::days(date.weekday().num_days_from_monday() as i64);
+                let owner = week + chrono::Duration::days(3);
+                earlier
+                    .entry((owner.year(), owner.month()))
+                    .or_default()
+                    .entry(week)
+                    .or_default()
+                    .entry(date)
+                    .or_default()
+                    .push(note);
+            }
+            None => undated.push(note),
+        }
+    }
+    fn note_items(mut entries: Vec<&NotePreviewEntry>) -> Vec<Item> {
+        entries.sort_by(|a, b| {
+            b.meta
+                .created_ms
+                .or(b.meta.updated_ms)
+                .cmp(&a.meta.created_ms.or(a.meta.updated_ms))
+                .then_with(|| b.path.cmp(&a.path))
+        });
+        entries.into_iter().map(Item::note).collect()
+    }
+    let this_week = (0..=today.signed_duration_since(monday).num_days())
+        .rev()
+        .map(|offset| {
+            let date = monday + chrono::Duration::days(offset);
+            let label = if date == today {
+                "Today".into()
+            } else if date == today - chrono::Duration::days(1) {
+                "Yesterday".into()
+            } else {
+                date.format("%A").to_string()
+            };
+            bucket(
+                format!("feed:this-week:day:{}", date.format("%Y-%m-%d")),
+                label,
+                note_items(days.remove(&date).unwrap_or_default()),
+            )
+        })
+        .collect();
+    let mut earlier_items = Vec::new();
+    for ((year, month), weeks) in earlier.into_iter().rev() {
+        let mut week_items = Vec::new();
+        for (monday, dates) in weeks.into_iter().rev() {
+            let sunday = monday + chrono::Duration::days(6);
+            let month_start = NaiveDate::from_ymd_opt(year, month, 1).unwrap();
+            let mut first_owned_week = month_start
+                - chrono::Duration::days(month_start.weekday().num_days_from_monday() as i64);
+            if (first_owned_week + chrono::Duration::days(3)).month() != month {
+                first_owned_week += chrono::Duration::days(7);
+            }
+            let week_number = 1 + monday.signed_duration_since(first_owned_week).num_days() / 7;
+            let first = if monday.month() == sunday.month() {
+                monday.day().to_string()
+            } else {
+                monday.format("%-d %b").to_string()
+            };
+            let label = format!(
+                "Week {} ({}–{})",
+                week_number,
+                first,
+                sunday.format("%-d %b")
+            );
+            let day_items = dates
+                .into_iter()
+                .rev()
+                .map(|(date, notes)| {
+                    bucket(
+                        format!("feed:day:{}", date.format("%Y-%m-%d")),
+                        format!(
+                            "{} ({} {})",
+                            date.format("%A"),
+                            date.day(),
+                            date.format("%b")
+                        ),
+                        note_items(notes),
+                    )
+                })
+                .collect();
+            week_items.push(bucket(
+                format!("feed:week:{}", monday.format("%G-%V")),
+                label,
+                day_items,
+            ));
+        }
+        let month_date = NaiveDate::from_ymd_opt(year, month, 1).unwrap();
+        let label = if year == today.year() {
+            month_date.format("%B").to_string()
+        } else {
+            month_date.format("%B %Y").to_string()
+        };
+        earlier_items.push(bucket(
+            format!("feed:month:{year}-{month:02}"),
+            label,
+            week_items,
+        ));
+    }
+    if !undated.is_empty() {
+        earlier_items.push(bucket(
+            "feed:undated".into(),
+            "Undated".into(),
+            note_items(undated),
+        ));
+    }
+    let mut result = vec![bucket(
+        "feed:section:this-week".into(),
+        "This week".into(),
+        this_week,
+    )];
+    if !earlier_items.is_empty() {
+        result.push(bucket(
+            "feed:section:earlier".into(),
+            "Earlier".into(),
+            earlier_items,
+        ));
+    }
+    result
 }
 
 pub fn contains(items: &[Item], id: &str) -> bool {
@@ -296,19 +459,21 @@ mod tests {
             NaiveDate::from_ymd_opt(2026, 9, 30).unwrap(),
             false,
         );
-        assert_eq!(groups[0].label, "Today");
-        assert_eq!(groups[1].label, "September 2026");
-        assert_eq!(groups[1].children.len(), 1);
-        assert_eq!(groups[1].children[0].children.len(), 2);
-        let ids: HashSet<_> =
-            groups
-                .iter()
-                .flat_map(|i| {
-                    std::iter::once(&i.id).chain(i.children.iter().flat_map(|c| {
-                        std::iter::once(&c.id).chain(c.children.iter().map(|n| &n.id))
-                    }))
-                })
-                .collect();
+        assert_eq!(groups[0].label, "This week");
+        assert_eq!(groups[0].children[0].label, "Today");
+        assert_eq!(groups[0].children.len(), 3); // Monday through Wednesday, including empty days
+        assert_eq!(groups[1].label, "Earlier");
+        assert_eq!(groups[1].children[0].label, "September");
+        assert_eq!(groups[1].children[0].children.len(), 1); // boundary week belongs to September
+        assert_eq!(groups[1].children[0].children[0].children.len(), 2); // Aug 31 and Sep 1
+        fn collect_ids<'a>(items: &'a [Item], out: &mut HashSet<&'a str>) {
+            for item in items {
+                out.insert(&item.id);
+                collect_ids(&item.children, out);
+            }
+        }
+        let mut ids = HashSet::new();
+        collect_ids(&groups, &mut ids);
         assert_eq!(ids.iter().filter(|id| id.ends_with(".md")).count(), 3);
     }
     #[test]
@@ -321,7 +486,9 @@ mod tests {
         assert!(Filter::Archived.matches(&n));
         assert!(!Filter::Active.matches(&n));
         let map = [(p, n)].into();
-        assert!(feed(&map, Filter::Active, Local::now().date_naive(), false).is_empty());
+        let active = feed(&map, Filter::Active, Local::now().date_naive(), false);
+        assert_eq!(active.len(), 1); // current-week calendar remains visible when empty
+        assert!(active[0].children.iter().all(|day| day.children.is_empty()));
     }
     #[test]
     fn collapsed_descendants_and_system_destinations_are_excluded() {

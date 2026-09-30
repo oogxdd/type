@@ -65,6 +65,32 @@ fn press(cx: &mut TestAppContext, window: AnyWindowHandle, keys: &str) {
 }
 
 #[gpui_kit::test]
+fn stream_and_folders_keep_their_own_expansion(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    f.0.create("Work", "# Nested note".into(), None).unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.set_view(View::Folders, window, cx);
+            app.click_row("Work".into(), true, false, window, cx);
+            assert!(
+                app.roots
+                    .iter()
+                    .any(|row| row.id.as_ref() == "Work" && row.is_expanded())
+            );
+            app.set_view(View::Feed, window, cx);
+            app.set_view(View::Folders, window, cx);
+            assert!(
+                app.roots
+                    .iter()
+                    .any(|row| row.id.as_ref() == "Work" && row.is_expanded())
+            );
+        })
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
 fn keyboard_focus_tabs_vim_and_persistence(cx: &mut TestAppContext) {
     let f = Fixture::new();
     let path =
