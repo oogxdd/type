@@ -1,12 +1,12 @@
 # GPUI migration — handoff / live status
 
-Updated: 2026-09-30. This is an unfinished migration; update this file after each milestone.
+Updated: 2026-10-01. This is an unfinished migration; update this file after each milestone.
 
 ## Where to continue
 
 - Branch: `codex/gpui-desktop`.
 - Worktree: `/Volumes/KINGSTON/Projects/type/app/.worktrees/gpui-desktop`.
-- Base: `081cc4cb`; initial migration commit: `5ff01346`; handoff note: `6bb5378a`.
+- Base: `081cc4cb`; core shell: `5ff01346`; handoff: `6bb5378a`; UI/keys/tests: `f1efa117`; launcher/CI: `e88e3635`. Documentation cleanup is the following commit.
 - New shell: `apps/gpui` (`type-gpui`). Existing `experiments/gpui-demo` is untouched.
 - Original worktree has unrelated dirty files (`package.json`, `crates/type-core/examples`, `docs/VOICE_MEMOS_IMPORT.md`). Do not overwrite them.
 - User wants progress committed along the way and now explicitly requested a push. No PR requested. Latest instruction: test functionally only; the user will test UI and feel. Prepare a clean handoff for a fresh agent.
@@ -41,7 +41,7 @@ Updated: 2026-09-30. This is an unfinished migration; update this file after eac
 - Earlier `cargo check -p type-gpui --offline`, native build, and **26 library tests** passed.
 - Latest `cargo test -p type-gpui --offline -- --test-threads=1`: **33 passed** (26 library + 7 binary, including two real headless GUI flows). Test harness macro import issue fixed. Tab interception regression exposed/fixed: Kit bindings dispatch before raw key listeners; a single window-scoped `App::intercept_keystrokes` now owns shortcuts/Vim/navigation before native actions. Backdrop click over New note closes palette without creating a note; filtered group Enter executes the correct action.
 - User will verify appearance/feel. Do not automate visual review unless asked again. Add functional geometry coverage if extending cursors (soft wrap, scroll, empty lines, Visual inclusive endpoint).
-- `cargo build -p type-gpui --features gpui-kit/test-support --offline` passed. `cargo fmt -p type-gpui` and `git diff --check` passed. Two unused UI helper warnings remain (removed tag toolbar / palette button); there is also an upstream `block` future-compatibility warning.
+- `cargo build -p type-gpui --features gpui-kit/test-support --offline` passed. `cargo fmt -p type-gpui` and `git diff --check` passed. Unused helper/variant warnings remain (removed tag toolbar / palette button); there is also an upstream `block` future-compatibility warning.
 - Full core/workspace test suite and remote CI were not run for this last milestone.
 
 ## Commands
@@ -76,7 +76,7 @@ Current bundle: `/Volumes/KINGSTON/Projects/type/app/experiments/gpui-demo/targe
 4. Review profile rename/forget and standalone folder creation. Rename logic exists under `Config("profile_name")` but no obvious settings button; profile deletion and standalone folder creation have no UI. Security panic reset clears profiles via reload, but needs a functional isolated-fixture test. Optional extension policy needs review before production use.
 5. Native macOS bundle/dev launcher exists and was exercised with `--no-build`; root app/dev/build scripts target GPUI, explicit `desktop:tauri:*` aliases retain Tauri. Validate a normal build/launcher and release bundling before claiming packaging finished. Launcher currently needs Python >=3.11 (`tomllib`); improve portability if appropriate. `desktop:dmg:dev` remains an explicit legacy alias; native bundling currently emits only unsigned `.app`.
 6. CI adds native macOS tests/bundle; Linux Rust job excludes type-gpui so Tauri/core checks keep their existing dependencies. Remote CI and Linux/Windows runtime remain unverified.
-7. README/AGENTS are updated for the native entry point. Tag release workflow still targets Tauri. Signing/notarization, installer and native updater are unfinished. Do not publish native artifacts through the old Tauri updater or release anything without an explicit request.
+7. Essential README/AGENTS/CLAUDE/build/release/Vim/architecture docs are now minimal and describe GPUI. Obsolete desktop updater/signing/rich-editor guides and the old architecture book were removed; core storage/sync/MCP and mobile guides remain. Tag release workflow still targets Tauri. Signing/notarization, installer and native updater are unfinished. Do not publish native artifacts through the old Tauri updater or release anything without an explicit request.
 8. Keep this note current and commit progress in this branch. No merge, PR or release requested.
 
 ## H1/H2/H3 feasibility (investigation only)

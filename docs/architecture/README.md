@@ -1,71 +1,30 @@
-# Архитектура Type: короткая книга
+# Type architecture
 
-Эта папка — не академический учебник, а практическое введение в то, как думать
-о слоях, зависимостях и границах в этом проекте. Текст рассчитан на разработчика
-примерно middle-уровня, который уверенно пишет React/TypeScript, немного знает
-Node.js и хочет лучше понимать системный дизайн.
-
-Главная идея: хороший код — это не только "работает сейчас". Хороший код легко
-менять, тестировать, переносить на другую платформу и объяснять другому человеку.
-
-## Как читать
-
-Для первого знакомства начните с [карты Rust Core и двух приложений](./12-architecture-map.md):
-там обзорные Mermaid-схемы и ссылки на подробные версии со всеми функциями.
-[Каталог API](./14-exposed-api-catalog.md) показывает подгруппы доменов, доступность
-на desktop/mobile и найденные обращения из frontend.
-[Shared stores](./13-shared-stores-proposal.md) описаны отдельно как предложение,
-а не как уже существующая архитектура.
-
-Лучше читать по порядку. Каждая глава короткая и привязана к реальным файлам
-проекта.
-
-1. [Зачем вообще нужна архитектура](./01-why-architecture.md)
-2. [Слои проекта простыми словами](./02-layers.md)
-3. [Пример: путь команды `create_note`](./03-create-note-walkthrough.md)
-4. [Как вносить изменения без хаоса](./04-how-to-change-code.md)
-5. [Мостик из React/Node в backend-архитектуру](./05-react-node-analogies.md)
-6. [Практика: как натренировать архитектурное мышление](./06-practice.md)
-7. [Кэш превью заметок на фронтенде](./07-frontend-caching.md) — слой данных,
-   инвалидация, инвариант шифрования и почему здесь (пока) нет TanStack Query
-8. [Что общее, а что раздельное: ревизия монорепы](./08-shared-code-review.md) —
-   сколько кода делят desktop и mobile, слабые места границы (FFI-«бухгалтерия»,
-   JSON на границе, дубли), приоритеты и какие хуки можно выносить в shared
-9. [Как добавить фичу: две обвязки и кодген](./09-adding-features-and-codegen.md) —
-   чек-лист новой функции для обоих приложений, что именно генерирует `ubrn`
-   (и чего не генерирует), как разрабатывать мобилку с настоящим ядром и где
-   на границе Rust ↔ JS живёт сериализация
-10. [Zero-knowledge sync peer](./10-zero-knowledge-sync-peer.md) — возможная
-    будущая топология синхронизации
-11. [Filesystem-first sync without Git](./11-filesystem-sync-without-git.md) —
-    исследование альтернативы Git-транспорту
-12. [Карта Rust Core и двух приложений](./12-architecture-map.md) — обзор,
-    слои и текстовые версии подробных диаграмм
-13. [Предложение: общий JS state-слой](./13-shared-stores-proposal.md) — конкретные
-    stores, методы, платформенные границы, workflows и этапы миграции
-14. [Полный внешний API по доменам](./14-exposed-api-catalog.md) — все функции
-    Tauri/UniFFI, подгруппы и статическая ревизия использования
-
-## Ментальная модель в одну строку
+Desktop: `apps/gpui` (Rust + GPUI Kit). Mobile: `apps/mobile` (React Native).
+Both use `crates/type-core`; mobile crosses `crates/type-ffi` through UniFFI.
+The desktop calls application services directly.
 
 ```text
-Tauri commands / UniFFI -> application -> ports <- adapters
-                              |
-                            domain
+GPUI shell / UniFFI exports
+             ↓
+        application → ports ← adapters
+             ↓
+           domain
 ```
 
-Расшифровка:
+Core receives `AppEnv { app_data_dir, documents_dir }`, never a window or UI
+handle. Domain owns DTOs, application owns workflows, ports define contracts,
+and adapters own filesystem/Git/crypto/transcription implementations. A shell
+owns focus, UI state, platform recording and background orchestration.
 
-- `commands` — вход из Tauri IPC, почти как HTTP controller.
-- `application` — сценарии/use cases: "создать заметку", "запустить импорт", "сделать pull".
-- `domain` — основные типы и правила предметной области.
-- `ports` — интерфейсы, которые нужны use case'ам.
-- `adapters` — реализации core-контрактов: файловая система, git2, crypto, HTTP.
-  Tauri/native UI интеграции остаются в оболочках.
+New core behavior belongs in application/ports/adapters. Call it from GPUI;
+export it through UniFFI only when mobile needs it, then regenerate bindings and
+align the typed bridge. Keep storage formats and tag rules shared.
 
-## Что не надо делать
+[Code conventions](../../AGENTS.md) · [Native shell](../../apps/gpui/README.md)
+· [Mobile bridge](../../packages/mobile-core/README.md)
+· [Migration status](../GPUI_MIGRATION_STATUS.md)
 
-Не пытайся сразу выучить весь backend. Сначала пойми один вертикальный путь:
-например, создание заметки. Если ты понимаешь, как запрос проходит через
-`commands/notes.rs`, `application/notes.rs`, `ports/notes.rs` и
-`adapters/notes/`, остальная архитектура станет намного понятнее.
+The retained sync research is separate from implemented architecture:
+[untrusted peer](10-zero-knowledge-sync-peer.md) and
+[filesystem sync](11-filesystem-sync-without-git.md).
