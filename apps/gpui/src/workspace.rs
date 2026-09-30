@@ -355,9 +355,9 @@ impl TypeApp {
                     TreeItem::new(i.id.clone(), i.label.clone())
                         .children(convert(&i.children, expanded, today_id, defaults))
                         .expanded(
-                            expanded.contains(i.id.as_str())
-                                || (defaults
-                                    && (i.id == "feed:section:this-week" || i.id == today_id)),
+                            i.id == "feed:section:this-week"
+                                || expanded.contains(i.id.as_str())
+                                || (defaults && i.id == today_id),
                         )
                 })
                 .collect()

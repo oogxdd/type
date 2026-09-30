@@ -481,6 +481,7 @@ impl TypeApp {
             let id = entry.item().id.clone();
             let is_folder = folders.contains(&id);
             let is_section = stream && id.starts_with("feed:section:");
+            let is_earlier = id == "feed:section:earlier";
             let (archived, reviewed) = note_markers.get(&id).copied().unwrap_or_default();
             let click_view = view.clone();
             let click_id = id.clone();
@@ -523,16 +524,19 @@ impl TypeApp {
                     h_flex()
                         .w_full()
                         .gap_2()
-                        .child(div().w(px(12.)).when(is_folder && !is_section, |cell| {
-                            cell.child(
-                                Icon::new(if entry.is_expanded() {
-                                    IconName::ChevronDown
-                                } else {
-                                    IconName::ChevronRight
-                                })
-                                .size(px(12.)),
-                            )
-                        }))
+                        .child(div().w(px(12.)).when(
+                            is_folder && (!is_section || is_earlier),
+                            |cell| {
+                                cell.child(
+                                    Icon::new(if entry.is_expanded() {
+                                        IconName::ChevronDown
+                                    } else {
+                                        IconName::ChevronRight
+                                    })
+                                    .size(px(12.)),
+                                )
+                            },
+                        ))
                         .when(!is_section, |row| {
                             row.child(
                                 Icon::new(icon)
@@ -593,7 +597,7 @@ impl TypeApp {
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_click(move |event, window, cx| {
                     let _ = click_view.update(cx, |this, cx| {
-                        if is_section {
+                        if is_section && !is_earlier {
                             this.tree.update(cx, |tree, cx| tree.focus(window, cx));
                             return;
                         }

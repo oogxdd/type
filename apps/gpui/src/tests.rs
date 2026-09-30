@@ -1,8 +1,9 @@
 use super::{Backend, TypeApp, View, vim};
+use chrono::Datelike;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{
-    AnyWindowHandle, AppContext, Bounds, Entity, Focusable, TestAppContext, WindowBounds,
-    WindowOptions, point, px, size,
+    AnyWindowHandle, AppContext, Bounds, Entity, Focusable, Modifiers, TestAppContext,
+    VisualTestContext, WindowBounds, WindowOptions, point, px, size,
 };
 use type_core::{AppEnv, STREAM_FOLDER};
 
@@ -88,6 +89,47 @@ fn stream_and_folders_keep_their_own_expansion(cx: &mut TestAppContext) {
         })
     })
     .unwrap();
+}
+
+#[gpui_kit::test]
+fn earlier_stream_section_expands_on_click(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    f.0.create(STREAM_FOLDER, "# Old note".into(), Some(1_609_459_200_000))
+        .unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        let earlier = app
+            .roots
+            .iter()
+            .find(|row| row.id.as_ref() == "feed:section:earlier")
+            .unwrap();
+        assert!(!earlier.is_expanded());
+        let month = earlier.children.first().unwrap();
+        assert_eq!(month.label.as_ref(), "December 2020");
+        assert!(app.tree.read(cx).index_of(&month.id).is_none());
+    })
+    .unwrap();
+    let elapsed_days = chrono::Local::now().weekday().num_days_from_monday() + 1;
+    let earlier_y = 28. + 70. + 44. + 29. + elapsed_days as f32 * 32. + 14.;
+    let mut visual = VisualTestContext::from_window(window, cx);
+    visual.simulate_click(point(px(80.), px(earlier_y)), Modifiers::default());
+    visual.run_until_parked();
+    visual.update(|_, cx| {
+        let app = app.read(cx);
+        let earlier = app
+            .roots
+            .iter()
+            .find(|row| row.id.as_ref() == "feed:section:earlier")
+            .unwrap();
+        assert!(earlier.is_expanded());
+        assert!(
+            app.tree
+                .read(cx)
+                .index_of(&earlier.children[0].id)
+                .is_some()
+        );
+    });
 }
 
 #[gpui_kit::test]
