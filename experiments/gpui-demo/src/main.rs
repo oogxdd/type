@@ -1,10 +1,11 @@
 mod document;
 mod sample_data;
 mod tree_moves;
+mod vim;
 
 use std::{
     collections::{HashMap, HashSet},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use gpui_kit::{
@@ -36,12 +37,17 @@ struct Note {
 }
 
 struct Demo {
+    vim: vim::Vim,
+    vim_enabled: bool,
     roots: Vec<TreeItem>,
     tree: Entity<TreeState>,
     notes: HashMap<SharedString, Note>,
     active: SharedString,
     folder_ids: HashSet<SharedString>,
     drop_target: Option<(SharedString, tree_moves::Placement)>,
+    drag_task: Option<Task<()>>,
+    drag_pointer: Option<(SharedString, Point<Pixels>, Bounds<Pixels>)>,
+    hover_since: Instant,
     tag_count: usize,
     next_id: usize,
     tag_task: Option<Task<()>>,
@@ -71,12 +77,17 @@ impl Demo {
             })
             .collect();
         let mut demo = Self {
+            vim: vim::Vim::default(),
+            vim_enabled: true,
             folder_ids: collect_folders(&roots),
             roots,
             tree: tree.clone(),
             notes,
             active: "welcome".into(),
             drop_target: None,
+            drag_task: None,
+            drag_pointer: None,
+            hover_since: Instant::now(),
             tag_count: 0,
             next_id: 1,
             tag_task: None,
@@ -107,8 +118,10 @@ impl Demo {
         let body = self.notes[id].initial_body.clone();
         let editor = cx.new(|cx| {
             EditorState::new(window, cx)
-                .language("plaintext")
-                .line_number(false)
+                .language("markdown")
+                .auto_close(false)
+                .smart_indent(false)
+                .line_number(true)
                 .soft_wrap(true)
                 .tab_size(TabSize {
                     tab_size: 2,
@@ -150,11 +163,129 @@ impl Demo {
         self.tag_task = None;
         let editor = self.ensure_editor(&id, window, cx);
         self.active = id;
+        self.vim.reset();
+        editor.update(cx, |state, cx| state.set_readonly(self.vim_enabled, cx));
         self.refresh_tags(cx);
         if focus {
             let handle = editor.focus_handle(cx);
             window.defer(cx, move |window, cx| handle.focus(window, cx));
         }
+        cx.notify();
+    }
+
+    fn vim_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        use gpui_kit::component::input::{MoveDown, MoveUp, Redo, Search, Undo};
+        if event.keystroke.key == "escape" && cx.has_active_drag() {
+            cx.stop_active_drag(window);
+            self.drop_target = None;
+            self.drag_pointer = None;
+            self.drag_task = None;
+            window.prevent_default();
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
+        if !self.vim_enabled {
+            return;
+        }
+        let note = self.notes.get_mut(&self.active).unwrap();
+        let editor = note.editor.as_ref().unwrap().clone();
+        if !editor.focus_handle(cx).is_focused(window) {
+            return;
+        }
+        let stroke = &event.keystroke;
+        if stroke.modifiers.platform || stroke.modifiers.alt {
+            return;
+        }
+        let mut key = stroke.key.clone();
+        if stroke.modifiers.control {
+            key = format!("ctrl-{key}");
+            if key != "ctrl-r" && key != "ctrl-[" {
+                return;
+            }
+        } else if stroke.modifiers.shift && key.len() == 1 {
+            key = if key.chars().all(|c| c.is_ascii_alphabetic()) {
+                key.to_uppercase()
+            } else {
+                stroke.key_char.clone().unwrap_or(key)
+            };
+        }
+        let value = editor.read(cx).value();
+        let cursor = editor.read(cx).cursor();
+        let literal = stroke.key_char.as_deref().unwrap_or(&stroke.key);
+        let Some(effects) = self.vim.key(&key, literal, &value, cursor) else {
+            return;
+        };
+        window.prevent_default();
+        cx.stop_propagation();
+        // Read-only Normal/Visual modes also reject IME commits and native paste.
+        // Modal edit effects temporarily enter the engine's editable path.
+        editor.update(cx, |state, cx| state.set_readonly(false, cx));
+        let mut native_motion = false;
+        for effect in effects {
+            match effect {
+                vim::Effect::Select(range) => {
+                    editor.update(cx, |state, cx| state.set_selected_range(range, cx))
+                }
+                vim::Effect::Replace(range, text, cursor) => editor.update(cx, |state, cx| {
+                    state.set_selected_range(range, cx);
+                    state.replace(text, window, cx);
+                    state.set_selected_range(cursor..cursor, cx);
+                }),
+                vim::Effect::Vertical(down, count) => {
+                    if self.vim.visual() {
+                        let head = self.vim.head;
+                        editor.update(cx, |state, cx| state.set_selected_range(head..head, cx));
+                    }
+                    for _ in 0..count {
+                        window.dispatch_action(
+                            if down {
+                                Box::new(MoveDown)
+                            } else {
+                                Box::new(MoveUp)
+                            },
+                            cx,
+                        );
+                    }
+                    native_motion = true;
+                }
+                vim::Effect::Undo => window.dispatch_action(Box::new(Undo), cx),
+                vim::Effect::Redo => window.dispatch_action(Box::new(Redo), cx),
+                vim::Effect::Search => window.dispatch_action(Box::new(Search), cx),
+            }
+        }
+        let id = self.active.clone();
+        let view = cx.weak_entity();
+        // Native actions are deferred by GPUI. Restore the gate after they run.
+        window.defer(cx, move |_, cx| {
+            let _ = view.update(cx, |this, cx| {
+                if this.active != id {
+                    return;
+                }
+                if native_motion {
+                    let state = editor.read(cx);
+                    let range = this.vim.finish_motion(&state.value(), state.cursor());
+                    if this.vim.visual() {
+                        editor.update(cx, |state, cx| state.set_selected_range(range, cx));
+                    }
+                }
+                editor.update(cx, |state, cx| {
+                    state.set_readonly(this.vim_enabled && this.vim.mode != vim::Mode::Insert, cx)
+                });
+                cx.notify();
+            });
+        });
+        cx.notify();
+    }
+
+    fn toggle_vim(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.vim_enabled = !self.vim_enabled;
+        let note = self.notes.get_mut(&self.active).unwrap();
+        self.vim.reset();
+        note.editor.as_ref().unwrap().update(cx, |state, cx| {
+            state.set_readonly(self.vim_enabled, cx);
+            state.focus(window, cx);
+        });
         cx.notify();
     }
 
@@ -245,6 +376,126 @@ impl Demo {
         self.refresh_tags(cx);
     }
 
+    // One hit test for the entire viewport. GPUI drag-move callbacks are global,
+    // not row-hover callbacks; virtual rows must never compete to set the target.
+    fn update_drag(&mut self, cx: &mut Context<Self>) {
+        let Some((source, pointer, bounds)) = self.drag_pointer.clone() else {
+            return;
+        };
+        if !cx.has_active_drag() || !bounds.contains(&pointer) {
+            self.drop_target = None;
+            cx.notify();
+            return;
+        }
+        let scroll = self
+            .tree
+            .read(cx)
+            .scroll_handle()
+            .0
+            .borrow()
+            .base_handle
+            .clone();
+        let y = f32::from(pointer.y - bounds.origin.y);
+        let height = f32::from(bounds.size.height);
+        let velocity = if y < 40. {
+            (40. - y) / 4.
+        } else if y > height - 40. {
+            -(y - height + 40.) / 4.
+        } else {
+            0.
+        };
+        if velocity != 0. {
+            let offset = scroll.offset();
+            scroll.set_offset(point(offset.x, offset.y + px(velocity)));
+        }
+        let content_y = y - f32::from(scroll.offset().y);
+        let index = (content_y.max(0.) / 36.).floor() as usize;
+        let candidate = self.tree.read(cx).entry(index).and_then(|entry| {
+            let id = &entry.item().id;
+            let fraction = (content_y % 36.) / 36.;
+            let placement = tree_moves::placement_at(fraction, self.folder_ids.contains(id));
+            tree_moves::can_move(&self.roots, &source, id).then(|| (id.clone(), placement))
+        });
+        if candidate != self.drop_target {
+            self.hover_since = Instant::now();
+            self.drop_target = candidate;
+        }
+        if let Some((id, tree_moves::Placement::Inside)) = &self.drop_target {
+            if self.hover_since.elapsed() >= Duration::from_millis(600) {
+                if let Some(item) =
+                    tree_moves::find(&self.roots, id).filter(|item| !item.is_expanded())
+                {
+                    item.clone().expanded(true);
+                    let selected = self.tree.read(cx).selected_item().cloned();
+                    self.tree.update(cx, |state, cx| {
+                        state.set_items(self.roots.clone(), cx);
+                        state.set_selected_item(selected.as_ref(), cx);
+                    });
+                }
+            }
+        }
+        cx.notify();
+    }
+
+    fn track_drag(&mut self, event: &DragMoveEvent<DraggedRow>, cx: &mut Context<Self>) {
+        self.drag_pointer = Some((
+            event.drag(cx).id.clone(),
+            event.event.position,
+            event.bounds,
+        ));
+        self.update_drag(cx);
+        if self.drag_task.is_none() {
+            self.drag_task = Some(cx.spawn(async move |view, cx| {
+                loop {
+                    cx.background_executor()
+                        .timer(Duration::from_millis(16))
+                        .await;
+                    let keep = view
+                        .update(cx, |this, cx| {
+                            if !cx.has_active_drag() {
+                                this.drop_target = None;
+                                this.drag_pointer = None;
+                                this.drag_task = None;
+                                cx.notify();
+                                false
+                            } else {
+                                this.update_drag(cx);
+                                true
+                            }
+                        })
+                        .unwrap_or(false);
+                    if !keep {
+                        break;
+                    }
+                }
+            }));
+        }
+    }
+
+    fn click_row(
+        &mut self,
+        id: SharedString,
+        is_folder: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if is_folder {
+            if let Some(item) = tree_moves::find(&self.roots, &id) {
+                item.clone().expanded(!item.is_expanded());
+            }
+            self.tree.update(cx, |state, cx| {
+                state.set_items(self.roots.clone(), cx);
+                state.set_selected_item(Some(&TreeItem::new(id.clone(), "")), cx);
+                state.focus(window, cx);
+            });
+        } else {
+            self.tree.update(cx, |state, cx| {
+                state.set_selected_item(Some(&TreeItem::new(id.clone(), "")), cx)
+            });
+            self.open_note(id, true, window, cx);
+        }
+    }
+
     fn move_row(
         &mut self,
         source: SharedString,
@@ -261,6 +512,8 @@ impl Demo {
         }
         if tree_moves::move_item(&mut self.roots, &source, target.as_ref(), placement) {
             self.drop_target = None;
+            self.drag_task = None;
+            self.drag_pointer = None;
             self.rebuild_tree(&source, cx);
             cx.notify();
         }
@@ -272,7 +525,7 @@ impl Demo {
         self.tree.update(cx, |state, cx| {
             state.set_items(roots, cx);
             state.set_selected_item(Some(&item), cx);
-            state.reveal_item(selected, ScrollStrategy::Center, cx);
+            state.reveal_item(selected, ScrollStrategy::Top, cx);
         });
     }
 
@@ -403,8 +656,6 @@ impl Demo {
             let click_id = id.clone();
             let menu_view = view.clone();
             let menu_id = id.clone();
-            let hover_view = view.clone();
-            let hover_id = id.clone();
             let drop_view = view.clone();
             let drop_id = id.clone();
             let icon = if is_folder {
@@ -469,26 +720,6 @@ impl Demo {
                     },
                     |drag, _, _, cx| cx.new(|_| drag.clone()),
                 )
-                .on_drag_move(move |event: &DragMoveEvent<DraggedRow>, _, cx| {
-                    let dragged = event.drag(cx).id.clone();
-                    let y =
-                        (event.event.position.y - event.bounds.origin.y) / event.bounds.size.height;
-                    let position = if is_folder && (0.25..0.75).contains(&y) {
-                        tree_moves::Placement::Inside
-                    } else if y < 0.5 {
-                        tree_moves::Placement::Before
-                    } else {
-                        tree_moves::Placement::After
-                    };
-                    let _ = hover_view.update(cx, |this, cx| {
-                        let candidate = tree_moves::can_move(&this.roots, &dragged, &hover_id)
-                            .then(|| (hover_id.clone(), position));
-                        if this.drop_target != candidate {
-                            this.drop_target = candidate;
-                            cx.notify();
-                        }
-                    });
-                })
                 .on_drop(move |drag: &DraggedRow, _, cx| {
                     let _ = drop_view.update(cx, |this, cx| {
                         if let Some((target, position)) = this
@@ -500,12 +731,13 @@ impl Demo {
                         }
                     });
                 })
+                // The stock tree toggles on mouse-down, which collapses a folder
+                // before its drag can start. Defer activation until a real click.
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_click(move |_, window, cx| {
-                    if !is_folder {
-                        let _ = click_view.update(cx, |this, cx| {
-                            this.open_note(click_id.clone(), true, window, cx)
-                        });
-                    }
+                    let _ = click_view.update(cx, |this, cx| {
+                        this.click_row(click_id.clone(), is_folder, window, cx)
+                    });
                 })
                 .text_color(cx.theme().foreground)
         })
@@ -555,6 +787,7 @@ impl Render for Demo {
         let note = &self.notes[&self.active];
         let editor = note.editor.as_ref().unwrap();
         v_flex().size_full().bg(cx.theme().background).text_color(cx.theme().foreground)
+            .capture_key_down(cx.listener(Self::vim_key))
             .child(h_flex().h(px(60.)).flex_none().px_5().gap_3().border_b_1().border_color(cx.theme().border)
                 .child(div().font_weight(FontWeight::SEMIBOLD).child("Type"))
                 .child(div().text_sm().text_color(cx.theme().muted_foreground).child("GPUI playground")))
@@ -562,7 +795,9 @@ impl Render for Demo {
                 .child(resizable_panel().size(px(300.)).size_range(px(220.)..px(600.))
                     .child(v_flex().size_full()
                         .child(div().px_4().py_3().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(cx.theme().muted_foreground).child("SAMPLE NOTES"))
-                        .child(div().flex_1().min_h_0().child(self.render_tree(cx)))
+                        .child(div().id("tree-viewport").flex_1().min_h_0()
+                            .on_drag_move(cx.listener(|this, event: &DragMoveEvent<DraggedRow>, _, cx| this.track_drag(event, cx)))
+                            .child(self.render_tree(cx)))
                         .child(div().id("root-drop").px_4().py_3().border_t_1().border_color(cx.theme().border)
                             .text_sm().text_color(cx.theme().muted_foreground).child("Drop here to move to root")
                             .drag_over::<DraggedRow>(|style, _, _, cx| style.bg(cx.theme().accent))
@@ -571,14 +806,15 @@ impl Render for Demo {
                     .child(v_flex().size_full()
                         .child(h_flex().px_6().py_4().gap_3().flex_none()
                             .child(div().flex_1().text_lg().font_weight(FontWeight::SEMIBOLD).child(note.title.clone()))
+                            .child(Button::new("vim-toggle").ghost().small().label(if self.vim_enabled { "Vim on" } else { "Vim off" }).on_click(cx.listener(|this, _, window, cx| this.toggle_vim(window, cx))))
                             .child(self.tag_menu(false, cx)).child(self.tag_menu(true, cx)))
                         .child(div().px_6().pb_3().flex_none().text_xs().text_color(cx.theme().muted_foreground)
-                            .child("Type text · #tag for a paragraph · ::: #tag for a block · edit tag names directly"))
+                            .child("i: insert · Esc: normal · hjkl / wbe: move · dd / ciw / yy / p · v / V: select · /: find"))
                         .child(div().flex_1().min_h_0().px_5().pb_4().child(Editor::new(editor).bordered(false).h(relative(1.))
                             .text_size(px(17.)).font_family(cx.theme().font_family.clone())))))))
             .child(h_flex().h(px(30.)).flex_none().px_4().gap_3().border_t_1().border_color(cx.theme().border)
                 .text_xs().text_color(cx.theme().muted_foreground)
-                .child("Sample data · in memory").child(div().flex_1())
+                .child("Sample data · in memory").child(if self.vim_enabled { self.vim.label() } else { "TEXT".into() }).child(div().flex_1())
                 .child(format!("{} tagged regions · frontmatter hidden", self.tag_count)))
     }
 }

@@ -23,11 +23,18 @@ The window includes:
   dropdown menus and drag/drop for both notes and folders. Drop in a folder
   row's middle to move inside it, near a row's upper/lower edge to reorder,
   or on the footer to move to the root. A folder cannot move into itself or
-  a descendant. Folder moves carry their whole subtree. There is no automatic
-  scrolling or expansion while hovering during a drag yet.
-- One native text editor with soft wrapping, selection, clipboard support and
+  a descendant. Folder moves carry their whole subtree. A single viewport hit
+  test resolves the target; folders toggle on click rather than mouse-down.
+  Hover inside a folder for 600 ms to expand it; holding near the viewport
+  edges scrolls the tree. Escape cancels a drag. Selection and moves currently
+  operate on one item; multi-selection is not implemented yet.
+- One native text editor with line numbers, soft wrapping, selection, clipboard support and
   undo/redo. Each visited note retains its editor buffer, cursor and history
-  during the session. There is no preview pane or Markdown formatting renderer.
+  during the session. Markdown syntax highlighting is enabled in the editable
+  buffer; markup remains visible. This is not a WYSIWYG Markdown renderer.
+- A switchable Vim layer, enabled by default, with a visible mode indicator.
+  Insert mode uses the native input/IME path. Normal and Visual modes gate
+  native text entry, while modal edits use the same editor history.
 - Visible Type-style tag syntax with colored regions: leading `#todo` on a
   paragraph, and `::: #idea` / closing `:::` around multiple lines. Nested
   blocks can use longer outer fences (`::::`). The Tag line / Tag block menus
@@ -50,11 +57,12 @@ paragraph tags and nested fenced scopes, including an unclosed scope through EOF
 It ignores tag-looking syntax in code fences. It does not yet implement flags
 (`key=value`), inline TagSpan syntax, registry colors or the complete shared
 Markdown document model. It must not be used as a privacy filter or to migrate
-real notes. Persistence, sync, recording and Vim mode are outside this sample.
+real notes. Persistence, sync and recording are outside this sample.
 
 The entry point is `src/main.rs`; synthetic fixtures are in `src/sample_data.rs`
 and `samples/welcome.md`. `document.rs` handles metadata separation and tag
-regions; `tree_moves.rs` handles tree mutations. Dependencies are pinned by
+regions; `tree_moves.rs` handles tree mutations; `vim.rs` contains the modal
+command state machine and UTF-8 motions. Dependencies are pinned by
 `Cargo.toml` and `Cargo.lock`.
 
 Validation:
@@ -64,3 +72,26 @@ cargo fmt --manifest-path experiments/gpui-demo/Cargo.toml --check
 cargo build --manifest-path experiments/gpui-demo/Cargo.toml --locked
 cargo test --manifest-path experiments/gpui-demo/Cargo.toml --locked
 ```
+
+Vim command coverage:
+
+- `i/a/I/A`, `o/O`, Escape and Ctrl-[; `h/j/k/l`, arrows, `w/b/e`, `0/^/$`, `gg/G`.
+- `d/c/y` with motions and counts, `dd/cc/yy`, `D/C/x`, `p/P`, `r`, `f/t`.
+- `v/V`, `iw/aw` and basic quoted/bracketed text objects; `u`, Ctrl-r; `/` opens
+  the editor's native search panel. The unnamed register is shared across notes.
+- `j/k` use the editor's wrapped visual rows. Linewise operators and `V` use
+  logical lines. Character motions use Unicode scalar boundaries, not extended
+  grapheme clusters. Quoted/bracketed text objects currently have a simple,
+  non-nesting parser. Dot repeat, macros, named/system registers, Ex commands,
+  backward character search and full Vim search semantics are not implemented.
+
+Validation for the DnD/Vim checkpoint: macOS build and 23 unit tests passed.
+Native UI gesture verification remains pending: Computer Use access to the demo
+was not approved. Tests cover tree mutation invariants and modal command effects,
+not native event dispatch, IME, focus, or drag timing.
+
+Feasibility: GPUI Kit's [Editor](https://gpui-kit.com/docs/components/editor)
+provides the text engine and decoration hooks. Styling editable Markdown is a
+reasonable incremental path. Obsidian-style live preview with hidden delimiters,
+variable-height headings, embedded images and tables needs an additional display
+mapping/layout layer; enabling Markdown highlighting alone does not provide it.
