@@ -6,10 +6,10 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 
 - Branch: `codex/gpui-desktop`.
 - Worktree: `/Volumes/KINGSTON/Projects/type/app/.worktrees/gpui-desktop`.
-- Base: `081cc4cb`; core shell: `5ff01346`; handoff: `6bb5378a`; UI/keys/tests: `f1efa117`; launcher/CI: `e88e3635`. Documentation cleanup is the following commit.
+- Base: `081cc4cb`; core shell: `5ff01346`; handoff: `6bb5378a`; UI/keys/tests: `f1efa117`; launcher/CI: `e88e3635`; nested Stream calendar: `6997f7be`.
 - New shell: `apps/gpui` (`type-gpui`). Existing `experiments/gpui-demo` is untouched.
 - Original worktree has unrelated dirty files (`package.json`, `crates/type-core/examples`, `docs/VOICE_MEMOS_IMPORT.md`). Do not overwrite them.
-- User wants progress committed along the way and now explicitly requested a push. No PR requested. Latest instruction: test functionally only; the user will test UI and feel. Prepare a clean handoff for a fresh agent.
+- User wants progress committed along the way. No PR or release requested. The user will test UI and feel; agents verify functionality. The user plans to try the separate GPUI bundle with production data after making their own backup.
 
 ## User requirements
 
@@ -47,6 +47,14 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 - Included with the editor appearance work in the user-requested commit `feat(gpui): refine settings and editor appearance`. No push performed. Remaining parity: tag registry settings, profile forget/delete, automatic queue processing, and native updater/release UI. Do not expose the previous shell updater in GPUI.
 
 ## Verification / current issue
+
+### Nested Stream calendar (2026-10-01)
+
+- Matched the user's Tauri nested navigation mode: `This week` contains every elapsed day (including empty days); `Earlier` contains month → ISO week → day → note. Weeks crossing months belong to the month containing Thursday. Notes stay inside the left navigation pane.
+- Stream section labels are muted; note rows include archived/reviewed markers. Expansion is now retained independently when switching Stream and Folders. The old simpler date grouping remains in Trash.
+- `cargo test -p type-gpui --offline -- --test-threads=1` passed: 27 library + 12 binary tests, including calendar boundary/filter tests and a headless UI test for expansion across tab switches. `cargo fmt -p type-gpui` and `git diff --check` passed.
+- Normal debug build and separate `Type GPUI Dev.app` bundle succeeded. Bundle identifier is `com.digital.type2.gpui.dev`; its executable hash matches the freshly built binary. The Tauri production app was untouched. The new bundle was not launched, and production data was not opened.
+- Remaining: user review of Stream appearance/feel; real-data smoke test for opening, editing, restarting, and sync if used. Native release signing/updater remain unfinished.
 
 ### Editor / window appearance (2026-10-01, implemented and launched for review)
 
@@ -89,15 +97,15 @@ CARGO_TARGET_DIR=/Volumes/KINGSTON/Projects/type/app/experiments/gpui-demo/targe
   python3 apps/gpui/scripts/desktop.py dev --no-build --data-dir "$PWD/.tmp/gpui-playground"
 ```
 
-Current bundle: `/Volumes/KINGSTON/Projects/type/app/experiments/gpui-demo/target/bundle/Type GPUI Dev.app`. CUA confirmed its standard window exists, but did not inspect its contents. The user then explicitly requested functional testing only. `.tmp/Type GPUI Dev.app` is an obsolete earlier bundle; do not use it. Do not restart/close the current app unnecessarily while the user is playing with it.
+Current bundle: `/Volumes/KINGSTON/Projects/type/app/experiments/gpui-demo/target/bundle/Type GPUI Dev.app`. The bundle was refreshed with nested Stream on 2026-10-01 but not relaunched. An older dev process may still be open on the isolated playground; do not restart/close it unnecessarily. `.tmp/Type GPUI Dev.app` is obsolete.
 
 ## Next / remaining
 
 1. Continue functional coverage: editor-only Tab, Normal/Visual paste/IME guards, move/rename after autosave, multi-selection, profile-switch flush, close/quit conflicts. Existing tests cover Ctrl+W, nav Tab, Unicode insert/save, Visual inclusive selection and mode preservation, grouped palette confirmation, backdrop click, filesystem conflicts/collisions, date groups and pure DnD.
-2. Preserve folder expansion across Stream/Folders switching. `set_view` clears roots; view-specific expansion is currently lost.
+2. Stream/Folders expansion now survives switching views. Confirm the nested Stream presentation with the user; headless tests do not judge appearance.
 3. Finish retaining failed recording bytes + retry: `pending_recording` field exists and blocks close/profile switch, but is not populated on stop. `Capture::finish` and recording save currently consume bytes. No microphone permission/test has been performed. Add automatic processing after capture/import/sync respecting settings; presently only manual Queue is wired. Validate filename format / OCR provider settings.
 4. Review profile rename/forget and standalone folder creation. Profile rename is now available under Settings → Working folders; profile deletion and standalone folder creation have no UI. Security panic reset clears profiles via reload, but needs a functional isolated-fixture test. Optional extension policy needs review before production use.
-5. Native macOS bundle/dev launcher exists and was exercised with `--no-build`; root app/dev/build scripts target GPUI, explicit `desktop:tauri:*` aliases retain Tauri. Validate a normal build/launcher and release bundling before claiming packaging finished. Launcher currently needs Python >=3.11 (`tomllib`); improve portability if appropriate. `desktop:dmg:dev` remains an explicit legacy alias; native bundling currently emits only unsigned `.app`.
+5. Native macOS bundle/dev launcher exists; normal debug build and unsigned dev bundling passed. Root app/dev/build scripts target GPUI, explicit `desktop:tauri:*` aliases retain Tauri. Validate release bundling before claiming packaging finished. Launcher needs Python >=3.11 (`tomllib`); improve portability if appropriate. `desktop:dmg:dev` remains an explicit legacy alias; native bundling currently emits only unsigned `.app`.
 6. CI adds native macOS tests/bundle; Linux Rust job excludes type-gpui so Tauri/core checks keep their existing dependencies. Remote CI and Linux/Windows runtime remain unverified.
 7. Essential README/AGENTS/CLAUDE/build/release/Vim/architecture docs are now minimal and describe GPUI. Obsolete desktop updater/signing/rich-editor guides and the old architecture book were removed; core storage/sync/MCP and mobile guides remain. Tag release workflow still targets Tauri. Signing/notarization, installer and native updater are unfinished. Do not publish native artifacts through the old Tauri updater or release anything without an explicit request.
 8. Keep this note current and commit progress in this branch. No merge, PR or release requested.
