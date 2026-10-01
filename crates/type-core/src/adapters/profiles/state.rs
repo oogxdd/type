@@ -224,11 +224,11 @@ fn push_normalized_profile(
         );
         root = rebased;
     }
-    if !root.exists() {
-        fs::create_dir_all(&root)
-            .map_err(|err| format!("Failed to create notes root '{}': {err}", root.display()))?;
+    // A registered folder may have been moved in Finder or be on an offline
+    // volume. Keep its entry without silently recreating an empty replacement.
+    if root.is_dir() {
+        ensure_system_folders(&root)?;
     }
-    ensure_system_folders(&root)?;
 
     let normalized_root = root.to_string_lossy().to_string();
     if !seen_roots.insert(normalized_root.clone()) {
@@ -321,7 +321,7 @@ pub fn default_profiles_state(app: &AppEnv) -> Result<NotesProfilesFile, String>
     if !legacy_root.exists() {
         fs::create_dir_all(&legacy_root).map_err(|err| err.to_string())?;
     }
-    Ok(NotesProfilesFile {
+    let mut state = NotesProfilesFile {
         active_profile_id: "default".to_string(),
         profiles: vec![NotesProfileEntry {
             id: "default".to_string(),
@@ -329,14 +329,23 @@ pub fn default_profiles_state(app: &AppEnv) -> Result<NotesProfilesFile, String>
             description: String::new(),
             notes_root: legacy_root.to_string_lossy().to_string(),
         }],
-    })
+    };
+    // Discover legacy managed profiles only while bootstrapping the registry.
+    // Repeating this on every read would resurrect profiles the user removed.
+    let ids = state.profiles.iter().map(|p| p.id.clone()).collect();
+    let roots = state
+        .profiles
+        .iter()
+        .map(|p| p.notes_root.clone())
+        .collect();
+    state
+        .profiles
+        .extend(discover_filesystem_profiles(app, &ids, &roots)?);
+    Ok(state)
 }
 
 /// Persist profiles state to disk as pretty-printed JSON.
-pub fn write_profiles_state(
-    app: &AppEnv,
-    state: &NotesProfilesFile,
-) -> Result<(), String> {
+pub fn write_profiles_state(app: &AppEnv, state: &NotesProfilesFile) -> Result<(), String> {
     let path = profiles_file_path(app)?;
     let content = serde_json::to_string_pretty(state).map_err(|err| err.to_string())?;
     fs::write(path, content).map_err(|err| err.to_string())
@@ -358,11 +367,6 @@ pub fn normalize_profiles_state(
         for profile in default_profiles_state(app)?.profiles {
             push_normalized_profile(app, profile, &mut seen_ids, &mut seen_roots, &mut profiles)?;
         }
-    }
-
-    let discovered = discover_filesystem_profiles(app, &seen_ids, &seen_roots)?;
-    for profile in discovered {
-        push_normalized_profile(app, profile, &mut seen_ids, &mut seen_roots, &mut profiles)?;
     }
 
     let active_profile_id = if profiles
@@ -502,6 +506,107 @@ pub fn create_profile_state(
     Ok(state)
 }
 
+/// Portable identity belongs to the folder; the device registry stores paths.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct FolderProfile {
+    id: String,
+    name: String,
+    #[serde(default)]
+    description: String,
+}
+
+fn write_folder_profile(profile: &NotesProfileEntry) -> Result<(), String> {
+    let directory = Path::new(&profile.notes_root).join(".type");
+    fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+    let identity = FolderProfile {
+        id: profile.id.clone(),
+        name: profile.name.clone(),
+        description: profile.description.clone(),
+    };
+    fs::write(
+        directory.join("profile.json"),
+        serde_json::to_vec_pretty(&identity).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Open an existing folder or create a new one at the exact supplied path.
+/// There is no implicit `notes/` child and no file relocation.
+pub fn open_profile_folder_state(app: &AppEnv, path: &str) -> Result<NotesProfilesFile, String> {
+    let expanded = if path.trim() == "~" || path.trim().starts_with("~/") {
+        let home = std::env::var("HOME").map_err(|_| "Cannot resolve your home folder.")?;
+        PathBuf::from(home).join(path.trim().strip_prefix("~/").unwrap_or(""))
+    } else {
+        normalize_notes_root_path(path)?
+    };
+    if expanded.exists() && !expanded.is_dir() {
+        return Err("Choose a folder, not a file.".into());
+    }
+    // Catch the old managed-profile parent without guessing at arbitrary folders.
+    if !expanded.join("_system").exists() && expanded.join("notes/_system").is_dir() {
+        return Err(format!(
+            "Choose the notes folder inside this profile: {}",
+            expanded.join("notes").display()
+        ));
+    }
+    fs::create_dir_all(&expanded).map_err(|e| e.to_string())?;
+    let root = fs::canonicalize(&expanded).map_err(|e| e.to_string())?;
+    let mut state = ensure_profiles_state(app)?;
+    if let Some(profile) = state
+        .profiles
+        .iter()
+        .find(|p| fs::canonicalize(&p.notes_root).is_ok_and(|existing| existing == root))
+    {
+        write_folder_profile(profile)?;
+        state.active_profile_id = profile.id.clone();
+        write_profiles_state(app, &state)?;
+        return Ok(state);
+    }
+    let identity_path = root.join(".type/profile.json");
+    let identity = if identity_path.exists() {
+        let identity: FolderProfile =
+            serde_json::from_slice(&fs::read(&identity_path).map_err(|e| e.to_string())?)
+                .map_err(|e| format!("Cannot read profile identity: {e}"))?;
+        if identity.id.trim().is_empty() || identity.name.trim().is_empty() {
+            return Err("Profile identity needs an id and name.".into());
+        }
+        identity
+    } else {
+        FolderProfile {
+            id: uuid::Uuid::now_v7().to_string(),
+            name: root
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned(),
+            description: String::new(),
+        }
+    };
+    // A copied folder can carry the same identity. Keep its device entry distinct.
+    let id = if state
+        .profiles
+        .iter()
+        .any(|p| p.id == identity.id && Path::new(&p.notes_root).exists())
+    {
+        uuid::Uuid::now_v7().to_string()
+    } else {
+        identity.id
+    };
+    state.profiles.retain(|p| p.id != id);
+    let profile = NotesProfileEntry {
+        id: id.clone(),
+        name: identity.name,
+        description: identity.description,
+        notes_root: root.to_string_lossy().into_owned(),
+    };
+    ensure_system_folders(&root)?;
+    write_folder_profile(&profile)?;
+    state.profiles.push(profile);
+    state.active_profile_id = id;
+    write_profiles_state(app, &state)?;
+    Ok(state)
+}
+
 /// Update a profile's name and/or description.
 pub fn update_profile_state(
     app: &AppEnv,
@@ -523,15 +628,18 @@ pub fn update_profile_state(
     if let Some(next_description) = description {
         state.profiles[index].description = normalize_profile_description(next_description);
     }
+    if Path::new(&state.profiles[index].notes_root)
+        .join(".type/profile.json")
+        .exists()
+    {
+        write_folder_profile(&state.profiles[index])?;
+    }
     write_profiles_state(app, &state)?;
     Ok(state)
 }
 
 /// Delete a profile (at least one must remain). Switches active if needed.
-pub fn delete_profile_state(
-    app: &AppEnv,
-    profile_id: &str,
-) -> Result<NotesProfilesFile, String> {
+pub fn delete_profile_state(app: &AppEnv, profile_id: &str) -> Result<NotesProfilesFile, String> {
     let mut state = ensure_profiles_state(app)?;
     let id = profile_id.trim();
     if id.is_empty() {
@@ -600,6 +708,110 @@ pub fn set_profile_notes_root_state(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct Fixture(PathBuf);
+    impl Fixture {
+        fn new() -> Self {
+            Self(
+                fs::canonicalize(std::env::temp_dir())
+                    .unwrap()
+                    .join(format!("type-profile-test-{}", uuid::Uuid::now_v7())),
+            )
+        }
+        fn env(&self) -> AppEnv {
+            AppEnv::new(self.0.join("app"))
+        }
+    }
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn opens_existing_repository_in_place_and_deduplicates_aliases() {
+        let f = Fixture::new();
+        let root = f.0.join("personal");
+        fs::create_dir_all(root.join(".git")).unwrap();
+        fs::write(root.join("note.md"), "original").unwrap();
+        fs::write(root.join(".git/config"), "repository config").unwrap();
+        let state = open_profile_folder_state(&f.env(), root.to_str().unwrap()).unwrap();
+        let profile = find_profile(&state, &state.active_profile_id).unwrap();
+        assert_eq!(Path::new(&profile.notes_root), root);
+        assert!(root.join(".type/profile.json").exists());
+        assert!(!root.join("notes").exists());
+        assert_eq!(
+            fs::read_to_string(root.join("note.md")).unwrap(),
+            "original"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join(".git/config")).unwrap(),
+            "repository config"
+        );
+        let again = open_profile_folder_state(&f.env(), &format!("{}/../personal", root.display()))
+            .unwrap();
+        assert!(state == again);
+        delete_profile_state(&f.env(), &profile.id).unwrap();
+        assert_eq!(ensure_profiles_state(&f.env()).unwrap().profiles.len(), 1);
+        assert!(root.join("note.md").exists());
+        let reopened = open_profile_folder_state(&f.env(), root.to_str().unwrap()).unwrap();
+        assert_eq!(reopened.active_profile_id, profile.id);
+    }
+
+    #[test]
+    fn creates_exact_path_and_reconnects_after_a_finder_move() {
+        let f = Fixture::new();
+        let root = f.0.join("new-folder");
+        let state = open_profile_folder_state(&f.env(), root.to_str().unwrap()).unwrap();
+        let moved = f.0.join("moved-folder");
+        fs::rename(&root, &moved).unwrap();
+        ensure_profiles_state(&f.env()).unwrap();
+        assert_eq!(crate::notes_root(&f.env()).unwrap(), root);
+        assert!(crate::ensured_notes_root(&f.env()).is_err());
+        assert!(
+            !root.exists(),
+            "reading the registry must not recreate the old location"
+        );
+        let reopened = open_profile_folder_state(&f.env(), moved.to_str().unwrap()).unwrap();
+        assert_eq!(reopened.active_profile_id, state.active_profile_id);
+        assert_eq!(reopened.profiles.len(), state.profiles.len());
+        assert!(!root.exists());
+        let profile = find_profile(&reopened, &reopened.active_profile_id).unwrap();
+        assert_eq!(Path::new(&profile.notes_root), moved);
+        update_profile_state(&f.env(), &profile.id, Some("Personal"), None).unwrap();
+        let identity: FolderProfile =
+            serde_json::from_slice(&fs::read(moved.join(".type/profile.json")).unwrap()).unwrap();
+        assert_eq!(identity.name, "Personal");
+    }
+
+    #[test]
+    fn rejects_files_relative_paths_and_legacy_parent() {
+        let f = Fixture::new();
+        let parent = f.0.join("legacy");
+        fs::create_dir_all(parent.join("notes/_system")).unwrap();
+        fs::write(parent.join("file.md"), "unchanged").unwrap();
+        assert!(open_profile_folder_state(&f.env(), "relative").is_err());
+        assert!(
+            open_profile_folder_state(&f.env(), parent.join("file.md").to_str().unwrap()).is_err()
+        );
+        assert!(
+            open_profile_folder_state(&f.env(), parent.to_str().unwrap())
+                .err()
+                .unwrap()
+                .contains("notes folder")
+        );
+        assert!(!parent.join("_system").exists());
+    }
+
+    #[test]
+    fn removed_managed_profile_does_not_reappear_on_restart() {
+        let f = Fixture::new();
+        let state = create_profile_state(&f.env(), "managed", None).unwrap();
+        let profile = find_profile(&state, &state.active_profile_id).unwrap();
+        delete_profile_state(&f.env(), &profile.id).unwrap();
+        assert_eq!(ensure_profiles_state(&f.env()).unwrap().profiles.len(), 1);
+        assert!(Path::new(&profile.notes_root).exists());
+    }
 
     const OLD_CONTAINER: &str =
         "/var/mobile/Containers/Data/Application/9CD5AD91-AB1A-4C60-9E57-0D36055DA0F1";

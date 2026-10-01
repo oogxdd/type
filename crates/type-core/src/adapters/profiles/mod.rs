@@ -51,6 +51,11 @@ impl ProfilesGateway for ProfilesAdapter {
         Ok(profiles_snapshot(&self.app, &state))
     }
 
+    fn open_folder(&self, path: &str) -> Result<Self::Snapshot, String> {
+        let state = open_profile_folder_state(&self.app, path)?;
+        Ok(profiles_snapshot(&self.app, &state))
+    }
+
     fn create(&self, args: Self::CreateArgs) -> Result<Self::Snapshot, String> {
         let state = create_profile_state(&self.app, &args.name, args.description.as_deref())?;
         Ok(profiles_snapshot(&self.app, &state))

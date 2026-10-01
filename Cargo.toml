@@ -8,6 +8,7 @@
 resolver = "2"
 members = [
     "apps/desktop/src-tauri",
+    "apps/gpui",
     "crates/type-core",
     "crates/type-ffi",
 ]
@@ -15,3 +16,9 @@ members = [
 [workspace.package]
 edition = "2021"
 rust-version = "1.97.1"
+
+[profile.dev]
+debug = 0
+
+[profile.dev.package."*"]
+opt-level = 2

@@ -15,6 +15,10 @@ impl<G: ProfilesGateway> ProfilesUseCases<G> {
         self.gateway.list()
     }
 
+    pub fn open_folder(&self, path: &str) -> Result<G::Snapshot, String> {
+        self.gateway.open_folder(path)
+    }
+
     pub fn create(&self, args: G::CreateArgs) -> Result<G::Snapshot, String> {
         self.gateway.create(args)
     }
