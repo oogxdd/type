@@ -1,14 +1,7 @@
 # CLAUDE.md
 
-The agent + contributor guide for this repository is **[AGENTS.md](./AGENTS.md)**.
-Read it before changing anything — it covers the monorepo layout (Tauri desktop +
-React Native mobile over one Rust core), the core's ports/adapters layout, the
-React context tree, and the non-obvious gotchas (the `_system` folder layout,
-filename lifecycle, debounced saves, transcription-mode fallback, …).
-
-For the Rust side specifically, see also
-[apps/desktop/src-tauri/README.md](./apps/desktop/src-tauri/README.md) (Tauri shell),
-[crates/type-core](./crates/type-core) (shared core), and
-[packages/mobile-core/README.md](./packages/mobile-core/README.md) (mobile FFI bridge).
+Read [AGENTS.md](AGENTS.md) for conventions and
+[GPUI migration status](docs/GPUI_MIGRATION_STATUS.md) for the current handoff.
+Desktop is Rust + GPUI; mobile uses the same core through UniFFI.
 
 @AGENTS.md

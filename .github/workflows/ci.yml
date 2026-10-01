@@ -65,4 +65,21 @@ jobs:
             librsvg2-dev \
             patchelf
       - name: Rust unit tests
-        run: cargo test --workspace --lib
+        run: cargo test --workspace --exclude type-gpui --lib
+
+  gpui:
+    name: Native GPUI (macOS build + keyboard flows)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: swatinem/rust-cache@v2
+      - name: Native unit and headless UI tests
+        run: cargo test -p type-gpui -- --test-threads=1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Release packaging and native updater tests
+        run: python3 -m unittest discover -s apps/gpui/scripts -p 'test_*.py'
+      - name: Build app bundle
+        run: python3 apps/gpui/scripts/desktop.py bundle --test-support

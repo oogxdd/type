@@ -1,0 +1,48 @@
+name: GPUI promote or withdraw
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Candidate version to publish or live version to withdraw'
+        required: true
+        type: string
+      operation:
+        type: choice
+        options: [promote, withdraw]
+        default: promote
+      rollout_interval:
+        description: 'Seconds between 7 rollout groups; 86400 = one group per day'
+        required: true
+        default: '86400'
+        type: string
+
+permissions:
+  contents: read
+concurrency:
+  group: gpui-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    environment: gpui-production
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+      VERSION: ${{ inputs.version }}
+      OPERATION: ${{ inputs.operation }}
+      ROLLOUT_INTERVAL: ${{ inputs.rollout_interval }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Promote verified candidate or withdraw an update
+        run: |
+          python3 apps/gpui/scripts/promote.py --version "$VERSION" \
+            --operation "$OPERATION" --rollout-interval "$ROLLOUT_INTERVAL" \
+            --repository "$GITHUB_REPOSITORY" --work-dir "$RUNNER_TEMP/promotion"

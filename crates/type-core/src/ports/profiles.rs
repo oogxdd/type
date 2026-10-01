@@ -143,6 +143,8 @@ pub trait ProfilesGateway {
     type Export;
 
     fn list(&self) -> Result<Self::Snapshot, String>;
+    /// Register a folder in place and make it active; never move existing notes.
+    fn open_folder(&self, path: &str) -> Result<Self::Snapshot, String>;
     fn create(&self, args: Self::CreateArgs) -> Result<Self::Snapshot, String>;
     fn set_active(&self, args: Self::SetActiveArgs) -> Result<Self::Snapshot, String>;
     fn set_notes_root(&self, args: Self::SetNotesRootArgs) -> Result<Self::Snapshot, String>;
@@ -163,7 +165,7 @@ pub trait ProfilesGateway {
 //   in:  nothing
 //   out: ProfilesSnapshot — active profile id + list of all profiles
 //   - Loads from disk, migrates from legacy format if needed
-//   - Normalizes: deduplicates, fixes empty roots, discovers orphaned profile directories
+//   - Normalizes: deduplicates, fixes empty roots; discovers managed folders at bootstrap
 //   - Always returns at least one profile ("default")
 //
 // create_profile(name, description)
@@ -217,7 +219,7 @@ pub trait ProfilesGateway {
 //
 // Key assumptions for any implementation:
 //   - Profile state is persisted as JSON (.notes-profiles.json in app data)
-//   - Profile ids are URL-safe slugs derived from the name
+//   - Legacy profile ids are name slugs; open_folder uses portable UUID identities
 //   - Each profile has an isolated notes root directory
 //   - At least one profile must always exist
 //   - Timestamps in filenames are Unix milliseconds

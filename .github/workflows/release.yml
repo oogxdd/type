@@ -1,4 +1,7 @@
-name: Desktop Release
+name: Legacy Tauri Desktop Release
+
+# GPUI uses gpui-release.yml / gpui-promote.yml and gpui-v* tags. Keep this
+# legacy feed separate until the previous shell's users migrate explicitly.
 
 # Tag-driven desktop releases: pushing desktop-v1.2.3 builds the .dmg + updater
 # artifacts and publishes them as a GitHub Release.

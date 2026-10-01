@@ -1,381 +1,144 @@
-# Releasing — versioning & CI
+# Native desktop releases
 
-Desktop (macOS Tauri app, auto-updates in-app) and mobile (React Native /
-Expo) releases are **tag-driven** and intentionally separate.
+GPUI uses [Sparkle 2](https://sparkle-project.org/documentation/) on macOS,
+with a universal Apple Silicon / Intel DMG, Developer ID signing,
+notarization, Ed25519 archive signatures and a signed appcast. Requires macOS 12+.
+The release path never falls back to shipping an unsigned artifact.
 
-- The **git tag is the release trigger and the source of truth for the version.**
-  You don't have to commit a version bump — tagging *is* the release. CI reads the
-  version out of the tag and writes it into the app config before building. (The
-  version committed in the repo is just the dev baseline.)
-- See also: [DESKTOP_AUTO_UPDATE.md](./DESKTOP_AUTO_UPDATE.md) for the desktop
-  updater internals, and [UPDATER_KEY_ROTATION.md](./UPDATER_KEY_ROTATION.md)
-  for generating or rotating the signing key.
-- For future Mac App Store / TestFlight releases, see
-  [MACOS_APP_STORE_TESTFLIGHT.md](./MACOS_APP_STORE_TESTFLIGHT.md).
+Settings → Updates provides manual checks and a device-local automatic-check
+toggle. Automatic checks are enabled in configured release builds; installation
+requires confirmation. Sparkle handles download, signature validation, app
+replacement and relaunch. Before a check or relaunch, the shell flushes notes;
+save conflicts, recordings and unfinished operations postpone relaunch. Resolve
+the problem and use Check for updates again to resume. GPUI's normal quit hook
+also preserves drafts if termination cannot be cancelled.
 
----
+Dev bundles and standalone binaries never start Sparkle. A plain
+`npm run desktop:release` still creates an unsigned local `.app` without an
+updater; use the packaging command or CI for distribution. Nothing is published
+by a local build.
 
-## 1. Versioning model
+## One-time configuration
 
-**Separate tag namespaces.** Desktop and mobile can move independently:
+The public GitHub repository is `oogxdd/type`. The native feed lives at
+`https://github.com/oogxdd/type/releases/download/gpui-updates/appcast.xml`,
+independent of GitHub's latest release and the old Tauri `latest.json`.
+Do not change the feed URL or signing key casually after shipping.
 
-```
-desktop-v0.5.0   desktop 0.5.0
-mobile-v0.2.0    mobile 0.2.0
-desktop-v0.5.1   desktop 0.5.1
-```
+Repository secrets already configured (names checked on 2026-10-01):
 
-> Why GitHub's *latest* release matters for the updater: the desktop updater
-> reads `…/releases/latest/download/latest.json`, so the desktop release must be
-> marked as GitHub's latest release. The desktop workflow forces the `latest`
-> flag on every desktop release. Mobile releases are also listed on GitHub,
-> but are explicitly prevented from replacing the latest desktop release.
-
----
-
-## 2. How to cut a desktop release
-
-### Option A — push a tag (normal path)
-
-```bash
-git checkout main && git pull          # release from main
-npm version 0.5.0 --no-git-tag-version  # optional: keep repo baseline in sync
-git commit -am "Release 0.5.0" || true
-
-git tag desktop-v0.5.0
-git push origin desktop-v0.5.0
-```
-
-CI ([`.github/workflows/release.yml`](../.github/workflows/release.yml)) builds
-the `.dmg` + updater artifacts and publishes the GitHub Release.
-
-### Option B — manual run (no tag)
-
-Actions tab → **Desktop Release** → **Run workflow** → enter the version.
-Useful for re-running a failed build.
-
-### Option C — build locally
-
-CI is not rationed here: `oogxdd/type` is public, and GitHub Actions is free on
-standard runners for public repositories. Build locally for *speed*, not cost —
-a cold CI build takes 8–10 minutes, while your Mac rebuilds incrementally in
-about two:
-
-```bash
-# desktop needs the updater signing key in the environment:
-export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/type-updater.key)"
-export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<password>"
-
-apps/desktop/scripts/release-local.sh 0.5.0
-```
-
-It bumps the version, builds, signs, assembles `latest.json`, and creates the
-GitHub Release via `gh` — exactly what CI does. (`gh auth login` required once.)
-
----
-
-## 2b. Developing locally without touching the installed prod app
-
-The released app and a local dev build are **fully separate installs with
-separate data**, as long as you use the dev config. Never point a dev run at the
-production identifier — `com.digital.type2`'s app-data directory is where the
-real notes live.
-
-| | Production | Dev |
-| --- | --- | --- |
-| Bundle | `/Applications/Type.app` | `/Applications/Type Dev.app` |
-| Identifier | `com.digital.type2` | `com.digital.type2.dev` |
-| App data (notes, profiles, keys) | `~/Library/Application Support/com.digital.type2` | `~/Library/Application Support/com.digital.type2.dev` |
-| Auto-update | on (GitHub `latest.json`) | off (`endpoints: []`) |
-
-Everything above the identifier line is driven by
-`apps/desktop/src-tauri/tauri.dev.conf.json`, which Tauri deep-merges over
-`tauri.conf.json`.
-
-```bash
-npm run desktop:app       # dev run against the dev identifier — safe
-npm run desktop:dmg:dev   # "Type Dev.dmg", installs alongside prod
-```
-
-`npm run desktop:app:prod-data` exists as an explicit escape hatch: it runs the
-dev build against the **production** app-data directory. Use it only when you
-deliberately need to reproduce something against real notes, and back up first
-(see below).
-
-The dev config sets `plugins.updater.endpoints: []`, so a dev build can never
-download and overwrite itself with a production release. The updater errors with
-`EmptyEndpoints` if you press "Check for updates" there — that is intended.
-
-### Backing up production data
-
-Everything the desktop app owns lives under one directory:
-
-```bash
-STAMP=$(date +%Y%m%d-%H%M%S)
-rsync -aH --exclude 'whisper/' --exclude '.DS_Store' \
-  "$HOME/Library/Application Support/com.digital.type2/" \
-  "/Volumes/KINGSTON/Backups/type/prod-$STAMP/app-data/"
-ditto /Applications/Type.app "/Volumes/KINGSTON/Backups/type/prod-$STAMP/Type.app"
-```
-
-`whisper/` is excluded because the managed Python env re-provisions itself.
-Everything that matters — `notes/`, `profiles/`, `config.json`,
-`.notes-profiles.json`, `local_sync/` — is a few tens of MB.
-
----
-
-## 3. How to cut a mobile release
-
-For the native Xcode ad-hoc build, signing, and OTA deployment used by the
-GitHub-hosted macOS runner, see
-[MOBILE_AD_HOC_GITHUB_ACTIONS.md](./MOBILE_AD_HOC_GITHUB_ACTIONS.md).
-
-```bash
-git checkout main && git pull
-git tag mobile-v0.2.0
-git push origin mobile-v0.2.0
-```
-
-CI ([`.github/workflows/mobile-adhoc.yml`](../.github/workflows/mobile-adhoc.yml)):
-
-1. creates a GitHub Release without changing the desktop Latest,
-2. runs on a macOS runner,
-3. generates the iOS UniFFI/native module from `packages/mobile-core`,
-4. archives and exports an ad-hoc `.ipa` with Xcode,
-5. verifies its signature, version, and registered-device profile,
-6. uploads it as a workflow artifact and tagged GitHub Release asset, and
-7. deploys the OTA install site to `https://type-ota.vercel.app`.
-
-The workflow sets `MOBILE_VERSION` from the tag and uses the GitHub run number
-as `IOS_BUILD_NUMBER`. For a manual run, use Actions → **Mobile Ad Hoc** and
-optionally enter an explicit build number. Manual dispatch updates the OTA site
-and keeps the IPA as a 30-day workflow artifact but does not create a GitHub
-Release; the `github-release` job runs only for a pushed `mobile-v*` tag.
-
----
-
-## 4. Required GitHub secrets
-
-Add under **Settings → Secrets and variables → Actions**.
-
-### Mobile (required)
-
-The `ios` job keeps using the existing `testflight` GitHub Environment so its
-Apple API-key secrets remain available; the legacy environment name does not
-mean the workflow uploads to TestFlight. Add the following as environment
-secrets (or repository secrets if environment scoping is not desired):
-
-| Secret | What it is |
+| Secret | Purpose |
 | --- | --- |
-| `APPLE_TEAM_ID` | Apple Developer team ID |
-| `APP_STORE_CONNECT_KEY_ID` | Team App Store Connect API key ID |
-| `APP_STORE_CONNECT_ISSUER_ID` | Team App Store Connect API issuer ID |
-| `APP_STORE_CONNECT_PRIVATE_KEY` | Complete contents of the API key `.p8` file |
-| `IOS_DISTRIBUTION_CERTIFICATE_BASE64` | Base64-encoded Apple Distribution `.p12` including its private key |
-| `IOS_DISTRIBUTION_CERTIFICATE_PASSWORD` | Password for that `.p12` |
-| `IOS_AD_HOC_DEVICE_UDIDS` | Required registered device UDIDs, separated by commas, spaces, or newlines |
-| `VERCEL_TOKEN` | Token with deploy access to the OTA project |
+| `APPLE_CERTIFICATE` | Base64 Developer ID Application `.p12` |
+| `APPLE_CERTIFICATE_PASSWORD` | Password for the `.p12` |
+| `APPLE_SIGNING_IDENTITY` | Full `Developer ID Application: … (TEAMID)` identity |
+| `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` | Apple ID, app-specific password and team for notarization |
 
-`IOS_AD_HOC_BASE_URL`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` are optional
-repository variables. The workflow defaults them to the existing production
-URL and Vercel project.
+These Apple values have not been exercised by the GPUI pipeline yet.
+On 2026-10-01, `SPARKLE_PRIVATE_KEY` and the repository variable
+`SPARKLE_PUBLIC_KEY` were configured using a dedicated `type-gpui` key in the
+maintainer's macOS Keychain. Environments `gpui-release` and `gpui-production`
+restrict deployment sources to `gpui-v*` tags and the `main` branch respectively.
+Never reuse the Tauri updater key or put the private key
+in this repository, a bundle, release assets or the synced notes root.
 
-The runner imports the distribution identity into a temporary Keychain; Xcode
-uses the API key for automatic provisioning and exports with
-`ExportOptionsAdHoc.plist`. Expo/EAS and TestFlight are not used. See
-[MOBILE_AD_HOC_GITHUB_ACTIONS.md](./MOBILE_AD_HOC_GITHUB_ACTIONS.md) for setup.
+Generate the key once on your Mac using the pinned distribution:
 
-### Desktop (required)
-
-| Secret                                | What it is                                            |
-| ------------------------------------- | ----------------------------------------------------- |
-| `TAURI_SIGNING_PRIVATE_KEY`           | Contents of `~/.tauri/type-updater.key`               |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`  | Password for that key                                 |
-
-`GITHUB_TOKEN` is provided automatically (used to create the Release).
-
-### Desktop — Apple notarization (optional)
-
-Without these the `.dmg` still works but triggers the "unidentified developer"
-warning on first open. With them, tauri-action notarizes automatically:
-`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`,
-`APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`.
-
-Set **all six or none** — a partially configured setup fails the release rather
-than falling back to unsigned. Full walkthrough, including the microphone
-entitlement the hardened runtime requires:
-[MACOS_CODE_SIGNING.md](./MACOS_CODE_SIGNING.md).
-
----
-
-## 5. First-release checklist (one-time)
-
-1. Generate the updater key and add the two `TAURI_SIGNING_*` secrets — see
-   [DESKTOP_AUTO_UPDATE.md](./DESKTOP_AUTO_UPDATE.md).
-2. Put the public key into `tauri.conf.json` → `plugins.updater.pubkey` (replace
-   `REPLACE_WITH_UPDATER_PUBLIC_KEY`) and commit it.
-3. Configure the mobile secrets in the `testflight` GitHub Environment,
-   including registered device UDIDs,
-   Apple signing secrets, and Vercel project secrets.
-4. Tag `desktop-v0.5.0` (or your next version) and push. Verify the desktop job produces
-   a Release with `Type_*.dmg`, `*.app.tar.gz`, `*.app.tar.gz.sig`, and
-   `latest.json`, and that an older install sees the update.
-5. Tag `mobile-v0.2.0` (or your next mobile version) and push. Open
-   `https://type-ota.vercel.app` in Safari on a registered device and install it.
-
----
-
-## 6. What runs when, and what it costs
-
-| Workflow | Trigger | Runners | Builds the app? |
-| --- | --- | --- | --- |
-| `ci.yml` | push to `main`/`master`; every PR commit, any branch — **except** changes that touch only `**.md` / `docs/**` | ubuntu ×2 | No — typecheck + unit tests |
-| `ffi-bindings-check.yml` | PRs touching `crates/type-ffi/**`, `packages/mobile-core/**`, `scripts/check-ffi-surface.mjs`; manual | ubuntu (PRs); **macOS only on manual dispatch** — its `codegen` job is gated on `github.event_name == 'workflow_dispatch'` | No — surface check + codegen |
-| `release.yml` | push of a `desktop-v*` tag; manual | ubuntu + **macOS** | **Yes** — `.dmg` + updater artifacts |
-| `mobile-adhoc.yml` | push of a `mobile-v*` tag; manual | ubuntu + **macOS** | Yes — ad-hoc `.ipa` → Vercel OTA site + artifact/release asset |
-
-Things that trigger **nothing**: pushing a branch that has no open PR, and
-pushing a tag outside the `desktop-v*` / `mobile-v*` namespaces.
-
-**Cost: none.** `oogxdd/type` is a public repository, and GitHub Actions is free
-on standard runners for public repos — including `macos-latest`. The macOS
-multiplier and the included-minutes pool that most guidance warns about apply to
-*private* repositories. Nothing here is a reason to avoid a run; what a run
-actually costs is wall-clock time and a little noise.
-
-Documentation-only changes are skipped declaratively via `paths-ignore` in
-`ci.yml`, so there is nothing to remember per commit. The filter skips a run
-only when **every** changed path matches, so a commit mixing docs and code still
-runs — it fails in the safe direction.
-
-`[skip ci]` (or `[ci skip]`, `[no ci]`, `[skip actions]`) in a commit message
-still works as a manual override. Avoid it for code changes: an opt-out you have
-to remember gets forgotten exactly when you're in a hurry, which is when CI is
-worth most.
-
-> **The marker is matched as a plain substring, anywhere in the message —
-> including the body, and including inside backticks or a quotation.** Writing
-> *about* it ("replaced the skip-marker convention with `paths-ignore`") silently
-> suppresses that commit's run. This bit us on the very commit that added
-> `paths-ignore`. If you need to mention it in a message, break it up or say
-> "skip marker". Actions → CI → Run workflow re-runs checks afterwards.
-
-### Why the release build is always cold
-
-`swatinem/rust-cache@v2` is in both workflows, but the release build still
-compiles from scratch every time, for three independent reasons:
-
-1. **Different operating systems.** `ci.yml`'s `rust` job runs on
-   `ubuntu-latest`; `release.yml` runs on `macos-latest`. Rust caches are
-   per-platform, so CI produces nothing the release job could restore. This is
-   the dominant reason.
-2. **Cache scoping by ref.** A tag push runs on `refs/tags/desktop-v1.2.3`.
-   Actions restores from the current ref's scope, falling back to the default
-   branch — so `main → tag` can work, but a cache *saved* under one tag is
-   invisible to the next tag. Tag-to-tag reuse never happens.
-3. **Different profiles.** `cargo test --workspace --lib` builds `debug`;
-   `tauri build` builds `release`. Even on matching platforms you would reuse
-   the downloaded crates, not the compiled dependencies.
-
-### Should you fix it?
-
-Probably not. Warming it means adding a `macos-latest` job on `main` that does a
-release-profile build with a shared `shared-key`, which the tag job then
-restores. Since the runners are free here, the cost is complexity rather than
-money — an extra job on every push to `main`, plus a cache Actions evicts after
-7 days unused, so at a weekly release cadence the warm cache is often gone by
-the time you need it.
-
-**Your fastest path is local.** The repo's `target/` on a dev Mac stays warm
-(~12 GB), so `npm run desktop:release <version>` rebuilds incrementally in a
-couple of minutes. CI is the fallback for when you're away from that machine.
-
-If you do want it warmed, the shape is:
-
-```yaml
-# ci.yml — new job, main only
-warm-desktop-cache:
-  if: github.ref == 'refs/heads/main'
-  runs-on: macos-latest
-  steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@1.97.1
-    - uses: swatinem/rust-cache@v2
-      with:
-        shared-key: desktop-macos-release
-    - run: cargo build --release --manifest-path apps/desktop/src-tauri/Cargo.toml
-
-# release.yml — desktop job restores it, never saves (a tag-scoped
-# save can't be read by anything later)
-- uses: swatinem/rust-cache@v2
-  with:
-    shared-key: desktop-macos-release
-    save-if: false
+```sh
+python3 apps/gpui/scripts/sparkle.py /private/tmp/type-sparkle
+/private/tmp/type-sparkle/bin/generate_keys --account type-gpui
+/private/tmp/type-sparkle/bin/generate_keys --account type-gpui -p
 ```
 
-### Choosing CI or local per release
+The first command verifies the upstream archive's pinned SHA-256. Sparkle's
+`generate_keys` stores the private key in macOS Keychain and prints the public
+key. Put that public key in the repository variable. Export the private key
+with `generate_keys --account type-gpui -x /path/to/private-key-file`, pass the
+file directly to `gh secret set SPARKLE_PRIVATE_KEY --repo oogxdd/type < /path/to/private-key-file`,
+then remove the exported file. Keep a secure backup of the signing key.
 
-Both paths produce identical artifacts and both create the GitHub Release, so
-the risk is doing it twice for the same tag. The `setup` job guards against
-that: it checks whether the release already carries a `latest.json`, and the
-whole `desktop` job is skipped if so. The check deliberately lives in `setup`
-rather than inside the macOS job, so a local release wastes seconds of CI
-rather than spinning up a macOS runner to do nothing. That makes the choice a
-matter of what you do first, with no flags to remember:
+Configure GitHub environments `gpui-release` and `gpui-production` to restrict
+who can build and promote releases. If a production reviewer is configured,
+GitHub waits for their approval before promotion. Repository secrets are used
+by both workflows; no credential values are exposed to app settings.
 
-- **Local:** `npm run desktop:release 1.2.3`. It builds, signs, publishes, and
-  creates the tag. If that tag push wakes CI, CI sees the finished release and
-  skips.
-- **CI:** just push the tag — `git tag desktop-v1.2.3 && git push origin
-  desktop-v1.2.3`. Nothing is published yet, so CI builds it.
+## Build a candidate
 
-### Local release credentials — use the Keychain, not a dotenv
+1. Update `apps/gpui/Cargo.toml` and its Cargo.lock package entry to the same
+   numeric `major.minor.patch` version. Each native release must increase it.
+2. Write `docs/releases/gpui-vVERSION.md`; the draft uses these notes and embeds
+   them in the signed feed. Commit changes to `main` through the normal project
+   process and let CI pass.
+3. Push the immutable `gpui-vVERSION` tag on that commit. The **GPUI release
+   candidate** workflow validates ancestry/version, runs functional checks,
+   builds both architectures, bundles Sparkle 2.10.0, signs inside out,
+   notarizes/staples the app and DMG, signs the feed and creates a **draft**.
+   Manual dispatch accepts an existing tag for a build that failed before
+   creating a draft. Existing candidate assets are never overwritten.
 
-`release-local.sh` resolves everything it needs by itself, so a local release is
-one command with no exports. It looks in this order: existing environment →
-login Keychain → derived from the machine.
+Artifacts: `Type-VERSION-universal.dmg`, `appcast.xml`, `release.json`.
+The manifest records commit, DMG checksum and the previous feed checksum.
+The first version's draft can be built with the included 0.4.5 release notes;
+no tag or release was created during this implementation.
 
-Derived for free: the updater private key from `~/.tauri/type-updater.key`, the
-signing identity from `security find-identity`, and the Team ID from that
-identity's `(TEAMID)` suffix.
+For a local candidate, install both Rust targets, import your Developer ID into
+Keychain, provide the required environment variables above, then run:
 
-The three actual secrets go in the Keychain once:
-
-```bash
-security add-generic-password -a "$USER" -s type-updater-key-password -w
-security add-generic-password -a "$USER" -s type-apple-app-password -w
-security add-generic-password -a "$USER" -s type-apple-id -w
+```sh
+npm run desktop:release:package -- --version VERSION --repository oogxdd/type \
+  --output /private/tmp/type-release-VERSION \
+  --sparkle-dir /private/tmp/type-sparkle \
+  --notes docs/releases/gpui-vVERSION.md
 ```
 
-`-w` with no value prompts for it, so nothing lands in shell history.
+Use a fresh output directory. For subsequent builds download the current
+`gpui-updates/appcast.xml` and pass `--previous-feed /path/to/appcast.xml` so
+the candidate retains previously signed releases. Packaging verifies that
+previous feed before using it. The local command does not create a GitHub release.
 
-**Why not a `.env` file:** these are release-signing secrets. A dotenv is
-plaintext on disk and one `.gitignore` slip from being committed, and it invites
-copies to spread. Keychain items are encrypted at rest, survive across shells,
-and live where the Developer ID certificate already is. Plain `export` in a
-shell is worse still — it lasts only until you close the window, and typing the
-password inline puts it in history.
+## Test and promote
 
-Environment variables still win when set, so CI and one-off overrides keep
-working unchanged.
+Download the draft DMG using authenticated GitHub/`gh`. Test on an isolated
+profile: installation, launch, Unicode editing/save, restart and any sync used.
+For the first release also test the real Sparkle old→new replacement path with
+two signed/notarized fixture builds and a separate HTTPS test feed/key. Do not
+point a test build at the production feed or start two shells on the same notes
+root. Headless tests cover the save barrier but cannot prove Gatekeeper,
+installer authorization or a real relaunch.
 
-If the Apple credentials are missing, the script warns and builds **unsigned**
-rather than failing. Take that warning seriously: shipping an unsigned update to
-people running a notarized build means macOS refuses to launch their next fresh
-install.
+After the candidate passes, manually run **GPUI promote or withdraw** from
+`main`, select `promote` and its version. The workflow checks the signed feed,
+DMG checksum/signature/notarization and unchanged baseline feed. A candidate
+built before another promotion/withdrawal is rejected; build a new version
+against the current feed. It publishes downloads first, then replaces the
+signed native feed. A failure after publishing downloads can be retried while
+the live feed is still unchanged; assets are not replaced.
 
----
+Promotion starts the rollout clock at publication, not at build time. Default
+interval `86400` delivers one of Sparkle's seven groups per day. Manual checks
+offer the update immediately; they bypass phased rollout by Sparkle design.
+Set interval `0` for immediate availability to everyone.
+See [Sparkle phased rollouts](https://sparkle-project.org/documentation/publishing/#phased-group-rollouts).
 
-## 7. Later: dedicated macOS runners (e.g. getmac.io / self-hosted)
+`gpui-v*` installers and the `gpui-updates` feed are marked `latest=false` so
+legacy Tauri clients keep their existing latest.json endpoint. The first GPUI
+installation is manual; native updates only begin after that installation.
+The old `desktop-v*` workflow remains explicitly labeled Legacy Tauri.
 
-Out of scope for now — high-level only. When free minutes stop being enough and
-local builds get tedious, point the macOS job at a faster/cheaper runner:
+## Withdraw a problem release
 
-- **Self-hosted / third-party macOS runner** (getmac.io, MacStadium, a Mac mini):
-  register it as a GitHub self-hosted runner with a label like `macos-getmac`,
-  then change `runs-on: macos-latest` → `runs-on: [self-hosted, macOS, macos-getmac]`
-  in the `desktop` job. Everything else (steps, secrets) stays the same.
-- Pre-install Node, Rust, and Xcode on the runner image so jobs skip toolchain
-  setup; keep `swatinem/rust-cache` for incremental Rust builds.
-- Persisted signing material can live in the runner's Keychain instead of
-  importing certs each run — or keep using the secrets for reproducibility.
+Run **GPUI promote or withdraw**, select `withdraw` and the problematic version.
+It verifies the live feed, removes only that item, re-signs and replaces the
+feed. Existing installed versions are not downgraded, and a downloaded/queued
+update may still complete. Publish a higher fixed version to repair affected
+installs. Keep old release assets available for the retained feed items.
+
+## Verification status
+
+Local GPUI and release-script/native-bridge tests use synthetic profiles and
+keys. Actual Developer ID signing, notarization, Intel runtime, remote Actions
+and signed/notarized old→new UI replacement still require the first candidate
+smoke test. No release has been published as part of this integration.
+
+Mobile is unchanged: [mobile distribution](MOBILE_AD_HOC_GITHUB_ACTIONS.md).
+Migration journal: [GPUI status](GPUI_MIGRATION_STATUS.md).

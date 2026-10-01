@@ -1,151 +1,39 @@
-# Сборка и тестирование на Маке (после перехода на монорепу)
+# Build and test on macOS
 
-Практическая шпаргалка для случая «на другой машине есть Мак, нужно
-собрать и потестить». Покрывает оба шелла — десктоп (Tauri) и мобилку
-(React Native/Expo) — поверх общего Rust-core.
+Install Rust through rustup; `rust-toolchain.toml` pins the project toolchain.
+The native launcher needs Python 3.11+. Node/npm are needed for mobile/MCP,
+not for the GPUI app itself.
 
-Подробности по каждому пункту — в связанных доках, здесь только маршрут.
-
-## С чего начать
+From the repository root:
 
 ```sh
-git clone <repo> && cd type
-npm install     # npm workspaces поднимет apps/* и packages/* одной командой
+npm run desktop:app
+npm run desktop:build
+npm run desktop:test
+npm run desktop:bundle
 ```
 
----
-
-## Десктоп (Tauri)
-
-### Разработка (HMR, без прод-подписи)
+Dev notes use `com.digital.type2.gpui.dev`. To use a synthetic fixture:
 
 ```sh
-npm run desktop:tauri -- dev
+npm run desktop:app -- --data-dir /absolute/path/to/fixture
 ```
-React — Vite HMR мгновенно; Rust — `tauri dev` сам пересобирает и
-перезапускает окно.
 
-### Просто DMG для локальной проверки (dev-конфиг, без прод-подписи/апдейтера)
+For direct Rust checks:
 
 ```sh
-npm run tauri:build:dev -w type
-```
-Собирает `.dmg` по `src-tauri/tauri.dev.conf.json` — быстрый способ
-получить установочный файл для ручной проверки, не связываясь с ключами.
-
-### Полная прод-сборка (с апдейтером и/или нотаризацией Apple)
-
-Два независимых слоя подписи поверх обычной `tauri build`:
-
-**1. Апдейтер (обязателен для авто-обновлений внутри приложения)**
-
-Один раз:
-```sh
-npm run tauri signer generate -- -w ~/.tauri/type-updater.key
-```
-Публичный ключ (`~/.tauri/type-updater.key.pub`) — в
-`apps/desktop/src-tauri/tauri.conf.json` → `plugins.updater.pubkey`
-(коммитится). Приватный ключ — никогда не коммитить, хранить в
-менеджере паролей.
-
-При каждой сборке:
-```sh
-export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/type-updater.key)"
-export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<пароль>"
-npm run tauri build -- --bundles app,dmg
-```
-Именно `app,dmg` — один `dmg` не создаёт `.tar.gz`/`.sig`, нужные
-апдейтеру. Результат в `src-tauri/target/release/bundle/`:
-`dmg/*.dmg` (инсталлятор), `macos/Type.app.tar.gz` + `.sig` (пейлоад
-апдейта и подпись).
-
-**2. Нотаризация Apple (опционально — убирает "unidentified developer")**
-
-Без неё `.dmg` всё равно работает и обновляется, просто первый запуск
-требует правый клик → «Открыть». С нотаризацией нужны секреты/env:
-`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`,
-`APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`,
-`APPLE_TEAM_ID` (используются `tauri-action` в CI; локально —
-через `bundle.macOS.signingIdentity` в конфиге).
-
-**Готовый скрипт "под ключ"** — когда не хочется собирать вручную или
-кончились бесплатные минуты GH Actions:
-```sh
-export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/type-updater.key)"
-export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="<пароль>"
-apps/desktop/scripts/release-local.sh 0.5.0
-```
-Бампит версию, собирает `app,dmg`, собирает `latest.json`, публикует
-GitHub Release через `gh release create` (`gh auth login` нужен один
-раз). Apple-нотаризацию сам не делает — только updater-подпись.
-
-Подробности: [`docs/RELEASING.md`](./RELEASING.md),
-[`docs/DESKTOP_AUTO_UPDATE.md`](./DESKTOP_AUTO_UPDATE.md).
-
----
-
-## Мобилка (React Native / Expo)
-
-### Демо-режим (без нативной сборки, работает сразу — Expo Go тоже ок)
-
-```sh
-npm run mobile:start
-```
-Крутится на in-memory моке ядра (`mock-core.ts`): полностью
-интерактивно, ничего не персистится. Для чистой UI-работы нативная
-сборка не нужна вообще.
-
-### Dev-client с настоящим Rust-ядром (собирается один раз, дальше hot reload)
-
-Предпосылки: Xcode,
-`rustup target add aarch64-apple-ios aarch64-apple-ios-sim`.
-
-```sh
-# once, в packages/mobile-core — тул мак-онли, поэтому --no-save
-npm install --no-save uniffi-bindgen-react-native@0.31.0-3
-
-npm run mobile:ios   # с корня: codegen:ios + expo run:ios одной командой
+cargo fmt -p type-gpui --check
+cargo check -p type-gpui
+cargo test -p type-gpui -- --test-threads=1
+cargo test -p type-core --lib
 ```
 
-Ручная проводка не нужна: `ubrn` заменяет стабильный demo fallback
-`packages/mobile-core/src/index.tsx` сгенерированным TurboModule entry.
-`apps/mobile/src/core/boot.ts` импортирует один и тот же package entry в обоих
-режимах.
+`CARGO_TARGET_DIR` can reuse an existing build cache; the migration-specific
+path is in [the handoff](GPUI_MIGRATION_STATUS.md). `desktop.py` places `.app`
+bundles under that target's `bundle/` directory and supports `--no-build`.
+Tests use temporary roots. The user handles UI/feel review.
 
-Дальше цикл разработки:
-- правите TS → `npm run mobile:start`, hot reload в уже стоящий
-  dev-client, без пересборки;
-- правите Rust (`type-core`/`type-ffi`) → пересборка dev-client:
-  `npm run mobile:ios` (или фоновый вотчер `npm run mobile:ios:watch`,
-  сам следит за `crates/` и пересобирает).
-
-Для реального устройства (не симулятора) —
-`IPHONEOS_DEPLOYMENT_TARGET=16.4 npm run codegen:ios:device -w @typenotes/mobile-core`
-вместо `codegen:ios` (симуляторная сборка не даёт device-слайс). Это
-**отладочная** сборка ядра — для разработки. Всё, что ставится на телефон
-для настоящей работы (ad-hoc, TestFlight, CI), собирается
-`codegen:ios:release`: без оптимизаций то же чтение превью в ~3 раза медленнее,
-а библиотека ~700 МБ вместо ~100 МБ. До 0.4.2 все iOS-сборки так и уходили.
-
-Подробности: [`apps/mobile/README.md`](../apps/mobile/README.md),
-[`packages/mobile-core/README.md`](../packages/mobile-core/README.md),
-[`docs/architecture/09-adding-features-and-codegen.md`](./architecture/09-adding-features-and-codegen.md).
-
----
-
-## Gotchas
-
-- **`npm run desktop:tauri -- build` (или голый `tauri build`) падает с
-  `A public key has been found, but no private key. Make sure to set
-  'TAURI_SIGNING_PRIVATE_KEY' environment variable.`** — это не значит,
-  что сборка не удалась. `.app`/`.dmg`/`.tar.gz` уже собраны к этому
-  моменту ("Finished N bundles" в логе выше), падает только шаг подписи
-  updater-пейлоада. Причина: `plugins.updater.pubkey` в
-  `tauri.conf.json` непустой, а `bundle.createUpdaterArtifacts: true` —
-  этого достаточно, чтобы Tauri потребовал приватный ключ.
-  - Просто хотите потестить билд локально → пересоберите через
-    `npm run desktop:dmg:dev` (dev-конфиг, апдейтер выключен, ключ не
-    нужен) — см. «Просто DMG для локальной проверки» выше.
-  - Нужен рабочий апдейтер → экспортируйте
-    `TAURI_SIGNING_PRIVATE_KEY`/`_PASSWORD` перед сборкой — см.
-    [UPDATER_KEY_ROTATION.md](./UPDATER_KEY_ROTATION.md).
+Mobile: `npm install`, then `npm run mobile:start` for the mock or
+`npm run mobile:ios` for native codegen/build. See
+[mobile README](../apps/mobile/README.md) and
+[FFI bridge](../packages/mobile-core/README.md).

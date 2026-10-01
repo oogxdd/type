@@ -115,7 +115,7 @@ pub const PROTECTED_SYSTEM_FOLDERS: [&str; 9] = [
 
 // ── Root resolution ────────────────────────────────────────────────────────────
 
-/// Resolve the active profile's notes root, creating the directory if needed.
+/// Resolve the active profile's notes root without recreating moved folders.
 pub fn notes_root(app: &AppEnv) -> Result<PathBuf, String> {
     let root = match ensure_profiles_state(app) {
         Ok(state) => {
@@ -126,16 +126,18 @@ pub fn notes_root(app: &AppEnv) -> Result<PathBuf, String> {
         }
         Err(_) => crate::legacy_notes_root(app)?,
     };
-    if !root.exists() {
-        fs::create_dir_all(&root)
-            .map_err(|err| format!("Failed to create notes root '{}': {err}", root.display()))?;
-    }
     Ok(root)
 }
 
 /// Notes root with system folders guaranteed to exist.
 pub fn ensured_notes_root(app: &AppEnv) -> Result<PathBuf, String> {
     let root = notes_root(app)?;
+    if !root.is_dir() {
+        return Err(format!(
+            "Profile folder is unavailable: {}. Add its new location in Profiles.",
+            root.display()
+        ));
+    }
     ensure_system_folders(&root)?;
     Ok(root)
 }

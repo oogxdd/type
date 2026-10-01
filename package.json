@@ -7,13 +7,15 @@
     "packages/*"
   ],
   "scripts": {
-    "desktop:dev": "npm run --workspace type dev",
+    "desktop:dev": "python3 apps/gpui/scripts/desktop.py dev",
     "desktop:tauri": "npm run --workspace type tauri --",
-    "desktop:build": "npm run --workspace type build",
-    "desktop:app": "npm run --workspace type tauri:dev:isolated",
-    "desktop:app:prod-data": "npm run --workspace type tauri -- dev",
-    "desktop:dmg:dev": "npm run --workspace type tauri:build:dev",
-    "desktop:release": "bash apps/desktop/scripts/release-local.sh",
+    "desktop:build": "cargo build -p type-gpui",
+    "desktop:app": "python3 apps/gpui/scripts/desktop.py dev",
+    "desktop:app:prod-data": "python3 apps/gpui/scripts/desktop.py dev --production",
+    "desktop:dmg:dev": "npm run desktop:tauri:dmg:dev",
+    "desktop:release": "python3 apps/gpui/scripts/desktop.py bundle --release",
+    "desktop:release:package": "python3 apps/gpui/scripts/release.py",
+    "desktop:release:test": "python3 -m unittest discover -s apps/gpui/scripts -p 'test_*.py'",
     "mobile:start": "npm run --workspace @typenotes/mobile start",
     "mobile:ios": "npm run --workspace @typenotes/mobile-core codegen:ios && npm run --workspace @typenotes/mobile ios",
     "mobile:ios:watch": "node scripts/watch-mobile-ios.mjs",
@@ -22,7 +24,15 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "mcp:build": "npm run --workspace @typenotes/notes-mcp build",
-    "mcp:test": "npm run --workspace @typenotes/notes-mcp test"
+    "mcp:test": "npm run --workspace @typenotes/notes-mcp test",
+    "desktop:tauri:dev": "npm run --workspace type dev",
+    "desktop:tauri:build": "npm run --workspace type build",
+    "desktop:tauri:app": "npm run --workspace type tauri:dev:isolated",
+    "desktop:tauri:app:prod-data": "npm run --workspace type tauri -- dev",
+    "desktop:tauri:dmg:dev": "npm run --workspace type tauri:build:dev",
+    "desktop:tauri:release": "bash apps/desktop/scripts/release-local.sh",
+    "desktop:test": "cargo test -p type-gpui -- --test-threads=1",
+    "desktop:bundle": "python3 apps/gpui/scripts/desktop.py bundle"
   },
   "version": "1.0.0",
   "dependencies": {

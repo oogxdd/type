@@ -1,0 +1,110 @@
+name: GPUI release candidate
+
+on:
+  push:
+    tags: ['gpui-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag on main, e.g. gpui-v0.4.6'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+concurrency:
+  group: gpui-release
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    runs-on: macos-15
+    environment: gpui-release
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref_name }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate immutable release source
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^gpui-v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          git fetch origin main
+          git merge-base --is-ancestor HEAD origin/main
+          python3 -c 'import sys; sys.path.insert(0, "apps/gpui/scripts"); from release import release_version; import os; release_version(os.environ["RELEASE_TAG"][6:])'
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo 'Release already exists; do not replace candidate assets. Use a new version.' >&2
+            exit 1
+          fi
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: swatinem/rust-cache@v2
+      - name: Functional checks
+        run: |
+          cargo test --locked -p type-gpui -- --test-threads=1
+          cargo test --locked -p type-core --lib
+          python3 -m unittest discover -s apps/gpui/scripts -p 'test_*.py'
+      - name: Import Developer ID into temporary keychain
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$APPLE_CERTIFICATE"
+          test -n "$APPLE_CERTIFICATE_PASSWORD"
+          KEYCHAIN="$RUNNER_TEMP/gpui-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          export KEYCHAIN_PASSWORD
+          python3 -c 'import base64,os,pathlib; pathlib.Path(os.environ["RUNNER_TEMP"], "developer-id.p12").write_bytes(base64.b64decode(os.environ["APPLE_CERTIFICATE"], validate=True))'
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/developer-id.p12" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" "$HOME/Library/Keychains/login.keychain-db"
+          rm "$RUNNER_TEMP/developer-id.p12"
+      - name: Read current native feed
+        run: |
+          mkdir -p "$RUNNER_TEMP/previous"
+          if gh release view gpui-updates >/dev/null 2>&1; then
+            gh release download gpui-updates --pattern appcast.xml --dir "$RUNNER_TEMP/previous"
+          fi
+      - name: Build signed and notarized universal candidate
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          NOTES="docs/releases/${RELEASE_TAG}.md"
+          test -s "$NOTES"
+          ARGS=()
+          if [ -f "$RUNNER_TEMP/previous/appcast.xml" ]; then
+            ARGS+=(--previous-feed "$RUNNER_TEMP/previous/appcast.xml")
+          fi
+          python3 apps/gpui/scripts/release.py --version "${RELEASE_TAG#gpui-v}" \
+            --repository "$GITHUB_REPOSITORY" --output "$RUNNER_TEMP/release" \
+            --sparkle-dir "$RUNNER_TEMP/sparkle" --notes "$NOTES" "${ARGS[@]}"
+      - name: Create draft for installation and update smoke test
+        run: |
+          gh release create "$RELEASE_TAG" "$RUNNER_TEMP/release/"* \
+            --verify-tag --draft --title "Type ${RELEASE_TAG#gpui-v}" \
+            --notes-file "docs/releases/${RELEASE_TAG}.md"
+      - name: Remove temporary signing material
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/gpui-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/developer-id.p12"
