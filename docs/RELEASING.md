@@ -26,6 +26,13 @@ is published, signed and notarized. Quit Type normally, open the DMG and drag
 is manual when coming from `Type GPUI Dev` or the previous Tauri shell.
 The Dev bundle has no updater, and Tauri does not install native GPUI releases.
 
+To keep the old Tauri installation, install the signed native bundle as
+`/Applications/Type GPUI.app` instead, leaving `/Applications/Type.app` intact.
+Renaming the outer `.app` folder does not alter its signed contents. Launch the
+GPUI app by that exact path; its Sparkle updater updates the running host bundle.
+This is the maintainer's installation on 2026-10-01. GPUI Dev was closed
+normally and retained as a hidden backup; legacy Type 0.8.1 was left unchanged.
+
 After installing the signed native build, use **Settings → Updates → Check for
 updates** for subsequent GPUI releases. The production feed is already live;
 0.4.6 is its current version, so an up-to-date installation will not offer a
