@@ -28,6 +28,35 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Native update channel live (2026-10-01)
+
+- Published `gpui-v0.4.6`: https://github.com/oogxdd/type/releases/tag/gpui-v0.4.6
+  Candidate run `36879405095` and promotion `36909822428` succeeded. Source is
+  immutable merge `73f32c03`; PRs #12/#14 passed all CI before merging.
+- Dedicated signed feed is live under `gpui-updates/appcast.xml`. Its signature,
+  version, enclosure URL and bundled public key/feed URL were independently
+  verified after publication. Legacy latest remains `desktop-v0.8.1`.
+- Downloaded the real 45,063,112-byte DMG and verified manifest commit/SHA-256,
+  Sparkle archive/feed signatures, nested codesign, app/DMG staples, Gatekeeper
+  acceptance and arm64/x86_64 slices. SHA-256 is
+  `6d1012ef3052f58bf7e7d5aca46fa50eede163339d893d52f6f72d61a06955c1`.
+- Fixture PR #15 / run `36880471771` produced two Developer ID signed/notarized
+  isolated apps. Real UI update 0.0.1 → 0.0.2 completed: replacement, relaunch,
+  exact Unicode text preservation, new plist version and valid post-update
+  signature/staple confirmed. Test prerelease is clearly TEST ONLY and never
+  latest; production key/feed and real notes were not used by these fixtures.
+- User clarified that general app testing is unnecessary; priority is being
+  able to install now and receive subsequent updates. The actual candidate was
+  inspected as an artifact, without opening production notes or restarting the
+  user's app. Comprehensive editor/UI smoke and Intel runtime execution were
+  not claimed; Intel remains a runtime verification limitation.
+- First installation from GPUI Dev or legacy Tauri is manual using the 0.4.6
+  DMG. Subsequent signed GPUI releases use Settings → Updates. Dev bundles
+  intentionally have no updater. Current-line typing flicker was fixed before
+  PR #12 merged; the installed Dev bundle contains it, but the already-running
+  process needs a normal restart. Local build + manual artifact upload remains
+  documented in `docs/RELEASING.md`.
+
 ### Isolated updater fixtures (2026-10-01)
 
 PR #14 was merged as `73f32c03`; all macOS/Rust/TypeScript checks passed.

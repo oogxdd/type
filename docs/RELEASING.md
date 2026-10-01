@@ -18,6 +18,26 @@ Dev bundles and standalone binaries never start Sparkle. A plain
 updater; use the packaging command or CI for distribution. Nothing is published
 by a local build.
 
+## Install the first native version
+
+[Type 0.4.6 universal DMG](https://github.com/oogxdd/type/releases/download/gpui-v0.4.6/Type-0.4.6-universal.dmg)
+is published, signed and notarized. Quit Type normally, open the DMG and drag
+`Type.app` to Applications. Launch that installed app. This first installation
+is manual when coming from `Type GPUI Dev` or the previous Tauri shell.
+The Dev bundle has no updater, and Tauri does not install native GPUI releases.
+
+After installing the signed native build, use **Settings → Updates → Check for
+updates** for subsequent GPUI releases. The production feed is already live;
+0.4.6 is its current version, so an up-to-date installation will not offer a
+newer version until the next candidate is promoted. Automatic checks are
+available; installation requires confirmation.
+
+Release execution and verification are recorded in
+[GPUI migration status](GPUI_MIGRATION_STATUS.md). The real isolated Sparkle
+0.0.1 → 0.0.2 replacement/relaunch test passed with exact Unicode text preserved.
+The published app/DMG and live feed passed signature, notarization, Gatekeeper,
+checksum and architecture inspection. Intel runtime execution was not tested.
+
 ## One-time configuration
 
 The public GitHub repository is `oogxdd/type`. The native feed lives at
@@ -34,8 +54,8 @@ Repository secrets already configured (names checked on 2026-10-01):
 | `APPLE_SIGNING_IDENTITY` | Full `Developer ID Application: … (TEAMID)` identity |
 | `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` | Apple ID, app-specific password and team for notarization |
 
-Developer ID import succeeded in the first candidate run on 2026-10-01;
-notarization credentials still await a completed packaging run.
+Developer ID signing and Apple notarization succeeded for GPUI 0.4.6 and
+the isolated updater fixtures on 2026-10-01.
 On 2026-10-01, `SPARKLE_PRIVATE_KEY` and the repository variable
 `SPARKLE_PUBLIC_KEY` were configured using a dedicated `type-gpui` key in the
 maintainer's macOS Keychain. Environments `gpui-release` and `gpui-production`
