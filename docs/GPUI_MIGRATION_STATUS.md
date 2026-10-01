@@ -28,6 +28,22 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### First-candidate packaging correction (2026-10-01)
+
+The `gpui-v0.4.5` candidate run `36874580320` passed functional checks and
+Developer ID import, then stopped before building because macOS Bash 3.2
+rejects an empty argument array under `set -u`. No draft or public update was
+created. CI and the documented local-build alternative now use positional
+arguments, including when there is no previous feed. The tag stays immutable;
+the corrected candidate is version 0.4.6. A regression executes the actual
+packaging step with the system Bash for both absent and existing feeds.
+All 43 GPUI tests, 94 core tests and 9 release/native tests pass locally. The
+packaging regression fails on the original workflow and passes after the fix.
+The installed `Type GPUI Dev.app` contains the highlight correction; the already
+running process was left alone and needs a restart to load it. Original dirty
+checkouts were left untouched. Signing/notarization and isolated old→new update
+verification remain pending.
+
 ### Current-line typing flicker (2026-10-01)
 
 Before merging PR #12, the user reported that Highlight current line blinks
@@ -40,8 +56,7 @@ The fill remains behind text and does not depend on the native caret blink.
 
 A headless regression checks the first painted frame after each typed character,
 including Unicode, soft wraps and newlines, with line numbers enabled/disabled.
-It fails on the original renderer and passes after the fix. All 43 GPUI tests passed locally, including the regression. The PR remains
-unmerged pending remote CI for this fix; no release tag has been pushed.
+It fails on the original renderer and passes after the fix. All 43 GPUI tests passed locally, including the regression. PR #12 was merged as `e7911fb6` after all CI checks passed.
 
 ### First native release setup (2026-10-01, in progress)
 

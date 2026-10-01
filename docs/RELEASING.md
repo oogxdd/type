@@ -78,7 +78,7 @@ by both workflows; no credential values are exposed to app settings.
 
 Artifacts: `Type-VERSION-universal.dmg`, `appcast.xml`, `release.json`.
 The manifest records commit, DMG checksum and the previous feed checksum.
-The first version's draft can be built with the included 0.4.5 release notes;
+The first version's draft can be built with the included 0.4.6 release notes;
 no tag or release was created during this implementation.
 
 ## Alternative: build locally and upload the artifacts yourself
@@ -119,7 +119,7 @@ the GPUI version and release notes as described above. The committed version
 must match `VERSION`; the output directory must be fresh.
 
 ```sh
-VERSION=0.4.5  # replace with the new committed GPUI version
+VERSION=0.4.6  # replace with the new committed GPUI version
 python3 apps/gpui/scripts/sparkle.py /private/tmp/type-sparkle
 
 export APPLE_SIGNING_IDENTITY='Developer ID Application: Maxim Ignatev (Y377P5XKGJ)'
@@ -137,21 +137,22 @@ export SPARKLE_PUBLIC_KEY="$(/private/tmp/type-sparkle/bin/generate_keys --accou
   chmod 600 "$key_export_dir/key"
   export SPARKLE_PRIVATE_KEY="$(cat "$key_export_dir/key")"
 
-  previous_args=()
-  if gh release view gpui-updates --repo oogxdd/type >/dev/null 2>&1; then
-    gh release download gpui-updates --repo oogxdd/type --pattern appcast.xml --dir "$key_export_dir"
-    previous_args=(--previous-feed "$key_export_dir/appcast.xml")
-  fi
-
-  npm run desktop:release:package -- --version "$VERSION" --repository oogxdd/type \
+  set -- --version "$VERSION" --repository oogxdd/type \
     --output "/private/tmp/type-release-$VERSION" \
     --sparkle-dir /private/tmp/type-sparkle \
-    --notes "docs/releases/gpui-v$VERSION.md" "${previous_args[@]}"
+    --notes "docs/releases/gpui-v$VERSION.md"
+  if gh release view gpui-updates --repo oogxdd/type >/dev/null 2>&1; then
+    gh release download gpui-updates --repo oogxdd/type --pattern appcast.xml --dir "$key_export_dir"
+    set -- "$@" --previous-feed "$key_export_dir/appcast.xml"
+  fi
+
+  npm run desktop:release:package -- "$@"
 )
 unset APPLE_ID APPLE_PASSWORD
 ```
 
-Use Bash or Zsh for this snippet (it uses an argument array). Do not enable
+Use Bash or Zsh for this snippet. Positional arguments also work with the
+macOS system Bash when the first release has no previous feed. Do not enable
 shell tracing (`set -x`) while working with credentials. The packaging command
 builds both architectures, signs and notarizes the app/DMG, staples tickets and
 generates the signed feed and provenance. It publishes nothing. Later candidates

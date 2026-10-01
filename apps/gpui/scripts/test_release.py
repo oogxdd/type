@@ -108,6 +108,40 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
             validate_candidate(manifest, '0.4.6', 'baseline', dmg, feed, 'fixture/repo')
 
+    @unittest.skipUnless(sys.platform == 'darwin', 'uses macOS system Bash')
+    def test_candidate_packaging_arguments_with_and_without_previous_feed(self):
+        workflow = (desktop.ROOT / '.github/workflows/gpui-release.yml').read_text()
+        step = workflow.split('      - name: Build signed and notarized universal candidate\n', 1)[1]
+        script = step.split('        run: |\n', 1)[1].split('      - name:', 1)[0]
+        script = '\n'.join(line[10:] for line in script.splitlines())
+        shim = self.root / 'bin'
+        shim.mkdir()
+        fake_python = shim / 'python3'
+        fake_python.write_text('#!' + sys.executable + '\nimport json,os,sys\n'
+                               'open(os.environ["CAPTURE"],"w").write(json.dumps(sys.argv[1:]))\n')
+        fake_python.chmod(0o700)
+        captured = self.root / 'arguments.json'
+        version = desktop.tomllib.loads((desktop.ROOT / 'apps/gpui/Cargo.toml').read_text())['package']['version']
+        previous = self.root / 'previous/appcast.xml'
+        previous.parent.mkdir()
+        for has_previous in (False, True):
+            with self.subTest(previous_feed=has_previous):
+                if has_previous:
+                    previous.write_text('fixture')
+                environment = {**os.environ, 'PATH': str(shim) + ':' + os.environ['PATH'],
+                               'RUNNER_TEMP': str(self.root), 'RELEASE_TAG': 'gpui-v' + version,
+                               'GITHUB_REPOSITORY': 'fixture/repo', 'CAPTURE': str(captured)}
+                subprocess.run(['/bin/bash', '--noprofile', '--norc', '-c', script],
+                               cwd=desktop.ROOT, env=environment, check=True)
+                import json
+                expected = ['apps/gpui/scripts/release.py', '--version', version,
+                            '--repository', 'fixture/repo', '--output', str(self.root / 'release'),
+                            '--sparkle-dir', str(self.root / 'sparkle'), '--notes',
+                            'docs/releases/gpui-v' + version + '.md']
+                if has_previous:
+                    expected += ['--previous-feed', str(previous)]
+                self.assertEqual(json.loads(captured.read_text()), expected)
+
     def test_version_must_match_source(self):
         actual = desktop.tomllib.loads((desktop.ROOT / 'apps/gpui/Cargo.toml').read_text())['package']['version']
         self.assertEqual(release_version(actual), actual)
