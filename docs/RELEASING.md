@@ -34,7 +34,8 @@ Repository secrets already configured (names checked on 2026-10-01):
 | `APPLE_SIGNING_IDENTITY` | Full `Developer ID Application: … (TEAMID)` identity |
 | `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` | Apple ID, app-specific password and team for notarization |
 
-These Apple values have not been exercised by the GPUI pipeline yet.
+Developer ID import succeeded in the first candidate run on 2026-10-01;
+notarization credentials still await a completed packaging run.
 On 2026-10-01, `SPARKLE_PRIVATE_KEY` and the repository variable
 `SPARKLE_PUBLIC_KEY` were configured using a dedicated `type-gpui` key in the
 maintainer's macOS Keychain. Environments `gpui-release` and `gpui-production`
@@ -78,8 +79,10 @@ by both workflows; no credential values are exposed to app settings.
 
 Artifacts: `Type-VERSION-universal.dmg`, `appcast.xml`, `release.json`.
 The manifest records commit, DMG checksum and the previous feed checksum.
-The first version's draft can be built with the included 0.4.6 release notes;
-no tag or release was created during this implementation.
+The initial `gpui-v0.4.5` tag remains immutable. Its candidate run passed
+functional checks but stopped before building due to a macOS Bash empty-array
+error; no draft or update was published. Version 0.4.6 contains that packaging
+correction and the current-line typing highlight fix.
 
 ## Alternative: build locally and upload the artifacts yourself
 
