@@ -28,6 +28,29 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Release execution (2026-10-01, in progress)
+
+- PR #12 merged after all checks passed, including the current-line flicker fix.
+  Merge/source commit: `e7911fb6bb35bb6650f38621998be1ffa4e33823`.
+- Immutable tag `gpui-v0.4.5` points to that commit. Candidate Actions run:
+  https://github.com/oogxdd/type/actions/runs/36874580320 . The signed/notarized
+  universal build is running; no candidate has been promoted yet.
+- GPUI/core/release tests passed locally (43 / 94 / 8), and repository CI passed.
+  One Linux job was cancelled/retried because Azure's Ubuntu mirror downloaded
+  WebKit extremely slowly; the retry passed in 2m8s. No code failure was hidden.
+- `Type GPUI Dev.app` was updated atomically at `/Applications`, without closing
+  the running app. Current executable SHA-256:
+  `5e63e32d5c75fee6317dbef3860f9d097951e0d0781be9a5239b9a08408d7c70`.
+  Previous bundle: `/private/tmp/type-gpui-backup-b6vp_fcs/Type GPUI Dev.app`.
+  The running process needs a normal restart to use the new code.
+- `docs/RELEASING.md` now documents both CI and local signed/notarized packaging,
+  manual upload of DMG/appcast/provenance, avoiding duplicate CI tag builds,
+  and the shared verification/promotion/withdrawal process. Shell examples
+  passed syntax validation. Local Apple ID/password Keychain items are absent;
+  they must be seeded before choosing the local-build alternative.
+- Original main worktree's unrelated dirty files and production notes remain
+  untouched. The integration worktree is `.worktrees/gpui-release`.
+
 ### Current-line typing flicker (2026-10-01)
 
 Before merging PR #12, the user reported that Highlight current line blinks
