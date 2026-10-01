@@ -1,0 +1,64 @@
+name: Isolated Sparkle update smoke fixtures
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fixtures:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      FIXTURE_TAG: gpui-smoke-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Import Developer ID into temporary keychain
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$APPLE_CERTIFICATE"
+          test -n "$APPLE_CERTIFICATE_PASSWORD"
+          KEYCHAIN="$RUNNER_TEMP/gpui-smoke-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          export KEYCHAIN_PASSWORD
+          python3 -c 'import base64,os,pathlib; pathlib.Path(os.environ["RUNNER_TEMP"], "developer-id.p12").write_bytes(base64.b64decode(os.environ["APPLE_CERTIFICATE"], validate=True))'
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security default-keychain -d user -s "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/developer-id.p12" -k "$KEYCHAIN" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" "$HOME/Library/Keychains/login.keychain-db"
+          rm "$RUNNER_TEMP/developer-id.p12"
+      - name: Build two universal notarized isolated fixtures
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          python3 apps/gpui/scripts/updater_smoke.py --repository "$GITHUB_REPOSITORY" \
+            --tag "$FIXTURE_TAG" --output "$RUNNER_TEMP/fixtures" --sparkle-dir "$RUNNER_TEMP/sparkle"
+      - name: Publish TEST ONLY prerelease for the isolated HTTPS feed
+        run: |
+          gh release create "$FIXTURE_TAG" "$RUNNER_TEMP/fixtures/"* \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title 'TEST ONLY — isolated Sparkle update fixtures' \
+            --notes 'Disposable 0.0.1 → 0.0.2 test app. Separate bundle identity, Sparkle key and HTTPS feed. Uses only /private/tmp/type-gpui-updater-smoke-data; no Type notes. Install the 0.0.1 fixture and use Check for updates to verify replacement, text preservation and relaunch. These are NOT Type installers.'
+      - name: Remove fixture signing material
+        if: always()
+        run: |
+          security default-keychain -d user -s "$HOME/Library/Keychains/login.keychain-db"
+          security delete-keychain "$RUNNER_TEMP/gpui-smoke-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/developer-id.p12"

@@ -84,6 +84,35 @@ functional checks but stopped before building due to a macOS Bash empty-array
 error; no draft or update was published. Version 0.4.6 contains that packaging
 correction and the current-line typing highlight fix.
 
+## Isolated replacement/relaunch test
+
+Before the first production promotion, run **Isolated Sparkle update smoke
+fixtures** (`gpui-updater-smoke.yml`) manually from `main`. It builds universal
+0.0.1 and 0.0.2 Cocoa fixtures, signs/notarizes/staples both, and publishes a
+clearly labelled **TEST ONLY prerelease**, marked `latest=false`, under a unique
+`gpui-smoke-RUN_ID` tag. The fixtures use the production updater bridge with
+only its bundle-identity guard changed. They have their own disposable signing
+key and public HTTPS feed; the production Sparkle key/feed are never used.
+The temporary CI Keychain is deleted after the job.
+
+Download `Type-Updater-Smoke-0.0.1.zip`, extract into a private temporary
+installation folder and verify the extracted app with `codesign --verify
+--deep --strict`, `xcrun stapler validate` and `spctl --assess --type execute`.
+Launch that exact fixture, type synthetic Unicode text, then use **Check for
+updates** and confirm installation. Verify the relaunched title is 0.0.2,
+the typed text survived, and `/private/tmp/type-gpui-updater-smoke-data/launches.txt`
+records 0.0.1 then 0.0.2. Inspect its Info.plist version/signature/staple again.
+Fixtures access only that fixed synthetic-data directory and do not link
+`type-core` or open any Type notes.
+
+This tests Sparkle archive verification, extraction, replacement and relaunch.
+Separately install the actual draft candidate with an explicit isolated
+`--data-dir`, and check editing, save, quit and manual reopen. Do not test its
+automatic relaunch with CLI data-directory overrides: Sparkle may restart it
+without those arguments. A production-note launch is not an isolated smoke test.
+Intel execution still needs a real Intel Mac; a universal binary alone does
+not establish that runtime check.
+
 ## Alternative: build locally and upload the artifacts yourself
 
 This uses the same signing, notarization, native feed and promotion checks as

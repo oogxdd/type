@@ -161,6 +161,12 @@ class ReleaseTests(unittest.TestCase):
         subprocess.run(['clang', '-fobjc-arc', '-fblocks', '-framework', 'Foundation',
                         str(desktop.ROOT / 'apps/gpui/native/updater_test.m'), '-o', str(binary)], check=True)
         subprocess.run([str(binary)], check=True)
+        # Compile the isolated fixture against the exact production bridge.
+        subprocess.run(['clang', '-fobjc-arc', '-fblocks', '-framework', 'Cocoa',
+                        str(desktop.ROOT / 'apps/gpui/native/updater_smoke.m'),
+                        str(desktop.ROOT / 'apps/gpui/native/updater.m'),
+                        '-o', str(self.root / 'smoke-fixture')], check=True)
+
 
 
 if __name__ == '__main__':
