@@ -91,13 +91,13 @@ jobs:
           set -euo pipefail
           NOTES="docs/releases/${RELEASE_TAG}.md"
           test -s "$NOTES"
-          ARGS=()
-          if [ -f "$RUNNER_TEMP/previous/appcast.xml" ]; then
-            ARGS+=(--previous-feed "$RUNNER_TEMP/previous/appcast.xml")
-          fi
-          python3 apps/gpui/scripts/release.py --version "${RELEASE_TAG#gpui-v}" \
+          set -- --version "${RELEASE_TAG#gpui-v}" \
             --repository "$GITHUB_REPOSITORY" --output "$RUNNER_TEMP/release" \
-            --sparkle-dir "$RUNNER_TEMP/sparkle" --notes "$NOTES" "${ARGS[@]}"
+            --sparkle-dir "$RUNNER_TEMP/sparkle" --notes "$NOTES"
+          if [ -f "$RUNNER_TEMP/previous/appcast.xml" ]; then
+            set -- "$@" --previous-feed "$RUNNER_TEMP/previous/appcast.xml"
+          fi
+          python3 apps/gpui/scripts/release.py "$@"
       - name: Create draft for installation and update smoke test
         run: |
           gh release create "$RELEASE_TAG" "$RUNNER_TEMP/release/"* \
