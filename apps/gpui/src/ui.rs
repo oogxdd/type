@@ -417,14 +417,11 @@ impl Render for TypeApp {
                 } else {
                     px(12.)
                 })
-                .child(
+                .child(editor::PaintLayer::new(
                     div()
                         .relative()
                         .size_full()
-                        .when(self.prefs.current_line_highlight, |pane| {
-                            pane.child(self.render_current_line(editor.clone()))
-                        })
-                        .child(
+                        .child(editor::PaintLayer::new(
                             Editor::new(editor)
                                 .bordered(false)
                                 .appearance(false)
@@ -435,11 +432,16 @@ impl Render for TypeApp {
                                 .h(relative(1.))
                                 .text_size(px(self.prefs.font_size))
                                 .font_family(cx.theme().font_family.clone()),
-                        )
+                        ))
+                        .when(self.prefs.current_line_highlight, |pane| {
+                            pane.child(self.render_current_line(editor.clone()))
+                        })
                         .when(block_cursor, |pane| {
-                            pane.child(self.render_cursor(editor.clone(), cx))
+                            pane.child(editor::PaintLayer::new(
+                                self.render_cursor(editor.clone(), cx),
+                            ))
                         }),
-                )
+                ))
                 .when(self.prefs.line_numbers, |pane| {
                     pane.child(self.render_line_numbers(editor.clone(), cx))
                 })

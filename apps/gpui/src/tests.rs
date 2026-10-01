@@ -381,13 +381,15 @@ fn editor_fills_pane_and_gutter_tracks_wrapping_folding_and_preferences(cx: &mut
 
 #[gpui_kit::test]
 fn current_line_highlight_survives_each_typing_frame(cx: &mut TestAppContext) {
+    use gpui_kit::base::input::RopeExt;
     let f = Fixture::new();
     let path = f.0.create(STREAM_FOLDER, "".into(), None).unwrap();
     let (window, app) = launch(&f, cx);
     cx.update_window(window, |_, window, cx| {
         app.update(cx, |app, cx| {
             app.open_note(path.into(), true, window, cx);
-            app.prefs.vim = false;
+            app.prefs.vim = true;
+            app.vim.mode = vim::Mode::Insert;
             app.prefs.current_line_highlight = true;
             app.notes[&app.active].editor.clone().unwrap()
                 .update(cx, |state, cx| state.set_readonly(false, cx));
@@ -403,9 +405,11 @@ fn current_line_highlight_survives_each_typing_frame(cx: &mut TestAppContext) {
                 app.prefs.line_numbers = numbers;
                 cx.notify();
             });
-            for ch in format!("aβ😀{}\nnext line β😀", " word".repeat(35)).chars() {
+            for ch in format!("\naβ😀{}{}", " word".repeat(35), "\nnext line β😀".repeat(35)).chars() {
                 if ch == '\n' {
+                    let before = editor.read(cx).text().lines_len();
                     window.press("enter", cx);
+                    assert_eq!(editor.read(cx).text().lines_len(), before + 1, "Enter inserts a line in Insert mode");
                 } else {
                     window.input(&ch.to_string(), cx);
                 }
@@ -416,6 +420,27 @@ fn current_line_highlight_survives_each_typing_frame(cx: &mut TestAppContext) {
                         && quad.bounds.size.height == height
                         && quad.bounds.size.width > px(500.).scale(window.scale_factor())
                 }), "highlight disappeared in the first frame after typing {ch:?}, numbers={numbers}");
+                let state = editor.read(cx);
+                let cell = state.range_to_bounds(&(state.cursor()..state.cursor())).unwrap();
+                let expected_y = cell.top().scale(window.scale_factor());
+                let quad = window.painted_quads().into_iter().find(|quad| {
+                    quad.background == accent && quad.bounds.size.width > px(500.).scale(window.scale_factor())
+                }).unwrap();
+                assert!((quad.bounds.top() - expected_y).0.abs() <= px(1.).scale(window.scale_factor()).0,
+                    "highlight trails the cursor after {ch:?}: {:?} vs {:?}, numbers={numbers}", quad.bounds.top(), expected_y);
+                if let Some((caret, _)) = state.cursor_layout() {
+                    let caret = Bounds::new(caret.origin + state.scroll_offset(), caret.size).scale(window.scale_factor());
+                    if let Some(cursor) = window.painted_quads().into_iter().find(|q| {
+                        q.bounds.size.width <= px(3.).scale(window.scale_factor())
+                            && (q.bounds.left() - caret.left()).0.abs() <= 1.
+                            && (q.bounds.top() - caret.top()).0.abs() <= 1.
+                            && (q.bounds.size.height - caret.size.height).0.abs() <= 1.
+                    }) {
+                        assert!(quad.order < cursor.order, "highlight must stay behind the native caret");
+                    }
+                }
+
+
             }
         }
     }).unwrap();

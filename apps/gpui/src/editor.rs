@@ -18,22 +18,7 @@ impl TypeApp {
                 let cell = state
                     .visible_row_range()
                     .filter(|rows| rows.contains(&row))
-                    .and_then(|_| state.range_to_bounds(&(offset..offset)))
-                    .or_else(|| {
-                        // The underlay paints before Kit publishes this frame's
-                        // text geometry. Appending at EOF or adding a line can
-                        // put the new offset outside the previous layout. Keep
-                        // its laid-out caret row until the editor updates it,
-                        // independently of whether the Insert caret is blinking.
-                        if visual_head.is_some() {
-                            return None;
-                        }
-                        let (mut caret, height) = state.cursor_layout()?;
-                        caret.origin.y +=
-                            state.scroll_offset().y - (height - caret.size.height) / 2.;
-                        caret.size.height = height;
-                        Some(caret)
-                    });
+                    .and_then(|_| state.range_to_bounds(&(offset..offset)));
                 if let Some(cell) = cell.filter(|cell| {
                     cell.bottom() > state.input_bounds().top()
                         && cell.top() < state.input_bounds().bottom()
@@ -147,4 +132,65 @@ pub(crate) fn visible_line_numbers(
         }
     }
     labels
+}
+
+/// Reserve a background layer before painting the editor. The editor's own
+/// layer stays above it even when a later sibling paints the background using
+/// geometry published by the editor in this same frame.
+pub(crate) struct PaintLayer(AnyElement);
+
+impl PaintLayer {
+    pub fn new(child: impl IntoElement) -> Self {
+        Self(child.into_any_element())
+    }
+}
+
+impl IntoElement for PaintLayer {
+    type Element = Self;
+    fn into_element(self) -> Self {
+        self
+    }
+}
+
+impl Element for PaintLayer {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+    fn request_layout(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, ()) {
+        (self.0.request_layout(window, cx), ())
+    }
+    fn prepaint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.0.prepaint(window, cx);
+    }
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut (),
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        window.paint_layer(bounds, |window| self.0.paint(window, cx));
+    }
 }
