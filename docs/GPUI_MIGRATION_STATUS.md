@@ -28,6 +28,21 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Isolated updater fixtures (2026-10-01)
+
+PR #14 was merged as `73f32c03`; all macOS/Rust/TypeScript checks passed.
+Immutable `gpui-v0.4.6` points to that commit; candidate run `36879405095` is
+building. The old 0.4.5 tag has no draft or public feed change.
+
+Added an explicitly dispatched, main-only fixture workflow. It produces two
+universal signed/notarized Cocoa apps using the real production bridge with
+only the bundle-identity guard changed, a disposable fixture signing key,
+separate HTTPS feed and clearly labelled TEST ONLY prerelease (never latest).
+The fixture saves only synthetic text under `/private/tmp`; it does not link
+the core or discover production roots. This avoids relying on CLI overrides
+surviving Sparkle relaunch. Fixture compilation is included in native release
+tests; actual replacement/relaunch and candidate notarization remain pending.
+
 ### First-candidate packaging correction (2026-10-01)
 
 The `gpui-v0.4.5` candidate run `36874580320` passed functional checks and
