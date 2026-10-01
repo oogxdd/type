@@ -380,6 +380,48 @@ fn editor_fills_pane_and_gutter_tracks_wrapping_folding_and_preferences(cx: &mut
 }
 
 #[gpui_kit::test]
+fn current_line_highlight_survives_each_typing_frame(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let path = f.0.create(STREAM_FOLDER, "".into(), None).unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.open_note(path.into(), true, window, cx);
+            app.prefs.vim = false;
+            app.prefs.current_line_highlight = true;
+            app.notes[&app.active].editor.clone().unwrap()
+                .update(cx, |state, cx| state.set_readonly(false, cx));
+            cx.notify();
+        });
+        window.render_frame(cx);
+        window.render_frame(cx);
+        let editor = app.read(cx).notes[&app.read(cx).active].editor.clone().unwrap();
+        editor.focus_handle(cx).focus(window, cx);
+        window.render_frame(cx);
+        for numbers in [true, false] {
+            app.update(cx, |app, cx| {
+                app.prefs.line_numbers = numbers;
+                cx.notify();
+            });
+            for ch in format!("aβ😀{}\nnext line β😀", " word".repeat(35)).chars() {
+                if ch == '\n' {
+                    window.press("enter", cx);
+                } else {
+                    window.input(&ch.to_string(), cx);
+                }
+                let height = editor.read(cx).line_height().unwrap().scale(window.scale_factor());
+                let accent: gpui_kit::Background = super::Theme::global(cx).accent.into();
+                assert!(window.painted_quads().iter().any(|quad| {
+                    quad.background == accent
+                        && quad.bounds.size.height == height
+                        && quad.bounds.size.width > px(500.).scale(window.scale_factor())
+                }), "highlight disappeared in the first frame after typing {ch:?}, numbers={numbers}");
+            }
+        }
+    }).unwrap();
+}
+
+#[gpui_kit::test]
 fn editor_gutter_scrolls_and_large_windows_use_the_full_pane(cx: &mut TestAppContext) {
     use gpui_kit::base::input::RopeExt;
     let f = Fixture::new();

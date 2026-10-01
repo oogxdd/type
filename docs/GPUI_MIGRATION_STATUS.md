@@ -28,6 +28,21 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Current-line typing flicker (2026-10-01)
+
+Before merging PR #12, the user reported that Highlight current line blinks
+while typing. The underlay paints before Kit publishes the new editor geometry;
+appending beyond the previous line or adding a newline can make the new cursor
+range unresolvable for one frame. It now retains the last laid-out caret row
+until fresh range geometry is available, with the proper scroll offset and
+viewport clipping. Visual selections keep their explicit inclusive Vim head.
+The fill remains behind text and does not depend on the native caret blink.
+
+A headless regression checks the first painted frame after each typed character,
+including Unicode, soft wraps and newlines, with line numbers enabled/disabled.
+It fails on the original renderer and passes after the fix. All 43 GPUI tests passed locally, including the regression. The PR remains
+unmerged pending remote CI for this fix; no release tag has been pushed.
+
 ### First native release setup (2026-10-01, in progress)
 
 - User authorized carrying out the updater setup and release instructions.

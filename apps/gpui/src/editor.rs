@@ -15,13 +15,29 @@ impl TypeApp {
                 }
                 let offset = visual_head.unwrap_or_else(|| state.cursor());
                 let row = state.text().offset_to_position(offset).line as usize;
-                if !state
+                let cell = state
                     .visible_row_range()
-                    .is_some_and(|rows| rows.contains(&row))
-                {
-                    return;
-                }
-                if let Some(cell) = state.range_to_bounds(&(offset..offset)) {
+                    .filter(|rows| rows.contains(&row))
+                    .and_then(|_| state.range_to_bounds(&(offset..offset)))
+                    .or_else(|| {
+                        // The underlay paints before Kit publishes this frame's
+                        // text geometry. Appending at EOF or adding a line can
+                        // put the new offset outside the previous layout. Keep
+                        // its laid-out caret row until the editor updates it,
+                        // independently of whether the Insert caret is blinking.
+                        if visual_head.is_some() {
+                            return None;
+                        }
+                        let (mut caret, height) = state.cursor_layout()?;
+                        caret.origin.y +=
+                            state.scroll_offset().y - (height - caret.size.height) / 2.;
+                        caret.size.height = height;
+                        Some(caret)
+                    });
+                if let Some(cell) = cell.filter(|cell| {
+                    cell.bottom() > state.input_bounds().top()
+                        && cell.top() < state.input_bounds().bottom()
+                }) {
                     let bounds = Bounds::new(
                         point(viewport.left(), cell.top()),
                         size(viewport.size.width, cell.size.height),
