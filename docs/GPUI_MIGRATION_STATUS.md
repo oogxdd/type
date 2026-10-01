@@ -28,6 +28,25 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Current-line geometry synchronization (2026-10-01)
+
+The user reported that Insert-mode Enter moves the caret before the current-line
+fill follows. The earlier anti-flicker fallback retained old geometry; Kit only
+publishes fresh cursor/range geometry during editor paint. The editor now paints
+before the highlight reads geometry, within two reserved paint layers so the
+later-painted highlight still appears behind text, selection and native caret.
+The custom Normal/Visual cursor retains its own foreground layer. Removed the
+stale-caret fallback. No editor text/layout engine is duplicated or double-painted.
+
+The synthetic typing regression now checks exact first-frame row position in
+Insert mode, real Enter insertion, Unicode, soft wrapping and enough newlines
+to scroll, with line numbers both on/off. It also checks the visible native caret
+stays above the highlight. Position checks fail on the previous renderer and
+pass with the paint-order correction. All 43 GPUI tests pass locally; formatting
+and diff checks passed. Remote CI and the corrective release are pending.
+This change is committed separately from updater/release preparation, as the
+user requested. No installed app or real notes were used for these tests.
+
 ### Native update channel live (2026-10-01)
 
 - Published `gpui-v0.4.6`: https://github.com/oogxdd/type/releases/tag/gpui-v0.4.6
