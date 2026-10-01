@@ -40,8 +40,14 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 - Integration worktree `.worktrees/gpui-release` merges GPUI head `0a51b9c1`
   with current remote main `33cd8bb2`; no conflicts. Original dirty worktree
   and installed/running apps remain untouched.
-- Release/native Python suite: all 8 tests passed. Native/core and remote CI,
-  signed/notarized candidate and real isolated update verification are pending.
+- Local validation after integration: all 42 native tests, 94 core tests and
+  8 release/native bridge tests passed. Core network tests used loopback access.
+- Integration commit `3763ad34` is pushed as `codex/gpui-release`; PR #12
+  runs CI. TypeScript checks passed; Rust/macOS jobs are still running.
+- Local Apple notarization credential services are absent; release signing and
+  notarization will use existing GitHub secrets. Candidate and real isolated
+  update verification are pending. No app was launched/restarted and no
+  production notes were accessed during this setup.
 
 ### Native updater and release pipeline (2026-10-01)
 

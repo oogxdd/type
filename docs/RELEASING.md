@@ -81,20 +81,129 @@ The manifest records commit, DMG checksum and the previous feed checksum.
 The first version's draft can be built with the included 0.4.5 release notes;
 no tag or release was created during this implementation.
 
-For a local candidate, install both Rust targets, import your Developer ID into
-Keychain, provide the required environment variables above, then run:
+## Alternative: build locally and upload the artifacts yourself
+
+This uses the same signing, notarization, native feed and promotion checks as
+CI. GitHub does not rebuild an uploaded local candidate. A plain
+`npm run desktop:release` is not sufficient for distribution.
+
+### Prepare the Mac once
+
+- Install Xcode command-line tools and the pinned Rust toolchain from
+  `rust-toolchain.toml`; use Python 3.12 or later.
+- Import the **Developer ID Application** certificate and its private key into
+  macOS Keychain. `security find-identity -v -p codesigning` must show it.
+  An Apple Development or Apple Distribution identity is not a substitute.
+- Run `gh auth login` for `oogxdd/type` and install both build targets:
 
 ```sh
-npm run desktop:release:package -- --version VERSION --repository oogxdd/type \
-  --output /private/tmp/type-release-VERSION \
-  --sparkle-dir /private/tmp/type-sparkle \
-  --notes docs/releases/gpui-vVERSION.md
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
 ```
 
-Use a fresh output directory. For subsequent builds download the current
-`gpui-updates/appcast.xml` and pass `--previous-feed /path/to/appcast.xml` so
-the candidate retains previously signed releases. Packaging verifies that
-previous feed before using it. The local command does not create a GitHub release.
+GitHub secrets cannot be downloaded back to this Mac. Store your Apple ID and
+an Apple **app-specific password** locally, using interactive Keychain prompts:
+
+```sh
+security add-generic-password -U -a "$USER" -s type-apple-id -w
+security add-generic-password -U -a "$USER" -s type-apple-app-password -w
+```
+
+The dedicated Sparkle private key created during setup is already in this Mac's
+Keychain under account `type-gpui`. Do not generate a replacement signing key
+for each release. On a new Mac, securely restore the existing key first.
+
+### Build a candidate
+
+Start from a clean, committed checkout of `main`, after its checks pass. Update
+the GPUI version and release notes as described above. The committed version
+must match `VERSION`; the output directory must be fresh.
+
+```sh
+VERSION=0.4.5  # replace with the new committed GPUI version
+python3 apps/gpui/scripts/sparkle.py /private/tmp/type-sparkle
+
+export APPLE_SIGNING_IDENTITY='Developer ID Application: Maxim Ignatev (Y377P5XKGJ)'
+export APPLE_TEAM_ID=Y377P5XKGJ
+export APPLE_ID="$(security find-generic-password -s type-apple-id -w)"
+export APPLE_PASSWORD="$(security find-generic-password -s type-apple-app-password -w)"
+export SPARKLE_PUBLIC_KEY="$(/private/tmp/type-sparkle/bin/generate_keys --account type-gpui -p)"
+
+# Export only to a private temporary directory; remove it on exit.
+(
+  set -eu
+  key_export_dir="$(mktemp -d /private/tmp/type-sparkle-key.XXXXXX)"
+  trap 'rm -rf "$key_export_dir"; unset SPARKLE_PRIVATE_KEY' EXIT
+  /private/tmp/type-sparkle/bin/generate_keys --account type-gpui -x "$key_export_dir/key"
+  chmod 600 "$key_export_dir/key"
+  export SPARKLE_PRIVATE_KEY="$(cat "$key_export_dir/key")"
+
+  previous_args=()
+  if gh release view gpui-updates --repo oogxdd/type >/dev/null 2>&1; then
+    gh release download gpui-updates --repo oogxdd/type --pattern appcast.xml --dir "$key_export_dir"
+    previous_args=(--previous-feed "$key_export_dir/appcast.xml")
+  fi
+
+  npm run desktop:release:package -- --version "$VERSION" --repository oogxdd/type \
+    --output "/private/tmp/type-release-$VERSION" \
+    --sparkle-dir /private/tmp/type-sparkle \
+    --notes "docs/releases/gpui-v$VERSION.md" "${previous_args[@]}"
+)
+unset APPLE_ID APPLE_PASSWORD
+```
+
+Use Bash or Zsh for this snippet (it uses an argument array). Do not enable
+shell tracing (`set -x`) while working with credentials. The packaging command
+builds both architectures, signs and notarizes the app/DMG, staples tickets and
+generates the signed feed and provenance. It publishes nothing. Later candidates
+must retain the current feed with `--previous-feed`; the snippet downloads it
+and packaging verifies its signature before use.
+
+Only these three files are uploaded, from `/private/tmp/type-release-VERSION/`:
+
+| File | Purpose |
+| --- | --- |
+| `Type-VERSION-universal.dmg` | Signed/notarized installer and update payload |
+| `appcast.xml` | Signed candidate feed, including retained prior releases |
+| `release.json` | Version, source commit, bundle ID and artifact/baseline hashes |
+
+### Upload to GitHub without a duplicate CI build
+
+Do not push the tag until packaging succeeds. Temporarily disable only the
+**GPUI release candidate** workflow so the tag does not start another build.
+Ordinary CI and promotion remain enabled:
+
+```sh
+gh workflow disable gpui-release.yml --repo oogxdd/type
+git tag "gpui-v$VERSION"
+git push origin "gpui-v$VERSION"
+```
+
+In GitHub → Releases → **Draft a new release**, select that existing tag,
+use title `Type VERSION`, copy `docs/releases/gpui-vVERSION.md`, and attach
+exactly the three files above. **Save draft**, then re-enable the candidate
+workflow immediately, including if the upload fails:
+
+```sh
+gh workflow enable gpui-release.yml --repo oogxdd/type
+```
+
+Alternatively, upload the same draft from the terminal:
+
+```sh
+gh release create "gpui-v$VERSION" \
+  "/private/tmp/type-release-$VERSION/Type-$VERSION-universal.dmg" \
+  "/private/tmp/type-release-$VERSION/appcast.xml" \
+  "/private/tmp/type-release-$VERSION/release.json" \
+  --repo oogxdd/type --verify-tag --draft --latest=false \
+  --title "Type $VERSION" --notes-file "docs/releases/gpui-v$VERSION.md"
+```
+
+Do not upload a private key, certificate, credential file or development bundle.
+Keep candidate assets immutable. If packaging changes, use a new version.
+Test this draft and promote it through **GPUI promote or withdraw**, exactly as
+with a CI-built candidate. Do not publish it directly or manually replace the
+live `gpui-updates/appcast.xml`: the promotion workflow verifies the signatures,
+notarization, DMG hash and unchanged feed baseline before publication.
 
 ## Test and promote
 
