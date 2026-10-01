@@ -59,7 +59,7 @@ impl TypeApp {
         let title = match &modal.kind {
             ModalKind::Palette => "Commands · type mv to file notes".into(),
             ModalKind::Rename(_) => "Rename".into(),
-            ModalKind::CreateProfile => "New working folder".into(),
+            ModalKind::CreateProfile => "Add profile · absolute folder path or ~/…".into(),
             ModalKind::Remote => "Git remote URL".into(),
             ModalKind::Unlock => "Unlock Type".into(),
             ModalKind::Delete(paths) => {
@@ -88,6 +88,11 @@ impl TypeApp {
                     .child(title),
             )
             .child(Input::new(&modal.input));
+        if matches!(modal.kind, ModalKind::CreateProfile) {
+            panel = panel.child(div().text_sm().whitespace_normal()
+                .child("Choose the folder containing your Markdown notes. A new path creates a folder; an existing path opens it in place."))
+                .child(self.command_button("profile-picker", "Choose folder…", Choice::PickProfile, cx));
+        }
         if matches!(modal.kind, ModalKind::Palette) {
             let entries = self.entries(&modal.input.read(cx).value(), cx);
             let start = modal.selected.saturating_sub(5);

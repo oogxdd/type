@@ -174,3 +174,35 @@ Current bundle: `/Volumes/KINGSTON/Projects/type/app/experiments/gpui-demo/targe
 ## H1/H2/H3 feasibility (investigation only)
 
 GPUI rendering can support mixed-size text in principle, but stock Kit Editor 0.7 is a source editor with uniform font size and line height. `HighlightStyle`/text decorations expose color, weight, italic, underline, etc., not per-range font size. Proper large headings require editor layout extensions (variable row heights, wrapping, hit-testing, selection and cursor/scroll geometry), or a different document renderer. No heading-size feature implemented. Reference: https://gpui-kit.com/component/editor/ and local cached `gpui-pre-0.3.7/src/style.rs`, `gpui-component-0.7.0/src/input/editor.rs`.
+
+
+## Folder-based profiles (2026-10-01)
+
+GPUI now has one folder selection surface: Settings → Profiles. Removed the
+General → Notes location card and the command that moved the active notes root.
+The native picker and a typed absolute/`~/` path both register a folder in place;
+new paths create that exact folder. There is no extra `notes/` nesting. Legacy
+managed profiles need their `profiles/<id>/notes` child; selecting a recognizable
+parent returns a hint rather than accidentally opening backups as notes.
+
+`.type/profile.json` carries portable identity/name, while the existing
+app-local registry stores registered paths and active selection. Existing Git,
+settings and Markdown stay in place. Rename persists the folder name metadata;
+remove forgets registration only (one entry must remain). Show in Finder reveals
+the folder for manual relocation. Opening a moved folder restores its identity
+and replaces the unavailable old registration. Core registry reads no longer
+recreate missing registered folders, and legacy auto-discovery happens only at
+bootstrap so forgotten managed profiles do not reappear on every launch.
+
+Checks use synthetic fixtures: existing repository preservation, exact new path,
+canonical-path deduplication, forget/reopen, Finder relocation, portable rename,
+invalid input/legacy-parent rejection, and native modal switch with draft flush.
+The production `123fresh` layout was inspected read-only; its notes root is
+`/Users/digital/Library/Application Support/com.digital.type2/profiles/123fresh/notes`.
+Legacy Tauri/mobile management UI and move APIs are retained during cutover.
+
+Validation: all 94 core tests and all 42 GPUI tests passed. Core network tests
+ran outside the sandbox to permit loopback sockets. Native build with
+`gpui-kit/test-support` and `git diff --check` passed. Rebuilt the dev bundle and
+atomically updated `/Applications/Type GPUI Dev.app` (binary hash verified);
+the running app was left open. Restart it to use the new Profiles controls.

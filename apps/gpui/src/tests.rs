@@ -636,3 +636,64 @@ fn settings_rename_and_invalid_provider_keep_other_config(cx: &mut TestAppContex
     );
     assert_eq!(snapshot.app_config.openai_model, "fixture-model");
 }
+
+#[gpui_kit::test]
+fn profile_path_opens_in_place_flushes_draft_and_forgets_without_deleting(cx: &mut TestAppContext) {
+    use super::commands::{Choice, ModalKind};
+    let f = Fixture::new();
+    let path = f.0.create(STREAM_FOLDER, "original".into(), None).unwrap();
+    let folder =
+        f.0.env
+            .app_data_dir
+            .canonicalize()
+            .unwrap()
+            .join("selected-folder");
+    std::fs::create_dir_all(folder.join(".git")).unwrap();
+    std::fs::write(folder.join("existing.md"), "existing note").unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.open_note(path.clone().into(), true, window, cx);
+            let editor = app.notes[&app.active].editor.clone().unwrap();
+            editor.update(cx, |editor, cx| {
+                editor.set_value("saved before switch", window, cx)
+            });
+            app.notes.get_mut(&app.active).unwrap().dirty = true;
+            app.show_modal(
+                ModalKind::CreateProfile,
+                folder.to_str().unwrap(),
+                window,
+                cx,
+            );
+        });
+    })
+    .unwrap();
+    press(cx, window, "enter");
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            assert!(app.error.is_none(), "{:?}", app.error);
+            assert!(app.modal.is_none());
+            assert_eq!(app.backend.root, folder);
+            assert_eq!(
+                app.backend
+                    .notes()
+                    .unwrap()
+                    .read_note("existing.md")
+                    .unwrap(),
+                "existing note"
+            );
+            assert_eq!(
+                f.0.notes().unwrap().read_note(&path).unwrap(),
+                "saved before switch"
+            );
+            assert!(folder.join(".git").is_dir());
+            app.execute(Choice::RemoveProfile, window, cx);
+            assert!(app.error.is_none(), "{:?}", app.error);
+            assert_eq!(app.backend.root, f.0.root);
+            assert_eq!(app.profiles.profiles.len(), 1);
+            assert!(folder.join("existing.md").exists());
+            assert!(folder.join(".type/profile.json").exists());
+        });
+    })
+    .unwrap();
+}

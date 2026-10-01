@@ -53,3 +53,23 @@ Linux; the GPUI platform also needs its desktop graphics/window libraries.
 See [migration status](../../docs/GPUI_MIGRATION_STATUS.md) for exact verification,
 remaining work and the current handoff. The original Tauri app is kept during
 cutover; this README does not claim full feature or release parity.
+
+## Profiles
+
+A profile points directly at a notes folder. In Settings → Profiles, choose a
+folder in the native picker or enter an absolute path (`~/…` also works). An
+existing folder opens in place, including its Git repository and `.type`
+settings; a new path creates that folder, without an extra `notes/` child.
+For a legacy managed profile, select `profiles/<id>/notes`, not its parent.
+
+The folder carries its name and identity in `.type/profile.json`. The app keeps
+the list of registered paths and the active selection in its device-local
+`.notes-profiles.json`. Rename changes the display name, not the directory name.
+Removing a profile only forgets its entry; files and Git history remain intact.
+At least one profile stays registered.
+
+Use **Show in Finder** to reveal the folder, and move it yourself after finishing
+editing. Add its new path, then remove the old entry if still listed. A moved or
+offline folder is not silently recreated. Opening its new path restores the
+profile identity. This folder workflow is implemented in the GPUI shell; the
+legacy Tauri/mobile folder-management UI keeps its existing APIs.

@@ -31,7 +31,7 @@ impl Section {
     fn title(self) -> &'static str {
         match self {
             Self::General => "General",
-            Self::Profiles => "Working folders",
+            Self::Profiles => "Profiles",
             Self::Appearance => "Appearance & editor",
             Self::Sync => "Sync",
             Self::Transcription => "Voice transcription",
@@ -44,12 +44,12 @@ impl Section {
     }
     fn description(self) -> &'static str {
         match self {
-            Self::General => "Your notes and how new files are named.",
-            Self::Profiles => "Keep separate collections of notes in their own working folders.",
+            Self::General => "How new files are named.",
+            Self::Profiles => "A profile is simply the folder you work in.",
             Self::Appearance => {
                 "Make the editor comfortable. These preferences stay on this device."
             }
-            Self::Sync => "Sync the current working folder with Git or pair your phone.",
+            Self::Sync => "Sync the current profile folder with Git or pair your phone.",
             Self::Transcription => {
                 "Choose where recordings are transcribed and which provider this desktop uses."
             }
@@ -342,30 +342,6 @@ impl TypeApp {
                 settings = settings
                     .child(
                         self.settings_card(
-                            "Notes location",
-                            "The active working folder stores your Markdown files here.",
-                            cx,
-                        )
-                        .child(
-                            div()
-                                .text_sm()
-                                .child(profile.map(|p| p.name.clone()).unwrap_or_default()),
-                        )
-                        .child(
-                            div()
-                                .text_sm()
-                                .whitespace_normal()
-                                .child(self.backend.root.display().to_string()),
-                        )
-                        .child(self.command_button(
-                            "choose-root",
-                            "Move notes root…",
-                            Choice::Root,
-                            cx,
-                        )),
-                    )
-                    .child(
-                        self.settings_card(
                             "New notes",
                             "Naming applies to newly created files.",
                             cx,
@@ -396,43 +372,45 @@ impl TypeApp {
             }
             Section::Profiles => {
                 let mut card = self.settings_card(
-                    "Working folders",
-                    "Select a collection to make it active.",
+                    "Profiles",
+                    "Open an existing notes folder or create one by entering a new path.",
                     cx,
                 );
                 for p in &self.profiles.profiles {
                     let id = p.id.clone();
                     card = card.child(
-                        Button::new(SharedString::from(format!("profile-{}", p.id)))
-                            .ghost()
-                            .selected(p.id == self.profiles.active_profile_id)
-                            .label(p.name.clone())
-                            .on_click(cx.listener(move |this, _, window, cx| {
-                                this.execute(Choice::Profile(id.clone()), window, cx)
-                            })),
+                        v_flex()
+                            .gap_1()
+                            .child(
+                                Button::new(SharedString::from(format!("profile-{}", p.id)))
+                                    .ghost()
+                                    .selected(p.id == self.profiles.active_profile_id)
+                                    .label(p.name.clone())
+                                    .on_click(cx.listener(move |this, _, window, cx| {
+                                        this.execute(Choice::Profile(id.clone()), window, cx)
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .whitespace_normal()
+                                    .child(p.notes_root.clone()),
+                            ),
                     );
                 }
-                settings = settings
-                    .child(card.child(self.command_button(
-                        "new-profile",
-                        "New working folder…",
-                        Choice::NewProfile,
-                        cx,
-                    )))
-                    .child(
-                        self.settings_card(
-                            "Active folder",
-                            "The name identifies this collection in Type.",
-                            cx,
-                        )
-                        .child(self.setting_row(
-                            "profile_name",
-                            "Name",
-                            "Rename the current working folder.",
-                            false,
-                            cx,
-                        )),
-                    );
+                settings = settings.child(card.child(h_flex().gap_2()
+                    .child(self.command_button("pick-profile", "Choose folder…", Choice::PickProfile, cx))
+                    .child(self.command_button("new-profile", "Enter path…", Choice::NewProfile, cx))))
+                    .child(self.settings_card("Active profile",
+                        "To relocate this folder, move it in Finder, add its new path here, then remove the old entry. Removing a profile keeps all its files.", cx)
+                        .child(self.setting_row("profile_name", "Name", "A display name for this folder.", false, cx))
+                        .child(h_flex().gap_2()
+                            .child(self.command_button("reveal-profile", "Show in Finder", Choice::RevealProfile, cx))
+                            .child(Button::new("remove-profile").ghost()
+                                .label("Remove from Type")
+                                .disabled(self.profiles.profiles.len() <= 1)
+                                .on_click(cx.listener(|this, _, window, cx| this.execute(Choice::RemoveProfile, window, cx))))));
             }
             Section::Appearance => {
                 settings = settings.child(
@@ -509,7 +487,7 @@ impl TypeApp {
                 );
             }
             Section::Sync => {
-                let mut git = self.settings_card("Git sync", "Sync this working folder with a remote repository. Credentials stay on this device.", cx)
+                let mut git = self.settings_card("Git sync", "Sync this profile folder with a remote repository. Credentials stay on this device.", cx)
                     .child(div().text_sm().whitespace_normal().child(profile.map(|p| p.settings.git_remote_url.clone()).filter(|s| !s.is_empty()).unwrap_or_else(|| "No remote connected".into())))
                     .child(h_flex().flex_wrap().gap_2()
                         .child(self.command_button("remote", "Connect…", Choice::Remote, cx))
@@ -521,7 +499,7 @@ impl TypeApp {
                     (
                         "git_branch",
                         "Branch",
-                        "Remote branch for this working folder.",
+                        "Remote branch for this profile folder.",
                         false,
                     ),
                     (
@@ -645,7 +623,7 @@ impl TypeApp {
                 }
             }
             Section::Transcription => {
-                settings = settings.child(self.settings_card("Recording destination", "This preference syncs with the working folder. Processing is currently started manually with Process queue.", cx)
+                settings = settings.child(self.settings_card("Recording destination", "This preference syncs with the profile folder. Processing is currently started manually with Process queue.", cx)
                     .child(self.setting_options("transcription_mode", &[("off", "Off"), ("desktop", "Desktop"), ("assemblyai", "AssemblyAI"), ("native", "Native mobile")], cx)))
                     .child(self.settings_card("Desktop provider", "Whisper processes audio locally. AssemblyAI uploads recordings to its cloud service when processing.", cx)
                         .child(self.setting_options("transcription_provider", &[("whisper", "Local Whisper"), ("assemblyai", "AssemblyAI cloud")], cx))
@@ -712,7 +690,7 @@ impl TypeApp {
                     .child(
                         self.settings_card(
                             "Import",
-                            "Bring an Apple Notes export into the current working folder.",
+                            "Bring an Apple Notes export into the current profile folder.",
                             cx,
                         )
                         .child(self.command_button(

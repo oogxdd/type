@@ -31,6 +31,12 @@ impl Backend {
 
     pub fn notes(&self) -> Result<Notes, String> {
         ensure_security_unlocked_for_app(&self.env)?;
+        if !self.root.is_dir() {
+            return Err(format!(
+                "Profile folder is unavailable: {}. Add its new path in Settings → Profiles.",
+                self.root.display()
+            ));
+        }
         Ok(NotesService::new(
             FilesystemNotesRepository::new(self.root.clone()),
             FrontMatterNoteDocumentCodec,

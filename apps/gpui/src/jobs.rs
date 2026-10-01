@@ -341,40 +341,37 @@ impl TypeApp {
         Ok(())
     }
 
-    pub fn pick_root(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn pick_profile_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.close_modal(window, cx);
         if let Err(e) = self.ensure_profile_switch() {
             self.error = Some(e);
+            cx.notify();
             return;
         }
         let picker = cx.prompt_for_paths(PathPromptOptions {
             files: false,
             directories: true,
             multiple: false,
-            prompt: Some("Move working-folder files into the selected notes root".into()),
+            prompt: Some("Choose the folder containing your notes".into()),
         });
-        let profile_id = self.profiles.active_profile_id.clone();
-        cx.spawn_in(window, async move |view, cx| {
-            if let Ok(Ok(Some(paths))) = picker.await {
+        cx.spawn_in(window, async move |view, cx| match picker.await {
+            Ok(Ok(Some(paths))) => {
                 if let Some(path) = paths.into_iter().next() {
                     let _ = view.update_in(cx, |this, window, cx| {
-                        if this.flush(true, cx).is_err() {
-                            return;
-                        }
-                        let result =
-                            this.backend
-                                .profiles()
-                                .set_notes_root(SetProfileNotesRootArgs {
-                                    profile_id,
-                                    notes_root: path.to_string_lossy().into(),
-                                });
-                        match result.and_then(|_| this.reload_profiles()) {
-                            Ok(_) => this.refresh(window, cx),
-                            Err(e) => this.error = Some(e),
-                        }
+                        this.error = this
+                            .open_profile_folder(&path.to_string_lossy(), window, cx)
+                            .err();
                         cx.notify();
                     });
                 }
             }
+            Ok(Err(e)) => {
+                let _ = view.update_in(cx, |this, _, cx| {
+                    this.error = Some(e.to_string());
+                    cx.notify();
+                });
+            }
+            _ => {}
         })
         .detach();
     }

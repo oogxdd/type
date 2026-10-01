@@ -45,7 +45,9 @@ pub enum Choice {
     Vim,
     Profile(String),
     NewProfile,
-    Root,
+    PickProfile,
+    RevealProfile,
+    RemoveProfile,
     Remote,
     Pull,
     Push,
@@ -91,7 +93,9 @@ impl Choice {
             Self::CommandPalette | Self::Settings | Self::BackToNotes | Self::Theme | Self::Vim => {
                 "View"
             }
-            Self::Profile(_) | Self::Root => "Working folders",
+            Self::Profile(_) | Self::PickProfile | Self::RevealProfile | Self::RemoveProfile => {
+                "Profiles"
+            }
             Self::Remote
             | Self::Pull
             | Self::Push
@@ -244,8 +248,10 @@ impl TypeApp {
             ("Settings", Choice::Settings),
             ("Toggle light / dark theme", Choice::Theme),
             ("Toggle Vim", Choice::Vim),
-            ("New working folder…", Choice::NewProfile),
-            ("Choose notes root (move files)…", Choice::Root),
+            ("Add profile by path…", Choice::NewProfile),
+            ("Add profile: choose folder…", Choice::PickProfile),
+            ("Show profile in Finder", Choice::RevealProfile),
+            ("Remove profile from Type", Choice::RemoveProfile),
             ("Connect Git remote…", Choice::Remote),
             ("Pull from Git", Choice::Pull),
             ("Commit and push to Git", Choice::Push),
@@ -273,7 +279,7 @@ impl TypeApp {
         .collect::<Vec<_>>();
         for profile in &self.profiles.profiles {
             entries.push(Entry {
-                label: format!("Working folder: {}", profile.name),
+                label: format!("Profile: {}", profile.name),
                 choice: Choice::Profile(profile.id.clone()),
             });
         }
@@ -311,7 +317,7 @@ impl TypeApp {
             "Create",
             "Navigate",
             "View",
-            "Working folders",
+            "Profiles",
             "Sync and backup",
             "Capture and processing",
             "Security",
@@ -620,7 +626,7 @@ impl TypeApp {
             }
             "git_branch" | "git_username" | "git_password" | "git_commit_message"
             | "transcription_mode" | "profile_name" => {
-                let profile = self.active_profile().ok_or("No working folder.")?;
+                let profile = self.active_profile().ok_or("No active profile.")?;
                 if field == "profile_name" {
                     self.profiles = self.backend.profiles().update(UpdateProfileArgs {
                         profile_id: profile.id.clone(),
@@ -729,16 +735,7 @@ impl TypeApp {
                     self.revision += 1;
                 }
                 ModalKind::CreateProfile => {
-                    if value.is_empty() {
-                        return Err("Enter a working-folder name.".into());
-                    }
-                    self.flush(false, cx)?;
-                    self.ensure_profile_switch()?;
-                    self.backend.profiles().create(CreateProfileArgs {
-                        name: value,
-                        description: None,
-                    })?;
-                    self.reload_profiles()?;
+                    self.open_profile_folder(&value, window, cx)?;
                 }
                 ModalKind::Remote => {
                     self.flush(false, cx)?;
@@ -813,11 +810,25 @@ impl TypeApp {
 
     pub fn ensure_profile_switch(&self) -> Result<(), String> {
         if self.recording || self.busy || self.pending_recording.is_some() {
-            return Err("Finish the current operation before changing working folders.".into());
+            return Err("Finish the current operation before changing profiles.".into());
         }
         if self.local_server.as_ref().is_some_and(|s| s.running) {
-            return Err("Stop the phone sync server before changing working folders.".into());
+            return Err("Stop the phone sync server before changing profiles.".into());
         }
+        Ok(())
+    }
+
+    pub fn open_profile_folder(
+        &mut self,
+        path: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<(), String> {
+        self.ensure_profile_switch()?;
+        self.flush(true, cx)?;
+        self.backend.profiles().open_folder(path)?;
+        self.reload_profiles()?;
+        self.refresh(window, cx);
         Ok(())
     }
 
@@ -1021,7 +1032,17 @@ impl TypeApp {
                     self.refresh(window, cx);
                 }
                 Choice::NewProfile => self.show_modal(ModalKind::CreateProfile, "", window, cx),
-                Choice::Root => self.pick_root(window, cx),
+                Choice::PickProfile => self.pick_profile_folder(window, cx),
+                Choice::RevealProfile => cx.reveal_path(&self.backend.root),
+                Choice::RemoveProfile => {
+                    self.flush(true, cx)?;
+                    self.ensure_profile_switch()?;
+                    self.backend.profiles().delete(DeleteProfileArgs {
+                        profile_id: self.profiles.active_profile_id.clone(),
+                    })?;
+                    self.reload_profiles()?;
+                    self.refresh(window, cx);
+                }
                 Choice::Remote => self.show_modal(
                     ModalKind::Remote,
                     self.active_profile()
