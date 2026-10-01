@@ -58,7 +58,6 @@ impl TypeApp {
             drag_pointer: None,
             hover_since: Instant::now(),
             tag_count: 0,
-            next_id: 1,
             tag_task: None,
             subscriptions: vec![],
         };
@@ -102,6 +101,10 @@ impl TypeApp {
                 }
                 let id = state.read(cx).selected_item().map(|item| item.id.clone());
                 if let Some(id) = id {
+                    // Repainting the same row is not a navigation request.
+                    if this.saved_selection.get(&this.view) == Some(&id) {
+                        return;
+                    }
                     this.saved_selection.insert(this.view, id.clone());
                     if this.selected.len() <= 1 {
                         this.selected.clear();
@@ -305,9 +308,8 @@ impl TypeApp {
                                 this.new_note(window, cx);
                             }
                         }
-                        if let Some(id) = this.saved_selection.get(&this.view).cloned() {
-                            this.select_row(&id, cx);
-                        }
+                        // Reconciliation retains selection in rebuild_navigation.
+                        // Revealing it here would override manual scrolling every poll.
                         this.refresh_tags(cx);
                     }
                     Err(error) => {
@@ -333,6 +335,15 @@ impl TypeApp {
                 self.view == View::Trash,
             ),
         };
+        fn live_titles(items: &mut [navigation::Item], notes: &HashMap<SharedString, Note>) {
+            for item in items {
+                if let Some(note) = notes.get(item.id.as_str()) {
+                    item.label = note.title.to_string();
+                }
+                live_titles(&mut item.children, notes);
+            }
+        }
+        live_titles(&mut self.nav_items, &self.notes);
         let defaults = self.roots.is_empty() && !self.expanded_by_view.contains_key(&self.view);
         let mut expanded = if self.roots.is_empty() {
             self.expanded_by_view
@@ -474,13 +485,21 @@ impl TypeApp {
         self.subscriptions.push(
             cx.subscribe(&editor, |this, engine, event: &InputEvent, cx| {
                 if matches!(event, InputEvent::Change) {
+                    let mut title_changed = false;
                     if let Some(note) = this.notes.values_mut().find(|n| {
                         n.editor
                             .as_ref()
                             .is_some_and(|e| e.entity_id() == engine.entity_id())
                     }) {
                         note.dirty = engine.read(cx).value().as_ref() != note.saved_body;
-                        note.title = navigation::title(&engine.read(cx).value()).into();
+                        let title: SharedString =
+                            navigation::title(&engine.read(cx).value()).into();
+                        title_changed = note.title != title;
+                        note.title = title;
+                    }
+                    this.revision += 1;
+                    if title_changed {
+                        this.rebuild_navigation(cx);
                     }
                     this.schedule_save(cx);
                     this.schedule_tags(cx);
@@ -620,38 +639,63 @@ impl TypeApp {
         if self.locked || self.busy || self.flush(true, cx).is_err() {
             return;
         }
-        let folder = if self.view == View::Folders {
-            self.tree
-                .read(cx)
-                .selected_item()
-                .map(|i| {
-                    if self.folder_ids.contains(&i.id) {
-                        i.id.to_string()
-                    } else {
-                        type_core::note_parent_folder_path(&i.id)
-                    }
-                })
-                .unwrap_or_default()
-        } else {
-            STREAM_FOLDER.into()
+        // Persist immediately so the first save never replaces the row identity.
+        let created = (|| -> Result<_, String> {
+            let path = self.backend.create(STREAM_FOLDER, String::new(), None)?;
+            let root = self.backend.notes()?.get_tree()?;
+            let previews = self
+                .backend
+                .notes()?
+                .list_note_previews(vec![path.clone()])?;
+            Ok((path, root, previews))
+        })();
+        let (path, root, previews) = match created {
+            Ok(created) => created,
+            Err(error) => {
+                self.error = Some(error);
+                cx.notify();
+                return;
+            }
         };
-        let id: SharedString = format!("draft:{}", self.next_id).into();
-        self.next_id += 1;
-        self.notes
-            .retain(|_, n| n.draft_folder.is_none() || n.dirty);
-        self.notes.insert(
-            id.clone(),
-            Note {
-                title: "Untitled".into(),
-                saved_body: "".into(),
-                initial_body: "".into(),
-                dirty: false,
-                draft_folder: Some(folder),
-                fills: None,
-                markers: None,
-                editor: None,
-            },
-        );
+        self.revision += 1; // Reject refreshes started before creation.
+        if self.view != View::Feed {
+            fn expansion(items: &[TreeItem], out: &mut HashSet<SharedString>) {
+                for item in items {
+                    if item.is_expanded() {
+                        out.insert(item.id.clone());
+                    }
+                    expansion(&item.children, out);
+                }
+            }
+            let mut expanded = HashSet::new();
+            expansion(&self.roots, &mut expanded);
+            self.expanded_by_view.insert(self.view, expanded);
+            self.roots.clear();
+        }
+        self.view = View::Feed;
+        self.filter = navigation::Filter::Active;
+        self.settings = false;
+        self.selected.clear();
+        let paths: HashSet<_> = navigation::note_paths(&root).into_iter().collect();
+        self.previews.retain(|path, _| paths.contains(path));
+        self.folder_tree = Some(root);
+        for preview in previews {
+            self.previews.insert(preview.path.clone(), preview);
+        }
+        let id: SharedString = path.into();
+        self.saved_selection.insert(View::Feed, id.clone());
+        self.rebuild_navigation(cx);
+        let today: SharedString = format!(
+            "feed:this-week:day:{}",
+            chrono::Local::now().format("%Y-%m-%d")
+        )
+        .into();
+        if let Some(item) = tree_moves::find(&self.roots, &today) {
+            item.clone().expanded(true);
+        }
+        self.tree
+            .update(cx, |tree, cx| tree.set_items(self.roots.clone(), cx));
+        self.select_row(&id, cx);
         self.open_note(id, true, window, cx);
         self.vim.mode = vim::Mode::Insert;
         if let Some(editor) = self.notes[&self.active].editor.as_ref() {

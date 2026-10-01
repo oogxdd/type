@@ -101,7 +101,6 @@ struct TypeApp {
     drag_pointer: Option<(SharedString, Point<Pixels>, Bounds<Pixels>)>,
     hover_since: Instant,
     tag_count: usize,
-    next_id: usize,
     tag_task: Option<Task<()>>,
     subscriptions: Vec<Subscription>,
 }

@@ -66,16 +66,33 @@ impl Item {
 }
 
 pub fn title(body: &str) -> String {
-    let line = body
-        .lines()
-        .find(|line| !line.trim().is_empty() && !line.starts_with(":::"))
-        .unwrap_or("Untitled");
-    let text = line.trim().trim_start_matches('#').trim();
-    if text.is_empty() {
-        "Untitled".into()
-    } else {
-        text.chars().take(90).collect()
+    // Skip tag-only lines; use the first prose/heading line, up to five words.
+    for line in body.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with(":::") {
+            continue;
+        }
+        let heading = line.trim_start_matches('#');
+        let text = if line.starts_with('#') && !heading.starts_with(char::is_whitespace) {
+            line.split_whitespace()
+                .skip_while(|word| word.starts_with('#'))
+                .collect::<Vec<_>>()
+                .join(" ")
+        } else {
+            heading.trim().to_string()
+        };
+        if !text.is_empty() {
+            return text
+                .split_whitespace()
+                .take(5)
+                .collect::<Vec<_>>()
+                .join(" ")
+                .chars()
+                .take(90)
+                .collect();
+        }
     }
+    "New note".into()
 }
 
 pub fn folders(
@@ -417,6 +434,24 @@ pub fn move_suggestions(folders: &[String], query: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn titles_use_prose_after_tags_and_at_most_five_words() {
+        assert_eq!(super::title(""), "New note");
+        assert_eq!(super::title("#work #idea\n\n"), "New note");
+        assert_eq!(
+            super::title("#work #idea\n\nПервая строка с содержанием заметки дальше"),
+            "Первая строка с содержанием заметки"
+        );
+        assert_eq!(
+            super::title("## Heading with six words in it"),
+            "Heading with six words in"
+        );
+        assert_eq!(
+            super::title("#work Some actual prose\nMore"),
+            "Some actual prose"
+        );
+    }
+
     use super::*;
     fn note(path: &str, timestamp: i64) -> NotePreviewEntry {
         NotePreviewEntry {

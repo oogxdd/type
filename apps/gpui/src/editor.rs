@@ -47,7 +47,7 @@ impl TypeApp {
         if !self.prefs.line_numbers {
             return px(0.);
         }
-        let digits = editor.read(cx).text().lines_len().max(1).ilog10() + 1;
+        let digits = editor.read(cx).text().lines_len().max(10).ilog10() + 1;
         px((self.prefs.font_size * 0.72).clamp(10., 14.) * 0.65 * digits as f32 + 16.)
     }
 

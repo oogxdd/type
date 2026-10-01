@@ -764,3 +764,200 @@ fn profile_path_opens_in_place_flushes_draft_and_forgets_without_deleting(cx: &m
     })
     .unwrap();
 }
+
+#[gpui_kit::test]
+fn new_note_stays_selected_through_typing_saves_and_refresh(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let old = f.0.create("Work", "Old note".into(), None).unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.set_view(View::Folders, window, cx);
+            app.open_note(old.clone().into(), true, window, cx);
+            // A background read is already in flight when Cmd+N arrives.
+            app.refresh(window, cx);
+        });
+    })
+    .unwrap();
+    press(cx, window, "cmd-n");
+    let first = app.read_with(cx, |app, _| app.active.clone());
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            assert_eq!(app.view, View::Feed);
+            assert!(first.starts_with(STREAM_FOLDER));
+            assert_eq!(f.0.notes().unwrap().read_note(&first).unwrap(), "");
+            assert_eq!(app.notes[&first].title.as_ref(), "New note");
+            assert_eq!(app.tree.read(cx).selected_item().unwrap().id, first);
+            let today: gpui_kit::SharedString = format!(
+                "feed:this-week:day:{}",
+                chrono::Local::now().format("%Y-%m-%d")
+            )
+            .into();
+            assert!(
+                super::tree_moves::find(&app.roots, &today)
+                    .unwrap()
+                    .is_expanded()
+            );
+            let editor = app.notes[&first].editor.clone().unwrap();
+            assert!(editor.focus_handle(cx).is_focused(window));
+            assert_eq!(app.vim.mode, vim::Mode::Insert);
+        });
+    })
+    .unwrap();
+    cx.simulate_input(window, "#work\n\nOne two three four five six");
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            assert_eq!(app.active, first);
+            assert_eq!(app.notes[&first].title.as_ref(), "One two three four five");
+            assert_eq!(
+                super::tree_moves::find(&app.roots, &first)
+                    .unwrap()
+                    .label
+                    .as_ref(),
+                "One two three four five"
+            );
+            app.flush(false, cx).unwrap();
+            app.refresh(window, cx);
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            assert_eq!(app.active, first);
+            assert_eq!(app.tree.read(cx).selected_item().unwrap().id, first);
+            assert!(
+                app.notes[&first]
+                    .editor
+                    .as_ref()
+                    .unwrap()
+                    .focus_handle(cx)
+                    .is_focused(window)
+            );
+            assert_eq!(app.vim.mode, vim::Mode::Insert);
+            assert_eq!(
+                f.0.notes().unwrap().read_note(&first).unwrap(),
+                "#work\n\nOne two three four five six"
+            );
+        });
+    })
+    .unwrap();
+    press(cx, window, "cmd-n cmd-n");
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            assert_ne!(app.active, first);
+            let latest = app.active.clone();
+            assert!(latest.starts_with(STREAM_FOLDER));
+            assert_eq!(app.tree.read(cx).selected_item().unwrap().id, latest);
+            assert_eq!(app.notes[&latest].title.as_ref(), "New note");
+            assert!(
+                app.notes[&latest]
+                    .editor
+                    .as_ref()
+                    .unwrap()
+                    .focus_handle(cx)
+                    .is_focused(window)
+            );
+            app.refresh(window, cx);
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    app.read_with(cx, |app, cx| {
+        assert_ne!(app.active.as_ref(), old);
+        assert_eq!(app.tree.read(cx).selected_item().unwrap().id, app.active);
+    });
+}
+
+#[gpui_kit::test]
+fn line_number_gutter_reserves_two_digits(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.prefs.line_numbers = true;
+            let editor = app.notes[&app.active].editor.clone().unwrap();
+            let width = app.line_number_width(&editor, cx);
+            for count in [9, 10, 99, 100, 1000] {
+                editor.update(cx, |editor, cx| {
+                    editor.set_value(vec!["line"; count].join("\n"), window, cx)
+                });
+                let next = app.line_number_width(&editor, cx);
+                if count < 100 {
+                    assert_eq!(next, width);
+                } else {
+                    assert!(next > width);
+                }
+            }
+        });
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn background_refresh_preserves_manual_navigation_scroll(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    for i in 0..80 {
+        f.0.create(&format!("Folder {i:02}"), "Fixture note".into(), None)
+            .unwrap();
+    }
+    let (window, app) = launch(&f, cx);
+    let selected: gpui_kit::SharedString = "Folder 79".into();
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.set_view(View::Folders, window, cx);
+            app.click_row(selected.clone(), true, false, window, cx);
+        });
+        window.render_frame(cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        let scroll = app.read(cx).tree.read(cx).scroll_handle().clone();
+        assert!(scroll.0.borrow().base_handle.offset().y < px(0.));
+        // Scroll back to the first row while keeping the far-away folder selected.
+        scroll.scroll_to_item_strict(0, gpui_kit::ScrollStrategy::Top);
+        window.render_frame(cx);
+        assert_eq!(scroll.0.borrow().base_handle.offset().y, px(0.));
+    })
+    .unwrap();
+    for _ in 0..3 {
+        cx.update_window(window, |_, window, cx| {
+            app.update(cx, |app, cx| app.refresh(window, cx));
+        })
+        .unwrap();
+        cx.run_until_parked();
+        cx.update_window(window, |_, window, cx| {
+            window.render_frame(cx);
+            let app = app.read(cx);
+            let tree = app.tree.read(cx);
+            assert_eq!(tree.selected_item().unwrap().id, selected);
+            assert_eq!(
+                tree.scroll_handle().0.borrow().base_handle.offset().y,
+                px(0.),
+                "background reconciliation must not scroll to the selected folder"
+            );
+        })
+        .unwrap();
+    }
+    // An explicit navigation request still reveals the selected row.
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| app.select_row(&selected, cx));
+        window.render_frame(cx);
+        assert!(
+            app.read(cx)
+                .tree
+                .read(cx)
+                .scroll_handle()
+                .0
+                .borrow()
+                .base_handle
+                .offset()
+                .y
+                < px(0.)
+        );
+    })
+    .unwrap();
+}

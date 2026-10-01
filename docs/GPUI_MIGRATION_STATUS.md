@@ -28,6 +28,41 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Preserve manually scrolled navigation during polling (2026-10-02)
+
+Background refresh no longer calls `select_row` after reconciliation. That
+helper reveals the selected row; polling every three seconds therefore pulled
+navigation back to a distant selected folder. `rebuild_navigation` already
+preserves selection without scrolling. Explicit creation, view switching and
+navigation retain their reveal behavior.
+
+A native regression creates 80 synthetic folders, selects the last one, scrolls
+back to the top, and checks selection/scroll position across three refreshes.
+It also verifies an explicit reveal still scrolls. Before the fix the test
+reproduced a jump from 0 to -1988 pixels on the first refresh.
+After the fix all 47 GPUI tests pass (28 library, 19 native); formatting and
+diff checks pass. The local Dev preview is rebuilt; installed apps are unchanged.
+
+
+### Cmd+N capture and stable gutter (2026-10-02)
+
+Implemented in the `gpui-line-sync` worktree (`codex/gpui-release-0.4.7`).
+Cmd+N now persists an empty Stream note immediately, selects it under expanded
+Today and focuses its editor in Insert mode. Empty notes show `New note`; live
+sidebar titles use up to five words from the first nonempty prose/heading line,
+skipping tag-only lines. Saving keeps the same path/editor identity. Creation
+and edits invalidate obsolete background snapshots; tree repaints with unchanged
+selection no longer reopen a previously selected note. Untouched empty captures
+remain real notes; the existing dirty-empty-on-leave cleanup remains in place.
+The number gutter reserves two digits for 1–99 lines, growing at 100/1000/etc.
+
+Validation: 46 GPUI tests pass (28 library, 18 native), including real Cmd+N from
+Folders during an in-flight refresh, native text input, immediate title changes,
+flush/refresh focus stability, repeated Cmd+N and digit-width boundaries.
+Formatting and diff checks passed. Tests use synthetic temporary profiles.
+No production app replacement, relaunch, release or publication performed.
+
+
 ### Current-line geometry synchronization (2026-10-01)
 
 The user reported that Insert-mode Enter moves the caret before the current-line
