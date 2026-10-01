@@ -66,6 +66,63 @@ fn press(cx: &mut TestAppContext, window: AnyWindowHandle, keys: &str) {
 }
 
 #[gpui_kit::test]
+fn updates_flush_unicode_drafts_and_block_operations_and_conflicts(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let path = f.0.create(STREAM_FOLDER, "baseline".into(), None).unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            assert!(
+                app.updater.is_none(),
+                "headless/dev builds never start Sparkle"
+            );
+            app.open_note(path.clone().into(), true, window, cx);
+            let editor = app.notes[&app.active].editor.clone().unwrap();
+            editor.update(cx, |editor, cx| {
+                editor.set_value("черновик β😀", window, cx)
+            });
+            app.notes.get_mut(&app.active).unwrap().dirty = true;
+            assert!(app.prepare_update(cx));
+            assert_eq!(
+                f.0.notes().unwrap().read_note(&path).unwrap(),
+                "черновик β😀"
+            );
+            assert!(!app.notes[&app.active].dirty);
+            app.busy = true;
+            assert!(!app.prepare_update(cx));
+            app.busy = false;
+            app.recording = true;
+            assert!(!app.prepare_update(cx));
+            app.recording = false;
+            app.pending_recording = Some(std::sync::Arc::new((vec![1, 2], "fixture".into())));
+            assert!(!app.prepare_update(cx));
+            app.pending_recording = None;
+            editor.update(cx, |editor, cx| {
+                editor.set_value("unsaved local draft", window, cx)
+            });
+            app.notes.get_mut(&app.active).unwrap().dirty = true;
+            f.0.notes()
+                .unwrap()
+                .write_note(&path, "external change")
+                .unwrap();
+            assert!(!app.prepare_update(cx));
+            assert_eq!(
+                f.0.notes().unwrap().read_note(&path).unwrap(),
+                "external change"
+            );
+            assert!(app.notes[&app.active].dirty);
+            assert_eq!(editor.read(cx).value().as_ref(), "unsaved local draft");
+            assert!(app.error.as_ref().unwrap().contains("changed outside"));
+            app.settings = true;
+            app.settings_section = super::settings::Section::Updates;
+        });
+        window.render_frame(cx);
+        assert!(window.find("check-updates").bounds().size.width > px(0.));
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
 fn stream_and_folders_keep_their_own_expansion(cx: &mut TestAppContext) {
     let f = Fixture::new();
     f.0.create("Work", "# Nested note".into(), None).unwrap();

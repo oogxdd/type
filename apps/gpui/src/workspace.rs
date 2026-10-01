@@ -10,6 +10,7 @@ impl TypeApp {
         Self::apply_theme(prefs.dark, window, cx);
         let tree = cx.new(|cx| TreeState::new(cx));
         let mut app = Self {
+            updater: None,
             backend,
             profiles,
             prefs,
@@ -61,6 +62,17 @@ impl TypeApp {
             tag_task: None,
             subscriptions: vec![],
         };
+        cx.defer_in(window, |this, _, cx| {
+            let owner = cx.weak_entity();
+            let app = cx.to_async();
+            this.updater = updater::Updater::new(move || {
+                app.update(|cx| {
+                    owner
+                        .update(cx, |this, cx| this.prepare_update(cx))
+                        .unwrap_or(false)
+                })
+            });
+        });
         // Kit dispatches matched bindings (e.g. Tab and Escape) before raw key
         // listeners. Keep one owner, ahead of native actions, so Vim and pane
         // navigation work consistently rather than only for unmatched keys.

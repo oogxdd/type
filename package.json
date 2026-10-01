@@ -14,6 +14,8 @@
     "desktop:app:prod-data": "python3 apps/gpui/scripts/desktop.py dev --production",
     "desktop:dmg:dev": "npm run desktop:tauri:dmg:dev",
     "desktop:release": "python3 apps/gpui/scripts/desktop.py bundle --release",
+    "desktop:release:package": "python3 apps/gpui/scripts/release.py",
+    "desktop:release:test": "python3 -m unittest discover -s apps/gpui/scripts -p 'test_*.py'",
     "mobile:start": "npm run --workspace @typenotes/mobile start",
     "mobile:ios": "npm run --workspace @typenotes/mobile-core codegen:ios && npm run --workspace @typenotes/mobile ios",
     "mobile:ios:watch": "node scripts/watch-mobile-ios.mjs",

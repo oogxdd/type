@@ -15,6 +15,9 @@ npm run desktop:bundle       # unsigned macOS .app
 npm run desktop:release      # unsigned release .app; does not publish
 ```
 
+Signed macOS releases and the GPUI updater use a separate draft → promote
+workflow. Setup and rollout: [Native desktop releases](docs/RELEASING.md).
+
 Rust is pinned by `rust-toolchain.toml`. The dev launcher needs Python 3.11+.
 Native desktop does not need Node dependencies; npm only provides command aliases.
 Use `--data-dir /absolute/path` with `desktop:app` for a fixture. The default dev

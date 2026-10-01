@@ -18,3 +18,6 @@ qrcode = { version = "0.14", default-features = false }
 
 [dev-dependencies]
 gpui-kit = { version = "=0.7.0", features = ["test-support", "tree-sitter-markdown", "tree-sitter-markdown-inline"] }
+
+[build-dependencies]
+cc = "1"

@@ -1,6 +1,6 @@
 use super::*;
 use commands::Choice;
-use gpui_kit::base::Selectable;
+use gpui_kit::base::{Disableable, Selectable};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Section {
@@ -13,9 +13,10 @@ pub enum Section {
     Import,
     Security,
     Keyboard,
+    Updates,
 }
 impl Section {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::General,
         Self::Profiles,
         Self::Appearance,
@@ -25,6 +26,7 @@ impl Section {
         Self::Import,
         Self::Security,
         Self::Keyboard,
+        Self::Updates,
     ];
     fn title(self) -> &'static str {
         match self {
@@ -37,6 +39,7 @@ impl Section {
             Self::Import => "Import & backup",
             Self::Security => "Security",
             Self::Keyboard => "Keyboard",
+            Self::Updates => "Updates",
         }
     }
     fn description(self) -> &'static str {
@@ -56,6 +59,7 @@ impl Section {
             Self::Import => "Bring notes into Type or make a portable copy of your collections.",
             Self::Security => "Encrypt note bodies. Filenames and frontmatter remain readable.",
             Self::Keyboard => "Application shortcuts and editor navigation.",
+            Self::Updates => "Keep Type up to date on this Mac.",
         }
     }
     pub fn adjacent(self, direction: isize) -> Self {
@@ -309,6 +313,31 @@ impl TypeApp {
                     .child(self.settings_section.description()),
             );
         match self.settings_section {
+            Section::Updates => {
+                let available = self.updater.is_some();
+                let automatic = self.updater.as_ref().is_some_and(|u| u.automatic());
+                settings = settings.child(
+                    self.settings_card(
+                        "Type",
+                        if available { "Updates are signed and installed with your confirmation. Type saves your notes before restarting." }
+                        else { "Updates are available in configured macOS release builds. Development builds use manual installation." },
+                        cx,
+                    )
+                    .child(div().text_sm().child(format!("Version {}", env!("CARGO_PKG_VERSION"))))
+                    .child(Button::new("check-updates").label("Check for updates…").disabled(!available)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            if this.prepare_update(cx) {
+                                if let Some(updater) = &this.updater { updater.check(); }
+                            }
+                        })))
+                    .child(Button::new("automatic-updates").ghost().disabled(!available)
+                        .label(format!("Automatically check: {}", if automatic { "On" } else { "Off" }))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            if let Some(updater) = &this.updater { updater.set_automatic(!updater.automatic()); }
+                            cx.notify();
+                        })))
+                );
+            }
             Section::General => {
                 settings = settings
                     .child(

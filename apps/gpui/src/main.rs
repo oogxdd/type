@@ -4,6 +4,7 @@ mod editor;
 mod jobs;
 mod settings;
 mod ui;
+mod updater;
 mod workspace;
 use std::{
     collections::{HashMap, HashSet},
@@ -52,6 +53,7 @@ struct Note {
     editor: Option<Entity<EditorState>>,
 }
 struct TypeApp {
+    updater: Option<updater::Updater>,
     backend: Backend,
     profiles: NotesProfilesSnapshot,
     prefs: Preferences,

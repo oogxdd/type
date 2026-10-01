@@ -26,6 +26,53 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Native updater and release pipeline (2026-10-01)
+
+- Local milestone commit: `feat(gpui): add Sparkle updater and staged native releases`.
+  No push, merge or publication.
+
+- Added a macOS Sparkle 2.10.0 bridge with Settings → Updates (manual check and
+  device-local automatic-check toggle). Debug/dev launches and unconfigured
+  bundles never start it. Release bundles embed a pinned/checksummed framework,
+  HTTPS feed, public key, pre-extraction archive verification and signed-feed
+  verification. Automatic installation is disabled; the user confirms updates.
+- The shell flushes notes before checks/relaunch and pauses relaunch for a disk
+  conflict, busy job, active capture or pending recording. The native delegate
+  retains the postponed install handler; checking again after resolving the
+  issue resumes it. Existing GPUI quit/recovery hooks remain in effect.
+- Added universal Apple Silicon/Intel packaging, inside-out Developer ID signing
+  of Sparkle helpers/framework/app, mandatory accepted notarization and stapling
+  of app/DMG, `/Applications` installer link, signed archives/appcast and public
+  release provenance. Local packaging never publishes anything.
+- New `gpui-v*` candidate workflow tests and creates a draft; separate manual
+  promotion verifies the candidate/baseline and publishes the dedicated
+  `gpui-updates/appcast.xml` feed with seven daily rollout groups. The clock
+  starts at promotion. Withdrawal removes/re-signs only the selected feed item;
+  installed versions require a higher corrective release. Legacy Tauri tags
+  and latest.json stay separate; the first GPUI install is manual.
+- Checks: **41 GPUI tests** (27 library + 14 binary) passed, including a new
+  synthetic save/conflict/recording barrier flow. **8 release/native tests**
+  passed: configuration rejection, bundle symlinks/stale-code removal,
+  promotion date/history, withdrawal, candidate checksum/feed drift, committed
+  version validation, notarization rejection and native postponed-handler retry.
+  Debug executable build passed. Actual GPUI+Sparkle bundle passed inside-out
+  ad-hoc signing and `codesign --verify --deep --strict` in an isolated output.
+  Real Sparkle tools passed archive signing, embedded release notes, signed-feed
+  verification, tamper rejection and promotion re-signing using a synthetic app
+  and ephemeral key. Framework SHA-256 extraction check, format and diff checks
+  passed. Existing unused helper/variant and upstream `block` warnings remain.
+- Read only repository metadata: public `oogxdd/type` already has the Apple
+  signing/notary secret names, including the certificate password. Missing:
+  `SPARKLE_PRIVATE_KEY` secret and `SPARKLE_PUBLIC_KEY` variable; key creation
+  and configuration steps are in `docs/RELEASING.md`. No real signing key was
+  generated, secret written, remote workflow run, app launched/restarted,
+  production data accessed, tag pushed or release published.
+- Remaining: configure Sparkle keys/environments, run the first signed and
+  notarized candidate on CI, test Intel/runtime/Gatekeeper and real old→new
+  installation/relaunch with isolated profiles before promotion. Production
+  signing/notarization and live updater replacement cannot be claimed from
+  ad-hoc/headless checks. Linux/Windows native updater support is not implemented.
+
 - `gpui-kit = 0.7.0` (its engine dependency is `gpui-pre = 0.3.7`: different version lines).
 - Real profiles / filesystem notes / metadata / security gates through core application services, not Tauri IPC.
 - Lazy editors; 400ms autosave, flush on navigation/profile switch/close; external-body conflict check preserves draft; encrypted recovery on unavoidable quit.
@@ -119,9 +166,9 @@ Current bundle: `/Volumes/KINGSTON/Projects/type/app/experiments/gpui-demo/targe
 2. Stream/Folders expansion now survives switching views. Confirm the nested Stream presentation with the user; headless tests do not judge appearance.
 3. Lower priority for the user's current text-notes cutover: retain failed recording bytes + retry (`pending_recording` is not populated on stop), and add automatic processing after capture/import/sync respecting settings. Recording/OCR are not important to the user now; transcription is useful later but manual Queue is acceptable for the trial. No microphone permission/test has been performed. Validate filename format / OCR provider settings when revisiting these workflows.
 4. Review profile rename/forget and standalone folder creation. Profile rename is now available under Settings → Working folders; profile deletion and standalone folder creation have no UI. Security panic reset clears profiles via reload, but needs a functional isolated-fixture test. Optional extension policy needs review before production use.
-5. Native macOS bundle/dev launcher exists; normal debug build and unsigned dev bundling passed. Root app/dev/build scripts target GPUI, explicit `desktop:tauri:*` aliases retain Tauri. Validate release bundling before claiming packaging finished. Launcher needs Python >=3.11 (`tomllib`); improve portability if appropriate. `desktop:dmg:dev` remains an explicit legacy alias; native bundling currently emits only unsigned `.app`.
+5. Root app/dev/build scripts target GPUI; explicit `desktop:tauri:*` aliases and `desktop:dmg:dev` retain Tauri. Local `desktop:release` emits an unsigned `.app`; `desktop:release:package` and the native candidate workflow build universal signed/notarized DMGs with Sparkle. Python >=3.12 is configured in release/CI (launcher alone needs >=3.11). Real Developer ID/notary and installer validation await the first candidate; isolated ad-hoc bundle verification passed.
 6. CI adds native macOS tests/bundle; Linux Rust job excludes type-gpui so Tauri/core checks keep their existing dependencies. Remote CI and Linux/Windows runtime remain unverified.
-7. Essential README/AGENTS/CLAUDE/build/release/Vim/architecture docs are now minimal and describe GPUI. Obsolete desktop updater/signing/rich-editor guides and the old architecture book were removed; core storage/sync/MCP and mobile guides remain. Tag release workflow still targets Tauri. Signing/notarization, installer and native updater are unfinished. Do not publish native artifacts through the old Tauri updater or release anything without an explicit request.
+7. Native updater, signing/notarization, universal installer and draft → promote/withdraw pipelines are implemented; see the updater milestone and `docs/RELEASING.md`. Configure Sparkle keys and complete a real signed/notarized old→new smoke test before production promotion. `desktop-v*` remains the legacy Tauri channel; GPUI uses `gpui-v*` plus its dedicated feed. No publication is authorized by implementation alone.
 8. Keep this note current and commit progress in this branch. No merge, PR or release requested.
 
 ## H1/H2/H3 feasibility (investigation only)
