@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use type_core::AppEnv;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Preferences {
     pub dark: bool,

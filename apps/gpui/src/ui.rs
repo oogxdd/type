@@ -379,8 +379,11 @@ impl Render for TypeApp {
         }
         // The native editor owns the blinking Insert caret. Normal and Visual
         // use our glyph-sized overlay; inputs in a modal keep their normal caret.
-        let block_cursor =
-            self.prefs.vim && self.vim.mode != vim::Mode::Insert && self.modal.is_none();
+        let block_cursor = self.modal.is_none()
+            && self.current_folder().map_or_else(
+                || self.prefs.vim && self.vim.mode != vim::Mode::Insert,
+                |tab| tab.read(cx).block_cursor(),
+            );
         let theme = Theme::global_mut(cx);
         theme.colors.caret = if block_cursor {
             theme.colors.background
@@ -399,53 +402,29 @@ impl Render for TypeApp {
             .text_color(cx.theme().foreground)
             .track_focus(&self.focus)
             .key_context("Type")
-            .on_action(cx.listener(Self::on_quit));
+            .on_action(cx.listener(Self::on_quit))
+            .on_action(cx.listener(Self::on_open_folder))
+            .on_action(cx.listener(Self::on_close_folder))
+            .on_action(cx.listener(Self::on_save_file));
+        let top_inset = if !self.folder_tabs.is_empty() && !self.locked {
+            px(64.)
+        } else {
+            px(28.)
+        };
         let content = if self.locked {
             div().flex_1().into_any_element()
+        } else if self.active_folder.is_some() {
+            div().into_any_element()
         } else if self.settings {
             self.render_settings(cx).into_any_element()
         } else if let Some(note) = self.notes.get(&self.active).filter(|n| n.editor.is_some()) {
             let editor = note.editor.as_ref().unwrap();
-            div()
-                .id("editor-pane")
-                .relative()
-                .size_full()
-                .min_w_0()
-                .min_h_0()
-                .pl(if self.prefs.line_numbers {
-                    self.line_number_width(editor, cx)
-                } else {
-                    px(12.)
-                })
-                .child(editor::PaintLayer::new(
-                    div()
-                        .relative()
-                        .size_full()
-                        .child(editor::PaintLayer::new(
-                            Editor::new(editor)
-                                .bordered(false)
-                                .appearance(false)
-                                .readonly(
-                                    self.busy
-                                        || (self.prefs.vim && self.vim.mode != vim::Mode::Insert),
-                                )
-                                .h(relative(1.))
-                                .text_size(px(self.prefs.font_size))
-                                .font_family(cx.theme().font_family.clone()),
-                        ))
-                        .when(self.prefs.current_line_highlight, |pane| {
-                            pane.child(self.render_current_line(editor.clone()))
-                        })
-                        .when(block_cursor, |pane| {
-                            pane.child(editor::PaintLayer::new(
-                                self.render_cursor(editor.clone(), cx),
-                            ))
-                        }),
-                ))
-                .when(self.prefs.line_numbers, |pane| {
-                    pane.child(self.render_line_numbers(editor.clone(), cx))
-                })
-                .into_any_element()
+            editor::EditorAppearance {
+                prefs: &self.prefs,
+                vim: &self.vim,
+            }
+            .render(editor, self.busy, cx)
+            .into_any_element()
         } else {
             div()
                 .p_6()
@@ -457,15 +436,18 @@ impl Render for TypeApp {
                 })
                 .into_any_element()
         };
-        if (self.prefs.sidebar || self.settings) && !self.locked {
+        if let Some(tab) = self.current_folder().filter(|_| !self.locked) {
+            body = body.child(div().size_full().min_h_0().child(tab));
+        } else if (self.prefs.sidebar || self.settings) && !self.locked {
             body = body.child(
                 div().size_full().min_h_0().child(
                     h_resizable("main-panes")
+                        .with_state(&self.pane_state)
                         .child(
                             resizable_panel()
                                 .size(px(330.))
                                 .size_range(px(240.)..px(600.))
-                                .child(div().size_full().pt(px(28.)).child(if self.settings {
+                                .child(div().size_full().pt(top_inset).child(if self.settings {
                                     self.render_settings_navigation(cx).into_any_element()
                                 } else {
                                     self.render_navigation(cx).into_any_element()
@@ -478,7 +460,7 @@ impl Render for TypeApp {
                                     .size_full()
                                     .min_w_0()
                                     .min_h_0()
-                                    .pt(px(28.))
+                                    .pt(top_inset)
                                     .child(content)
                                     .test_support(),
                             ),
@@ -490,13 +472,15 @@ impl Render for TypeApp {
                 div()
                     .size_full()
                     .min_h_0()
-                    .pt(px(28.))
+                    .pt(top_inset)
                     .pl(px(250.))
                     .child(content),
             );
         }
-        // Overlay the titlebar so pane dividers continue through the top strip.
-        // Kit owns dragging and macOS's configured double-click action.
+        if !self.folder_tabs.is_empty() && !self.locked {
+            body = body.child(self.render_workspace_tabs(cx));
+        }
+        // Transparent native chrome keeps the pane divider visible to the top.
         body = body.child(
             div().absolute().top_0().left_0().w_full().h(px(28.)).child(
                 TitleBar::new()

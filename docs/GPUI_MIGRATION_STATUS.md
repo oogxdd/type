@@ -28,6 +28,33 @@ Updated: 2026-10-02. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Ordinary folder workspaces — preview (2026-10-02)
+
+Implementation in `.worktrees/gpui-open-folders`, branch
+`codex/gpui-open-folders`, based on `codex/gpui-release-0.4.8` (`22013349`).
+Type → Open Folder opens a session-only filesystem workspace without profile,
+system-folder or Git setup. Content-based UTF-8/UTF-16 text detection includes
+hidden/config files; binary files show an unsupported message. Existing files
+autosave, preserving encoding/BOM/CRLF and checking the disk baseline before
+replacement; conflicting drafts retain their tabs. Creation/move/delete remain
+outside this workspace.
+
+Workspace tabs use Kit's Dock tab primitives below the native titlebar, with a
+Home tab, per-folder close and shared resizable-pane widths. With Home alone
+the tabs disappear. Both editors share gutter, highlight and modal-cursor
+rendering. Following the user's preview feedback, there is no status bar or Vim
+mode/toggle label: folder name and unified tree/file refresh are at the top of
+the sidebar, and a quiet Saved indicator occupies the editor's bottom right.
+The user explicitly chose tabs below the window controls after trying inline
+native-titlebar tabs.
+
+All 59 GPUI tests pass (35 library, 24 native), including real input/Vim/autosave,
+text/encoding preservation, conflict retention, tab mouse clicks, matching
+gutter geometry, unified refresh, full-height panes and header alignment after
+resizing/switching.
+macOS dev preview only; other platforms and production/release are untested.
+Leave running dev windows open for the user's inspection.
+
 ### Native release 0.4.8 (2026-10-02)
 
 The user requested a locally built GPUI release. Release branch

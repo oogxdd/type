@@ -56,6 +56,39 @@ See [migration status](../../docs/GPUI_MIGRATION_STATUS.md) for exact verificati
 remaining work and the current handoff. The original Tauri app is kept during
 cutover; this README does not claim full feature or release parity.
 
+## Open ordinary folders
+
+**Type → Open Folder…** (Cmd+O / Ctrl+O) opens any existing folder in a separate
+workspace tab below the window controls. The leftmost **Home** tab returns to
+the profile workspace. The tab strip is completely absent when only Home is open. Open folders retain
+their tree expansion and editor buffers during the session; opening the same
+folder again selects its existing tab. Use the tab's × or Cmd+Shift+W /
+Ctrl+Shift+W to close it.
+
+The sidebar lists files and directories, loading subdirectories when expanded.
+Text files are detected by content, regardless of extension (including JSON,
+configuration files and files without an extension). UTF-8 and BOM-marked UTF-16
+are supported. Markdown keeps its full frontmatter; JSON has syntax highlighting.
+Binary files show an unsupported-format message. Symbolic links and text files
+larger than 16 MB are not opened. Changes autosave after 400 ms, with an explicit
+save available through Cmd+S / Ctrl+S. Navigation and closing
+also flush changes. Empty files remain on disk. The original encoding, BOM and
+CRLF line endings are preserved. Refresh the folder with its refresh button or
+Cmd+R / Ctrl+R; clean buffers also refresh when the window becomes active.
+
+An ordinary folder does not register a profile or initialize `_system`, `.type`
+or Git. Profile note creation, move, trash and delete commands are unavailable
+there. If a file changed externally, saving and closing stop while the local
+draft remains in the editor. Copy the draft if needed, then refresh to reload
+the disk version; reloading a dirty buffer asks before discarding edits.
+
+The folder name and refresh live at the top of the sidebar. One refresh updates
+both the tree and open files. A quiet save indicator sits in the editor's bottom
+right corner, with no status bar. Vim and editor appearance are configured in
+Home's Settings; both workspaces use the same line-number gutter, current-line
+highlight and modal cursor.
+Opened folders are not restored after restarting the app.
+
 ## Profiles
 
 A profile points directly at a notes folder. In Settings → Profiles, choose a

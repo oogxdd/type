@@ -336,6 +336,12 @@ impl TypeApp {
     }
 
     pub fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.locked && self.modal.is_none() {
+            if let Some(tab) = self.current_folder() {
+                tab.update(cx, |tab, cx| tab.key_down(event, window, cx));
+                return;
+            }
+        }
         let editor_focused = self
             .notes
             .get(&self.active)
