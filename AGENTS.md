@@ -104,5 +104,8 @@ platforms/workflows. macOS CI tests GPUI; Linux workspace tests exclude it.
 `desktop:release` creates an unsigned native bundle locally. Signed/notarized
 universal DMGs with Sparkle use `desktop:release:package` or `gpui-v*` candidate
 tags, followed by the separate promotion workflow. See `docs/RELEASING.md`.
+For requested local releases, follow its **Agent preflight for a requested local
+release** section: check the actual login Keychain, offer local Apple credential
+setup when missing, and finish packaging before pushing a tag.
 The legacy `desktop-v*` workflow targets Tauri. Do not send GPUI artifacts to its
 updater, or publish/merge/create a PR without the user's instruction.

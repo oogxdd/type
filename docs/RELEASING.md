@@ -159,8 +159,15 @@ CI. GitHub does not rebuild an uploaded local candidate. A plain
 rustup target add aarch64-apple-darwin x86_64-apple-darwin
 ```
 
-GitHub secrets cannot be downloaded back to this Mac. Store your Apple ID and
-an Apple **app-specific password** locally, using interactive Keychain prompts:
+GitHub secrets cannot be downloaded back to this Mac. Local notarization can
+be configured once and reused for later releases. Sign in to
+[Apple Account](https://account.apple.com/) with the Developer account, open
+**Sign-In and Security → App-Specific Passwords**, and generate a password for
+Type notarization (or use an existing one you have securely retained). The normal
+Apple Account password is not the notarization password. Enter the Apple ID
+email and app-specific password into the following local Keychain prompts;
+do not send the password in chat or put it in shell history:
+
 
 ```sh
 security add-generic-password -U -a "$USER" -s type-apple-id -w
@@ -170,6 +177,70 @@ security add-generic-password -U -a "$USER" -s type-apple-app-password -w
 The dedicated Sparkle private key created during setup is already in this Mac's
 Keychain under account `type-gpui`. Do not generate a replacement signing key
 for each release. On a new Mac, securely restore the existing key first.
+
+### Agent preflight for a requested local release
+
+Read this section before pushing a `gpui-v*` tag. A tag starts the CI candidate
+build; complete local packaging first to avoid duplicate builds. If the user
+asks for a local release, check credentials locally and offer the one-time
+Keychain setup above if they are missing, before choosing CI. Explain the
+missing credential and let the user enter it locally. Do not generate a new
+Sparkle key or replace an existing release.
+
+Check signing and Keychain access in the actual macOS user session. The Codex
+sandbox can report zero signing identities even when the login Keychain has
+one; retry through the normal approval mechanism before concluding that the
+certificate or credentials are absent. Never dump Keychain contents or print
+credential values. This check reports only availability:
+
+```sh
+security find-identity -v -p codesigning
+python3 apps/gpui/scripts/sparkle.py /private/tmp/type-sparkle
+python3 - <<'CHECK'
+import os
+import subprocess
+
+for variable, service in (
+    ("APPLE_ID", "type-apple-id"),
+    ("APPLE_PASSWORD", "type-apple-app-password"),
+):
+    result = subprocess.run(
+        ["security", "find-generic-password", "-s", service, "-w"],
+        capture_output=True,
+    )
+    available = bool(os.environ.get(variable)) or (
+        result.returncode == 0 and bool(result.stdout.strip())
+    )
+    print(f"{variable}: {'available' if available else 'missing'}")
+result = subprocess.run(
+    ["/private/tmp/type-sparkle/bin/generate_keys", "--account", "type-gpui", "-p"],
+    capture_output=True,
+)
+print("Sparkle key: " + (
+    "available" if result.returncode == 0 and result.stdout.strip() else "missing"
+))
+CHECK
+```
+
+Also check `gh auth status` and `rustup target list --installed`; both macOS
+architectures are required. Environment credentials can be used instead of
+these named Keychain items. A pre-existing notarytool profile may also be useful,
+but **the current `release.py` requires `APPLE_ID` and `APPLE_PASSWORD`** and
+creates its own `type-gpui-notary` profile; a saved profile alone does not satisfy
+that script. See [Apple's notarization credential documentation](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow).
+
+On 2026-10-02 this Mac had the Developer ID identity and the `type-gpui`
+Sparkle key, but neither Apple credential in the environment/named Keychain
+items nor a usable `type-gpui-notary` profile. GPUI 0.4.8 therefore used CI.
+This is a dated observation, not a reason to skip preflight on the next release.
+
+Use a clean dedicated worktree so unrelated local changes stay intact. Run
+`cargo test --locked -p type-gpui -- --test-threads=1`,
+`cargo test --locked -p type-core --lib`, and
+`python3 -m unittest discover -s apps/gpui/scripts -p 'test_*.py'` before packaging.
+Reuse an existing `CARGO_TARGET_DIR` when available, and keep it consistent
+through tests and packaging. Both architecture-specific release caches must be
+warm for a fast universal build; a warm debug cache alone is insufficient.
 
 ### Build a candidate
 
