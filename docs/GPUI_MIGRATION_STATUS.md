@@ -1,6 +1,6 @@
 # GPUI migration — handoff / live status
 
-Updated: 2026-10-01. This is an unfinished migration; update this file after each milestone.
+Updated: 2026-10-02. This is an unfinished migration; update this file after each milestone.
 
 ## Where to continue
 
@@ -27,6 +27,18 @@ Updated: 2026-10-01. This is an unfinished migration; update this file after eac
 - Investigate larger H1/H2/H3 only; do not implement yet.
 
 ## Implemented
+
+### Native release 0.4.8 (2026-10-02)
+
+The user requested a locally built GPUI release. Release branch
+`codex/gpui-release-0.4.8` starts at current `origin/main` (`aa02e879`) and
+includes the tested capture/navigation correction from `d4e22991` as `200e4a48`.
+GPUI manifest/lock version is 0.4.8; release notes are in
+`docs/releases/gpui-v0.4.8.md`. Local release-script tests passed (9 tests). This Mac has the Developer ID
+identity and Sparkle key, but Apple notarization credentials/profile are absent;
+the signed universal candidate will be built by the configured GitHub workflow.
+Native tests and candidate/promotion checks are pending.
+
 
 ### Preserve manually scrolled navigation during polling (2026-10-02)
 
