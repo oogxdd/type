@@ -20,7 +20,7 @@ by a local build.
 
 ## Install the first native version
 
-[Type 0.4.6 universal DMG](https://github.com/oogxdd/type/releases/download/gpui-v0.4.6/Type-0.4.6-universal.dmg)
+[Type 0.4.8 universal DMG](https://github.com/oogxdd/type/releases/download/gpui-v0.4.8/Type-0.4.8-universal.dmg)
 is published, signed and notarized. Quit Type normally, open the DMG and drag
 `Type.app` to Applications. Launch that installed app. This first installation
 is manual when coming from `Type GPUI Dev` or the previous Tauri shell.
@@ -35,7 +35,7 @@ normally and retained as a hidden backup; legacy Type 0.8.1 was left unchanged.
 
 After installing the signed native build, use **Settings → Updates → Check for
 updates** for subsequent GPUI releases. The production feed is already live;
-0.4.6 is its current version, so an up-to-date installation will not offer a
+0.4.8 is its current version, so an up-to-date installation will not offer a
 newer version until the next candidate is promoted. Automatic checks are
 available; installation requires confirmation.
 
@@ -146,6 +146,33 @@ This uses the same signing, notarization, native feed and promotion checks as
 CI. GitHub does not rebuild an uploaded local candidate. A plain
 `npm run desktop:release` is not sufficient for distribution.
 
+### One command for the local path
+
+```sh
+npm run desktop:release:local -- --check
+# One-time interactive setup in the user's Terminal, if credentials are missing:
+npm run desktop:release:local -- --setup --apple-id YOUR_APPLE_ID_EMAIL
+# After committing the new version and release notes:
+npm run desktop:release:local -- VERSION --target-dir /absolute/path/to/existing/cargo/cache
+```
+
+The local wrapper detects the Developer ID identity and team, validates an
+existing notarization Keychain profile or reads the named Apple credential
+items, checks GitHub authentication/both Rust targets, and compares the local
+Sparkle public key with the production repository variable. It runs functional
+checks, retains the current signed feed, exports the dedicated Sparkle key only
+to a private temporary directory, and builds the candidate. It publishes nothing;
+upload and promotion follow the steps below. `--output` selects a fresh artifact
+directory; `CARGO_TARGET_DIR` is also respected.
+
+`--setup` uses Apple's interactive `notarytool store-credentials` prompt; the
+password is typed locally, validated by Apple, and stored in Keychain. A saved
+profile avoids exporting Apple passwords during later builds. An existing
+App Store Connect API key can also be stored in the same profile using
+`xcrun notarytool store-credentials type-gpui-notary --key /path/to/AuthKey_KEYID.p8 --key-id KEYID --issuer ISSUER_ID`;
+team API keys need their issuer ID. Never copy credential values into a commit
+or chat. `APPLE_NOTARIZATION_PROFILE` selects a different existing profile.
+
 ### Prepare the Mac once
 
 - Install Xcode command-line tools and the pinned Rust toolchain from
@@ -225,14 +252,19 @@ CHECK
 Also check `gh auth status` and `rustup target list --installed`; both macOS
 architectures are required. Environment credentials can be used instead of
 these named Keychain items. A pre-existing notarytool profile may also be useful,
-but **the current `release.py` requires `APPLE_ID` and `APPLE_PASSWORD`** and
-creates its own `type-gpui-notary` profile; a saved profile alone does not satisfy
-that script. See [Apple's notarization credential documentation](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow).
+and `release.py` now accepts `APPLE_NOTARIZATION_PROFILE` directly. Without
+that option it still requires `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID`
+and creates its own `type-gpui-notary` profile, preserving the CI path. See [Apple's notarization credential documentation](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow).
 
 On 2026-10-02 this Mac had the Developer ID identity and the `type-gpui`
 Sparkle key, but neither Apple credential in the environment/named Keychain
-items nor a usable `type-gpui-notary` profile. GPUI 0.4.8 therefore used CI.
-This is a dated observation, not a reason to skip preflight on the next release.
+items nor a usable `type-gpui-notary` profile. GPUI 0.4.8 initially used CI.
+This is a dated observation, not a reason to skip preflight on the next release. Later in the same session the
+user supplied the app-specific password, Apple validated it, and the existing
+`type-gpui-notary` Keychain profile was configured successfully. The new local
+wrapper's `--check` then passed for Developer ID, notarization, production Sparkle
+key, GitHub and both macOS Rust targets. The local path is now configured for later releases; 0.4.8 was subsequently
+completed locally after the CI upload stalled.
 
 Use a clean dedicated worktree so unrelated local changes stay intact. Run
 `cargo test --locked -p type-gpui -- --test-threads=1`,
@@ -365,6 +397,83 @@ legacy Tauri clients keep their existing latest.json endpoint. The first GPUI
 installation is manual; native updates only begin after that installation.
 The old `desktop-v*` workflow remains explicitly labeled Legacy Tauri.
 
+## Diagnose a stalled release; keep both build paths available
+
+On 2026-10-02, CI candidate run `36945725452` was cancelled at the default
+six-hour job limit. Functional checks took 17 minutes; both release architectures
+finished by 00:57:45 UTC, and the app passed notarization/Gatekeeper by 00:58:29.
+The DMG was created at 00:58:37, then `notarytool submit` produced no result before
+06:23:41. Apple's submission history contained the accepted app ZIP but no DMG
+submission from that run. This points to stalled submission/upload rather than
+hours of compilation; the exact network cause was not established.
+
+The local 0.4.8 candidate used the same immutable source commit `41d680c6`.
+Its app and DMG were accepted by Apple, then signed Sparkle artifacts were
+uploaded as a draft and promoted through workflow run `37019377691`. Both
+architectures, nested app/installer signatures, staples, Gatekeeper, manifest
+checksum and published feed/archive signatures were verified. The live feed
+now includes 0.4.8, 0.4.7 and 0.4.6; legacy Latest remains `desktop-v0.8.1`.
+Installer: https://github.com/oogxdd/type/releases/tag/gpui-v0.4.8.
+
+Keep local packaging and CI on the same `release.py` and promotion checks.
+The local Developer ID certificate, dedicated Sparkle key and validated
+`type-gpui-notary` profile are available on the maintainer's Mac. Preserve both
+Rust release caches (`aarch64-apple-darwin` and `x86_64-apple-darwin`); a debug
+cache does not accelerate these builds. Keep the machine awake and the KINGSTON
+volume connected while running locally. A codesign Keychain dialog requires
+local confirmation; the app-specific Apple password is separate from the Mac
+login password. Never launch a test against production notes.
+
+### Required bounds and visible progress
+
+The shared packaging script and CI workflow implement:
+
+- A five-minute limit for uploading each notarization archive, using ordinary
+  S3 upload (`--no-s3-acceleration`) rather than transfer acceleration.
+- A printed submission ID immediately after upload, status polling every
+  30 seconds and a twenty-minute processing deadline. Check Apple's service
+  with the ID if processing continues after the client stops.
+- A 90-minute candidate job limit and a 65-minute packaging-step limit in CI.
+- `desktop:release:local` preflight/setup/build commands and support for an
+  existing notarization profile.
+
+These limits apply to both local packaging and future CI candidates. The
+published 0.4.8 tag remains immutable and retains its original scripts; rerunning
+that old tag does not pick up these safeguards. Seventeen release-script/native-
+bridge tests passed locally. Monitor the build log to identify its actual phase;
+do not describe an active job as healthy merely because it has not failed.
+A missing submission ID is an upload problem to investigate, rather than a
+reason to wait for the default six-hour job cancellation.
+
+### Recovery commands
+
+```sh
+# GitHub status; live step output is available in the Actions web UI.
+gh run view RUN_ID --repo oogxdd/type --json status,conclusion,jobs
+# gh --log becomes available after the job finishes:
+gh run view RUN_ID --repo oogxdd/type --log
+
+# On the configured Mac, inspect uploads without exposing credentials:
+xcrun notarytool history --keychain-profile type-gpui-notary --output-format json
+xcrun notarytool info SUBMISSION_ID --keychain-profile type-gpui-notary --output-format json
+xcrun notarytool log SUBMISSION_ID --keychain-profile type-gpui-notary /private/tmp/type-notary-log.json
+```
+
+If no submission ID is produced within five minutes, inspect history and
+network/Apple availability; ordinary S3 upload is a recovery option. If an ID
+exists, inspect its status rather than submitting duplicates. An accepted
+submission can be stapled; an invalid one needs its log. A timed-out client does
+not cancel Apple's processing. For local packaging failure, preserve the signed
+bundle/DMG and logs; the warm Cargo cache avoids recompiling on a fresh-output
+retry. Never replace published assets for the same version.
+
+A failed CI build with no draft may be recovered by locally packaging the same
+immutable tag, uploading exactly the three candidate files and using the normal
+promotion workflow. Once one path creates the candidate, do not let another
+upload competing assets. Local upload of an already-existing tag does not need
+another tag push or a duplicate CI build. If packaging succeeded but only
+promotion failed, retry promotion while its live-feed baseline remains valid.
+
 ## Withdraw a problem release
 
 Run **GPUI promote or withdraw**, select `withdraw` and the problematic version.
@@ -376,9 +485,9 @@ installs. Keep old release assets available for the retained feed items.
 ## Verification status
 
 Local GPUI and release-script/native-bridge tests use synthetic profiles and
-keys. Actual Developer ID signing, notarization, Intel runtime, remote Actions
-and signed/notarized old→new UI replacement still require the first candidate
-smoke test. No release has been published as part of this integration.
+keys. Developer ID signing, notarization, remote promotion and the isolated
+signed/notarized old→new replacement test have passed. GPUI 0.4.8 was locally
+built and published on 2026-10-02; Intel runtime execution remains untested.
 
 Mobile is unchanged: [mobile distribution](MOBILE_AD_HOC_GITHUB_ACTIONS.md).
 Migration journal: [GPUI status](GPUI_MIGRATION_STATUS.md).

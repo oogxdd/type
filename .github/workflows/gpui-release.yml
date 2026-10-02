@@ -19,6 +19,7 @@ concurrency:
 jobs:
   candidate:
     runs-on: macos-15
+    timeout-minutes: 90
     environment: gpui-release
     permissions:
       contents: write
@@ -80,6 +81,7 @@ jobs:
             gh release download gpui-updates --pattern appcast.xml --dir "$RUNNER_TEMP/previous"
           fi
       - name: Build signed and notarized universal candidate
+        timeout-minutes: 65
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}

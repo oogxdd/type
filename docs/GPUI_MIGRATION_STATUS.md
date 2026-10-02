@@ -37,7 +37,15 @@ GPUI manifest/lock version is 0.4.8; release notes are in
 `docs/releases/gpui-v0.4.8.md`. Local release-script tests passed (9 tests). This Mac has the Developer ID
 identity and Sparkle key, but Apple notarization credentials/profile are absent;
 the signed universal candidate will be built by the configured GitHub workflow.
-Native tests and candidate/promotion checks are pending.
+All 47 GPUI tests and all CI checks passed. The CI candidate was cancelled at
+six hours after DMG submission stalled; the same tag was packaged locally.
+Published 0.4.8 via promotion `37019377691`; signatures, app/DMG notarization,
+Gatekeeper, both binary architectures, installer contents, checksum and live
+Sparkle feed/archive signatures passed. Live versions: 0.4.8/0.4.7/0.4.6;
+legacy Latest remains desktop-v0.8.1. Local Apple credentials are configured in
+Keychain. New preflight/profile support and bounded notarization/CI safeguards are
+integrated for subsequent releases (17 release-script tests pass).
+See docs/RELEASING.md for local/CI recovery and exact integration status.
 
 
 ### Preserve manually scrolled navigation during polling (2026-10-02)

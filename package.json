@@ -32,7 +32,8 @@
     "desktop:tauri:dmg:dev": "npm run --workspace type tauri:build:dev",
     "desktop:tauri:release": "bash apps/desktop/scripts/release-local.sh",
     "desktop:test": "cargo test -p type-gpui -- --test-threads=1",
-    "desktop:bundle": "python3 apps/gpui/scripts/desktop.py bundle"
+    "desktop:bundle": "python3 apps/gpui/scripts/desktop.py bundle",
+    "desktop:release:local": "python3 apps/gpui/scripts/release_local.py"
   },
   "version": "1.0.0",
   "dependencies": {

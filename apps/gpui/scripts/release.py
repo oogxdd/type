@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 
 from desktop import ROOT, update_configuration
@@ -51,12 +52,39 @@ def sign_bundle(bundle, identity):
     run('codesign', '--verify', '--deep', '--strict', '--verbose=2', bundle)
 
 
-def notarize(path, profile):
-    result = run('xcrun', 'notarytool', 'submit', path, '--keychain-profile', profile,
-                 '--wait', '--output-format', 'json', capture_output=True, text=True)
+def submit_notarization(path, profile):
+    print(f'Uploading {Path(path).name} for notarization (5 minute limit)...', flush=True)
+    try:
+        result = run('xcrun', 'notarytool', 'submit', path, '--keychain-profile', profile,
+                     '--no-s3-acceleration', '--no-wait', '--output-format', 'json',
+                     capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError('notarization upload exceeded 5 minutes; check submission history before retrying') from error
     response = json.loads(result.stdout)
-    if response.get('status') != 'Accepted':
-        raise RuntimeError(f'notarization rejected: {response.get("id")} ({response.get("status")})')
+    submission = response.get('id')
+    status = response.get('status', 'In Progress')
+    if not submission:
+        raise RuntimeError('notarization upload did not return a submission ID')
+    print(f'Notarization submission: {submission}', flush=True)
+    deadline = time.monotonic() + 1200
+    while status != 'Accepted':
+        if status != 'In Progress':
+            raise RuntimeError(f'notarization rejected: {submission} ({status}); retrieve its notarytool log')
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError(f'notarization exceeded 20 minutes: {submission}; processing may continue at Apple')
+        result = run('xcrun', 'notarytool', 'info', submission, '--keychain-profile', profile,
+                     '--output-format', 'json', capture_output=True, text=True,
+                     timeout=min(60, remaining))
+        status = json.loads(result.stdout).get('status')
+        print(f'Notarization {submission}: {status}', flush=True)
+        if status == 'In Progress':
+            time.sleep(min(30, max(0, deadline - time.monotonic())))
+    return submission
+
+
+def notarize(path, profile):
+    submit_notarization(path, profile)
     run('xcrun', 'stapler', 'staple', path)
     run('xcrun', 'stapler', 'validate', path)
 
@@ -75,10 +103,13 @@ def main():
         parser.error('release packaging requires macOS')
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', options.repository):
         parser.error('repository must be owner/name')
-    required = ['APPLE_SIGNING_IDENTITY', 'APPLE_ID', 'APPLE_PASSWORD', 'APPLE_TEAM_ID',
+    required = ['APPLE_SIGNING_IDENTITY',
                 'SPARKLE_PRIVATE_KEY', 'SPARKLE_PUBLIC_KEY']
     if any(not os.environ.get(key) for key in required):
         parser.error('missing required release credentials (see docs/RELEASING.md)')
+    if not os.environ.get('APPLE_NOTARIZATION_PROFILE') and any(
+            not os.environ.get(key) for key in ('APPLE_ID', 'APPLE_PASSWORD', 'APPLE_TEAM_ID')):
+        parser.error('set APPLE_NOTARIZATION_PROFILE or Apple ID/password/team credentials')
     if not os.environ['APPLE_SIGNING_IDENTITY'].startswith('Developer ID Application:'):
         parser.error('distribution requires a Developer ID Application identity')
     feed = f'https://github.com/{options.repository}/releases/download/gpui-updates/appcast.xml'
@@ -105,17 +136,14 @@ def main():
     sign_bundle(bundle, os.environ['APPLE_SIGNING_IDENTITY'])
     # Credentials are kept in the build machine's Keychain, never the bundle.
     with tempfile.TemporaryDirectory() as temp:
-        keychain_profile = 'type-gpui-notary'
-        run('xcrun', 'notarytool', 'store-credentials', keychain_profile,
-            '--apple-id', os.environ['APPLE_ID'], '--team-id', os.environ['APPLE_TEAM_ID'],
-            '--password', os.environ['APPLE_PASSWORD'])
+        keychain_profile = os.environ.get('APPLE_NOTARIZATION_PROFILE') or 'type-gpui-notary'
+        if not os.environ.get('APPLE_NOTARIZATION_PROFILE'):
+            run('xcrun', 'notarytool', 'store-credentials', keychain_profile,
+                '--apple-id', os.environ['APPLE_ID'], '--team-id', os.environ['APPLE_TEAM_ID'],
+                '--password', os.environ['APPLE_PASSWORD'])
         zipfile = Path(temp) / 'Type.zip'
         run('ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', bundle, zipfile)
-        result = run('xcrun', 'notarytool', 'submit', zipfile, '--keychain-profile', keychain_profile,
-                     '--wait', '--output-format', 'json', capture_output=True, text=True)
-        response = json.loads(result.stdout)
-        if response.get('status') != 'Accepted':
-            raise RuntimeError(f'app notarization rejected: {response.get("id")} ({response.get("status")})')
+        submit_notarization(zipfile, keychain_profile)
         run('xcrun', 'stapler', 'staple', bundle)
         run('xcrun', 'stapler', 'validate', bundle)
         run('spctl', '--assess', '--type', 'execute', '--verbose=2', bundle)

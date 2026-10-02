@@ -12,7 +12,7 @@ from unittest.mock import patch
 import xml.etree.ElementTree as ET
 import desktop
 from promote import NS, edit_feed, validate_candidate
-from release import release_version, notarize
+from release import release_version, notarize, submit_notarization
 
 
 class ReleaseTests(unittest.TestCase):
@@ -153,6 +153,29 @@ class ReleaseTests(unittest.TestCase):
         with patch('release.run', return_value=subprocess.CompletedProcess([], 0, '{"status":"Invalid","id":"fixture"}')) as run:
             with self.assertRaises(RuntimeError):
                 notarize(self.root / 'fixture.dmg', 'fixture-profile')
+            self.assertEqual(run.call_count, 1)
+
+    def test_notarization_upload_is_bounded_before_stapling(self):
+        with patch('release.run', side_effect=subprocess.TimeoutExpired('notarytool', 300)) as run:
+            with self.assertRaisesRegex(RuntimeError, 'upload exceeded 5 minutes'):
+                notarize(self.root / 'fixture.dmg', 'fixture-profile')
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual(run.call_args.kwargs['timeout'], 300)
+            self.assertIn('--no-s3-acceleration', run.call_args.args)
+
+    def test_notarization_reports_submission_and_polls_until_accepted(self):
+        responses = [subprocess.CompletedProcess([], 0, response) for response in (
+            '{"id":"fixture-id"}', '{"status":"In Progress"}', '{"status":"Accepted"}')]
+        with patch('release.run', side_effect=responses) as run, patch('release.time.sleep'), patch('release.time.monotonic', return_value=0):
+            self.assertEqual(submit_notarization(self.root / 'fixture.dmg', 'fixture-profile'), 'fixture-id')
+            self.assertEqual(run.call_count, 3)
+            self.assertIn('info', run.call_args.args)
+
+    def test_notarization_processing_limit_keeps_submission_id(self):
+        response = subprocess.CompletedProcess([], 0, '{"id":"fixture-id"}')
+        with patch('release.run', return_value=response) as run, patch('release.time.monotonic', side_effect=[0, 1201]):
+            with self.assertRaisesRegex(RuntimeError, 'exceeded 20 minutes: fixture-id'):
+                submit_notarization(self.root / 'fixture.dmg', 'fixture-profile')
             self.assertEqual(run.call_count, 1)
 
     @unittest.skipUnless(sys.platform == 'darwin', 'native bridge requires macOS')
