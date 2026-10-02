@@ -44,7 +44,7 @@ impl TypeApp {
                     .on_mouse_down(MouseButton::Right, |_, window, cx| { window.prevent_default(); cx.stop_propagation(); })
                     .on_click(cx.listener(|this, _, window, cx| { window.prevent_default(); cx.stop_propagation(); this.close_modal(window, cx); })))
                 .child(div().id("palette-panel").occlude().child(command
-                    .placeholder("Search commands and notes · mv to file")
+                    .placeholder("Search commands · mv to folder")
                     .on_query(move |_, _, cx| { let _ = query_view.update(cx, |_, cx| cx.notify()); })
                     .on_confirm(move |index, window, cx| {
                         if let Some(choice) = choices.get(index.section).and_then(|items| items.get(index.row)).cloned() {
@@ -58,6 +58,15 @@ impl TypeApp {
         }
         let title = match &modal.kind {
             ModalKind::Palette => "Commands · type mv to file notes".into(),
+            ModalKind::CreateFolder(parent) => format!(
+                "New folder in {}",
+                if parent.is_empty() {
+                    "Folders root"
+                } else {
+                    parent
+                }
+            ),
+            ModalKind::StreamDate => "Review a day · YYYY-MM-DD (local time)".into(),
             ModalKind::Rename(_) => "Rename".into(),
             ModalKind::CreateProfile => "Add profile · absolute folder path or ~/…".into(),
             ModalKind::Remote => "Git remote URL".into(),
@@ -201,6 +210,7 @@ impl TypeApp {
     fn render_navigation(&self, cx: &mut Context<Self>) -> impl IntoElement {
         use gpui_kit::assets::IconName as Icons;
         let view = cx.weak_entity();
+        let root_menu_view = view.clone();
         let status = if let Some(error) = &self.error {
             error.clone()
         } else if let Some(capture) = &self.capture {
@@ -278,24 +288,52 @@ impl TypeApp {
                             .ghost()
                             .small()
                             .icon(Icons::ListFilter)
-                            .tooltip("Filter notes")
+                            .label(self.filter.label())
+                            .tooltip("Stream view · status and date")
                             .dropdown_menu(move |mut menu, _, _| {
                                 for filter in Filter::ALL {
                                     let view = view.clone();
                                     menu = menu.item(PopupMenuItem::new(filter.label()).on_click(
                                         move |_, window, cx| {
                                             let _ = view.update(cx, |this, cx| {
-                                                if this.flush(true, cx).is_ok() {
-                                                    this.filter = filter;
-                                                    this.set_view(View::Feed, window, cx);
-                                                }
+                                                this.execute(Choice::Filter(filter), window, cx);
                                             });
                                         },
                                     ));
                                 }
-                                menu
+                                let view_date = view.clone();
+                                menu = menu.separator().item(
+                                    PopupMenuItem::new("Review a day…").on_click(
+                                        move |_, window, cx| {
+                                            let _ = view_date.update(cx, |this, cx| {
+                                                this.execute(Choice::StreamDate, window, cx)
+                                            });
+                                        },
+                                    ),
+                                );
+                                let view_all = view.clone();
+                                menu.item(PopupMenuItem::new("All dates").on_click(
+                                    move |_, window, cx| {
+                                        let _ = view_all.update(cx, |this, cx| {
+                                            this.execute(Choice::ClearDate, window, cx)
+                                        });
+                                    },
+                                ))
                             }),
                     ),
+            )
+            .when(
+                self.view == View::Feed && self.prefs.stream_day.is_some(),
+                |panel| {
+                    panel.child(
+                        div()
+                            .px_5()
+                            .py_2()
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(format!("Reviewing {}", self.prefs.stream_day.unwrap())),
+                    )
+                },
             )
             .when(self.view == View::Trash, |panel| {
                 panel.child(
@@ -323,7 +361,22 @@ impl TypeApp {
                 panel.child(
                     div()
                         .id("root-drop")
-                        .h(px(18.))
+                        .map(|element| {
+                            #[cfg(test)]
+                            {
+                                use gpui_kit::test::TestSupportExt;
+                                element.test_support()
+                            }
+                            #[cfg(not(test))]
+                            {
+                                element
+                            }
+                        })
+                        .h(px(36.))
+                        .px_4()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .child("Folders root · right-click to create a folder")
                         .w_full()
                         .drag_over::<DraggedRow>(|style, _, _, cx| style.bg(cx.theme().accent))
                         .on_drop(cx.listener(|this, drag: &DraggedRow, window, cx| {
@@ -334,7 +387,23 @@ impl TypeApp {
                                 window,
                                 cx,
                             )
-                        })),
+                        }))
+                        .context_menu(move |menu, _, _| {
+                            let view = root_menu_view.clone();
+                            menu.item(PopupMenuItem::new("New folder at root…").on_click(
+                                move |_, window, cx| {
+                                    let _ = view.update(cx, |this, cx| {
+                                        if this.view == View::Folders {
+                                            this.execute(
+                                                Choice::NewFolder(String::new()),
+                                                window,
+                                                cx,
+                                            );
+                                        }
+                                    });
+                                },
+                            ))
+                        }),
                 )
             })
             .when(self.prefs.rail, |panel| {

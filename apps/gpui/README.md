@@ -41,6 +41,26 @@ The legacy Tauri shell remains available via `desktop:tauri:app` and related
 - Vim: i/a/I/A, o/O, v/V, hjkl/wbe, operators, counts, text objects, p/P,
   u, Ctrl+R and `/` search. Ctrl+J/K moves five rendered rows.
 
+In **Folders**, right-click a folder → **New folder here…**, or choose **New
+folder at root…**. The **Folders root** area below the tree also offers a root
+creation menu. Empty folders persist without placeholder notes.
+
+To file the focused Stream note, press Cmd+K, type `mv ` and a folder name or
+relative path. ↑/↓ choose, Tab/→ complete and drill down, Enter moves. A completed
+path stays selectable even when its folder has no children. Missing destination
+folders can be created by the same action. Filing advances to the next visible
+Stream note.
+
+The Stream filter menu offers **Active**, **Unreviewed**, **All**, **Archived** and
+**Reviewed**, plus **Review a day…** (`YYYY-MM-DD`, local creation date) and **All
+dates**. View preferences persist locally; Cmd+N returns to today's active Stream.
+Active hides archived notes; Unreviewed hides both archived and reviewed notes.
+Cmd+K → **Archive / unarchive note** or **Mark / unmark reviewed** changes the
+frontmatter marker in place and advances focus. These markers do not move a note
+to Trash. At the end, the preceding visible note is used; an empty filtered view
+clears the editor without generating another capture. The palette no longer
+builds an Open command for every note.
+
 Native tests use their own temporary files:
 
 ```sh

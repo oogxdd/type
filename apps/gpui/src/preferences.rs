@@ -5,6 +5,8 @@ use type_core::AppEnv;
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
 pub struct Preferences {
+    pub stream_filter: crate::navigation::Filter,
+    pub stream_day: Option<chrono::NaiveDate>,
     pub dark: bool,
     pub vim: bool,
     pub font_size: f32,
@@ -17,6 +19,8 @@ pub struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
+            stream_filter: crate::navigation::Filter::Active,
+            stream_day: None,
             dark: true,
             vim: true,
             font_size: 17.,

@@ -5,6 +5,8 @@ use type_core::{application::git_sync::GitSyncUseCases, *};
 pub enum ModalKind {
     Palette,
     Rename(String),
+    CreateFolder(String),
+    StreamDate,
     CreateProfile,
     Remote,
     Unlock,
@@ -24,6 +26,10 @@ pub struct Modal {
 pub enum Choice {
     CommandPalette,
     New,
+    NewFolder(String),
+    Filter(Filter),
+    StreamDate,
+    ClearDate,
     Feed,
     Folders,
     TrashView,
@@ -88,7 +94,8 @@ impl Choice {
             | Self::Split
             | Self::Copy
             | Self::Reload => "Selection",
-            Self::New | Self::NewProfile => "Create",
+            Self::New | Self::NewProfile | Self::NewFolder(_) => "Create",
+            Self::Filter(_) | Self::StreamDate | Self::ClearDate => "View",
             Self::Feed | Self::Folders | Self::TrashView | Self::MoveNote(_) => "Navigate",
             Self::CommandPalette | Self::Settings | Self::BackToNotes | Self::Theme | Self::Vim => {
                 "View"
@@ -198,9 +205,9 @@ impl TypeApp {
             let items = self
                 .folder_tree
                 .as_ref()
-                .map(|r| navigation::folders(r, &self.previews))
+                .map(navigation::folder_destinations)
                 .unwrap_or_default();
-            let dirs = navigation::destinations(&items);
+            let dirs = items;
             let mut entries: Vec<_> = navigation::move_suggestions(&dirs, query)
                 .into_iter()
                 .map(|p| Entry {
@@ -209,7 +216,7 @@ impl TypeApp {
                 })
                 .collect();
             if !query.trim().is_empty()
-                && !dirs.iter().any(|d| d == query.trim())
+                && !dirs.iter().any(|d| d == query.trim().trim_end_matches('/'))
                 && type_gpui::backend::validate_destination(query.trim_end_matches('/'), false)
                     .is_ok()
             {
@@ -218,6 +225,16 @@ impl TypeApp {
                     label: format!("Create folder and move to {path}"),
                     choice: Choice::Move(path),
                 });
+            }
+            let current = query.trim().trim_end_matches('/');
+            if query.ends_with('/') && dirs.iter().any(|d| d == current) {
+                entries.insert(
+                    0,
+                    Entry {
+                        label: format!("Move here: {current}"),
+                        choice: Choice::Move(current.into()),
+                    },
+                );
             }
             if query.is_empty() {
                 entries.insert(
@@ -232,6 +249,20 @@ impl TypeApp {
         }
         let mut entries = vec![
             ("New note", Choice::New),
+            ("New folder at root…", Choice::NewFolder(String::new())),
+            ("Stream: review a day…", Choice::StreamDate),
+            ("Stream: all dates", Choice::ClearDate),
+            (
+                "Stream: active (hide archived)",
+                Choice::Filter(Filter::Active),
+            ),
+            (
+                "Stream: unreviewed (hide reviewed and archived)",
+                Choice::Filter(Filter::Unreviewed),
+            ),
+            ("Stream: all notes", Choice::Filter(Filter::All)),
+            ("Stream: archived", Choice::Filter(Filter::Archived)),
+            ("Stream: reviewed", Choice::Filter(Filter::Reviewed)),
             ("Open Stream", Choice::Feed),
             ("Open Folders", Choice::Folders),
             ("Open Trash", Choice::TrashView),
@@ -239,8 +270,8 @@ impl TypeApp {
             ("Rename selection…", Choice::Rename),
             ("Move selection to Trash", Choice::Trash),
             ("Delete selection permanently…", Choice::Delete),
-            ("Toggle reviewed marker", Choice::Reviewed),
-            ("Toggle archived marker", Choice::ArchiveFlag),
+            ("Mark / unmark reviewed · next note", Choice::Reviewed),
+            ("Archive / unarchive note · next note", Choice::ArchiveFlag),
             ("Duplicate note", Choice::Duplicate),
             ("Split note at cursor", Choice::Split),
             ("Copy note body", Choice::Copy),
@@ -281,15 +312,6 @@ impl TypeApp {
             entries.push(Entry {
                 label: format!("Profile: {}", profile.name),
                 choice: Choice::Profile(profile.id.clone()),
-            });
-        }
-        for n in self.previews.values() {
-            if n.path.starts_with("_system/archive/") {
-                continue;
-            }
-            entries.push(Entry {
-                label: format!("Open: {} · {}", navigation::title(&n.content), n.path),
-                choice: Choice::MoveNote(n.path.clone()),
             });
         }
         let query = query.to_lowercase();
@@ -710,6 +732,30 @@ impl TypeApp {
         };
         let result: Result<(), String> = (|| {
             match kind {
+                ModalKind::CreateFolder(parent) => {
+                    if value.is_empty() || value.contains(['/', '\\']) {
+                        return Err("Enter a folder name without separators.".into());
+                    }
+                    let path = if parent.is_empty() {
+                        value.clone()
+                    } else {
+                        format!("{parent}/{value}")
+                    };
+                    self.backend.create_folder(&path)?;
+                    self.revision += 1;
+                    self.folder_tree = Some(self.backend.notes()?.get_tree()?);
+                    self.rebuild_navigation(cx);
+                    self.select_row(&path.into(), cx);
+                }
+                ModalKind::StreamDate => {
+                    self.flush(true, cx)?;
+                    self.prefs.stream_day = Some(
+                        chrono::NaiveDate::parse_from_str(&value, "%Y-%m-%d")
+                            .map_err(|_| "Enter a date as YYYY-MM-DD.".to_string())?,
+                    );
+                    self.persist_preferences();
+                    self.set_view(View::Feed, window, cx);
+                }
                 ModalKind::Rename(path) => {
                     self.flush(false, cx)?;
                     let name = if path.ends_with(".md") && !value.ends_with(".md") {
@@ -885,6 +931,32 @@ impl TypeApp {
             match choice {
                 Choice::CommandPalette => self.show_modal(ModalKind::Palette, "", window, cx),
                 Choice::New => self.new_note(window, cx),
+                Choice::NewFolder(parent) => {
+                    self.show_modal(ModalKind::CreateFolder(parent), "", window, cx)
+                }
+                Choice::StreamDate => self.show_modal(
+                    ModalKind::StreamDate,
+                    &self
+                        .prefs
+                        .stream_day
+                        .unwrap_or_else(|| chrono::Local::now().date_naive())
+                        .to_string(),
+                    window,
+                    cx,
+                ),
+                Choice::ClearDate => {
+                    self.flush(true, cx)?;
+                    self.prefs.stream_day = None;
+                    self.persist_preferences();
+                    self.set_view(View::Feed, window, cx);
+                }
+                Choice::Filter(filter) => {
+                    self.flush(true, cx)?;
+                    self.filter = filter;
+                    self.prefs.stream_filter = filter;
+                    self.persist_preferences();
+                    self.set_view(View::Feed, window, cx);
+                }
                 Choice::Feed => self.set_view(View::Feed, window, cx),
                 Choice::Folders => self.set_view(View::Folders, window, cx),
                 Choice::TrashView => self.set_view(View::Trash, window, cx),
@@ -901,11 +973,16 @@ impl TypeApp {
                         ARCHIVE_FOLDER.into()
                     };
                     let paths = self.targets(cx);
+                    if paths.is_empty() {
+                        return Err("Select a note or folder first.".into());
+                    }
+                    let next_note = self.next_review_note(&paths, cx);
                     self.backend.move_items(
                         paths.clone(),
                         &destination,
                         destination == ARCHIVE_FOLDER,
                     )?;
+                    let mut cached_previews = std::mem::take(&mut self.previews);
                     for path in paths {
                         let name = path.rsplit('/').next().unwrap();
                         let next = if destination.is_empty() {
@@ -913,8 +990,24 @@ impl TypeApp {
                         } else {
                             format!("{destination}/{name}")
                         };
+                        let prefix = format!("{path}/");
+                        let old_keys: Vec<_> = cached_previews
+                            .keys()
+                            .filter(|p| **p == path || p.starts_with(&prefix))
+                            .cloned()
+                            .collect();
+                        for key in old_keys {
+                            if let Some(mut preview) = cached_previews.remove(&key) {
+                                preview.path = format!("{next}{}", &key[path.len()..]);
+                                cached_previews.insert(preview.path.clone(), preview);
+                            }
+                        }
                         self.remap(&path, &next);
                     }
+                    self.previews = cached_previews;
+                    self.folder_tree = Some(self.backend.notes()?.get_tree()?);
+                    self.rebuild_navigation(cx);
+                    self.advance_review(next_note, window, cx);
                     self.refresh(window, cx);
                 }
                 Choice::Rename => {
@@ -935,7 +1028,9 @@ impl TypeApp {
                 }
                 Choice::Reviewed | Choice::ArchiveFlag => {
                     self.flush(false, cx)?;
-                    for path in self.targets(cx).into_iter().filter(|p| p.ends_with(".md")) {
+                    let paths = self.targets(cx);
+                    let next_note = self.next_review_note(&paths, cx);
+                    for path in paths.iter().filter(|p| p.ends_with(".md")) {
                         let meta = self.backend.notes()?.get_note_meta(&path)?;
                         self.backend.notes()?.update_note_markers(
                             &path,
@@ -951,8 +1046,12 @@ impl TypeApp {
                             },
                         )?;
                     }
-                    self.previews.clear();
+                    for preview in self.backend.notes()?.list_note_previews(paths)? {
+                        self.previews.insert(preview.path.clone(), preview);
+                    }
                     self.revision += 1;
+                    self.rebuild_navigation(cx);
+                    self.advance_review(next_note, window, cx);
                     self.refresh(window, cx);
                 }
                 Choice::Duplicate => {
@@ -1068,6 +1167,52 @@ impl TypeApp {
         cx.notify();
     }
 
+    fn next_review_note(&self, targets: &[String], cx: &App) -> Option<SharedString> {
+        if self.view != View::Feed {
+            return None;
+        }
+        let mut visible = vec![];
+        let mut index = 0;
+        while let Some(entry) = self.tree.read(cx).entry(index) {
+            let id = &entry.item().id;
+            if !self.folder_ids.contains(id) {
+                visible.push(id.clone());
+            }
+            index += 1;
+        }
+        let at = visible
+            .iter()
+            .position(|id| targets.iter().any(|p| p == id.as_str()))?;
+        visible
+            .iter()
+            .skip(at + 1)
+            .chain(visible[..at].iter().rev())
+            .find(|id| !targets.iter().any(|p| p == id.as_str()))
+            .cloned()
+    }
+
+    fn advance_review(
+        &mut self,
+        next: Option<SharedString>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.view != View::Feed {
+            return;
+        }
+        self.selected.clear();
+        if let Some(id) = next {
+            self.select_row(&id, cx);
+            self.open_note(id, true, window, cx);
+        } else if !navigation::contains(&self.nav_items, &self.active) {
+            self.active = "".into();
+            self.tree.update(cx, |tree, cx| {
+                tree.set_selected_index(None, cx);
+                tree.focus(window, cx);
+            });
+        }
+    }
+
     pub fn menu_for(
         view: WeakEntity<Self>,
         id: SharedString,
@@ -1078,6 +1223,8 @@ impl TypeApp {
         let actions = if folder {
             vec![
                 ("New note here", Choice::New),
+                ("New folder here…", Choice::NewFolder(id.to_string())),
+                ("New folder at root…", Choice::NewFolder(String::new())),
                 ("Move…", Choice::MoveMode),
                 ("Rename…", Choice::Rename),
                 ("Move to Trash", Choice::Trash),

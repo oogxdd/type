@@ -129,6 +129,15 @@ impl Backend {
         self.notes()?.move_items(paths, destination.into())
     }
 
+    /// Existing core move semantics create a destination even for an empty selection.
+    pub fn create_folder(&self, path: &str) -> Result<(), String> {
+        validate_destination(path, false)?;
+        if path.is_empty() || self.root.join(path).exists() {
+            return Err("A folder or file with this name already exists.".into());
+        }
+        self.notes()?.move_items(vec![], path.into())
+    }
+
     pub fn rename(&self, path: &str, name: &str) -> Result<String, String> {
         validate_relative(path)?;
         if name.is_empty() || name.starts_with('.') || name.contains(['/', '\\']) || name == ".." {

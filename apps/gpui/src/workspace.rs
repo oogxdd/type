@@ -13,13 +13,13 @@ impl TypeApp {
             updater: None,
             backend,
             profiles,
+            filter: prefs.stream_filter,
             prefs,
             locked,
             focus: cx.focus_handle(),
             navigation_focus: cx.focus_handle(),
             view: View::Feed,
             navigation_focused: false,
-            filter: Filter::Active,
             folder_tree: None,
             previews: HashMap::new(),
             nav_items: vec![],
@@ -304,7 +304,10 @@ impl TypeApp {
                             this.active = "".into();
                             if let Some(id) = this.first_note(cx) {
                                 this.open_note(id, false, window, cx);
-                            } else {
+                            } else if this.previews.is_empty()
+                                && this.prefs.stream_day.is_none()
+                                && this.filter == Filter::Active
+                            {
                                 this.new_note(window, cx);
                             }
                         }
@@ -335,6 +338,11 @@ impl TypeApp {
                 self.view == View::Trash,
             ),
         };
+        if self.view == View::Feed {
+            if let Some(day) = self.prefs.stream_day {
+                navigation::retain_day(&mut self.nav_items, &self.previews, day);
+            }
+        }
         fn live_titles(items: &mut [navigation::Item], notes: &HashMap<SharedString, Note>) {
             for item in items {
                 if let Some(note) = notes.get(item.id.as_str()) {
@@ -384,6 +392,17 @@ impl TypeApp {
                         )
                 })
                 .collect()
+        }
+        if self.view == View::Feed && self.prefs.stream_day.is_some() {
+            fn expand(items: &[navigation::Item], out: &mut HashSet<SharedString>) {
+                for item in items {
+                    if item.folder {
+                        out.insert(item.id.clone().into());
+                        expand(&item.children, out);
+                    }
+                }
+            }
+            expand(&self.nav_items, &mut expanded);
         }
         self.roots = convert(&self.nav_items, &expanded, &today_id, defaults);
         self.folder_ids.clear();
@@ -674,6 +693,9 @@ impl TypeApp {
         }
         self.view = View::Feed;
         self.filter = navigation::Filter::Active;
+        self.prefs.stream_filter = self.filter;
+        self.prefs.stream_day = None;
+        self.persist_preferences();
         self.settings = false;
         self.selected.clear();
         let paths: HashSet<_> = navigation::note_paths(&root).into_iter().collect();
@@ -724,7 +746,16 @@ impl TypeApp {
         self.roots.clear();
         self.rebuild_navigation(cx);
         if let Some(id) = self.saved_selection.get(&view).cloned() {
-            self.select_row(&id, cx);
+            if navigation::contains(&self.nav_items, &id) {
+                self.select_row(&id, cx);
+            }
+        }
+        if view == View::Feed && !navigation::contains(&self.nav_items, &self.active) {
+            self.active = "".into();
+            if let Some(id) = self.first_note(cx) {
+                self.open_note(id.clone(), false, window, cx);
+                self.select_row(&id, cx);
+            }
         }
         self.tree.update(cx, |t, cx| t.focus(window, cx));
         cx.notify();
@@ -766,6 +797,10 @@ impl TypeApp {
     }
 
     pub fn targets(&self, cx: &App) -> Vec<String> {
+        if !self.navigation_focused && !self.active.is_empty() && !self.active.starts_with("draft:")
+        {
+            return vec![self.active.to_string()];
+        }
         if !self.selected.is_empty() {
             return self
                 .selected

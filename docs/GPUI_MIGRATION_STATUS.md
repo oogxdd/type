@@ -28,6 +28,44 @@ Updated: 2026-10-02. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Stream review and folder organization (2026-10-02)
+
+Transferred to the primary checkout on `main` at the user’s request. The
+checkout was fast-forwarded from `081cc4cb` to existing `origin/main` (`22013349`)
+to bring in the already-integrated GPUI shell. Only this task’s changes were
+transferred; `codex/gpui-open-folders` and its preview were not merged. The local
+voice-memos script and untracked import work are preserved.
+
+- Folder context menus create empty child folders or root folders. The root
+  drop area also has a creation menu. Uses the existing core empty `move_items`
+  destination behavior; no new core/Tauri/FFI endpoint or placeholder note.
+  Names, protected destinations and existing-name collisions are checked.
+- Cmd+K no longer enumerates/previews/titles every note to build Open commands.
+  Its few Stream/Folders/Trash navigation commands remain. `mv` reads only folder
+  metadata, supports fuzzy names/relative paths, Tab/right completion and
+  creation of missing destinations. Completed empty folders remain selectable.
+- Stream view menu and palette offer status filters plus an exact local-calendar
+  day (`YYYY-MM-DD`). Both persist device-locally. Active hides archived;
+  Unreviewed hides archived and reviewed. Cmd+N resets to active/all dates.
+- Archive/Reviewed are existing frontmatter markers, distinct from Trash. The
+  focused editor takes precedence over stale sidebar selections. Applying a
+  marker or filing via `mv` opens/focuses the next visible Stream note, skipping
+  date headers; at the end it falls back to the preceding visible note. A fully
+  processed view clears the editor rather than creating an unexpected capture.
+  Changed previews update immediately and obsolete refreshes are invalidated.
+- Functional coverage includes actual Cmd+K/Tab/Enter, daily filtering, marker
+  persistence, empty-list focus, root/child context menus, and preserving moved
+  note bodies. Only synthetic temporary profiles are used.
+- Transferred implementation: **49 GPUI tests passed** (28 library + 21
+  native/binary), including Cmd+K/mv, daily review, root/child right-click menus,
+  marker persistence and next-note focus. Formatting and diff checks passed.
+  The count excludes the separate ordinary-folder preview tests.
+  The local dev bundle was rebuilt from this primary checkout successfully.
+- The transferred feature edits were removed from `gpui-open-folders`; its prior
+  preview changes remain there, along with a small existing test compatibility
+  repair (`Background::as_solid()`). No preview merge, production data access,
+  installed app replacement, launch/restart, push or release was performed.
+
 ### Native release 0.4.8 (2026-10-02)
 
 The user requested a locally built GPUI release. Release branch
@@ -336,7 +374,7 @@ Current bundle: `/Volumes/KINGSTON/Projects/type/app/experiments/gpui-demo/targe
 1. Continue functional coverage: editor-only Tab, Normal/Visual paste/IME guards, move/rename after autosave, multi-selection, profile-switch flush, close/quit conflicts. Existing tests cover Ctrl+W, nav Tab, Unicode insert/save, Visual inclusive selection and mode preservation, grouped palette confirmation, backdrop click, filesystem conflicts/collisions, date groups and pure DnD.
 2. Stream/Folders expansion now survives switching views. Confirm the nested Stream presentation with the user; headless tests do not judge appearance.
 3. Lower priority for the user's current text-notes cutover: retain failed recording bytes + retry (`pending_recording` is not populated on stop), and add automatic processing after capture/import/sync respecting settings. Recording/OCR are not important to the user now; transcription is useful later but manual Queue is acceptable for the trial. No microphone permission/test has been performed. Validate filename format / OCR provider settings when revisiting these workflows.
-4. Review profile rename/forget and standalone folder creation. Profile rename is now available under Settings → Working folders; profile deletion and standalone folder creation have no UI. Security panic reset clears profiles via reload, but needs a functional isolated-fixture test. Optional extension policy needs review before production use.
+4. Review profile rename/forget and standalone folder creation. Profile rename is now available under Settings → Working folders; profile deletion and standalone folder creation now have GPUI UI. Security panic reset clears profiles via reload, but needs a functional isolated-fixture test. Optional extension policy needs review before production use.
 5. Root app/dev/build scripts target GPUI; explicit `desktop:tauri:*` aliases and `desktop:dmg:dev` retain Tauri. Local `desktop:release` emits an unsigned `.app`; `desktop:release:package` and the native candidate workflow build universal signed/notarized DMGs with Sparkle. Python >=3.12 is configured in release/CI (launcher alone needs >=3.11). Real Developer ID/notary and installer validation await the first candidate; isolated ad-hoc bundle verification passed.
 6. CI adds native macOS tests/bundle; Linux Rust job excludes type-gpui so Tauri/core checks keep their existing dependencies. Remote CI and Linux/Windows runtime remain unverified.
 7. Native updater, signing/notarization, universal installer and draft → promote/withdraw pipelines are implemented; see the updater milestone and `docs/RELEASING.md`. Configure Sparkle keys and complete a real signed/notarized old→new smoke test before production promotion. `desktop-v*` remains the legacy Tauri channel; GPUI uses `gpui-v*` plus its dedicated feed. No publication is authorized by implementation alone.

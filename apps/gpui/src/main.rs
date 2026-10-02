@@ -31,7 +31,7 @@ use gpui_kit::{
             TextDecorationCollection,
         },
         list::ListItem,
-        menu::{DropdownMenu, PopupMenu, PopupMenuItem},
+        menu::{ContextMenuExt, DropdownMenu, PopupMenu, PopupMenuItem},
         resizable::{h_resizable, resizable_panel},
         tree::{TreeItem, TreeState, tree},
         v_flex,
@@ -478,7 +478,7 @@ impl TypeApp {
         count_notes(&self.nav_items, &mut counts);
         let menu_view = view.clone();
         let menu_folders = folders.clone();
-        tree(&self.tree, move |ix, entry, selected, _, cx| {
+        tree(&self.tree, move |_, entry, selected, _, cx| {
             let id = entry.item().id.clone();
             let is_folder = folders.contains(&id);
             let is_section = stream && id.starts_with("feed:section:");
@@ -501,7 +501,7 @@ impl TypeApp {
                 .as_ref()
                 .filter(|(target, _)| *target == id)
                 .map(|(_, position)| *position);
-            ListItem::new(ix)
+            ListItem::new(SharedString::from(format!("nav-row-{id}")))
                 .selected(selected)
                 .when(multi.contains(&id), |row| row.bg(cx.theme().accent))
                 .h(px(if is_section { 29. } else { 32. }))

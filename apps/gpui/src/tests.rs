@@ -1,5 +1,4 @@
 use super::{Backend, TypeApp, View, vim};
-use chrono::Datelike;
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{
     AnyWindowHandle, AppContext, Bounds, Entity, Focusable, Modifiers, TestAppContext,
@@ -167,10 +166,12 @@ fn earlier_stream_section_expands_on_click(cx: &mut TestAppContext) {
         assert!(app.tree.read(cx).index_of(&month.id).is_none());
     })
     .unwrap();
-    let elapsed_days = chrono::Local::now().weekday().num_days_from_monday() + 1;
-    let earlier_y = 28. + 70. + 44. + 29. + elapsed_days as f32 * 32. + 14.;
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("nav-row-feed:section:earlier", cx);
+    })
+    .unwrap();
     let mut visual = VisualTestContext::from_window(window, cx);
-    visual.simulate_click(point(px(80.), px(earlier_y)), Modifiers::default());
     visual.run_until_parked();
     visual.update(|_, cx| {
         let app = app.read(cx);
@@ -960,4 +961,204 @@ fn background_refresh_preserves_manual_navigation_scroll(cx: &mut TestAppContext
         );
     })
     .unwrap();
+}
+
+#[gpui_kit::test]
+fn folder_creation_move_palette_and_daily_review(cx: &mut TestAppContext) {
+    use super::commands::{Choice, ModalKind};
+    use chrono::TimeZone;
+    let f = Fixture::new();
+    let day = chrono::Local::now().date_naive();
+    let ms = chrono::Local
+        .from_local_datetime(&day.and_hms_opt(12, 0, 0).unwrap())
+        .single()
+        .unwrap()
+        .timestamp_millis();
+    let first =
+        f.0.create(STREAM_FOLDER, "first review".into(), Some(ms + 2000))
+            .unwrap();
+    let second =
+        f.0.create(STREAM_FOLDER, "second review".into(), Some(ms + 1000))
+            .unwrap();
+    let third =
+        f.0.create(STREAM_FOLDER, "third review".into(), Some(ms))
+            .unwrap();
+    let older =
+        f.0.create(STREAM_FOLDER, "yesterday".into(), Some(ms - 86400000))
+            .unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.set_view(View::Folders, window, cx);
+            app.execute(Choice::NewFolder("".into()), window, cx);
+            app.modal
+                .as_ref()
+                .unwrap()
+                .input
+                .update(cx, |input, cx| input.set_value("Projects", window, cx));
+            app.submit_modal(window, cx);
+            app.execute(Choice::NewFolder("Projects".into()), window, cx);
+            app.modal
+                .as_ref()
+                .unwrap()
+                .input
+                .update(cx, |input, cx| input.set_value("Demo", window, cx));
+            app.submit_modal(window, cx);
+            assert!(f.0.root.join("Projects/Demo").is_dir());
+            assert!(f.0.create_folder("Projects/Demo").is_err());
+            assert!(f.0.create_folder("_system/me").is_err());
+            assert!(f.0.create_folder("../escape").is_err());
+            app.show_modal(ModalKind::StreamDate, &day.to_string(), window, cx);
+            app.submit_modal(window, cx);
+            assert!(!super::navigation::contains(&app.nav_items, &older));
+            app.open_note(first.clone().into(), true, window, cx);
+            app.select_row(&first.clone().into(), cx);
+            // A stale navigation multiselection must never override the focused editor.
+            app.selected.insert(older.clone().into());
+            assert_eq!(app.targets(cx), vec![first.clone()]);
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    press(cx, window, "cmd-k");
+    cx.simulate_input(window, "Archive / unarchive");
+    cx.run_until_parked();
+    press(cx, window, "enter");
+    cx.update_window(window, |_, window, cx| {
+        assert_eq!(app.read(cx).active.as_str(), second);
+        assert!(
+            app.read(cx).notes[&app.read(cx).active]
+                .editor
+                .as_ref()
+                .unwrap()
+                .focus_handle(cx)
+                .is_focused(window)
+        );
+        assert!(!super::navigation::contains(
+            &app.read(cx).nav_items,
+            &first
+        ));
+        assert!(
+            f.0.notes()
+                .unwrap()
+                .get_note_meta(&first)
+                .unwrap()
+                .archived_ms
+                .is_some()
+        );
+    })
+    .unwrap();
+    press(cx, window, "cmd-k");
+    cx.simulate_input(window, "mv Projects/De");
+    cx.run_until_parked();
+    press(cx, window, "tab");
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        assert_eq!(
+            app.modal
+                .as_ref()
+                .unwrap()
+                .palette
+                .as_ref()
+                .unwrap()
+                .read(cx)
+                .query(cx),
+            "mv Projects/Demo/"
+        );
+        assert!(
+            app.entries("mv Projects/Demo/", cx)
+                .iter()
+                .any(|e| matches!(&e.choice, Choice::Move(p) if p == "Projects/Demo"))
+        );
+    })
+    .unwrap();
+    press(cx, window, "enter");
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            assert_eq!(app.active.as_str(), third);
+            let moved = format!("Projects/Demo/{}", second.rsplit('/').next().unwrap());
+            assert_eq!(
+                f.0.notes().unwrap().read_note(&moved).unwrap(),
+                "second review"
+            );
+            assert!(!f.0.root.join(&second).exists());
+            app.execute(Choice::Filter(super::Filter::Unreviewed), window, cx);
+            app.open_note(third.clone().into(), true, window, cx);
+            app.execute(Choice::Reviewed, window, cx);
+            assert!(app.active.is_empty());
+            assert!(
+                f.0.notes()
+                    .unwrap()
+                    .get_note_meta(&third)
+                    .unwrap()
+                    .reviewed_ms
+                    .is_some()
+            );
+            assert_eq!(super::Preferences::load(&f.0.env).stream_day, Some(day));
+            assert!(
+                app.entries("", cx)
+                    .iter()
+                    .all(|e| !matches!(e.choice, Choice::MoveNote(_)))
+            );
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, _, cx| {
+        assert!(app.read(cx).active.is_empty());
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn folders_right_click_creates_root_and_child_without_blocking_rows(cx: &mut TestAppContext) {
+    use super::commands::ModalKind;
+    let f = Fixture::new();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| app.set_view(View::Folders, window, cx));
+        window.render_frame(cx);
+        window.right_click("root-drop", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(
+            window.within("popup-menu").find(0usize).label(),
+            Some("New folder at root…")
+        );
+        window.within("popup-menu").click(0usize, cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            assert!(matches!(&app.modal.as_ref().unwrap().kind, ModalKind::CreateFolder(parent) if parent.is_empty()));
+            app.modal.as_ref().unwrap().input.update(cx, |input, cx| input.set_value("Root folder", window, cx));
+            app.submit_modal(window, cx);
+        });
+        window.render_frame(cx);
+        window.right_click("nav-row-Root folder", cx);
+    }).unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        // The first row is a label, then New note and New folder.
+        assert_eq!(
+            window.within("popup-menu").find(2usize).label(),
+            Some("New folder here…")
+        );
+        window.within("popup-menu").click(2usize, cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            assert!(matches!(&app.modal.as_ref().unwrap().kind, ModalKind::CreateFolder(parent) if parent == "Root folder"));
+            app.modal.as_ref().unwrap().input.update(cx, |input, cx| input.set_value("Child", window, cx));
+            app.submit_modal(window, cx);
+        });
+    }).unwrap();
+    assert!(f.0.root.join("Root folder/Child").is_dir());
 }

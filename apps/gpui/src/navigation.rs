@@ -8,7 +8,7 @@ pub enum View {
     Folders,
     Trash,
 }
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Filter {
     All,
     #[default]
@@ -39,7 +39,7 @@ impl Filter {
             Self::All => true,
             Self::Active => note.meta.archived_ms.is_none(),
             Self::Reviewed => note.meta.reviewed_ms.is_some(),
-            Self::Unreviewed => note.meta.reviewed_ms.is_none(),
+            Self::Unreviewed => note.meta.reviewed_ms.is_none() && note.meta.archived_ms.is_none(),
             Self::Archived => note.meta.archived_ms.is_some(),
         }
     }
@@ -388,6 +388,34 @@ pub fn visible<'a>(items: &'a [Item], expanded: &HashSet<String>) -> Vec<&'a Ite
             rows
         })
         .collect()
+}
+
+/// Palette destinations need only folder metadata, never note bodies/titles.
+pub fn folder_destinations(root: &FolderNode) -> Vec<String> {
+    root.children
+        .iter()
+        .filter(|f| !crate::backend::is_protected(&f.path))
+        .flat_map(|f| std::iter::once(f.path.clone()).chain(folder_destinations(f)))
+        .collect()
+}
+
+pub fn retain_day(
+    items: &mut Vec<Item>,
+    notes: &std::collections::HashMap<String, NotePreviewEntry>,
+    day: NaiveDate,
+) {
+    items.retain_mut(|item| {
+        if item.folder {
+            retain_day(&mut item.children, notes, day);
+            !item.children.is_empty()
+        } else {
+            notes
+                .get(&item.id)
+                .and_then(|n| n.meta.created_ms.or(n.meta.updated_ms))
+                .and_then(|ms| Local.timestamp_millis_opt(ms).single())
+                .is_some_and(|t| t.date_naive() == day)
+        }
+    });
 }
 
 pub fn destinations(items: &[Item]) -> Vec<String> {
