@@ -682,7 +682,7 @@ impl Render for FolderWorkspace {
                                                 div()
                                                     .flex_1()
                                                     .truncate()
-                                                    .font_weight(FontWeight::MEDIUM)
+                                                    .font_weight(FontWeight::SEMIBOLD)
                                                     .child(self.label()),
                                             )
                                             .child(

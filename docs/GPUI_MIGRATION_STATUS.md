@@ -60,6 +60,9 @@ Leave running dev windows open for the user's inspection.
 Initial feature commit: `83efd5da`. The 2026-10-03 follow-up restores the compact
 tab layout from the user's screenshot and verifies both top rows cover the pane
 divider. Dev build and all 59 tests pass; no production app changes or merge.
+Tab-layout correction: `97c1d19a`. The folder heading is restored to the first
+preview's `text_sm` / Semibold (600); the size is unchanged. This typography-only
+follow-up is verified by a dev rebuild and formatting/diff checks.
 
 ### Native release 0.4.8 (2026-10-02)
 
