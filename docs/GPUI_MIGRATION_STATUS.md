@@ -28,6 +28,17 @@ Updated: 2026-10-02. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Native release 0.4.9 (2026-10-02, local packaging in progress)
+
+The user requested a new release built locally. Main includes folder creation,
+Cmd+K/mv improvements and daily Stream review (`4636402b`); ordinary-folder
+preview remains excluded. GPUI manifest/lock version is 0.4.9 and release notes
+are in `docs/releases/gpui-v0.4.9.md`. Local preflight passed: Developer ID,
+notarization profile, production Sparkle key match, GitHub and both Rust targets.
+Packaging will use a clean detached worktree and the existing universal build
+cache; unrelated Voice Memos changes stay outside the release. No release tag or
+publication exists yet; package verification precedes upload/promotion.
+
 ### Stream review and folder organization (2026-10-02)
 
 Transferred to the primary checkout on `main` at the user’s request. The
