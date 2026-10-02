@@ -1006,6 +1006,25 @@ fn folder_chrome_and_refresh_use_the_home_editor(cx: &mut TestAppContext) {
         assert_eq!(tabs.top(), px(28.));
         assert_eq!(tabs.size.height, px(36.));
         assert_eq!(tabs.left(), px(0.));
+        for y in [px(14.), px(46.)] {
+            let probe = point(content.left(), y).scale(window.scale_factor());
+            let top = window
+                .painted_quads()
+                .into_iter()
+                .filter(|quad| quad.bounds.contains(&probe))
+                .filter(|quad| {
+                    quad.background
+                        .as_solid()
+                        .is_some_and(|color| color.a == 1.)
+                })
+                .max_by_key(|quad| quad.order)
+                .unwrap();
+            assert_eq!(
+                top.background,
+                super::Theme::global(cx).background.into(),
+                "the pane divider must not show through either top row"
+            );
+        }
         assert_eq!(
             window.find("folder-sidebar-header").bounds().top(),
             tabs.bottom()
@@ -1030,9 +1049,13 @@ fn folder_chrome_and_refresh_use_the_home_editor(cx: &mut TestAppContext) {
                 .is_empty()
         );
         window.render_frame(cx);
-        assert_eq!(
-            window.find("home-title-slot").bounds().right(),
-            content.left()
+        let folder_tab_id = format!("workspace-tab-{:?}", tab.entity_id());
+        let tab_before_resize = window.find(folder_tab_id.clone()).bounds();
+        let main_tab = window.find("workspace-main").bounds();
+        assert!(tab_before_resize.left() >= main_tab.right());
+        assert!(
+            tab_before_resize.left() - main_tab.right() < px(12.),
+            "folder tabs sit directly beside Type"
         );
         let panes = app.read(cx).pane_state.clone();
         panes.update(cx, |panes, cx| panes.resize_panel(0, px(410.), window, cx));
@@ -1040,10 +1063,11 @@ fn folder_chrome_and_refresh_use_the_home_editor(cx: &mut TestAppContext) {
         window.render_frame(cx);
         let content = window.find("folder-content-pane").bounds();
         assert_eq!(
-            window.find("home-title-slot").bounds().right(),
-            content.left()
+            window.find(folder_tab_id.clone()).bounds(),
+            tab_before_resize,
+            "resizing the sidebar must not move workspace tabs"
         );
-        window.click_at("home-title-slot", point(px(20.), px(14.)), cx);
+        window.click("workspace-main", cx);
         assert!(
             app.read(cx).active_folder.is_none(),
             "native tab click returns Home"
@@ -1057,10 +1081,7 @@ fn folder_chrome_and_refresh_use_the_home_editor(cx: &mut TestAppContext) {
             content.left(),
             "pane widths survive workspace switching"
         );
-        assert_eq!(
-            window.find("home-title-slot").bounds().right(),
-            main_pane.left()
-        );
+        assert_eq!(window.find(folder_tab_id).bounds(), tab_before_resize);
         window.click(format!("workspace-close-{:?}", tab.entity_id()), cx);
         assert!(app.read(cx).folder_tabs.is_empty());
         assert!(

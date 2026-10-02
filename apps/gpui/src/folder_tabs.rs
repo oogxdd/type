@@ -182,85 +182,64 @@ impl TypeApp {
     }
 
     pub(crate) fn render_workspace_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let sidebar = self.prefs.sidebar || (self.active_folder.is_none() && self.settings);
-        let width = self
-            .pane_state
-            .read(cx)
-            .sizes()
-            .first()
-            .copied()
-            .unwrap_or(px(330.));
-        let active = self
-            .folder_tabs
-            .iter()
-            .position(|tab| Some(tab.entity_id()) == self.active_folder);
         h_flex()
             .id("workspace-tabs")
             .test_support()
             .absolute()
             .top(px(28.))
             .left_0()
-            .h(px(36.))
             .w_full()
+            .h(px(36.))
+            .overflow_x_scroll()
             .bg(cx.theme().background)
-            .min_w_0()
+            .border_b_1()
+            .border_color(cx.theme().border)
+            .gap_1()
+            .px_2()
             .child(
-                div()
-                    .id("home-title-slot")
-                    .test_support()
-                    .flex_none()
-                    .when(sidebar, |slot| {
-                        slot.w(width).border_r_1().border_color(cx.theme().border)
+                Button::new("workspace-main")
+                    .ghost()
+                    .small()
+                    .label("Type")
+                    .when(self.active_folder.is_none(), |button| {
+                        button.bg(cx.theme().accent)
                     })
-                    .child(
-                        TabBar::new("home-tab-bar")
-                            .small()
-                            .h(px(36.))
-                            .bg(transparent_black())
-                            .selected_index(if self.active_folder.is_none() {
-                                0
-                            } else {
-                                usize::MAX
-                            })
-                            .child(
-                                Tab::new()
-                                    .debug_selector(|| "home-workspace-tab".into())
-                                    .label("Home")
-                                    .on_click(cx.listener(|this, _, window, cx| {
-                                        this.switch_workspace(None, window, cx)
-                                    })),
-                            ),
+                    .on_click(
+                        cx.listener(|this, _, window, cx| this.switch_workspace(None, window, cx)),
                     ),
             )
-            .child(
-                TabBar::new("folder-tab-bar")
-                    .small()
-                    .h(px(36.))
-                    .flex_1()
-                    .min_w_0()
-                    .max_width(px(220.))
-                    .bg(transparent_black())
-                    .selected_index(active.unwrap_or(usize::MAX))
-                    .children(self.folder_tabs.iter().map(|tab| {
-                        let id = tab.entity_id();
-                        Tab::new()
-                            .debug_selector(move || format!("folder-workspace-tab-{id:?}"))
+            .children(self.folder_tabs.iter().map(|tab| {
+                let id = tab.entity_id();
+                h_flex()
+                    .id(SharedString::from(format!("workspace-tab-{id:?}")))
+                    .test_support()
+                    .flex_none()
+                    .gap_1()
+                    .rounded_md()
+                    .when(self.active_folder == Some(id), |tab| {
+                        tab.bg(cx.theme().accent)
+                    })
+                    .child(
+                        Button::new(SharedString::from(format!("workspace-select-{id:?}")))
+                            .ghost()
+                            .small()
                             .label(tab.read(cx).label())
+                            .tooltip(tab.read(cx).folder.root.display().to_string())
                             .on_click(cx.listener(move |this, _, window, cx| {
                                 this.switch_workspace(Some(id), window, cx)
-                            }))
-                            .suffix(
-                                Button::new(SharedString::from(format!("workspace-close-{id:?}")))
-                                    .ghost()
-                                    .xsmall()
-                                    .icon(IconName::Close)
-                                    .tooltip("Close folder")
-                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                        cx.stop_propagation();
-                                        this.close_folder(id, window, cx)
-                                    })),
-                            )
-                    })),
-            )
+                            })),
+                    )
+                    .child(
+                        Button::new(SharedString::from(format!("workspace-close-{id:?}")))
+                            .ghost()
+                            .small()
+                            .label("×")
+                            .tooltip("Close folder")
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.close_folder(id, window, cx)
+                            })),
+                    )
+            }))
     }
 }

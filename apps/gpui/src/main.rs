@@ -36,7 +36,6 @@ use gpui_kit::{
         list::ListItem,
         menu::{DropdownMenu, PopupMenu, PopupMenuItem},
         resizable::{ResizableState, h_resizable, resizable_panel},
-        tab::{Tab, TabBar},
         tree::{TreeItem, TreeState, tree},
         v_flex,
     },

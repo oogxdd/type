@@ -480,16 +480,16 @@ impl Render for TypeApp {
         if !self.folder_tabs.is_empty() && !self.locked {
             body = body.child(self.render_workspace_tabs(cx));
         }
-        // Transparent native chrome keeps the pane divider visible to the top.
-        body = body.child(
-            div().absolute().top_0().left_0().w_full().h(px(28.)).child(
-                TitleBar::new()
-                    .h(px(28.))
-                    .w_full()
-                    .border_0()
-                    .bg(transparent_black()),
+        // Open-folder navigation is one uninterrupted strip across the window.
+        body = body.child(div().absolute().top_0().left_0().w_full().h(px(28.)).child(
+            TitleBar::new().h(px(28.)).w_full().border_0().bg(
+                if !self.folder_tabs.is_empty() && !self.locked {
+                    cx.theme().background
+                } else {
+                    transparent_black()
+                },
             ),
-        );
+        ));
         body.when_some(
             self.error.clone().filter(|_| self.modal.is_none()),
             |body, error| {

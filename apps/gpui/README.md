@@ -59,9 +59,9 @@ cutover; this README does not claim full feature or release parity.
 ## Open ordinary folders
 
 **Type → Open Folder…** (Cmd+O / Ctrl+O) opens any existing folder in a separate
-workspace tab below the window controls. The leftmost **Home** tab returns to
-the profile workspace. The tab strip is completely absent when only Home is open. Open folders retain
-their tree expansion and editor buffers during the session; opening the same
+workspace tab below the window controls. The leftmost **Type** tab returns to
+the profile workspace. The tab strip is completely absent when only Type is
+open. Open folders retain their tree expansion and editor buffers during the session; opening the same
 folder again selects its existing tab. Use the tab's × or Cmd+Shift+W /
 Ctrl+Shift+W to close it.
 
@@ -85,7 +85,7 @@ the disk version; reloading a dirty buffer asks before discarding edits.
 The folder name and refresh live at the top of the sidebar. One refresh updates
 both the tree and open files. A quiet save indicator sits in the editor's bottom
 right corner, with no status bar. Vim and editor appearance are configured in
-Home's Settings; both workspaces use the same line-number gutter, current-line
+Type's Settings; both workspaces use the same line-number gutter, current-line
 highlight and modal cursor.
 Opened folders are not restored after restarting the app.
 

@@ -39,21 +39,27 @@ autosave, preserving encoding/BOM/CRLF and checking the disk baseline before
 replacement; conflicting drafts retain their tabs. Creation/move/delete remain
 outside this workspace.
 
-Workspace tabs use Kit's Dock tab primitives below the native titlebar, with a
-Home tab, per-folder close and shared resizable-pane widths. With Home alone
-the tabs disappear. Both editors share gutter, highlight and modal-cursor
-rendering. Following the user's preview feedback, there is no status bar or Vim
+Workspace tabs use the original compact row below the native titlebar: Type
+followed immediately by folder tabs with rounded active backgrounds and close
+buttons. Both top rows span the window without a vertical divider. Resizing
+the sidebar does not move these tabs. With Type alone the tabs disappear.
+Pane widths are shared across workspaces. Both editors share gutter, highlight
+and modal-cursor rendering. Following the user's preview feedback, there is no status bar or Vim
 mode/toggle label: folder name and unified tree/file refresh are at the top of
 the sidebar, and a quiet Saved indicator occupies the editor's bottom right.
-The user explicitly chose tabs below the window controls after trying inline
-native-titlebar tabs.
+The user explicitly chose the original tab layout from their screenshot after
+trying titlebar tabs and pane-aligned Dock tabs.
 
 All 59 GPUI tests pass (35 library, 24 native), including real input/Vim/autosave,
 text/encoding preservation, conflict retention, tab mouse clicks, matching
-gutter geometry, unified refresh, full-height panes and header alignment after
+gutter geometry, unified refresh, full-height panes and stable compact tabs after
 resizing/switching.
 macOS dev preview only; other platforms and production/release are untested.
 Leave running dev windows open for the user's inspection.
+
+Initial feature commit: `83efd5da`. The 2026-10-03 follow-up restores the compact
+tab layout from the user's screenshot and verifies both top rows cover the pane
+divider. Dev build and all 59 tests pass; no production app changes or merge.
 
 ### Native release 0.4.8 (2026-10-02)
 
