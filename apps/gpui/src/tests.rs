@@ -65,6 +65,63 @@ fn press(cx: &mut TestAppContext, window: AnyWindowHandle, keys: &str) {
 }
 
 #[gpui_kit::test]
+fn phone_sync_restore_respects_preference_and_lock_and_reports_failure(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let (window, app) = launch(&f, cx);
+    let preference = f.0.env.app_data_dir.join("direct-sync-enabled");
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.restore_phone_sync(window, cx);
+            assert!(app.sync_start_task.is_none());
+            assert!(!app.busy);
+            std::fs::write(&preference, "enabled\n").unwrap();
+            app.locked = true;
+            app.restore_phone_sync(window, cx);
+            assert!(app.sync_start_task.is_none());
+            app.locked = false;
+            // An unavailable synthetic root fails before binding any network port.
+            std::fs::remove_dir_all(&f.0.root).unwrap();
+            std::fs::write(&f.0.root, "unavailable folder").unwrap();
+            app.restore_phone_sync(window, cx);
+            assert!(app.sync_start_task.is_some());
+            assert!(app.busy);
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        assert!(app.sync_start_task.is_none());
+        assert!(!app.busy);
+        assert!(
+            app.error
+                .as_ref()
+                .unwrap()
+                .starts_with("Phone sync could not start:")
+        );
+        assert!(type_core::local_sync_auto_start_enabled(&f.0.env));
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn quitting_preserves_phone_sync_auto_start(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let (window, app) = launch(&f, cx);
+    std::fs::write(
+        f.0.env.app_data_dir.join("direct-sync-enabled"),
+        "enabled\n",
+    )
+    .unwrap();
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| app.on_quit(&super::Quit, window, cx));
+    })
+    .unwrap();
+    cx.run_until_parked();
+    assert!(type_core::local_sync_auto_start_enabled(&f.0.env));
+}
+
+#[gpui_kit::test]
 fn updates_flush_unicode_drafts_and_block_operations_and_conflicts(cx: &mut TestAppContext) {
     let f = Fixture::new();
     let path = f.0.create(STREAM_FOLDER, "baseline".into(), None).unwrap();

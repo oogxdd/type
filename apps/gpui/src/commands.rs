@@ -511,7 +511,7 @@ impl TypeApp {
         }
         if self.flush(true, cx).is_ok() {
             self.persist_preferences();
-            let _ = type_core::stop_local_sync_server_impl(&self.backend.env);
+            type_core::shutdown_local_sync_server();
             let _ = window;
             cx.quit();
         }
@@ -814,6 +814,7 @@ impl TypeApp {
                     }
                     self.locked = false;
                     self.reload_profiles()?;
+                    self.restore_phone_sync(window, cx);
                 }
                 ModalKind::EnablePassword => {
                     if value.len() < 8 {

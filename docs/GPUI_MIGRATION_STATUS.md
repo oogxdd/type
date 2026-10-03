@@ -1,6 +1,6 @@
 # GPUI migration — handoff / live status
 
-Updated: 2026-10-02. This is an unfinished migration; update this file after each milestone.
+Updated: 2026-10-03. This is an unfinished migration; update this file after each milestone.
 
 ## Where to continue
 
@@ -27,6 +27,33 @@ Updated: 2026-10-02. This is an unfinished migration; update this file after eac
 - Investigate larger H1/H2/H3 only; do not implement yet.
 
 ## Implemented
+
+### Phone sync restoration and live diagnosis (2026-10-03)
+
+GPUI omitted Tauri's `direct-sync-enabled` startup restoration and called the
+explicit Stop operation on window close / Cmd+Q / app quit, clearing that
+preference. It now starts hosting in the background when previously enabled,
+after launch or security unlock, and uses preference-preserving shutdown on all
+exit paths. Explicit Settings → Stop server still disables restoration. Startup
+failure is logged and shown without forcing Settings open; startup is serialized
+with other jobs and normal close/quit.
+
+Validation: all **51 GPUI tests** passed (28 library + 23 native), including new
+synthetic tests for disabled/locked restoration, unavailable-root startup errors
+without network binding, and preserving the preference on Cmd+Q. Formatting,
+diff checks and the dev bundle build passed. Committed at the user's request as
+`fix(gpui): restore phone sync hosting across app launches`.
+
+At the user's request, launched the existing dev bundle with `--dev --production`
+after confirming no Type shell was running; stdout/stderr are captured in ignored
+`.tmp/gpui-sync-debug.log`. After manual Start server, the previously paired phone
+authenticated over Iroh; both upload-pack and receive-pack exited 0 and the push
+notification was logged. The user confirmed eventual `0/0`, but reports slow
+overall connection/pull/push. Phone Sync log export was requested to distinguish
+transport, Git, note refresh and history durations; elapsed desktop phase timings
+are absent from the existing bundle's logs. The refreshed dev bundle contains the
+fix; the running instance was deliberately not restarted during phone testing.
+No installed app replacement, mobile changes, release or publication performed.
 
 ### Native release 0.4.9 (2026-10-02, local packaging in progress)
 

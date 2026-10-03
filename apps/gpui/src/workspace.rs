@@ -41,6 +41,7 @@ impl TypeApp {
             save_task: None,
             poll_task: None,
             job_task: None,
+            sync_start_task: None,
             recording: false,
             capture: None,
             pending_recording: None,
@@ -143,7 +144,7 @@ impl TypeApp {
                 if this.flush(true, cx).is_err() {
                     return false;
                 }
-                let _ = type_core::stop_local_sync_server_impl(&this.backend.env);
+                type_core::shutdown_local_sync_server();
                 this.persist_preferences();
                 true
             })
@@ -161,7 +162,7 @@ impl TypeApp {
                 let _ = std::fs::create_dir_all(&dir);
                 let _ = std::fs::write(dir.join("unsaved-recording.wav"), &recording.0);
             }
-            let _ = type_core::stop_local_sync_server_impl(&this.backend.env);
+            type_core::shutdown_local_sync_server();
             async {}
         }));
         app.focus.focus(window, cx);
@@ -169,6 +170,7 @@ impl TypeApp {
             app.show_modal(commands::ModalKind::Unlock, "", window, cx);
         } else {
             app.refresh(window, cx);
+            app.restore_phone_sync(window, cx);
         }
         app.poll_task = Some(cx.spawn_in(window, async move |view, cx| {
             loop {

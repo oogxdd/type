@@ -119,6 +119,40 @@ impl ResultData {
 }
 
 impl TypeApp {
+    pub fn restore_phone_sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.locked
+            || self.busy
+            || self.sync_start_task.is_some()
+            || !type_core::local_sync_auto_start_enabled(&self.backend.env)
+        {
+            return;
+        }
+        self.busy = true;
+        let backend = self.backend.clone();
+        let task = cx.background_executor().spawn(async move {
+            ensure_security_unlocked_for_app(&backend.env)?;
+            LocalSyncUseCases::new(LocalSyncAdapter::new(backend.env)).start()
+        });
+        self.sync_start_task = Some(cx.spawn_in(window, async move |view, cx| {
+            let result = task.await;
+            let _ = view.update_in(cx, |this, window, cx| {
+                this.sync_start_task = None;
+                this.busy = false;
+                match result {
+                    Ok(server) => {
+                        this.local_server = Some(server);
+                        this.refresh(window, cx);
+                    }
+                    Err(error) => {
+                        eprintln!("[local-sync] automatic startup failed: {error}");
+                        this.error = Some(format!("Phone sync could not start: {error}"));
+                    }
+                }
+                cx.notify();
+            });
+        }));
+    }
+
     pub fn run_job(
         &mut self,
         label: &str,

@@ -84,6 +84,7 @@ struct TypeApp {
     save_task: Option<Task<()>>,
     poll_task: Option<Task<()>>,
     job_task: Option<Task<()>>,
+    sync_start_task: Option<Task<()>>,
     recording: bool,
     capture: Option<jobs::Capture>,
     pending_recording: Option<std::sync::Arc<(Vec<u8>, String)>>,
