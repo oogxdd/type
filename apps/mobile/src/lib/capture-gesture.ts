@@ -64,6 +64,18 @@ export const shouldCommitPull = (
   return success && !blocked && direction === "up" && ready;
 };
 
+/** Capture allows only forward filing; browsing enables its actual neighbors. */
+export const pageReleaseStep = (
+  direction: SwipeDirection, ready: boolean, success: boolean, blocked: boolean,
+  allowNext: boolean, allowPrevious: boolean
+): number => {
+  "worklet";
+  if (!ready || !success || blocked) return 0;
+  if (direction === "up" && allowNext) return 1;
+  if (direction === "down" && allowPrevious) return -1;
+  return 0;
+};
+
 export const menuReleaseTarget = (
   progress: number, velocityX: number, startedOpen: boolean, success: boolean
 ): number => {

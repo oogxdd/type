@@ -33,7 +33,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import * as core from "@typenotes/mobile-core/core-api";
 
-import { CaptureSession } from "../lib/capture";
+import { NotePages, type NotePageRequest } from "../lib/note-pages";
+import { isRecordingNoteType } from "@typenotes/shared/format";
+import type { NoteMeta } from "@typenotes/shared/types";
+import { RecordingAudioPlayer } from "../ui/audio-player";
 import { collectNotePaths } from "../lib/feed";
 import { registerCaptureDraft } from "../lib/capture-draft";
 import {
@@ -93,7 +96,7 @@ const SyncStatusLabel = ({ top }: { top: number }) => {
   );
 };
 
-export const CaptureScreen = () => {
+export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const navigation =
@@ -102,9 +105,10 @@ export const CaptureScreen = () => {
   const {
     menuVisible, menuProgress, direction, dragging, pull, pullReady,
     transitioning, commitRequest, commitVelocity, captureScroll, openMenu,
-    suppressPressUntil,
+    suppressPressUntil, allowPrevious, allowNext, commitStep, captureRequest, showPage,
   } = useHomeShell();
   const [readyLabel, setReadyLabel] = useState(false);
+  const [previousLabel, setPreviousLabel] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [restoring, setRestoring] = useState(false);
 
@@ -150,41 +154,55 @@ export const CaptureScreen = () => {
 
   const indicatorOpacity = useSharedValue(0);
 
-  // One session per page, not one per screen: filing hands the finished page's
-  // session off to storage and the fresh page starts on its own, so a keystroke
-  // that lands while the previous write is still in flight can never be folded
-  // into the note being filed.
-  const newSession = useCallback(
-    (initial?: { path: string; content: string }) =>
-      new CaptureSession({
-        createNote: async (content) => {
-          const path = (await core.createNote({ content })).path;
-          useSyncStore.getState().scheduleAutoSync("capture saved", "edit");
-          return path;
-        },
-        writeNote: async (path, content) => {
-          await core.writeNote(path, content);
-          useSyncStore.getState().scheduleAutoSync("capture saved", "edit");
-        },
-        deleteNote: async (path) => {
-          await core.deleteItems([path]);
-          useSyncStore.getState().scheduleAutoSync("capture deleted");
-        },
-      }, undefined, initial),
-    []
-  );
-  const sessionRef = useRef<CaptureSession | null>(null);
-  if (sessionRef.current === null) {
-    sessionRef.current = newSession();
+  const pagesRef = useRef<NotePages | null>(null);
+  if (!pagesRef.current) {
+    pagesRef.current = new NotePages({
+      createNote: async (content) => {
+        const path = (await core.createNote({ content })).path;
+        useSyncStore.getState().scheduleAutoSync("capture saved", "edit");
+        return path;
+      },
+      writeNote: async (path, content) => {
+        await core.writeNote(path, content);
+        useSyncStore.getState().scheduleAutoSync("note saved", "edit");
+      },
+      deleteNote: async (path) => {
+        await core.deleteItems([path]);
+        useSyncStore.getState().scheduleAutoSync("capture deleted");
+      },
+      readNote: async (path) => {
+        const tree = await core.getTree();
+        return collectNotePaths(tree).includes(path) ? core.readNote(path) : null;
+      },
+    });
   }
+  const pages = pagesRef.current;
+  const [browsing, setBrowsing] = useState(false);
+  const [pagePath, setPagePath] = useState<string | null>(null);
+  const [meta, setMeta] = useState<NoteMeta | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    setMeta(null);
+    if (pagePath) void core.getNoteMeta(pagePath).then((value) => {
+      if (!cancelled) setMeta(value);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [pagePath]);
 
+  const pageQueue = useRef<Promise<void>>(Promise.resolve());
   const persistDraft = useCallback(async () => {
-    const session = sessionRef.current;
+    await pageQueue.current;
+    const session = pages.session;
     if (!session) return;
     await session.flush();
     const path = session.currentPath();
     if (path) await useNotesStore.getState().noteFiled(path);
-  }, []);
+  }, [pages]);
   const flushDraft = useCallback(() => { void persistDraft().catch(() => {}); }, [persistDraft]);
   useEffect(() => registerCaptureDraft(persistDraft), [persistDraft]);
   useEffect(() => navigation.addListener("blur", flushDraft), [navigation, flushDraft]);
@@ -196,36 +214,6 @@ export const CaptureScreen = () => {
     return () => { subscription.remove(); flushDraft(); };
   }, [flushDraft]);
 
-  // Menu actions may edit, move or delete the saved draft. Reconcile it when
-  // returning, so the persistent input cannot overwrite an edit made in Editor.
-  const wasMenuVisible = useRef(menuVisible);
-  useEffect(() => {
-    const returning = wasMenuVisible.current && !menuVisible;
-    wasMenuVisible.current = menuVisible;
-    if (!returning) return;
-    const session = sessionRef.current;
-    if (!session?.currentPath()) return;
-    let cancelled = false;
-    setRestoring(true);
-    transitioning.value = true;
-    void (async () => {
-      await session.flush();
-      const path = session.currentPath();
-      if (!path) return;
-      const tree = await core.getTree();
-      const exists = collectNotePaths(tree).includes(path);
-      const content = exists ? await core.readNote(path) : "";
-      if (cancelled || sessionRef.current !== session) return;
-      sessionRef.current = newSession(exists ? { path, content } : undefined);
-      setText(content);
-    })().catch(() => {
-      if (!cancelled) Alert.alert("Could not reload note", "Your draft is still here. Try opening it again.");
-    }).finally(() => {
-      if (!cancelled) { setRestoring(false); transitioning.value = false; }
-    });
-    return () => { cancelled = true; transitioning.value = false; };
-  }, [menuVisible, newSession, transitioning]);
-
   const showIcons = useCallback(() => {
     setIconsVisible(true);
     iconsOpacity.value = withTiming(1, { duration: 180 });
@@ -236,45 +224,93 @@ export const CaptureScreen = () => {
     iconsOpacity.value = withTiming(0, { duration: 180 });
   }, [iconsOpacity]);
 
+  const displayPage = useCallback((resetScroll = true) => {
+    if (!mounted.current) return;
+    setText(pages.session.currentContent());
+    setBrowsing(pages.browsing);
+    setPagePath(pages.session.currentPath());
+    allowPrevious.value = pages.browsing && pages.previousPath !== null;
+    allowNext.value = !pages.browsing || pages.nextPath !== null;
+    if (resetScroll) {
+      prevContentHRef.current = 0;
+      offsetY.value = 0;
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }
+    pull.value = 0;
+    pullReady.value = false;
+    showIcons();
+  }, [pages, allowPrevious, allowNext, offsetY, pull, pullReady, showIcons]);
+
+  // Queue page requests so rapid taps cannot race two reads/saves. A failed
+  // transition leaves the current session intact and editable for retry.
+  const pendingPageRequests = useRef(0);
+  const switchPage = useCallback((operation: () => Promise<void>, reveal: boolean) => {
+    pendingPageRequests.current += 1;
+    transitioning.value = true;
+    setRestoring(true);
+    pageQueue.current = pageQueue.current.catch(() => {}).then(async () => {
+      if (!mounted.current) return;
+      const previousPath = pages.session.currentPath();
+      const wasBrowsing = pages.browsing;
+      await operation();
+      displayPage(wasBrowsing !== pages.browsing || previousPath !== pages.session.currentPath());
+      if (mounted.current && reveal) showPage();
+    }).catch(() => {
+      if (mounted.current) Alert.alert("Could not open note", "Your current text is still here. Try again.");
+    }).finally(() => {
+      pendingPageRequests.current -= 1;
+      if (mounted.current && pendingPageRequests.current === 0) {
+        setRestoring(false);
+        transitioning.value = false;
+      }
+    });
+  }, [pages, displayPage, showPage, transitioning]);
+  useEffect(() => {
+    if (note) switchPage(() => pages.open(note.path, note.paths), true);
+  }, [note, pages, switchPage]);
+  useEffect(() => {
+    // Prepare capture behind the open menu, so closing it doesn't first show
+    // the saved note and then jump to the retained draft.
+    if (menuVisible && pages.browsing) switchPage(() => pages.returnToCapture(), false);
+  }, [menuVisible, pages, switchPage]);
+  useEffect(() => {
+    if (captureRequest > 0) switchPage(() => pages.returnToCapture(), false);
+  }, [captureRequest, pages, switchPage]);
+
   // Reveal the fresh blank page. The filed page is off-screen at this point
   // (the ghost covers the viewport), so clearing the input is invisible.
   const openBlankPage = useCallback(() => {
-    setText("");
-    prevContentHRef.current = 0;
-    offsetY.value = 0;
-    pull.value = 0;
-    pullReady.value = false;
-    scrollRef.current?.scrollTo({ y: 0, animated: false });
-    setCommitting(false);
+    displayPage();
     showIcons();
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
+        if (!mounted.current) return;
         pageY.value = 0;
+        setCommitting(false);
         transitioning.value = false;
-        inputRef.current?.focus();
+        if (!pages.browsing) inputRef.current?.focus();
       })
     );
-  }, [offsetY, pageY, showIcons, transitioning, pull, pullReady]);
+  }, [displayPage, pages, pageY, showIcons, transitioning]);
 
   // Keep the old draft until storage succeeds. Failure restores the page,
   // rather than abandoning a dirty session behind a fresh empty input.
   const finishCommit = useCallback(() => {
-    const filed = sessionRef.current;
-    if (!filed) return;
-    void filed.commit().then((path) => {
-      sessionRef.current = newSession();
+    void pages.advance(commitStep.value).then((path) => {
+      if (!mounted.current) return;
       openBlankPage();
       if (path) {
         useSyncStore.getState().scheduleAutoSync("capture filed");
         void useNotesStore.getState().noteFiled(path).catch(() => {});
       }
     }).catch(() => {
+      if (!mounted.current) return;
       setCommitting(false);
       transitioning.value = false;
       pageY.value = withTiming(0, { duration: 220 });
       Alert.alert("Could not save note", "Your text is still here. Try again before starting a new note.");
     });
-  }, [newSession, openBlankPage, pageY, transitioning]);
+  }, [pages, commitStep, openBlankPage, pageY, transitioning]);
 
   // A worklet that outlives the render that created it must not hold a
   // per-render function. The commit spring's callback runs on the UI runtime
@@ -292,9 +328,14 @@ export const CaptureScreen = () => {
     // Start where the finger left off. Without the release velocity the spring
     // begins at rest, so a fast throw visibly stalls at the hand-off before the
     // page starts moving.
-    pageY.value = withSpring(-visiblePageHeight(windowH.value, keyboard.height.value),
+    pageY.value = withSpring(-commitStep.value * visiblePageHeight(windowH.value, keyboard.height.value),
       { ...COMMIT_SPRING, velocity: commitVelocity.value },
       (finished) => { if (finished) runOnJS(runFinishCommit)(); });
+  });
+  useAnimatedReaction(() => direction.value, (value, previous) => {
+    if (value !== previous && (value === "up" || value === "down")) {
+      runOnJS(setPreviousLabel)(value === "down");
+    }
   });
   useAnimatedReaction(() => pullReady.value, (ready, previous) => {
     if (ready === previous) return;
@@ -314,8 +355,14 @@ export const CaptureScreen = () => {
       contentH.value = event.contentSize.height;
       viewportH.value = event.layoutMeasurement.height;
       // Momentum, keyboard resizing and programmatic scrolls cannot arm it.
-      if (dragging.value && direction.value === "up" && menuProgress.value < 0.001 && !transitioning.value) {
-        pull.value = overscrollPastEnd(event.contentOffset.y, event.contentSize.height, event.layoutMeasurement.height);
+      if (dragging.value && menuProgress.value < 0.001 && !transitioning.value) {
+        if (direction.value === "up" && allowNext.value) {
+          pull.value = overscrollPastEnd(event.contentOffset.y, event.contentSize.height, event.layoutMeasurement.height);
+        } else if (direction.value === "down" && allowPrevious.value) {
+          pull.value = Math.max(0, -event.contentOffset.y);
+        } else {
+          pull.value = 0;
+        }
         pullReady.value = isPullReady(pull.value, pullReady.value);
       }
       // Surface the indicator while scrolling; let it fade shortly after.
@@ -358,8 +405,8 @@ export const CaptureScreen = () => {
     if (viewport <= 0 || contentHeight <= viewport) {
       return;
     }
-    const wasAtBottom =
-      previous <= viewport || offsetY.value >= previous - viewport - 48;
+    const wasAtBottom = previous > 0 &&
+      (previous <= viewport || offsetY.value >= previous - viewport - 48);
     if (wasAtBottom) {
       scrollToY(contentHeight - viewport);
     }
@@ -389,7 +436,8 @@ export const CaptureScreen = () => {
     // Flush to the screen edge, *not* above the home indicator: the strip is
     // what lies under the page, so any inset below it reads as a stray band of
     // paper beneath the gap. Only the keyboard actually shortens the page.
-    bottom: keyboard.height.value,
+    top: direction.value === "down" ? insets.top : undefined,
+    bottom: direction.value === "down" ? undefined : keyboard.height.value,
     height: pullZoneHeight(pull.value),
     opacity: transitioning.value ? 0 : 1,
     backgroundColor: interpolateColor(
@@ -416,7 +464,7 @@ export const CaptureScreen = () => {
   const ghostStyle = useAnimatedStyle(() => {
     const pageHeight = Math.max(1, height - keyboard.height.value);
     return {
-      transform: [{ translateY: pageY.value + pageHeight }],
+      transform: [{ translateY: pageY.value + commitStep.value * pageHeight }],
       paddingBottom: keyboard.height.value,
     };
   });
@@ -458,7 +506,7 @@ export const CaptureScreen = () => {
 
   const onChange = (value: string) => {
     setText(value);
-    sessionRef.current?.onChange(value);
+    pages.session.onChange(value);
     // Keep the page uncluttered while writing; tapping back into the text
     // brings the buttons back. While a dictation is running the stop button
     // must stay reachable, so nothing fades.
@@ -470,7 +518,8 @@ export const CaptureScreen = () => {
   // Dictation is the alternative to typing a page, so the mic only shows on
   // a blank page (or while a recording is running and must stay stoppable).
   // It fades instead of unmounting — see micOpacity.
-  const micAvailable = text.trim().length === 0 || recordingActive;
+  // A recording started on capture must still expose Stop while browsing.
+  const micAvailable = recordingActive || (!browsing && text.trim().length === 0);
   useEffect(() => {
     micOpacity.value = withTiming(micAvailable ? 1 : 0, { duration: 180 });
   }, [micAvailable, micOpacity]);
@@ -505,6 +554,8 @@ export const CaptureScreen = () => {
                 directionalLockEnabled
                 alwaysBounceVertical
               >
+                {isRecordingNoteType(meta?.note_type, meta?.recording_audio_path) && meta?.recording_audio_path
+                  ? <RecordingAudioPlayer audioPath={meta.recording_audio_path} /> : null}
                 <TextInput
                   ref={inputRef}
                   style={[
@@ -520,7 +571,7 @@ export const CaptureScreen = () => {
                   value={text}
                   onChangeText={onChange}
                   onPressIn={showIcons}
-                  placeholder={PLACEHOLDER}
+                  placeholder={browsing ? "" : PLACEHOLDER}
                   placeholderTextColor={theme.colors.secondaryText}
                   multiline
                   scrollEnabled={false}
@@ -569,7 +620,7 @@ export const CaptureScreen = () => {
                   fontFamily: theme.fontFamily,
                 }}
               >
-                {PLACEHOLDER}
+                {browsing ? "" : PLACEHOLDER}
               </Text>
             </Animated.View>
           </View>
@@ -601,7 +652,11 @@ export const CaptureScreen = () => {
             pullLabelStyle,
           ]}
         >
-          {readyLabel ? "Release to start a new note" : "Pull up to start a new note"}
+          {browsing
+            ? previousLabel
+              ? readyLabel ? "Release to open previous note" : "Pull down to open previous note"
+              : readyLabel ? "Release to open next note" : "Pull up to open next note"
+            : readyLabel ? "Release to start a new note" : "Pull up to start a new note"}
         </Animated.Text>
       </Animated.View>
     </View>

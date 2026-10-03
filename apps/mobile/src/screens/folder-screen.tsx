@@ -110,10 +110,11 @@ export const FolderScreen = () => {
                 if (organizer.onRowPress(item.row)) {
                   return;
                 }
-                navigation.navigate("Editor", {
+                navigation.popTo("Home", { note: {
                   path: item.row.path,
-                  title: item.row.preview.title || "Note",
-                });
+                  paths: rows.map((row) => row.path),
+                  requestId: Date.now(),
+                } });
               }}
             />
           )

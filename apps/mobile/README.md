@@ -16,6 +16,9 @@ fast flick cannot create a note.
 **Swipe right** (or tap the hamburger) to reveal the menu; **swipe left** in
 the menu (or tap close) to return to the same draft and scroll position. The
 menu and draft stay mounted, and one directional coordinator owns both.
+Saved notes open on this same paper surface, without the mic: pull beyond the
+bottom for the next note, or beyond the top for the previous one in the selected
+list. A menu round trip returns to capture, retaining any unfinished draft.
 The floating mic
 button in the bottom-right dictates a voice note: tap to start and tap again
 to stop. Long-press the mic to reveal camera and photo-library actions for a
@@ -75,7 +78,7 @@ src/
   state/                  zustand stores: notes (incl. move/delete/archive),
                           settings (working folders), sync, appearance
                           (device-local, no core)
-  screens/                capture, menu, feed, folder, editor, sync, settings
+  screens/                capture (new + saved notes), menu, feed, folder, sync, settings
   ui/                     dictation/photo capture button, audio player, note
                           actions sheet + folder picker + selection mode
                           (note-organizer), shared primitives

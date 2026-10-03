@@ -22,7 +22,6 @@ import { parseSyncDeepLink } from "@typenotes/shared/sync-link";
 import { bootCore } from "./core/boot";
 import { navigateToScreen, navigationRef, Stack } from "./navigation";
 import { HomeScreen } from "./screens/home-screen";
-import { EditorScreen } from "./screens/editor-screen";
 import { FeedScreen } from "./screens/feed-screen";
 import { FolderScreen } from "./screens/folder-screen";
 import { LockScreen } from "./screens/lock-screen";
@@ -82,14 +81,6 @@ const RootStack = () => {
         name="Folder"
         component={FolderScreen}
         options={({ route }) => ({ title: route.params.title })}
-      />
-      <Stack.Screen
-        name="Editor"
-        component={EditorScreen}
-        options={{
-          // No title — the note text speaks for itself.
-          title: "",
-        }}
       />
       <Stack.Screen
         name="Sync"

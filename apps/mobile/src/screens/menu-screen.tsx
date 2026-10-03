@@ -81,7 +81,7 @@ export const MenuScreen = () => {
   const refresh = useNotesStore((s) => s.refresh);
 
   // Selection, the note action sheet and the folder picker. Called here, above
-  // the contentReady early return, because it is a hook.
+  // deferred row construction, because it is a hook.
   const organizer = useNoteOrganizer(tree);
 
   // The pan and native lists run simultaneously; do not treat a swipe as a tap.
@@ -148,9 +148,9 @@ export const MenuScreen = () => {
     [contentReady, tree, expanded]
   );
 
-  if (!contentReady) {
-    return <View style={[styles.root, { backgroundColor: theme.colors.background }]} />;
-  }
+  // Keep the native list recognizer mounted from the first frame. Attaching
+  // it only after interactions finish can cancel Home's in-flight menu pan.
+  // Only the expensive row data is deferred, never the gesture tree.
 
   const archive = findFolder(tree, ARCHIVE_FOLDER_PATH);
 
@@ -256,16 +256,17 @@ export const MenuScreen = () => {
                   if (organizer.onRowPress(item)) {
                     return;
                   }
-                  openScreen("Editor", {
+                  openScreen("Home", { note: {
                     path: item.path,
-                    title: item.preview.title || "Note",
-                  });
+                    paths: feedSections.flatMap((section) => section.data.map((row) => row.path)),
+                    requestId: Date.now(),
+                  } });
                 }}
               />
             )}
             ListEmptyComponent={
               <Text style={[styles.empty, { color: theme.colors.secondaryText }]}>
-                No notes yet — swipe left and start typing.
+                {loading || !contentReady ? "Loading notes…" : "No notes yet — swipe left and start typing."}
               </Text>
             }
           />
@@ -342,7 +343,7 @@ export const MenuScreen = () => {
             }
             ListEmptyComponent={
               <Text style={[styles.empty, { color: theme.colors.secondaryText }]}>
-                No folders yet.
+                {loading || !contentReady ? "Loading folders…" : "No folders yet."}
               </Text>
             }
           />

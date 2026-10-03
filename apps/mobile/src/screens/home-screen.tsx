@@ -1,20 +1,23 @@
 // Menu and Capture are persistent layers of one route. The native stack has
 // no pop recognizer here: one pan owns direction and release for both layers.
-import { useIsFocused } from "@react-navigation/native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useIsFocused, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { BackHandler, Keyboard, StyleSheet, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withTiming,
 } from "react-native-reanimated";
 import {
-  menuReleaseTarget, resolveSwipeDirection, shouldCommitPull,
+  menuReleaseTarget, resolveSwipeDirection, pageReleaseStep,
   type SwipeDirection,
 } from "../lib/capture-gesture";
 import { recordGestureAttempt, type GestureOutcome } from "../lib/gesture-trace";
 import { useDiagnosticsStore } from "../state/diagnostics-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useTheme } from "../theme";
+import type { RootStackParamList } from "../navigation";
+import type { NotePageRequest } from "../lib/note-pages";
 import { CaptureScreen } from "./capture-screen";
 import { HomeShellProvider, type HomeShell } from "./home-shell";
 import { MenuScreen } from "./menu-screen";
@@ -24,10 +27,21 @@ const dismissKeyboard = () => Keyboard.dismiss();
 
 export const HomeScreen = () => {
   const profile = useSettingsStore((state) => activeProfile(state.snapshot));
-  return <HomeWorkspace key={`${profile?.id}:${profile?.notes_root}`} />;
+  const route = useRoute<RouteProp<RootStackParamList, "Home">>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const workspace = `${profile?.id}:${profile?.notes_root}`;
+  const [request, setRequest] = useState<{ workspace: string; note: NotePageRequest } | null>(null);
+  useEffect(() => { setRequest(null); }, [workspace]);
+  useEffect(() => {
+    if (!route.params?.note) return;
+    setRequest({ workspace, note: route.params.note });
+    // A consumed note request must not replay against a different notes root.
+    navigation.setParams({ note: undefined });
+  }, [route.params?.note, workspace, navigation]);
+  return <HomeWorkspace key={workspace} note={request?.workspace === workspace ? request.note : undefined} />;
 };
 
-const HomeWorkspace = () => {
+const HomeWorkspace = ({ note }: { note?: NotePageRequest }) => {
   const theme = useTheme();
   const focused = useIsFocused();
   const { width } = useWindowDimensions();
@@ -41,6 +55,12 @@ const HomeWorkspace = () => {
   const transitioning = useSharedValue(false);
   const commitRequest = useSharedValue(0);
   const commitVelocity = useSharedValue(0);
+  const commitStep = useSharedValue(1);
+  const allowPrevious = useSharedValue(false);
+  const allowNext = useSharedValue(true);
+  const [captureRequest, setCaptureRequest] = useState(0);
+  const selectingNote = useRef(false);
+  const wasOpen = useRef(false);
   const suppressPressUntil = useSharedValue(0);
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
@@ -62,7 +82,14 @@ const HomeWorkspace = () => {
   const feedScroll = useMemo(() => Gesture.Native(), []);
   const folderScroll = useMemo(() => Gesture.Native(), []);
 
-  const settled = useCallback((open: boolean) => setMenuVisible(open), []);
+  const settled = useCallback((open: boolean) => {
+    if (!open && wasOpen.current && !selectingNote.current) {
+      setCaptureRequest((request) => request + 1);
+    }
+    selectingNote.current = false;
+    wasOpen.current = open;
+    setMenuVisible(open);
+  }, []);
   const openMenu = useCallback(() => {
     if (transitioning.value) return;
     Keyboard.dismiss();
@@ -70,11 +97,19 @@ const HomeWorkspace = () => {
       if (finished) runOnJS(settled)(true);
     });
   }, [menuProgress, settled, transitioning]);
-  const openCapture = useCallback(() => {
+  const closeMenu = useCallback(() => {
     menuProgress.value = withTiming(0, SETTLE, (finished) => {
       if (finished) runOnJS(settled)(false);
     });
   }, [menuProgress, settled]);
+
+  const openCapture = useCallback(() => {
+    if (!transitioning.value) closeMenu();
+  }, [closeMenu, transitioning]);
+  const showPage = useCallback(() => {
+    selectingNote.current = true;
+    closeMenu();
+  }, [closeMenu]);
 
   useEffect(() => {
     if (!focused) return;
@@ -169,10 +204,12 @@ const HomeWorkspace = () => {
         menuProgress.value = withTiming(target, SETTLE, (finished) => {
           if (finished) runOnJS(settled)(target === 1);
         });
-      } else if (!startedOpen.value && shouldCommitPull(
-        direction.value, pullReady.value, success, transitioning.value
-      )) {
+      } else if (!startedOpen.value && pageReleaseStep(
+        direction.value, pullReady.value, success, transitioning.value,
+        allowNext.value, allowPrevious.value
+      ) !== 0) {
         transitioning.value = true;
+        commitStep.value = direction.value === "down" ? -1 : 1;
         commitVelocity.value = event.velocityY;
         commitRequest.value += 1;
         outcome.value = "filed";
@@ -194,7 +231,7 @@ const HomeWorkspace = () => {
       pullReady.value = false;
       if (!transitioning.value) pull.value = withTiming(0, { duration: 180 });
     }), [focused, captureScroll, feedScroll, folderScroll, direction, dragging, pull,
-      pullReady, transitioning, commitRequest, commitVelocity, suppressPressUntil, startX, startY,
+      pullReady, transitioning, commitRequest, commitVelocity, commitStep, allowPrevious, allowNext, suppressPressUntil, startX, startY,
       startProgress, startedOpen, startTime, maxDx, maxDy, maxPull, outcome,
       traceEnabled, traceEmitted, menuProgress, windowW, settled]);
 
@@ -207,10 +244,10 @@ const HomeWorkspace = () => {
   const dimStyle = useAnimatedStyle(() => ({ opacity: 0.08 * (1 - menuProgress.value) }));
   const shell = useMemo<HomeShell>(() => ({
     menuVisible, menuProgress, direction, dragging, pull, pullReady, transitioning,
-    commitRequest, commitVelocity, suppressPressUntil, captureScroll, feedScroll,
+    commitRequest, commitVelocity, commitStep, allowPrevious, allowNext, captureRequest, showPage, suppressPressUntil, captureScroll, feedScroll,
     folderScroll, openMenu, openCapture,
   }), [menuVisible, menuProgress, direction, dragging, pull, pullReady, transitioning,
-    commitRequest, commitVelocity, suppressPressUntil, captureScroll, feedScroll,
+    commitRequest, commitVelocity, commitStep, allowPrevious, allowNext, captureRequest, showPage, suppressPressUntil, captureScroll, feedScroll,
     folderScroll, openMenu, openCapture]);
 
   return (
@@ -228,7 +265,7 @@ const HomeWorkspace = () => {
             pointerEvents={menuVisible ? "none" : "auto"}
             accessibilityElementsHidden={menuVisible}
             importantForAccessibility={menuVisible ? "no-hide-descendants" : "auto"}>
-            <CaptureScreen />
+            <CaptureScreen note={note} />
           </Animated.View>
         </View>
       </GestureDetector>

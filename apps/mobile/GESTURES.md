@@ -1,8 +1,9 @@
 # Home gestures
 
 `HomeScreen` is one native-stack root containing persistent Menu and Capture
-layers. Native stack gestures are disabled on Home. Detail routes still use
-normal native navigation. Opening/closing the menu preserves the draft, cursor,
+layers. Saved notes use the same Capture surface; there is no separate editor
+route. Native stack gestures are disabled on Home. Settings and folder routes
+still use normal native navigation. Opening/closing the menu preserves the draft, cursor,
 scroll, menu filter and expanded folders. No replica page is used for the menu.
 
 ## One direction owner
@@ -58,6 +59,26 @@ A registered flush runs before switching working folders; Home's state is
 scoped to the profile/root. Returning from the menu reloads a saved draft to
 respect edits, moves or deletion performed there.
 
+## Browsing saved notes
+
+Selecting a note loads it into the same paper surface. The microphone is hidden
+(an already active recording keeps its Stop control available);
+recording notes retain their audio player. Edits use the serialized, retryable
+capture save queue. A failed write/read retains the current page.
+
+Pull up past the bottom to open the next note; pull down past the top to open
+the previous note. Both use the same distance/readiness/retraction rules as
+capture. The list order and filter are captured when selecting a note. At either
+end, an unavailable neighbor disables the corresponding action. Downward pulls
+on capture do nothing. Browsing never files or deletes an emptied saved note.
+
+Opening the menu returns the hidden paper to capture mode; closing the menu
+reveals the retained draft, or a blank page if there was none. Selecting another
+note in the menu opens that note instead. Lists and their native recognizers
+mount together at startup; only row construction is deferred, so loading cannot
+replace the recognizer tree during a swipe. After unlock, the profile is loaded
+before mounting Home to avoid resetting the workspace during initial load.
+
 ## Diagnostics and verification
 
 Settings → Diagnostics → Record swipes records direction, largest displacement,
@@ -84,5 +105,6 @@ The previous main version mixed a native-stack full-screen pop with several
 RNGH pans and split the screen by height. That ownership conflict is why Home
 now has no native pop recognizer. Do not restore the split as a threshold fix.
 
-Folder note paging is a subsequent feature: reuse the direction/release model,
-but give top/bottom edges previous/next actions in the browsing context.
+Functional checks cover ordered browsing in both directions, list boundaries,
+failed saves/reads, retaining drafts and editing the draft through the list.
+Physical startup timing and gesture feel on iOS/Android remain device checks.

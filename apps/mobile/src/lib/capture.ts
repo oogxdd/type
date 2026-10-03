@@ -38,6 +38,10 @@ export class CaptureSession {
     return this.path;
   }
 
+  currentContent(): string {
+    return this.content;
+  }
+
   onChange(text: string) {
     this.content = text;
     this.dirty = true;

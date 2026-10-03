@@ -134,10 +134,11 @@ export const FeedScreen = () => {
           row={item}
           theme={theme}
           onPress={() =>
-            navigation.navigate("Editor", {
+            navigation.popTo("Home", { note: {
               path: item.path,
-              title: item.preview.title || "Note",
-            })
+              paths: sections.flatMap((section) => section.data.map((row) => row.path)),
+              requestId: Date.now(),
+            } })
           }
         />
       )}

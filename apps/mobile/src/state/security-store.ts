@@ -40,8 +40,9 @@ export const useSecurityStore = create<SecurityStoreState>((set) => ({
       if (result.panic_triggered) {
         // Local data was wiped and reseeded (exactly as on desktop). Reload
         // everything so the UI shows the fresh state.
-        set({ state: await core.getSecurityState() });
+        const state = await core.getSecurityState();
         await useSettingsStore.getState().load();
+        set({ state });
         void useNotesStore.getState().refresh();
         return;
       }
@@ -49,8 +50,11 @@ export const useSecurityStore = create<SecurityStoreState>((set) => ({
         set({ error: result.message ?? "Invalid password." });
         return;
       }
-      set({ state: await core.getSecurityState() });
+      const state = await core.getSecurityState();
+      // Mount Home only after its profile/root is known. Otherwise the first
+      // snapshot remounts the workspace and closes a menu opened during load.
       await useSettingsStore.getState().load();
+      set({ state });
       // Not awaited — see the boot sequence in App.tsx.
       void useNotesStore.getState().refresh();
     } catch (error) {
