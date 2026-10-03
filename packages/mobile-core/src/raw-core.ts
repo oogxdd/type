@@ -26,6 +26,8 @@ export interface RawCore {
   // ── Notes ──
   getTree(): Promise<string>;
   readNote(path: string): Promise<string>;
+  readNoteIfExists(path: string): Promise<string | null | undefined>;
+  listNoteSummaries(paths: string[]): Promise<string>;
   createNote(argsJson: string): Promise<string>;
   writeNote(path: string, content: string): Promise<void>;
   setNoteTimestamp(argsJson: string): Promise<void>;

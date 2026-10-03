@@ -13,7 +13,7 @@ import { formatNoteDateLabel, type NotePreview } from "@typenotes/shared/format"
  * an older snapshot is then ignored instead of showing previews in the old
  * shape until each note happens to change.
  */
-export const PREVIEW_SNAPSHOT_FORMAT = 1;
+export const PREVIEW_SNAPSHOT_FORMAT = 2;
 
 export type VersionedPreview = { version: string; preview: NotePreview };
 

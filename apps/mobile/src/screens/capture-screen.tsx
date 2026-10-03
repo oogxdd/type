@@ -37,8 +37,8 @@ import { NotePages, type NotePageRequest } from "../lib/note-pages";
 import { isRecordingNoteType } from "@typenotes/shared/format";
 import type { NoteMeta } from "@typenotes/shared/types";
 import { RecordingAudioPlayer } from "../ui/audio-player";
-import { collectNotePaths } from "../lib/feed";
 import { registerCaptureDraft } from "../lib/capture-draft";
+import { noteForegroundActivity } from "../lib/note-loading";
 import {
   isPullReady,
   overscrollPastEnd,
@@ -170,9 +170,10 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
         await core.deleteItems([path]);
         useSyncStore.getState().scheduleAutoSync("capture deleted");
       },
-      readNote: async (path) => {
-        const tree = await core.getTree();
-        return collectNotePaths(tree).includes(path) ? core.readNote(path) : null;
+      readNote: core.readNoteIfExists,
+      publishNote: async (path, exists) => {
+        if (exists) await useNotesStore.getState().noteFiled(path);
+        else await useNotesStore.getState().noteRemoved(path);
       },
     });
   }
@@ -199,9 +200,7 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
     await pageQueue.current;
     const session = pages.session;
     if (!session) return;
-    await session.flush();
-    const path = session.currentPath();
-    if (path) await useNotesStore.getState().noteFiled(path);
+    await session.publish();
   }, [pages]);
   const flushDraft = useCallback(() => { void persistDraft().catch(() => {}); }, [persistDraft]);
   useEffect(() => registerCaptureDraft(persistDraft), [persistDraft]);
@@ -245,6 +244,7 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   // transition leaves the current session intact and editable for retry.
   const pendingPageRequests = useRef(0);
   const switchPage = useCallback((operation: () => Promise<void>, reveal: boolean) => {
+    noteForegroundActivity();
     pendingPageRequests.current += 1;
     transitioning.value = true;
     setRestoring(true);
@@ -301,7 +301,6 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
       openBlankPage();
       if (path) {
         useSyncStore.getState().scheduleAutoSync("capture filed");
-        void useNotesStore.getState().noteFiled(path).catch(() => {});
       }
     }).catch(() => {
       if (!mounted.current) return;
@@ -505,6 +504,7 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   }));
 
   const onChange = (value: string) => {
+    noteForegroundActivity();
     setText(value);
     pages.session.onChange(value);
     // Keep the page uncluttered while writing; tapping back into the text

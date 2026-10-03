@@ -71,6 +71,9 @@ src/
   lib/appearance.ts       palette + theme derivation (pure, tested)
   lib/capture.ts          capture-page note lifecycle (pure, tested)
   lib/feed.ts             tree+previews → list rows (pure, tested)
+  lib/note-processing.ts  pure worker jobs: JSON cache + incremental Feed sections
+  lib/note-worker.native.ts dedicated Worklet Runtime (separate from animations)
+  lib/note-loading.ts     local-week priority + foreground yielding + tree reuse
   lib/folder-tree.ts      folder tree → flat expandable rows (pure, tested)
   lib/backup-export.ts    native Files / SAF backup bridge
   lib/backup-naming.ts    provider-safe timestamped backup folder names
@@ -89,10 +92,29 @@ Notes are organized from any list: hold a row for archive / move / delete, or
 the core has no separate create-folder command.
 
 State flows one way: screens → `@typenotes/mobile-core/core-api` (typed
-facade over the FFI) → Rust core. Stores cache the tree/previews/status and
-re-fetch after mutations. Preview parsing, date labels, sync-error hints,
-and frontmatter helpers come from `@typenotes/shared` — the same code the
-desktop app uses.
+facade over the FFI) → Rust core. Opening a note reads that path directly;
+missing files differ from locked/read failures. A saved draft publishes its
+list changes once, including an earlier autosave. Known paths refresh one
+summary; new/deleted paths also refresh the tree.
+
+Rust creates compact previews in its blocking pool (two lines, at most 384
+Unicode characters each, up to 200 notes per call); note bodies stay native.
+Shared fixtures pin parity with `@typenotes/shared` Markdown/tag semantics.
+One background Worklet Runtime decodes native JSON, holds the preview cache,
+serializes/restores snapshots and retains sorted Feed rows. Only changed date
+sections return to React. Unchanged folders and preview maps retain identity.
+The Web/test implementation runs those same pure jobs without native worklets.
+
+Today and the current local Monday-start week load before older Stream notes
+and ordinary folders. Cached/filename-based placeholders keep history visible.
+Opening history bypasses the background summary queue. Between history batches,
+loading yields to typing and menu/page transitions; an in-flight native batch
+finishes normally. Profile changes and locking invalidate pending results and
+clear both caches. Plaintext snapshots are disabled while encryption is enabled.
+
+See [the performance notes](../../docs/PERFORMANCE_IDEAS_GPUI_RN.md) for checks
+and the physical-device release verification matrix. These changes add FFI
+exports, so regenerate bindings and rebuild the native client before testing.
 
 ## Transcription
 

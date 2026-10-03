@@ -40,6 +40,11 @@ export type NotePreviewEntry = {
   meta: NoteMeta;
 };
 
+export type NoteSummaryEntry = Omit<NotePreviewEntry, "content"> & {
+  title: string;
+  second_line: string;
+};
+
 export type DragData = {
   type: "folder" | "note";
   path: string;

@@ -38,10 +38,7 @@ fn parse(json: &str) -> serde_json::Value {
 async fn ffi_end_to_end() {
     // Calls before init_core fail with a clear message instead of panicking.
     let uninitialized = crate::get_tree().await;
-    assert!(uninitialized
-        .unwrap_err()
-        .to_string()
-        .contains("init_core"));
+    assert!(uninitialized.unwrap_err().to_string().contains("init_core"));
 
     let app_dir = std::env::temp_dir().join(format!("type-ffi-test-{}", std::process::id()));
     let _ = fs::remove_dir_all(&app_dir);
@@ -63,15 +60,20 @@ async fn ffi_end_to_end() {
 
     // ── Notes: create → read → write → rename → tree → previews ──────────────
     let created = parse(
-        &crate::create_note(r#"{"folder_path":"_system/stream","content":"hello from ffi"}"#.to_string())
-            .await
-            .unwrap(),
+        &crate::create_note(
+            r#"{"folder_path":"_system/stream","content":"hello from ffi"}"#.to_string(),
+        )
+        .await
+        .unwrap(),
     );
     let note_path = created["path"].as_str().unwrap().to_string();
     // The front-matter codec keeps a separating blank line at the top of the
     // body — same contract the desktop frontend sees over IPC.
     assert_eq!(
-        crate::read_note(note_path.clone()).await.unwrap().trim_start(),
+        crate::read_note(note_path.clone())
+            .await
+            .unwrap()
+            .trim_start(),
         "hello from ffi"
     );
 
@@ -79,7 +81,10 @@ async fn ffi_end_to_end() {
         .await
         .unwrap();
     assert_eq!(
-        crate::read_note(note_path.clone()).await.unwrap().trim_start(),
+        crate::read_note(note_path.clone())
+            .await
+            .unwrap()
+            .trim_start(),
         "updated body"
     );
 
@@ -98,9 +103,16 @@ async fn ffi_end_to_end() {
         .expect("stream folder in tree");
     assert!(!stream["notes"].as_array().unwrap().is_empty());
 
-    let previews = parse(&crate::list_note_previews(vec![note_path.clone()]).await.unwrap());
+    let previews = parse(
+        &crate::list_note_previews(vec![note_path.clone()])
+            .await
+            .unwrap(),
+    );
     assert_eq!(previews[0]["path"], note_path.as_str());
-    assert_eq!(previews[0]["content"].as_str().unwrap().trim(), "updated body");
+    assert_eq!(
+        previews[0]["content"].as_str().unwrap().trim(),
+        "updated body"
+    );
     // The tree and the preview stat the file on different paths; for an
     // unchanged note they must agree, or every launch would re-read it.
     let tree_version = stream["notes"]
@@ -112,16 +124,81 @@ async fn ffi_end_to_end() {
         .clone();
     assert!(tree_version.is_string());
     assert_eq!(previews[0]["version"], tree_version);
+    assert_eq!(
+        crate::read_note_if_exists("_system/stream/missing.md".into())
+            .await
+            .unwrap(),
+        None
+    );
+    assert!(
+        crate::read_note_if_exists("../invalid.md".into())
+            .await
+            .is_err()
+    );
+    assert!(
+        crate::read_note_if_exists("_system/stream".into())
+            .await
+            .is_err()
+    );
+    let summaries = parse(
+        &crate::list_note_summaries(vec![note_path.clone()])
+            .await
+            .unwrap(),
+    );
+    assert_eq!(summaries[0]["title"], "updated body");
+    assert_eq!(summaries[0]["version"], tree_version);
+    assert!(summaries[0].get("content").is_none());
+    assert!(
+        crate::list_note_summaries(vec![note_path.clone(); 201])
+            .await
+            .is_err()
+    );
+
+    // A long document stays native: only two bounded Unicode lines cross FFI.
+    let huge_body = format!(
+        "{}\n{}\n{}",
+        "🦀".repeat(10_000),
+        "я".repeat(10_000),
+        "body-only-secret".repeat(100_000)
+    );
+    let huge = parse(
+        &crate::create_note(serde_json::json!({ "content": huge_body }).to_string())
+            .await
+            .unwrap(),
+    );
+    let huge_path = huge["path"].as_str().unwrap().to_string();
+    let compact = crate::list_note_summaries(vec![huge_path.clone()])
+        .await
+        .unwrap();
+    assert!(compact.len() < 4_000);
+    assert!(!compact.contains("body-only-secret"));
+    let compact = parse(&compact);
+    assert_eq!(compact[0]["title"].as_str().unwrap().chars().count(), 384);
+    assert_eq!(
+        compact[0]["second_line"].as_str().unwrap().chars().count(),
+        384
+    );
+    crate::delete_items(vec![huge_path]).await.unwrap();
 
     // Tags use the real header without changing or nesting the body.
     let before_tags = crate::read_note(note_path.clone()).await.unwrap();
     for tags in [serde_json::json!(["todo", "работа"]), serde_json::json!([])] {
-        crate::update_note_tags(serde_json::json!({ "path": note_path, "tags": tags }).to_string()).await.unwrap();
-        assert_eq!(crate::read_note(note_path.clone()).await.unwrap(), before_tags);
-        assert_eq!(parse(&crate::get_note_meta(note_path.clone()).await.unwrap())["tags"], tags);
+        crate::update_note_tags(serde_json::json!({ "path": note_path, "tags": tags }).to_string())
+            .await
+            .unwrap();
+        assert_eq!(
+            crate::read_note(note_path.clone()).await.unwrap(),
+            before_tags
+        );
+        assert_eq!(
+            parse(&crate::get_note_meta(note_path.clone()).await.unwrap())["tags"],
+            tags
+        );
     }
     let registry = serde_json::json!({"version":1,"tags":[{"name":"work","color":"#123456","description":"Shared"}]});
-    crate::write_tag_registry(registry.to_string()).await.unwrap();
+    crate::write_tag_registry(registry.to_string())
+        .await
+        .unwrap();
     assert_eq!(parse(&crate::read_tag_registry().await.unwrap()), registry);
 
     // ── Working-folder settings: transcription_mode round-trip ────────────────
@@ -177,7 +254,11 @@ async fn ffi_end_to_end() {
         "mime_type": "audio/mp4",
         "folder_path": "_system/stream"
     });
-    let saved = parse(&crate::save_audio_recording(save_args.to_string()).await.unwrap());
+    let saved = parse(
+        &crate::save_audio_recording(save_args.to_string())
+            .await
+            .unwrap(),
+    );
     let recording_note_rel = saved["note_path"].as_str().unwrap().to_string();
 
     let queued = parse(
@@ -223,5 +304,17 @@ async fn ffi_end_to_end() {
     assert!(handwriting_note.contains("ocr_status: pending"));
     assert!(!handwriting_note.contains("ocr_status: completed"));
 
+    crate::enable_security(serde_json::json!({ "unlock_password": "synthetic-passphrase", "panic_password": "synthetic-panic" }).to_string()).await.unwrap();
+    crate::lock_security().await.unwrap();
+    assert!(
+        crate::read_note_if_exists("_system/stream/missing.md".into())
+            .await
+            .is_err()
+    );
+    assert!(
+        crate::list_note_summaries(vec![recording_note_rel])
+            .await
+            .is_err()
+    );
     let _ = fs::remove_dir_all(&app_dir);
 }

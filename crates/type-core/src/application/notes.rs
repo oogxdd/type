@@ -9,7 +9,7 @@ use crate::{
         NotesRepository,
     },
     CreateNoteArgs, CreateNoteResult, FolderNode, NoteFrontMatter, NoteMeta, NotePreviewEntry,
-    OrderFile, SetNoteTimestampArgs, SetOrderArgs, STREAM_FOLDER,
+    NoteSummaryEntry, OrderFile, SetNoteTimestampArgs, SetOrderArgs, STREAM_FOLDER,
 };
 
 /// Note use cases. This layer owns workflow and policy while persistence,
@@ -53,6 +53,15 @@ where
         let raw = self.repository.read_to_string(&full_path)?;
         let (_, body) = self.documents.parse(&raw);
         self.crypto.decrypt_note_body(&body)
+    }
+
+    /// A missing note is distinct from an invalid path, locked body or I/O error.
+    pub fn read_note_if_exists(&self, path: &str) -> Result<Option<String>, String> {
+        let full_path = self.repository.resolve_path(path)?;
+        if self.repository.entry_kind(&full_path)?.is_none() {
+            return Ok(None);
+        }
+        self.read_note(path).map(Some)
     }
 
     pub fn create_note(&self, args: CreateNoteArgs) -> Result<CreateNoteResult, String> {
@@ -161,10 +170,7 @@ where
     /// Bulk preview fetch: one filesystem pass returning decrypted body + meta
     /// per note. Unreadable or vanished notes are skipped so a single broken
     /// file cannot take down the whole list.
-    pub fn list_note_previews(
-        &self,
-        paths: Vec<String>,
-    ) -> Result<Vec<NotePreviewEntry>, String> {
+    pub fn list_note_previews(&self, paths: Vec<String>) -> Result<Vec<NotePreviewEntry>, String> {
         let mut entries = Vec::with_capacity(paths.len());
         for path in paths {
             let Ok(full_path) = self.repository.resolve_path(&path) else {
@@ -194,6 +200,25 @@ where
             });
         }
         Ok(entries)
+    }
+
+    pub fn list_note_summaries(&self, paths: Vec<String>) -> Result<Vec<NoteSummaryEntry>, String> {
+        // Process one body at a time instead of retaining a batch of full documents.
+        let mut summaries = Vec::with_capacity(paths.len());
+        for path in paths {
+            for entry in self.list_note_previews(vec![path])? {
+                let (title, second_line) =
+                    crate::domain::note_preview::preview_lines(&entry.content, &entry.meta);
+                summaries.push(NoteSummaryEntry {
+                    path: entry.path,
+                    version: entry.version,
+                    title,
+                    second_line,
+                    meta: entry.meta,
+                });
+            }
+        }
+        Ok(summaries)
     }
 
     fn note_meta_from_front_matter(
@@ -227,7 +252,10 @@ where
     }
 
     pub fn update_note_tags(&self, path: &str, tags: Vec<String>) -> Result<(), String> {
-        if !tags.iter().all(|tag| crate::domain::tag_registry::valid_tag_name(tag)) {
+        if !tags
+            .iter()
+            .all(|tag| crate::domain::tag_registry::valid_tag_name(tag))
+        {
             return Err("Invalid tag name.".into());
         }
         let full_path = self.repository.resolve_path(path)?;
@@ -237,7 +265,11 @@ where
         let raw = self.repository.read_to_string(&full_path)?;
         let (mut meta, _) = self.documents.parse(&raw);
         meta.tags = Some(tags);
-        meta.passthrough_lines.retain(|line| !line.split_once(':').is_some_and(|(key, _)| key.trim().eq_ignore_ascii_case("tags")));
+        meta.passthrough_lines.retain(|line| {
+            !line
+                .split_once(':')
+                .is_some_and(|(key, _)| key.trim().eq_ignore_ascii_case("tags"))
+        });
         meta.updated_ms = self.clock.now_ms().or(meta.updated_ms);
         self.repository.write_note_metadata(&full_path, &meta)
     }

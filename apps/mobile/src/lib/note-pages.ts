@@ -29,7 +29,7 @@ export class NotePages {
   }
 
   async open(path: string, paths: string[]): Promise<void> {
-    await this.session.flush();
+    await this.session.publish();
     const content = await this.storage.readNote(path);
     if (content === null) throw new Error("This note no longer exists.");
     // Publish only after both saving and reading succeed. Failures retain the
@@ -40,7 +40,7 @@ export class NotePages {
   }
 
   async returnToCapture(): Promise<void> {
-    await this.session.flush();
+    await this.session.publish();
     const path = this.draft.currentPath();
     if (path) {
       const content = await this.storage.readNote(path);

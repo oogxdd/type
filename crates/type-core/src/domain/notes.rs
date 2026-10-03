@@ -12,7 +12,7 @@ pub struct NoteEntry {
 }
 
 /// Metadata returned to the frontend for a single note.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct NoteMeta {
     pub created_ms: Option<i64>,
     pub updated_ms: Option<i64>,
@@ -37,6 +37,16 @@ pub struct NotePreviewEntry {
     /// The file's version (see [`NoteEntry::version`]) as of this read.
     pub version: Option<String>,
     pub content: String,
+    pub meta: NoteMeta,
+}
+
+/// Bounded list text; full bodies never cross the mobile bridge for previews.
+#[derive(Serialize)]
+pub struct NoteSummaryEntry {
+    pub path: String,
+    pub version: Option<String>,
+    pub title: String,
+    pub second_line: String,
     pub meta: NoteMeta,
 }
 
@@ -133,4 +143,7 @@ pub struct CreateNoteResult {
 }
 
 #[derive(Deserialize)]
-pub struct SetNoteTagsArgs { pub path: String, pub tags: Vec<String> }
+pub struct SetNoteTagsArgs {
+    pub path: String,
+    pub tags: Vec<String>,
+}

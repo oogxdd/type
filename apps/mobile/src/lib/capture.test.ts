@@ -134,6 +134,46 @@ describe("CaptureSession", () => {
 });
 
 describe("resuming a saved capture draft", () => {
+  it("publishes an earlier autosave once across repeated menu round trips", async () => {
+    const { storage } = makeStorage();
+    const publishNote = vi.fn(async () => {});
+    const session = new CaptureSession({ ...storage, publishNote }, 60_000);
+    session.onChange("saved before opening the menu");
+    await session.flush();
+    expect(publishNote).not.toHaveBeenCalled();
+    for (let index = 0; index < 10; index += 1) await session.publish();
+    expect(publishNote).toHaveBeenCalledTimes(1);
+    session.onChange("changed again");
+    await Promise.all([session.publish(), session.publish()]);
+    expect(publishNote).toHaveBeenCalledTimes(2);
+  });
+
+  it("does no writes or publication for an unchanged saved note", async () => {
+    const { storage } = makeStorage();
+    const publishNote = vi.fn(async () => {});
+    const session = new CaptureSession({ ...storage, publishNote }, 60_000, { path: "a.md", content: "same" });
+    for (let index = 0; index < 10; index += 1) await session.publish();
+    expect(storage.writeNote).not.toHaveBeenCalled();
+    expect(publishNote).not.toHaveBeenCalled();
+    session.onChange("temporary");
+    session.onChange("same");
+    await session.publish();
+    expect(storage.writeNote).not.toHaveBeenCalled();
+  });
+
+  it("retries failed publication and removes an emptied capture from its list", async () => {
+    const { storage } = makeStorage();
+    const publishNote = vi.fn(async (_path: string, _exists: boolean) => {}).mockRejectedValueOnce(new Error("read failed"));
+    const session = new CaptureSession({ ...storage, publishNote }, 60_000);
+    session.onChange("draft");
+    await expect(session.publish()).rejects.toThrow("read failed");
+    await session.publish();
+    session.onChange("");
+    await session.commit();
+    expect(publishNote).toHaveBeenLastCalledWith(expect.any(String), false);
+    expect(storage.deleteNote).toHaveBeenCalledTimes(1);
+  });
+
   it("does not recreate the note after editing it through the menu", async () => {
     const writes: Array<[string, string]> = [];
     const storage = {

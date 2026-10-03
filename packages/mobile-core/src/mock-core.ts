@@ -11,6 +11,7 @@
 // persists, git operations only simulate success.
 
 import type { FolderNode, NoteMeta, ProfileSettings } from "@typenotes/shared/types";
+import { parseNotePreview } from "@typenotes/shared/format";
 
 import type { RawCore, RawTranscriptionProvider } from "./raw-core";
 
@@ -288,6 +289,16 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
     // ── Notes ──
     getTree: async () => JSON.stringify(buildTree()),
     readNote: async (path) => requireNote(path).content,
+    readNoteIfExists: async (path) => notes.get(path)?.content ?? null,
+    listNoteSummaries: async (paths) => {
+      if (paths.length > 200) throw new Error("At most 200 note summaries per request.");
+      return JSON.stringify(paths.flatMap((path) => {
+      const note = notes.get(path);
+      if (!note) return [];
+      const preview = parseNotePreview(note.content, note.meta.updated_ms, note.meta);
+      return [{ path, version: versionOf(note), title: [...preview.title].slice(0, 384).join(""), second_line: [...preview.secondLine].slice(0, 384).join(""), meta: note.meta }];
+      }));
+    },
     createNote: async (argsJson) => {
       const args = JSON.parse(argsJson) as {
         folder_path?: string | null;

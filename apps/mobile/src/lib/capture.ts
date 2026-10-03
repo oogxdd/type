@@ -13,6 +13,7 @@ export type CaptureStorage = {
   createNote(content: string): Promise<string>;
   writeNote(path: string, content: string): Promise<void>;
   deleteNote(path: string): Promise<void>;
+  publishNote?(path: string, exists: boolean): Promise<void>;
 };
 
 export const CAPTURE_DEBOUNCE_MS = 500;
@@ -23,6 +24,10 @@ export class CaptureSession {
   private dirty = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private chain: Promise<void> = Promise.resolve();
+  private savedContent = "";
+  private savedRevision = 0;
+  private publishedRevision = 0;
+  private publication: Promise<void> = Promise.resolve();
 
   constructor(
     private storage: CaptureStorage,
@@ -31,6 +36,7 @@ export class CaptureSession {
   ) {
     this.path = initial?.path ?? null;
     this.content = initial?.content ?? "";
+    this.savedContent = this.content;
   }
 
   /** The path of the note backing the current page, if one exists yet. */
@@ -43,6 +49,7 @@ export class CaptureSession {
   }
 
   onChange(text: string) {
+    if (text === this.content) return;
     this.content = text;
     this.dirty = true;
     if (this.timer) {
@@ -70,6 +77,10 @@ export class CaptureSession {
       // Loop: content may change while a write is in flight.
       while (this.dirty) {
         const content = this.content;
+        if (this.path && content === this.savedContent) {
+          this.dirty = false;
+          return;
+        }
         if (!this.path && !content.trim()) {
           // Nothing worth creating yet.
           this.dirty = false;
@@ -80,10 +91,24 @@ export class CaptureSession {
         } else {
           await this.storage.writeNote(this.path, content);
         }
+        this.savedContent = content;
+        this.savedRevision += 1;
         this.dirty = content !== this.content;
       }
     });
     return this.chain;
+  }
+
+  /** Publish saves once, including autosaves completed before this call. */
+  publish(): Promise<void> {
+    this.publication = this.publication.catch(() => {}).then(async () => {
+      await this.flush();
+      const revision = this.savedRevision;
+      if (!this.path || revision === this.publishedRevision) return;
+      await this.storage.publishNote?.(this.path, true);
+      this.publishedRevision = revision;
+    });
+    return this.publication;
   }
 
   /**
@@ -92,17 +117,20 @@ export class CaptureSession {
    * or null when nothing was kept.
    */
   async commit(): Promise<string | null> {
-    await this.flush();
+    await this.publish();
     const path = this.path;
     const keep = Boolean(path) && Boolean(this.content.trim());
     if (path && !keep) {
       await (this.chain = this.chain
         .catch(() => {})
         .then(() => this.storage.deleteNote(path)));
+      await this.storage.publishNote?.(path, false);
     }
     this.path = null;
     this.content = "";
     this.dirty = false;
+    this.savedContent = "";
+    this.savedRevision = this.publishedRevision = 0;
     return keep ? path : null;
   }
 }

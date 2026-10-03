@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { NotePages, type NotePageStorage } from "./note-pages";
+import { createMockCore } from "@typenotes/mobile-core/mock-core";
+import { setRawCore } from "@typenotes/mobile-core/raw-core";
+import { readNoteIfExists } from "@typenotes/mobile-core/core-api";
 
 const fixture = () => {
   const notes = new Map([["a.md", "Alpha"], ["b.md", "Beta"], ["c.md", "Gamma"]]);
@@ -13,6 +16,23 @@ const fixture = () => {
 };
 
 describe("the shared capture and saved-note page", () => {
+  it("opens 100 pages directly in a 10,000-note store without requesting a tree", async () => {
+    const core = createMockCore();
+    await core.initCore("/tmp/type-pages-synthetic", "/tmp");
+    const paths: string[] = [];
+    for (let index = 0; index < 10_000; index += 1) paths.push(JSON.parse(await core.createNote(JSON.stringify({ content: `note ${index}` }))).path);
+    const getTree = vi.fn(core.getTree);
+    setRawCore({ ...core, getTree });
+    const pages = new NotePages({ readNote: readNoteIfExists, createNote: async () => { throw new Error("unexpected create"); }, writeNote: core.writeNote, deleteNote: async (path) => core.deleteItems([path]) });
+    for (let index = 0; index < 100; index += 1) await pages.open(paths[index], paths);
+    expect(getTree).not.toHaveBeenCalled();
+    expect(pages.session.currentContent()).toBe("note 99");
+    await expect(pages.open("missing.md", paths)).rejects.toThrow("no longer exists");
+    expect(pages.session.currentContent()).toBe("note 99");
+    setRawCore({ ...core, readNoteIfExists: async () => undefined });
+    expect(await readNoteIfExists("native-missing.md")).toBeNull();
+  });
+
   it("follows the supplied filtered order in both directions, stopping at its edges", async () => {
     const { pages, storage } = fixture();
     await pages.open("c.md", ["c.md", "a.md"]);

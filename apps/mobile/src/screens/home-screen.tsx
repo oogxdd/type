@@ -13,6 +13,7 @@ import {
   type SwipeDirection,
 } from "../lib/capture-gesture";
 import { recordGestureAttempt, type GestureOutcome } from "../lib/gesture-trace";
+import { noteForegroundActivity } from "../lib/note-loading";
 import { useDiagnosticsStore } from "../state/diagnostics-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useTheme } from "../theme";
@@ -92,12 +93,14 @@ const HomeWorkspace = ({ note }: { note?: NotePageRequest }) => {
   }, []);
   const openMenu = useCallback(() => {
     if (transitioning.value) return;
+    noteForegroundActivity(400);
     Keyboard.dismiss();
     menuProgress.value = withTiming(1, SETTLE, (finished) => {
       if (finished) runOnJS(settled)(true);
     });
   }, [menuProgress, settled, transitioning]);
   const closeMenu = useCallback(() => {
+    noteForegroundActivity(400);
     menuProgress.value = withTiming(0, SETTLE, (finished) => {
       if (finished) runOnJS(settled)(false);
     });
@@ -180,6 +183,7 @@ const HomeWorkspace = ({ note }: { note?: NotePageRequest }) => {
         return;
       }
       if (horizontal) {
+        runOnJS(noteForegroundActivity)(400);
         cancelAnimation(menuProgress);
         runOnJS(dismissKeyboard)();
       }
@@ -197,6 +201,7 @@ const HomeWorkspace = ({ note }: { note?: NotePageRequest }) => {
       }
     })
     .onEnd((event, success) => {
+      runOnJS(noteForegroundActivity)(400);
       maxPull.value = Math.max(maxPull.value, pull.value);
       if (direction.value === "left" || direction.value === "right") {
         const target = menuReleaseTarget(menuProgress.value, event.velocityX, startedOpen.value, success);

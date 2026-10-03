@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useMemo } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -11,10 +10,10 @@ import {
   View,
 } from "react-native";
 
-import { STREAM_FOLDER_PATH } from "@typenotes/shared/constants";
-import { formatRecordingStatusLabel } from "@typenotes/shared/format";
+import { formatRecordingStatusLabel, formatNoteDateLabel } from "@typenotes/shared/format";
 
-import { feedNoteRows, findFolder, groupNoteRowsByDate, type NoteRow } from "../lib/feed";
+import type { NoteRow } from "../lib/feed";
+import { useFeedSections } from "../lib/use-feed-sections";
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useTheme, type Theme } from "../theme";
@@ -91,7 +90,7 @@ export const NoteListRow = ({
         ) : null}
       </View>
       <Text style={[styles.rowDate, { color: theme.colors.secondaryText }]}>
-        {preview.dateLabel}
+        {formatNoteDateLabel(preview.updatedMs)}
       </Text>
     </Pressable>
   );
@@ -101,15 +100,10 @@ export const FeedScreen = () => {
   const theme = useTheme();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const tree = useNotesStore((s) => s.tree);
-  const previews = useNotesStore((s) => s.previews);
   const loading = useNotesStore((s) => s.loading);
   const refresh = useNotesStore((s) => s.refresh);
 
-  const sections = useMemo(
-    () => groupNoteRowsByDate(feedNoteRows(findFolder(tree, STREAM_FOLDER_PATH), previews)),
-    [tree, previews]
-  );
+  const sections = useFeedSections("all");
 
   return (
     <SectionList

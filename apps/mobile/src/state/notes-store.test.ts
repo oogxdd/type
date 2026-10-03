@@ -1,8 +1,4 @@
-// Filing a page from the capture screen must not re-read the whole notes
-// folder. `list_note_previews` returns each note's decrypted *body*, so asking
-// for every path ships the entire corpus over the FFI bridge as one JSON
-// string and parses it again in JS — a cost that grows with the folder and is
-// paid on every swipe-up. These tests pin the cheap path.
+// Pin bounded compact reads, no-op refreshes and isolation of async results.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,6 +18,7 @@ vi.mock("./preview-snapshot-file", () => ({
   readPreviewSnapshot: async (profileId: string) => snapshotFiles.get(profileId) ?? null,
   writePreviewSnapshot: async (profileId: string, contents: string) => {
     snapshotFiles.set(profileId, contents);
+    return true;
   },
   deletePreviewSnapshot: async (profileId: string) => {
     snapshotFiles.delete(profileId);
@@ -46,9 +43,9 @@ const trackPreviewCalls = (core: RawCore) => {
   const calls: string[][] = [];
   setRawCore({
     ...core,
-    listNotePreviews: (paths: string[]) => {
+    listNoteSummaries: (paths: string[]) => {
       calls.push([...paths]);
-      return core.listNotePreviews(paths);
+      return core.listNoteSummaries(paths);
     },
   });
   return calls;
@@ -73,7 +70,7 @@ describe("notes store", () => {
     snapshotFiles.clear();
   });
 
-  it("reads every note's body on the first refresh", async () => {
+  it("loads every note's compact summary on the first refresh", async () => {
     await createNote(core, "first");
     await createNote(core, "second");
     previewCalls.length = 0;
@@ -106,8 +103,7 @@ describe("notes store", () => {
   });
 
   it("asks for previews in bounded batches", async () => {
-    // One giant list_note_previews call builds the whole decrypted corpus as a
-    // single JSON string on both sides of the FFI bridge.
+    // The native endpoint also caps its batches at 200.
     for (let index = 0; index < 250; index += 1) {
       await createNote(core, `note ${index}`);
     }
@@ -194,12 +190,12 @@ describe("notes store", () => {
     let filed: string | null = null;
     setRawCore({
       ...core,
-      listNotePreviews: async (paths: string[]) => {
+      listNoteSummaries: async (paths: string[]) => {
         if (filed === null) {
           filed = await createNote(core, "filed mid-refresh");
           await useNotesStore.getState().noteFiled(filed);
         }
-        return core.listNotePreviews(paths);
+        return core.listNoteSummaries(paths);
       },
     });
 
@@ -241,8 +237,8 @@ describe("notes store", () => {
     let edited = false;
     setRawCore({
       ...core,
-      listNotePreviews: async (paths: string[]) => {
-        const result = await core.listNotePreviews(paths);
+      listNoteSummaries: async (paths: string[]) => {
+        const result = await core.listNoteSummaries(paths);
         if (!edited) {
           // The refresh has read the old body; now the note changes and the
           // editor re-reads it before the refresh gets to publish.
@@ -273,8 +269,8 @@ describe("notes store", () => {
     });
     setRawCore({
       ...core,
-      listNotePreviews: async (paths: string[]) => {
-        const result = await core.listNotePreviews(paths);
+      listNoteSummaries: async (paths: string[]) => {
+        const result = await core.listNoteSummaries(paths);
         if (paths.length === 1) {
           await held;
         }
@@ -290,9 +286,8 @@ describe("notes store", () => {
     expect(useNotesStore.getState().previews.size).toBe(6);
   });
 
-  it("publishes the top of the Feed first, then the rest, in three steps", async () => {
-    // Every publish rebuilds the menu lists, which sort and date-group the
-    // whole Feed; publishing per batch made that happen dozens of times.
+  it("publishes the Feed in bounded portions before ordinary folders", async () => {
+    // Each bounded publication lets recent rows appear before the rest.
     for (let index = 0; index < 450; index += 1) {
       await createNote(core, `feed ${index}`);
     }
@@ -300,7 +295,7 @@ describe("notes store", () => {
     await core.moveItems(toMove, "Work");
     const published: Map<string, unknown>[] = [];
     const unsubscribe = useNotesStore.subscribe((state, previous) => {
-      if (state.previews !== previous.previews) {
+      if (state.previews !== previous.previews && state.previews.size > 0) {
         published.push(state.previews);
       }
     });
@@ -308,8 +303,8 @@ describe("notes store", () => {
     await useNotesStore.getState().refresh();
     unsubscribe();
 
-    expect(published).toHaveLength(3);
-    const [top, feed, everything] = published;
+    expect(published).toHaveLength(4);
+    const [top, , feed, everything] = published;
     const feedInTreeOrder = findFolder(useNotesStore.getState().tree, "_system/stream")!.notes.map(
       (note) => note.path
     );
@@ -370,5 +365,132 @@ describe("notes store", () => {
     expect(snapshotFiles.has("journal")).toBe(false);
     expect(useNotesStore.getState().previews.size).toBe(1);
   });
-});
 
+  it("keeps tree, preview and folder references on an unchanged refresh", async () => {
+    useEncryption(false);
+    useWorkingFolder("journal");
+    await createNote(core, "unchanged");
+    await useNotesStore.getState().refresh();
+    const before = useNotesStore.getState();
+    const snapshot = snapshotFiles.get("journal");
+    previewCalls.length = 0;
+
+    await useNotesStore.getState().refresh();
+
+    expect(previewCalls).toEqual([]);
+    expect(useNotesStore.getState().tree).toBe(before.tree);
+    expect(useNotesStore.getState().previews).toBe(before.previews);
+    expect(useNotesStore.getState().folderPreviews).toBe(before.folderPreviews);
+    expect(snapshotFiles.get("journal")).toBe(snapshot);
+  });
+
+  it("does not scan the tree when publishing an edited known note", async () => {
+    const path = await createNote(core, "before");
+    await useNotesStore.getState().refresh();
+    const getTree = vi.fn(core.getTree);
+    setRawCore({ ...core, getTree });
+    await core.writeNote(path, "after");
+
+    await useNotesStore.getState().noteFiled(path);
+
+    expect(getTree).not.toHaveBeenCalled();
+    expect(useNotesStore.getState().previews.get(path)?.title).toBe("after");
+  });
+
+  it("reports a failed publication so a saved revision can be retried", async () => {
+    const path = await createNote(core, "before");
+    await useNotesStore.getState().refresh();
+    setRawCore({ ...core, listNoteSummaries: async () => { throw Error("read failed"); } });
+    await expect(useNotesStore.getState().noteFiled(path)).rejects.toThrow("read failed");
+    setRawCore(core);
+    await core.writeNote(path, "after");
+    await useNotesStore.getState().noteFiled(path);
+    expect(useNotesStore.getState().previews.get(path)?.title).toBe("after");
+  });
+
+  it("discards previews from a profile changed while native reading was in flight", async () => {
+    useWorkingFolder("first");
+    const path = await createNote(core, "old profile");
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let started!: () => void;
+    const reading = new Promise<void>((resolve) => { started = resolve; });
+    setRawCore({ ...core, listNoteSummaries: async (paths) => {
+      const raw = await core.listNoteSummaries(paths);
+      started();
+      await held;
+      return raw;
+    } });
+    const refresh = useNotesStore.getState().refresh();
+    await reading;
+    useWorkingFolder("second");
+    release();
+    await refresh;
+    expect(useNotesStore.getState().previews.has(path)).toBe(false);
+    expect(useNotesStore.getState().tree).toBeNull();
+    expect(useNotesStore.getState().loading).toBe(false);
+  });
+
+  it("clears plaintext in both runtimes when locked during native reading", async () => {
+    useWorkingFolder("journal");
+    useEncryption(true);
+    const path = await createNote(core, "secret");
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let started!: () => void;
+    const reading = new Promise<void>((resolve) => { started = resolve; });
+    setRawCore({ ...core, listNoteSummaries: async (paths) => {
+      const raw = await core.listNoteSummaries(paths);
+      started();
+      await held;
+      return raw;
+    } });
+    const refresh = useNotesStore.getState().refresh();
+    await reading;
+    useSecurityStore.setState({ state: { encryption_enabled: true, locked: true, auto_lock_on_background: false } });
+    release();
+    await refresh;
+    expect(useNotesStore.getState().previews.has(path)).toBe(false);
+    expect(useNotesStore.getState().tree).toBeNull();
+    const { runNoteJob } = await import("../lib/note-worker");
+    const cached = await runNoteJob({ kind: "snapshot", scope: useNotesStore.getState().processingScope });
+    expect(cached.raw).not.toContain("secret");
+    expect(snapshotFiles.has("journal")).toBe(false);
+  });
+
+  it("publishes today and this week before history and opens an old note independently", async () => {
+    const date = (days: number) => {
+      const now = new Date();
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, 12).getTime();
+    };
+    const monday = (new Date().getDay() + 6) % 7;
+    const datedNote = async (days: number, text: string) => {
+      const entry = JSON.parse(await core.createNote(JSON.stringify({ content: text, timestamp_ms: date(days) })));
+      return entry.path as string;
+    };
+    const old = await datedNote(30, "history");
+    const week = monday ? await datedNote(monday, "this week") : null;
+    const today = await datedNote(0, "today");
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let started!: () => void;
+    const history = new Promise<void>((resolve) => { started = resolve; });
+    const calls: string[][] = [];
+    setRawCore({ ...core, listNoteSummaries: async (paths) => {
+      calls.push(paths);
+      if (paths.includes(old)) { started(); await held; }
+      return core.listNoteSummaries(paths);
+    } });
+    const refresh = useNotesStore.getState().refresh();
+    await history;
+    expect(calls[0]).toEqual([today]);
+    expect(useNotesStore.getState().previews.has(today)).toBe(true);
+    if (week) expect(useNotesStore.getState().previews.has(week)).toBe(true);
+    expect(useNotesStore.getState().previews.has(old)).toBe(false);
+    const { readNoteIfExists } = await import("@typenotes/mobile-core/core-api");
+    expect(await readNoteIfExists(old)).toBe("history");
+    release();
+    await refresh;
+    expect(useNotesStore.getState().previews.has(old)).toBe(true);
+  });
+});

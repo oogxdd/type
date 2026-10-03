@@ -1,0 +1,18 @@
+[
+  {"body":"# Привет **мир**\nВторая [строка](https://example.com)","meta":{},"title":"Привет мир","secondLine":"Вторая строка"},
+  {"body":"::: #work researched=true\n#todo купить молоко\n[очень [важно]{#inner}]{#outer number=42}\n:::","meta":{},"title":"купить молоко","secondLine":"очень важно"},
+  {"body":"#a #b\nтекст с #skip-ai посередине","meta":{},"title":"#a #b","secondLine":"текст с #skip-ai посередине"},
+  {"body":"::: !!\nобычный текст","meta":{},"title":"::: !!","secondLine":"обычный текст"},
+  {"body":"type_annotations_b64: YWJjZGVmZ2hpamtsbW5vcA==\n# Hello\n\n<!-- type:lens:v1\n{\"text\":\"internal\"}\n-->\n","meta":{},"title":"Hello","secondLine":""},
+  {"body":"<!-- type:lens:v1\n{}\n-->\n","meta":{},"title":"","secondLine":""},
+  {"body":"---\ntitle: hidden\n---\nHello\nworld","meta":{},"title":"Hello","secondLine":"world"},
+  {"body":"Recording\nTranscript\n(Transcription pending.)\nError: no provider","meta":{"note_type":"audio_recording","transcription_status":"pending"},"title":"Voice recording","secondLine":""},
+  {"body":"Transcript\n# Actual words\nSecond line","meta":{"recording_audio_path":"_system/_recordings/a.m4a","transcription_status":"completed"},"title":"Actual words","secondLine":"Second line"},
+  {"body":"","meta":{"note_type":"handwriting_attachment","ocr_status":"pending"},"title":"Handwriting note","secondLine":""},
+  {"body":"#work [текст]{#неизвестный flag=ok}\n- ![Фото](image.png)","meta":{},"title":"текст","secondLine":"Фото"},
+  {"body":"NV_EMPTY_LINE_TOKEN_abc123\nhello\\_world\n> quoted text","meta":{},"title":"helloworld","secondLine":"quoted text"},
+  {"body":"[a]{#x}[b]{#y}\r\n## Heading","meta":{},"title":"ab","secondLine":"Heading"},
+  {"body":"[](url)\n![](image.png)\n[text]{flag=\"a } value\"}","meta":{},"title":"[](url)","secondLine":"text"},
+  {"body":"#ok #aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa prose","meta":{},"title":"#ok #aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa prose","secondLine":""},
+  {"body":"(Transcription ожидается.)\nvisible","meta":{},"title":"(Transcription ожидается.)","secondLine":"visible"}
+]

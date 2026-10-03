@@ -63,9 +63,15 @@ export const initCore = async (
 
 export const getTree = async (): Promise<FolderNode> =>
   parse(await getRawCore().getTree());
+export const getTreeRaw = (): Promise<string> => getRawCore().getTree();
+export const listNoteSummariesRaw = (paths: string[]): Promise<string> =>
+  getRawCore().listNoteSummaries(paths);
 
 export const readNote = (path: string): Promise<string> =>
   getRawCore().readNote(path);
+
+export const readNoteIfExists = async (path: string): Promise<string | null> =>
+  (await getRawCore().readNoteIfExists(path)) ?? null;
 
 export const createNote = async (
   args: CreateNoteArgs = {}

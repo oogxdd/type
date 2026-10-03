@@ -26,12 +26,14 @@ export const readPreviewSnapshot = async (profileId: string): Promise<string | n
 export const writePreviewSnapshot = async (
   profileId: string,
   contents: string
-): Promise<void> => {
+): Promise<boolean> => {
   try {
     await FileSystem.makeDirectoryAsync(SNAPSHOT_DIR, { intermediates: true });
     await FileSystem.writeAsStringAsync(snapshotFile(profileId), contents);
+    return true;
   } catch {
     // The next launch reads whatever the snapshot is missing.
+    return false;
   }
 };
 

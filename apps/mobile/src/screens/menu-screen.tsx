@@ -20,15 +20,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   ARCHIVE_FOLDER_PATH,
-  STREAM_FOLDER_PATH,
 } from "@typenotes/shared/constants";
-import { matchesFeedFilter, type FeedNoteFilter } from "@typenotes/shared/note-filter";
 
 import {
-  feedNoteRows,
   findFolder,
   folderNoteCount,
-  groupNoteRowsByDate,
   type NoteRow,
   type NoteRowSection,
 } from "../lib/feed";
@@ -39,6 +35,7 @@ import {
 } from "../lib/folder-tree";
 import { flushCaptureDraft } from "../lib/capture-draft";
 import { formatRelativeTime } from "../lib/relative-time";
+import { useFeedSections } from "../lib/use-feed-sections";
 import { autoSyncLabel } from "../lib/sync-experience";
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
@@ -55,7 +52,7 @@ type MenuTab = "feed" | "folders";
 
 // The subset of the desktop's filter chips that matches what the phone can
 // set: archiving is the one marker the note sheet writes.
-const FEED_FILTERS: Array<{ id: FeedNoteFilter; label: string }> = [
+const FEED_FILTERS: Array<{ id: "active" | "all" | "archived"; label: string }> = [
   { id: "active", label: "Active" },
   { id: "all", label: "All" },
   { id: "archived", label: "Archived" },
@@ -72,11 +69,10 @@ export const MenuScreen = () => {
   }));
   const [tab, setTab] = useState<MenuTab>("feed");
   // "Active" first: reviewing a feed means looking at what is not filed yet.
-  const [filter, setFilter] = useState<FeedNoteFilter>("active");
+  const [filter, setFilter] = useState<"active" | "all" | "archived">("active");
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
 
   const tree = useNotesStore((s) => s.tree);
-  const previews = useNotesStore((s) => s.previews);
   const loading = useNotesStore((s) => s.loading);
   const refresh = useNotesStore((s) => s.refresh);
 
@@ -129,20 +125,9 @@ export const MenuScreen = () => {
     return () => task.cancel();
   }, []);
 
-  // Building the rows sorts and date-groups every Feed note. This screen stays
-  // mounted behind the capture page and re-renders on every sync-state change,
-  // so rebuild only when the notes or the list controls actually change.
-  const feedSections = useMemo(
-    () =>
-      contentReady
-        ? groupNoteRowsByDate(
-            feedNoteRows(findFolder(tree, STREAM_FOLDER_PATH), previews, {
-              keep: (preview) => matchesFeedFilter(preview, filter),
-            })
-          )
-        : [],
-    [contentReady, tree, previews, filter]
-  );
+  // The persistent layer subscribes to its Stream inputs. The worker keeps
+  // sorted history and returns changed sections independently of sync status.
+  const feedSections = useFeedSections(filter, contentReady);
   const folderRows = useMemo(
     () => (contentReady ? flattenFolderTree(tree, expanded) : []),
     [contentReady, tree, expanded]

@@ -99,7 +99,7 @@ const UUID_V7_TIME = /^([0-9a-f]{8})-([0-9a-f]{4})-7[0-9a-f]{3}-/i;
  * The creation time a file name carries, if any — close enough to order and
  * date-group a row before its front matter has been read.
  */
-const timestampFromFileName = (name: string): number | null => {
+export const timestampFromFileName = (name: string): number | null => {
   const utc = UTC_SLUG_PARTS.exec(name);
   if (utc) {
     const [year, month, day, hours, minutes, seconds] = utc.slice(1).map(Number);

@@ -40,6 +40,11 @@ pub async fn read_note(path: String) -> Result<String, CoreError> {
     run_blocking(move || notes_service()?.read_note(&path)).await
 }
 
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn read_note_if_exists(path: String) -> Result<Option<String>, CoreError> {
+    run_blocking(move || notes_service()?.read_note_if_exists(&path)).await
+}
+
 /// `args_json`: `CreateNoteArgs`. Returns JSON `CreateNoteResult`.
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn create_note(args_json: String) -> Result<String, CoreError> {
@@ -87,6 +92,17 @@ pub async fn list_note_previews(paths: Vec<String>) -> Result<String, CoreError>
     run_blocking(move || to_json(&notes_service()?.list_note_previews(paths)?)).await
 }
 
+/// Small bounded text for list rows; full documents stay in the blocking pool.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn list_note_summaries(paths: Vec<String>) -> Result<String, CoreError> {
+    if paths.len() > 200 {
+        return Err(CoreError::Failure(
+            "At most 200 note summaries per request.".into(),
+        ));
+    }
+    run_blocking(move || to_json(&notes_service()?.list_note_summaries(paths)?)).await
+}
+
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn move_items(items: Vec<String>, destination: String) -> Result<(), CoreError> {
     run_blocking(move || notes_service()?.move_items(items, destination)).await
@@ -118,5 +134,6 @@ pub async fn update_note_tags(args_json: String) -> Result<(), CoreError> {
     run_blocking(move || {
         let args: type_core::domain::notes::SetNoteTagsArgs = from_json(&args_json)?;
         notes_service()?.update_note_tags(&args.path, args.tags)
-    }).await
+    })
+    .await
 }

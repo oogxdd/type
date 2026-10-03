@@ -5,6 +5,7 @@
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
+import { useMemo } from "react";
 import {
   FlatList,
   Pressable,
@@ -33,26 +34,25 @@ export const FolderScreen = () => {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, "Folder">>();
-  const tree = useNotesStore((s) => s.tree);
-  const previews = useNotesStore((s) => s.previews);
+  const folder = useNotesStore((s) => findFolder(s.tree, route.params.path));
+  const previews = useNotesStore((s) => s.folderPreviews.get(route.params.path));
   const loading = useNotesStore((s) => s.loading);
   const refresh = useNotesStore((s) => s.refresh);
-  const organizer = useNoteOrganizer(tree);
+  const organizer = useNoteOrganizer(useNotesStore((s) => s.tree));
 
-  const folder = findFolder(tree, route.params.path);
-  const subfolders = browsableFolders(folder);
-  const rows = folderNoteRows(folder, previews);
+  const subfolders = useMemo(() => browsableFolders(folder), [folder]);
+  const rows = useMemo(() => folderNoteRows(folder, previews ?? new Map()), [folder, previews]);
 
   // One virtualized list rather than a ScrollView of everything: a folder can
   // hold hundreds of notes.
-  const items: Item[] = [
+  const items: Item[] = useMemo(() => [
     ...subfolders.map((child) => ({
       kind: "folder" as const,
       key: `folder:${child.path}`,
       folder: child,
     })),
     ...rows.map((row) => ({ kind: "note" as const, key: row.path, row })),
-  ];
+  ], [subfolders, rows]);
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
