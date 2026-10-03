@@ -424,12 +424,12 @@ impl TypeApp {
                                 .xsmall()
                                 .tooltip(status)
                                 .child(div().size(px(9.)).rounded_full().bg(
-                                    if self.error.is_some() {
-                                        cx.theme().danger
-                                    } else if self.recording || self.busy {
-                                        rgb(0xe6ac45).into()
-                                    } else {
+                                    // Match Tauri: the dot indicates phone sync hosting,
+                                    // independently of saves, recording, jobs or errors.
+                                    if self.local_server.as_ref().is_some_and(|s| s.running) {
                                         rgb(0x00b88b).into()
+                                    } else {
+                                        cx.theme().muted_foreground.opacity(0.45)
                                     },
                                 ))
                                 .on_click(cx.listener(|this, _, window, cx| {

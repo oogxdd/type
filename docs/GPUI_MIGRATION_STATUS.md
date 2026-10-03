@@ -30,6 +30,14 @@ Updated: 2026-10-03. This is an unfinished migration; update this file after eac
 
 ### Phone sync restoration and live diagnosis (2026-10-03)
 
+Follow-up: the sidebar dot now follows the phone sync server's `running` status:
+green while hosting, muted gray otherwise, matching Tauri. A code comment
+documents that saves, recording, jobs and errors do not control its color.
+Formatting, diff checks and the dev bundle build passed; the running app was
+not restarted. Committed at the user's request as
+`fix(gpui): show sync server state in sidebar dot`. No new tests for this color-only
+change; UI/feel verification remains with the user.
+
 GPUI omitted Tauri's `direct-sync-enabled` startup restoration and called the
 explicit Stop operation on window close / Cmd+Q / app quit, clearing that
 preference. It now starts hosting in the background when previously enabled,
