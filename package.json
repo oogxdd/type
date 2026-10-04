@@ -25,6 +25,7 @@
     "test": "npm run test --workspaces --if-present",
     "mcp:build": "npm run --workspace @typenotes/notes-mcp build",
     "mcp:test": "npm run --workspace @typenotes/notes-mcp test",
+    "voice-memos:import": "cargo run -p type-core --example import_voice_memos --",
     "desktop:tauri:dev": "npm run --workspace type dev",
     "desktop:tauri:build": "npm run --workspace type build",
     "desktop:tauri:app": "npm run --workspace type tauri:dev:isolated",

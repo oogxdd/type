@@ -136,3 +136,55 @@ the end of the job even when a step fails.
 
 For local signing diagnostics and cable installation, see
 [`apps/mobile/AD_HOC_DISTRIBUTION.md`](../apps/mobile/AD_HOC_DISTRIBUTION.md).
+
+## Local release 0.4.3 (2026-10-03)
+
+iOS 0.4.3, build `2026100301`, was built locally from source commit
+`809eef31` with the version updates in `apps/mobile/app.json` and the native
+app's `Info.plist`. No CI build or tag push was needed. The optimized Rust
+device/simulator framework was regenerated, CocoaPods refreshed, and Xcode
+26.6 successfully archived and exported an Apple Distribution signed ad-hoc IPA.
+The existing `EXPO_USE_PRECOMPILED_MODULES: false` setting was preserved.
+
+Validation: mobile typecheck, 142 mobile tests, 9 mobile bridge tests and 94
+shared-core tests passed. The core sync tests required execution outside the
+sandbox to bind synthetic local sockets. The IPA passed deep/strict codesign
+verification. App and RecordingWidget versions/builds match, both profiles
+contain all three devices supported by the previously deployed 0.4.2 IPA,
+and neither permits debugging. Physical-device installation and UI feel remain
+for user testing; Android was not built.
+
+Local artifacts (ignored by Git):
+
+- `apps/mobile/ios/build/export-adhoc-0.4.3/Type.ipa`
+- `apps/mobile/ios/build/Type-0.4.3.xcarchive`
+- `apps/mobile/ios/build/ota-0.4.3/` (install page, manifest and IPA)
+- `apps/mobile/ios/build/release-0.4.3/` (build logs and verification metadata)
+
+IPA SHA-256: `07a2abba5e8a0358f089d372d6282cc372c78fc6cf7f38303cdfe33cb2451219`.
+Published to the existing `https://type-ota.vercel.app` site after explicit user
+approval. The live landing page, manifest and IPA returned HTTP 200 with their
+expected content types; the manifest reports 0.4.3 and the downloaded production
+IPA matches the verified local SHA-256. No GitHub release or tag was created.
+
+## Local release 0.4.4 (2026-10-04)
+
+Built locally and published to `https://type-ota.vercel.app` from requested
+commit `41b03e8eded636438226e584b684268148dd4d9b`, with only release version
+metadata changed to 0.4.4 / build `2026100302`. This includes the note-loading
+and worker-based feed-processing changes. Regenerated the optimized Rust
+device/simulator framework and UniFFI bindings, refreshed CocoaPods without
+enabling precompiled Expo modules, and archived/exported with Xcode 26.6.
+
+Mobile and generated-bridge typechecks passed. All 343 functional tests passed:
+160 mobile (including worker serialization), 9 bridge, 77 shared, 96 core and
+one FFI end-to-end flow. The exported IPA passed deep/strict signature checking
+and is signed by Apple Distribution. App/widget versions and build numbers
+match; both profiles retain all three previously supported devices and disable
+debugging. Live page, manifest and IPA returned HTTP 200 with correct content
+types; the downloaded production IPA matches the local SHA-256.
+
+Artifacts and logs use the same paths as 0.4.3 above with `0.4.4` substituted.
+IPA SHA-256: `eb14535d4f919f8c3cbd1700b76732db3cda2f42e3568f8a49550c2e394f30ee`.
+Physical-device installation/UI feel remain for user testing; Android was not
+built. No GitHub release or tag was created.
