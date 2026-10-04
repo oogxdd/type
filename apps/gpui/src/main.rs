@@ -67,6 +67,7 @@ struct TypeApp {
     previews: HashMap<String, NotePreviewEntry>,
     nav_items: Vec<navigation::Item>,
     selected: HashSet<SharedString>,
+    selection_anchor: Option<SharedString>,
     saved_selection: HashMap<View, SharedString>,
     expanded_by_view: HashMap<View, HashSet<SharedString>>,
     settings: bool,
@@ -436,7 +437,7 @@ impl TypeApp {
         }
     }
 
-    fn render_tree(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_tree(&self, cx: &mut Context<Self>) -> impl IntoElement + Styled {
         let view = cx.weak_entity();
         let folders = self.folder_ids.clone();
         let multi = self.selected.clone();

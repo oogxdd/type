@@ -1,6 +1,6 @@
 # GPUI migration — handoff / live status
 
-Updated: 2026-10-03. This is an unfinished migration; update this file after each milestone.
+Updated: 2026-10-04. This is an unfinished migration; update this file after each milestone.
 
 ## Where to continue
 
@@ -27,6 +27,72 @@ Updated: 2026-10-03. This is an unfinished migration; update this file after eac
 - Investigate larger H1/H2/H3 only; do not implement yet.
 
 ## Implemented
+
+### Contextual palette and blank Folders area (2026-10-04)
+
+User feedback follow-up to navigation organization:
+
+- Cmd+K offers `New folder inside “current/path”…` first when the tree cursor
+  is on a folder, with root creation kept separately. This uses navigation
+  context, so an unrelated editor note does not supply the destination.
+- Move/Rename/Trash/Delete labels identify the exact folder or whole note,
+  or count folders/notes in a group. The palette and `mv` prompt describe the
+  same filesystem targets that execution uses; selected text is not a move target.
+  Modal open/close and requested editor focus explicitly retain the owning pane.
+- Removed the added + Folder / Move / Trash action strip, selection count and
+  sidebar keyboard/drop hints as requested. Keyboard and Cmd+K actions remain.
+- The Folders tree uses its content height for short lists and shrinks to a
+  scroll viewport for long lists. The entire remaining blank area has the root
+  folder context menu and root drop behavior, with an always-accessible minimum
+  24px blank area. Existing item-specific context menus keep their behavior.
+- Validation: **55 GPUI tests passed** (28 library + 27 native), including actual
+  Cmd+K search/Enter to create a child and move its parent, explicit folder/note
+  and mixed-group target labels, unrelated editor text-selection isolation,
+  empty/short-list blank-area geometry and item menus, and an 80-folder list with
+  a reachable blank context target below the last rendered row. Formatting and
+  diff checks passed. No core API changes; synthetic profiles only.
+- Included at the user’s request in `feat(gpui): improve navigation organization
+  and contextual commands`. User UI/feel review is next; Linux/Windows runtime
+  remains unverified. Dev bundle build passed; only the test Dev instance was
+  quit normally and relaunched with `--dev --data-dir .tmp/gpui-nav-playground`
+  (absolute path supplied). New Dev process confirmed; production remained open.
+
+### Navigation organization workflow (2026-10-04)
+
+Audit: Shift navigation and modifier-click explicitly excluded folders from
+multi-selection. Keyboard ranges only accumulated, and clicking selected notes
+seeded selection from the open editor rather than the tree cursor. Root folder
+creation was hidden in menus; the existing `mv` palette already supported new
+destinations. The new workflow applies to both Folders and Stream.
+
+- Shift J/K or Shift arrows selects visible rows from a stable anchor, shrinking
+  when reversing. Stream calendar headers are excluded. Space toggles individual
+  notes/folders; these marks survive ordinary j/k movement. Esc clears selection.
+  Modifier-click now includes folders without opening/collapsing them or adding
+  an unrelated editor note. Selection survives collapsed ancestors and polling.
+- The initial navigation action strip was removed in the user feedback follow-up
+  above; root creation and organization remain available through Cmd+K and menus.
+  `m` opens `mv`; type an existing folder or a new relative path, then Enter.
+  `n` creates inside the current folder in Folders, or at root in Stream;
+  Shift N always creates at root. Folder creation retains marked items and cursor.
+  Cmd+K, existing Trash/delete chords and context menus remain available.
+- Targets are deterministic and omit descendants already carried by a selected
+  folder. Move suggestions exclude selected folders and their descendants;
+  backend collision/self-move guards remain authoritative. Rename rejects multiple
+  independent targets. Navigation action buttons/context menus restore tree focus
+  so modal confirmation operates on navigation selection, not an unrelated editor.
+- Validation: **53 GPUI tests passed** (28 library + 25 native), including new
+  synthetic flows for folder range contraction, modifier-click, create root folder
+  without losing selection, moving three folders with bodies preserved, selecting
+  a folder plus child, creating a destination via `mv`, Stream ranges and disjoint
+  Space selection, moving notes and Trash. Formatting and diff checks passed.
+  Dev bundle build (`desktop.py bundle --test-support`) also passed.
+  No core API changes; no production notes accessed or app restarted.
+- Included with the contextual palette follow-up in the user-requested commit.
+  User review of UI/feel is next;
+  mouse Shift-click currently toggles rows (keyboard Shift movement owns ranges).
+  Linux/Windows runtime and destructive permanent-delete UI were not newly tested.
+
 
 ### Phone sync restoration and live diagnosis (2026-10-03)
 

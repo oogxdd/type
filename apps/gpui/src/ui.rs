@@ -44,7 +44,11 @@ impl TypeApp {
                     .on_mouse_down(MouseButton::Right, |_, window, cx| { window.prevent_default(); cx.stop_propagation(); })
                     .on_click(cx.listener(|this, _, window, cx| { window.prevent_default(); cx.stop_propagation(); this.close_modal(window, cx); })))
                 .child(div().id("palette-panel").occlude().child(command
-                    .placeholder("Search commands · mv to folder")
+                    .placeholder(if query.starts_with("mv ") {
+                        format!("Move {} · destination folder path", self.palette_target_label(cx))
+                    } else {
+                        format!("Commands for {} · mv to folder", self.palette_target_label(cx))
+                    })
                     .on_query(move |_, _, cx| { let _ = query_view.update(cx, |_, cx| cx.notify()); })
                     .on_confirm(move |index, window, cx| {
                         if let Some(choice) = choices.get(index.section).and_then(|items| items.get(index.row)).cloned() {
@@ -211,6 +215,12 @@ impl TypeApp {
         use gpui_kit::assets::IconName as Icons;
         let view = cx.weak_entity();
         let root_menu_view = view.clone();
+        let mut folder_rows = 0;
+        if self.view == View::Folders {
+            while self.tree.read(cx).entry(folder_rows).is_some() {
+                folder_rows += 1;
+            }
+        }
         let status = if let Some(error) = &self.error {
             error.clone()
         } else if let Some(capture) = &self.capture {
@@ -346,7 +356,7 @@ impl TypeApp {
                 )
             })
             .child(
-                div()
+                v_flex()
                     .id("tree-viewport")
                     .flex_1()
                     .min_h_0()
@@ -355,57 +365,67 @@ impl TypeApp {
                             this.track_drag(event, cx)
                         }),
                     )
-                    .child(self.render_tree(cx)),
+                    .child(
+                        self.render_tree(cx)
+                            .when(self.view == View::Folders, |tree| {
+                                // Let the tree shrink when scrolling is needed, but use its
+                                // content height for short lists. The rest is a root target.
+                                tree.h(px(folder_rows as f32 * 32.)).min_h_0()
+                            }),
+                    )
+                    .when(self.view == View::Folders, |panel| {
+                        panel.child(
+                            div()
+                                .id("root-drop")
+                                .map(|element| {
+                                    #[cfg(test)]
+                                    {
+                                        use gpui_kit::test::TestSupportExt;
+                                        element.test_support()
+                                    }
+                                    #[cfg(not(test))]
+                                    {
+                                        element
+                                    }
+                                })
+                                .flex_1()
+                                .flex_shrink_0()
+                                .min_h(px(24.))
+                                .w_full()
+                                .drag_over::<DraggedRow>(|style, _, _, cx| {
+                                    style.bg(cx.theme().accent)
+                                })
+                                .on_drop(cx.listener(|this, drag: &DraggedRow, window, cx| {
+                                    this.move_row(
+                                        drag.id.clone(),
+                                        None,
+                                        tree_moves::Placement::Root,
+                                        window,
+                                        cx,
+                                    )
+                                }))
+                                .context_menu(move |menu, _, _| {
+                                    let view = root_menu_view.clone();
+                                    menu.item(PopupMenuItem::new("New folder at root…").on_click(
+                                        move |_, window, cx| {
+                                            let _ = view.update(cx, |this, cx| {
+                                                if this.view == View::Folders {
+                                                    this.tree.update(cx, |tree, cx| {
+                                                        tree.focus(window, cx)
+                                                    });
+                                                    this.execute(
+                                                        Choice::NewFolder(String::new()),
+                                                        window,
+                                                        cx,
+                                                    );
+                                                }
+                                            });
+                                        },
+                                    ))
+                                }),
+                        )
+                    }),
             )
-            .when(self.view == View::Folders, |panel| {
-                panel.child(
-                    div()
-                        .id("root-drop")
-                        .map(|element| {
-                            #[cfg(test)]
-                            {
-                                use gpui_kit::test::TestSupportExt;
-                                element.test_support()
-                            }
-                            #[cfg(not(test))]
-                            {
-                                element
-                            }
-                        })
-                        .h(px(36.))
-                        .px_4()
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground)
-                        .child("Folders root · right-click to create a folder")
-                        .w_full()
-                        .drag_over::<DraggedRow>(|style, _, _, cx| style.bg(cx.theme().accent))
-                        .on_drop(cx.listener(|this, drag: &DraggedRow, window, cx| {
-                            this.move_row(
-                                drag.id.clone(),
-                                None,
-                                tree_moves::Placement::Root,
-                                window,
-                                cx,
-                            )
-                        }))
-                        .context_menu(move |menu, _, _| {
-                            let view = root_menu_view.clone();
-                            menu.item(PopupMenuItem::new("New folder at root…").on_click(
-                                move |_, window, cx| {
-                                    let _ = view.update(cx, |this, cx| {
-                                        if this.view == View::Folders {
-                                            this.execute(
-                                                Choice::NewFolder(String::new()),
-                                                window,
-                                                cx,
-                                            );
-                                        }
-                                    });
-                                },
-                            ))
-                        }),
-                )
-            })
             .when(self.prefs.rail, |panel| {
                 panel.child(
                     h_flex()

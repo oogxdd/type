@@ -157,6 +157,7 @@ impl TypeApp {
             cx.notify();
         }));
         let navigation = self.navigation_focus.contains_focused(window, cx);
+        self.navigation_focused = navigation;
         let palette = if matches!(kind, ModalKind::Palette) {
             let state = cx.new(|cx| CommandState::new(window, cx));
             state.update(cx, |state, cx| {
@@ -184,6 +185,7 @@ impl TypeApp {
     pub fn close_modal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let navigation = self.modal.take().map(|m| m.navigation).unwrap_or(false);
         self.modal_subscription = None;
+        self.navigation_focused = navigation;
         if self.settings {
             if navigation {
                 self.navigation_focus.focus(window, cx);
@@ -200,6 +202,38 @@ impl TypeApp {
         cx.notify();
     }
 
+    /// Describes filesystem targets, never the editor's text selection.
+    pub(crate) fn palette_target_label(&self, cx: &App) -> String {
+        let paths = self.targets(cx);
+        if paths.len() == 1 {
+            let path = &paths[0];
+            if self.folder_ids.contains(path.as_str()) {
+                return format!("folder “{path}”");
+            }
+            let title = self
+                .previews
+                .get(path)
+                .map(|note| navigation::title(&note.content))
+                .unwrap_or_else(|| path.rsplit('/').next().unwrap_or(path).to_string());
+            return format!("note “{title}”");
+        }
+        let folders = paths
+            .iter()
+            .filter(|path| self.folder_ids.contains(path.as_str()))
+            .count();
+        let notes = paths.len() - folders;
+        match (folders, notes) {
+            (0, 0) => "notes or folders".into(),
+            (0, n) => format!("{n} notes"),
+            (n, 0) => format!("{n} folders"),
+            (f, n) => format!(
+                "{f} {} and {n} {}",
+                if f == 1 { "folder" } else { "folders" },
+                if n == 1 { "note" } else { "notes" }
+            ),
+        }
+    }
+
     pub fn entries(&self, query: &str, cx: &App) -> Vec<Entry> {
         if let Some(query) = query.strip_prefix("mv ") {
             let items = self
@@ -207,7 +241,16 @@ impl TypeApp {
                 .as_ref()
                 .map(navigation::folder_destinations)
                 .unwrap_or_default();
-            let dirs = items;
+            let targets = self.targets(cx);
+            let dirs: Vec<_> = items
+                .iter()
+                .cloned()
+                .filter(|folder| {
+                    !targets
+                        .iter()
+                        .any(|source| folder == source || folder.starts_with(&format!("{source}/")))
+                })
+                .collect();
             let mut entries: Vec<_> = navigation::move_suggestions(&dirs, query)
                 .into_iter()
                 .map(|p| Entry {
@@ -216,7 +259,9 @@ impl TypeApp {
                 })
                 .collect();
             if !query.trim().is_empty()
-                && !dirs.iter().any(|d| d == query.trim().trim_end_matches('/'))
+                && !items
+                    .iter()
+                    .any(|d| d == query.trim().trim_end_matches('/'))
                 && type_gpui::backend::validate_destination(query.trim_end_matches('/'), false)
                     .is_ok()
             {
@@ -308,6 +353,33 @@ impl TypeApp {
             choice,
         })
         .collect::<Vec<_>>();
+        if self.navigation_focused && self.view == View::Folders {
+            if let Some(folder) = self
+                .tree
+                .read(cx)
+                .selected_item()
+                .filter(|item| self.folder_ids.contains(&item.id))
+            {
+                // Put the contextual destination first when searching “new folder”.
+                entries.insert(
+                    1,
+                    Entry {
+                        label: format!("New folder inside “{}”…", folder.id),
+                        choice: Choice::NewFolder(folder.id.to_string()),
+                    },
+                );
+            }
+        }
+        let target = self.palette_target_label(cx);
+        for entry in &mut entries {
+            entry.label = match entry.choice {
+                Choice::MoveMode => format!("Move {target} to folder… (mv)"),
+                Choice::Rename => format!("Rename {target}…"),
+                Choice::Trash => format!("Move {target} to Trash"),
+                Choice::Delete => format!("Delete {target} permanently…"),
+                _ => continue,
+            };
+        }
         for profile in &self.profiles.profiles {
             entries.push(Entry {
                 label: format!("Profile: {}", profile.name),
@@ -552,18 +624,20 @@ impl TypeApp {
                     index.saturating_sub(1)
                 };
                 if stroke.modifiers.shift {
-                    if let Some(id) = id.filter(|i| !self.folder_ids.contains(i)) {
-                        self.selected.insert(id);
+                    let anchor = self
+                        .selection_anchor
+                        .get_or_insert_with(|| id.clone().unwrap_or_default())
+                        .clone();
+                    let anchor_index = self.tree.read(cx).index_of(&anchor).unwrap_or(index);
+                    self.selected.clear();
+                    for ix in anchor_index.min(next)..=anchor_index.max(next) {
+                        if let Some(row) = self.tree.read(cx).entry(ix) {
+                            if !row.item().id.starts_with("feed:") {
+                                self.selected.insert(row.item().id.clone());
+                            }
+                        }
                     }
-                    if let Some(row) = self
-                        .tree
-                        .read(cx)
-                        .entry(next)
-                        .filter(|e| !self.folder_ids.contains(&e.item().id))
-                    {
-                        self.selected.insert(row.item().id.clone());
-                    }
-                } else {
+                } else if self.selection_anchor.take().is_some() {
                     self.selected.clear();
                 }
                 self.tree.update(cx, |s, cx| {
@@ -572,6 +646,7 @@ impl TypeApp {
                 });
             }
             "h" | "l" | "left" | "right" => {
+                self.selection_anchor = None;
                 if let Some(id) = id {
                     let folder = if self.folder_ids.contains(&id) {
                         Some(id)
@@ -588,6 +663,30 @@ impl TypeApp {
                         });
                     }
                 }
+            }
+            "space" => {
+                self.selection_anchor = None;
+                if let Some(id) = id.filter(|id| !id.starts_with("feed:")) {
+                    if !self.selected.remove(&id) {
+                        self.selected.insert(id);
+                    }
+                }
+            }
+            "m" => self.execute(Choice::MoveMode, window, cx),
+            "n" if self.view != View::Trash => {
+                let parent = if stroke.modifiers.shift || self.view != View::Folders {
+                    String::new()
+                } else {
+                    id.map(|id| {
+                        if self.folder_ids.contains(&id) {
+                            id.to_string()
+                        } else {
+                            type_core::note_parent_folder_path(&id)
+                        }
+                    })
+                    .unwrap_or_default()
+                };
+                self.execute(Choice::NewFolder(parent), window, cx);
             }
             "enter" => {
                 if let Some(id) = id {
@@ -607,6 +706,7 @@ impl TypeApp {
             }
             "escape" => {
                 self.selected.clear();
+                self.selection_anchor = None;
             }
             _ => return,
         }
@@ -745,7 +845,9 @@ impl TypeApp {
                     self.revision += 1;
                     self.folder_tree = Some(self.backend.notes()?.get_tree()?);
                     self.rebuild_navigation(cx);
-                    self.select_row(&path.into(), cx);
+                    if self.selected.is_empty() && self.view == View::Folders {
+                        self.select_row(&path.into(), cx);
+                    }
                 }
                 ModalKind::StreamDate => {
                     self.flush(true, cx)?;
@@ -890,6 +992,7 @@ impl TypeApp {
         self.expanded_by_view.clear();
         self.saved_selection.clear();
         self.selected.clear();
+        self.selection_anchor = None;
         self.revision += 1;
         self.loading = true;
         Ok(())
@@ -965,7 +1068,12 @@ impl TypeApp {
                     self.open_note(path.clone().into(), true, window, cx);
                     self.select_row(&path.into(), cx);
                 }
-                Choice::MoveMode => self.show_modal(ModalKind::Palette, "mv ", window, cx),
+                Choice::MoveMode => {
+                    if self.targets(cx).is_empty() {
+                        return Err("Select a note or folder first.".into());
+                    }
+                    self.show_modal(ModalKind::Palette, "mv ", window, cx);
+                }
                 Choice::Move(_) | Choice::Trash => {
                     self.flush(false, cx)?;
                     let destination = if let Choice::Move(destination) = choice {
@@ -1012,7 +1120,11 @@ impl TypeApp {
                     self.refresh(window, cx);
                 }
                 Choice::Rename => {
-                    if let Some(path) = self.targets(cx).first() {
+                    let paths = self.targets(cx);
+                    if paths.len() > 1 {
+                        return Err("Select one item to rename.".into());
+                    }
+                    if let Some(path) = paths.first() {
                         self.show_modal(
                             ModalKind::Rename(path.clone()),
                             path.rsplit('/').next().unwrap(),
@@ -1202,6 +1314,7 @@ impl TypeApp {
             return;
         }
         self.selected.clear();
+        self.selection_anchor = None;
         if let Some(id) = next {
             self.select_row(&id, cx);
             self.open_note(id, true, window, cx);
@@ -1255,6 +1368,7 @@ impl TypeApp {
                         return;
                     }
                     this.navigation_focused = true;
+                    this.tree.update(cx, |tree, cx| tree.focus(window, cx));
                     if !this.selected.contains(&id) {
                         this.selected.clear();
                         this.selected.insert(id.clone());

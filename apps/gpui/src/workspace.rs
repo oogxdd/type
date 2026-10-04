@@ -24,6 +24,7 @@ impl TypeApp {
             previews: HashMap::new(),
             nav_items: vec![],
             selected: HashSet::new(),
+            selection_anchor: None,
             saved_selection: HashMap::new(),
             expanded_by_view: HashMap::new(),
             settings: false,
@@ -107,10 +108,10 @@ impl TypeApp {
                         return;
                     }
                     this.saved_selection.insert(this.view, id.clone());
-                    if this.selected.len() <= 1 {
-                        this.selected.clear();
-                    }
-                    if !this.folder_ids.contains(&id) && id != this.active {
+                    if this.selected.is_empty()
+                        && !this.folder_ids.contains(&id)
+                        && id != this.active
+                    {
                         this.open_note(id, false, window, cx);
                     }
                 }
@@ -432,7 +433,7 @@ impl TypeApp {
             }
         });
         self.selected
-            .retain(|id| self.tree.read(cx).index_of(id).is_some());
+            .retain(|id| navigation::contains(&self.nav_items, id));
     }
 
     pub fn first_note(&self, cx: &App) -> Option<SharedString> {
@@ -563,6 +564,7 @@ impl TypeApp {
         editor.update(cx, |s, cx| s.set_readonly(self.prefs.vim, cx));
         self.refresh_tags(cx);
         if focus {
+            self.navigation_focused = false;
             let handle = editor.focus_handle(cx);
             window.defer(cx, move |window, cx| handle.focus(window, cx));
         }
@@ -700,6 +702,7 @@ impl TypeApp {
         self.persist_preferences();
         self.settings = false;
         self.selected.clear();
+        self.selection_anchor = None;
         let paths: HashSet<_> = navigation::note_paths(&root).into_iter().collect();
         self.previews.retain(|path, _| paths.contains(path));
         self.folder_tree = Some(root);
@@ -745,6 +748,7 @@ impl TypeApp {
         self.view = view;
         self.settings = false;
         self.selected.clear();
+        self.selection_anchor = None;
         self.roots.clear();
         self.rebuild_navigation(cx);
         if let Some(id) = self.saved_selection.get(&view).cloned() {
@@ -771,16 +775,24 @@ impl TypeApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if multiple && !folder {
+        self.navigation_focused = true;
+        self.selection_anchor = None;
+        if multiple && !id.starts_with("feed:") {
+            if self.selected.is_empty() {
+                if let Some(current) = self.tree.read(cx).selected_item() {
+                    if !current.id.starts_with("feed:") && current.id != id {
+                        self.selected.insert(current.id.clone());
+                    }
+                }
+            }
             if !self.selected.remove(&id) {
                 self.selected.insert(id.clone());
             }
-            if !self.active.is_empty() && self.active != id {
-                self.selected.insert(self.active.clone());
-            }
+            self.select_row(&id, cx);
             self.tree.update(cx, |s, cx| s.focus(window, cx));
         } else {
             self.selected.clear();
+            self.selection_anchor = None;
             self.select_row(&id, cx);
             if folder {
                 if let Some(item) = tree_moves::find(&self.roots, &id) {
@@ -804,12 +816,20 @@ impl TypeApp {
             return vec![self.active.to_string()];
         }
         if !self.selected.is_empty() {
-            return self
+            let mut paths: Vec<String> = self
                 .selected
                 .iter()
-                .filter(|p| !p.starts_with("draft:"))
+                .filter(|p| !p.starts_with("draft:") && !p.starts_with("feed:"))
                 .map(ToString::to_string)
                 .collect();
+            paths.sort();
+            // A selected folder already carries its selected descendants.
+            let all = paths.clone();
+            paths.retain(|path| {
+                !all.iter()
+                    .any(|parent| path.starts_with(&format!("{parent}/")))
+            });
+            return paths;
         }
         let editor = self.notes.get(&self.active).and_then(|n| n.editor.as_ref());
         if editor.is_some() && !self.navigation_focused && !self.active.starts_with("draft:") {
@@ -841,6 +861,7 @@ impl TypeApp {
         self.active = map(&self.active, old, new).into();
         self.previews.clear();
         self.selected.clear();
+        self.selection_anchor = None;
         self.saved_selection.insert(self.view, self.active.clone());
         self.revision += 1;
     }

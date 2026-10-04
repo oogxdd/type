@@ -1,8 +1,8 @@
 use super::{Backend, TypeApp, View, vim};
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::{
-    AnyWindowHandle, AppContext, Bounds, Entity, Focusable, Modifiers, TestAppContext,
-    VisualTestContext, WindowBounds, WindowOptions, point, px, size,
+    AnyWindowHandle, AppContext, Bounds, Entity, Focusable, TestAppContext, VisualTestContext,
+    WindowBounds, WindowOptions, point, px, size,
 };
 use type_core::{AppEnv, STREAM_FOLDER};
 
@@ -1175,6 +1175,10 @@ fn folders_right_click_creates_root_and_child_without_blocking_rows(cx: &mut Tes
     cx.update_window(window, |_, window, cx| {
         app.update(cx, |app, cx| app.set_view(View::Folders, window, cx));
         window.render_frame(cx);
+        assert!(
+            window.find("root-drop").bounds().size.height > px(300.),
+            "the entire unused Folders area must open the root context menu"
+        );
         window.right_click("root-drop", cx);
     })
     .unwrap();
@@ -1196,6 +1200,10 @@ fn folders_right_click_creates_root_and_child_without_blocking_rows(cx: &mut Tes
             app.submit_modal(window, cx);
         });
         window.render_frame(cx);
+        let row = window.find("nav-row-Root folder").bounds();
+        let blank = window.find("root-drop").bounds();
+        assert!(blank.size.height > px(300.));
+        assert!((blank.top() - row.bottom()).abs() <= px(1.));
         window.right_click("nav-row-Root folder", cx);
     }).unwrap();
     cx.run_until_parked();
@@ -1218,4 +1226,311 @@ fn folders_right_click_creates_root_and_child_without_blocking_rows(cx: &mut Tes
         });
     }).unwrap();
     assert!(f.0.root.join("Root folder/Child").is_dir());
+}
+
+#[gpui_kit::test]
+fn navigation_folder_range_create_and_move(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    for folder in ["Alpha", "Beta", "Gamma"] {
+        f.0.create_folder(folder).unwrap();
+        f.0.create(folder, format!("{folder} body"), None).unwrap();
+    }
+    f.0.create(STREAM_FOLDER, "Unrelated open note".into(), None)
+        .unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.set_view(View::Folders, window, cx);
+            app.select_row(&"Alpha".into(), cx);
+            app.click_row("Beta".into(), true, true, window, cx);
+            assert_eq!(app.targets(cx), ["Alpha", "Beta"]);
+            assert!(
+                !super::tree_moves::find(&app.roots, &"Beta".into())
+                    .unwrap()
+                    .is_expanded()
+            );
+            app.selected.clear();
+            app.select_row(&"Alpha".into(), cx);
+        });
+    })
+    .unwrap();
+    press(cx, window, "shift-j shift-j");
+    cx.update_window(window, |_, _, cx| {
+        assert_eq!(app.read(cx).targets(cx), ["Alpha", "Beta", "Gamma"]);
+    })
+    .unwrap();
+    press(cx, window, "shift-k");
+    cx.update_window(window, |_, _, cx| {
+        assert_eq!(app.read(cx).targets(cx), ["Alpha", "Beta"]);
+    })
+    .unwrap();
+    press(cx, window, "shift-j shift-n");
+    cx.simulate_input(window, "Projects");
+    press(cx, window, "enter");
+    cx.update_window(window, |_, _, cx| {
+        assert!(f.0.root.join("Projects").is_dir());
+        assert_eq!(app.read(cx).targets(cx), ["Alpha", "Beta", "Gamma"]);
+        assert_eq!(
+            app.read(cx)
+                .tree
+                .read(cx)
+                .selected_item()
+                .unwrap()
+                .id
+                .as_str(),
+            "Gamma"
+        );
+    })
+    .unwrap();
+    press(cx, window, "m");
+    cx.simulate_input(window, "Projects");
+    press(cx, window, "enter");
+    cx.update_window(window, |_, _, cx| {
+        assert!(app.read(cx).error.is_none(), "{:?}", app.read(cx).error);
+        for folder in ["Alpha", "Beta", "Gamma"] {
+            assert!(!f.0.root.join(folder).exists());
+            let path = std::fs::read_dir(f.0.root.join(format!("Projects/{folder}")))
+                .unwrap()
+                .map(|entry| entry.unwrap().path())
+                .find(|path| path.extension().is_some_and(|e| e == "md"))
+                .unwrap();
+            assert!(
+                std::fs::read_to_string(path)
+                    .unwrap()
+                    .contains(&format!("{folder} body"))
+            );
+        }
+    })
+    .unwrap();
+    // Selecting both a folder and its child must carry the subtree just once.
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.select_row(&"Projects/Alpha".into(), cx);
+            app.tree.update(cx, |tree, cx| tree.focus(window, cx));
+        });
+    })
+    .unwrap();
+    press(cx, window, "l shift-j");
+    cx.update_window(window, |_, _, cx| {
+        assert_eq!(app.read(cx).selected.len(), 2);
+        assert_eq!(app.read(cx).targets(cx), ["Projects/Alpha"]);
+    })
+    .unwrap();
+    press(cx, window, "m");
+    cx.simulate_input(window, "Collected");
+    press(cx, window, "enter");
+    assert!(f.0.root.join("Collected/Alpha").is_dir());
+    assert!(!f.0.root.join("Projects/Alpha").exists());
+}
+
+#[gpui_kit::test]
+fn navigation_stream_selection_create_move_and_trash(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let timestamp = type_core::now_ms().unwrap();
+    let first =
+        f.0.create(STREAM_FOLDER, "one".into(), Some(timestamp + 3))
+            .unwrap();
+    let second =
+        f.0.create(STREAM_FOLDER, "two".into(), Some(timestamp + 2))
+            .unwrap();
+    let third =
+        f.0.create(STREAM_FOLDER, "three".into(), Some(timestamp + 1))
+            .unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.select_row(&first.clone().into(), cx);
+            app.tree.update(cx, |tree, cx| tree.focus(window, cx));
+        });
+    })
+    .unwrap();
+    press(cx, window, "shift-j shift-k");
+    cx.update_window(window, |_, _, cx| {
+        assert_eq!(app.read(cx).targets(cx), [first.clone()]);
+        assert!(
+            app.read(cx)
+                .selected
+                .iter()
+                .all(|id| !id.starts_with("feed:"))
+        );
+    })
+    .unwrap();
+    press(cx, window, "escape");
+    // Space marks remain while moving through unselected rows.
+    press(cx, window, "space j j space");
+    cx.update_window(window, |_, _, cx| {
+        let targets = app.read(cx).targets(cx);
+        assert_eq!(targets.len(), 2);
+        assert!(targets.contains(&first));
+        assert!(targets.contains(&third));
+        assert!(!targets.contains(&second));
+    })
+    .unwrap();
+    press(cx, window, "n");
+    cx.simulate_input(window, "Reading");
+    press(cx, window, "enter m");
+    cx.simulate_input(window, "Reading");
+    press(cx, window, "enter");
+    for path in [&first, &third] {
+        assert!(!f.0.root.join(path).exists());
+        assert!(
+            f.0.root
+                .join("Reading")
+                .join(path.rsplit('/').next().unwrap())
+                .is_file()
+        );
+    }
+    assert!(f.0.root.join(&second).is_file());
+    // Refocus navigation after Stream advances to the remaining note's editor.
+    press(cx, window, "ctrl-w space cmd-backspace");
+    assert!(!f.0.root.join(&second).exists());
+    assert!(
+        f.0.root
+            .join(type_core::ARCHIVE_FOLDER)
+            .join(second.rsplit('/').next().unwrap())
+            .is_file()
+    );
+}
+
+#[gpui_kit::test]
+fn palette_creation_and_actions_describe_the_focused_filesystem_targets(cx: &mut TestAppContext) {
+    use super::commands::{Choice, ModalKind};
+    let f = Fixture::new();
+    f.0.create_folder("Projects").unwrap();
+    f.0.create_folder("Other").unwrap();
+    let editor_note =
+        f.0.create(STREAM_FOLDER, "Unrelated editor note".into(), None)
+            .unwrap();
+    let root_note = f.0.create("", "Root note".into(), None).unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.set_view(View::Folders, window, cx);
+            app.select_row(&"Projects".into(), cx);
+        });
+    })
+    .unwrap();
+    press(cx, window, "cmd-k");
+    cx.simulate_input(window, "new folder");
+    cx.update_window(window, |_, _, cx| {
+        let entries = app.read(cx).entries("new folder", cx);
+        assert_eq!(entries[0].label, "New folder inside “Projects”…");
+        assert!(matches!(&entries[0].choice, Choice::NewFolder(parent) if parent == "Projects"));
+        assert!(
+            entries
+                .iter()
+                .any(|e| matches!(&e.choice, Choice::NewFolder(parent) if parent.is_empty()))
+        );
+    })
+    .unwrap();
+    press(cx, window, "enter");
+    cx.simulate_input(window, "Ideas");
+    press(cx, window, "enter");
+    assert!(f.0.root.join("Projects/Ideas").is_dir());
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.select_row(&"Projects".into(), cx);
+            app.selected.extend(["Projects".into(), "Other".into()]);
+            assert_eq!(app.palette_target_label(cx), "2 folders");
+            app.selected.remove("Other");
+            app.selected.insert(root_note.clone().into());
+            assert_eq!(app.palette_target_label(cx), "1 folder and 1 note");
+            app.selected.clear();
+            app.tree.update(cx, |tree, cx| tree.focus(window, cx));
+        });
+    })
+    .unwrap();
+    press(cx, window, "cmd-k");
+    cx.simulate_input(window, "to folder");
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        assert_eq!(app.targets(cx), ["Projects"]);
+        assert_eq!(
+            app.entries("to folder", cx)[0].label,
+            "Move folder “Projects” to folder… (mv)"
+        );
+    })
+    .unwrap();
+    press(cx, window, "enter");
+    cx.update_window(window, |_, _, cx| {
+        assert!(matches!(
+            app.read(cx).modal.as_ref().unwrap().kind,
+            ModalKind::Palette
+        ));
+        assert_eq!(app.read(cx).targets(cx), ["Projects"]);
+    })
+    .unwrap();
+    cx.simulate_input(window, "Elsewhere");
+    press(cx, window, "enter");
+    assert!(f.0.root.join("Elsewhere/Projects/Ideas").is_dir());
+    assert!(!f.0.root.join("Projects").exists());
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.selected.insert("Other".into());
+            app.open_note(editor_note.clone().into(), true, window, cx);
+            app.notes[&app.active]
+                .editor
+                .as_ref()
+                .unwrap()
+                .update(cx, |editor, cx| {
+                    editor.set_selected_range(0..9, cx);
+                });
+        });
+    })
+    .unwrap();
+    press(cx, window, "cmd-k");
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        assert_eq!(app.targets(cx), [editor_note.clone()]);
+        assert_eq!(app.palette_target_label(cx), "note “Unrelated editor note”");
+        assert!(
+            app.entries("new folder", cx)
+                .iter()
+                .all(|e| !e.label.contains("inside"))
+        );
+        assert_eq!(
+            app.entries("to folder", cx)[0].label,
+            "Move note “Unrelated editor note” to folder… (mv)"
+        );
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn folders_full_list_keeps_blank_root_context_space(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    for index in 0..80 {
+        f.0.create_folder(&format!("Folder {index:02}")).unwrap();
+    }
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.set_view(View::Folders, window, cx);
+            app.select_row(&"Folder 79".into(), cx);
+        });
+        window.render_frame(cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        let blank = window.find("root-drop").bounds();
+        assert!(blank.size.height >= px(24.));
+        assert!(
+            blank.size.height <= px(25.),
+            "a long tree should use all remaining height"
+        );
+        assert!(window.find("nav-row-Folder 79").bounds().bottom() <= blank.top() + px(1.));
+        window.right_click("root-drop", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(
+            window.within("popup-menu").find(0usize).label(),
+            Some("New folder at root…")
+        );
+    })
+    .unwrap();
 }
