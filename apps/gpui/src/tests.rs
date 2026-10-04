@@ -1492,6 +1492,8 @@ fn navigation_folder_range_create_and_move(cx: &mut TestAppContext) {
     })
     .unwrap();
     press(cx, window, "m");
+    cx.simulate_input(window, "mv");
+    press(cx, window, "tab");
     cx.simulate_input(window, "Projects");
     press(cx, window, "enter");
     cx.update_window(window, |_, _, cx| {
@@ -1526,6 +1528,8 @@ fn navigation_folder_range_create_and_move(cx: &mut TestAppContext) {
     })
     .unwrap();
     press(cx, window, "m");
+    cx.simulate_input(window, "mv");
+    press(cx, window, "tab");
     cx.simulate_input(window, "Collected");
     press(cx, window, "enter");
     assert!(f.0.root.join("Collected/Alpha").is_dir());
@@ -1578,6 +1582,8 @@ fn navigation_stream_selection_create_move_and_trash(cx: &mut TestAppContext) {
     press(cx, window, "n");
     cx.simulate_input(window, "Reading");
     press(cx, window, "enter m");
+    cx.simulate_input(window, "mv");
+    press(cx, window, "tab");
     cx.simulate_input(window, "Reading");
     press(cx, window, "enter");
     for path in [&first, &third] {
@@ -1742,4 +1748,240 @@ fn folders_full_list_keeps_blank_root_context_space(cx: &mut TestAppContext) {
         );
     })
     .unwrap();
+}
+
+#[gpui_kit::test]
+fn rename_updates_tree_and_previews_before_background_refresh(cx: &mut TestAppContext) {
+    use super::commands::Choice;
+    let f = Fixture::new();
+    let note =
+        f.0.create("Work/Child", "Title stays visible".into(), None)
+            .unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.open_note(note.clone().into(), false, window, cx);
+            let editor_id = app.notes[&app.active].editor.as_ref().unwrap().entity_id();
+            app.set_view(View::Folders, window, cx);
+            app.select_row(&note.clone().into(), cx);
+            app.select_row(&"Work".into(), cx);
+            app.execute(Choice::Rename, window, cx);
+            app.modal
+                .as_ref()
+                .unwrap()
+                .input
+                .update(cx, |input, cx| input.set_value("Renamed", window, cx));
+            // Keep refresh unavailable: assertions must pass synchronously, with no polling.
+            app.refreshing = true;
+            app.submit_modal(window, cx);
+            let renamed_note = note.replacen("Work/", "Renamed/", 1);
+            assert!(app.error.is_none(), "{:?}", app.error);
+            assert!(!super::navigation::contains(&app.nav_items, "Work"));
+            assert!(super::navigation::contains(&app.nav_items, &renamed_note));
+            assert_eq!(
+                app.tree.read(cx).selected_item().unwrap().id.as_str(),
+                "Renamed"
+            );
+            assert!(
+                super::tree_moves::find(&app.roots, &"Renamed".into())
+                    .unwrap()
+                    .is_expanded()
+            );
+            assert!(
+                super::tree_moves::find(&app.roots, &"Renamed/Child".into())
+                    .unwrap()
+                    .is_expanded()
+            );
+            assert_eq!(app.active.as_str(), renamed_note);
+            assert_eq!(
+                app.notes[&app.active].editor.as_ref().unwrap().entity_id(),
+                editor_id
+            );
+            assert_eq!(app.previews[&renamed_note].content, "Title stays visible");
+            app.select_row(&renamed_note.clone().into(), cx);
+            app.execute(Choice::Rename, window, cx);
+            app.modal
+                .as_ref()
+                .unwrap()
+                .input
+                .update(cx, |input, cx| input.set_value("new-name", window, cx));
+            app.submit_modal(window, cx);
+            let new_note = "Renamed/Child/new-name.md";
+            assert!(!super::navigation::contains(&app.nav_items, &renamed_note));
+            assert!(super::navigation::contains(&app.nav_items, new_note));
+            assert_eq!(
+                app.tree.read(cx).selected_item().unwrap().label.as_str(),
+                "Title stays visible"
+            );
+            assert_eq!(app.active.as_str(), new_note);
+            assert_eq!(app.previews[new_note].path, new_note);
+            assert!(!f.0.root.join(renamed_note).exists());
+            assert!(f.0.root.join(new_note).is_file());
+            app.refreshing = false;
+        });
+        window.render_frame(cx);
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn navigation_m_opens_empty_palette_and_mv_tab_starts_at_root(cx: &mut TestAppContext) {
+    use super::commands::Choice;
+    let f = Fixture::new();
+    for folder in ["Source", "Destination/Nested"] {
+        f.0.create_folder(folder).unwrap();
+    }
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.set_view(View::Folders, window, cx);
+            app.select_row(&"Source".into(), cx);
+        });
+    })
+    .unwrap();
+    press(cx, window, "m");
+    cx.update_window(window, |_, _, cx| {
+        assert_eq!(
+            app.read(cx)
+                .modal
+                .as_ref()
+                .unwrap()
+                .palette
+                .as_ref()
+                .unwrap()
+                .read(cx)
+                .query(cx),
+            ""
+        );
+    })
+    .unwrap();
+    cx.simulate_input(window, "mv");
+    press(cx, window, "tab");
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        assert_eq!(
+            app.modal
+                .as_ref()
+                .unwrap()
+                .palette
+                .as_ref()
+                .unwrap()
+                .read(cx)
+                .query(cx),
+            "mv "
+        );
+        let entries = app.entries("mv ", cx);
+        assert!(
+            entries
+                .iter()
+                .any(|e| matches!(&e.choice, Choice::Move(path) if path.is_empty()))
+        );
+        assert!(
+            entries
+                .iter()
+                .any(|e| matches!(&e.choice, Choice::Move(path) if path == "Destination"))
+        );
+        assert!(entries.iter().all(
+            |e| !matches!(&e.choice, Choice::Move(path) if path == "Source" || path.contains('/'))
+        ));
+    })
+    .unwrap();
+    cx.simulate_input(window, "Destination");
+    press(cx, window, "tab");
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        let query = app
+            .modal
+            .as_ref()
+            .unwrap()
+            .palette
+            .as_ref()
+            .unwrap()
+            .read(cx)
+            .query(cx);
+        assert_eq!(query, "mv Destination/");
+        assert!(
+            app.entries(&query, cx)
+                .iter()
+                .any(|e| matches!(&e.choice, Choice::Move(path) if path == "Destination/Nested"))
+        );
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn deletion_skips_empty_folders_and_confirms_contents_with_cancel_focused(cx: &mut TestAppContext) {
+    use super::commands::{Choice, ModalKind};
+    let f = Fixture::new();
+    for folder in ["Empty", "Ordered empty", "Hidden content", "Also empty"] {
+        f.0.create_folder(folder).unwrap();
+    }
+    std::fs::write(f.0.root.join("Ordered empty/.notes-order.json"), "{}").unwrap();
+    std::fs::write(
+        f.0.root.join("Hidden content/attachment.bin"),
+        b"not a Markdown note",
+    )
+    .unwrap();
+    let note =
+        f.0.create("Full/Child", "Preserve on cancel".into(), None)
+            .unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.set_view(View::Folders, window, cx);
+            app.select_row(&"Empty".into(), cx);
+            app.execute(Choice::Delete, window, cx);
+            assert!(app.modal.is_none());
+            assert!(!f.0.root.join("Empty").exists());
+            assert!(!super::navigation::contains(&app.nav_items, "Empty"));
+            app.selected
+                .extend(["Ordered empty".into(), "Also empty".into()]);
+            app.execute(Choice::Delete, window, cx);
+            assert!(app.modal.is_none());
+            assert!(!f.0.root.join("Ordered empty").exists());
+            assert!(!f.0.root.join("Also empty").exists());
+            app.select_row(&"Full".into(), cx);
+        });
+    })
+    .unwrap();
+    press(cx, window, "cmd-shift-backspace");
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        let modal = app.read(cx).modal.as_ref().unwrap();
+        assert!(matches!(modal.kind, ModalKind::Delete(_)));
+        assert!(modal.delete_focus.as_ref().unwrap()[0].is_focused(window));
+        assert_eq!(window.find("delete-cancel").label(), Some("Cancel"));
+        assert_eq!(window.find("delete-confirm").label(), Some("OK"));
+        assert!(f.0.root.join(&note).is_file());
+    })
+    .unwrap();
+    press(cx, window, "enter");
+    assert!(f.0.root.join(&note).is_file());
+    cx.update_window(window, |_, _, cx| assert!(app.read(cx).modal.is_none()))
+        .unwrap();
+    press(cx, window, "cmd-shift-backspace tab shift-tab enter");
+    assert!(f.0.root.join(&note).is_file());
+    press(cx, window, "cmd-shift-backspace tab enter");
+    assert!(!f.0.root.join("Full").exists());
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            assert!(app.error.is_none(), "{:?}", app.error);
+            assert!(!super::navigation::contains(&app.nav_items, "Full"));
+            app.select_row(&"Hidden content".into(), cx);
+            app.tree.update(cx, |tree, cx| tree.focus(window, cx));
+            app.execute(Choice::Delete, window, cx);
+            assert!(app.modal.is_some(), "unrecognized content still needs confirmation");
+            assert_eq!(app.view, View::Folders);
+            assert!(matches!(&app.modal.as_ref().unwrap().kind, ModalKind::Delete(paths) if paths == &["Hidden content"]));
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("delete-confirm", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    assert!(!f.0.root.join("Hidden content").exists());
 }

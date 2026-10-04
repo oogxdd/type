@@ -308,7 +308,8 @@ impl TypeApp {
                             this.active = "".into();
                             if let Some(id) = this.first_note(cx) {
                                 this.open_note(id, false, window, cx);
-                            } else if this.previews.is_empty()
+                            } else if this.view == View::Feed
+                                && this.previews.is_empty()
                                 && this.prefs.stream_day.is_none()
                                 && this.filter == Filter::Active
                             {
@@ -764,6 +765,7 @@ impl TypeApp {
                 self.select_row(&id, cx);
             }
         }
+        self.navigation_focused = true;
         self.tree.update(cx, |t, cx| t.focus(window, cx));
         cx.notify();
     }
@@ -860,7 +862,15 @@ impl TypeApp {
             .map(|(p, n)| (map(&p, old, new).into(), n))
             .collect();
         self.active = map(&self.active, old, new).into();
-        self.previews.clear();
+        self.previews = self
+            .previews
+            .drain()
+            .map(|(path, mut preview)| {
+                let next = map(&path, old, new);
+                preview.path = next.clone();
+                (next, preview)
+            })
+            .collect();
         self.selected.clear();
         self.selection_anchor = None;
         self.saved_selection.insert(self.view, self.active.clone());

@@ -21,6 +21,7 @@ pub struct Modal {
     pub palette: Option<Entity<CommandState>>,
     pub selected: usize,
     pub navigation: bool,
+    pub delete_focus: Option<[FocusHandle; 2]>,
 }
 #[derive(Clone)]
 pub enum Choice {
@@ -167,16 +168,24 @@ impl TypeApp {
         } else {
             None
         };
-        let handle = palette
+        let delete_focus =
+            matches!(kind, ModalKind::Delete(_)).then(|| [cx.focus_handle(), cx.focus_handle()]);
+        let handle = delete_focus
             .as_ref()
-            .map(|s| s.focus_handle(cx))
-            .unwrap_or_else(|| input.focus_handle(cx));
+            .map(|handles| handles[0].clone())
+            .unwrap_or_else(|| {
+                palette
+                    .as_ref()
+                    .map(|s| s.focus_handle(cx))
+                    .unwrap_or_else(|| input.focus_handle(cx))
+            });
         self.modal = Some(Modal {
             kind,
             input: input.clone(),
             palette,
             selected: 0,
             navigation,
+            delete_focus,
         });
         window.defer(cx, move |window, cx| handle.focus(window, cx));
         cx.notify();
@@ -253,6 +262,7 @@ impl TypeApp {
                 .collect();
             let mut entries: Vec<_> = navigation::move_suggestions(&dirs, query)
                 .into_iter()
+                .filter(|path| !query.is_empty() || !path.contains('/'))
                 .map(|p| Entry {
                     label: format!("Move to {p}"),
                     choice: Choice::Move(p),
@@ -509,7 +519,12 @@ impl TypeApp {
             if let Some(palette) = &modal.palette {
                 if matches!(key.as_str(), "tab" | "right") {
                     let query = palette.read(cx).query(cx);
-                    if query.starts_with("mv ") {
+                    if key == "tab" && query == "mv" {
+                        palette.update(cx, |state, cx| state.set_query("mv ", window, cx));
+                        window.prevent_default();
+                        cx.stop_propagation();
+                        cx.notify();
+                    } else if query.starts_with("mv ") {
                         if let Some(index) = palette.read(cx).selected_index() {
                             if let Some(Entry {
                                 choice: Choice::Move(path),
@@ -519,7 +534,11 @@ impl TypeApp {
                                 .get(index.section)
                                 .and_then(|(_, entries)| entries.get(index.row))
                             {
-                                let value = format!("mv {path}/");
+                                let value = if path.is_empty() {
+                                    "mv ".to_string()
+                                } else {
+                                    format!("mv {path}/")
+                                };
                                 palette.update(cx, |s, cx| s.set_query(value, window, cx));
                             }
                         }
@@ -529,6 +548,27 @@ impl TypeApp {
                     }
                 }
                 return; // Command owns arrows, Enter, Escape, scrolling and focus.
+            }
+            if let Some(handles) = &modal.delete_focus {
+                match key.as_str() {
+                    "tab" => {
+                        let next = usize::from(handles[0].is_focused(window));
+                        handles[next].focus(window, cx);
+                    }
+                    "escape" => self.close_modal(window, cx),
+                    "enter" | "space" => {
+                        if handles[1].is_focused(window) {
+                            self.submit_modal(window, cx);
+                        } else {
+                            self.close_modal(window, cx);
+                        }
+                    }
+                    _ => return,
+                }
+                window.prevent_default();
+                cx.stop_propagation();
+                cx.notify();
+                return;
             }
             match key.as_str() {
                 "escape" if !self.locked => self.close_modal(window, cx),
@@ -672,7 +712,7 @@ impl TypeApp {
                     }
                 }
             }
-            "m" => self.execute(Choice::MoveMode, window, cx),
+            "m" => self.execute(Choice::CommandPalette, window, cx),
             "n" if self.view != View::Trash => {
                 let parent = if stroke.modifiers.shift || self.view != View::Folders {
                     String::new()
@@ -867,20 +907,24 @@ impl TypeApp {
                     };
                     let new = self.backend.rename(&path, &name)?;
                     self.remap(&path, &new);
+                    // Preserve expansion while rebuilding from the renamed metadata.
+                    fn remap_tree(items: &mut [TreeItem], old: &str, new: &str) {
+                        for item in items {
+                            if item.id == old {
+                                item.id = new.to_owned().into();
+                            } else if let Some(tail) = item.id.strip_prefix(&format!("{old}/")) {
+                                item.id = format!("{new}/{tail}").into();
+                            }
+                            remap_tree(&mut item.children, old, new);
+                        }
+                    }
+                    remap_tree(&mut self.roots, &path, &new);
+                    self.folder_tree = Some(self.backend.notes()?.get_tree()?);
+                    self.rebuild_navigation(cx);
+                    self.select_row(&new.into(), cx);
                 }
                 ModalKind::Delete(paths) => {
-                    if value != "delete" {
-                        return Err("Type delete to confirm permanent deletion.".into());
-                    }
-                    self.flush(false, cx)?;
-                    self.backend.notes()?.delete_items(paths.clone())?;
-                    for path in paths {
-                        self.notes.retain(|p, _| {
-                            p.as_str() != path && !p.starts_with(&format!("{path}/"))
-                        });
-                    }
-                    self.previews.clear();
-                    self.revision += 1;
+                    self.delete_targets(paths, window, cx)?;
                 }
                 ModalKind::CreateProfile => {
                     self.open_profile_folder(&value, window, cx)?;
@@ -1136,7 +1180,16 @@ impl TypeApp {
                 Choice::Delete => {
                     let paths = self.targets(cx);
                     if !paths.is_empty() {
-                        self.show_modal(ModalKind::Delete(paths), "", window, cx);
+                        self.flush(false, cx)?;
+                        let empty = paths
+                            .iter()
+                            .map(|path| self.backend.folder_is_empty(path))
+                            .collect::<Result<Vec<_>, _>>()?;
+                        if empty.iter().all(|empty| *empty) {
+                            self.delete_targets(paths, window, cx)?;
+                        } else {
+                            self.show_modal(ModalKind::Delete(paths), "", window, cx);
+                        }
                     }
                 }
                 Choice::Reviewed | Choice::ArchiveFlag => {
@@ -1280,6 +1333,34 @@ impl TypeApp {
         cx.notify();
     }
 
+    fn delete_targets(
+        &mut self,
+        paths: Vec<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Result<(), String> {
+        self.flush(false, cx)?;
+        let next = self.next_review_note(&paths, cx);
+        self.backend.notes()?.delete_items(paths.clone())?;
+        let deleted = |path: &str| {
+            paths
+                .iter()
+                .any(|parent| path == parent || path.starts_with(&format!("{parent}/")))
+        };
+        self.notes.retain(|path, _| !deleted(path));
+        self.previews.retain(|path, _| !deleted(path));
+        if deleted(&self.active) {
+            self.active = "".into();
+        }
+        self.selected.clear();
+        self.selection_anchor = None;
+        self.revision += 1;
+        self.folder_tree = Some(self.backend.notes()?.get_tree()?);
+        self.rebuild_navigation(cx);
+        self.advance_review(next, window, cx);
+        Ok(())
+    }
+
     fn next_review_note(&self, targets: &[String], cx: &App) -> Option<SharedString> {
         if self.view != View::Feed {
             return None;
@@ -1342,6 +1423,7 @@ impl TypeApp {
                 ("Move…", Choice::MoveMode),
                 ("Rename…", Choice::Rename),
                 ("Move to Trash", Choice::Trash),
+                ("Delete permanently…", Choice::Delete),
             ]
         } else {
             vec![

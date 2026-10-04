@@ -14,7 +14,7 @@ impl TypeApp {
         )
     }
 
-    fn render_modal(&self, cx: &mut Context<Self>) -> AnyElement {
+    fn render_modal(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let Some(modal) = &self.modal else {
             return div().into_any_element();
         };
@@ -76,7 +76,14 @@ impl TypeApp {
             ModalKind::Remote => "Git remote URL".into(),
             ModalKind::Unlock => "Unlock Type".into(),
             ModalKind::Delete(paths) => {
-                format!("Permanently delete {} items · type delete", paths.len())
+                if paths.len() == 1 {
+                    format!("Permanently delete “{}” and its contents?", paths[0])
+                } else {
+                    format!(
+                        "Permanently delete {} items and their contents?",
+                        paths.len()
+                    )
+                }
             }
             ModalKind::Config(field) => format!("Edit {}", field.replace('_', " ")),
             ModalKind::EnablePassword => "Encryption password (at least 8 characters)".into(),
@@ -100,13 +107,49 @@ impl TypeApp {
                     .font_weight(FontWeight::SEMIBOLD)
                     .child(title),
             )
-            .child(Input::new(&modal.input));
+            .when(modal.delete_focus.is_none(), |panel| {
+                panel.child(Input::new(&modal.input))
+            });
         if matches!(modal.kind, ModalKind::CreateProfile) {
             panel = panel.child(div().text_sm().whitespace_normal()
                 .child("Choose the folder containing your Markdown notes. A new path creates a folder; an existing path opens it in place."))
                 .child(self.command_button("profile-picker", "Choose folder…", Choice::PickProfile, cx));
         }
-        if matches!(modal.kind, ModalKind::Palette) {
+        if let Some(handles) = &modal.delete_focus {
+            panel =
+                panel.child(
+                    h_flex()
+                        .gap_2()
+                        .child(
+                            div().track_focus(&handles[0]).child(
+                                Button::new("delete-cancel")
+                                    .ghost()
+                                    .label("Cancel")
+                                    .tab_stop(false)
+                                    .when(handles[0].is_focused(window), |button| {
+                                        button.border_color(cx.theme().primary)
+                                    })
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.close_modal(window, cx)
+                                    })),
+                            ),
+                        )
+                        .child(
+                            div().track_focus(&handles[1]).child(
+                                Button::new("delete-confirm")
+                                    .primary()
+                                    .label("OK")
+                                    .tab_stop(false)
+                                    .when(handles[1].is_focused(window), |button| {
+                                        button.border_color(cx.theme().primary)
+                                    })
+                                    .on_click(cx.listener(|this, _, window, cx| {
+                                        this.submit_modal(window, cx)
+                                    })),
+                            ),
+                        ),
+                );
+        } else if matches!(modal.kind, ModalKind::Palette) {
             let entries = self.entries(&modal.input.read(cx).value(), cx);
             let start = modal.selected.saturating_sub(5);
             let mut list = v_flex().gap_1();
@@ -617,7 +660,7 @@ impl Render for TypeApp {
             },
         )
         .when(self.modal.is_some(), |body| {
-            body.child(self.render_modal(cx))
+            body.child(self.render_modal(window, cx))
         })
     }
 }

@@ -774,7 +774,7 @@ impl TypeApp {
                     ),
                     (
                         "Navigation",
-                        "j / k or ↑ / ↓ — navigate\nShift J / K or Shift ↑ / ↓ — select range\nSpace — toggle selection · Esc — clear\nm — move selection (or Cmd K → mv)\nn — new folder (child in Folders, root in Stream)\nShift N — new root folder\nh / l — collapse / expand\nEnter — open\nTab — Stream / Folders (notes navigation)\n⌘/Ctrl Backspace — move to Trash\n⌘/Ctrl Shift Backspace — delete permanently",
+                        "j / k or ↑ / ↓ — navigate\nShift J / K or Shift ↑ / ↓ — select range\nSpace — toggle selection · Esc — clear\nm — command palette (same as Cmd K)\nmv then Tab — choose destination folder\nn — new folder (child in Folders, root in Stream)\nShift N — new root folder\nh / l — collapse / expand\nEnter — open\nTab — Stream / Folders (notes navigation)\n⌘/Ctrl Backspace — move to Trash\n⌘/Ctrl Shift Backspace — delete permanently",
                     ),
                     (
                         "Vim editor",

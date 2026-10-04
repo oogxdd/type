@@ -28,6 +28,44 @@ Updated: 2026-10-05. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Immediate rename, palette entry and deletion (2026-10-05)
+
+- Rename now remaps cached previews/editor paths, reads fresh folder metadata,
+  rebuilds the tree and selects the new path synchronously. Expanded renamed
+  folders/descendants stay expanded; note titles and cached editor identities
+  remain intact. It works even while an older background refresh is pending;
+  the revision guard rejects that stale result.
+- Navigation `m` opens the same empty command palette as Cmd+K. Typing `mv`
+  then Tab inserts a space and shows root destinations. Further Tab/right
+  completion drills into folders; the root action no longer inserts `/`.
+  Empty move queries list root folders, with nested paths reachable by drill
+  or fuzzy search. Keyboard documentation reflects the revised flow.
+- Permanent deletion skips confirmation only when every target is an empty
+  user folder. Fresh disk inspection counts nested folders and hidden/unknown
+  files; only the internal `.notes-order.json` file is ignored as metadata.
+  Other targets get an OK/Cancel dialog with Cancel initially focused. Tab or
+  Shift Tab switches buttons, Enter/Space activates the focused button, and Esc
+  cancels. The typed `delete` requirement and input field were removed. Folder
+  context menus now include permanent deletion.
+- Both deletion paths immediately rebuild navigation and remove affected caches.
+  Background refresh no longer creates a Stream capture while viewing Folders
+  when the last note was deleted. Empty-folder groups delete together; groups
+  containing content require confirmation for the whole group.
+- Validation: **62 GPUI tests passed** (29 library + 33 native), including the
+  concurrent Vim work and new synchronous rename assertions while refresh is
+  unavailable, real `m` / `mv` / Tab root-and-child completion, immediate empty
+  folder/group deletion, metadata-only empty folders, non-Markdown content,
+  focused Cancel/Enter, Tab/Shift Tab, keyboard confirmation and mouse OK.
+  Formatting and diff checks passed. No core API changes or real notes used.
+- Included at the user’s request in `fix(gpui): update navigation immediately
+  and simplify palette and deletion flows`. Concurrent Vim work is separately
+  committed as `c002f0e0`. Earlier navigation/release/import work was pushed to
+  `origin/main` through `83be0d32`.
+  Dev bundle build passed; the test Dev instance was quit normally and relaunched
+  on the same `.tmp/gpui-nav-playground` app-data directory. The production instance
+  remained open. User UI/feel review and Linux/Windows runtime remain outstanding.
+
+
 ### Vim half-page movement and working history (2026-10-05)
 
 - Added Ctrl D / Ctrl U in Normal and Visual modes, using half the editor's

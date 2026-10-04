@@ -138,6 +138,31 @@ impl Backend {
         self.notes()?.move_items(vec![], path.into())
     }
 
+    /// Include hidden/unrecognized content: the navigation projection cannot
+    /// establish that deleting a folder needs no confirmation.
+    pub fn folder_is_empty(&self, path: &str) -> Result<bool, String> {
+        validate_relative(path)?;
+        if is_protected(path) {
+            return Err("System folders cannot be deleted.".into());
+        }
+        let full = self.root.join(path);
+        if !std::fs::symlink_metadata(&full)
+            .map_err(|e| e.to_string())?
+            .is_dir()
+        {
+            return Ok(false);
+        }
+        for entry in std::fs::read_dir(full).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            if entry.file_name() != ".notes-order.json"
+                || !entry.file_type().map_err(|e| e.to_string())?.is_file()
+            {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
     pub fn rename(&self, path: &str, name: &str) -> Result<String, String> {
         validate_relative(path)?;
         if name.is_empty() || name.starts_with('.') || name.contains(['/', '\\']) || name == ".." {
