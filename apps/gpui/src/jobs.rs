@@ -16,7 +16,6 @@ pub struct Capture {
     error: Arc<Mutex<Option<String>>>,
     channels: u16,
     rate: u32,
-    pub started: Instant,
     pub folder: String,
 }
 impl Capture {
@@ -64,7 +63,6 @@ impl Capture {
             error,
             channels: config.channels,
             rate: config.sample_rate.0,
-            started: Instant::now(),
             folder,
         })
     }
@@ -183,7 +181,6 @@ impl TypeApp {
                         }
                         if let Some(server) = result.server {
                             this.local_server = Some(server);
-                            this.settings = true;
                         }
                         if let Some(report) = result.report {
                             this.job_status = report;

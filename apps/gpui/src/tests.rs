@@ -1985,3 +1985,187 @@ fn deletion_skips_empty_folders_and_confirms_contents_with_cancel_focused(cx: &m
     cx.run_until_parked();
     assert!(!f.0.root.join("Hidden content").exists());
 }
+
+#[gpui_kit::test]
+fn sidebar_actions_and_filter_menu_keep_their_behavior(cx: &mut TestAppContext) {
+    use super::{Filter, commands::Choice};
+    let f = Fixture::new();
+    let (window, app) = launch(&f, cx);
+    let original = cx.read(|cx| app.read(cx).active.clone());
+    cx.update_window(window, |_, window, cx| {
+        let new = window.find("new").bounds();
+        let settings = window.find("settings").bounds();
+        let stream = window.find("nav-stream").bounds();
+        assert_eq!(new.left(), stream.left());
+        assert_eq!(settings.left(), stream.left());
+        assert_eq!(new.size.height, px(32.));
+        assert_eq!(settings.size.height, px(32.));
+        assert_eq!(window.viewport_size().height - settings.bottom(), px(8.));
+        assert_eq!(window.viewport_size().height - settings.center().y, px(24.));
+        assert!(new.size.width > px(280.));
+        assert!(settings.size.width > px(240.));
+        window.right_click("new", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(
+            window.within("popup-menu").find(0usize).label(),
+            Some("Start a voice note")
+        );
+        window.within("popup-menu").click(0usize, cx);
+        assert_eq!(app.read(cx).active, original);
+        assert!(!app.read(cx).recording);
+        assert!(app.read(cx).capture.is_none());
+        assert!(!app.read(cx).busy);
+        app.update(cx, |app, cx| {
+            app.execute(Choice::Filter(Filter::All), window, cx)
+        });
+        window.render_frame(cx);
+        let filter = window.find("nav-filter").bounds();
+        assert_eq!(filter.size.width, filter.size.height);
+        assert_eq!(filter.size.height, px(24.));
+        let icon = window.find("nav-filter-icon").bounds();
+        assert_eq!(icon.size, size(px(14.), px(14.)));
+        assert!(filter.contains(&icon.origin) && filter.contains(&icon.bottom_right()));
+        window.click("nav-filter", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(
+            window.within("popup-menu").find(3usize).label(),
+            Some("Unreviewed")
+        );
+        window.within("popup-menu").click(3usize, cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(app.read(cx).filter, Filter::Unreviewed);
+        let filter = window.find("nav-filter").bounds();
+        assert!(filter.size.width > filter.size.height && filter.size.width < px(100.));
+        assert_eq!(filter.size.height, px(24.));
+        let icon = window.find("nav-filter-icon").bounds();
+        assert_eq!(icon.size, size(px(14.), px(14.)));
+        assert!(filter.contains(&icon.origin) && filter.contains(&icon.bottom_right()));
+        let before = app.read(cx).active.clone();
+        window.click_at("new", point(px(270.), px(20.)), cx);
+        assert_ne!(app.read(cx).active, before);
+        window.click("settings", cx);
+        assert!(app.read(cx).settings);
+    })
+    .unwrap();
+    assert_eq!(
+        super::Preferences::load(&f.0.env).stream_filter,
+        Filter::Active
+    );
+}
+
+#[gpui_kit::test]
+fn sidebar_sync_hover_and_stop_keep_notes_open(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let (window, app) = launch(&f, cx);
+    // Publish a synthetic running status through the same completion path as Start.
+    // No server is bound and no phone or real profile is used.
+    let mut running = type_core::local_sync_server_status(&f.0.env).unwrap();
+    running.running = true;
+    running.ssh_url = Some("ssh://type@127.0.0.1:1234/notes".into());
+    running.iroh_ticket = Some("synthetic-ticket".into());
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.run_job("Synthetic start", window, cx, move |_| {
+                let mut result = super::jobs::ResultData::message("Started");
+                result.server = Some(running);
+                Ok(result)
+            });
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        assert!(!app.read(cx).settings);
+        // Polling correctly reads the actual inactive daemon. Supply the pairing
+        // fixture again solely for the hover and stop-click behavior.
+        app.update(cx, |app, cx| {
+            let status = app.local_server.as_mut().unwrap();
+            status.running = true;
+            status.ssh_url = Some("ssh://type@127.0.0.1:1234/notes".into());
+            cx.notify();
+        });
+        window.render_frame(cx);
+        window.hover("status", cx);
+    })
+    .unwrap();
+    cx.background_executor
+        .advance_clock(std::time::Duration::from_millis(600));
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.find("phone-pairing-code").bounds().size.width >= px(220.));
+        window.click("status", cx);
+        assert!(!app.read(cx).settings);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, _, cx| {
+        assert!(!app.read(cx).busy);
+        assert!(!app.read(cx).settings);
+        assert!(!app.read(cx).local_server.as_ref().unwrap().running);
+        assert_eq!(app.read(cx).status, "Phone sync server stopped");
+    })
+    .unwrap();
+    assert!(!type_core::local_sync_auto_start_enabled(&f.0.env));
+}
+
+#[gpui_kit::test]
+fn sidebar_sync_start_failure_does_not_open_settings(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        // Fail before Git setup or socket binding, using only the fixture root.
+        std::fs::remove_dir_all(&f.0.root).unwrap();
+        std::fs::write(&f.0.root, "unavailable folder").unwrap();
+        window.click("status", cx);
+        assert!(app.read(cx).busy);
+        assert!(!app.read(cx).settings);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, _, cx| {
+        assert!(!app.read(cx).busy);
+        assert!(!app.read(cx).settings);
+        assert!(app.read(cx).error.is_some());
+    })
+    .unwrap();
+}
+
+#[test]
+fn application_assets_render_sidebar_icons_with_visible_pixels() {
+    use gpui_kit::{AssetSource, SvgRenderer, assets::IconName};
+    let renderer = SvgRenderer::new(std::sync::Arc::new(super::AppAssets));
+    for icon in [IconName::ListFilter, IconName::Mic] {
+        let path = icon.path();
+        let bytes = super::AppAssets
+            .load(&path)
+            .unwrap_or_else(|error| panic!("Missing application icon {path}: {error}"))
+            .unwrap_or_else(|| panic!("Missing application icon {path}"));
+        let parsed = renderer.parse_svg(&bytes).unwrap();
+        let requested = size(gpui_kit::DevicePixels(14), gpui_kit::DevicePixels(14));
+        let image = renderer
+            .render_parsed(&parsed, gpui_kit::SvgSize::ExactSize(requested))
+            .unwrap();
+        assert_eq!(image.size(0), requested);
+        assert!(
+            image
+                .as_bytes(0)
+                .unwrap()
+                .chunks_exact(4)
+                .any(|pixel| pixel[3] > 0),
+            "Icon {path} must paint visible pixels"
+        );
+    }
+}

@@ -553,47 +553,8 @@ impl TypeApp {
                             profile.map(|p| p.name.as_str()).unwrap_or("Type"),
                             &self.backend.env,
                         ) {
-                            if let Ok(code) = qrcode::QrCode::new(link.as_bytes()) {
-                                let width = code.width();
-                                let cells = code.to_colors();
-                                settings = settings.child(
-                                    div().size(px(240.)).child(
-                                        canvas(
-                                            move |_, _, _| (),
-                                            move |bounds, _, window, _| {
-                                                let scale = f32::from(bounds.size.width)
-                                                    / (width + 8) as f32;
-                                                window.paint_quad(fill(bounds, rgb(0xffffff)));
-                                                for y in 0..width {
-                                                    for x in 0..width {
-                                                        if cells[y * width + x]
-                                                            == qrcode::Color::Dark
-                                                        {
-                                                            window.paint_quad(fill(
-                                                                Bounds::new(
-                                                                    point(
-                                                                        bounds.origin.x
-                                                                            + px((x + 4) as f32
-                                                                                * scale),
-                                                                        bounds.origin.y
-                                                                            + px((y + 4) as f32
-                                                                                * scale),
-                                                                    ),
-                                                                    size(
-                                                                        px(scale + 0.1),
-                                                                        px(scale + 0.1),
-                                                                    ),
-                                                                ),
-                                                                rgb(0x000000),
-                                                            ));
-                                                        }
-                                                    }
-                                                }
-                                            },
-                                        )
-                                        .size_full(),
-                                    ),
-                                );
+                            if let Some(code) = ui::pairing_code(&link, 240.) {
+                                settings = settings.child(code);
                             }
                             settings = settings.child(
                                 Button::new("pairing-copy")

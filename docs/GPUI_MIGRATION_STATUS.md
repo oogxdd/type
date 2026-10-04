@@ -4,8 +4,8 @@ Updated: 2026-10-05. This is an unfinished migration; update this file after eac
 
 ## Where to continue
 
-- Branch: `codex/gpui-desktop`.
-- Worktree: `/Volumes/KINGSTON/Projects/type/app/.worktrees/gpui-desktop`.
+- Current branch: `main` (sidebar refinement); original migration branch: `codex/gpui-desktop`.
+- Current checkout: `/Volumes/KINGSTON/Projects/type/app`; original migration worktree: `.worktrees/gpui-desktop`.
 - Base: `081cc4cb`; core shell: `5ff01346`; handoff: `6bb5378a`; UI/keys/tests: `f1efa117`; launcher/CI: `e88e3635`; nested Stream calendar: `6997f7be`; Earlier click fix: `9f39b292`.
 - New shell: `apps/gpui` (`type-gpui`). Existing `experiments/gpui-demo` is untouched.
 - Original worktree has unrelated dirty files (`package.json`, `crates/type-core/examples`, `docs/VOICE_MEMOS_IMPORT.md`). Do not overwrite them.
@@ -27,6 +27,41 @@ Updated: 2026-10-05. This is an unfinished migration; update this file after eac
 - Investigate larger H1/H2/H3 only; do not implement yet.
 
 ## Implemented
+
+### Sidebar actions, phone sync hover and filter control (2026-10-05)
+
+- The gray/green dot starts/stops phone sync directly. Server job completion
+  no longer forces Settings open; jobs retain their existing flush/security
+  guards and the dot is disabled during an operation. Hover shows sync state,
+  with the existing phone pairing link encoded as a QR while hosting and a
+  short scanning hint. Settings and hover share the QR renderer/quiet zone.
+- New note and Settings use full-width text rows (Settings leaves room for
+  the independent sync dot), aligned with Stream and in the same sidebar font.
+  Both hover targets are 32px tall. The Settings footer remains 48px tall with
+  no extra bottom padding, retaining the original text position and leaving
+  8px below its hover target. Removed the separate sidebar capture icons;
+  recording/handwriting commands remain in Cmd+K. Right-clicking New note
+  offers “Start a voice note”; activating it only dismisses the menu.
+- Stream filters use a 24px icon button with the sidebar background. All has
+  no border or label; specific filters add an 11px label left of the 14px icon
+  and a border at 65% normal opacity. Existing status/date options, persistence,
+  defaults and the date caption are retained.
+- The missing icon was an asset-registration error: Kit's default component
+  bundle omits ListFilter and Mic. Startup now registers `AllAssets`. A new
+  regression reproduced the missing-resource failure, then passed by loading
+  and rasterizing both SVGs at 14px with nontransparent pixels.
+- Validation: the initial full GPUI suite passed **65 tests** (29 library +
+  36 native). The final native suite passed **37 tests**, including the SVG
+  regression, actual menu actions, icon containment, restored Settings center
+  position, 32px action heights and 8px bottom spacing. The final border-only
+  change passed formatting, diff checks and dev bundling. Synthetic profiles
+  only; no real notes, microphone or phone were used.
+- Dev bundle refreshed at `experiments/gpui-demo/target/bundle/Type GPUI Dev.app`
+  and reopened normally on the same `.tmp/gpui-nav-playground` for user review.
+  Included at the user's request in `feat(gpui): refine sidebar controls and phone sync`.
+  No push/publication, production data or installed-app replacement used.
+  Remaining: user UI/feel review and live phone pairing; Linux/Windows runtime
+  remains unverified.
 
 ### Immediate rename, palette entry and deletion (2026-10-05)
 

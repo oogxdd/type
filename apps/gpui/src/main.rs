@@ -19,6 +19,9 @@ use type_gpui::{
     vim,
 };
 
+// The default component bundle omits full-catalog icons such as ListFilter.
+use gpui_kit::assets::AllAssets as AppAssets;
+
 use gpui_kit::{
     component::{
         ActiveTheme, Icon, IconName, Sizable, Theme, ThemeMode, TitleBar,
@@ -802,7 +805,7 @@ fn main() {
         }
     };
     gpui_kit::application()
-        .with_assets(gpui_kit::assets::Assets)
+        .with_assets(AppAssets)
         .run(move |cx| {
             gpui_kit::init(cx);
             cx.bind_keys([KeyBinding::new("secondary-q", Quit, Some("Type"))]);

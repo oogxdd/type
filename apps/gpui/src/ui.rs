@@ -1,5 +1,6 @@
 use super::*;
 use commands::{Choice, ModalKind};
+use gpui_kit::base::Disableable;
 
 impl TypeApp {
     pub(crate) fn command_button(
@@ -12,6 +13,75 @@ impl TypeApp {
         Button::new(id).ghost().small().label(label).on_click(
             cx.listener(move |this, _, window, cx| this.execute(choice.clone(), window, cx)),
         )
+    }
+
+    fn sidebar_button(
+        &self,
+        id: &'static str,
+        label: &'static str,
+        choice: Choice,
+        cx: &mut Context<Self>,
+    ) -> Button {
+        // The same 8px button inset as Stream, without an icon shifting the text.
+        Button::new(id)
+            .ghost()
+            .small()
+            .h(px(32.))
+            .px_2()
+            .accessibility_label(label)
+            .child(div().w_full().text_sm().child(label))
+            .on_click(cx.listener(move |this, _, window, cx| {
+                this.execute(choice.clone(), window, cx);
+            }))
+    }
+
+    fn phone_sync_running(&self) -> bool {
+        self.local_server
+            .as_ref()
+            .is_some_and(|status| status.running)
+    }
+
+    fn render_sync_tooltip(&self, cx: &App) -> AnyElement {
+        let mut content = v_flex().gap_2().py_2().text_sm();
+        if self.phone_sync_running() {
+            content = content.child("Phone sync is on");
+            let name = self
+                .profiles
+                .profiles
+                .iter()
+                .find(|profile| profile.id == self.profiles.active_profile_id)
+                .map(|profile| profile.name.as_str())
+                .unwrap_or("Type");
+            let code = self
+                .local_server
+                .as_ref()
+                .and_then(|status| jobs::pairing_link(status, name, &self.backend.env))
+                .and_then(|link| pairing_code(&link, 220.));
+            if let Some(code) = code {
+                content = content.child(code).child(
+                    div()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .child("Scan with Type on your phone to pair."),
+                );
+            } else {
+                content = content.child("Preparing phone pairing…");
+            }
+            content = content.child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("Click the dot to stop syncing."),
+            );
+        } else {
+            content = content.child("Phone sync is off").child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("Click the dot to start syncing with your phone."),
+            );
+        }
+        content.into_any_element()
     }
 
     fn render_modal(&self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
@@ -264,47 +334,44 @@ impl TypeApp {
                 folder_rows += 1;
             }
         }
-        let status = if let Some(error) = &self.error {
-            error.clone()
-        } else if let Some(capture) = &self.capture {
-            format!("Recording · {}s", capture.started.elapsed().as_secs())
-        } else if self.busy {
-            self.status.clone()
-        } else if !self.processing_status.is_empty() {
-            self.processing_status.clone()
-        } else {
-            self.status.clone()
-        };
+        let sync_view = cx.weak_entity();
+        let filter_icon = div()
+            .id("nav-filter-icon")
+            .map(|element| {
+                #[cfg(test)]
+                {
+                    use gpui_kit::test::TestSupportExt;
+                    element.test_support()
+                }
+                #[cfg(not(test))]
+                {
+                    element
+                }
+            })
+            .size(px(14.))
+            .flex_none()
+            .child(
+                Icon::new(Icons::ListFilter)
+                    .with_size(px(14.))
+                    .text_color(cx.theme().foreground.opacity(0.85)),
+            );
         v_flex()
             .size_full()
             .track_focus(&self.navigation_focus)
             .when(self.prefs.rail, |panel| {
                 panel.child(
-                    h_flex()
-                        .h(px(70.))
-                        .px_3()
-                        .gap_2()
-                        .flex_none()
-                        .child(
-                            self.command_button("new", "New note", Choice::New, cx)
-                                .icon(Icons::CirclePlus),
-                        )
-                        .child(div().flex_1())
-                        .child(
-                            self.command_button("record", "", Choice::Record, cx)
-                                .icon(Icons::Mic)
-                                .tooltip(if self.recording {
-                                    "Stop recording"
-                                } else {
-                                    "Record audio"
-                                })
-                                .when(self.recording, |b| b.text_color(cx.theme().danger)),
-                        )
-                        .child(
-                            self.command_button("handwriting", "", Choice::Handwriting, cx)
-                                .icon(Icons::FilePenLine)
-                                .tooltip("Import handwriting"),
-                        ),
+                    h_flex().h(px(70.)).px_3().flex_none().child(
+                        self.sidebar_button("new", "New note", Choice::New, cx)
+                            .w_full()
+                            .context_menu(|menu, _, _| {
+                                // Placeholder only: recording is not part of this action.
+                                menu.item(
+                                    PopupMenuItem::new("Start a voice note")
+                                        .icon(Icons::Mic)
+                                        .on_click(|_, _, _| {}),
+                                )
+                            }),
+                    ),
                 )
             })
             .child(
@@ -339,10 +406,32 @@ impl TypeApp {
                     .child(
                         Button::new("nav-filter")
                             .ghost()
-                            .small()
-                            .icon(Icons::ListFilter)
-                            .label(self.filter.label())
-                            .tooltip("Stream view · status and date")
+                            .xsmall()
+                            .h(px(24.))
+                            .min_w(px(24.))
+                            .px_1p5()
+                            .bg(cx.theme().background)
+                            .rounded(px(4.))
+                            .when(self.filter == Filter::All, |button| {
+                                button.w(px(24.)).px_0()
+                            })
+                            .when(self.filter != Filter::All, |button| {
+                                button
+                                    .border_1()
+                                    .border_color(cx.theme().border.opacity(0.65))
+                                    .child(div().text_size(px(11.)).child(self.filter.label()))
+                            })
+                            .child(filter_icon)
+                            .text_color(if self.filter == Filter::All {
+                                cx.theme().muted_foreground
+                            } else {
+                                cx.theme().foreground
+                            })
+                            .accessibility_label(format!("Stream filter: {}", self.filter.label()))
+                            .tooltip(format!(
+                                "Stream filter: {} · status and date",
+                                self.filter.label()
+                            ))
                             .dropdown_menu(move |mut menu, _, _| {
                                 for filter in Filter::ALL {
                                     let view = view.clone();
@@ -477,27 +566,48 @@ impl TypeApp {
                         .gap_2()
                         .flex_none()
                         .child(
-                            self.command_button("settings", "Settings", Choice::Settings, cx)
-                                .icon(Icons::SlidersHorizontal),
+                            self.sidebar_button("settings", "Settings", Choice::Settings, cx)
+                                .flex_1(),
                         )
-                        .child(div().flex_1())
                         .child(
-                            Button::new("status")
-                                .ghost()
-                                .xsmall()
-                                .tooltip(status)
-                                .child(div().size(px(9.)).rounded_full().bg(
-                                    // Match Tauri: the dot indicates phone sync hosting,
-                                    // independently of saves, recording, jobs or errors.
-                                    if self.local_server.as_ref().is_some_and(|s| s.running) {
-                                        rgb(0x00b88b).into()
-                                    } else {
-                                        cx.theme().muted_foreground.opacity(0.45)
-                                    },
-                                ))
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.execute(Choice::Settings, window, cx)
-                                })),
+                            div()
+                                .id("sync-hover")
+                                .tooltip(move |window, cx| {
+                                    let view = sync_view.clone();
+                                    gpui_kit::component::tooltip::Tooltip::element(move |_, cx| {
+                                        view.upgrade()
+                                            .map(|view| view.read(cx).render_sync_tooltip(cx))
+                                            .unwrap_or_else(|| div().into_any_element())
+                                    })
+                                    .build(window, cx)
+                                })
+                                .child(
+                                    Button::new("status")
+                                        .ghost()
+                                        .small()
+                                        .disabled(self.busy || self.locked)
+                                        .accessibility_label(if self.phone_sync_running() {
+                                            "Stop phone sync server"
+                                        } else {
+                                            "Start phone sync server"
+                                        })
+                                        .child(div().size(px(9.)).rounded_full().bg(
+                                            // Saves, recording, jobs and errors do not control this dot.
+                                            if self.phone_sync_running() {
+                                                rgb(0x00b88b).into()
+                                            } else {
+                                                cx.theme().muted_foreground.opacity(0.45)
+                                            },
+                                        ))
+                                        .on_click(cx.listener(|this, _, window, cx| {
+                                            let choice = if this.phone_sync_running() {
+                                                Choice::StopServer
+                                            } else {
+                                                Choice::Server
+                                            };
+                                            this.execute(choice, window, cx);
+                                        })),
+                                ),
                         ),
                 )
             })
@@ -663,4 +773,54 @@ impl Render for TypeApp {
             body.child(self.render_modal(window, cx))
         })
     }
+}
+
+/// Pairing links use the same QR encoding and quiet zone in Settings and hover.
+pub(crate) fn pairing_code(link: &str, side: f32) -> Option<AnyElement> {
+    let code = qrcode::QrCode::new(link.as_bytes()).ok()?;
+    let width = code.width();
+    let cells = code.to_colors();
+    Some(
+        div()
+            .id("phone-pairing-code")
+            .map(|element| {
+                #[cfg(test)]
+                {
+                    use gpui_kit::test::TestSupportExt;
+                    element.test_support()
+                }
+                #[cfg(not(test))]
+                {
+                    element
+                }
+            })
+            .size(px(side))
+            .child(
+                canvas(
+                    move |_, _, _| (),
+                    move |bounds, _, window, _| {
+                        let scale = f32::from(bounds.size.width) / (width + 8) as f32;
+                        window.paint_quad(fill(bounds, rgb(0xffffff)));
+                        for y in 0..width {
+                            for x in 0..width {
+                                if cells[y * width + x] == qrcode::Color::Dark {
+                                    window.paint_quad(fill(
+                                        Bounds::new(
+                                            point(
+                                                bounds.origin.x + px((x + 4) as f32 * scale),
+                                                bounds.origin.y + px((y + 4) as f32 * scale),
+                                            ),
+                                            size(px(scale + 0.1), px(scale + 0.1)),
+                                        ),
+                                        rgb(0x000000),
+                                    ));
+                                }
+                            }
+                        }
+                    },
+                )
+                .size_full(),
+            )
+            .into_any_element(),
+    )
 }
