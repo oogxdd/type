@@ -1,7 +1,7 @@
 # Native desktop releases
 
 GPUI uses [Sparkle 2](https://sparkle-project.org/documentation/) on macOS,
-with a universal Apple Silicon / Intel DMG, Developer ID signing,
+with universal or Apple Silicon-only DMGs, Developer ID signing,
 notarization, Ed25519 archive signatures and a signed appcast. Requires macOS 12+.
 The release path never falls back to shipping an unsigned artifact.
 
@@ -32,8 +32,8 @@ remains universal for CI and earlier releases.
 
 ## Install the first native version
 
-[Type 0.4.8 universal DMG](https://github.com/oogxdd/type/releases/download/gpui-v0.4.8/Type-0.4.8-universal.dmg)
-is published, signed and notarized. Quit Type normally, open the DMG and drag
+[Type 0.4.10 Apple Silicon DMG](https://github.com/oogxdd/type/releases/download/gpui-v0.4.10/Type-0.4.10-arm64.dmg)
+is published, signed and notarized for M-series Macs (macOS 12+). Quit Type normally, open the DMG and drag
 `Type.app` to Applications. Launch that installed app. This first installation
 is manual when coming from `Type GPUI Dev` or the previous Tauri shell.
 The Dev bundle has no updater, and Tauri does not install native GPUI releases.
@@ -47,15 +47,18 @@ normally and retained as a hidden backup; legacy Type 0.8.1 was left unchanged.
 
 After installing the signed native build, use **Settings → Updates → Check for
 updates** for subsequent GPUI releases. The production feed is already live;
-0.4.8 is its current version, so an up-to-date installation will not offer a
-newer version until the next candidate is promoted. Automatic checks are
+0.4.10 is its current Apple Silicon version, with immediate availability.
+An existing native GPUI installation can update through that feed; Intel
+remains on the previous universal release. Automatic checks are
 available; installation requires confirmation.
 
 Release execution and verification are recorded in
 [GPUI migration status](GPUI_MIGRATION_STATUS.md). The real isolated Sparkle
 0.0.1 → 0.0.2 replacement/relaunch test passed with exact Unicode text preserved.
-The published app/DMG and live feed passed signature, notarization, Gatekeeper,
-checksum and architecture inspection. Intel runtime execution was not tested.
+The published 0.4.10 app/DMG and live feed passed signature, notarization,
+Gatekeeper, checksum and arm64 architecture inspection. Signed app launch,
+normal quit and reopen used a synthetic profile. UI/feel and production updater
+installation remain for user review; no Intel build is included in 0.4.10.
 
 ## One-time configuration
 

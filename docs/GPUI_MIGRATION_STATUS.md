@@ -4,7 +4,7 @@ Updated: 2026-10-05. This is an unfinished migration; update this file after eac
 
 ## Where to continue
 
-- Current branch: `main` (sidebar refinement); original migration branch: `codex/gpui-desktop`.
+- Current branch: `main` (GPUI 0.4.10 release); original migration branch: `codex/gpui-desktop`.
 - Current checkout: `/Volumes/KINGSTON/Projects/type/app`; original migration worktree: `.worktrees/gpui-desktop`.
 - Base: `081cc4cb`; core shell: `5ff01346`; handoff: `6bb5378a`; UI/keys/tests: `f1efa117`; launcher/CI: `e88e3635`; nested Stream calendar: `6997f7be`; Earlier click fix: `9f39b292`.
 - New shell: `apps/gpui` (`type-gpui`). Existing `experiments/gpui-demo` is untouched.
@@ -28,7 +28,7 @@ Updated: 2026-10-05. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
-### Native release 0.4.10 — in progress (2026-10-05)
+### Native release 0.4.10 — published (2026-10-05)
 
 - User requested a local macOS Apple Silicon build and GitHub/updater publication.
   Release checkout: `/private/tmp/type-gpui-release-0.4.10`. Includes main
@@ -42,8 +42,31 @@ Updated: 2026-10-05. This is an unfinished migration; update this file after eac
 - Version/lock: 0.4.10. Checks passed: 78 GPUI tests (36 library + 42 native),
   an additional folder Vim history/half-page regression, 96 core tests and
   19 release-tool/native-bridge tests. Formatting and diff checks passed.
-  Local Apple Silicon release compilation/packaging are in progress. Production
-  data and running user apps are untouched; UI/feel review belongs to the user.
+- Source merge: `3af61e8f`; packaging argument correction/source tag commit:
+  `61c78792` (`gpui-v0.4.10`). Local optimized arm64 build succeeded, then
+  app notarization `a4c4a008-5f4a-41ba-bc17-6af07ab931e8` and DMG notarization
+  `e739c9ee-df41-47d8-a9f6-cc2728e19eb4` were accepted. App/DMG signatures,
+  staples and Gatekeeper passed. Uploaded candidate was downloaded again and
+  checked for manifest hash, feed/archive signatures, unchanged feed baseline,
+  bundle/version/updater configuration and exact arm64 installer executable.
+  The DMG requires a local temporary mountpoint; macOS rejected one on KINGSTON.
+- Signed app launch/normal quit/reopen passed with a new synthetic data root;
+  synthetic Unicode note bytes survived. Existing installed apps/notes were
+  untouched. Main push was explicitly approved after automatic review requested
+  approval. All release-source CI jobs passed:
+  https://github.com/oogxdd/type/actions/runs/37237969636.
+- Local-only candidate uploaded with the candidate workflow temporarily disabled
+  and restored to active. Promotion succeeded with immediate rollout (interval 0):
+  https://github.com/oogxdd/type/actions/runs/37238156395. Public release:
+  https://github.com/oogxdd/type/releases/tag/gpui-v0.4.10. Artifact:
+  `Type-0.4.10-arm64.dmg` (SHA-256
+  `044975cf418980c120d4b71c27789d3ae8012aa07d81b9fac1c000964ed9369b`).
+  Live feed signature, archive signature, checksum, arm64 hardware requirement
+  and immediate rollout passed post-publication inspection. Feed retains
+  0.4.9/0.4.8/0.4.7; legacy Latest remains `desktop-v0.8.1`.
+- Remaining: user UI/feel and installation via the existing production app;
+  no production updater replacement/relaunch, real phone pairing, microphone,
+  sync or Intel/Linux/Windows runtime test was performed for this release.
 
 
 ### Sidebar actions, phone sync hover and filter control (2026-10-05)
