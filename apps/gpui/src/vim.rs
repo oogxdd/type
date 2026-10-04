@@ -14,8 +14,9 @@ pub enum Effect {
     Select(Range<usize>),
     Replace(Range<usize>, String, usize),
     Vertical(bool, usize),
-    Undo,
-    Redo,
+    HalfPage(bool, Option<usize>),
+    Undo(usize),
+    Redo(usize),
     Search,
 }
 #[derive(Default)]
@@ -243,9 +244,11 @@ impl Vim {
             self.clear();
             return Some(vec![]);
         }
+        let explicit_count = (self.count > 0).then_some(n);
         self.count = 0;
         let effects = match key {
             "j" | "down" | "k" | "up" => vec![Effect::Vertical(matches!(key, "j" | "down"), n)],
+            "ctrl-d" | "ctrl-u" => vec![Effect::HalfPage(key == "ctrl-d", explicit_count)],
             "v" | "V" => {
                 let mode = if key == "V" {
                     Mode::VisualLine
@@ -334,8 +337,14 @@ impl Vim {
                     vec![Effect::Replace(range, value, cursor)]
                 }
             }
-            "u" => vec![Effect::Undo],
-            "ctrl-r" => vec![Effect::Redo],
+            "u" | "ctrl-r" => {
+                self.mode = Mode::Normal;
+                vec![if key == "u" {
+                    Effect::Undo(n)
+                } else {
+                    Effect::Redo(n)
+                }]
+            }
             "/" => vec![Effect::Search],
             _ => vec![],
         };
@@ -621,6 +630,28 @@ mod tests {
     #[test]
     fn change_word_preserves_space() {
         assert_eq!(run("hello world", &["c", "w"]).0, " world");
+    }
+    #[test]
+    fn paging_and_history_preserve_counts_and_insert_input() {
+        let mut vim = Vim::default();
+        assert_eq!(
+            vim.key("ctrl-d", "", "abc", 0),
+            Some(vec![Effect::HalfPage(true, None)])
+        );
+        vim.key("3", "3", "abc", 0);
+        assert_eq!(
+            vim.key("ctrl-u", "", "abc", 0),
+            Some(vec![Effect::HalfPage(false, Some(3))])
+        );
+        vim.key("2", "2", "abc", 0);
+        assert_eq!(vim.key("u", "u", "abc", 0), Some(vec![Effect::Undo(2)]));
+        vim.key("v", "v", "abc", 0);
+        assert_eq!(vim.key("ctrl-r", "", "abc", 0), Some(vec![Effect::Redo(1)]));
+        assert_eq!(vim.mode, Mode::Normal);
+        vim.key("i", "i", "abc", 0);
+        for key in ["ctrl-d", "ctrl-u", "u", "ctrl-r"] {
+            assert_eq!(vim.key(key, key, "abc", 0), None);
+        }
     }
     #[test]
     fn empty_commands_are_safe() {

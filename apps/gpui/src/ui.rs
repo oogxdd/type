@@ -516,7 +516,9 @@ impl Render for TypeApp {
                                 .appearance(false)
                                 .readonly(
                                     self.busy
-                                        || (self.prefs.vim && self.vim.mode != vim::Mode::Insert),
+                                        || (self.prefs.vim
+                                            && self.vim.mode != vim::Mode::Insert
+                                            && !self.replaying_vim_history),
                                 )
                                 .h(relative(1.))
                                 .text_size(px(self.prefs.font_size))

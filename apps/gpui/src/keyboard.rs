@@ -60,8 +60,9 @@ pub fn command(event: &KeyDownEvent, mac: bool, editor_focused: bool) -> Option<
     if event.is_held || event.prefer_character_input || !primary || m.alt {
         return None;
     }
-    // Control-J inside a non-mac editor belongs to editing. Focus still has Ctrl-W.
-    if !mac && editor_focused && stroke.key == "j" {
+    // Control-J/R inside a non-mac editor belong to editing (motion/redo).
+    // Focus still has Ctrl-W; refresh remains available outside the editor.
+    if !mac && editor_focused && matches!(stroke.key.as_str(), "j" | "r") {
         return None;
     }
     let key = if m.shift {
@@ -120,6 +121,7 @@ mod tests {
             }
         }
         assert_eq!(command(&event("ctrl-j"), false, true), None);
+        assert_eq!(command(&event("ctrl-r"), false, true), None);
         assert_eq!(command(&event("ctrl-k"), true, true), None);
         assert_eq!(command(&event("ctrl-w"), true, true), Some(Command::Focus));
         assert_eq!(command(&event("ctrl-shift-w"), true, true), None);

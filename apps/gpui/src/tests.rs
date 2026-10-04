@@ -248,6 +248,215 @@ fn earlier_stream_section_expands_on_click(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn vim_history_round_trips_unicode_edits(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let original = "alpha βeta\nsecond line\n";
+    let path = f.0.create(STREAM_FOLDER, original.into(), None).unwrap();
+    let (window, app) = launch(&f, cx);
+    let assert_body = |cx: &mut TestAppContext, expected: &str| {
+        cx.update_window(window, |_, _, cx| {
+            let app = app.read(cx);
+            let state = app.notes[&app.active].editor.as_ref().unwrap().read(cx);
+            assert_eq!(state.value().as_ref(), expected);
+            assert_eq!(app.vim.mode, vim::Mode::Normal);
+            assert!(!state.is_editable());
+            assert!(state.selected_range().is_empty());
+            assert_eq!(app.vim.head, state.cursor());
+        })
+        .unwrap();
+    };
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.open_note(path.clone().into(), true, window, cx)
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    press(cx, window, "i");
+    cx.simulate_input(window, "Привет 🦀 ");
+    press(cx, window, "escape u");
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        let state = app.notes[&app.active].editor.as_ref().unwrap().read(cx);
+        assert_eq!(state.value().as_ref(), original);
+        assert_eq!(app.vim.mode, vim::Mode::Normal);
+    })
+    .unwrap();
+    press(cx, window, "ctrl-r");
+    let inserted = format!("Привет 🦀 {original}");
+    assert_body(cx, &inserted);
+    cx.update_window(window, |_, window, cx| {
+        use gpui_kit::EntityInputHandler;
+        let app = app.read(cx);
+        let editor = app.notes[&app.active].editor.as_ref().unwrap().clone();
+        editor.update(cx, |state, cx| {
+            state.replace_text_in_range(None, "blocked IME", window, cx)
+        });
+    })
+    .unwrap();
+    cx.update(|cx| {
+        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("blocked paste".into()))
+    });
+    press(cx, window, "cmd-v");
+    assert_body(cx, &inserted);
+    press(cx, window, "g g d d");
+    assert_body(cx, "second line\n");
+    press(cx, window, "u");
+    assert_body(cx, &inserted);
+    press(cx, window, "ctrl-r 2 u");
+    assert_body(cx, original);
+    press(cx, window, "2 ctrl-r");
+    assert_body(cx, "second line\n");
+    press(cx, window, "u x ctrl-r");
+    assert_body(cx, &inserted["П".len()..]);
+    press(cx, window, "cmd-s");
+    assert_eq!(
+        f.0.notes().unwrap().read_note(&path).unwrap(),
+        inserted["П".len()..]
+    );
+    press(cx, window, "u");
+    assert_body(cx, &inserted);
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        assert!(
+            app.notes[&app.active].dirty,
+            "undo after saving must schedule another save"
+        );
+    })
+    .unwrap();
+    press(cx, window, "v u");
+    assert_body(cx, original);
+    press(cx, window, "ctrl-r");
+    assert_body(cx, &inserted);
+}
+
+#[gpui_kit::test]
+fn vim_half_page_uses_viewport_rows_and_preserves_visual_head(cx: &mut TestAppContext) {
+    use gpui_kit::base::input::RopeExt;
+    let f = Fixture::new();
+    let body = (0..140)
+        .map(|row| format!("row {row:03} Привет 🦀"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let path = f.0.create(STREAM_FOLDER, body.clone(), None).unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| app.open_note(path.into(), true, window, cx));
+    })
+    .unwrap();
+    cx.run_until_parked();
+    let (rows, height) = cx
+        .update_window(window, |_, _, cx| {
+            let app = app.read(cx);
+            let state = app.notes[&app.active].editor.as_ref().unwrap().read(cx);
+            let height = state.line_height().unwrap();
+            (
+                (state.input_bounds().size.height / height / 2.)
+                    .floor()
+                    .max(1.) as usize,
+                height,
+            )
+        })
+        .unwrap();
+    let assert_row = |cx: &mut TestAppContext, row: usize, visual: bool| {
+        cx.update_window(window, |_, _, cx| {
+            let app = app.read(cx);
+            let state = app.notes[&app.active].editor.as_ref().unwrap().read(cx);
+            assert_eq!(
+                state.text().offset_to_position(app.vim.head).line as usize,
+                row
+            );
+            assert_eq!(state.value().as_ref(), body);
+            assert_eq!(app.vim.visual(), visual);
+            assert!(!state.is_editable());
+            assert_eq!(state.selected_range().is_empty(), !visual);
+            assert!(state.value().is_char_boundary(app.vim.head));
+            let cell = state
+                .range_to_bounds(&(app.vim.head..app.vim.head))
+                .unwrap();
+            assert!(cell.bottom() > state.input_bounds().top());
+            assert!(cell.top() < state.input_bounds().bottom());
+            if visual {
+                assert!(app.vim.head < state.selected_range().end);
+            }
+        })
+        .unwrap();
+    };
+    press(cx, window, "ctrl-d");
+    assert_row(cx, rows, false);
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        let state = app.notes[&app.active].editor.as_ref().unwrap().read(cx);
+        assert_eq!(state.scroll_offset().y, -height * rows as f32);
+    })
+    .unwrap();
+    press(cx, window, "ctrl-u");
+    assert_row(cx, 0, false);
+    press(cx, window, "3 ctrl-d");
+    assert_row(cx, 3, false);
+    press(cx, window, "3 ctrl-u v ctrl-d");
+    assert_row(cx, rows, true);
+    press(cx, window, "ctrl-u escape ctrl-u");
+    assert_row(cx, 0, false);
+    press(cx, window, "shift-g ctrl-d");
+    assert_row(cx, 139, false);
+    for _ in 0..5 {
+        press(cx, window, "ctrl-d");
+        assert_row(cx, 139, false);
+    }
+    press(cx, window, "g g i");
+    cx.simulate_input(window, "u");
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        assert!(
+            app.notes[&app.active]
+                .editor
+                .as_ref()
+                .unwrap()
+                .read(cx)
+                .value()
+                .starts_with('u')
+        );
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn vim_half_page_moves_through_wrapped_unicode_rows(cx: &mut TestAppContext) {
+    use gpui_kit::base::input::RopeExt;
+    let f = Fixture::new();
+    let body = format!("{}\ntail", "абв 🦀 ".repeat(1000));
+    let path = f.0.create(STREAM_FOLDER, body.clone(), None).unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| app.open_note(path.into(), true, window, cx));
+    })
+    .unwrap();
+    cx.run_until_parked();
+    press(cx, window, "v ctrl-d");
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        let state = app.notes[&app.active].editor.as_ref().unwrap().read(cx);
+        assert!(app.vim.head > 0);
+        assert_eq!(state.text().offset_to_position(app.vim.head).line, 0);
+        assert!(state.scroll_offset().y < px(0.));
+        assert!(body.is_char_boundary(app.vim.head));
+        assert!(app.vim.head < state.selected_range().end);
+        assert_eq!(state.value().as_ref(), body);
+    })
+    .unwrap();
+    press(cx, window, "ctrl-u escape");
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        let state = app.notes[&app.active].editor.as_ref().unwrap().read(cx);
+        assert_eq!(state.cursor(), 0);
+        assert_eq!(state.scroll_offset().y, px(0.));
+        assert_eq!(state.value().as_ref(), body);
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
 fn keyboard_focus_tabs_vim_and_persistence(cx: &mut TestAppContext) {
     let f = Fixture::new();
     let path =

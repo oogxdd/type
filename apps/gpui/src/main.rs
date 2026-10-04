@@ -93,6 +93,7 @@ struct TypeApp {
     local_server: Option<type_core::LocalSyncServerStatus>,
     job_status: String,
     vim: vim::Vim,
+    replaying_vim_history: bool,
     roots: Vec<TreeItem>,
     tree: Entity<TreeState>,
     notes: HashMap<SharedString, Note>,
@@ -109,7 +110,7 @@ struct TypeApp {
 mod tree_moves;
 impl TypeApp {
     fn vim_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        use gpui_kit::component::input::{MoveDown, MoveUp, Redo, Search, Undo};
+        use gpui_kit::component::input::{MoveDown, MoveUp, Search};
         if event.keystroke.key == "escape" && cx.has_active_drag() {
             cx.stop_active_drag(window);
             self.drop_target = None;
@@ -138,7 +139,10 @@ impl TypeApp {
         }
         let key = keyboard::modal_key(stroke);
         if stroke.modifiers.control
-            && !matches!(key.as_str(), "ctrl-r" | "ctrl-[" | "ctrl-j" | "ctrl-k")
+            && !matches!(
+                key.as_str(),
+                "ctrl-r" | "ctrl-[" | "ctrl-j" | "ctrl-k" | "ctrl-d" | "ctrl-u"
+            )
         {
             return;
         }
@@ -169,6 +173,7 @@ impl TypeApp {
         // Modal edit effects temporarily enter the engine's editable path.
         editor.update(cx, |state, cx| state.set_readonly(false, cx));
         let mut native_motion = false;
+        let mut page_scroll = None;
         for effect in effects {
             match effect {
                 vim::Effect::Select(range) => {
@@ -196,8 +201,46 @@ impl TypeApp {
                     }
                     native_motion = true;
                 }
-                vim::Effect::Undo => window.dispatch_action(Box::new(Undo), cx),
-                vim::Effect::Redo => window.dispatch_action(Box::new(Redo), cx),
+                vim::Effect::HalfPage(down, count) => {
+                    let state = editor.read(cx);
+                    let rows = count.unwrap_or_else(|| {
+                        state
+                            .line_height()
+                            .map(|height| {
+                                (state.input_bounds().size.height / height / 2.)
+                                    .floor()
+                                    .max(1.) as usize
+                            })
+                            .unwrap_or(1)
+                    });
+                    if let Some(height) = state.line_height() {
+                        let mut offset = state.scroll_offset();
+                        offset.y = (offset.y + height * rows as f32 * if down { -1. } else { 1. })
+                            .min(px(0.));
+                        page_scroll = Some(offset);
+                    }
+                    if self.vim.visual() {
+                        let head = self.vim.head;
+                        editor.update(cx, |state, cx| state.set_selected_range(head..head, cx));
+                    }
+                    for _ in 0..rows {
+                        window.dispatch_action(
+                            if down {
+                                Box::new(MoveDown)
+                            } else {
+                                Box::new(MoveUp)
+                            },
+                            cx,
+                        );
+                    }
+                    native_motion = true;
+                }
+                vim::Effect::Undo(count) => {
+                    self.replay_vim_history(editor.clone(), true, count, window, cx)
+                }
+                vim::Effect::Redo(count) => {
+                    self.replay_vim_history(editor.clone(), false, count, window, cx)
+                }
                 vim::Effect::Search => window.dispatch_action(Box::new(Search), cx),
             }
         }
@@ -217,12 +260,69 @@ impl TypeApp {
                     }
                 }
                 editor.update(cx, |state, cx| {
+                    if let Some(offset) = page_scroll {
+                        state.set_scroll_offset(offset, cx);
+                    }
                     state.set_readonly(this.prefs.vim && this.vim.mode != vim::Mode::Insert, cx)
                 });
                 cx.notify();
             });
         });
         cx.notify();
+    }
+
+    fn replay_vim_history(
+        &self,
+        editor: Entity<EditorState>,
+        undo: bool,
+        count: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use gpui_kit::component::input::{Redo, Undo};
+        let id = self.active.clone();
+        let owner = cx.weak_entity();
+        window.defer(cx, move |window, cx| {
+            let ready = owner
+                .update(cx, |this, cx| {
+                    if this.active != id || this.locked || this.busy || this.modal.is_some() {
+                        return false;
+                    }
+                    this.replaying_vim_history = true;
+                    editor.update(cx, |state, cx| state.set_readonly(false, cx));
+                    cx.notify();
+                    true
+                })
+                .unwrap_or(false);
+            if !ready {
+                return;
+            }
+            // Kit registers history listeners only when rendered editable and
+            // exposes no public replay API. Rebuild those listeners, dispatch
+            // synchronously, then restore the read-only frame in this callback.
+            // No platform input can arrive between these two draws.
+            window.draw(cx).clear(cx);
+            let focus = editor.focus_handle(cx);
+            for _ in 0..count {
+                if undo {
+                    focus.dispatch_action(&Undo, window, cx);
+                } else {
+                    focus.dispatch_action(&Redo, window, cx);
+                }
+            }
+            let _ = owner.update(cx, |this, cx| {
+                this.replaying_vim_history = false;
+                let state = editor.read(cx);
+                let cursor = state.selected_range().start;
+                let range = this.vim.finish_motion(&state.value(), cursor);
+                editor.update(cx, |state, cx| {
+                    state.set_selected_range(range, cx);
+                    state.set_readonly(this.prefs.vim && this.vim.mode != vim::Mode::Insert, cx);
+                });
+                cx.notify();
+            });
+            window.draw(cx).clear(cx);
+        });
     }
 
     fn toggle_vim(&mut self, window: &mut Window, cx: &mut Context<Self>) {

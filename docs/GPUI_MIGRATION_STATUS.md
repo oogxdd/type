@@ -1,6 +1,6 @@
 # GPUI migration — handoff / live status
 
-Updated: 2026-10-04. This is an unfinished migration; update this file after each milestone.
+Updated: 2026-10-05. This is an unfinished migration; update this file after each milestone.
 
 ## Where to continue
 
@@ -27,6 +27,37 @@ Updated: 2026-10-04. This is an unfinished migration; update this file after eac
 - Investigate larger H1/H2/H3 only; do not implement yet.
 
 ## Implemented
+
+### Vim half-page movement and working history (2026-10-05)
+
+- Added Ctrl D / Ctrl U in Normal and Visual modes, using half the editor's
+  viewport height in rendered rows. Numeric prefixes choose a row count;
+  viewport scrolling accompanies the cursor, with native wrapping/folding
+  navigation and an inclusive Visual head. Insert retains native input.
+- Fixed `u` / Ctrl R: Kit registers undo/redo listeners only in editable
+  rendered frames, so temporarily changing the state before deferred dispatch
+  did nothing in Normal mode. History replay now rebuilds those listeners,
+  dispatches synchronously through the editor focus handle, and restores the
+  read-only frame in the same callback. Uses the native history, including
+  Unicode, atomic edits, counted steps and redo-branch invalidation. Replaying
+  history returns to Normal, collapses restored selections and updates Vim head.
+- Non-macOS Ctrl R in the editor now belongs to redo rather than app refresh.
+  Settings → Keyboard includes paging. No core API changes.
+- Regression first reproduced the broken undo on the prior code. New synthetic
+  native tests cover Insert Unicode → undo/redo, deletion, counts, branching,
+  save/dirty tracking, Visual undo, rejected Normal IME/paste, viewport-sized
+  movement, scrolling, document edges, and soft-wrapped Unicode selection.
+- Validation: full GPUI suite passed **60 tests** (29 library + 31 native),
+  including all new Vim tests; the concurrently added
+  `rename_updates_tree_and_previews_before_background_refresh` test failed on
+  retaining `Work` in navigation. That test/navigation implementation is outside
+  this Vim task and remains under concurrent development. Formatting and diff
+  checks passed. Dev bundle build (`desktop.py bundle --test-support`) passed;
+  output is `experiments/gpui-demo/target/bundle/Type GPUI Dev.app`.
+  Committed at the user's request as
+  `fix(gpui): restore Vim history and add half-page movement`.
+  No publication, installed-app replacement or restart for this task.
+  Remaining: user UI/feel review; Linux/Windows runtime remains unverified.
 
 ### Contextual palette and blank Folders area (2026-10-04)
 

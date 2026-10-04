@@ -778,7 +778,7 @@ impl TypeApp {
                     ),
                     (
                         "Vim editor",
-                        "i / a / I / A — Insert\no / O — new line\nv / V — Visual / line selection\ndd / cc / yy — delete / change / copy line\np / P — paste\nu / Ctrl R — undo / redo\n/ — search\nEsc — Normal mode",
+                        "i / a / I / A — Insert\no / O — new line\nv / V — Visual / line selection\nCtrl D / Ctrl U — half page down / up\ndd / cc / yy — delete / change / copy line\np / P — paste\nu / Ctrl R — undo / redo\n/ — search\nEsc — Normal mode",
                     ),
                 ] {
                     settings = settings.child(
