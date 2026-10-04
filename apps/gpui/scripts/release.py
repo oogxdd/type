@@ -149,7 +149,7 @@ def main():
         run('lipo', '-create', *binaries, '-output', universal)
     else:
         shutil.copy2(binaries[0], universal)
-    run('lipo', '-verify_arch', *(['arm64', 'x86_64'] if options.architecture == 'universal' else ['arm64']), universal)
+    run('lipo', universal, '-verify_arch', *(['arm64', 'x86_64'] if options.architecture == 'universal' else ['arm64']))
     run(sys.executable, ROOT / 'apps/gpui/scripts/desktop.py', 'bundle', '--release', '--no-build',
         '--binary', universal, '--sparkle-dir', sparkle, '--feed-url', feed,
         '--public-key', os.environ['SPARKLE_PUBLIC_KEY'], cwd=ROOT)
