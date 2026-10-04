@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a universal, signed and notarized GPUI release. Never publish here."""
+"""Build a signed and notarized GPUI release. Never publish here."""
 import argparse
 import hashlib
 import json
@@ -16,6 +16,22 @@ import tomllib
 
 from desktop import ROOT, update_configuration
 from sparkle import fetch
+from promote import NS
+import xml.etree.ElementTree as ET
+
+ET.register_namespace("sparkle", NS)
+
+
+def restrict_hardware(feed, version):
+    tree = ET.parse(feed)
+    items = [i for i in tree.findall("channel/item") if i.findtext(f"{{{NS}}}version") == version]
+    if len(items) != 1:
+        raise ValueError("expected exactly one Apple Silicon update item")
+    requirement = items[0].find(f"{{{NS}}}hardwareRequirements")
+    if requirement is None:
+        requirement = ET.SubElement(items[0], f"{{{NS}}}hardwareRequirements")
+    requirement.text = "arm64"
+    tree.write(feed, encoding="utf-8", xml_declaration=True)
 
 
 def run(*args, **kwargs):
@@ -97,6 +113,7 @@ def main():
     parser.add_argument('--sparkle-dir', type=Path, required=True)
     parser.add_argument('--notes', type=Path, required=True)
     parser.add_argument('--previous-feed', type=Path)
+    parser.add_argument('--architecture', choices=['universal', 'arm64'], default='universal')
     options = parser.parse_args()
     version = release_version(options.version)
     if sys.platform != 'darwin':
@@ -122,13 +139,17 @@ def main():
     target = Path(os.environ.get('CARGO_TARGET_DIR', ROOT / 'target'))
     target = (target if target.is_absolute() else ROOT / target).resolve()
     binaries = []
-    for arch in ('aarch64', 'x86_64'):
+    for arch in (('aarch64', 'x86_64') if options.architecture == 'universal' else ('aarch64',)):
         triple = f'{arch}-apple-darwin'
         run('cargo', 'build', '--locked', '--release', '-p', 'type-gpui', '--target', triple, cwd=ROOT,
             env={**os.environ, 'MACOSX_DEPLOYMENT_TARGET': '12.0'})
         binaries.append(target / triple / 'release/type-gpui')
-    universal = output / 'type-gpui-universal'
-    run('lipo', '-create', *binaries, '-output', universal)
+    universal = output / 'type-gpui-release'
+    if options.architecture == 'universal':
+        run('lipo', '-create', *binaries, '-output', universal)
+    else:
+        shutil.copy2(binaries[0], universal)
+    run('lipo', '-verify_arch', *(['arm64', 'x86_64'] if options.architecture == 'universal' else ['arm64']), universal)
     run(sys.executable, ROOT / 'apps/gpui/scripts/desktop.py', 'bundle', '--release', '--no-build',
         '--binary', universal, '--sparkle-dir', sparkle, '--feed-url', feed,
         '--public-key', os.environ['SPARKLE_PUBLIC_KEY'], cwd=ROOT)
@@ -151,7 +172,7 @@ def main():
         staging.mkdir()
         run('ditto', bundle, staging / 'Type.app')
         (staging / 'Applications').symlink_to('/Applications')
-        dmg = output / f'Type-{version}-universal.dmg'
+        dmg = output / f'Type-{version}-{options.architecture}.dmg'
         run('hdiutil', 'create', '-volname', 'Type', '-srcfolder', staging, '-format', 'ULFO', '-fs', 'APFS', dmg)
         run('codesign', '--sign', os.environ['APPLE_SIGNING_IDENTITY'], '--timestamp', dmg)
         notarize(dmg, keychain_profile)
@@ -168,10 +189,13 @@ def main():
         '--embed-release-notes', '--phased-rollout-interval', '86400',
         '--download-url-prefix', f'https://github.com/{options.repository}/releases/download/gpui-v{version}/',
         archives, input=secret, text=True)
+    if options.architecture == 'arm64':
+        restrict_hardware(archives / 'appcast.xml', version)
+        run(sparkle / 'bin/sign_update', '--ed-key-file', '-', archives / 'appcast.xml', input=secret, text=True)
     run(sparkle / 'bin/sign_update', '--verify', '--ed-key-file', '-', archives / 'appcast.xml', input=secret, text=True)
     shutil.copy2(archives / 'appcast.xml', output / 'appcast.xml')
     # Public provenance for promotion; no credentials are included.
-    manifest = {'version': version, 'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
+    manifest = {'version': version, 'architecture': options.architecture, 'dmg_name': dmg.name, 'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
                 'bundle_id': plistlib.loads((bundle / 'Contents/Info.plist').read_bytes())['CFBundleIdentifier'],
                 'dmg_sha256': hashlib.sha256(dmg.read_bytes()).hexdigest(),
                 'previous_feed_sha256': hashlib.sha256(options.previous_feed.read_bytes()).hexdigest() if options.previous_feed else None}

@@ -84,6 +84,7 @@ def build_candidate(options, environment, sparkle):
                         '--pattern', 'appcast.xml', '--dir', str(temp)], cwd=ROOT, check=True)
         subprocess.run([sys.executable, str(ROOT / 'apps/gpui/scripts/release.py'),
                         '--version', version, '--repository', options.repository,
+                        '--architecture', options.architecture,
                         '--output', str(output), '--sparkle-dir', str(sparkle),
                         '--notes', str(notes), '--previous-feed', str(temp / 'appcast.xml')],
                        cwd=ROOT, env=environment, check=True)
@@ -101,6 +102,7 @@ def main():
     parser.add_argument('--sparkle-dir', type=Path, default=Path('/private/tmp/type-sparkle'))
     parser.add_argument('--target-dir', type=Path, help='reuse an existing Cargo cache; otherwise respects CARGO_TARGET_DIR')
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--architecture', choices=['universal', 'arm64'], default='universal')
     parser.add_argument('--repository', default='oogxdd/type')
     options = parser.parse_args()
     try:
@@ -125,7 +127,10 @@ def main():
                 raise RuntimeError(f'{command} missing; reconnect the toolchain volume or install the pinned tools')
         capture('gh', 'auth', 'status')
         targets = capture('rustup', 'target', 'list', '--installed').splitlines()
-        missing = sorted({'aarch64-apple-darwin', 'x86_64-apple-darwin'} - set(targets))
+        required_targets = {'aarch64-apple-darwin'}
+        if options.architecture == 'universal':
+            required_targets.add('x86_64-apple-darwin')
+        missing = sorted(required_targets - set(targets))
         if missing:
             raise RuntimeError('install missing targets: rustup target add ' + ' '.join(missing))
         apple_credentials(environment, options.profile)
@@ -136,7 +141,7 @@ def main():
             raise RuntimeError('local Sparkle key differs from the production public key; restore the existing key')
         if options.target_dir:
             environment['CARGO_TARGET_DIR'] = str(options.target_dir.resolve())
-        print('Developer ID, Apple notarization, Sparkle, GitHub and both Rust targets are available.')
+        print('Developer ID, Apple notarization, Sparkle, GitHub and selected Rust targets are available.')
         if not options.check:
             build_candidate(options, environment, sparkle)
     except (RuntimeError, ValueError):

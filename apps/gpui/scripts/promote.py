@@ -26,6 +26,16 @@ def verify_feed(sparkle, feed):
         input=os.environ['SPARKLE_PRIVATE_KEY'] + '\n', text=True)
 
 
+def candidate_dmg_name(manifest, version):
+    architecture = manifest.get('architecture', 'universal')
+    if architecture not in ('universal', 'arm64'):
+        raise ValueError('unsupported candidate architecture')
+    expected = f'Type-{version}-{architecture}.dmg'
+    if manifest.get('dmg_name', expected) != expected:
+        raise ValueError('unexpected candidate DMG name')
+    return expected
+
+
 def validate_candidate(manifest, version, current_hash, dmg, feed, repository):
     if manifest['version'] != version or manifest['bundle_id'] != 'com.digital.type2':
         raise ValueError('candidate provenance does not match')
@@ -40,6 +50,8 @@ def validate_candidate(manifest, version, current_hash, dmg, feed, repository):
     selected = [i for i in items if i.findtext(f'{{{NS}}}version') == version]
     if len(selected) != 1:
         raise ValueError('expected exactly one candidate enclosure')
+    if manifest.get('architecture') == 'arm64' and selected[0].findtext(f'{{{NS}}}hardwareRequirements') != 'arm64':
+        raise ValueError('Apple Silicon candidate must require arm64 hardware')
     enclosure = selected[0].find('enclosure')
     expected = f'https://github.com/{repository}/releases/download/gpui-v{version}/{dmg.name}'
     if enclosure is None or enclosure.get('url') != expected or int(enclosure.get('length', '0')) != dmg.stat().st_size:
@@ -111,7 +123,7 @@ def main():
         run('gh', 'release', 'download', tag, '--repo', args.repository, '--dir', candidate)
         manifest = json.loads((candidate / 'release.json').read_text())
         current_hash = hashlib.sha256((current / 'appcast.xml').read_bytes()).hexdigest() if exists else None
-        dmg = candidate / f'Type-{args.version}-universal.dmg'
+        dmg = candidate / candidate_dmg_name(manifest, args.version)
         run('codesign', '--verify', '--strict', dmg)
         run('xcrun', 'stapler', 'validate', dmg)
         feed = candidate / 'appcast.xml'

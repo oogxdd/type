@@ -2169,3 +2169,390 @@ fn application_assets_render_sidebar_icons_with_visible_pixels() {
         );
     }
 }
+
+#[gpui_kit::test]
+fn folder_chrome_and_refresh_use_the_home_editor(cx: &mut TestAppContext) {
+    use std::{fs, path::Path};
+    let f = Fixture::new();
+    let body = "same text β😀\nsecond line\n";
+    let note = f.0.create(STREAM_FOLDER, body.into(), None).unwrap();
+    let folder = f.0.env.app_data_dir.join("chrome-fixture");
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("file.md"), body).unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.prefs.line_numbers = true;
+            app.open_note(note.into(), true, window, cx);
+        });
+        window.render_frame(cx);
+        window.render_frame(cx);
+        let main = app.read(cx).notes[&app.read(cx).active]
+            .editor
+            .clone()
+            .unwrap();
+        let main_gutter =
+            main.read(cx).input_bounds().left() - window.find("editor-pane").bounds().left();
+        app.update(cx, |app, cx| app.open_folder_path(&folder, window, cx));
+        let tab = app.read(cx).current_folder().unwrap();
+        tab.update(cx, |tab, cx| {
+            let id = tab.entry_id(Path::new("file.md"));
+            tab.open_file(id, true, window, cx);
+        });
+        window.render_frame(cx);
+        window.render_frame(cx);
+        let editor = tab.read(cx).current_editor().unwrap();
+        assert_eq!(
+            editor.read(cx).input_bounds().left() - window.find("editor-pane").bounds().left(),
+            main_gutter
+        );
+        let sidebar = window.find("folder-sidebar").bounds();
+        let content = window.find("folder-content-pane").bounds();
+        assert_eq!(sidebar.top(), px(0.));
+        assert_eq!(content.top(), px(0.));
+        let tabs = window.find("workspace-tabs").bounds();
+        assert_eq!(tabs.top(), px(28.));
+        assert_eq!(tabs.size.height, px(36.));
+        assert_eq!(tabs.left(), px(0.));
+        for y in [px(14.), px(46.)] {
+            let probe = point(content.left(), y).scale(window.scale_factor());
+            let top = window
+                .painted_quads()
+                .into_iter()
+                .filter(|quad| quad.bounds.contains(&probe))
+                .filter(|quad| {
+                    quad.background
+                        .as_solid()
+                        .is_some_and(|color| color.a == 1.)
+                })
+                .max_by_key(|quad| quad.order)
+                .unwrap();
+            assert_eq!(
+                top.background,
+                super::Theme::global(cx).background.into(),
+                "the pane divider must not show through either top row"
+            );
+        }
+        assert_eq!(
+            window.find("folder-sidebar-header").bounds().top(),
+            tabs.bottom()
+        );
+        assert!(window.try_find("folder-editor-footer").is_none());
+        assert!(window.try_find("folder-sidebar-footer").is_none());
+        let saved = window.find("folder-save-state").bounds();
+        assert!(saved.bottom() <= content.bottom());
+        assert!(saved.top() > content.bottom() - px(40.));
+        assert!(saved.left() > content.right() - px(100.));
+        fs::write(folder.join("file.md"), "updated from disk β😀").unwrap();
+        fs::write(folder.join("new-config.json"), "{}").unwrap();
+        window.click("folder-refresh", cx);
+        assert_eq!(editor.read(cx).value().as_ref(), "updated from disk β😀");
+        assert_eq!(
+            tab.read(cx).current_editor().unwrap().entity_id(),
+            editor.entity_id()
+        );
+        assert!(
+            !tab.read(cx)
+                .entry_id(Path::new("new-config.json"))
+                .is_empty()
+        );
+        window.render_frame(cx);
+        let folder_tab_id = format!("workspace-tab-{:?}", tab.entity_id());
+        let tab_before_resize = window.find(folder_tab_id.clone()).bounds();
+        let main_tab = window.find("workspace-main").bounds();
+        assert!(tab_before_resize.left() >= main_tab.right());
+        assert!(
+            tab_before_resize.left() - main_tab.right() < px(12.),
+            "folder tabs sit directly beside Type"
+        );
+        let panes = app.read(cx).pane_state.clone();
+        panes.update(cx, |panes, cx| panes.resize_panel(0, px(410.), window, cx));
+        window.render_frame(cx);
+        window.render_frame(cx);
+        let content = window.find("folder-content-pane").bounds();
+        assert_eq!(
+            window.find(folder_tab_id.clone()).bounds(),
+            tab_before_resize,
+            "resizing the sidebar must not move workspace tabs"
+        );
+        window.click("workspace-main", cx);
+        assert!(
+            app.read(cx).active_folder.is_none(),
+            "native tab click returns Home"
+        );
+        window.render_frame(cx);
+        window.render_frame(cx);
+        let main_pane = window.find("content-pane").bounds();
+        assert_eq!(main_pane.top(), px(0.));
+        assert_eq!(
+            main_pane.left(),
+            content.left(),
+            "pane widths survive workspace switching"
+        );
+        assert_eq!(window.find(folder_tab_id).bounds(), tab_before_resize);
+        window.click(format!("workspace-close-{:?}", tab.entity_id()), cx);
+        assert!(app.read(cx).folder_tabs.is_empty());
+        assert!(
+            app.read(cx).active_folder.is_none(),
+            "close does not select its folder tab"
+        );
+        window.render_frame(cx);
+        assert!(window.try_find("workspace-tabs").is_none());
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn ordinary_folder_tabs_preserve_main_and_save_real_files_without_profile_setup(
+    cx: &mut TestAppContext,
+) {
+    use std::{fs, path::Path};
+    let f = Fixture::new();
+    let main_path =
+        f.0.create(STREAM_FOLDER, "# Main note".into(), None)
+            .unwrap();
+    let folder = f.0.env.app_data_dir.join("ordinary-folder");
+    fs::create_dir_all(folder.join("nested")).unwrap();
+    fs::write(
+        folder.join("note.md"),
+        "---\nid: untouched\n---\n# Original\n",
+    )
+    .unwrap();
+    fs::write(folder.join("nested/plain.txt"), "Привет 😀").unwrap();
+    fs::write(folder.join("image.png"), [0, 1, 2]).unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.open_note(main_path.clone().into(), true, window, cx);
+        });
+        window.render_frame(cx);
+        assert!(window.try_find("workspace-tabs").is_none());
+        let profile_id = app.read(cx).profiles.active_profile_id.clone();
+        app.update(cx, |app, cx| app.open_folder_path(&folder, window, cx));
+        window.render_frame(cx);
+        assert!(window.find("workspace-tabs").visible());
+        let tab = app.read(cx).current_folder().unwrap();
+        tab.update(cx, |tab, cx| {
+            let id = tab.entry_id(Path::new("note.md"));
+            tab.open_file(id, true, window, cx);
+            let editor = tab.current_editor().unwrap();
+            assert_eq!(
+                editor.read(cx).value().as_ref(),
+                "---\nid: untouched\n---\n# Original\n"
+            );
+            editor.update(cx, |editor, cx| {
+                editor.set_value("---\nid: untouched\n---\n# Edited β😀\n", window, cx)
+            });
+        });
+        app.update(cx, |app, cx| app.switch_workspace(None, window, cx));
+        assert_eq!(app.read(cx).active.as_ref(), main_path);
+        assert_eq!(app.read(cx).profiles.active_profile_id, profile_id);
+        assert_eq!(
+            fs::read_to_string(folder.join("note.md")).unwrap(),
+            "---\nid: untouched\n---\n# Edited β😀\n"
+        );
+        app.update(cx, |app, cx| {
+            app.open_folder_path(&folder.join("."), window, cx)
+        });
+        assert_eq!(
+            app.read(cx).folder_tabs.len(),
+            1,
+            "same canonical folder reuses its tab"
+        );
+        tab.update(cx, |tab, cx| {
+            let nested = tab.entry_id(Path::new("nested"));
+            tab.toggle_directory(&nested, Some(true), window, cx);
+            let text = tab.entry_id(Path::new("nested/plain.txt"));
+            tab.open_file(text, true, window, cx);
+            tab.current_editor()
+                .unwrap()
+                .update(cx, |editor, cx| editor.set_value("", window, cx));
+            let unsupported = tab.entry_id(Path::new("image.png"));
+            tab.open_file(unsupported, true, window, cx);
+            assert!(tab.current_editor().is_none());
+        });
+        assert!(
+            folder.join("nested/plain.txt").is_file(),
+            "empty ordinary files are not deleted"
+        );
+        assert_eq!(
+            fs::read_to_string(folder.join("nested/plain.txt")).unwrap(),
+            ""
+        );
+        assert!(!folder.join("_system").exists());
+        assert!(!folder.join(".type").exists());
+        assert!(!folder.join(".git").exists());
+        app.update(cx, |app, cx| app.close_folder(tab.entity_id(), window, cx));
+        window.render_frame(cx);
+        assert!(window.try_find("workspace-tabs").is_none());
+        assert!(app.read(cx).current_folder().is_none());
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn folder_conflicts_keep_the_tab_and_draft_and_block_quit_and_updates(cx: &mut TestAppContext) {
+    use std::{fs, path::Path};
+    let f = Fixture::new();
+    let folder = f.0.env.app_data_dir.join("ordinary-folder");
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("note.txt"), "original").unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| app.open_folder_path(&folder, window, cx));
+        let tab = app.read(cx).current_folder().unwrap();
+        tab.update(cx, |tab, cx| {
+            tab.open_file(tab.entry_id(Path::new("note.txt")), true, window, cx);
+            tab.current_editor()
+                .unwrap()
+                .update(cx, |editor, cx| editor.set_value("local draft", window, cx));
+        });
+        fs::write(folder.join("note.txt"), "external change").unwrap();
+        app.update(cx, |app, cx| {
+            app.close_folder(tab.entity_id(), window, cx);
+            assert_eq!(app.folder_tabs.len(), 1);
+            assert_eq!(app.active_folder, Some(tab.entity_id()));
+            assert!(app.flush(false, cx).is_err());
+            assert!(!app.prepare_update(cx));
+        });
+        assert_eq!(
+            tab.read(cx)
+                .current_editor()
+                .unwrap()
+                .read(cx)
+                .value()
+                .as_ref(),
+            "local draft"
+        );
+        assert_eq!(
+            fs::read_to_string(folder.join("note.txt")).unwrap(),
+            "external change"
+        );
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn external_folder_shortcuts_cannot_create_or_delete_profile_notes(cx: &mut TestAppContext) {
+    use std::{fs, path::Path};
+    let f = Fixture::new();
+    let main_path =
+        f.0.create(STREAM_FOLDER, "# Main note".into(), None)
+            .unwrap();
+    let folder = f.0.env.app_data_dir.join("ordinary-folder");
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("plain.txt"), "hello").unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| app.open_folder_path(&folder, window, cx));
+        let tab = app.read(cx).current_folder().unwrap();
+        tab.update(cx, |tab, cx| {
+            tab.open_file(tab.entry_id(Path::new("plain.txt")), true, window, cx)
+        });
+    })
+    .unwrap();
+    press(cx, window, "cmd-n cmd-backspace cmd-shift-backspace cmd-k");
+    assert_eq!(
+        f.0.notes().unwrap().read_note(&main_path).unwrap(),
+        "# Main note"
+    );
+    assert_eq!(
+        fs::read_to_string(folder.join("plain.txt")).unwrap(),
+        "hello"
+    );
+    cx.update_window(window, |_, _, cx| {
+        assert!(app.read(cx).modal.is_none());
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn arbitrary_text_files_accept_native_input_and_vim_and_autosave(cx: &mut TestAppContext) {
+    use std::{fs, path::Path};
+    let f = Fixture::new();
+    let folder = f.0.env.app_data_dir.join("ordinary-folder");
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(folder.join("mcp.json"), "hello").unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| app.open_folder_path(&folder, window, cx));
+        let tab = app.read(cx).current_folder().unwrap();
+        tab.update(cx, |tab, cx| {
+            tab.open_file(tab.entry_id(Path::new("mcp.json")), true, window, cx)
+        });
+        window.render_frame(cx);
+    })
+    .unwrap();
+    press(cx, window, "i");
+    cx.update_window(window, |_, window, cx| window.input("Привет 😀 ", cx))
+        .unwrap();
+    cx.run_until_parked();
+    press(cx, window, "escape cmd-s");
+    assert_eq!(
+        fs::read_to_string(folder.join("mcp.json")).unwrap(),
+        "Привет 😀 hello"
+    );
+    cx.update_window(window, |_, window, cx| {
+        let tab = app.read(cx).current_folder().unwrap();
+        tab.update(cx, |tab, cx| {
+            let editor = tab.current_editor().unwrap();
+            editor.update(cx, |editor, cx| editor.set_value("autosaved", window, cx));
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(500));
+    cx.run_until_parked();
+    assert_eq!(
+        fs::read_to_string(folder.join("mcp.json")).unwrap(),
+        "autosaved"
+    );
+}
+
+#[gpui_kit::test]
+fn ordinary_folder_preserves_vim_history_and_half_page_movement(cx: &mut TestAppContext) {
+    use std::{fs, path::Path};
+    let f = Fixture::new();
+    let folder = f.0.env.app_data_dir.join("folder-vim-release-fixture");
+    fs::create_dir_all(&folder).unwrap();
+    let original = (0..80)
+        .map(|n| format!("line {n} β😀\n"))
+        .collect::<String>();
+    fs::write(folder.join("note.txt"), &original).unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| app.open_folder_path(&folder, window, cx));
+        let tab = app.read(cx).current_folder().unwrap();
+        tab.update(cx, |tab, cx| {
+            tab.open_file(tab.entry_id(Path::new("note.txt")), true, window, cx)
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    press(cx, window, "i");
+    cx.simulate_input(window, "Привет 🦀 ");
+    press(cx, window, "escape u");
+    cx.update_window(window, |_, _, cx| {
+        let tab = app.read(cx).current_folder().unwrap();
+        let editor = tab.read(cx).current_editor().unwrap();
+        assert_eq!(editor.read(cx).value().as_ref(), original);
+        assert!(!editor.read(cx).is_editable());
+    })
+    .unwrap();
+    press(cx, window, "ctrl-r cmd-s");
+    assert_eq!(
+        fs::read_to_string(folder.join("note.txt")).unwrap(),
+        format!("Привет 🦀 {original}")
+    );
+    press(cx, window, "g g 3 ctrl-d");
+    cx.update_window(window, |_, _, cx| {
+        use gpui_kit::base::input::RopeExt;
+        let tab = app.read(cx).current_folder().unwrap();
+        let editor = tab.read(cx).current_editor().unwrap();
+        let state = editor.read(cx);
+        assert_eq!(state.text().offset_to_position(state.cursor()).line, 3);
+        assert!(!state.is_editable());
+    })
+    .unwrap();
+}

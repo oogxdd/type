@@ -11,8 +11,8 @@ import unittest
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
 import desktop
-from promote import NS, edit_feed, validate_candidate
-from release import release_version, notarize, submit_notarization
+from promote import NS, edit_feed, validate_candidate, candidate_dmg_name
+from release import release_version, notarize, submit_notarization, restrict_hardware
 
 
 class ReleaseTests(unittest.TestCase):
@@ -141,6 +141,35 @@ class ReleaseTests(unittest.TestCase):
                 if has_previous:
                     expected += ['--previous-feed', str(previous)]
                 self.assertEqual(json.loads(captured.read_text()), expected)
+
+    def test_arm64_candidate_requires_hardware_and_keeps_previous_item(self):
+        dmg = self.root / 'Type-0.4.6-arm64.dmg'
+        dmg.write_bytes(b'fixture')
+        feed = self.feed()
+        feed.write_text(feed.read_text().replace('https://example.com/new.dmg',
+            'https://github.com/fixture/repo/releases/download/gpui-v0.4.6/' + dmg.name).replace('length="123"', 'length="7"'))
+        manifest = dict(version='0.4.6', architecture='arm64', dmg_name=dmg.name,
+                        bundle_id='com.digital.type2', previous_feed_sha256='baseline',
+                        dmg_sha256=hashlib.sha256(dmg.read_bytes()).hexdigest())
+        with self.assertRaisesRegex(ValueError, 'require arm64'):
+            validate_candidate(manifest, '0.4.6', 'baseline', dmg, feed, 'fixture/repo')
+        restrict_hardware(feed, '0.4.6')
+        self.assertEqual(validate_candidate(manifest, '0.4.6', 'baseline', dmg, feed, 'fixture/repo'), 'signature')
+        edit_feed(feed, '0.4.6', 'promote', 0)
+        items = ET.parse(feed).findall('channel/item')
+        self.assertEqual(items[0].findtext(f'{{{NS}}}hardwareRequirements'), 'arm64')
+        self.assertEqual(items[1].findtext('description'), 'previous release')
+        self.assertIsNone(items[1].find(f'{{{NS}}}hardwareRequirements'))
+        with self.assertRaises(ValueError):
+            restrict_hardware(feed, '9.9.9')
+
+    def test_candidate_filename_accepts_old_manifests_and_rejects_untrusted_paths(self):
+        self.assertEqual(candidate_dmg_name({}, '0.4.6'), 'Type-0.4.6-universal.dmg')
+        self.assertEqual(candidate_dmg_name({'architecture': 'arm64'}, '0.4.6'), 'Type-0.4.6-arm64.dmg')
+        for manifest in ({'architecture': 'intel'}, {'dmg_name': '../other.dmg'},
+                         {'architecture': 'arm64', 'dmg_name': 'Type-0.4.6-universal.dmg'}):
+            with self.subTest(manifest=manifest), self.assertRaises(ValueError):
+                candidate_dmg_name(manifest, '0.4.6')
 
     def test_version_must_match_source(self):
         actual = desktop.tomllib.loads((desktop.ROOT / 'apps/gpui/Cargo.toml').read_text())['package']['version']

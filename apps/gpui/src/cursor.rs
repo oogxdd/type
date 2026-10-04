@@ -1,7 +1,7 @@
 use super::*;
 
-impl TypeApp {
-    pub fn render_cursor(&self, editor: Entity<EditorState>, _: &App) -> impl IntoElement {
+impl editor::EditorAppearance<'_> {
+    pub fn render_cursor(&self, editor: Entity<EditorState>, _: &App) -> impl IntoElement + use<> {
         let mode = self.vim.mode;
         let visual_head = self.vim.head;
         let font_size = self.prefs.font_size;

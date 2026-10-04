@@ -18,6 +18,18 @@ Dev bundles and standalone binaries never start Sparkle. A plain
 updater; use the packaging command or CI for distribution. Nothing is published
 by a local build.
 
+## Apple Silicon local candidates
+
+For an M-series-only release, pass `--architecture arm64` to
+`desktop:release:local` (or `release.py`). The app executable contains only
+arm64; the pinned Sparkle framework retains its upstream architecture slices.
+Upload `Type-VERSION-arm64.dmg`, `appcast.xml` and `release.json`. Promotion
+reads the architecture from provenance and verifies the signed feed requires
+`arm64` hardware, using Sparkle's
+[hardware requirement](https://sparkle-project.org/documentation/publishing/#minimum-system-version-requirements).
+The local preflight requires only the selected Rust targets. The default
+remains universal for CI and earlier releases.
+
 ## Install the first native version
 
 [Type 0.4.8 universal DMG](https://github.com/oogxdd/type/releases/download/gpui-v0.4.8/Type-0.4.8-universal.dmg)

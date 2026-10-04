@@ -9,8 +9,13 @@ impl TypeApp {
         let prefs = Preferences::load(&backend.env);
         Self::apply_theme(prefs.dark, window, cx);
         let tree = cx.new(|cx| TreeState::new(cx));
+        let pane_state = cx.new(|_| ResizableState::default());
         let mut app = Self {
+            pane_state: pane_state.clone(),
             updater: None,
+            folder_tabs: vec![],
+            active_folder: None,
+            folder_subscriptions: HashMap::new(),
             backend,
             profiles,
             filter: prefs.stream_filter,
@@ -78,6 +83,8 @@ impl TypeApp {
         // Kit dispatches matched bindings (e.g. Tab and Escape) before raw key
         // listeners. Keep one owner, ahead of native actions, so Vim and pane
         // navigation work consistently rather than only for unmatched keys.
+        app.subscriptions
+            .push(cx.observe(&pane_state, |_, _, cx| cx.notify()));
         let owner = cx.weak_entity();
         let app_window = window.window_handle();
         app.subscriptions
@@ -132,6 +139,9 @@ impl TypeApp {
                         this.lock(window, cx);
                     }
                 } else if !this.locked {
+                    if let Some(tab) = this.current_folder() {
+                        tab.update(cx, |tab, cx| tab.refresh(window, cx));
+                    }
                     this.refresh(window, cx);
                 }
             }));
@@ -206,6 +216,9 @@ impl TypeApp {
             .state()
             .is_ok_and(|s| s.encryption_enabled);
         let dir = self.backend.env.app_data_dir.join("gpui-recovery");
+        for tab in &self.folder_tabs {
+            tab.read(cx).recover(&dir, encrypted, cx);
+        }
         let _ = std::fs::create_dir_all(&dir);
         for (index, (path, note)) in self.notes.iter().filter(|(_, n)| n.dirty).enumerate() {
             let body = note
@@ -227,7 +240,7 @@ impl TypeApp {
     }
 
     pub fn refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.locked || self.refreshing || self.busy {
+        if self.locked || self.refreshing || self.busy || self.active_folder.is_some() {
             return;
         }
         self.refreshing = true;
@@ -584,10 +597,14 @@ impl TypeApp {
     }
 
     pub fn flush(&mut self, leaving: bool, cx: &mut Context<Self>) -> Result<(), String> {
-        let result = self.try_flush(leaving, cx);
+        let result = self
+            .flush_folders(cx)
+            .and_then(|_| self.try_flush(leaving, cx));
         if let Err(error) = &result {
             self.error = Some(error.clone());
             cx.notify();
+        } else if self.active_folder.is_some() {
+            self.error = None;
         }
         result
     }

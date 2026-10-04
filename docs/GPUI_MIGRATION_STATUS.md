@@ -28,6 +28,24 @@ Updated: 2026-10-05. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Native release 0.4.10 — in progress (2026-10-05)
+
+- User requested a local macOS Apple Silicon build and GitHub/updater publication.
+  Release checkout: `/private/tmp/type-gpui-release-0.4.10`. Includes main
+  `74c8b76b` and all open-folders commits through `dcb2b29b`. Merge preserves
+  current Vim undo/redo and half-page movement in both workspace editors,
+  the full icon catalog and newer navigation/sidebar functionality.
+- Added optional `--architecture arm64` to local packaging, arm64 DMG provenance
+  and promotion support, and a signed Sparkle hardware requirement. Universal
+  remains supported for existing releases/CI. Local signing/notarization,
+  GitHub authentication and the existing production Sparkle key passed preflight.
+- Version/lock: 0.4.10. Checks passed: 78 GPUI tests (36 library + 42 native),
+  an additional folder Vim history/half-page regression, 96 core tests and
+  19 release-tool/native-bridge tests. Formatting and diff checks passed.
+  Local Apple Silicon release compilation/packaging are in progress. Production
+  data and running user apps are untouched; UI/feel review belongs to the user.
+
+
 ### Sidebar actions, phone sync hover and filter control (2026-10-05)
 
 - The gray/green dot starts/stops phone sync directly. Server job completion
@@ -281,6 +299,42 @@ voice-memos script and untracked import work are preserved.
   preview changes remain there, along with a small existing test compatibility
   repair (`Background::as_solid()`). No preview merge, production data access,
   installed app replacement, launch/restart, push or release was performed.
+
+### Ordinary folder workspaces — preview (2026-10-02)
+
+Implementation in `.worktrees/gpui-open-folders`, branch
+`codex/gpui-open-folders`, based on `codex/gpui-release-0.4.8` (`22013349`).
+Type → Open Folder opens a session-only filesystem workspace without profile,
+system-folder or Git setup. Content-based UTF-8/UTF-16 text detection includes
+hidden/config files; binary files show an unsupported message. Existing files
+autosave, preserving encoding/BOM/CRLF and checking the disk baseline before
+replacement; conflicting drafts retain their tabs. Creation/move/delete remain
+outside this workspace.
+
+Workspace tabs use the original compact row below the native titlebar: Type
+followed immediately by folder tabs with rounded active backgrounds and close
+buttons. Both top rows span the window without a vertical divider. Resizing
+the sidebar does not move these tabs. With Type alone the tabs disappear.
+Pane widths are shared across workspaces. Both editors share gutter, highlight
+and modal-cursor rendering. Following the user's preview feedback, there is no status bar or Vim
+mode/toggle label: folder name and unified tree/file refresh are at the top of
+the sidebar, and a quiet Saved indicator occupies the editor's bottom right.
+The user explicitly chose the original tab layout from their screenshot after
+trying titlebar tabs and pane-aligned Dock tabs.
+
+All 59 GPUI tests pass (35 library, 24 native), including real input/Vim/autosave,
+text/encoding preservation, conflict retention, tab mouse clicks, matching
+gutter geometry, unified refresh, full-height panes and stable compact tabs after
+resizing/switching.
+macOS dev preview only; other platforms and production/release are untested.
+Leave running dev windows open for the user's inspection.
+
+Initial feature commit: `83efd5da`. The 2026-10-03 follow-up restores the compact
+tab layout from the user's screenshot and verifies both top rows cover the pane
+divider. Dev build and all 59 tests pass; no production app changes or merge.
+Tab-layout correction: `97c1d19a`. The folder heading is restored to the first
+preview's `text_sm` / Semibold (600); the size is unchanged. This typography-only
+follow-up is verified by a dev rebuild and formatting/diff checks.
 
 ### Native release 0.4.8 (2026-10-02)
 

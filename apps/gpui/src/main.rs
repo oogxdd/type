@@ -1,6 +1,8 @@
 mod commands;
 mod cursor;
 mod editor;
+mod folder_tabs;
+mod folder_workspace;
 mod jobs;
 mod settings;
 mod ui;
@@ -35,7 +37,7 @@ use gpui_kit::{
         },
         list::ListItem,
         menu::{ContextMenuExt, DropdownMenu, PopupMenu, PopupMenuItem},
-        resizable::{h_resizable, resizable_panel},
+        resizable::{ResizableState, h_resizable, resizable_panel},
         tree::{TreeItem, TreeState, tree},
         v_flex,
     },
@@ -43,7 +45,7 @@ use gpui_kit::{
     *,
 };
 
-actions!(type_app, [Quit]);
+actions!(type_app, [Quit, OpenFolder, CloseFolder, SaveFile]);
 
 struct Note {
     title: SharedString,
@@ -56,6 +58,10 @@ struct Note {
     editor: Option<Entity<EditorState>>,
 }
 struct TypeApp {
+    pane_state: Entity<ResizableState>,
+    folder_tabs: Vec<Entity<folder_workspace::FolderWorkspace>>,
+    active_folder: Option<EntityId>,
+    folder_subscriptions: HashMap<EntityId, Subscription>,
     updater: Option<updater::Updater>,
     backend: Backend,
     profiles: NotesProfilesSnapshot,
@@ -808,7 +814,13 @@ fn main() {
         .with_assets(AppAssets)
         .run(move |cx| {
             gpui_kit::init(cx);
-            cx.bind_keys([KeyBinding::new("secondary-q", Quit, Some("Type"))]);
+            cx.bind_keys([
+                KeyBinding::new("secondary-q", Quit, Some("Type")),
+                KeyBinding::new("secondary-o", OpenFolder, Some("Type")),
+                KeyBinding::new("secondary-shift-w", CloseFolder, Some("Type")),
+                KeyBinding::new("secondary-s", SaveFile, Some("Type")),
+            ]);
+            cx.set_menus([Menu::new("Type").items([MenuItem::action("Open Folder…", OpenFolder)])]);
             cx.on_window_closed(|cx, _| {
                 if cx.windows().is_empty() {
                     cx.quit();

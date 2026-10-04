@@ -1,8 +1,72 @@
 use super::*;
 use gpui_kit::base::input::RopeExt;
 
+pub(crate) struct EditorAppearance<'a> {
+    pub prefs: &'a Preferences,
+    pub vim: &'a vim::Vim,
+}
+
+#[cfg(test)]
 impl TypeApp {
-    pub fn render_current_line(&self, editor: Entity<EditorState>) -> impl IntoElement {
+    pub fn line_number_width(&self, editor: &Entity<EditorState>, cx: &App) -> Pixels {
+        EditorAppearance {
+            prefs: &self.prefs,
+            vim: &self.vim,
+        }
+        .line_number_width(editor, cx)
+    }
+}
+
+impl EditorAppearance<'_> {
+    pub fn block_cursor(&self) -> bool {
+        self.prefs.vim && self.vim.mode != vim::Mode::Insert
+    }
+
+    pub fn render(
+        &self,
+        editor: &Entity<EditorState>,
+        busy: bool,
+        replaying_history: bool,
+        cx: &App,
+    ) -> impl IntoElement + use<> {
+        div()
+            .id("editor-pane")
+            .test_support()
+            .relative()
+            .size_full()
+            .min_w_0()
+            .min_h_0()
+            .pl(if self.prefs.line_numbers {
+                self.line_number_width(editor, cx)
+            } else {
+                px(12.)
+            })
+            .child(PaintLayer::new(
+                div()
+                    .relative()
+                    .size_full()
+                    .child(PaintLayer::new(
+                        Editor::new(editor)
+                            .bordered(false)
+                            .appearance(false)
+                            .readonly(busy || (self.block_cursor() && !replaying_history))
+                            .h(relative(1.))
+                            .text_size(px(self.prefs.font_size))
+                            .font_family(cx.theme().font_family.clone()),
+                    ))
+                    .when(self.prefs.current_line_highlight, |pane| {
+                        pane.child(self.render_current_line(editor.clone()))
+                    })
+                    .when(self.block_cursor(), |pane| {
+                        pane.child(PaintLayer::new(self.render_cursor(editor.clone(), cx)))
+                    }),
+            ))
+            .when(self.prefs.line_numbers, |pane| {
+                pane.child(self.render_line_numbers(editor.clone(), cx))
+            })
+    }
+
+    pub fn render_current_line(&self, editor: Entity<EditorState>) -> impl IntoElement + use<> {
         let visual_head = (self.prefs.vim
             && matches!(self.vim.mode, vim::Mode::Visual | vim::Mode::VisualLine))
         .then_some(self.vim.head);
@@ -51,7 +115,11 @@ impl TypeApp {
         px((self.prefs.font_size * 0.72).clamp(10., 14.) * 0.65 * digits as f32 + 16.)
     }
 
-    pub fn render_line_numbers(&self, editor: Entity<EditorState>, cx: &App) -> impl IntoElement {
+    pub fn render_line_numbers(
+        &self,
+        editor: Entity<EditorState>,
+        cx: &App,
+    ) -> impl IntoElement + use<> {
         let font_size = (self.prefs.font_size * 0.72).clamp(10., 14.);
         let width = self.line_number_width(&editor, cx);
         canvas(
