@@ -313,9 +313,7 @@ impl Handler for ClientHandler {
         // would add an empty commit per serve and reject phone pushes as
         // non-fast-forward.
         if let Ok(repo) = git2::Repository::open(&self.shared.repo_path) {
-            if crate::git_has_changes(&repo) {
-                let _ = crate::commit_all_changes(&repo, "Sync notes", &self.shared.branch);
-            }
+            let _ = crate::commit_all_changes(&repo, "Sync notes", &self.shared.branch);
         }
 
         let spawned = Command::new(&self.shared.git_path)
@@ -394,6 +392,7 @@ fn pump_child_io(
     repo_path: PathBuf,
 ) {
     let handle = session.handle();
+    let started_at = std::time::Instant::now();
     tokio::spawn(async move {
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
@@ -444,11 +443,20 @@ fn pump_child_io(
             .ok()
             .and_then(|status| status.code())
             .unwrap_or(1) as u32;
-        eprintln!("[local-sync] git process finished with exit code {code}");
+        eprintln!(
+            "[local-sync] git process finished with exit code {code}; service={service} elapsed_ms={}",
+            started_at.elapsed().as_millis()
+        );
+        let close_started_at = std::time::Instant::now();
         let _ = handle.exit_status_request(channel, code).await;
         let _ = handle.eof(channel).await;
         let _ = handle.close(channel).await;
+        eprintln!(
+            "[local-sync] {service} channel close finished in {}ms",
+            close_started_at.elapsed().as_millis()
+        );
         if service == "receive-pack" && code == 0 {
+            let receipts_started_at = std::time::Instant::now();
             match crate::issue_desktop_audio_receipts(&repo_path) {
                 Ok(result) if result.issued > 0 => eprintln!(
                     "[attachments] issued {} verified desktop audio receipt(s)",
@@ -459,6 +467,10 @@ fn pump_child_io(
                     eprintln!("[attachments] could not issue audio receipts after push: {error}")
                 }
             }
+            eprintln!(
+                "[attachments] post-push receipt maintenance finished in {}ms",
+                receipts_started_at.elapsed().as_millis()
+            );
             eprintln!("[local-sync] push received — notifying the app to refresh notes");
             super::notify_local_sync_push_received();
         }
@@ -797,11 +809,8 @@ mod tests {
         let durable_root = base.join("durable");
         fs::create_dir_all(&durable_root).unwrap();
         let durable_repo = crate::ensure_git_repo(&durable_root).unwrap();
-        crate::ensure_origin_remote(
-            &durable_repo,
-            &format!("ssh://127.0.0.1:{port}/notes"),
-        )
-        .unwrap();
+        crate::ensure_origin_remote(&durable_repo, &format!("ssh://127.0.0.1:{port}/notes"))
+            .unwrap();
         crate::perform_fetch(
             &durable_repo,
             &branch,

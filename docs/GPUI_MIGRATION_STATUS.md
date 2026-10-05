@@ -28,6 +28,86 @@ Updated: 2026-10-05. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Sync latency investigation and Git work reduction (2026-10-05)
+
+- Investigated the paired-phone log above using synthetic repositories only.
+  Reproduced a persistent stale-index stat cache: `git_has_changes` did not
+  request libgit2's `update_index`, so unchanged tracked files were re-hashed
+  on every reopened status command. The regression failed on the original
+  code, then passed with stat refresh enabled. Refresh updates only verified
+  unchanged metadata; edits remain unstaged, and index-lock contention falls
+  back to a status read without a cache write.
+- Removed duplicate change scans before `commit_all_changes` in pull,
+  manual checkpoint and the desktop SSH server. Staying on the current
+  branch now skips full worktree checkout; branch creation at the current
+  commit also avoids checkout. Real branch switches install the target tree
+  before changing HEAD, preserving the correct safe-checkout baseline.
+  Regression coverage includes staged/unstaged edits, deletions, same-length
+  edits, unborn/detached HEAD, real switches and rejected switches with edits,
+  index-lock contention and missing skip-worktree recordings.
+- Reproducible synthetic benchmark:
+  `cargo run -p type-core --example git_status_perf`. With 2,000 notes and
+  128 MiB of legacy tracked audio, stale status scans took 473/432/432 ms;
+  cache refresh took 525 ms initially, then 11/11 ms. Same-branch checkout
+  took 466 ms before the shortcut, versus below 1 ms with it. These desktop
+  measurements verify avoided work, not the phone's end-to-end speedup.
+- Added native phase timings for status scans, local commits, branch
+  preparation, merge/checkout and pull/push totals, plus desktop Git child,
+  SSH channel close and receipt maintenance timings. They contain counts and
+  durations rather than note content or additional credentials. Existing
+  phone Sync log still reports aggregate native calls; detailed new Rust
+  phase lines require native console capture.
+- Validation: the first full core run passed 94 tests but six loopback tests
+  were blocked by sandbox socket restrictions. Rerun with loopback enabled
+  passed all 100 tests; GPUI passed all 79 tests (36 library + 43 native).
+  Final core run passed all 101 tests, including additional skip-worktree
+  and rejected-switch checks. Targeted Rust formatting and diff checks passed.
+  Dev bundle build passed; refreshed
+  `experiments/gpui-demo/target/bundle/Type GPUI Dev.app` for the next launch.
+  Only synthetic test data used. Committed at the user's request as
+  `fix(sync): avoid repeated Git worktree scans and checkouts`.
+  No release, mobile install, or restart of the live sync app.
+- Remaining: rebuild the phone's native Rust core and compare a real sync;
+  the observed 9-second phone notes refresh and desktop receipt maintenance
+  are separate costs, and the supplied aggregate log cannot attribute all
+  remaining native pull/push time. No FFI exports or TS contracts changed.
+
+### Live paired-phone sync observation (2026-10-05)
+
+- At the user's request, rebuilt the current GPUI dev bundle with
+  `desktop.py bundle --test-support` (passed; existing unused-method and
+  dependency future-compatibility warnings). Confirmed no Type shell was
+  running, then launched the dev bundle with `--dev --production` after the
+  user explicitly selected the existing paired notes profile. One Type shell
+  confirmed; the app remains running for the user's session.
+- Timestamped stdout/stderr are captured in the ignored
+  `.tmp/gpui-sync-live-2026-10-05.log`. Hosting startup took 3.740 seconds;
+  the relay became reachable. The paired phone authenticated successfully.
+- Three upload-pack operations exited 0 in 2.387, 0.187 and 0.336 seconds.
+  Two connection timeouts/reconnections occurred. The user reported the phone
+  was still syncing. Audio-transfer authorization appeared later; receive-pack
+  finally exited 0 in 11.403 seconds. The last pull-to-push gap was 81.965
+  seconds; first phone connection to push completion was 184.772 seconds.
+  The push refresh notification followed 10.690 seconds after Git completion.
+- Result: desktop pull/push succeeded, but this run was slow. These timings
+  measure receipt of desktop log lines, not all phone-side phases. Phone sync
+  log export subsequently confirmed final success at 19:04:19:
+  `ahead=0 behind=0 dirty=false push=false`. Its automatic sync took 129.626
+  seconds (84.968-second pull and 44.621-second push), preceded by an
+  18.504-second status refresh. Pull included a 13.655-second status call,
+  62.042-second core Git pull and 9.011-second note refresh; history calls
+  took only 50–65 ms. The 184.772-second desktop observation includes earlier
+  connections, rather than measuring that single phone sync workflow.
+- Current code performs repeated full working-tree status scans during pull,
+  commit and push; these are a likely contributor to phone-side local work,
+  but the supplied log does not time fetch/commit/merge/status separately.
+  Desktop receipt maintenance hashes all local recordings after each push
+  before emitting its refresh notification; the observed 10.690-second gap
+  also includes SSH channel close calls. These remain profiling candidates,
+  not proven individual causes. UI freshness remains user verification.
+  No sync code changes,
+  automated real-notes tests, app restart during syncing, commit or publication.
+
 ### Native release 0.4.10 — published (2026-10-05)
 
 - User requested a local macOS Apple Silicon build and GitHub/updater publication.

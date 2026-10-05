@@ -103,6 +103,31 @@ pub struct GitSyncAdapter {
     app: AppEnv,
 }
 
+struct GitPhaseTimer {
+    phase: &'static str,
+    started_at: Instant,
+}
+
+impl GitPhaseTimer {
+    fn start(phase: &'static str) -> Self {
+        eprintln!("[git] {phase}: started");
+        Self {
+            phase,
+            started_at: Instant::now(),
+        }
+    }
+}
+
+impl Drop for GitPhaseTimer {
+    fn drop(&mut self) {
+        eprintln!(
+            "[git] {}: finished in {}ms",
+            self.phase,
+            self.started_at.elapsed().as_millis()
+        );
+    }
+}
+
 impl GitSyncAdapter {
     pub fn new(app: AppEnv) -> Self {
         Self { app }
@@ -233,6 +258,7 @@ impl GitSyncGateway for GitSyncAdapter {
     }
 
     fn pull(&self, args: Self::PullArgs) -> Result<Self::Status, String> {
+        let _timing = GitPhaseTimer::start("pull total");
         let (root, settings) = self.resolve_settings();
         if !git_repo_initialized(&root) {
             return Err("Repository is not initialized. Connect a remote first.".to_string());
@@ -291,14 +317,14 @@ impl GitSyncGateway for GitSyncAdapter {
         // Files are the source of truth and merges never block: pending local
         // edits are committed (exactly like push does) instead of failing the
         // pull, so the one-button pull-then-push sync just works.
-        if git_has_changes(&repo) {
-            let message = if settings.git_commit_message.trim().is_empty() {
-                "Sync notes"
-            } else {
-                settings.git_commit_message.as_str()
-            };
-            commit_all_changes(&repo, message, &target_branch)?;
-        }
+        let message = if settings.git_commit_message.trim().is_empty() {
+            "Sync notes"
+        } else {
+            settings.git_commit_message.as_str()
+        };
+        // This helper already checks for changes; an outer check repeats the
+        // complete worktree scan (including legacy tracked recordings).
+        commit_all_changes(&repo, message, &target_branch)?;
         switch_or_prepare_branch(&repo, &target_branch)?;
         let (analysis, _) = repo.merge_analysis(&[&fetched]).map_err(map_git_error)?;
         if analysis.is_up_to_date() {
@@ -326,10 +352,6 @@ impl GitSyncGateway for GitSyncAdapter {
         let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
         switch_or_prepare_branch(&repo, &target_branch)?;
 
-        if !git_has_changes(&repo) {
-            return Ok(build_git_status(&root));
-        }
-
         let message = args
             .message
             .as_deref()
@@ -340,6 +362,7 @@ impl GitSyncGateway for GitSyncAdapter {
     }
 
     fn push(&self, args: Self::PushArgs) -> Result<Self::Status, String> {
+        let _timing = GitPhaseTimer::start("push total");
         let (root, settings) = self.resolve_settings();
         if !git_repo_initialized(&root) {
             return Err("Repository is not initialized. Connect a remote first.".to_string());
@@ -496,7 +519,10 @@ fn remote_push(
         eprintln!("[git] push failed: {message}");
         message
     })?;
-    eprintln!("[git] push complete in {}ms", started_at.elapsed().as_millis());
+    eprintln!(
+        "[git] push complete in {}ms",
+        started_at.elapsed().as_millis()
+    );
     let mut local = repo
         .find_branch(branch, git2::BranchType::Local)
         .map_err(map_git_error)?;
@@ -571,16 +597,27 @@ pub fn git_remote_url(repo: &Repository) -> Option<String> {
 
 /// True if the working tree has uncommitted changes.
 pub fn git_has_changes(repo: &Repository) -> bool {
+    let started_at = Instant::now();
     let mut status_opts = StatusOptions::new();
     status_opts
         .include_untracked(true)
         .recurse_untracked_dirs(true)
-        .renames_head_to_index(true);
-    let Ok(statuses) = repo.statuses(Some(&mut status_opts)) else {
+        .renames_head_to_index(true)
+        // Persist refreshed stat information only after libgit2 verifies that
+        // the content is unchanged. Otherwise every reopened command re-hashes
+        // the same files. This does not stage edits or bypass content checks.
+        .update_index(true);
+    let statuses = repo.statuses(Some(&mut status_opts)).or_else(|_| {
+        // Another Git writer can hold index.lock. Status must still detect
+        // dirty files when its optional stat-cache write cannot acquire it.
+        status_opts.update_index(false);
+        repo.statuses(Some(&mut status_opts))
+    });
+    let Ok(statuses) = statuses else {
         return false;
     };
     let index = repo.index().ok();
-    statuses.iter().any(|entry| {
+    let dirty = statuses.iter().any(|entry| {
         // libgit2 reports a missing skip-worktree file as WT_DELETED even
         // though native Git correctly treats it as clean. Mobile audio cache
         // eviction relies on that bit, so mirror Git's behavior here and
@@ -590,8 +627,7 @@ pub fn git_has_changes(repo: &Repository) -> bool {
                 .path()
                 .and_then(|path| index.as_ref()?.get_path(Path::new(path), 0))
                 .map(|index_entry| {
-                    index_entry.flags_extended
-                        & git2::IndexEntryExtendedFlag::SKIP_WORKTREE.bits()
+                    index_entry.flags_extended & git2::IndexEntryExtendedFlag::SKIP_WORKTREE.bits()
                         != 0
                 })
                 .unwrap_or(false);
@@ -600,7 +636,13 @@ pub fn git_has_changes(repo: &Repository) -> bool {
             }
         }
         true
-    })
+    });
+    eprintln!(
+        "[git] local status scan finished in {}ms; entries={} dirty={dirty}",
+        started_at.elapsed().as_millis(),
+        statuses.len()
+    );
+    dirty
 }
 
 // ── Timestamp cache ────────────────────────────────────────────────────────────
@@ -860,7 +902,11 @@ pub fn ensure_git_repo(root: &Path) -> Result<Repository, String> {
         Err(_) => Repository::init(root).map_err(map_git_error)?,
     };
     ensure_device_settings_excluded(&repo);
-    if !crate::load_profile_settings(root).git_iroh_ticket.trim().is_empty() {
+    if !crate::load_profile_settings(root)
+        .git_iroh_ticket
+        .trim()
+        .is_empty()
+    {
         set_audio_git_exclusion(&repo, true)?;
     }
     Ok(repo)
@@ -1092,15 +1138,27 @@ pub fn ensure_origin_remote(repo: &Repository, remote_url: &str) -> Result<(), S
 
 /// Switch to the target branch, creating it if it doesn't exist.
 pub fn switch_or_prepare_branch(repo: &Repository, branch: &str) -> Result<(), String> {
+    let _timing = GitPhaseTimer::start("branch preparation");
     let name = branch.trim();
     if name.is_empty() {
         return Ok(());
     }
     let local_ref = format!("refs/heads/{}", name);
-    if repo.find_reference(&local_ref).is_ok() {
-        repo.set_head(&local_ref).map_err(map_git_error)?;
-        repo.checkout_head(Some(CheckoutBuilder::new().safe()))
+    if !repo.head_detached().map_err(map_git_error)?
+        && repo.head().ok().as_ref().and_then(|head| head.name()) == Some(local_ref.as_str())
+    {
+        // Sync normally remains on this branch. A safe checkout still walks
+        // the whole worktree, and is unnecessary without a branch change.
+        return Ok(());
+    }
+    if let Ok(reference) = repo.find_reference(&local_ref) {
+        let commit = reference.peel_to_commit().map_err(map_git_error)?;
+        // Keep the current HEAD as the safe-checkout baseline until the
+        // target tree is installed. Changing HEAD first makes libgit2 treat
+        // the old index as staged differences against the new branch.
+        repo.checkout_tree(commit.as_object(), Some(CheckoutBuilder::new().safe()))
             .map_err(map_git_error)?;
+        repo.set_head(&local_ref).map_err(map_git_error)?;
         return Ok(());
     }
     if let Ok(head) = repo.head() {
@@ -1108,8 +1166,6 @@ pub fn switch_or_prepare_branch(repo: &Repository, branch: &str) -> Result<(), S
             let commit = repo.find_commit(head_oid).map_err(map_git_error)?;
             repo.branch(name, &commit, false).map_err(map_git_error)?;
             repo.set_head(&local_ref).map_err(map_git_error)?;
-            repo.checkout_head(Some(CheckoutBuilder::new().safe()))
-                .map_err(map_git_error)?;
             return Ok(());
         }
     }
@@ -1129,6 +1185,7 @@ pub fn commit_all_changes(
     message: &str,
     branch: &str,
 ) -> Result<Option<Oid>, String> {
+    let _timing = GitPhaseTimer::start("local commit");
     if !git_has_changes(repo) {
         return Ok(None);
     }
@@ -1495,7 +1552,10 @@ pub fn perform_fetch<'a>(
         eprintln!("[git] fetch failed: {message}");
         message
     })?;
-    eprintln!("[git] fetch complete in {}ms", started_at.elapsed().as_millis());
+    eprintln!(
+        "[git] fetch complete in {}ms",
+        started_at.elapsed().as_millis()
+    );
     let fetch_head = repo.find_reference("FETCH_HEAD").map_err(map_git_error)?;
     repo.reference_to_annotated_commit(&fetch_head)
         .map_err(map_git_error)
@@ -1507,6 +1567,7 @@ pub fn fast_forward_to(
     branch: &str,
     fetch_commit: &AnnotatedCommit<'_>,
 ) -> Result<(), String> {
+    let _timing = GitPhaseTimer::start("fast-forward checkout");
     let target_oid = fetch_commit.id();
     let local_ref_name = format!("refs/heads/{}", branch);
     match repo.find_reference(&local_ref_name) {
@@ -1549,6 +1610,7 @@ pub fn merge_fetched_commit(
     branch: &str,
     fetched_commit: &AnnotatedCommit<'_>,
 ) -> Result<(), String> {
+    let _timing = GitPhaseTimer::start("merge and checkout");
     let pre_merge_head = repo
         .head()
         .map_err(map_git_error)?
@@ -1712,6 +1774,187 @@ pub fn merge_fetched_commit(
 mod tests {
     use super::*;
 
+    #[test]
+    fn status_refreshes_stale_stat_cache_without_staging_edits() {
+        let root = std::env::temp_dir().join(format!("type-status-cache-{}", uuid::Uuid::now_v7()));
+        fs::create_dir_all(&root).unwrap();
+        let repo = ensure_git_repo(&root).unwrap();
+        fs::write(root.join("note.md"), "original\n").unwrap();
+        let head = commit_all_changes(&repo, "initial", "main")
+            .unwrap()
+            .unwrap();
+        let mut index = repo.index().unwrap();
+        let mut entry = index.get_path(Path::new("note.md"), 0).unwrap();
+        let original_oid = entry.id;
+        entry.mtime = git2::IndexTime::new(1, 0);
+        entry.ctime = git2::IndexTime::new(1, 0);
+        index.add(&entry).unwrap();
+        index.write().unwrap();
+        drop(index);
+        drop(repo);
+
+        let repo = open_repo(&root).unwrap();
+        assert!(!git_has_changes(&repo));
+        let refreshed = open_repo(&root)
+            .unwrap()
+            .index()
+            .unwrap()
+            .get_path(Path::new("note.md"), 0)
+            .unwrap();
+        assert_ne!(
+            refreshed.mtime,
+            git2::IndexTime::new(1, 0),
+            "clean file stat cache must persist across commands"
+        );
+        assert_eq!(refreshed.id, original_oid);
+        assert_eq!(repo.head().unwrap().target(), Some(head));
+
+        fs::write(root.join("note.md"), "modified\n").unwrap();
+        assert!(
+            git_has_changes(&repo),
+            "same-length edits must still be detected"
+        );
+        assert_eq!(
+            repo.index()
+                .unwrap()
+                .get_path(Path::new("note.md"), 0)
+                .unwrap()
+                .id,
+            original_oid
+        );
+        fs::write(root.join("new.md"), "untracked\n").unwrap();
+        assert!(git_has_changes(&repo));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn status_detects_edits_when_stat_cache_write_is_locked() {
+        let root = std::env::temp_dir().join(format!("type-status-lock-{}", uuid::Uuid::now_v7()));
+        fs::create_dir_all(&root).unwrap();
+        let repo = ensure_git_repo(&root).unwrap();
+        fs::write(root.join("clean.md"), "unchanged\n").unwrap();
+        fs::write(root.join("dirty.md"), "original\n").unwrap();
+        commit_all_changes(&repo, "initial", "main").unwrap();
+        let mut index = repo.index().unwrap();
+        let mut entry = index.get_path(Path::new("clean.md"), 0).unwrap();
+        entry.mtime = git2::IndexTime::new(1, 0);
+        entry.ctime = git2::IndexTime::new(1, 0);
+        index.add(&entry).unwrap();
+        index.write().unwrap();
+        fs::write(root.join("dirty.md"), "modified\n").unwrap();
+        fs::write(
+            repo.path().join("index.lock"),
+            "synthetic external writer\n",
+        )
+        .unwrap();
+        let repo = open_repo(&root).unwrap();
+        assert!(
+            git_has_changes(&repo),
+            "cache write failure must not report edits as clean"
+        );
+        assert!(repo.path().join("index.lock").is_file());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn status_cache_refresh_preserves_missing_skip_worktree_audio() {
+        let root = std::env::temp_dir().join(format!("type-status-skip-{}", uuid::Uuid::now_v7()));
+        fs::create_dir_all(root.join("_system/_recordings")).unwrap();
+        let repo = ensure_git_repo(&root).unwrap();
+        fs::write(root.join("note.md"), "original\n").unwrap();
+        let audio_path = Path::new("_system/_recordings/audio.m4a");
+        fs::write(root.join(audio_path), "legacy audio bytes\n").unwrap();
+        commit_all_changes(&repo, "initial", "main").unwrap();
+        let mut index = repo.index().unwrap();
+        let mut audio = index.get_path(audio_path, 0).unwrap();
+        audio.flags |= git2::IndexEntryFlag::EXTENDED.bits();
+        audio.flags_extended |= git2::IndexEntryExtendedFlag::SKIP_WORKTREE.bits();
+        index.add(&audio).unwrap();
+        let mut note = index.get_path(Path::new("note.md"), 0).unwrap();
+        note.mtime = git2::IndexTime::new(1, 0);
+        note.ctime = git2::IndexTime::new(1, 0);
+        index.add(&note).unwrap();
+        index.write().unwrap();
+        fs::remove_file(root.join(audio_path)).unwrap();
+        let repo = open_repo(&root).unwrap();
+        assert!(!git_has_changes(&repo));
+        let audio = repo.index().unwrap().get_path(audio_path, 0).unwrap();
+        assert_ne!(
+            audio.flags_extended & git2::IndexEntryExtendedFlag::SKIP_WORKTREE.bits(),
+            0
+        );
+        fs::write(root.join("note.md"), "modified\n").unwrap();
+        assert!(git_has_changes(&repo));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn remaining_on_current_branch_preserves_worktree_and_index() {
+        let root = std::env::temp_dir().join(format!("type-same-branch-{}", uuid::Uuid::now_v7()));
+        fs::create_dir_all(&root).unwrap();
+        let repo = ensure_git_repo(&root).unwrap();
+        fs::write(root.join("note.md"), "initial\n").unwrap();
+        fs::write(root.join("delete.md"), "delete me\n").unwrap();
+        let head = commit_all_changes(&repo, "initial", "main")
+            .unwrap()
+            .unwrap();
+        let mut index = repo.index().unwrap();
+        fs::write(root.join("note.md"), "staged\n").unwrap();
+        index.add_path(Path::new("note.md")).unwrap();
+        index.write().unwrap();
+        let index_bytes = fs::read(repo.path().join("index")).unwrap();
+        fs::write(root.join("note.md"), "unstaged\n").unwrap();
+        fs::remove_file(root.join("delete.md")).unwrap();
+        switch_or_prepare_branch(&repo, "main").unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join("note.md")).unwrap(),
+            "unstaged\n"
+        );
+        assert!(!root.join("delete.md").exists());
+        assert_eq!(fs::read(repo.path().join("index")).unwrap(), index_bytes);
+        assert_eq!(repo.head().unwrap().target(), Some(head));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn switching_branches_still_checks_out_target_and_handles_unborn_head() {
+        let root =
+            std::env::temp_dir().join(format!("type-branch-switch-{}", uuid::Uuid::now_v7()));
+        fs::create_dir_all(&root).unwrap();
+        let repo = ensure_git_repo(&root).unwrap();
+        switch_or_prepare_branch(&repo, "main").unwrap();
+        fs::write(root.join("note.md"), "initial\n").unwrap();
+        let initial = commit_all_changes(&repo, "initial", "main")
+            .unwrap()
+            .unwrap();
+        repo.branch("other", &repo.find_commit(initial).unwrap(), false)
+            .unwrap();
+        fs::write(root.join("note.md"), "main version\n").unwrap();
+        commit_all_changes(&repo, "main edit", "main").unwrap();
+        switch_or_prepare_branch(&repo, "other").unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join("note.md")).unwrap(),
+            "initial\n"
+        );
+        assert_eq!(repo.head().unwrap().name(), Some("refs/heads/other"));
+        fs::write(root.join("note.md"), "unsaved other edit\n").unwrap();
+        assert!(switch_or_prepare_branch(&repo, "main").is_err());
+        assert_eq!(repo.head().unwrap().name(), Some("refs/heads/other"));
+        assert_eq!(
+            fs::read_to_string(root.join("note.md")).unwrap(),
+            "unsaved other edit\n"
+        );
+        fs::write(root.join("note.md"), "initial\n").unwrap();
+        repo.set_head_detached(initial).unwrap();
+        switch_or_prepare_branch(&repo, "main").unwrap();
+        assert_eq!(
+            fs::read_to_string(root.join("note.md")).unwrap(),
+            "main version\n"
+        );
+        assert!(!repo.head_detached().unwrap());
+        fs::remove_dir_all(root).unwrap();
+    }
+
     fn target(remote: &str) -> Option<(String, u16)> {
         tcp_target_from_remote(remote).map(|value| (value.host, value.port))
     }
@@ -1797,14 +2040,22 @@ mod tests {
 
         let desktop = base.join("desktop");
         fs::create_dir_all(desktop.join("_system/stream")).unwrap();
-        fs::write(desktop.join("_system/stream").join("desktop-note.md"), "desktop\n").unwrap();
+        fs::write(
+            desktop.join("_system/stream").join("desktop-note.md"),
+            "desktop\n",
+        )
+        .unwrap();
         let desktop_repo = ensure_git_repo(&desktop).unwrap();
         commit_all_changes(&desktop_repo, "init", "main").unwrap();
 
         let phone = base.join("phone");
         fs::create_dir_all(phone.join("_system/stream")).unwrap();
         fs::create_dir_all(phone.join("_system/archive")).unwrap();
-        fs::write(phone.join("_system/stream").join("phone-note.md"), "phone\n").unwrap();
+        fs::write(
+            phone.join("_system/stream").join("phone-note.md"),
+            "phone\n",
+        )
+        .unwrap();
         let phone_repo = ensure_git_repo(&phone).unwrap();
 
         prepare_bootstrap_worktree_for_sync(&phone, &phone_repo, "main").unwrap();
@@ -1825,7 +2076,10 @@ mod tests {
 
         assert!(phone.join("_system/stream").join("phone-note.md").exists());
         assert!(
-            phone.join("_system/stream").join("desktop-note.md").exists(),
+            phone
+                .join("_system/stream")
+                .join("desktop-note.md")
+                .exists(),
             "first pull should bring the desktop notes in"
         );
 
@@ -1869,7 +2123,9 @@ mod tests {
         let repo = open_repo(&root).unwrap();
         let tree = repo.head().unwrap().peel_to_tree().unwrap();
         assert!(tree.get_path(Path::new("_system/stream/note.md")).is_ok());
-        assert!(tree.get_path(Path::new("_system/_recordings/audio.m4a")).is_err());
+        assert!(tree
+            .get_path(Path::new("_system/_recordings/audio.m4a"))
+            .is_err());
         assert!(root.join("_system/_recordings/audio.m4a").is_file());
         fs::remove_dir_all(app_dir).unwrap();
     }
@@ -1906,7 +2162,10 @@ mod tests {
                 })
                 .is_err());
             assert_eq!(repo.head().unwrap().target(), Some(initial));
-            assert_eq!(fs::read_to_string(root.join("_system/stream/note.md")).unwrap(), text);
+            assert_eq!(
+                fs::read_to_string(root.join("_system/stream/note.md")).unwrap(),
+                text
+            );
             assert!(git_has_changes(&repo));
         }
         // Once the peer exists, accumulated edits become one local commit.
@@ -1973,37 +2232,66 @@ mod tests {
 
     #[test]
     fn new_phone_profile_connects_to_existing_history_without_old_commits() {
-        let app_dir = std::env::temp_dir().join(format!("type-new-phone-profile-{}", uuid::Uuid::now_v7()));
+        let app_dir =
+            std::env::temp_dir().join(format!("type-new-phone-profile-{}", uuid::Uuid::now_v7()));
         let app = AppEnv::new(&app_dir);
         let old_root = crate::ensured_notes_root(&app).unwrap();
-        fs::write(old_root.join("_system/stream/old-only.md"), "old phone history").unwrap();
+        fs::write(
+            old_root.join("_system/stream/old-only.md"),
+            "old phone history",
+        )
+        .unwrap();
         let old_repo = ensure_git_repo(&old_root).unwrap();
-        let old_head = commit_all_changes(&old_repo, "old", "main").unwrap().unwrap();
+        let old_head = commit_all_changes(&old_repo, "old", "main")
+            .unwrap()
+            .unwrap();
 
         let desktop = app_dir.join("desktop");
         fs::create_dir_all(desktop.join("_system/stream")).unwrap();
         fs::write(desktop.join("_system/stream/synced.md"), "desktop note").unwrap();
         let desktop_repo = ensure_git_repo(&desktop).unwrap();
-        let desktop_head = commit_all_changes(&desktop_repo, "desktop", "main").unwrap().unwrap();
+        let desktop_head = commit_all_changes(&desktop_repo, "desktop", "main")
+            .unwrap()
+            .unwrap();
 
         crate::create_profile_state(&app, "Fresh phone", None).unwrap();
         let fresh_root = crate::ensured_notes_root(&app).unwrap();
         assert_ne!(fresh_root, old_root);
-        assert!(crate::load_profile_settings(&fresh_root).git_remote_url.is_empty());
+        assert!(crate::load_profile_settings(&fresh_root)
+            .git_remote_url
+            .is_empty());
         // Same exclusion setup used by the QR flow before connect.
         crate::set_mobile_audio_git_exclusion(&app, true).unwrap();
         let adapter = GitSyncAdapter::new(app);
-        adapter.connect(ConnectGitArgs {
-            remote_url: Some(desktop.to_string_lossy().into_owned()),
-            branch: Some("main".into()), username: None, password: None,
-        }).unwrap();
-        adapter.pull(GitSyncArgs { branch: Some("main".into()), username: None, password: None }).unwrap();
+        adapter
+            .connect(ConnectGitArgs {
+                remote_url: Some(desktop.to_string_lossy().into_owned()),
+                branch: Some("main".into()),
+                username: None,
+                password: None,
+            })
+            .unwrap();
+        adapter
+            .pull(GitSyncArgs {
+                branch: Some("main".into()),
+                username: None,
+                password: None,
+            })
+            .unwrap();
         let fresh_repo = open_repo(&fresh_root).unwrap();
         let fresh_head = fresh_repo.head().unwrap().target().unwrap();
         // Fresh profile metadata may produce a local bootstrap/merge commit.
-        assert!(fresh_head == desktop_head || fresh_repo.graph_descendant_of(fresh_head, desktop_head).unwrap());
+        assert!(
+            fresh_head == desktop_head
+                || fresh_repo
+                    .graph_descendant_of(fresh_head, desktop_head)
+                    .unwrap()
+        );
         assert!(fresh_repo.find_commit(old_head).is_err());
-        assert_eq!(fs::read_to_string(fresh_root.join("_system/stream/synced.md")).unwrap(), "desktop note");
+        assert_eq!(
+            fs::read_to_string(fresh_root.join("_system/stream/synced.md")).unwrap(),
+            "desktop note"
+        );
         assert!(!fresh_root.join("_system/stream/old-only.md").exists());
         assert_eq!(old_repo.head().unwrap().target(), Some(old_head));
         assert!(old_root.join("_system/stream/old-only.md").is_file());
@@ -2041,7 +2329,11 @@ mod tests {
             std::env::temp_dir().join(format!("type-git-checkpoint-{}", uuid::Uuid::now_v7()));
         let app = AppEnv::new(&app_dir);
         let root = crate::ensured_notes_root(&app).unwrap();
-        fs::write(root.join("_system/stream").join("checkpoint.md"), "before editing\n").unwrap();
+        fs::write(
+            root.join("_system/stream").join("checkpoint.md"),
+            "before editing\n",
+        )
+        .unwrap();
 
         let adapter = GitSyncAdapter::new(app);
         let status = adapter
@@ -2059,7 +2351,10 @@ mod tests {
         assert_eq!(history[0].summary, "Before rewrite");
         assert_eq!(history[0].sync_state, "local");
         let repo = open_repo(&root).unwrap();
-        assert_eq!(commit_all_changes(&repo, "Duplicate", "main").unwrap(), None);
+        assert_eq!(
+            commit_all_changes(&repo, "Duplicate", "main").unwrap(),
+            None
+        );
         assert_eq!(build_git_history(&root, 10).unwrap().len(), 1);
 
         fs::remove_dir_all(&app_dir).unwrap();
