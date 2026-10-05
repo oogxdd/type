@@ -258,6 +258,17 @@ pub fn write_note_with_front_matter(
     meta: &NoteFrontMatter,
     body: &str,
 ) -> Result<(), String> {
+    crate::application::workspace::with_workspace_write(
+        path.parent().ok_or("Missing note folder.")?,
+        || write_note_with_front_matter_unlocked(path, meta, body),
+    )
+}
+
+fn write_note_with_front_matter_unlocked(
+    path: &Path,
+    meta: &NoteFrontMatter,
+    body: &str,
+) -> Result<(), String> {
     let body_to_write = encrypt_note_body_for_write(body)?;
     let serialized = render_note_with_front_matter(meta, &body_to_write);
     fs::write(path, serialized).map_err(|error| error.to_string())

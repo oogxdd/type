@@ -22,9 +22,17 @@ use crate::ensured_notes_root;
 use crate::ports::local_sync::LocalSyncGateway;
 
 #[cfg(desktop)]
+mod checkout;
+#[cfg(desktop)]
 mod devices;
 #[cfg(desktop)]
+mod events;
+#[cfg(desktop)]
+mod maintenance;
+#[cfg(desktop)]
 mod ssh_server;
+#[cfg(desktop)]
+pub use events::{subscribe_local_sync_events, LocalSyncEvent, LocalSyncSubscription};
 
 #[cfg(desktop)]
 use crate::{ensure_git_repo, resolve_target_branch, switch_or_prepare_branch};
@@ -125,22 +133,30 @@ static DAEMON: Mutex<Option<RunningDaemon>> = Mutex::new(None);
 /// the shell registers a listener here (a Tauri event emitter) and refreshes
 /// the notes UI — otherwise incoming notes stay invisible until app restart.
 #[cfg(desktop)]
-static PUSH_LISTENER: Mutex<Option<Box<dyn Fn() + Send + Sync>>> = Mutex::new(None);
+static PUSH_LISTENER: Mutex<Option<Arc<dyn Fn() + Send + Sync>>> = Mutex::new(None);
 
 #[cfg(desktop)]
 pub fn set_local_sync_push_listener(listener: Box<dyn Fn() + Send + Sync>) {
     if let Ok(mut guard) = PUSH_LISTENER.lock() {
-        *guard = Some(listener);
+        *guard = Some(Arc::from(listener));
     }
 }
 
 #[cfg(desktop)]
-fn notify_local_sync_push_received() {
-    if let Ok(guard) = PUSH_LISTENER.lock() {
-        if let Some(listener) = guard.as_ref() {
-            listener();
-        }
+fn notify_local_sync_push_received(root: &std::path::Path) {
+    events::pushed(root);
+    // Retained Tauri compatibility. Clone before calling to permit re-entry.
+    let listener = PUSH_LISTENER.lock().ok().and_then(|guard| guard.clone());
+    if let Some(listener) = listener {
+        listener();
     }
+}
+
+/// Audio arrives on its own stream after the text push; schedule a receipt
+/// pass without waiting for another Git cycle. No work on the Iroh executor.
+#[cfg(desktop)]
+pub(crate) fn request_local_sync_audio_maintenance(root: &std::path::Path) {
+    maintenance::request(root);
 }
 
 /// Core local-sync gateway. Child-process and mDNS state stay in this
@@ -231,19 +247,15 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
         // edits are committed by the server just before it serves each fetch
         // or push (see ssh_server), so starting — including the settings
         // page's auto-start — never creates commits by itself.
-        let repo = ensure_git_repo(&root)?;
-        repo.config()
-            .and_then(|mut cfg| cfg.set_str("receive.denyCurrentBranch", "updateInstead"))
-            .map_err(|e| format!("Failed to configure repo for local sync: {e}"))?;
-        let branch = resolve_target_branch(&repo, None);
-        switch_or_prepare_branch(&repo, &branch)?;
-        drop(repo);
-        // Receipts are tracked metadata. The next upload-pack request will
-        // commit them together with any pending desktop changes before the
-        // phone fetches, matching the server's existing serve-time behavior.
-        if let Err(error) = crate::issue_desktop_audio_receipts(&root) {
-            eprintln!("[attachments] could not issue startup audio receipts: {error}");
-        }
+        let branch = crate::application::workspace::with_workspace_write(&root, || {
+            let repo = ensure_git_repo(&root)?;
+            repo.config()
+                .and_then(|mut cfg| cfg.set_str("receive.denyCurrentBranch", "updateInstead"))
+                .map_err(|e| format!("Failed to configure repo for local sync: {e}"))?;
+            let branch = resolve_target_branch(&repo, None);
+            switch_or_prepare_branch(&repo, &branch)?;
+            Ok(branch)
+        })?;
 
         let served_name = root
             .file_name()
@@ -256,6 +268,7 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
         let pairing_token = Arc::new(Mutex::new(token));
         let consumed_pairing_tokens = Arc::new(Mutex::new(Vec::new()));
         let devices_path = devices::devices_path(app)?;
+        let maintenance = maintenance::Maintenance::new(root.clone())?;
         let shared = Arc::new(ssh_server::ServerShared {
             git_path: git,
             repo_path: root.clone(),
@@ -265,6 +278,8 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
             consumed_pairing_tokens: consumed_pairing_tokens.clone(),
             pairing_token_path: token_path,
             devices_path: devices_path.clone(),
+            operations: Arc::new(tokio::sync::Mutex::new(())),
+            maintenance: maintenance.clone(),
         });
         let server = ssh_server::start_ssh_server(shared, &host_key, LOCAL_SYNC_PORT)?;
 
@@ -330,6 +345,8 @@ pub fn start_local_sync_server_impl(app: &AppEnv) -> Result<LocalSyncServerStatu
             eprintln!("[local-sync] could not persist auto-start preference: {error}");
         }
         *guard = Some(daemon);
+        // SSH/Iroh are ready before any receipt scan or audio hashing starts.
+        maintenance.request();
         Ok(status)
     }
 }

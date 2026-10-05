@@ -41,15 +41,19 @@ pub(super) struct ServerShared {
     pub consumed_pairing_tokens: Arc<Mutex<Vec<(String, Instant)>>>,
     pub pairing_token_path: PathBuf,
     pub devices_path: PathBuf,
+    pub operations: Arc<tokio::sync::Mutex<()>>,
+    pub maintenance: super::maintenance::Maintenance,
 }
 
 pub(super) struct SshServerHandle {
+    maintenance: super::maintenance::Maintenance,
     runtime: tokio::runtime::Runtime,
 }
 
 impl SshServerHandle {
     pub(super) fn stop(self) {
         // Aborts the accept loop and every in-flight session task.
+        self.maintenance.stop();
         self.runtime.shutdown_background();
     }
 }
@@ -81,11 +85,15 @@ pub(super) fn start_ssh_server(
         inactivity_timeout: Some(std::time::Duration::from_secs(600)),
         ..Default::default()
     });
+    let maintenance = shared.maintenance.clone();
     let mut server = GitSshServer { shared };
     runtime.spawn(async move {
         let _ = server.run_on_socket(config, &listener).await;
     });
-    Ok(SshServerHandle { runtime })
+    Ok(SshServerHandle {
+        maintenance,
+        runtime,
+    })
 }
 
 struct GitSshServer {
@@ -305,18 +313,85 @@ impl Handler for ClientHandler {
             return Ok(());
         }
 
-        eprintln!("[local-sync] serving {service} for '{requested_path}'");
-        // Serve the latest notes: the desktop edits its working tree without
-        // committing, so pending changes are committed here — right before a
-        // fetch reads history, and before a push so updateInstead never meets
-        // a dirty tree. The dirty check matters: committing unconditionally
-        // would add an empty commit per serve and reject phone pushes as
-        // non-fast-forward.
-        if let Ok(repo) = git2::Repository::open(&self.shared.repo_path) {
-            let _ = crate::commit_all_changes(&repo, "Sync notes", &self.shared.branch);
+        static NEXT_CYCLE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        let cycle = NEXT_CYCLE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        eprintln!("[local-sync] cycle={cycle} serving {service}");
+        // Flush before acquiring any core/Git lock: server -> UI -> core must
+        // never form a lock cycle. Concurrent Git children serialize separately
+        // from the short worktree writer lock.
+        let operation = self.shared.operations.clone().lock_owned().await;
+        if let Err(error) = super::events::prepare(&self.shared.repo_path).await {
+            session.channel_success(channel)?;
+            fail_channel(session, channel, &error);
+            return Ok(());
         }
-
-        let spawned = Command::new(&self.shared.git_path)
+        let shared = self.shared.clone();
+        let prepared = tokio::task::spawn_blocking(move || {
+            let started = Instant::now();
+            let state = crate::application::workspace::workspace_state(&shared.repo_path)?;
+            let service =
+                crate::application::workspace::with_workspace_write(&shared.repo_path, || {
+                    let service = state.begin_git();
+                    let repo =
+                        git2::Repository::open(&shared.repo_path).map_err(|e| e.to_string())?;
+                    crate::commit_all_changes(&repo, "Sync notes", &shared.branch)?;
+                    Ok((service, repo.head().ok().and_then(|head| head.target())))
+                })?;
+            eprintln!(
+                "[local-sync] cycle={cycle} serve preparation elapsed_ms={}",
+                started.elapsed().as_millis()
+            );
+            Ok::<_, String>(service)
+        })
+        .await;
+        let (service_guard, head_before) = match prepared {
+            Ok(Ok(guard)) => guard,
+            Ok(Err(error)) => {
+                session.channel_success(channel)?;
+                fail_channel(
+                    session,
+                    channel,
+                    &format!("Desktop could not prepare its notes: {error}"),
+                );
+                return Ok(());
+            }
+            Err(_) => {
+                session.channel_success(channel)?;
+                fail_channel(
+                    session,
+                    channel,
+                    "Desktop Git preparation failed. Retry sync.",
+                );
+                return Ok(());
+            }
+        };
+        let bridge = if service == "receive-pack" {
+            match super::checkout::CheckoutBridge::start(
+                &self.shared.repo_path,
+                &self.shared.git_path,
+                cycle,
+            ) {
+                Ok(bridge) => Some(bridge),
+                Err(error) => {
+                    session.channel_success(channel)?;
+                    fail_channel(
+                        session,
+                        channel,
+                        &format!("Could not prepare safe incoming checkout: {error}"),
+                    );
+                    return Ok(());
+                }
+            }
+        } else {
+            None
+        };
+        let mut command = Command::new(&self.shared.git_path);
+        if let Some(bridge) = &bridge {
+            command
+                .arg("-c")
+                .arg(format!("core.hooksPath={}", bridge.hooks.display()));
+        }
+        let spawned = command
             .arg(service)
             .arg(&self.shared.repo_path)
             .stdin(Stdio::piped())
@@ -342,7 +417,12 @@ impl Handler for ClientHandler {
             channel,
             child,
             service,
-            self.shared.repo_path.clone(),
+            self.shared.clone(),
+            operation,
+            service_guard,
+            bridge,
+            cycle,
+            head_before,
         );
         Ok(())
     }
@@ -389,7 +469,12 @@ fn pump_child_io(
     channel: ChannelId,
     mut child: Child,
     service: &'static str,
-    repo_path: PathBuf,
+    shared: Arc<ServerShared>,
+    operation: tokio::sync::OwnedMutexGuard<()>,
+    service_guard: crate::application::workspace::GitService,
+    bridge: Option<super::checkout::CheckoutBridge>,
+    cycle: u64,
+    head_before: Option<git2::Oid>,
 ) {
     let handle = session.handle();
     let started_at = std::time::Instant::now();
@@ -401,16 +486,18 @@ fn pump_child_io(
         let out_task = async move {
             let Some(mut stdout) = stdout else { return };
             let mut buf = vec![0u8; 32 * 1024];
+            let mut forwarding = true;
             loop {
                 match stdout.read(&mut buf).await {
                     Ok(0) | Err(_) => break,
                     Ok(n) => {
-                        if out_handle
-                            .data(channel, Vec::from(&buf[..n]))
-                            .await
-                            .is_err()
+                        if forwarding
+                            && out_handle
+                                .data(channel, Vec::from(&buf[..n]))
+                                .await
+                                .is_err()
                         {
-                            break;
+                            forwarding = false;
                         }
                     }
                 }
@@ -420,60 +507,69 @@ fn pump_child_io(
         let err_task = async move {
             let Some(mut stderr) = stderr else { return };
             let mut buf = vec![0u8; 8 * 1024];
+            let mut forwarding = true;
             loop {
                 match stderr.read(&mut buf).await {
                     Ok(0) | Err(_) => break,
                     Ok(n) => {
-                        if err_handle
-                            .extended_data(channel, 1, Vec::from(&buf[..n]))
-                            .await
-                            .is_err()
+                        if forwarding
+                            && err_handle
+                                .extended_data(channel, 1, Vec::from(&buf[..n]))
+                                .await
+                                .is_err()
                         {
-                            break;
+                            forwarding = false;
                         }
                     }
                 }
             }
         };
-        tokio::join!(out_task, err_task);
-
-        let code = child
-            .wait()
-            .await
-            .ok()
-            .and_then(|status| status.code())
-            .unwrap_or(1) as u32;
-        eprintln!(
-            "[local-sync] git process finished with exit code {code}; service={service} elapsed_ms={}",
+        let wait_task = async move {
+            let code = child
+                .wait()
+                .await
+                .ok()
+                .and_then(|status| status.code())
+                .unwrap_or(1) as u32;
+            eprintln!(
+            "[local-sync] cycle={cycle} git process finished with exit code {code}; service={service} elapsed_ms={}",
             started_at.elapsed().as_millis()
         );
+            // Releases checkout/ref-update tail even when the task is cancelled.
+            drop(bridge);
+            let root = shared.repo_path.clone();
+            let head_after = if service == "receive-pack" && code == 0 {
+                tokio::task::spawn_blocking(move || {
+                    git2::Repository::open(root)
+                        .ok()
+                        .and_then(|repo| repo.head().ok().and_then(|head| head.target()))
+                })
+                .await
+                .ok()
+                .flatten()
+            } else {
+                None
+            };
+            drop(service_guard);
+            drop(operation);
+            if service == "receive-pack" && code == 0 && head_after != head_before {
+                eprintln!(
+                    "[local-sync] cycle={cycle} push received — notifying the app to refresh notes"
+                );
+                super::notify_local_sync_push_received(&shared.repo_path);
+                shared.maintenance.request();
+            }
+            code
+        };
+        let (_, _, code) = tokio::join!(out_task, err_task, wait_task);
         let close_started_at = std::time::Instant::now();
         let _ = handle.exit_status_request(channel, code).await;
         let _ = handle.eof(channel).await;
         let _ = handle.close(channel).await;
         eprintln!(
-            "[local-sync] {service} channel close finished in {}ms",
+            "[local-sync] cycle={cycle} {service} channel close finished in {}ms",
             close_started_at.elapsed().as_millis()
         );
-        if service == "receive-pack" && code == 0 {
-            let receipts_started_at = std::time::Instant::now();
-            match crate::issue_desktop_audio_receipts(&repo_path) {
-                Ok(result) if result.issued > 0 => eprintln!(
-                    "[attachments] issued {} verified desktop audio receipt(s)",
-                    result.issued
-                ),
-                Ok(_) => {}
-                Err(error) => {
-                    eprintln!("[attachments] could not issue audio receipts after push: {error}")
-                }
-            }
-            eprintln!(
-                "[attachments] post-push receipt maintenance finished in {}ms",
-                receipts_started_at.elapsed().as_millis()
-            );
-            eprintln!("[local-sync] push received — notifying the app to refresh notes");
-            super::notify_local_sync_push_received();
-        }
     });
 }
 
@@ -625,6 +721,25 @@ mod tests {
         fs::create_dir_all(repo_path.join(".type")).unwrap();
         fs::write(repo_path.join(".type").join("settings.json"), "{}\n").unwrap();
 
+        for index in 0..6600 {
+            fs::write(
+                repo_path.join(format!("_system/stream/n-{index:04}.md")),
+                format!("synthetic {index}\n{}", "markdown body\n".repeat(75)),
+            )
+            .unwrap();
+        }
+        let push_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = push_count.clone();
+        let subscribed_root = repo_path.clone();
+        let _subscription = super::super::subscribe_local_sync_events(move |event| match event {
+            super::super::LocalSyncEvent::Push { root } if root == subscribed_root => {
+                counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }
+            super::super::LocalSyncEvent::Prepare { reply, .. } => {
+                let _ = reply.send(Ok(()));
+            }
+            _ => {}
+        });
         // Mirror start_local_sync_server_impl's repo preparation.
         let repo = crate::ensure_git_repo(&repo_path).unwrap();
         repo.config()
@@ -661,6 +776,19 @@ mod tests {
         fs::write(&token_path, &token).unwrap();
         let live_token = Arc::new(Mutex::new(token.clone()));
         let devices_path = base.join("devices.json");
+        let (scan_entered, scan_started) = std::sync::mpsc::channel();
+        let (release_scan, scan_release) = std::sync::mpsc::channel();
+        let mut first_scan = Some(scan_release);
+        let maintenance =
+            super::super::maintenance::Maintenance::with_scan_probe(repo_path.clone(), move || {
+                if let Some(release) = first_scan.take() {
+                    let _ = scan_entered.send(());
+                    let _ = release.recv();
+                }
+            })
+            .unwrap();
+        maintenance.request();
+        scan_started.recv_timeout(Duration::from_secs(5)).unwrap();
         let server = start_ssh_server(
             Arc::new(ServerShared {
                 git_path: git.clone(),
@@ -671,6 +799,8 @@ mod tests {
                 consumed_pairing_tokens: Arc::new(Mutex::new(Vec::new())),
                 pairing_token_path: token_path.clone(),
                 devices_path: devices_path.clone(),
+                operations: Arc::new(tokio::sync::Mutex::new(())),
+                maintenance: maintenance.clone(),
             }),
             &host_key_text,
             port,
@@ -685,6 +815,7 @@ mod tests {
         let remote = format!("ssh://pair-{token}@127.0.0.1:{port}/notes");
         let clone_path = base.join("clone");
         let run_git = |args: &[&str], cwd: &Path| {
+            let started = Instant::now();
             let out = StdCommand::new(&git)
                 .args(args)
                 .current_dir(cwd)
@@ -692,6 +823,11 @@ mod tests {
                 .env("GIT_TERMINAL_PROMPT", "0")
                 .output()
                 .unwrap();
+            eprintln!(
+                "[sync-benchmark] operation={} elapsed_ms={}",
+                args[0],
+                started.elapsed().as_millis()
+            );
             assert!(
                 out.status.success(),
                 "git {args:?} failed:\n{}\n{}",
@@ -799,6 +935,240 @@ mod tests {
             repo_path.join("_system/stream").join("phone.md").exists(),
             "push should update the desktop working tree in place"
         );
+
+        assert_eq!(
+            push_count.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "push event must precede SSH completion"
+        );
+        release_scan.send(()).unwrap();
+        // Warm one-note delta, deletion, rename and synced metadata on a fully
+        // populated base; the child transfers only new Git objects.
+        fs::write(clone_path.join("_system/stream/n-0000.md"), "daily edit\n").unwrap();
+        fs::remove_file(clone_path.join("_system/stream/n-0001.md")).unwrap();
+        fs::rename(
+            clone_path.join("_system/stream/n-0002.md"),
+            clone_path.join("_system/stream/moved.md"),
+        )
+        .unwrap();
+        fs::write(
+            clone_path.join(".type/settings.json"),
+            "{\"transcription_mode\":\"off\"}\n",
+        )
+        .unwrap();
+        fs::write(
+            clone_path.join(".notes-order.json"),
+            "{\"folders\":[],\"notes\":[]}\n",
+        )
+        .unwrap();
+        run_git(&["add", "-A"], &clone_path);
+        run_git(
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@test",
+                "commit",
+                "-m",
+                "daily delta",
+            ],
+            &clone_path,
+        );
+        run_git(&["push", "origin", &branch], &clone_path);
+        assert_eq!(
+            fs::read_to_string(repo_path.join("_system/stream/n-0000.md")).unwrap(),
+            "daily edit\n"
+        );
+        assert!(!repo_path.join("_system/stream/n-0001.md").exists());
+        assert!(repo_path.join("_system/stream/moved.md").exists());
+        assert!(fs::read_to_string(repo_path.join(".type/settings.json"))
+            .unwrap()
+            .contains("off"));
+        assert!(repo_path.join(".notes-order.json").exists());
+        assert_eq!(push_count.load(std::sync::atomic::Ordering::SeqCst), 2);
+        run_git(&["push", "origin", &branch], &clone_path); // zero-delta cycle
+        assert_eq!(
+            push_count.load(std::sync::atomic::Ordering::SeqCst),
+            2,
+            "zero-delta push must not invalidate UI or receipts"
+        );
+        // Preparation errors are visible to Git, not ignored.
+        fs::write(
+            repo_path.join("_system/stream/prepare-error.md"),
+            "pending desktop\n",
+        )
+        .unwrap();
+        fs::write(repo_path.join(".git/index.lock"), "locked for regression").unwrap();
+        let failed = StdCommand::new(&git)
+            .args(["pull", "origin", &branch])
+            .current_dir(&clone_path)
+            .env("GIT_SSH_COMMAND", &ssh_command)
+            .output()
+            .unwrap();
+        assert!(!failed.status.success());
+        assert!(String::from_utf8_lossy(&failed.stderr).contains("could not prepare"));
+        fs::remove_file(repo_path.join(".git/index.lock")).unwrap();
+        run_git(&["pull", "origin", &branch], &clone_path);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            // A custom pre-receive creates a *late* desktop edit, after serve
+            // preparation. Checkout must reject and retain both histories.
+            let hook = repo_path.join(".git/hooks/pre-receive");
+            fs::write(
+                &hook,
+                "#!/bin/sh\nprintf 'late desktop edit\n' > ../_system/stream/fresh.md\n",
+            )
+            .unwrap();
+            fs::set_permissions(&hook, fs::Permissions::from_mode(0o700)).unwrap();
+            fs::write(clone_path.join("_system/stream/retry.md"), "phone retry\n").unwrap();
+            run_git(&["add", "-A"], &clone_path);
+            run_git(
+                &[
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "user.email=test@test",
+                    "commit",
+                    "-m",
+                    "retry",
+                ],
+                &clone_path,
+            );
+            let before = git2::Repository::open(&repo_path)
+                .unwrap()
+                .head()
+                .unwrap()
+                .target();
+            let failed = StdCommand::new(&git)
+                .args(["push", "origin", &branch])
+                .current_dir(&clone_path)
+                .env("GIT_SSH_COMMAND", &ssh_command)
+                .output()
+                .unwrap();
+            assert!(!failed.status.success(), "late edits must reject checkout");
+            assert_eq!(
+                push_count.load(std::sync::atomic::Ordering::SeqCst),
+                2,
+                "a rejected ref update is not an incoming change"
+            );
+            assert_eq!(
+                git2::Repository::open(&repo_path)
+                    .unwrap()
+                    .head()
+                    .unwrap()
+                    .target(),
+                before
+            );
+            assert_eq!(
+                fs::read_to_string(repo_path.join("_system/stream/fresh.md")).unwrap(),
+                "late desktop edit\n"
+            );
+            assert!(clone_path.join("_system/stream/retry.md").exists());
+            fs::remove_file(hook).unwrap();
+            run_git(
+                &[
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "user.email=test@test",
+                    "-c",
+                    "pull.rebase=false",
+                    "pull",
+                    "origin",
+                    &branch,
+                ],
+                &clone_path,
+            );
+            run_git(&["push", "origin", &branch], &clone_path);
+            assert!(repo_path.join("_system/stream/retry.md").exists());
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let entered = base.join("post-entered");
+            let release = base.join("post-release");
+            let hook = repo_path.join(".git/hooks/post-receive");
+            fs::write(
+                &hook,
+                format!(
+                    "#!/bin/sh\n: > {}\nwhile [ ! -f {} ]; do sleep 0.02; done\n",
+                    super::super::checkout::shell_quote(&entered),
+                    super::super::checkout::shell_quote(&release)
+                ),
+            )
+            .unwrap();
+            fs::set_permissions(&hook, fs::Permissions::from_mode(0o700)).unwrap();
+            fs::write(
+                clone_path.join("_system/stream/post.md"),
+                "phone post-hook test\n",
+            )
+            .unwrap();
+            run_git(&["add", "-A"], &clone_path);
+            run_git(
+                &[
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "user.email=test@test",
+                    "commit",
+                    "-m",
+                    "post hook",
+                ],
+                &clone_path,
+            );
+            let push_git = git.clone();
+            let push_root = clone_path.clone();
+            let push_ssh = ssh_command.clone();
+            let push_branch = branch.clone();
+            let push = std::thread::spawn(move || {
+                StdCommand::new(push_git)
+                    .args(["push", "origin", &push_branch])
+                    .current_dir(push_root)
+                    .env("GIT_SSH_COMMAND", push_ssh)
+                    .output()
+                    .unwrap()
+            });
+            let wait_started = Instant::now();
+            while !entered.exists() {
+                assert!(
+                    wait_started.elapsed() < Duration::from_secs(10),
+                    "custom post hook must run"
+                );
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            let (saved, saving) = std::sync::mpsc::channel();
+            let writer_root = repo_path.clone();
+            let writer = std::thread::spawn(move || {
+                let result =
+                    crate::application::workspace::with_workspace_write(&writer_root, || {
+                        fs::write(
+                            writer_root.join("_system/stream/after-apply.md"),
+                            "desktop edits during slow post hook\n",
+                        )
+                        .map_err(|e| e.to_string())
+                    });
+                let _ = saved.send(result);
+            });
+            // Detect a lock spanning a slow custom post hook, rather than
+            // asserting a platform-specific number of milliseconds.
+            let result = saving.recv_timeout(Duration::from_secs(5));
+            fs::write(&release, "release").unwrap();
+            let pushed = push.join().unwrap();
+            writer.join().unwrap();
+            result
+                .expect("autosave must remain available after ref update")
+                .unwrap();
+            assert!(
+                pushed.status.success(),
+                "{}",
+                String::from_utf8_lossy(&pushed.stderr)
+            );
+            assert!(repo_path.join("_system/stream/post.md").exists());
+            assert!(repo_path.join("_system/stream/after-apply.md").exists());
+            fs::remove_file(hook).unwrap();
+        }
 
         // Regression: a libgit2 client fetching over the *durable* remote —
         // an ssh:// URL without a username — must authenticate with the paired

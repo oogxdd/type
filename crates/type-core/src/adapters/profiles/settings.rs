@@ -209,6 +209,16 @@ pub fn load_profile_settings(notes_root: &Path) -> ProfileSettings {
 }
 
 pub fn save_profile_settings(notes_root: &Path, settings: &ProfileSettings) -> Result<(), String> {
+    fs::create_dir_all(notes_root).map_err(|e| e.to_string())?;
+    crate::application::workspace::with_workspace_write(notes_root, || {
+        save_profile_settings_unlocked(notes_root, settings)
+    })
+}
+
+fn save_profile_settings_unlocked(
+    notes_root: &Path,
+    settings: &ProfileSettings,
+) -> Result<(), String> {
     let folder = notes_root.join(SETTINGS_FOLDER);
     if !folder.exists() {
         fs::create_dir_all(&folder).map_err(|err| {

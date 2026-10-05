@@ -2556,3 +2556,158 @@ fn ordinary_folder_preserves_vim_history_and_half_page_movement(cx: &mut TestApp
     })
     .unwrap();
 }
+
+fn queue_pushes(app: &mut TypeApp, roots: Vec<std::path::PathBuf>) {
+    let (send, receive) = std::sync::mpsc::channel();
+    for root in roots {
+        send.send(type_core::LocalSyncEvent::Push { root }).unwrap();
+    }
+    app.sync_events = receive;
+}
+
+#[gpui_kit::test]
+fn incoming_push_coalesces_busy_refresh_and_preserves_dirty_baseline(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let dirty =
+        f.0.create(STREAM_FOLDER, "original draft baseline".into(), None)
+            .unwrap();
+    let clean =
+        f.0.create(STREAM_FOLDER, "clean before push".into(), None)
+            .unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.open_note(dirty.clone().into(), true, window, cx);
+            app.notes[&app.active]
+                .editor
+                .as_ref()
+                .unwrap()
+                .update(cx, |editor, cx| {
+                    editor.set_value("unsaved local draft", window, cx)
+                });
+            app.notes.get_mut(&app.active).unwrap().dirty = true;
+            app.busy = true;
+            f.0.notes()
+                .unwrap()
+                .write_note(&dirty, "incoming competing body")
+                .unwrap();
+            f.0.notes()
+                .unwrap()
+                .write_note(&clean, "incoming clean body")
+                .unwrap();
+            queue_pushes(
+                app,
+                vec![
+                    f.0.root.clone(),
+                    f.0.root.clone(),
+                    f.0.root.join("old-profile"),
+                ],
+            );
+            app.drain_sync_events(window, cx);
+            assert!(app.refresh_pending);
+            assert!(!app.refreshing);
+            app.busy = false;
+            app.refresh(window, cx);
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        assert_eq!(app.previews[&clean].content, "incoming clean body");
+        let note = &app.notes[dirty.as_str()];
+        assert!(note.dirty);
+        assert_eq!(note.saved_body, "original draft baseline");
+        assert_eq!(
+            note.editor.as_ref().unwrap().read(cx).value().as_ref(),
+            "unsaved local draft"
+        );
+        assert_eq!(app.active.as_str(), dirty);
+        assert!(!app.refresh_pending);
+        assert!(app.processing_task.is_none());
+        assert!(app.processing_status.is_empty());
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn incoming_push_reconciles_home_with_active_folder_and_survives_lock(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let note =
+        f.0.create(STREAM_FOLDER, "before push".into(), None)
+            .unwrap();
+    let folder = f.0.env.app_data_dir.join("ordinary");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("plain.md"), "ordinary").unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.open_folder_path(&folder, window, cx);
+            assert!(app.active_folder.is_some());
+            f.0.notes()
+                .unwrap()
+                .write_note(&note, "received while folder active")
+                .unwrap();
+            queue_pushes(app, vec![f.0.root.clone()]);
+            app.locked = true;
+            app.drain_sync_events(window, cx);
+            assert!(app.refresh_pending);
+            assert!(!app.refreshing);
+            app.locked = false;
+            app.refresh(window, cx);
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        assert!(app.active_folder.is_some());
+        assert_eq!(app.previews[&note].content, "received while folder active");
+        assert!(!app.refresh_pending);
+    })
+    .unwrap();
+    // A notification from a different root cannot trigger or change this profile.
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            queue_pushes(app, vec![f.0.root.join("old-profile")]);
+            app.drain_sync_events(window, cx);
+            assert!(!app.refreshing);
+            assert!(!app.refresh_pending);
+        });
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn stale_reconcile_keeps_pending_and_idle_poll_does_not_scan_processing(cx: &mut TestAppContext) {
+    let scans = super::jobs::PROCESSING_SCANS.load(std::sync::atomic::Ordering::SeqCst);
+    let f = Fixture::new();
+    f.0.create(STREAM_FOLDER, "original".into(), None).unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.refresh(window, cx);
+            app.revision += 1; // edit after the background snapshot started
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, _, cx| {
+        assert!(app.read(cx).refresh_pending);
+    })
+    .unwrap();
+    cx.background_executor
+        .advance_clock(std::time::Duration::from_millis(200));
+    cx.run_until_parked();
+    cx.update_window(window, |_, _, cx| {
+        assert!(!app.read(cx).refresh_pending);
+        assert!(!app.read(cx).refreshing);
+        assert_eq!(
+            super::jobs::PROCESSING_SCANS.load(std::sync::atomic::Ordering::SeqCst),
+            scans
+        );
+        assert!(app.read(cx).processing_updated.is_none());
+        assert!(app.read(cx).processing_task.is_none());
+    })
+    .unwrap();
+}

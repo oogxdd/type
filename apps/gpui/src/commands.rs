@@ -1032,6 +1032,13 @@ impl TypeApp {
     }
 
     pub fn reload_profiles(&mut self) -> Result<(), String> {
+        self.refresh_task = None;
+        self.refreshing = false;
+        self.refresh_pending = true;
+        self.processing_task = None;
+        self.server_status_task = None;
+        self.processing_updated = None;
+        self.processing_status.clear();
         self.backend = Backend::new(self.backend.env.clone())?;
         self.profiles = self.backend.profiles().list()?;
         self.notes.clear();

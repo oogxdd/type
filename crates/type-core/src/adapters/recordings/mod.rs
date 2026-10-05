@@ -689,7 +689,7 @@ pub fn resolve_recording_audio_absolute_path(root: &Path, path_rel: &str) -> Res
 
 // ── Note scanning ──────────────────────────────────────────────────────────────
 
-fn recording_info_from_note_meta(
+pub(crate) fn recording_info_from_note_meta(
     root: &Path,
     note_path: &Path,
     note_rel: &str,
@@ -745,6 +745,27 @@ pub fn collect_recording_notes(root: &Path) -> Result<Vec<RecordingNoteInfo>, St
 
 /// Update a recording note's transcription status and body on disk.
 pub fn update_recording_note_status(
+    note_path: &Path,
+    status: &str,
+    error: Option<String>,
+    transcript_id: Option<String>,
+    transcript_text: Option<&str>,
+) -> Result<(), String> {
+    crate::application::workspace::with_workspace_write(
+        note_path.parent().ok_or("Missing note folder.")?,
+        || {
+            update_recording_note_status_unlocked(
+                note_path,
+                status,
+                error,
+                transcript_id,
+                transcript_text,
+            )
+        },
+    )
+}
+
+fn update_recording_note_status_unlocked(
     note_path: &Path,
     status: &str,
     error: Option<String>,
@@ -1242,6 +1263,26 @@ pub fn recording_initial_body() -> String {
 /// (timestamp = now) and bulk audio import (timestamp = the source file's
 /// real creation time), so only the timestamp source differs between them.
 fn write_recording_note(
+    root: &Path,
+    audio_path: &Path,
+    target_folder_rel: String,
+    target_folder_path: &Path,
+    timestamp_ms: i64,
+    file_name_format: NoteFileNameFormat,
+) -> Result<RecordingWriteResult, String> {
+    crate::application::workspace::with_workspace_write(root, || {
+        write_recording_note_unlocked(
+            root,
+            audio_path,
+            target_folder_rel,
+            target_folder_path,
+            timestamp_ms,
+            file_name_format,
+        )
+    })
+}
+
+fn write_recording_note_unlocked(
     root: &Path,
     audio_path: &Path,
     target_folder_rel: String,

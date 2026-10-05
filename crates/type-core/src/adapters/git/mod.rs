@@ -243,18 +243,20 @@ impl GitSyncGateway for GitSyncAdapter {
                 }
             }
         };
-        prepare_bootstrap_worktree_for_sync(&root, &repo, &target_branch)?;
-        switch_or_prepare_branch(&repo, &target_branch)?;
-        if let Some(fetched_commit) = fetched {
-            let analysis = repo
-                .merge_analysis(&[&fetched_commit])
-                .map_err(map_git_error)?
-                .0;
-            if analysis.is_fast_forward() || analysis.is_up_to_date() {
-                fast_forward_to(&repo, &target_branch, &fetched_commit)?;
+        crate::application::workspace::with_workspace_write(&root, || {
+            prepare_bootstrap_worktree_for_sync(&root, &repo, &target_branch)?;
+            switch_or_prepare_branch(&repo, &target_branch)?;
+            if let Some(fetched_commit) = fetched {
+                let analysis = repo
+                    .merge_analysis(&[&fetched_commit])
+                    .map_err(map_git_error)?
+                    .0;
+                if analysis.is_fast_forward() || analysis.is_up_to_date() {
+                    fast_forward_to(&repo, &target_branch, &fetched_commit)?;
+                }
             }
-        }
-        Ok(build_git_status(&root))
+            Ok(build_git_status(&root))
+        })
     }
 
     fn pull(&self, args: Self::PullArgs) -> Result<Self::Status, String> {
@@ -311,34 +313,36 @@ impl GitSyncGateway for GitSyncAdapter {
             ssh_pub,
             trusted_host_key,
         )?;
-        // Fetch authenticates the real peer before creating local history. A
-        // reachable phone loopback proxy is not proof the desktop is online.
-        prepare_bootstrap_worktree_for_sync(&root, &repo, &target_branch)?;
-        // Files are the source of truth and merges never block: pending local
-        // edits are committed (exactly like push does) instead of failing the
-        // pull, so the one-button pull-then-push sync just works.
-        let message = if settings.git_commit_message.trim().is_empty() {
-            "Sync notes"
-        } else {
-            settings.git_commit_message.as_str()
-        };
-        // This helper already checks for changes; an outer check repeats the
-        // complete worktree scan (including legacy tracked recordings).
-        commit_all_changes(&repo, message, &target_branch)?;
-        switch_or_prepare_branch(&repo, &target_branch)?;
-        let (analysis, _) = repo.merge_analysis(&[&fetched]).map_err(map_git_error)?;
-        if analysis.is_up_to_date() {
-            return Ok(build_git_status(&root));
-        }
-        if analysis.is_fast_forward() {
-            fast_forward_to(&repo, &target_branch, &fetched)?;
-            return Ok(build_git_status(&root));
-        }
-        if analysis.is_normal() {
-            merge_fetched_commit(&repo, &target_branch, &fetched)?;
-            return Ok(build_git_status(&root));
-        }
-        Err("Pull failed because local and remote history could not be merged.".to_string())
+        crate::application::workspace::with_workspace_write(&root, || {
+            // Fetch authenticates the real peer before creating local history. A
+            // reachable phone loopback proxy is not proof the desktop is online.
+            prepare_bootstrap_worktree_for_sync(&root, &repo, &target_branch)?;
+            // Files are the source of truth and merges never block: pending local
+            // edits are committed (exactly like push does) instead of failing the
+            // pull, so the one-button pull-then-push sync just works.
+            let message = if settings.git_commit_message.trim().is_empty() {
+                "Sync notes"
+            } else {
+                settings.git_commit_message.as_str()
+            };
+            // This helper already checks for changes; an outer check repeats the
+            // complete worktree scan (including legacy tracked recordings).
+            commit_all_changes(&repo, message, &target_branch)?;
+            switch_or_prepare_branch(&repo, &target_branch)?;
+            let (analysis, _) = repo.merge_analysis(&[&fetched]).map_err(map_git_error)?;
+            if analysis.is_up_to_date() {
+                return Ok(build_git_status(&root));
+            }
+            if analysis.is_fast_forward() {
+                fast_forward_to(&repo, &target_branch, &fetched)?;
+                return Ok(build_git_status(&root));
+            }
+            if analysis.is_normal() {
+                merge_fetched_commit(&repo, &target_branch, &fetched)?;
+                return Ok(build_git_status(&root));
+            }
+            Err("Pull failed because local and remote history could not be merged.".to_string())
+        })
     }
 
     fn commit(&self, args: Self::CommitArgs) -> Result<Self::Status, String> {
@@ -1138,6 +1142,13 @@ pub fn ensure_origin_remote(repo: &Repository, remote_url: &str) -> Result<(), S
 
 /// Switch to the target branch, creating it if it doesn't exist.
 pub fn switch_or_prepare_branch(repo: &Repository, branch: &str) -> Result<(), String> {
+    let root = repo.workdir().ok_or("A notes worktree is required.")?;
+    crate::application::workspace::with_workspace_write(root, || {
+        switch_or_prepare_branch_unlocked(repo, branch)
+    })
+}
+
+fn switch_or_prepare_branch_unlocked(repo: &Repository, branch: &str) -> Result<(), String> {
     let _timing = GitPhaseTimer::start("branch preparation");
     let name = branch.trim();
     if name.is_empty() {
@@ -1181,6 +1192,17 @@ fn default_signature(repo: &Repository) -> Result<Signature<'_>, String> {
 
 /// Stage all changes and create a commit on the given branch.
 pub fn commit_all_changes(
+    repo: &Repository,
+    message: &str,
+    branch: &str,
+) -> Result<Option<Oid>, String> {
+    let root = repo.workdir().ok_or("A notes worktree is required.")?;
+    crate::application::workspace::with_workspace_write(root, || {
+        commit_all_changes_unlocked(repo, message, branch)
+    })
+}
+
+fn commit_all_changes_unlocked(
     repo: &Repository,
     message: &str,
     branch: &str,
@@ -1567,6 +1589,17 @@ pub fn fast_forward_to(
     branch: &str,
     fetch_commit: &AnnotatedCommit<'_>,
 ) -> Result<(), String> {
+    let root = repo.workdir().ok_or("A notes worktree is required.")?;
+    crate::application::workspace::with_workspace_write(root, || {
+        fast_forward_to_unlocked(repo, branch, fetch_commit)
+    })
+}
+
+fn fast_forward_to_unlocked(
+    repo: &Repository,
+    branch: &str,
+    fetch_commit: &AnnotatedCommit<'_>,
+) -> Result<(), String> {
     let _timing = GitPhaseTimer::start("fast-forward checkout");
     let target_oid = fetch_commit.id();
     let local_ref_name = format!("refs/heads/{}", branch);
@@ -1606,6 +1639,17 @@ fn make_conflict_path(rel_path: &str) -> String {
 
 /// Merge a fetched commit, saving `.conflict` files when there are conflicts.
 pub fn merge_fetched_commit(
+    repo: &Repository,
+    branch: &str,
+    fetched_commit: &AnnotatedCommit<'_>,
+) -> Result<(), String> {
+    let root = repo.workdir().ok_or("A notes worktree is required.")?;
+    crate::application::workspace::with_workspace_write(root, || {
+        merge_fetched_commit_unlocked(repo, branch, fetched_commit)
+    })
+}
+
+fn merge_fetched_commit_unlocked(
     repo: &Repository,
     branch: &str,
     fetched_commit: &AnnotatedCommit<'_>,

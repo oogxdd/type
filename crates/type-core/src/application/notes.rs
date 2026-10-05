@@ -65,6 +65,13 @@ where
     }
 
     pub fn create_note(&self, args: CreateNoteArgs) -> Result<CreateNoteResult, String> {
+        let root = self.repository.ensured_root()?;
+        crate::application::workspace::with_workspace_write(&root, || {
+            self.create_note_unlocked(args)
+        })
+    }
+
+    fn create_note_unlocked(&self, args: CreateNoteArgs) -> Result<CreateNoteResult, String> {
         self.repository.ensured_root()?;
         let folder_rel = args
             .folder_path
@@ -115,6 +122,13 @@ where
     }
 
     pub fn write_note(&self, path: &str, content: &str) -> Result<(), String> {
+        let root = self.repository.ensured_root()?;
+        crate::application::workspace::with_workspace_write(&root, || {
+            self.write_note_unlocked(path, content)
+        })
+    }
+
+    fn write_note_unlocked(&self, path: &str, content: &str) -> Result<(), String> {
         let full_path = self.repository.resolve_path(path)?;
         if let Some(parent) = full_path.parent() {
             self.repository.create_dir_all(parent)?;
@@ -138,6 +152,13 @@ where
     }
 
     pub fn set_note_timestamp(&self, args: SetNoteTimestampArgs) -> Result<(), String> {
+        let root = self.repository.ensured_root()?;
+        crate::application::workspace::with_workspace_write(&root, || {
+            self.set_note_timestamp_unlocked(args)
+        })
+    }
+
+    fn set_note_timestamp_unlocked(&self, args: SetNoteTimestampArgs) -> Result<(), String> {
         let full_path = self.repository.resolve_path(&args.path)?;
         if self.repository.entry_kind(&full_path)? != Some(NoteStorageEntryKind::File) {
             return Err("Note file does not exist.".to_string());
@@ -252,6 +273,13 @@ where
     }
 
     pub fn update_note_tags(&self, path: &str, tags: Vec<String>) -> Result<(), String> {
+        let root = self.repository.ensured_root()?;
+        crate::application::workspace::with_workspace_write(&root, || {
+            self.update_note_tags_unlocked(path, tags)
+        })
+    }
+
+    fn update_note_tags_unlocked(&self, path: &str, tags: Vec<String>) -> Result<(), String> {
         if !tags
             .iter()
             .all(|tag| crate::domain::tag_registry::valid_tag_name(tag))
@@ -275,6 +303,18 @@ where
     }
 
     pub fn update_note_markers(
+        &self,
+        path: &str,
+        archived: Option<bool>,
+        reviewed: Option<bool>,
+    ) -> Result<(), String> {
+        let root = self.repository.ensured_root()?;
+        crate::application::workspace::with_workspace_write(&root, || {
+            self.update_note_markers_unlocked(path, archived, reviewed)
+        })
+    }
+
+    fn update_note_markers_unlocked(
         &self,
         path: &str,
         archived: Option<bool>,
@@ -319,6 +359,13 @@ where
     }
 
     pub fn move_items(&self, items: Vec<String>, destination: String) -> Result<(), String> {
+        let root = self.repository.ensured_root()?;
+        crate::application::workspace::with_workspace_write(&root, || {
+            self.move_items_unlocked(items, destination)
+        })
+    }
+
+    fn move_items_unlocked(&self, items: Vec<String>, destination: String) -> Result<(), String> {
         self.repository.ensured_root()?;
         let destination_path = self.repository.resolve_path(&destination)?;
         if self.repository.entry_kind(&destination_path)? != Some(NoteStorageEntryKind::Directory) {
@@ -401,6 +448,13 @@ where
     }
 
     pub fn delete_items(&self, items: Vec<String>) -> Result<(), String> {
+        let root = self.repository.ensured_root()?;
+        crate::application::workspace::with_workspace_write(&root, || {
+            self.delete_items_unlocked(items)
+        })
+    }
+
+    fn delete_items_unlocked(&self, items: Vec<String>) -> Result<(), String> {
         self.repository.ensured_root()?;
         let mut parent_folder_groups: HashMap<PathBuf, Vec<String>> = HashMap::new();
         let mut parent_note_groups: HashMap<PathBuf, Vec<String>> = HashMap::new();
@@ -479,6 +533,13 @@ where
     }
 
     pub fn rename_item(&self, path: &str, new_name: &str) -> Result<String, String> {
+        let root = self.repository.ensured_root()?;
+        crate::application::workspace::with_workspace_write(&root, || {
+            self.rename_item_unlocked(path, new_name)
+        })
+    }
+
+    fn rename_item_unlocked(&self, path: &str, new_name: &str) -> Result<String, String> {
         self.repository.ensured_root()?;
         let full_path = self.repository.resolve_path(path)?;
         if self.repository.is_system_folder_path(&full_path) {
@@ -526,6 +587,11 @@ where
     }
 
     pub fn set_order(&self, args: SetOrderArgs) -> Result<(), String> {
+        let root = self.repository.ensured_root()?;
+        crate::application::workspace::with_workspace_write(&root, || self.set_order_unlocked(args))
+    }
+
+    fn set_order_unlocked(&self, args: SetOrderArgs) -> Result<(), String> {
         self.repository.ensured_root()?;
         let parent_path = self.repository.resolve_path(&args.parent)?;
         if self.repository.is_stream_folder_path(&parent_path) {

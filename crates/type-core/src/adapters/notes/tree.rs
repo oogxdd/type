@@ -247,6 +247,12 @@ pub fn read_order_file(dir: &Path) -> OrderFile {
 /// date). Checked on the path tail because callers hand over a directory
 /// without a notes root to compare it against.
 pub fn write_order_file(dir: &Path, order: &OrderFile) -> Result<(), String> {
+    crate::application::workspace::with_workspace_write(dir, || {
+        write_order_file_unlocked(dir, order)
+    })
+}
+
+fn write_order_file_unlocked(dir: &Path, order: &OrderFile) -> Result<(), String> {
     let dir_name = dir.file_name().and_then(|name| name.to_str());
     let parent_name = dir
         .parent()
@@ -261,7 +267,13 @@ pub fn write_order_file(dir: &Path, order: &OrderFile) -> Result<(), String> {
 }
 
 /// Remove entries from the folder or note order list.
-pub fn update_order_remove(
+pub fn update_order_remove(dir: &Path, names: &[String], is_folder: bool) -> Result<(), String> {
+    crate::application::workspace::with_workspace_write(dir, || {
+        update_order_remove_unlocked(dir, names, is_folder)
+    })
+}
+
+fn update_order_remove_unlocked(
     dir: &Path,
     names: &[String],
     is_folder: bool,
@@ -276,7 +288,13 @@ pub fn update_order_remove(
 }
 
 /// Append entries to the folder or note order list if not already present.
-pub fn update_order_append(
+pub fn update_order_append(dir: &Path, names: &[String], is_folder: bool) -> Result<(), String> {
+    crate::application::workspace::with_workspace_write(dir, || {
+        update_order_append_unlocked(dir, names, is_folder)
+    })
+}
+
+fn update_order_append_unlocked(
     dir: &Path,
     names: &[String],
     is_folder: bool,

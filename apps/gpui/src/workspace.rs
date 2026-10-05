@@ -10,6 +10,10 @@ impl TypeApp {
         Self::apply_theme(prefs.dark, window, cx);
         let tree = cx.new(|cx| TreeState::new(cx));
         let pane_state = cx.new(|_| ResizableState::default());
+        let (sync_sender, sync_events) = std::sync::mpsc::channel();
+        let sync_subscription = type_core::subscribe_local_sync_events(move |event| {
+            let _ = sync_sender.send(event);
+        });
         let mut app = Self {
             pane_state: pane_state.clone(),
             updater: None,
@@ -41,6 +45,12 @@ impl TypeApp {
             busy: false,
             loading: !locked,
             refreshing: false,
+            refresh_pending: false,
+            sync_events,
+            _sync_subscription: sync_subscription,
+            processing_task: None,
+            server_status_task: None,
+            processing_updated: None,
             suppress_selection: false,
             revision: 0,
             refresh_task: None,
@@ -185,21 +195,140 @@ impl TypeApp {
             app.restore_phone_sync(window, cx);
         }
         app.poll_task = Some(cx.spawn_in(window, async move |view, cx| {
+            let mut fallback_ticks = 0;
             loop {
-                cx.background_executor().timer(Duration::from_secs(3)).await;
+                // Cheap channel drain, not a note/body scan. Pushes coalesce to
+                // one reconcile; requests to flush are answered before Git locks.
+                cx.background_executor()
+                    .timer(Duration::from_millis(200))
+                    .await;
+                fallback_ticks += 1;
                 if view
                     .update_in(cx, |this, window, cx| {
+                        this.drain_sync_events(window, cx);
                         if !this.locked && !this.busy && !this.recording {
-                            this.refresh(window, cx);
+                            if fallback_ticks >= 75 {
+                                this.refresh_pending = true;
+                            }
+                            if this.refresh_pending {
+                                this.refresh(window, cx);
+                            }
+                            this.refresh_processing(window, cx);
+                            if fallback_ticks % 15 == 0 && fallback_ticks < 75 {
+                                this.refresh_server_status(window, cx);
+                            }
                         }
                     })
                     .is_err()
                 {
                     break;
                 }
+                if fallback_ticks >= 75 {
+                    fallback_ticks = 0;
+                }
             }
         }));
         app
+    }
+
+    pub(crate) fn drain_sync_events(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let mut pushed = false;
+        while let Ok(event) = self.sync_events.try_recv() {
+            match event {
+                type_core::LocalSyncEvent::Prepare { root, reply } => {
+                    let relevant = root == self.backend.root
+                        || self
+                            .folder_tabs
+                            .iter()
+                            .any(|tab| tab.read(cx).folder.root.starts_with(&root));
+                    let result = if !relevant {
+                        Ok(())
+                    } else if self.locked {
+                        Err("Unlock the desktop before syncing.".into())
+                    } else if self.busy {
+                        Err("The desktop is finishing another operation. Retry sync.".into())
+                    } else {
+                        self.flush(false, cx)
+                    };
+                    let _ = reply.send(result);
+                }
+                type_core::LocalSyncEvent::Push { root } => {
+                    if root == self.backend.root {
+                        self.refresh_pending = true;
+                        pushed = true;
+                    }
+                    if !self.locked {
+                        for tab in &self.folder_tabs {
+                            if tab.read(cx).folder.root.starts_with(&root) {
+                                tab.update(cx, |tab, cx| tab.refresh(window, cx));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if pushed {
+            self.refresh(window, cx);
+        }
+    }
+
+    fn refresh_server_status(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.server_status_task.is_some() {
+            return;
+        }
+        let backend = self.backend.clone();
+        let root = backend.root.clone();
+        let task = cx
+            .background_executor()
+            .spawn(async move { type_core::local_sync_server_status(&backend.env) });
+        self.server_status_task = Some(cx.spawn_in(window, async move |view, cx| {
+            let result = task.await;
+            let _ = view.update_in(cx, |this, _, cx| {
+                this.server_status_task = None;
+                if this.locked || this.backend.root != root {
+                    return;
+                }
+                if let Ok(server) = result {
+                    this.local_server = Some(server);
+                    cx.notify();
+                }
+            });
+        }));
+    }
+
+    fn refresh_processing(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.settings
+            || !matches!(
+                self.settings_section,
+                settings::Section::Transcription
+                    | settings::Section::Handwriting
+                    | settings::Section::Import
+            )
+            || self.processing_task.is_some()
+            || self
+                .processing_updated
+                .is_some_and(|at| at.elapsed() < Duration::from_secs(10))
+        {
+            return;
+        }
+        let backend = self.backend.clone();
+        let root = backend.root.clone();
+        let revision = self.revision;
+        let task = cx
+            .background_executor()
+            .spawn(async move { jobs::processing_snapshot(&backend) });
+        self.processing_task = Some(cx.spawn_in(window, async move |view, cx| {
+            let result = task.await;
+            let _ = view.update_in(cx, |this, _, cx| {
+                this.processing_task = None;
+                if this.locked || this.backend.root != root || this.revision != revision {
+                    return;
+                }
+                this.processing_status = result;
+                this.processing_updated = Some(Instant::now());
+                cx.notify();
+            });
+        }));
     }
 
     pub fn persist_preferences(&self) {
@@ -240,12 +369,18 @@ impl TypeApp {
     }
 
     pub fn refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.locked || self.refreshing || self.busy || self.active_folder.is_some() {
+        self.refresh_pending = true;
+        if self.locked || self.refreshing || self.busy {
             return;
         }
         self.refreshing = true;
+        self.refresh_pending = false;
         let backend = self.backend.clone();
         let revision = self.revision;
+        let refresh_root = backend.root.clone();
+        let started_at = Instant::now();
+        let core_state = type_core::application::workspace::workspace_state(&backend.root).ok();
+        let disk_revision = core_state.as_ref().map(|state| state.revision());
         let versions: HashMap<_, _> = self
             .previews
             .iter()
@@ -253,7 +388,7 @@ impl TypeApp {
             .collect();
         let task = cx.background_executor().spawn(async move {
             let server = type_core::local_sync_server_status(&backend.env).ok();
-            let processing = jobs::processing_snapshot(&backend);
+            let profiles = backend.profiles().list().ok();
             let notes = backend.notes()?;
             let root = notes.get_tree()?;
             fn changed(
@@ -273,21 +408,33 @@ impl TypeApp {
             let mut paths = vec![];
             changed(&root, &versions, &mut paths);
             let previews = notes.list_note_previews(paths)?;
-            Ok::<_, String>((root, previews, server, processing))
+            Ok::<_, String>((root, previews, server, profiles))
         });
         self.refresh_task = Some(cx.spawn_in(window, async move |view, cx| {
             let result = task.await;
             let _ = view.update_in(cx, |this, window, cx| {
                 this.refreshing = false;
-                if revision != this.revision || this.locked {
+                if revision != this.revision
+                    || this.backend.root != refresh_root
+                    || this.locked
+                    || core_state.as_ref().map(|state| state.revision()) != disk_revision
+                {
+                    this.refresh_pending = true;
                     return;
                 }
                 match result {
-                    Ok((root, previews, server, processing)) => {
+                    Ok((root, previews, server, profiles)) => {
+                        eprintln!(
+                            "[local-sync] UI reconcile changed_previews={} elapsed_ms={}",
+                            previews.len(),
+                            started_at.elapsed().as_millis()
+                        );
+                        if let Some(profiles) = profiles {
+                            this.profiles = profiles;
+                        }
                         if let Some(server) = server {
                             this.local_server = Some(server);
                         }
-                        this.processing_status = processing;
                         let paths: HashSet<_> = navigation::note_paths(&root).into_iter().collect();
                         this.previews.retain(|p, _| paths.contains(p));
                         for preview in previews {
@@ -314,9 +461,14 @@ impl TypeApp {
                         this.folder_tree = Some(root);
                         this.rebuild_navigation(cx);
                         this.loading = false;
-                        if !this.notes.contains_key(&this.active)
-                            || (!this.active.starts_with("draft:")
-                                && !navigation::contains(&this.nav_items, &this.active))
+                        if this.active_folder.is_none()
+                            && (!this.notes.contains_key(&this.active)
+                                || (!this.active.starts_with("draft:")
+                                    && !this
+                                        .notes
+                                        .get(&this.active)
+                                        .is_some_and(|note| note.dirty)
+                                    && !navigation::contains(&this.nav_items, &this.active)))
                         {
                             this.active = "".into();
                             if let Some(id) = this.first_note(cx) {
@@ -597,9 +749,18 @@ impl TypeApp {
     }
 
     pub fn flush(&mut self, leaving: bool, cx: &mut Context<Self>) -> Result<(), String> {
-        let result = self
-            .flush_folders(cx)
-            .and_then(|_| self.try_flush(leaving, cx));
+        let root = self.backend.root.clone();
+        let result = self.flush_folders(cx).and_then(|_| {
+            type_core::application::workspace::try_workspace_write(&root, || {
+                self.try_flush(leaving, cx)
+            })
+        });
+        if result.as_ref().err().map(String::as_str)
+            == Some(type_core::application::workspace::WORKSPACE_BUSY)
+        {
+            self.schedule_save(cx);
+            return result;
+        }
         if let Err(error) = &result {
             self.error = Some(error.clone());
             cx.notify();

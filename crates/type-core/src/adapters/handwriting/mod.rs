@@ -637,6 +637,18 @@ pub fn update_handwriting_note_status(
     error: Option<String>,
     extracted_text: Option<&str>,
 ) -> Result<(), String> {
+    crate::application::workspace::with_workspace_write(
+        note_path.parent().ok_or("Missing note folder.")?,
+        || update_handwriting_note_status_unlocked(note_path, status, error, extracted_text),
+    )
+}
+
+fn update_handwriting_note_status_unlocked(
+    note_path: &Path,
+    status: &str,
+    error: Option<String>,
+    extracted_text: Option<&str>,
+) -> Result<(), String> {
     let raw = fs::read_to_string(note_path).map_err(|issue| issue.to_string())?;
     let (mut meta, _) = parse_note_front_matter(&raw);
     if meta.id.is_none() {
