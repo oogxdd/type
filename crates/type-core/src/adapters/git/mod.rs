@@ -85,6 +85,68 @@ pub struct GitPushArgs {
     pub password: Option<String>,
 }
 
+/// One authenticated fetch/merge/send workflow; UI work is separate.
+#[derive(Deserialize)]
+pub struct GitSyncCycleArgs {
+    pub remote_url: Option<String>,
+    pub branch: Option<String>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub message: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct GitSyncCycleResult {
+    pub status: GitSyncStatus,
+    /// Diff after committing local edits, before/after applying the remote.
+    pub changed_paths: Vec<String>,
+    pub reset_required: bool,
+    pub tree_patch: Vec<GitSyncFolderPatch>,
+    pub entries: Vec<crate::NoteEntry>,
+    pub removed_paths: Vec<String>,
+    /// A successful pull must still reach the UI if sending subsequently fails.
+    pub push_error: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct GitSyncFolderPatch {
+    pub path: String,
+    pub exists: bool,
+    pub folder_order: Vec<String>,
+    pub note_order: Vec<String>,
+}
+
+/// Read only ancestor existence and small order files for changed notes. No
+/// listing/stat of unchanged notes, including the entire Stream collection.
+fn changed_folder_patch(root: &Path, paths: &[String]) -> Vec<GitSyncFolderPatch> {
+    let mut folders = std::collections::BTreeSet::new();
+    for path in paths {
+        let is_order = Path::new(path).file_name().and_then(|s| s.to_str()) == Some(ORDER_FILE);
+        if !path.ends_with(".md") && !is_order {
+            continue;
+        }
+        let mut folder = Path::new(path).parent();
+        while let Some(value) = folder {
+            let rel = value.to_string_lossy().to_string();
+            folders.insert(rel);
+            folder = value.parent();
+        }
+    }
+    folders
+        .into_iter()
+        .map(|path| {
+            let dir = root.join(&path);
+            let order = crate::read_order_file(&dir);
+            GitSyncFolderPatch {
+                path,
+                exists: dir.is_dir(),
+                folder_order: order.folder_order,
+                note_order: order.note_order,
+            }
+        })
+        .collect()
+}
+
 #[derive(Clone)]
 pub struct TrustedSshHostKey {
     host: String,
@@ -133,6 +195,168 @@ impl GitSyncAdapter {
         Self { app }
     }
 
+    pub fn sync_cycle(&self, args: GitSyncCycleArgs) -> Result<GitSyncCycleResult, String> {
+        let _timing = GitPhaseTimer::start("sync cycle total");
+        let (root, settings) = self.resolve_settings();
+        let repo = ensure_git_repo(&root)?;
+        let branch = args
+            .branch
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(&settings.git_branch);
+        let branch = resolve_target_branch(&repo, Some(branch.to_string()));
+        let reset_required =
+            git_current_branch(&repo).as_deref() != Some(&branch) || !git_head_has_commit(&repo);
+        let remote_url = args
+            .remote_url
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(&settings.git_remote_url);
+        if !remote_url.is_empty() {
+            ensure_origin_remote(&repo, remote_url)?;
+        }
+        if let Some(url) = git_remote_url(&repo) {
+            probe_remote_url(&url)?;
+        }
+        let username = args
+            .username
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                (!settings.git_username.is_empty()).then_some(settings.git_username.as_str())
+            });
+        let password = args
+            .password
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                (!settings.git_password.is_empty()).then_some(settings.git_password.as_str())
+            });
+        let message = args
+            .message
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or(&settings.git_commit_message);
+        let message = if message.trim().is_empty() {
+            "Sync notes"
+        } else {
+            message
+        };
+        let private_key = ssh_private_key_if_exists(&self.app);
+        let public_key = ssh_public_key_if_exists(&self.app);
+        let pin = trusted_ssh_host_key_from_settings(&settings);
+        // Authenticate before committing, preserving offline coalescing.
+        let fetched = match perform_fetch(
+            &repo,
+            &branch,
+            username,
+            password,
+            private_key.clone(),
+            public_key.clone(),
+            pin.clone(),
+        ) {
+            Ok(commit) => Some(commit),
+            Err(error) if error.to_lowercase().contains("couldn't find remote ref") => None,
+            // libgit2's local transport successfully fetches an empty remote,
+            // then reports its empty FETCH_HEAD as a corrupted reference.
+            Err(error)
+                if error.contains("FETCH_HEAD")
+                    && repo
+                        .find_reference(&format!("refs/remotes/origin/{branch}"))
+                        .is_err()
+                    && fs::read_to_string(repo.path().join("FETCH_HEAD"))
+                        .is_ok_and(|head| head.trim().is_empty()) =>
+            {
+                None
+            }
+            Err(error) => return Err(error),
+        };
+        let (changed_paths, tree_patch, entries, removed_paths, send_required) =
+            crate::application::workspace::with_workspace_write(&root, || {
+                let _timing = GitPhaseTimer::start("sync local commit and merge");
+                prepare_bootstrap_worktree_for_sync(&root, &repo, &branch)?;
+                switch_or_prepare_branch(&repo, &branch)?;
+                commit_all_changes(&repo, message, &branch)?;
+                let before = repo.head().ok().and_then(|head| head.target());
+                if let Some(ref fetched) = fetched {
+                    let (analysis, _) = repo.merge_analysis(&[fetched]).map_err(map_git_error)?;
+                    if analysis.is_fast_forward() {
+                        fast_forward_to(&repo, &branch, fetched)?;
+                    } else if analysis.is_normal() {
+                        merge_fetched_commit(&repo, &branch, fetched)?;
+                    } else if !analysis.is_up_to_date() {
+                        return Err("Local and remote history could not be merged.".to_string());
+                    }
+                }
+                let after = repo.head().ok().and_then(|head| head.target());
+                if fetched.is_some() {
+                    repo.find_branch(&branch, git2::BranchType::Local)
+                        .map_err(map_git_error)?
+                        .set_upstream(Some(&format!("origin/{branch}")))
+                        .map_err(map_git_error)?;
+                }
+                let paths = changed_tree_paths(&repo, before, after)?;
+                let send_required =
+                    after.is_some() && after != fetched.as_ref().map(|commit| commit.id());
+                let tree_patch = changed_folder_patch(&root, &paths);
+                let mut entries = Vec::new();
+                let mut removed_paths = Vec::new();
+                for path in &paths {
+                    if !path.ends_with(".md") {
+                        continue;
+                    }
+                    match fs::metadata(root.join(path)) {
+                        Ok(metadata) if metadata.is_file() => entries.push(crate::NoteEntry {
+                            name: Path::new(path)
+                                .file_name()
+                                .unwrap()
+                                .to_string_lossy()
+                                .to_string(),
+                            path: path.clone(),
+                            version: Some(crate::adapters::notes::note_file_version(&metadata)),
+                        }),
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                            removed_paths.push(path.clone())
+                        }
+                        Err(error) => return Err(error.to_string()),
+                        _ => {}
+                    }
+                }
+                Ok((paths, tree_patch, entries, removed_paths, send_required))
+            })?;
+        // Do not scan/commit again during send: edits arriving after the local
+        // phase stay dirty, and the shell owes another cycle for those edits.
+        let push_error = if send_required {
+            remote_push(
+                &repo,
+                &branch,
+                message,
+                username,
+                password,
+                private_key,
+                public_key,
+                pin,
+                false,
+            )
+            .err()
+        } else {
+            None
+        };
+        let status = {
+            let _timing = GitPhaseTimer::start("sync final status");
+            build_git_status(&root)
+        };
+        Ok(GitSyncCycleResult {
+            status,
+            changed_paths,
+            reset_required,
+            tree_patch,
+            entries,
+            removed_paths,
+            push_error,
+        })
+    }
+
     fn resolve_settings(&self) -> (PathBuf, crate::ProfileSettings) {
         let root = crate::ensured_notes_root(&self.app).unwrap_or_default();
         let settings = crate::load_profile_settings(&root);
@@ -148,6 +372,12 @@ impl GitSyncGateway for GitSyncAdapter {
     type PullArgs = GitSyncArgs;
     type CommitArgs = GitCommitArgs;
     type PushArgs = GitPushArgs;
+    type CycleArgs = GitSyncCycleArgs;
+    type CycleResult = GitSyncCycleResult;
+
+    fn sync_cycle(&self, args: Self::CycleArgs) -> Result<Self::CycleResult, String> {
+        GitSyncAdapter::sync_cycle(self, args)
+    }
 
     fn generate_ssh_key(&self) -> Result<String, String> {
         generate_ssh_keypair(&self.app)
@@ -243,18 +473,20 @@ impl GitSyncGateway for GitSyncAdapter {
                 }
             }
         };
-        prepare_bootstrap_worktree_for_sync(&root, &repo, &target_branch)?;
-        switch_or_prepare_branch(&repo, &target_branch)?;
-        if let Some(fetched_commit) = fetched {
-            let analysis = repo
-                .merge_analysis(&[&fetched_commit])
-                .map_err(map_git_error)?
-                .0;
-            if analysis.is_fast_forward() || analysis.is_up_to_date() {
-                fast_forward_to(&repo, &target_branch, &fetched_commit)?;
+        crate::application::workspace::with_workspace_write(&root, || {
+            prepare_bootstrap_worktree_for_sync(&root, &repo, &target_branch)?;
+            switch_or_prepare_branch(&repo, &target_branch)?;
+            if let Some(fetched_commit) = fetched {
+                let analysis = repo
+                    .merge_analysis(&[&fetched_commit])
+                    .map_err(map_git_error)?
+                    .0;
+                if analysis.is_fast_forward() || analysis.is_up_to_date() {
+                    fast_forward_to(&repo, &target_branch, &fetched_commit)?;
+                }
             }
-        }
-        Ok(build_git_status(&root))
+            Ok(build_git_status(&root))
+        })
     }
 
     fn pull(&self, args: Self::PullArgs) -> Result<Self::Status, String> {
@@ -311,54 +543,58 @@ impl GitSyncGateway for GitSyncAdapter {
             ssh_pub,
             trusted_host_key,
         )?;
-        // Fetch authenticates the real peer before creating local history. A
-        // reachable phone loopback proxy is not proof the desktop is online.
-        prepare_bootstrap_worktree_for_sync(&root, &repo, &target_branch)?;
-        // Files are the source of truth and merges never block: pending local
-        // edits are committed (exactly like push does) instead of failing the
-        // pull, so the one-button pull-then-push sync just works.
-        let message = if settings.git_commit_message.trim().is_empty() {
-            "Sync notes"
-        } else {
-            settings.git_commit_message.as_str()
-        };
-        // This helper already checks for changes; an outer check repeats the
-        // complete worktree scan (including legacy tracked recordings).
-        commit_all_changes(&repo, message, &target_branch)?;
-        switch_or_prepare_branch(&repo, &target_branch)?;
-        let (analysis, _) = repo.merge_analysis(&[&fetched]).map_err(map_git_error)?;
-        if analysis.is_up_to_date() {
-            return Ok(build_git_status(&root));
-        }
-        if analysis.is_fast_forward() {
-            fast_forward_to(&repo, &target_branch, &fetched)?;
-            return Ok(build_git_status(&root));
-        }
-        if analysis.is_normal() {
-            merge_fetched_commit(&repo, &target_branch, &fetched)?;
-            return Ok(build_git_status(&root));
-        }
-        Err("Pull failed because local and remote history could not be merged.".to_string())
+        crate::application::workspace::with_workspace_write(&root, || {
+            // Fetch authenticates the real peer before creating local history. A
+            // reachable phone loopback proxy is not proof the desktop is online.
+            prepare_bootstrap_worktree_for_sync(&root, &repo, &target_branch)?;
+            // Files are the source of truth and merges never block: pending local
+            // edits are committed (exactly like push does) instead of failing the
+            // pull, so the one-button pull-then-push sync just works.
+            let message = if settings.git_commit_message.trim().is_empty() {
+                "Sync notes"
+            } else {
+                settings.git_commit_message.as_str()
+            };
+            // This helper already checks for changes; an outer check repeats the
+            // complete worktree scan (including legacy tracked recordings).
+            commit_all_changes(&repo, message, &target_branch)?;
+            switch_or_prepare_branch(&repo, &target_branch)?;
+            let (analysis, _) = repo.merge_analysis(&[&fetched]).map_err(map_git_error)?;
+            if analysis.is_up_to_date() {
+                return Ok(build_git_status(&root));
+            }
+            if analysis.is_fast_forward() {
+                fast_forward_to(&repo, &target_branch, &fetched)?;
+                return Ok(build_git_status(&root));
+            }
+            if analysis.is_normal() {
+                merge_fetched_commit(&repo, &target_branch, &fetched)?;
+                return Ok(build_git_status(&root));
+            }
+            Err("Pull failed because local and remote history could not be merged.".to_string())
+        })
     }
 
     fn commit(&self, args: Self::CommitArgs) -> Result<Self::Status, String> {
         let (root, settings) = self.resolve_settings();
-        let repo = ensure_git_repo(&root)?;
-        let branch = args
-            .branch
-            .as_deref()
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or(settings.git_branch.as_str());
-        let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
-        switch_or_prepare_branch(&repo, &target_branch)?;
+        crate::application::workspace::with_workspace_write(&root, || {
+            let repo = ensure_git_repo(&root)?;
+            let branch = args
+                .branch
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or(settings.git_branch.as_str());
+            let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
+            switch_or_prepare_branch(&repo, &target_branch)?;
 
-        let message = args
-            .message
-            .as_deref()
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or("Checkpoint");
-        commit_all_changes(&repo, message, &target_branch)?;
-        Ok(build_git_status(&root))
+            let message = args
+                .message
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or("Checkpoint");
+            commit_all_changes(&repo, message, &target_branch)?;
+            Ok(build_git_status(&root))
+        })
     }
 
     fn push(&self, args: Self::PushArgs) -> Result<Self::Status, String> {
@@ -406,7 +642,9 @@ impl GitSyncGateway for GitSyncAdapter {
 
         let repo = open_repo(&root)?;
         let target_branch = resolve_target_branch(&repo, Some(branch.to_string()));
-        switch_or_prepare_branch(&repo, &target_branch)?;
+        crate::application::workspace::with_workspace_write(&root, || {
+            switch_or_prepare_branch(&repo, &target_branch)
+        })?;
 
         let status_before_push = build_git_status(&root);
         if !status_before_push.push_required {
@@ -427,6 +665,7 @@ impl GitSyncGateway for GitSyncAdapter {
             ssh_priv,
             ssh_pub,
             trusted_host_key,
+            true,
         )?;
         Ok(build_git_status(&root))
     }
@@ -441,6 +680,7 @@ fn remote_push(
     ssh_private_key: Option<PathBuf>,
     ssh_public_key: Option<PathBuf>,
     trusted_host_key: Option<TrustedSshHostKey>,
+    commit_pending: bool,
 ) -> Result<(), String> {
     let started_at = Instant::now();
     let mut callbacks = build_callbacks(
@@ -498,7 +738,12 @@ fn remote_push(
     let commit_started_at = Instant::now();
     // Authenticate first: offline auto-sync attempts must not accumulate a
     // commit for every saved note. Manual checkpoints remain independent.
-    commit_all_changes(repo, commit_message, branch)?;
+    let root = repo.workdir().ok_or("Repository has no working folder.")?;
+    if commit_pending {
+        crate::application::workspace::with_workspace_write(root, || {
+            commit_all_changes(repo, commit_message, branch)
+        })?;
+    }
     eprintln!(
         "[git] push local commit finished in {}ms",
         commit_started_at.elapsed().as_millis()
@@ -530,6 +775,40 @@ fn remote_push(
         .set_upstream(Some(&format!("origin/{}", branch)))
         .map_err(map_git_error)?;
     Ok(())
+}
+
+/// Tree diff excludes local-only commits and includes conflict siblings. No
+/// worktree traversal or rename detection: moves arrive as removal + addition.
+fn changed_tree_paths(
+    repo: &Repository,
+    before: Option<Oid>,
+    after: Option<Oid>,
+) -> Result<Vec<String>, String> {
+    if before == after {
+        return Ok(Vec::new());
+    }
+    let tree = |oid: Option<Oid>| -> Result<Option<git2::Tree<'_>>, String> {
+        oid.map(|id| {
+            repo.find_commit(id)
+                .and_then(|commit| commit.tree())
+                .map_err(map_git_error)
+        })
+        .transpose()
+    };
+    let before = tree(before)?;
+    let after = tree(after)?;
+    let diff = repo
+        .diff_tree_to_tree(before.as_ref(), after.as_ref(), None)
+        .map_err(map_git_error)?;
+    let mut paths = std::collections::BTreeSet::new();
+    for delta in diff.deltas() {
+        for file in [delta.old_file(), delta.new_file()] {
+            if let Some(path) = file.path().and_then(|path| path.to_str()) {
+                paths.insert(path.to_string());
+            }
+        }
+    }
+    Ok(paths.into_iter().collect())
 }
 
 // ── Core helpers ───────────────────────────────────────────────────────────────
@@ -1570,23 +1849,26 @@ pub fn fast_forward_to(
     let _timing = GitPhaseTimer::start("fast-forward checkout");
     let target_oid = fetch_commit.id();
     let local_ref_name = format!("refs/heads/{}", branch);
+    if repo.head().ok().and_then(|head| head.target()) == Some(target_oid) {
+        return Ok(());
+    }
+    // Keep the old HEAD as checkout's baseline. Updating the branch first
+    // makes unchanged old index entries look staged against the new commit;
+    // libgit2 may preserve them, including the absence of incoming notes.
+    let commit = repo.find_commit(target_oid).map_err(map_git_error)?;
+    repo.checkout_tree(commit.as_object(), Some(CheckoutBuilder::new().safe()))
+        .map_err(map_git_error)?;
     match repo.find_reference(&local_ref_name) {
         Ok(mut local_ref) => {
             local_ref
                 .set_target(target_oid, "Fast-forward")
                 .map_err(map_git_error)?;
-            repo.set_head(&local_ref_name).map_err(map_git_error)?;
-            repo.checkout_head(Some(CheckoutBuilder::new().safe()))
-                .map_err(map_git_error)?;
         }
         Err(_) => {
-            let commit = repo.find_commit(target_oid).map_err(map_git_error)?;
             repo.branch(branch, &commit, false).map_err(map_git_error)?;
-            repo.set_head(&local_ref_name).map_err(map_git_error)?;
-            repo.checkout_head(Some(CheckoutBuilder::new().safe()))
-                .map_err(map_git_error)?;
         }
     }
+    repo.set_head(&local_ref_name).map_err(map_git_error)?;
     Ok(())
 }
 
@@ -2358,5 +2640,164 @@ mod tests {
         assert_eq!(build_git_history(&root, 10).unwrap().len(), 1);
 
         fs::remove_dir_all(&app_dir).unwrap();
+    }
+    fn cycle_args(remote: &Path) -> GitSyncCycleArgs {
+        GitSyncCycleArgs {
+            remote_url: Some(remote.to_string_lossy().to_string()),
+            branch: Some("main".into()),
+            username: None,
+            password: None,
+            message: None,
+        }
+    }
+
+    #[test]
+    fn unified_cycle_diffs_remote_application_not_local_commits() {
+        let dir = std::env::temp_dir().join(format!("type-cycle-{}", uuid::Uuid::now_v7()));
+        let desktop_app = AppEnv::new(dir.join("desktop-app"));
+        let desktop_root = crate::ensured_notes_root(&desktop_app).unwrap();
+        let desktop_repo = ensure_git_repo(&desktop_root).unwrap();
+        for (name, body) in [
+            ("same.md", "same"),
+            ("deleted.md", "delete"),
+            ("moved.md", "move"),
+            ("edited.md", "before"),
+        ] {
+            fs::write(desktop_root.join(crate::STREAM_FOLDER).join(name), body).unwrap();
+        }
+        commit_all_changes(&desktop_repo, "initial", "main").unwrap();
+        let remote = dir.join("remote.git");
+        git2::build::RepoBuilder::new()
+            .bare(true)
+            .clone(desktop_root.to_str().unwrap(), &remote)
+            .unwrap();
+        ensure_origin_remote(&desktop_repo, remote.to_str().unwrap()).unwrap();
+        let phone_app = AppEnv::new(dir.join("phone-app"));
+        let phone_root = crate::ensured_notes_root(&phone_app).unwrap();
+        let phone = GitSyncAdapter::new(phone_app);
+        let first = phone.sync_cycle(cycle_args(&remote)).unwrap();
+        assert!(first.reset_required);
+        assert!(first.push_error.is_none());
+        assert!(!first.status.push_required);
+        let unchanged = phone.sync_cycle(cycle_args(&remote)).unwrap();
+        assert!(unchanged.changed_paths.is_empty());
+        assert!(unchanged.tree_patch.is_empty());
+        assert!(!unchanged.reset_required);
+        fs::write(
+            phone_root.join(crate::STREAM_FOLDER).join("local-only.md"),
+            "local edit",
+        )
+        .unwrap();
+        let local = phone.sync_cycle(cycle_args(&remote)).unwrap();
+        assert!(
+            local.changed_paths.is_empty(),
+            "a local commit must not trigger remote preview rebuilding"
+        );
+        assert!(local.push_error.is_none());
+        let desktop = GitSyncAdapter::new(desktop_app);
+        desktop
+            .pull(GitSyncArgs {
+                branch: Some("main".into()),
+                username: None,
+                password: None,
+            })
+            .unwrap();
+        assert!(desktop_root
+            .join(crate::STREAM_FOLDER)
+            .join("local-only.md")
+            .is_file());
+        fs::remove_file(desktop_root.join(crate::STREAM_FOLDER).join("deleted.md")).unwrap();
+        fs::write(
+            desktop_root.join(crate::STREAM_FOLDER).join("edited.md"),
+            "after",
+        )
+        .unwrap();
+        fs::create_dir_all(desktop_root.join("Work/Nested")).unwrap();
+        fs::rename(
+            desktop_root.join(crate::STREAM_FOLDER).join("moved.md"),
+            desktop_root.join("Work/Nested/moved.md"),
+        )
+        .unwrap();
+        crate::write_order_file(
+            &desktop_root.join("Work/Nested"),
+            &crate::OrderFile {
+                note_order: vec!["moved.md".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        desktop
+            .push(GitPushArgs {
+                message: None,
+                branch: Some("main".into()),
+                username: None,
+                password: None,
+            })
+            .unwrap();
+        fs::write(
+            phone_root
+                .join(crate::STREAM_FOLDER)
+                .join("another-local.md"),
+            "also local",
+        )
+        .unwrap();
+        let incoming = phone.sync_cycle(cycle_args(&remote)).unwrap();
+        assert!(incoming.push_error.is_none());
+        assert!(!incoming
+            .changed_paths
+            .iter()
+            .any(|path| path.contains("local")));
+        assert!(incoming
+            .changed_paths
+            .contains(&"_system/stream/edited.md".into()));
+        assert!(incoming
+            .removed_paths
+            .contains(&"_system/stream/deleted.md".into()));
+        assert!(incoming
+            .removed_paths
+            .contains(&"_system/stream/moved.md".into()));
+        assert!(incoming
+            .entries
+            .iter()
+            .any(|entry| entry.path == "Work/Nested/moved.md"));
+        assert_eq!(
+            incoming
+                .tree_patch
+                .iter()
+                .find(|folder| folder.path == "Work/Nested")
+                .unwrap()
+                .note_order,
+            vec!["moved.md"]
+        );
+        assert!(!incoming.status.push_required);
+        assert!(phone
+            .sync_cycle(cycle_args(&remote))
+            .unwrap()
+            .changed_paths
+            .is_empty());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn unified_offline_cycle_does_not_commit_a_draft() {
+        let dir = std::env::temp_dir().join(format!("type-cycle-offline-{}", uuid::Uuid::now_v7()));
+        let app = AppEnv::new(&dir);
+        let root = crate::ensured_notes_root(&app).unwrap();
+        let repo = ensure_git_repo(&root).unwrap();
+        fs::write(root.join(crate::STREAM_FOLDER).join("note.md"), "initial").unwrap();
+        let initial = commit_all_changes(&repo, "initial", "main").unwrap();
+        fs::write(
+            root.join(crate::STREAM_FOLDER).join("note.md"),
+            "unsynced draft",
+        )
+        .unwrap();
+        let result = GitSyncAdapter::new(app).sync_cycle(cycle_args(&dir.join("offline.git")));
+        assert!(result.is_err());
+        assert_eq!(repo.head().unwrap().target(), initial);
+        assert_eq!(
+            fs::read_to_string(root.join(crate::STREAM_FOLDER).join("note.md")).unwrap(),
+            "unsynced draft"
+        );
+        fs::remove_dir_all(dir).unwrap();
     }
 }

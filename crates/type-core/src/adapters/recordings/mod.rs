@@ -17,9 +17,9 @@ use crate::{
     allocate_note_file_name, collect_markdown_note_files, decode_audio_base64, generate_note_id,
     is_storage_folder_path, note_parent_folder_path, notes_root, now_ms, parse_note_front_matter,
     resolve_path, sanitize_relative, strip_root, uuid_tail_without_timestamp_prefix,
-    write_note_with_front_matter, NoteFileNameFormat, NoteFrontMatter, BASE64, STREAM_FOLDER,
-    RECORDINGS_STORAGE_FOLDER, RECORDING_STATUS_COMPLETED,
-    RECORDING_STATUS_FAILED, RECORDING_STATUS_PENDING, RECORDING_STATUS_PROCESSING,
+    write_note_with_front_matter, NoteFileNameFormat, NoteFrontMatter, BASE64,
+    RECORDINGS_STORAGE_FOLDER, RECORDING_STATUS_COMPLETED, RECORDING_STATUS_FAILED,
+    RECORDING_STATUS_PENDING, RECORDING_STATUS_PROCESSING, STREAM_FOLDER,
 };
 use base64::Engine as _;
 
@@ -321,28 +321,8 @@ impl RecordingsGateway for RecordingsAdapter {
     }
 
     fn save(&self, args: Self::SaveArgs) -> Result<Self::WriteResult, String> {
-        let root = crate::ensured_notes_root(&self.app)?;
-        let audio_bytes = decode_audio_base64(&args.audio_base64)?;
-        if audio_bytes.is_empty() {
-            return Err("Audio payload is empty.".to_string());
-        }
-
-        let (target_folder_rel, target_folder_path) =
-            resolve_recording_target_folder(&self.app, args.folder_path.as_deref())?;
-        let extension = audio_extension_from_mime(args.mime_type.as_deref());
-        validate_audio_payload(&audio_bytes, extension)?;
-        let audio_path = recording_audio_file_path(&root, extension)?;
-        fs::write(&audio_path, audio_bytes).map_err(|error| error.to_string())?;
-
-        let now = now_ms().unwrap_or(0);
-        write_recording_note(
-            &root,
-            &audio_path,
-            target_folder_rel,
-            &target_folder_path,
-            now,
-            args.file_name_format,
-        )
+        let bytes = decode_audio_base64(&args.audio_base64)?;
+        self.save_bytes(args, bytes)
     }
 
     fn queue_cloud(&self, args: Self::CloudQueueArgs) -> Result<Self::QueueResult, String> {
@@ -389,8 +369,8 @@ impl RecordingsGateway for RecordingsAdapter {
             .map(|recording| {
                 let folder_path = note_parent_folder_path(&recording.note_rel);
                 let audio_exists = recording.audio_path.is_file();
-                let archived_on_desktop = !audio_exists
-                    && crate::is_audio_evicted_locally(&root, &recording.audio_rel);
+                let archived_on_desktop =
+                    !audio_exists && crate::is_audio_evicted_locally(&root, &recording.audio_rel);
                 let mut error = recording.error.clone();
                 if !audio_exists && !archived_on_desktop {
                     error = Some(MISSING_AUDIO_ERROR.to_string());
@@ -436,13 +416,56 @@ impl RecordingsGateway for RecordingsAdapter {
 }
 
 impl RecordingsAdapter {
+    pub fn save_from_file(
+        &self,
+        source: &Path,
+        args: SaveRecordingArgs,
+    ) -> Result<RecordingWriteResult, String> {
+        self.save_bytes(args, fs::read(source).map_err(|error| error.to_string())?)
+    }
+    fn save_bytes(
+        &self,
+        args: SaveRecordingArgs,
+        audio_bytes: Vec<u8>,
+    ) -> Result<RecordingWriteResult, String> {
+        let root = crate::ensured_notes_root(&self.app)?;
+        if audio_bytes.is_empty() {
+            return Err("Audio payload is empty.".to_string());
+        }
+
+        let (target_folder_rel, target_folder_path) =
+            resolve_recording_target_folder(&self.app, args.folder_path.as_deref())?;
+        let extension = audio_extension_from_mime(args.mime_type.as_deref());
+        validate_audio_payload(&audio_bytes, extension)?;
+        let audio_path = recording_audio_file_path(&root, extension)?;
+        fs::write(&audio_path, audio_bytes).map_err(|error| error.to_string())?;
+
+        let now = now_ms().unwrap_or(0);
+        write_recording_note(
+            &root,
+            &audio_path,
+            target_folder_rel,
+            &target_folder_path,
+            now,
+            args.file_name_format,
+        )
+    }
+
     /// Resolve + validate a root-relative recording audio path into an
     /// absolute path, for shells that serve the file directly (e.g. the
     /// desktop app's Tauri asset protocol) instead of reading it into an
     /// IPC payload. Not part of [`RecordingsGateway`] — desktop-only.
     pub fn resolve_audio_absolute_path(&self, path: &str) -> Result<String, String> {
         let root = crate::ensured_notes_root(&self.app)?;
+        if crate::is_audio_evicted_locally(&root, path.trim()) {
+            return Err(
+                "Audio is archived on your computer and is no longer cached on this phone.".into(),
+            );
+        }
         let audio_path = resolve_recording_audio_absolute_path(&root, path)?;
+        if !audio_path.is_file() {
+            return Err(MISSING_AUDIO_ERROR.into());
+        }
         Ok(audio_path.to_string_lossy().into_owned())
     }
 
@@ -675,7 +698,10 @@ pub fn is_recording_audio_path_allowed(root: &Path, audio_path: &Path) -> bool {
 /// it lands inside the allowed recordings storage folders and actually exists.
 /// Shared by the base64 IPC read and the asset-protocol path resolver so both
 /// shells enforce the exact same boundary.
-pub fn resolve_recording_audio_absolute_path(root: &Path, path_rel: &str) -> Result<PathBuf, String> {
+pub fn resolve_recording_audio_absolute_path(
+    root: &Path,
+    path_rel: &str,
+) -> Result<PathBuf, String> {
     let rel = sanitize_relative(path_rel)?;
     let audio_path = root.join(rel);
     if !is_recording_audio_path_allowed(root, &audio_path) {
@@ -1429,7 +1455,8 @@ fn audio_import_inner(
     for source_rel in &args.source_paths {
         let source = PathBuf::from(source_rel);
         with_audio_import_state(|state| state.current = audio_import_title(&source));
-        let outcome = import_one_audio_file(root, target_folder_path, &source, args.file_name_format);
+        let outcome =
+            import_one_audio_file(root, target_folder_path, &source, args.file_name_format);
         with_audio_import_state(|state| {
             state.processed += 1;
             match outcome {

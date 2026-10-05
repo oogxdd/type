@@ -62,6 +62,25 @@ export type GitSyncStatus = {
   notes_root: string;
 };
 
+export type GitSyncFolderPatch = {
+  path: string;
+  exists: boolean;
+  folder_order: string[];
+  note_order: string[];
+};
+
+export type GitSyncCycleResult = {
+  status: GitSyncStatus;
+  changed_paths: string[];
+  reset_required: boolean;
+  tree_patch: GitSyncFolderPatch[];
+  entries: NoteEntry[];
+  removed_paths: string[];
+  push_error: string | null;
+};
+
+export type GitSyncCycleArgs = ConnectGitArgs & { message?: string };
+
 export type LocalSyncServerStatus = {
   supported: boolean;
   git_available: boolean;

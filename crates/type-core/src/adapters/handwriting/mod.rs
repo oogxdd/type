@@ -22,8 +22,8 @@ use crate::{
     is_storage_folder_path, note_parent_folder_path, notes_root, now_ms, parse_note_front_matter,
     resolve_path, sanitize_relative, strip_root, uuid_tail_without_timestamp_prefix,
     write_note_with_front_matter, NoteFileNameFormat, NoteFrontMatter, HANDWRITING_STORAGE_FOLDER,
-    STREAM_FOLDER, RECORDING_STATUS_COMPLETED, RECORDING_STATUS_FAILED, RECORDING_STATUS_PENDING,
-    RECORDING_STATUS_PROCESSING,
+    RECORDING_STATUS_COMPLETED, RECORDING_STATUS_FAILED, RECORDING_STATUS_PENDING,
+    RECORDING_STATUS_PROCESSING, STREAM_FOLDER,
 };
 
 mod huggingface;
@@ -180,23 +180,19 @@ pub struct HandwritingAdapter {
 }
 
 impl HandwritingAdapter {
-    pub fn new(app: AppEnv) -> Self {
-        Self { app }
+    pub fn save_from_file(
+        &self,
+        source: &Path,
+        args: SaveHandwritingAttachmentArgs,
+    ) -> Result<HandwritingAttachmentWriteResult, String> {
+        self.save_bytes(args, fs::read(source).map_err(|error| error.to_string())?)
     }
-}
-
-impl HandwritingGateway for HandwritingAdapter {
-    type SaveArgs = SaveHandwritingAttachmentArgs;
-    type WriteResult = HandwritingAttachmentWriteResult;
-    type QueueArgs = QueueHandwritingOcrArgs;
-    type QueueResult = HandwritingOcrQueueResult;
-    type ListResult = HandwritingOcrListResult;
-    type LocalStatusArgs = LocalOcrStatusArgs;
-    type LocalStatus = LocalOcrStatusResult;
-
-    fn save(&self, args: Self::SaveArgs) -> Result<Self::WriteResult, String> {
+    fn save_bytes(
+        &self,
+        args: SaveHandwritingAttachmentArgs,
+        image_bytes: Vec<u8>,
+    ) -> Result<HandwritingAttachmentWriteResult, String> {
         let root = crate::ensured_notes_root(&self.app)?;
-        let image_bytes = decode_image_base64(&args.image_base64)?;
         if image_bytes.is_empty() {
             return Err("Image payload is empty.".to_string());
         }
@@ -233,6 +229,25 @@ impl HandwritingGateway for HandwritingAdapter {
             note_path: strip_root(&root, &note_path),
             attachment_path: strip_root(&root, &attachment_path),
         })
+    }
+
+    pub fn new(app: AppEnv) -> Self {
+        Self { app }
+    }
+}
+
+impl HandwritingGateway for HandwritingAdapter {
+    type SaveArgs = SaveHandwritingAttachmentArgs;
+    type WriteResult = HandwritingAttachmentWriteResult;
+    type QueueArgs = QueueHandwritingOcrArgs;
+    type QueueResult = HandwritingOcrQueueResult;
+    type ListResult = HandwritingOcrListResult;
+    type LocalStatusArgs = LocalOcrStatusArgs;
+    type LocalStatus = LocalOcrStatusResult;
+
+    fn save(&self, args: Self::SaveArgs) -> Result<Self::WriteResult, String> {
+        let bytes = decode_image_base64(&args.image_base64)?;
+        self.save_bytes(args, bytes)
     }
 
     fn queue(&self, args: Self::QueueArgs) -> Result<Self::QueueResult, String> {

@@ -36,12 +36,13 @@ export const FolderScreen = () => {
   const route = useRoute<RouteProp<RootStackParamList, "Folder">>();
   const folder = useNotesStore((s) => findFolder(s.tree, route.params.path));
   const previews = useNotesStore((s) => s.folderPreviews.get(route.params.path));
+  const previewRevision = useNotesStore((s) => s.folderRevisions.get(route.params.path));
   const loading = useNotesStore((s) => s.loading);
   const refresh = useNotesStore((s) => s.refresh);
   const organizer = useNoteOrganizer(useNotesStore((s) => s.tree));
 
   const subfolders = useMemo(() => browsableFolders(folder), [folder]);
-  const rows = useMemo(() => folderNoteRows(folder, previews ?? new Map()), [folder, previews]);
+  const rows = useMemo(() => folderNoteRows(folder, previews ?? new Map()), [folder, previews, previewRevision]);
 
   // One virtualized list rather than a ScrollView of everything: a folder can
   // hold hundreds of notes.

@@ -27,9 +27,12 @@ export interface RawCore {
   getTree(): Promise<string>;
   readNote(path: string): Promise<string>;
   readNoteIfExists(path: string): Promise<string | null | undefined>;
+  readNoteForEditing?(path: string): Promise<string | null | undefined>;
   listNoteSummaries(paths: string[]): Promise<string>;
   createNote(argsJson: string): Promise<string>;
   writeNote(path: string, content: string): Promise<void>;
+  writeNoteChecked?(path: string, content: string, baseline: string): Promise<void>;
+  deleteNoteChecked?(path: string, baseline: string): Promise<void>;
   setNoteTimestamp(argsJson: string): Promise<void>;
   updateNoteMarkers(argsJson: string): Promise<void>;
   updateNoteTags(argsJson: string): Promise<void>;
@@ -61,6 +64,7 @@ export interface RawCore {
   getGitStatus(): Promise<string>;
   getGitHistory(argsJson: string | undefined): Promise<string>;
   connectGitRepo(argsJson: string): Promise<string>;
+  gitSyncCycle?(argsJson: string): Promise<string>;
   gitPull(argsJson: string): Promise<string>;
   gitCommit(argsJson: string): Promise<string>;
   gitPush(argsJson: string): Promise<string>;
@@ -77,6 +81,8 @@ export interface RawCore {
 
   // ── Recordings ──
   saveAudioRecording(argsJson: string): Promise<string>;
+  saveAudioRecordingFromFile?(sourcePath: string, argsJson: string): Promise<string>;
+  getRecordingPlaybackPath?(path: string): Promise<string>;
   queueRecordingTranscriptions(argsJson: string): Promise<string>;
   queueProviderTranscriptions(provider: RawTranscriptionProvider): Promise<string>;
   listRecordings(): Promise<string>;
@@ -85,6 +91,9 @@ export interface RawCore {
 
   // ── Photo attachments ──
   saveHandwritingAttachment(argsJson: string): Promise<string>;
+  saveHandwritingAttachmentFromFile?(sourcePath: string, argsJson: string): Promise<string>;
+  sealDraft?(content: string): Promise<string>;
+  openDraft?(content: string): Promise<string>;
 
   // ── Security ──
   getSecurityState(): Promise<string>;
@@ -95,9 +104,14 @@ export interface RawCore {
 }
 
 let rawCore: RawCore | null = null;
+type CoreCallRunner = <T>(method: string, run: () => Promise<T>) => Promise<T>;
+let runner: CoreCallRunner | null = null;
+let observedCore: RawCore | null = null;
+export const setCoreCallRunner = (next: CoreCallRunner | null) => { runner = next; observedCore = null; };
 
 export const setRawCore = (core: RawCore) => {
   rawCore = core;
+  observedCore = null;
 };
 
 export const isRawCoreSet = () => rawCore !== null;
@@ -110,5 +124,14 @@ export const getRawCore = (): RawCore => {
         "createMockCore() for demo mode."
     );
   }
-  return rawCore;
+  if (!runner) return rawCore;
+  const target = rawCore;
+  observedCore ??= new Proxy(target, {
+    get(core, key) {
+      const value = Reflect.get(core, key);
+      if (typeof value !== "function") return value;
+      return (...args: unknown[]) => runner ? runner(String(key), () => value.apply(core, args)) : value.apply(core, args);
+    },
+  });
+  return observedCore;
 };

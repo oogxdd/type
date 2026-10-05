@@ -16,6 +16,42 @@ const fixture = () => {
 };
 
 describe("the shared capture and saved-note page", () => {
+  it("does not repopulate a closed editor from a late native read", async () => {
+    const { pages, storage } = fixture();
+    let finish!: (content: string) => void;
+    const reading = new Promise<string>((resolve) => { finish = resolve; });
+    vi.mocked(storage.readNote).mockImplementationOnce(() => reading);
+    const opening = pages.open("a.md", ["a.md"]);
+    const closed = expect(opening).rejects.toThrow("closed");
+    await vi.waitFor(() => expect(storage.readNote).toHaveBeenCalledOnce());
+    pages.dispose(); finish("private body"); await closed;
+    expect(pages.session.currentContent()).toBe("");
+  });
+  it("waits for both draft writes before reporting failure at a lock boundary", async () => {
+    const { pages, storage } = fixture();
+    pages.session.onChange("draft");
+    await pages.open("a.md", ["a.md"]);
+    const retained = pages.snapshot().draft;
+    const snapshot = pages.snapshot();
+    snapshot.draft = { ...retained, content: "failed draft", dirty: true };
+    pages.restore(snapshot);
+    pages.session.onChange("slow browse save");
+    let finish!: () => void;
+    const slow = new Promise<void>((resolve) => { finish = resolve; });
+    vi.mocked(storage.writeNote).mockImplementation(async (path) => {
+      if (path === "draft.md") throw new Error("disk full");
+      await slow;
+    });
+    let settled = false;
+    const result = pages.flush().finally(() => { settled = true; });
+    const failure = expect(result).rejects.toThrow("disk full");
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+    finish(); await failure;
+    expect(pages.snapshot().draft.content).toBe("failed draft");
+    expect(pages.session.isDirty()).toBe(false);
+    pages.dispose();
+  });
   it("opens 100 pages directly in a 10,000-note store without requesting a tree", async () => {
     const core = createMockCore();
     await core.initCore("/tmp/type-pages-synthetic", "/tmp");

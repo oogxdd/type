@@ -295,8 +295,8 @@ describe("notes store", () => {
     await core.moveItems(toMove, "Work");
     const published: Map<string, unknown>[] = [];
     const unsubscribe = useNotesStore.subscribe((state, previous) => {
-      if (state.previews !== previous.previews && state.previews.size > 0) {
-        published.push(state.previews);
+      if (state.folderRevisions !== previous.folderRevisions && state.previews.size > 0) {
+        published.push(new Map(state.previews));
       }
     });
 
@@ -493,4 +493,53 @@ describe("notes store", () => {
     await refresh;
     expect(useNotesStore.getState().previews.has(old)).toBe(true);
   });
+  it("applies received edits/additions/deletions without a full tree read", async () => {
+    const kept = await createNote(core, "unchanged");
+    const edited = await createNote(core, "before");
+    const deleted = await createNote(core, "remove");
+    await useNotesStore.getState().refresh();
+    const untouched = useNotesStore.getState().previews.get(kept);
+    await core.writeNote(edited, "received update");
+    await core.deleteItems([deleted]);
+    const added = await createNote(core, "received addition");
+    const tree = JSON.parse(await core.getTree());
+    const entries = tree.children.find((node: { path: string }) => node.path === "_system").children
+      .find((node: { path: string }) => node.path === "_system/stream").notes
+      .filter((entry: { path: string }) => [edited, added].includes(entry.path));
+    const treeRead = vi.fn(core.getTree);
+    setRawCore({ ...core, getTree: treeRead });
+    previewCalls.length = 0;
+    await useNotesStore.getState().applySyncChanges({
+      status: JSON.parse(await core.getGitStatus()), changed_paths: [edited, deleted, added],
+      reset_required: false, entries, removed_paths: [deleted], push_error: null,
+      tree_patch: [{ path: "_system/stream", exists: true, note_order: [], folder_order: [] }],
+    });
+    expect(treeRead).not.toHaveBeenCalled();
+    expect(useNotesStore.getState().previews.get(kept)).toBe(untouched);
+    expect(useNotesStore.getState().previews.get(edited)?.title).toBe("received update");
+    expect(useNotesStore.getState().previews.get(added)?.title).toBe("received addition");
+    expect(useNotesStore.getState().previews.has(deleted)).toBe(false);
+    expect(useNotesStore.getState().notePaths.has(added)).toBe(true);
+    expect(useNotesStore.getState().notePaths.has(deleted)).toBe(false);
+  });
+
+  it("drops an incremental result when the working folder changes during its read", async () => {
+    const path = await createNote(core, "old workspace");
+    useWorkingFolder("delta-old");
+    await useNotesStore.getState().refresh();
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const entered = vi.fn();
+    setRawCore({ ...core, listNoteSummaries: async (paths) => { entered(); await pending; return core.listNoteSummaries(paths); } });
+    const apply = useNotesStore.getState().applySyncChanges({
+      status: JSON.parse(await core.getGitStatus()), changed_paths: [path], reset_required: false,
+      tree_patch: [], entries: [{ path, name: path.split("/").at(-1)!, version: "received" }], removed_paths: [], push_error: null,
+    });
+    await vi.waitFor(() => expect(entered).toHaveBeenCalledOnce());
+    useWorkingFolder("delta-new");
+    release(); await apply;
+    expect(useNotesStore.getState().tree).toBeNull();
+    expect(useNotesStore.getState().previews.size).toBe(0);
+  });
+
 });

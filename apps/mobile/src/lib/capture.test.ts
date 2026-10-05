@@ -23,6 +23,37 @@ const makeStorage = () => {
 };
 
 describe("CaptureSession", () => {
+  it("does not restore plaintext after disposal when a native save completes late", async () => {
+    let finish!: (path: string) => void;
+    const creating = new Promise<string>((resolve) => { finish = resolve; });
+    const createNote = vi.fn(() => creating);
+    const session = new CaptureSession({ createNote, writeNote: async () => {}, deleteNote: async () => {} });
+    session.onChange("private draft");
+    const saving = session.flush();
+    await vi.waitFor(() => expect(createNote).toHaveBeenCalledOnce());
+    session.dispose();
+    session.onChange("queued native input");
+    finish("saved.md"); await saving;
+    expect(session.currentContent()).toBe("");
+    expect(session.snapshot().savedContent).toBe("");
+  });
+  it("serializes a conflict copy behind an already running failed write", async () => {
+    let rejectWrite!: (error: Error) => void;
+    const writing = new Promise<void>((_resolve, reject) => { rejectWrite = reject; });
+    const createNote = vi.fn(async (content: string) => { expect(content).toBe("kept draft"); return "copy.md"; });
+    const session = new CaptureSession({ createNote, writeNote: () => writing, deleteNote: async () => {} }, 60_000, { path: "original.md", content: "baseline" });
+    session.onChange("kept draft");
+    const failed = session.flush();
+    await Promise.resolve();
+    const copy = session.saveCopy();
+    expect(createNote).not.toHaveBeenCalled();
+    rejectWrite(new Error("external edit"));
+    await expect(failed).rejects.toThrow("external edit");
+    await copy;
+    expect(session.currentPath()).toBe("copy.md");
+    expect(session.currentContent()).toBe("kept draft");
+    expect(session.isDirty()).toBe(false);
+  });
   it("creates the note once on first flush, then writes", async () => {
     const { storage, notes } = makeStorage();
     const session = new CaptureSession(storage, 10_000);
@@ -36,7 +67,7 @@ describe("CaptureSession", () => {
     session.onChange("hello world");
     await session.flush();
     expect(storage.createNote).toHaveBeenCalledTimes(1);
-    expect(storage.writeNote).toHaveBeenCalledWith("Feed/note-1.md", "hello world");
+    expect(storage.writeNote).toHaveBeenCalledWith("Feed/note-1.md", "hello world", "hello");
   });
 
   it("does not create anything for whitespace-only content", async () => {
@@ -67,7 +98,7 @@ describe("CaptureSession", () => {
     await session.flush();
     session.onChange("");
     expect(await session.commit()).toBeNull();
-    expect(storage.deleteNote).toHaveBeenCalledWith("Feed/note-1.md");
+    expect(storage.deleteNote).toHaveBeenCalledWith("Feed/note-1.md", "");
     expect(notes.size).toBe(0);
   });
 

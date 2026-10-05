@@ -125,3 +125,23 @@ pub(crate) fn to_json<T: serde::Serialize>(value: &T) -> Result<String, String> 
 pub(crate) fn from_json<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, String> {
     serde_json::from_str(json).map_err(|error| format!("Invalid arguments: {error}"))
 }
+
+/// Media input is a file in the host application's own container, not an
+/// arbitrary filesystem capability. Canonicalization rejects symlink escapes.
+pub(crate) fn media_source(path: &str) -> Result<std::path::PathBuf, String> {
+    let env = unlocked_env()?;
+    let source = std::path::Path::new(path)
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    let allowed = env
+        .documents_dir
+        .as_ref()
+        .and_then(|dir| dir.parent())
+        .unwrap_or(&env.app_data_dir)
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    if !source.starts_with(allowed) || !source.is_file() {
+        return Err("Media source must be a file in the app container.".into());
+    }
+    Ok(source)
+}

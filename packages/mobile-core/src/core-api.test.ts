@@ -9,6 +9,18 @@ describe("core-api over the mock core", () => {
     setRawCore(createMockCore({ now: () => 1_750_000_000_000 }));
   });
 
+  it("guards the editor baseline against external body edits and deletion", async () => {
+    const { path } = await core.createNote({ content: "\noriginal" });
+    expect(await core.readNoteForEditing(path)).toBe("\noriginal");
+    await core.writeNoteChecked(path, "mine", "\noriginal");
+    await core.writeNote(path, "external");
+    await expect(core.writeNoteChecked(path, "stale", "mine")).rejects.toThrow();
+    await expect(core.deleteNoteChecked(path, "mine")).rejects.toThrow();
+    expect(await core.readNote(path)).toBe("external");
+    await core.deleteNoteChecked(path, "external");
+    await expect(core.writeNoteChecked(path, "resurrect", "external")).rejects.toThrow();
+  });
+
   it("creates, writes, reads, and lists notes through the JSON boundary", async () => {
     const created = await core.createNote({ content: "hello" });
     expect(created.path.startsWith("_system/stream/")).toBe(true);

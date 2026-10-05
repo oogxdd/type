@@ -1,12 +1,11 @@
+import { beginNavigationTrace, recordResponsiveness } from "../lib/responsiveness-trace";
 // Persistent menu layer. HomeScreen owns all directional gestures.
 
 import { Ionicons } from "@expo/vector-icons";
-import { CommonActions, useNavigation } from "@react-navigation/native";
+import { CommonActions, useIsFocused, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  InteractionManager,
   Pressable,
   RefreshControl,
   SectionList,
@@ -33,7 +32,7 @@ import {
   toggleExpanded,
   type FolderTreeRow,
 } from "../lib/folder-tree";
-import { flushCaptureDraft } from "../lib/capture-draft";
+import { mobileRuntime } from "../core/runtime";
 import { formatRelativeTime } from "../lib/relative-time";
 import { useFeedSections } from "../lib/use-feed-sections";
 import { autoSyncLabel } from "../lib/sync-experience";
@@ -63,7 +62,7 @@ export const MenuScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { openCapture, suppressPressUntil, direction, dragging, feedScroll, folderScroll } = useHomeShell();
+  const { openCapture, pressAllowed, menuVisible, direction, dragging, feedScroll, folderScroll } = useHomeShell();
   const scrollProps = useAnimatedProps(() => ({
     scrollEnabled: !(dragging.value && (direction.value === "left" || direction.value === "right")),
   }));
@@ -81,7 +80,7 @@ export const MenuScreen = () => {
   const organizer = useNoteOrganizer(tree);
 
   // The pan and native lists run simultaneously; do not treat a swipe as a tap.
-  const pressWasSwipe = () => Date.now() < suppressPressUntil.value;
+  const pressWasSwipe = () => !pressAllowed();
 
   const openScreen = <Screen extends keyof RootStackParamList>(
     screen: Screen,
@@ -90,9 +89,9 @@ export const MenuScreen = () => {
     if (pressWasSwipe()) {
       return;
     }
-    void flushCaptureDraft().then(() => {
-      navigation.dispatch(CommonActions.navigate({ name: screen, params }));
-    }).catch(() => Alert.alert("Could not save draft", "Return to your note and try again."));
+    beginNavigationTrace();
+    mobileRuntime.requestSave();
+    navigation.dispatch(CommonActions.navigate({ name: screen, params }));
   };
 
   const selectTab = (next: MenuTab) => {
@@ -121,13 +120,14 @@ export const MenuScreen = () => {
   // Defer menu lists until after the initial blank page is visible.
   const [contentReady, setContentReady] = useState(false);
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => setContentReady(true));
-    return () => task.cancel();
+    const task = requestIdleCallback(() => setContentReady(true), { timeout: 500 });
+    return () => cancelIdleCallback(task);
   }, []);
 
   // The persistent layer subscribes to its Stream inputs. The worker keeps
   // sorted history and returns changed sections independently of sync status.
-  const feedSections = useFeedSections(filter, contentReady);
+  const focused = useIsFocused();
+  const feedSections = useFeedSections(filter, contentReady && menuVisible && focused);
   const folderRows = useMemo(
     () => (contentReady ? flattenFolderTree(tree, expanded) : []),
     [contentReady, tree, expanded]
@@ -464,6 +464,10 @@ const BottomItem = ({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      testID={`menu-${label.toLowerCase()}`}
+      onPressIn={() => recordResponsiveness("menu press feedback")}
       style={({ pressed }) => [styles.bottomItem, { opacity: pressed ? 0.6 : 1 }]}
     >
       <Ionicons name={icon} size={18} color={theme.colors.secondaryText} />

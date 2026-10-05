@@ -169,6 +169,17 @@ rewriting desktop history, pair a **new empty phone working folder**; reusing th
 old repository can restore the removed audio history. Core sync fixes require a
 native app rebuild, not only a JavaScript OTA update.
 
+## Runtime and responsiveness
+
+Drafts survive navigation through the application runtime; Settings and Sync
+open while saving and previews continue in the background. Failed saves retain
+text and offer Retry save / Save a copy. File media import, guarded note saves
+and encrypted recovery require rebuilt UniFFI bindings and a native app build.
+The rebuilt sync core sends one combined cycle and publishes changed-note
+previews without a full tree refresh; older native builds retain the fallback.
+
+See [runtime boundaries and the isolated Release XCTest harness](../../docs/MOBILE_RUNTIME.md).
+
 ## Backups
 
 The Rust core creates a complete ZIP containing every configured working

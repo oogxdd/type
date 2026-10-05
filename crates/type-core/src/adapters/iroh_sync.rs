@@ -14,7 +14,7 @@
 //!    had acknowledged. A handler that replies and returns therefore races its
 //!    own reply away. The desktop serves streams in a loop until the peer closes
 //!    instead.
-//! 2. **The phone keeps one connection per computer.** Every tunnelled git
+//! 2. **The phone reuses its text connection per computer.** Every tunnelled git
 //!    connection, the pairing check, and each audio offer is a separate QUIC
 //!    stream on it. That removes a per-connection handshake and means no reply
 //!    can race a connection teardown.
@@ -370,7 +370,9 @@ async fn serve_iroh_connection(
         let (send, recv) = match connection.accept_bi().await {
             Ok(pair) => pair,
             Err(error) => {
-                eprintln!("[iroh-sync] desktop connection from {remote_endpoint_id} ended: {error}");
+                eprintln!(
+                    "[iroh-sync] desktop connection from {remote_endpoint_id} ended: {error}"
+                );
                 break;
             }
         };
@@ -804,8 +806,13 @@ impl PhoneProxy {
     async fn bind(port: u16, dialer: IrohDialer) -> Result<Self, String> {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", port))
             .await
-            .map_err(|error| format!("Failed to start the phone sync proxy on port {port}: {error}"))?;
-        let port = listener.local_addr().map_err(|error| error.to_string())?.port();
+            .map_err(|error| {
+                format!("Failed to start the phone sync proxy on port {port}: {error}")
+            })?;
+        let port = listener
+            .local_addr()
+            .map_err(|error| error.to_string())?
+            .port();
         let task = tokio::spawn(async move {
             loop {
                 let (tcp, peer) = match listener.accept().await {
@@ -838,7 +845,7 @@ impl PhoneProxy {
 }
 
 struct IrohClientHandle {
-    runtime: tokio::runtime::Runtime,
+    runtime: Arc<tokio::runtime::Runtime>,
     router: Router,
     blobs: BlobStore,
     dialer: IrohDialer,
@@ -900,17 +907,6 @@ impl IrohClientHandle {
         self.run_pairing_check(pairing_token);
     }
 
-    /// Settle the audio question now, dialling if that is what it takes. The
-    /// archive path calls this because it is about to need the connection
-    /// anyway, so the answer costs nothing extra there — and without it a
-    /// properly paired phone would keep falling back to Git after every launch.
-    fn ensure_pairing_checked(&self) {
-        if self.dialer.diagnostics().paired {
-            return;
-        }
-        self.run_pairing_check("");
-    }
-
     fn run_pairing_check(&self, pairing_token: &str) {
         let outcome = self.runtime.block_on(async {
             tokio::time::timeout(
@@ -945,11 +941,15 @@ impl IrohClientHandle {
             runtime, router, ..
         } = self;
         let _ = runtime.block_on(router.shutdown());
-        runtime.shutdown_background();
+        if let Ok(runtime) = Arc::try_unwrap(runtime) {
+            runtime.shutdown_background();
+        }
     }
 }
 
 static CLIENT: Mutex<Option<IrohClientHandle>> = Mutex::new(None);
+// Audio serializes receipts independently; it never owns the text proxy lock.
+static AUDIO_ARCHIVE: Mutex<()> = Mutex::new(());
 
 /// Start (or re-point) the phone's loopback proxy for an Iroh pairing.
 ///
@@ -972,7 +972,9 @@ pub fn start_iroh_sync_client(
     let client = guard
         .as_mut()
         .ok_or_else(|| "The Iroh sync client is unavailable.".to_string())?;
-    client.runtime.block_on(client.proxy.ensure_running(client.dialer.clone()))?;
+    client
+        .runtime
+        .block_on(client.proxy.ensure_running(client.dialer.clone()))?;
     client.set_target(target);
     client.refresh_pairing(&pairing_token);
     let status = client.status_for_remote(&args.remote_url)?;
@@ -1043,7 +1045,7 @@ fn create_iroh_client(app: &AppEnv, target: RemoteTarget) -> Result<IrohClientHa
     let proxy = runtime.block_on(PhoneProxy::bind(IROH_CLIENT_PROXY_PORT, dialer.clone()))?;
 
     Ok(IrohClientHandle {
-        runtime,
+        runtime: Arc::new(runtime),
         router,
         blobs,
         dialer,
@@ -1067,12 +1069,32 @@ pub fn archive_mobile_audio_with_iroh(app: &AppEnv) -> Result<IrohAudioArchiveRe
         failed: 0,
         error: None,
     };
-    let guard = CLIENT
+    let _archive = AUDIO_ARCHIVE
         .lock()
-        .map_err(|_| "Iroh client state is poisoned.".to_string())?;
-    let client = guard
-        .as_ref()
-        .ok_or_else(|| "Start the Iroh sync connection before archiving audio.".to_string())?;
+        .map_err(|_| "Audio archive state is poisoned.".to_string())?;
+    let (runtime, endpoint, blobs, dialer) = {
+        let guard = CLIENT
+            .lock()
+            .map_err(|_| "Iroh client state is poisoned.".to_string())?;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| "Start the Iroh sync connection before archiving audio.".to_string())?;
+        // Pin the computer for this archive. A later QR re-pair cannot route
+        // these recordings to a different endpoint. Its own connection also
+        // avoids resetting the text tunnel when an audio transfer fails.
+        let dialer = IrohDialer {
+            endpoint: client.dialer.endpoint.clone(),
+            remote: Arc::new(Mutex::new(client.dialer.target()?)),
+            connection: Arc::new(tokio::sync::Mutex::new(None)),
+            diagnostics: Arc::new(Mutex::new(client.dialer.diagnostics())),
+        };
+        (
+            client.runtime.clone(),
+            client.router.endpoint().clone(),
+            client.blobs.clone(),
+            dialer,
+        )
+    }; // CLIENT is free before any hashing, pairing or network operation.
 
     // A failed pairing must never silently move recordings into permanent Git
     // history. Keep the local files for the next authorized Iroh attempt.
@@ -1081,16 +1103,34 @@ pub fn archive_mobile_audio_with_iroh(app: &AppEnv) -> Result<IrohAudioArchiveRe
         .filter(|recording| recording.audio_path.is_file())
         .count();
     if pending > 0 {
-        client.ensure_pairing_checked();
+        if !dialer.diagnostics().paired {
+            let result = runtime.block_on(async {
+                tokio::time::timeout(IROH_PAIRING_CHECK_TIMEOUT, check_iroh_pairing(&dialer, ""))
+                    .await
+                    .map_err(|_| "Audio pairing check timed out.".to_string())?
+            });
+            dialer.update(|state| match result {
+                Ok(()) => {
+                    state.paired = true;
+                    state.pair_error = None;
+                }
+                Err(error) => {
+                    state.paired = false;
+                    state.pair_error = Some(error);
+                }
+            });
+        }
     }
-    let diagnostics = client.dialer.diagnostics();
+    let diagnostics = dialer.diagnostics();
     if !diagnostics.paired {
         result.skipped = pending;
         result.error = Some(diagnostics.pair_error.unwrap_or_else(|| {
             "This phone is not paired for direct audio transfer. Scan the QR code in desktop Settings → Sync again.".to_string()
         }));
-        let repo = crate::ensure_git_repo(&root)?;
-        crate::set_audio_git_exclusion(&repo, true)?;
+        crate::application::workspace::with_workspace_write(&root, || {
+            let repo = crate::ensure_git_repo(&root)?;
+            crate::set_audio_git_exclusion(&repo, true)
+        })?;
         return Ok(result);
     }
 
@@ -1122,40 +1162,37 @@ pub fn archive_mobile_audio_with_iroh(app: &AppEnv) -> Result<IrohAudioArchiveRe
         // hangs here indefinitely instead of moving on to the next recording
         // (or, before the sync phase split, blocking the whole push).
         let audio_rel = recording.audio_rel.clone();
-        let outcome = client.runtime.block_on(tokio::time::timeout(
-            IROH_AUDIO_TRANSFER_TIMEOUT,
-            async {
-                let (header, blob_tag) = prepare_audio_blob_offer(
-                    client.router.endpoint(),
-                    &client.blobs,
-                    &recording.audio_path,
-                    audio_rel.clone(),
-                    sha256.clone(),
-                    byte_length,
-                )
-                .await?;
-                send_audio_blob_offer(&client.dialer, &header).await?;
-                // The temporary tag keeps the source alive for the entire
-                // transfer. Dropping it makes the imported cache entry
-                // eligible for blob-store GC.
-                drop(blob_tag);
-                Ok::<(), String>(())
-            },
-        ));
-        match outcome {
-            Ok(Ok(())) => match crate::record_desktop_audio_ack(
-                &root,
+        let outcome = runtime.block_on(tokio::time::timeout(IROH_AUDIO_TRANSFER_TIMEOUT, async {
+            let (header, blob_tag) = prepare_audio_blob_offer(
+                &endpoint,
+                &blobs,
+                &recording.audio_path,
                 audio_rel.clone(),
-                sha256,
+                sha256.clone(),
                 byte_length,
-            ) {
-                Ok(()) => result.uploaded += 1,
-                Err(error) => {
-                    eprintln!("[iroh-sync] could not record archive receipt for {audio_rel}: {error}");
-                    result.failed += 1;
-                    result.error = Some(error);
+            )
+            .await?;
+            send_audio_blob_offer(&dialer, &header).await?;
+            // The temporary tag keeps the source alive for the entire
+            // transfer. Dropping it makes the imported cache entry
+            // eligible for blob-store GC.
+            drop(blob_tag);
+            Ok::<(), String>(())
+        }));
+        match outcome {
+            Ok(Ok(())) => {
+                match crate::record_desktop_audio_ack(&root, audio_rel.clone(), sha256, byte_length)
+                {
+                    Ok(()) => result.uploaded += 1,
+                    Err(error) => {
+                        eprintln!(
+                            "[iroh-sync] could not record archive receipt for {audio_rel}: {error}"
+                        );
+                        result.failed += 1;
+                        result.error = Some(error);
+                    }
                 }
-            },
+            }
             Ok(Err(error)) => {
                 eprintln!("[iroh-sync] audio archive failed for {audio_rel}: {error}");
                 result.failed += 1;
@@ -1173,15 +1210,19 @@ pub fn archive_mobile_audio_with_iroh(app: &AppEnv) -> Result<IrohAudioArchiveRe
         }
     }
 
-    let repo = crate::ensure_git_repo(&root)?;
-    crate::set_audio_git_exclusion(&repo, true)?;
+    crate::application::workspace::with_workspace_write(&root, || {
+        let repo = crate::ensure_git_repo(&root)?;
+        crate::set_audio_git_exclusion(&repo, true)
+    })?;
     Ok(result)
 }
 
 pub fn set_mobile_audio_git_exclusion(app: &AppEnv, enabled: bool) -> Result<(), String> {
     let root = crate::ensured_notes_root(app)?;
-    let repo = crate::ensure_git_repo(&root)?;
-    crate::set_audio_git_exclusion(&repo, enabled)
+    crate::application::workspace::with_workspace_write(&root, || {
+        let repo = crate::ensure_git_repo(&root)?;
+        crate::set_audio_git_exclusion(&repo, enabled)
+    })
 }
 
 /// Stop the process-global phone proxy. Safe when no proxy is running.
@@ -1622,10 +1663,10 @@ mod tests {
         // scan would be rejected.
         let folder = temp_folder("rotated");
         let auth = test_auth(&folder, "f00dbabe");
-        auth.consumed_pairing_tokens
-            .lock()
-            .unwrap()
-            .push(("deadbeef".to_string(), Instant::now() + Duration::from_secs(300)));
+        auth.consumed_pairing_tokens.lock().unwrap().push((
+            "deadbeef".to_string(),
+            Instant::now() + Duration::from_secs(300),
+        ));
         auth.authorize_with_pairing_token("phone-endpoint", "deadbeef")
             .unwrap();
         assert!(auth.is_authorized("phone-endpoint"));
@@ -1636,10 +1677,10 @@ mod tests {
     fn an_expired_consumed_token_no_longer_pairs() {
         let folder = temp_folder("expired");
         let auth = test_auth(&folder, "f00dbabe");
-        auth.consumed_pairing_tokens
-            .lock()
-            .unwrap()
-            .push(("deadbeef".to_string(), Instant::now() - Duration::from_secs(1)));
+        auth.consumed_pairing_tokens.lock().unwrap().push((
+            "deadbeef".to_string(),
+            Instant::now() - Duration::from_secs(1),
+        ));
         assert!(auth
             .authorize_with_pairing_token("phone-endpoint", "deadbeef")
             .is_err());
@@ -1652,8 +1693,8 @@ mod tests {
         // address set in the ticket goes stale, the id never does.
         let computer = SecretKey::from_bytes(&[7u8; 32]).public();
         let relay = "https://relay.example.test./".parse().unwrap();
-        let ticket = EndpointTicket::new(EndpointAddr::new(computer).with_relay_url(relay))
-            .to_string();
+        let ticket =
+            EndpointTicket::new(EndpointAddr::new(computer).with_relay_url(relay)).to_string();
         let target = remote_target_from_args(&StartIrohClientArgs {
             ticket,
             remote_url: "ssh://pair-deadbeef@192.168.1.2:9418/Notes".to_string(),
@@ -1713,13 +1754,17 @@ mod tests {
         proxy.task.abort();
         let _ = (&mut proxy.task).await;
         assert!(proxy.task.is_finished());
-        assert!(tokio::net::TcpStream::connect(("127.0.0.1", original_port)).await.is_err());
+        assert!(tokio::net::TcpStream::connect(("127.0.0.1", original_port))
+            .await
+            .is_err());
 
         proxy.ensure_running(dialer.clone()).await.unwrap();
         assert!(!proxy.task.is_finished());
         assert_eq!(proxy.port, original_port);
         assert_eq!(dialer.endpoint.id(), endpoint_id);
-        let connection = tokio::net::TcpStream::connect(("127.0.0.1", original_port)).await.unwrap();
+        let connection = tokio::net::TcpStream::connect(("127.0.0.1", original_port))
+            .await
+            .unwrap();
         // A healthy listener must be reused; rebinding would fail on this port.
         proxy.ensure_running(dialer.clone()).await.unwrap();
         drop(connection);
@@ -1752,7 +1797,9 @@ mod tests {
     async fn a_full_response_survives_the_tunnel() {
         let folder = temp_folder("tunnel");
         // Stand in for the embedded SSH server: echo whatever arrives.
-        let echo = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let echo = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
         let echo_port = echo.local_addr().unwrap().port();
         tokio::spawn(async move {
             while let Ok((mut stream, _)) = echo.accept().await {
@@ -1803,7 +1850,6 @@ mod tests {
         fs::remove_dir_all(folder).ok();
     }
 
-
     /// The phone build already in people's hands (mobile-v0.2.6) speaks the
     /// pre-fix client protocol: a fresh connection per operation, one stream on
     /// it, then a drop. This asserts the *desktop* half of the fix is enough for
@@ -1844,7 +1890,9 @@ mod tests {
     #[tokio::test]
     async fn a_released_phone_still_pairs_and_tunnels() {
         let folder = temp_folder("released-phone");
-        let echo = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let echo = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
         let echo_port = echo.local_addr().unwrap().port();
         tokio::spawn(async move {
             while let Ok((mut stream, _)) = echo.accept().await {
@@ -1866,7 +1914,10 @@ mod tests {
         assert!(auth.is_authorized(&phone_id));
 
         // …and the released client's per-git-connection dial still tunnels.
-        let connection = phone.connect(desktop.addr.clone(), IROH_ALPN).await.unwrap();
+        let connection = phone
+            .connect(desktop.addr.clone(), IROH_ALPN)
+            .await
+            .unwrap();
         let (mut send, mut recv) = connection.open_bi().await.unwrap();
         send.write_all(IROH_SSH_HANDSHAKE).await.unwrap();
         send.write_all(b"git-upload-pack").await.unwrap();

@@ -99,3 +99,13 @@ pub async fn git_push(args_json: String) -> Result<String, CoreError> {
     })
     .await
 }
+
+/// Unified workflow with the paths changed by remote application.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn git_sync_cycle(args_json: String) -> Result<String, CoreError> {
+    run_blocking(move || {
+        let args: type_core::GitSyncCycleArgs = from_json(&args_json)?;
+        to_json(&git_sync_use_cases()?.sync_cycle(args)?)
+    })
+    .await
+}

@@ -55,6 +55,20 @@ where
         self.crypto.decrypt_note_body(&body)
     }
 
+    /// Nullable editor read; the codec owns separator handling, preserving
+    /// intentional leading newlines before decryption.
+    pub fn read_note_for_editing(&self, path: &str) -> Result<Option<String>, String> {
+        let full_path = self.repository.resolve_path(path)?;
+        match self.repository.entry_kind(&full_path)? {
+            None => return Ok(None),
+            Some(NoteStorageEntryKind::File) => {}
+            _ => return Err("Note path is not a file.".into()),
+        }
+        let raw = self.repository.read_to_string(&full_path)?;
+        let (_, body) = self.documents.parse(&raw);
+        self.crypto.decrypt_note_body(&body).map(Some)
+    }
+
     /// A missing note is distinct from an invalid path, locked body or I/O error.
     pub fn read_note_if_exists(&self, path: &str) -> Result<Option<String>, String> {
         let full_path = self.repository.resolve_path(path)?;

@@ -1,3 +1,4 @@
+import { preparePerformanceFixture } from "./performance-fixture";
 // Wires a RawCore implementation and initializes the Rust core.
 //
 // The package root is a committed in-memory fallback in clean clones and
@@ -8,7 +9,7 @@
 import * as FileSystem from "expo-file-system/legacy";
 
 import * as generated from "@typenotes/mobile-core";
-import { initCore } from "@typenotes/mobile-core/core-api";
+import { getProfiles, initCore, setProfileNotesRoot } from "@typenotes/mobile-core/core-api";
 import {
   isRawCoreSet,
   setRawCore,
@@ -36,6 +37,11 @@ export const bootCore = async (): Promise<BootResult> => {
   const documents = FileSystem.documentDirectory
     ? uriToPath(FileSystem.documentDirectory)
     : "";
-  await initCore(`${documents}typenotes`, documents);
+  const fixture = demoMode ? null : await preparePerformanceFixture();
+  await initCore(fixture?.appData ?? `${documents}typenotes`, fixture?.documents ?? documents);
+  if (fixture) {
+    const profiles = await getProfiles();
+    await setProfileNotesRoot(profiles.active_profile_id, fixture.notes);
+  }
   return { demoMode };
 };

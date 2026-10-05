@@ -15,6 +15,48 @@ const preview = (title: string, date: number): NotePreview => ({
 describe("note worker contracts", () => {
   beforeEach(() => { processNoteJob({ kind: "reset", scope }); });
 
+  it("sends one changed row rather than a whole 10,000-row section", () => {
+    const now = Date.now();
+    const notes = Array.from({ length: 10_000 }, (_, index) => ({ path: `${index}.md`, name: `${index}.md` }));
+    const changes: PreviewChange[] = notes.map((note) => [note.path, { version: "1", preview: preview(note.name, now) }]);
+    processNoteJob({ kind: "update", scope, changes, removed: [] });
+    const first = processNoteJob({ kind: "feed", scope, key: "delta", notes, filter: "all", now, incremental: true });
+    const data: NonNullable<typeof first.sections>[number]["data"] = [];
+    for (const patch of first.sectionPatches!) for (const splice of patch.splices) data.splice(splice.index, splice.deleteCount, ...splice.rows);
+    expect(data).toHaveLength(10_000);
+    processNoteJob({ kind: "update", scope, changes: [["5000.md", { version: "2", preview: preview("edited", now) }]], removed: [] });
+    const next = processNoteJob({ kind: "feed", scope, key: "delta", filter: "all", now, incremental: true });
+    expect(next.sectionPatches!.flatMap((patch) => patch.splices.flatMap((splice) => splice.rows))).toHaveLength(1);
+    for (const patch of next.sectionPatches!) for (const splice of patch.splices) data.splice(splice.index, splice.deleteCount, ...splice.rows);
+    expect(data[5000].preview.title).toBe("edited");
+    expect(data).toHaveLength(10_000);
+  });
+
+  it("applies incremental insertion, deletion, reordering, filtering and section removal", () => {
+    const now = Date.now();
+    const notes = ["a", "b", "c"].map((name) => ({ name, path: `${name}.md` }));
+    processNoteJob({ kind: "update", scope, changes: notes.map((note, index) => [note.path, { version: "1", preview: preview(note.name, now - index) }]), removed: [] });
+    const held = new Map<string, NonNullable<ReturnType<typeof processNoteJob>["sections"]>[number]["data"]>();
+    const apply = (filter: "all" | "active" | "archived", entries = notes) => {
+      const result = processNoteJob({ kind: "feed", scope, key: "delta", notes: entries, filter, now, incremental: true });
+      for (const patch of result.sectionPatches!) {
+        const data = held.get(patch.title) ?? [];
+        for (const splice of patch.splices) data.splice(splice.index, splice.deleteCount, ...splice.rows);
+        held.set(patch.title, data);
+      }
+      for (const title of held.keys()) { if (!result.sectionTitles!.includes(title)) held.delete(title); }
+      return result.sectionTitles!.flatMap((title) => held.get(title)!.map((row) => row.path));
+    };
+    expect(apply("all")).toEqual(["a.md", "b.md", "c.md"]);
+    processNoteJob({ kind: "update", scope, changes: [["c.md", { version: "2", preview: { ...preview("c", now + 1), isArchived: true } }]], removed: [] });
+    expect(apply("all")).toEqual(["c.md", "a.md", "b.md"]);
+    expect(apply("archived")).toEqual(["c.md"]);
+    expect(apply("active")).toEqual(["a.md", "b.md"]);
+    expect(apply("all", [notes[1]])).toEqual(["b.md"]);
+    expect(apply("all", [])).toEqual([]);
+    expect(apply("all", notes)).toEqual(["c.md", "a.md", "b.md"]);
+  });
+
   it("sorts 10,000 notes once, then returns only changed date sections", () => {
     const now = Date.now();
     const folder: FolderNode = { name: "stream", path: "_system/stream", children: [], notes: [] };

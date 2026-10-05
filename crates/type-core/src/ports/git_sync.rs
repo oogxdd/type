@@ -66,6 +66,8 @@ pub trait GitSyncGateway {
     type PullArgs;
     type CommitArgs;
     type PushArgs;
+    type CycleArgs;
+    type CycleResult;
 
     fn generate_ssh_key(&self) -> Result<String, String>;
     fn ssh_public_key(&self) -> Result<Option<String>, String>;
@@ -76,6 +78,7 @@ pub trait GitSyncGateway {
     fn pull(&self, args: Self::PullArgs) -> Result<Self::Status, String>;
     fn commit(&self, args: Self::CommitArgs) -> Result<Self::Status, String>;
     fn push(&self, args: Self::PushArgs) -> Result<Self::Status, String>;
+    fn sync_cycle(&self, args: Self::CycleArgs) -> Result<Self::CycleResult, String>;
 }
 
 // ─── Implementation Notes ─────────────────────────────────────────────────────

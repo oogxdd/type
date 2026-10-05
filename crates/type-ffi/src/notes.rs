@@ -8,6 +8,55 @@ use type_core::{
 
 use crate::{from_json, run_blocking, to_json, unlocked_env, CoreError};
 
+fn with_note_write<T>(run: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    let root = notes_root(&unlocked_env()?)?;
+    type_core::application::workspace::with_workspace_write(&root, run)
+}
+
+// Compare the decrypted body; marker-only frontmatter changes stay compatible.
+fn editing_body(path: &str) -> Result<Option<String>, String> {
+    notes_service()?.read_note_for_editing(path)
+}
+
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn read_note_for_editing(path: String) -> Result<Option<String>, CoreError> {
+    run_blocking(move || with_note_write(|| editing_body(&path))).await
+}
+
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn write_note_checked(
+    path: String,
+    content: String,
+    baseline: String,
+) -> Result<(), CoreError> {
+    run_blocking(move || {
+        with_note_write(|| {
+            if editing_body(&path)?.as_deref() != Some(baseline.as_str()) {
+                return Err(
+                    "This note changed outside the editor. Your draft is still here.".into(),
+                );
+            }
+            notes_service()?.write_note(&path, &content)
+        })
+    })
+    .await
+}
+
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn delete_note_checked(path: String, baseline: String) -> Result<(), CoreError> {
+    run_blocking(move || {
+        with_note_write(|| {
+            if editing_body(&path)?.as_deref() != Some(baseline.as_str()) {
+                return Err(
+                    "This note changed outside the editor. Your draft is still here.".into(),
+                );
+            }
+            notes_service()?.delete_items(vec![path])
+        })
+    })
+    .await
+}
+
 fn notes_service() -> Result<
     NotesService<
         FilesystemNotesRepository,
@@ -50,14 +99,14 @@ pub async fn read_note_if_exists(path: String) -> Result<Option<String>, CoreErr
 pub async fn create_note(args_json: String) -> Result<String, CoreError> {
     run_blocking(move || {
         let args: CreateNoteArgs = from_json(&args_json)?;
-        to_json(&notes_service()?.create_note(args)?)
+        with_note_write(|| to_json(&notes_service()?.create_note(args)?))
     })
     .await
 }
 
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn write_note(path: String, content: String) -> Result<(), CoreError> {
-    run_blocking(move || notes_service()?.write_note(&path, &content)).await
+    run_blocking(move || with_note_write(|| notes_service()?.write_note(&path, &content))).await
 }
 
 /// `args_json`: `SetNoteTimestampArgs`.
@@ -65,7 +114,7 @@ pub async fn write_note(path: String, content: String) -> Result<(), CoreError> 
 pub async fn set_note_timestamp(args_json: String) -> Result<(), CoreError> {
     run_blocking(move || {
         let args: SetNoteTimestampArgs = from_json(&args_json)?;
-        notes_service()?.set_note_timestamp(args)
+        with_note_write(|| notes_service()?.set_note_timestamp(args))
     })
     .await
 }
@@ -75,7 +124,9 @@ pub async fn set_note_timestamp(args_json: String) -> Result<(), CoreError> {
 pub async fn update_note_markers(args_json: String) -> Result<(), CoreError> {
     run_blocking(move || {
         let args: SetNoteMarkersArgs = from_json(&args_json)?;
-        notes_service()?.update_note_markers(&args.path, args.archived, args.reviewed)
+        with_note_write(|| {
+            notes_service()?.update_note_markers(&args.path, args.archived, args.reviewed)
+        })
     })
     .await
 }
@@ -105,18 +156,18 @@ pub async fn list_note_summaries(paths: Vec<String>) -> Result<String, CoreError
 
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn move_items(items: Vec<String>, destination: String) -> Result<(), CoreError> {
-    run_blocking(move || notes_service()?.move_items(items, destination)).await
+    run_blocking(move || with_note_write(|| notes_service()?.move_items(items, destination))).await
 }
 
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn delete_items(items: Vec<String>) -> Result<(), CoreError> {
-    run_blocking(move || notes_service()?.delete_items(items)).await
+    run_blocking(move || with_note_write(|| notes_service()?.delete_items(items))).await
 }
 
 /// Returns the item's new relative path.
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn rename_item(path: String, new_name: String) -> Result<String, CoreError> {
-    run_blocking(move || notes_service()?.rename_item(&path, &new_name)).await
+    run_blocking(move || with_note_write(|| notes_service()?.rename_item(&path, &new_name))).await
 }
 
 /// `args_json`: `SetOrderArgs`.
@@ -124,7 +175,7 @@ pub async fn rename_item(path: String, new_name: String) -> Result<String, CoreE
 pub async fn set_order(args_json: String) -> Result<(), CoreError> {
     run_blocking(move || {
         let args: SetOrderArgs = from_json(&args_json)?;
-        notes_service()?.set_order(args)
+        with_note_write(|| notes_service()?.set_order(args))
     })
     .await
 }
@@ -133,7 +184,7 @@ pub async fn set_order(args_json: String) -> Result<(), CoreError> {
 pub async fn update_note_tags(args_json: String) -> Result<(), CoreError> {
     run_blocking(move || {
         let args: type_core::domain::notes::SetNoteTagsArgs = from_json(&args_json)?;
-        notes_service()?.update_note_tags(&args.path, args.tags)
+        with_note_write(|| notes_service()?.update_note_tags(&args.path, args.tags))
     })
     .await
 }

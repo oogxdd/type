@@ -1,3 +1,4 @@
+import { finishNavigationTrace } from "./lib/responsiveness-trace";
 import {
   DarkTheme,
   DefaultTheme,
@@ -7,7 +8,6 @@ import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  AppState,
   Linking,
   StyleSheet,
   Text,
@@ -19,7 +19,8 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { getErrorMessage } from "@typenotes/shared/errors";
 import { parseSyncDeepLink } from "@typenotes/shared/sync-link";
 
-import { bootCore } from "./core/boot";
+import { bootMobile, startMobileLifecycle } from "./state/mobile-lifecycle";
+import { RuntimeNotice } from "./ui/runtime-notice";
 import { navigateToScreen, navigationRef, Stack } from "./navigation";
 import { HomeScreen } from "./screens/home-screen";
 import { FeedScreen } from "./screens/feed-screen";
@@ -33,14 +34,8 @@ import {
   SettingsWorkingFoldersScreen,
 } from "./screens/settings-screen";
 import { SyncScreen } from "./screens/sync-screen";
-import { useAppearanceStore } from "./state/appearance-store";
-import { useBackgroundOperationStore } from "./state/background-operation-store";
-import { runPreSuspendSync } from "./state/pre-suspend-sync";
-import { useDiagnosticsStore } from "./state/diagnostics-store";
-import { useNotesStore } from "./state/notes-store";
-import { useRecordingSessionStore } from "./state/recording-session-store";
 import { isLocked, useSecurityStore } from "./state/security-store";
-import { activeProfile, useSettingsStore } from "./state/settings-store";
+import { useSettingsStore } from "./state/settings-store";
 import { useSyncStore } from "./state/sync-store";
 import { useTheme } from "./theme";
 import { ErrorBoundary } from "./ui/error-boundary";
@@ -156,31 +151,11 @@ export default function App() {
   const initialUrlHandled = useRef(false);
 
   useEffect(() => {
+    const stopLifecycle = startMobileLifecycle();
     let cancelled = false;
     (async () => {
       try {
-        // First, so the boot/lock screens already paint in the user's chosen
-        // colors instead of flashing the system palette. It reads a plain
-        // file, so it does not depend on the core coming up.
-        await useAppearanceStore.getState().load();
-        await useDiagnosticsStore.getState().load();
-        const { demoMode: demo } = await bootCore();
-        useSettingsStore.getState().setDemoMode(demo);
-        await useSecurityStore.getState().load();
-        // While encrypted + locked, content calls are rejected by the core —
-        // the lock screen's unlock reloads these stores instead.
-        if (!isLocked(useSecurityStore.getState().state)) {
-          await useSettingsStore.getState().load();
-          // Not awaited: on a first launch, or after a sync that brought a
-          // lot, it reads thousands of note bodies. The capture page needs
-          // none of it, and the lists show the saved previews (or placeholder
-          // rows) until it is done.
-          void useNotesStore.getState().refresh();
-          // Best-effort — populates the menu's "last synced" label without
-          // forcing the user through the Sync screen first.
-          void useSyncStore.getState().refresh().catch(() => {});
-          useSyncStore.getState().scheduleAutoSync("app opened", "now");
-        }
+        await bootMobile();
         if (!cancelled) {
           setPhase({ state: "ready" });
         }
@@ -192,29 +167,8 @@ export default function App() {
     })();
     return () => {
       cancelled = true;
+      stopLifecycle();
     };
-  }, []);
-
-  // Switching (or creating) a working folder changes which notes the lists
-  // should show, and nothing else reloads them: Home remounts, but it renders
-  // whatever the notes store holds. The first profile to arrive is boot's.
-  useEffect(() => {
-    const workingFolder = (state: ReturnType<typeof useSettingsStore.getState>) => {
-      const profile = activeProfile(state.snapshot);
-      return profile ? `${profile.id}:${profile.notes_root}` : null;
-    };
-    let shown = workingFolder(useSettingsStore.getState());
-    return useSettingsStore.subscribe((state) => {
-      const next = workingFolder(state);
-      if (next === shown) {
-        return;
-      }
-      const booting = shown === null;
-      shown = next;
-      if (!booting && !isLocked(useSecurityStore.getState().state)) {
-        void useNotesStore.getState().refresh();
-      }
-    });
   }, []);
 
   // Deep links while the app is running; the initial (cold-start) URL is
@@ -224,75 +178,6 @@ export default function App() {
       handleSyncUrl(url)
     );
     return () => subscription.remove();
-  }, []);
-
-  // Auto-lock when the app goes to background (if enabled in security prefs).
-  // A screen lock is also an AppState background transition on iOS. While a
-  // voice note is recording (or a native backup picker/transfer is active),
-  // unmounting the app tree would interrupt work. Defer Type's own lock until
-  // that operation finishes. The OS lock screen still protects the device.
-  useEffect(() => {
-    let backgroundLockDeferred = false;
-
-    const protectedOperationActive = () =>
-      useRecordingSessionStore.getState().active ||
-      useBackgroundOperationStore.getState().count > 0;
-
-    const lockIfEnabled = () => {
-      const security = useSecurityStore.getState();
-      if (
-        security.state?.encryption_enabled &&
-        security.state.auto_lock_on_background
-      ) {
-        void security.lock();
-      }
-    };
-
-    const subscription = AppState.addEventListener("change", (next) => {
-      if (next === "active") {
-        backgroundLockDeferred = false;
-      }
-      const securityState = useSecurityStore.getState().state;
-      if (next === "active" && !isLocked(securityState)) {
-        useSyncStore.getState().scheduleAutoSync("app foregrounded", "now");
-      }
-      // Before the lock check: it opens a background operation, which defers
-      // the auto-lock until the owed sync has pushed.
-      if (next === "background" && !isLocked(securityState)) {
-        runPreSuspendSync();
-      }
-      if (
-        next === "background" &&
-        securityState?.encryption_enabled &&
-        securityState.auto_lock_on_background
-      ) {
-        if (protectedOperationActive()) {
-          backgroundLockDeferred = true;
-        } else {
-          lockIfEnabled();
-        }
-      }
-    });
-
-    const finishDeferredLock = () => {
-      if (
-        backgroundLockDeferred &&
-        !protectedOperationActive() &&
-        AppState.currentState !== "active"
-      ) {
-        backgroundLockDeferred = false;
-        lockIfEnabled();
-      }
-    };
-    const unsubscribeRecording = useRecordingSessionStore.subscribe(finishDeferredLock);
-    const unsubscribeBackgroundOperation =
-      useBackgroundOperationStore.subscribe(finishDeferredLock);
-
-    return () => {
-      subscription.remove();
-      unsubscribeRecording();
-      unsubscribeBackgroundOperation();
-    };
   }, []);
 
   const securityState = useSecurityStore((s) => s.state);
@@ -329,6 +214,7 @@ export default function App() {
       <SafeAreaProvider>
         <NavigationContainer
           ref={navigationRef}
+          onStateChange={finishNavigationTrace}
           theme={navigationTheme}
           onReady={() => {
             if (!initialUrlHandled.current) {
@@ -341,6 +227,7 @@ export default function App() {
             <RootStack />
           </ErrorBoundary>
         </NavigationContainer>
+        <RuntimeNotice />
         {demoMode ? (
           <View style={[styles.demoBanner, { backgroundColor: theme.colors.accent }]}>
             <Text style={styles.demoBannerText}>

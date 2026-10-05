@@ -14,8 +14,8 @@ const calendarKey = () => {
 /** Sorting/grouping stays in the worker; unchanged sections retain identity. */
 export const useFeedSections = (filter: "all" | "active" | "archived", ready = true) => {
   const key = useId();
-  const notes = useNotesStore((state) => findFolder(state.tree, STREAM_FOLDER_PATH)?.notes);
-  const previews = useNotesStore((state) => state.folderPreviews.get(STREAM_FOLDER_PATH));
+  const notes = useNotesStore((state) => ready ? findFolder(state.tree, STREAM_FOLDER_PATH)?.notes : undefined);
+  const previewRevision = useNotesStore((state) => ready ? state.folderRevisions.get(STREAM_FOLDER_PATH) : undefined);
   const scope = useNotesStore((state) => state.processingScope);
   const [shown, setShown] = useState<{ scope: string; sections: NoteRowSection[] }>({ scope, sections: [] });
   const latestScope = useRef(scope);
@@ -36,11 +36,16 @@ export const useFeedSections = (filter: "all" | "active" | "archived", ready = t
     const revision = ++request.current;
     const replaceNotes = sent.current?.scope !== scope || sent.current.notes !== notes;
     sent.current = { scope, notes };
-    void runNoteJob({ kind: "feed", scope, key, notes: replaceNotes ? notes ?? [] : undefined, filter, now: Date.now() }).then((result) => {
+    void runNoteJob({ kind: "feed", scope, key, notes: replaceNotes ? notes ?? [] : undefined, filter, now: Date.now(), incremental: true }).then((result) => {
       if (!result.sectionTitles || latestScope.current !== scope) return;
       if (heldSections.current.scope !== scope) heldSections.current = { scope, sections: new Map() };
       const held = heldSections.current.sections;
-      for (const section of result.sections ?? []) held.set(section.title, section);
+      for (const patch of result.sectionPatches ?? []) {
+        const data = [...(held.get(patch.title)?.data ?? [])];
+        for (const splice of patch.splices) data.splice(splice.index, splice.deleteCount, ...splice.rows);
+        held.set(patch.title, { title: patch.title, data });
+      }
+      for (const title of held.keys()) { if (!result.sectionTitles.includes(title)) held.delete(title); }
       if (revision !== request.current) return;
       setShown((previous) => {
         const next = result.sectionTitles!.map((title) => held.get(title)!);
@@ -48,6 +53,6 @@ export const useFeedSections = (filter: "all" | "active" | "archived", ready = t
       });
     }).catch(() => { sent.current = null; });
     return () => { request.current += 1; };
-  }, [notes, previews, filter, ready, scope, key, day]);
+  }, [notes, previewRevision, filter, ready, scope, key, day]);
   return shown.scope === scope ? shown.sections : [];
 };

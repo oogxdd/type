@@ -13,6 +13,31 @@ fn security_use_cases() -> Result<SecurityUseCases<SecurityAdapter>, String> {
     Ok(SecurityUseCases::new(SecurityAdapter::new(current_env()?)))
 }
 
+/// Session-only recovery: never write a plaintext draft to disk.
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn seal_draft(content: String) -> Result<String, CoreError> {
+    run_blocking(move || {
+        let env = crate::unlocked_env()?;
+        if !type_core::get_security_state_impl(&env)?.encryption_enabled {
+            return Err("Draft sealing requires encryption.".into());
+        }
+        type_core::encrypt_note_body_for_write(&content)
+    })
+    .await
+}
+
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn open_draft(content: String) -> Result<String, CoreError> {
+    run_blocking(move || {
+        crate::unlocked_env()?;
+        if !type_core::is_encrypted_note_body(&content) {
+            return Err("Recovery draft must be encrypted.".into());
+        }
+        type_core::decrypt_note_body_for_read(&content)
+    })
+    .await
+}
+
 /// Current security state as JSON (`SecurityState`).
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn get_security_state() -> Result<String, CoreError> {

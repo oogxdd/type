@@ -1,3 +1,4 @@
+import { clearResponsivenessTrace, exportResponsivenessTrace } from "../lib/responsiveness-trace";
 // Settings is a two-level menu: this file's default export lands on a list
 // of sections, each of which pushes into its own dedicated screen (also
 // exported from here) rather than showing everything in one long scroll.
@@ -649,6 +650,8 @@ export const SettingsDiagnosticsScreen = () => {
   const setCaptureSyncLogs = useDiagnosticsStore((s) => s.setCaptureSyncLogs);
   const syncLogEntries = useSyncLogStore((s) => s.entries);
   const clearSyncLog = useSyncLogStore((s) => s.clear);
+  const traceResponsiveness = useDiagnosticsStore((s) => s.diagnostics.traceResponsiveness);
+  const setTraceResponsiveness = useDiagnosticsStore((s) => s.setTraceResponsiveness);
 
   const exportSyncLog = async () => {
     try {
@@ -674,6 +677,12 @@ export const SettingsDiagnosticsScreen = () => {
           value={showCaptureSyncStatus}
           onValueChange={setShowCaptureSyncStatus}
         />
+      </SettingsGroup>
+
+      <SettingsGroup header="Responsiveness" footer="Records navigation dispatch timing and JS stalls. No note text or paths. Timings end at navigation state changes; rendered frames must be measured on device.">
+        <SettingsToggleRow title="Record responsiveness" value={traceResponsiveness} onValueChange={setTraceResponsiveness} />
+        <SettingsActionRow title="Export timings" onPress={() => { void Share.share({ message: exportResponsivenessTrace() }).catch(() => {}); }} />
+        <SettingsActionRow title="Clear timings" onPress={clearResponsivenessTrace} />
       </SettingsGroup>
 
       <SettingsGroup

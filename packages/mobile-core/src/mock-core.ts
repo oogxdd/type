@@ -283,13 +283,15 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
     return JSON.stringify({ scanned, queued, skipped, in_flight: 0 });
   };
 
-  return {
+  const playbackSources = new Map<string, string>();
+  const raw: RawCore = {
     initCore: () => {},
 
     // ── Notes ──
     getTree: async () => JSON.stringify(buildTree()),
     readNote: async (path) => requireNote(path).content,
     readNoteIfExists: async (path) => notes.get(path)?.content ?? null,
+    readNoteForEditing: async (path) => notes.get(path)?.content ?? null,
     listNoteSummaries: async (paths) => {
       if (paths.length > 200) throw new Error("At most 200 note summaries per request.");
       return JSON.stringify(paths.flatMap((path) => {
@@ -316,6 +318,16 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       const note = requireNote(path);
       note.content = content;
       note.meta.updated_ms = now();
+    },
+    writeNoteChecked: async (path, content, baseline) => {
+      const note = requireNote(path);
+      if (note.content !== baseline) throw new Error("This note changed outside the editor. Your draft is still here.");
+      note.content = content;
+      note.meta.updated_ms = now();
+    },
+    deleteNoteChecked: async (path, baseline) => {
+      if (notes.get(path)?.content !== baseline) throw new Error("This note changed outside the editor. Your draft is still here.");
+      notes.delete(path);
     },
     setNoteTimestamp: async (argsJson) => {
       const args = JSON.parse(argsJson) as { path: string; timestamp_ms: number };
@@ -482,6 +494,7 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       gitInitialized = true;
       return JSON.stringify(gitStatus());
     },
+    gitSyncCycle: async () => JSON.stringify({ status: gitStatus(), changed_paths: [], reset_required: false, tree_patch: [], entries: [], removed_paths: [], push_error: null }),
     gitPull: async () => JSON.stringify(gitStatus()),
     gitCommit: async (argsJson) => {
       const args = JSON.parse(argsJson) as { message?: string | null };
@@ -534,6 +547,17 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
     setMobileAudioGitExclusion: async () => {},
 
     // ── Recordings ──
+    saveAudioRecordingFromFile: async (source, argsJson) => {
+      const result = await raw.saveAudioRecording(JSON.stringify({ ...JSON.parse(argsJson), audio_base64: "" }));
+      playbackSources.set(JSON.parse(result).audio_path, source);
+      return result;
+    },
+    getRecordingPlaybackPath: async (path) => {
+      const source = playbackSources.get(path);
+      if (!source) throw new Error("This demo recording has no local file.");
+      return source;
+    },
+    saveHandwritingAttachmentFromFile: async (_source, argsJson) => raw.saveHandwritingAttachment(JSON.stringify({ ...JSON.parse(argsJson), image_base64: "" })),
     saveAudioRecording: async (argsJson) => {
       const args = JSON.parse(argsJson) as {
         audio_base64: string;
@@ -694,4 +718,5 @@ export const createMockCore = (options: MockCoreOptions = {}): RawCore => {
       return securityStateJson();
     },
   };
+  return raw;
 };

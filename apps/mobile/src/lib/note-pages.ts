@@ -13,9 +13,28 @@ export class NotePages {
   session: CaptureSession;
   browsing = false;
   private paths: string[] = [];
+  private disposed = false;
 
   constructor(private storage: NotePageStorage) {
     this.draft = this.session = new CaptureSession(storage);
+  }
+
+  async flush() {
+    const results = await Promise.allSettled([this.draft.flush(), this.session === this.draft ? Promise.resolve() : this.session.flush()]);
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed?.status === "rejected") throw failed.reason;
+  }
+  async publish() {
+    await Promise.all([this.draft.publish(), this.session === this.draft ? Promise.resolve() : this.session.publish()]);
+  }
+  dispose() { this.disposed = true; this.draft.dispose(); if (this.session !== this.draft) this.session.dispose(); }
+  snapshot() { return { draft: this.draft.snapshot(), session: this.session.snapshot(), browsing: this.browsing, paths: this.paths }; }
+  restore(value: ReturnType<NotePages["snapshot"]>) {
+    this.draft.restore(value.draft);
+    this.session = value.browsing ? new CaptureSession(this.storage) : this.draft;
+    this.session.restore(value.session);
+    this.browsing = value.browsing;
+    this.paths = value.paths;
   }
 
   get nextPath(): string | null {
@@ -29,8 +48,10 @@ export class NotePages {
   }
 
   async open(path: string, paths: string[]): Promise<void> {
-    await this.session.publish();
+    await this.session.flush();
+    void this.session.publish().catch((error) => this.storage.onSaveError?.(error));
     const content = await this.storage.readNote(path);
+    if (this.disposed) throw new Error("Editor is closed.");
     if (content === null) throw new Error("This note no longer exists.");
     // Publish only after both saving and reading succeed. Failures retain the
     // previous page, including its dirty state so a later attempt can retry.
@@ -40,10 +61,12 @@ export class NotePages {
   }
 
   async returnToCapture(): Promise<void> {
-    await this.session.publish();
+    await this.session.flush();
+    void this.session.publish().catch((error) => this.storage.onSaveError?.(error));
     const path = this.draft.currentPath();
     if (path) {
       const content = await this.storage.readNote(path);
+      if (this.disposed) throw new Error("Editor is closed.");
       this.draft = new CaptureSession(this.storage, undefined,
         content === null ? undefined : { path, content });
     }

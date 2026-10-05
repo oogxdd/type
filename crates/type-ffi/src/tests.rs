@@ -130,16 +130,12 @@ async fn ffi_end_to_end() {
             .unwrap(),
         None
     );
-    assert!(
-        crate::read_note_if_exists("../invalid.md".into())
-            .await
-            .is_err()
-    );
-    assert!(
-        crate::read_note_if_exists("_system/stream".into())
-            .await
-            .is_err()
-    );
+    assert!(crate::read_note_if_exists("../invalid.md".into())
+        .await
+        .is_err());
+    assert!(crate::read_note_if_exists("_system/stream".into())
+        .await
+        .is_err());
     let summaries = parse(
         &crate::list_note_summaries(vec![note_path.clone()])
             .await
@@ -148,11 +144,9 @@ async fn ffi_end_to_end() {
     assert_eq!(summaries[0]["title"], "updated body");
     assert_eq!(summaries[0]["version"], tree_version);
     assert!(summaries[0].get("content").is_none());
-    assert!(
-        crate::list_note_summaries(vec![note_path.clone(); 201])
-            .await
-            .is_err()
-    );
+    assert!(crate::list_note_summaries(vec![note_path.clone(); 201])
+        .await
+        .is_err());
 
     // A long document stays native: only two bounded Unicode lines cross FFI.
     let huge_body = format!(
@@ -240,6 +234,30 @@ async fn ffi_end_to_end() {
     // ── Git: status on an unconnected root + SSH key lifecycle (offline) ─────
     let status = parse(&crate::get_git_status().await.unwrap());
     assert_eq!(status["repo_initialized"], false);
+    // The unified native API preserves its structured incremental wire result.
+    let repo = type_core::ensure_git_repo(&notes_root).unwrap();
+    type_core::commit_all_changes(&repo, "synthetic baseline", "main").unwrap();
+    let remote_path = app_dir.join("synthetic-remote.git");
+    // Use the public core adapter to send to a new empty synthetic remote.
+    // A regular local bare repository avoids any external/network dependency.
+    std::process::Command::new("git")
+        .args(["init", "--bare"])
+        .arg(&remote_path)
+        .output()
+        .map(|output| assert!(output.status.success()))
+        .unwrap();
+    let cycle = parse(
+        &crate::git_sync_cycle(
+            serde_json::json!({ "remote_url": remote_path, "branch": "main" }).to_string(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(cycle["push_error"], serde_json::Value::Null);
+    assert_eq!(cycle["changed_paths"], serde_json::json!([]));
+    assert_eq!(cycle["entries"], serde_json::json!([]));
+    assert_eq!(cycle["removed_paths"], serde_json::json!([]));
+    assert_eq!(cycle["status"]["push_required"], false);
 
     let public_key = crate::generate_ssh_key().await.unwrap();
     assert!(public_key.contains("ssh-ed25519"));
@@ -304,17 +322,152 @@ async fn ffi_end_to_end() {
     assert!(handwriting_note.contains("ocr_status: pending"));
     assert!(!handwriting_note.contains("ocr_status: completed"));
 
+    // Guarded editing preserves whitespace/frontmatter and never recreates a
+    // deleted file or overwrites a remotely changed body.
+    let guarded = parse(
+        &crate::create_note(r#"{"content":"\nleading newline"}"#.into())
+            .await
+            .unwrap(),
+    );
+    let guarded_path = guarded["path"].as_str().unwrap().to_string();
+    assert_eq!(
+        crate::read_note_for_editing(guarded_path.clone())
+            .await
+            .unwrap()
+            .unwrap(),
+        "\nleading newline"
+    );
+    crate::write_note_checked(
+        guarded_path.clone(),
+        "edited".into(),
+        "\nleading newline".into(),
+    )
+    .await
+    .unwrap();
+    crate::update_note_markers(
+        serde_json::json!({"path":guarded_path,"archived":true}).to_string(),
+    )
+    .await
+    .unwrap();
+    crate::write_note_checked(guarded_path.clone(), "after marker".into(), "edited".into())
+        .await
+        .unwrap();
+    crate::write_note(guarded_path.clone(), "remote body".into())
+        .await
+        .unwrap();
+    assert!(crate::write_note_checked(
+        guarded_path.clone(),
+        "stale editor".into(),
+        "after marker".into()
+    )
+    .await
+    .is_err());
+    assert!(
+        crate::delete_note_checked(guarded_path.clone(), "after marker".into())
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        crate::read_note_for_editing(guarded_path.clone())
+            .await
+            .unwrap()
+            .unwrap(),
+        "remote body"
+    );
+    crate::delete_note_checked(guarded_path.clone(), "remote body".into())
+        .await
+        .unwrap();
+    assert!(crate::write_note_checked(
+        guarded_path.clone(),
+        "resurrect".into(),
+        "remote body".into()
+    )
+    .await
+    .is_err());
+
+    // Native file imports never require base64 in JavaScript.
+    let audio_source = app_dir.join("capture.m4a");
+    fs::write(
+        &audio_source,
+        type_core::decode_audio_base64(FAKE_AUDIO_BASE64).unwrap(),
+    )
+    .unwrap();
+    let imported = parse(
+        &crate::save_audio_recording_from_file(
+            audio_source.to_string_lossy().into(),
+            r#"{"mime_type":"audio/mp4"}"#.into(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(PathBuf::from(
+        crate::get_recording_playback_path(imported["audio_path"].as_str().unwrap().into())
+            .await
+            .unwrap()
+    )
+    .is_file());
+    assert!(crate::get_recording_playback_path("../outside.m4a".into())
+        .await
+        .is_err());
+    let image_source = app_dir.join("capture.jpg");
+    fs::write(&image_source, b"test-image").unwrap();
+    let imported_photo = parse(
+        &crate::save_handwriting_attachment_from_file(
+            image_source.to_string_lossy().into(),
+            r#"{"mime_type":"image/jpeg"}"#.into(),
+        )
+        .await
+        .unwrap(),
+    );
+    assert!(notes_root
+        .join(imported_photo["attachment_path"].as_str().unwrap())
+        .is_file());
+    assert!(crate::save_handwriting_attachment_from_file(
+        image_source.to_string_lossy().into(),
+        "null".into()
+    )
+    .await
+    .is_err());
+    assert!(crate::seal_draft("plain draft".into()).await.is_err());
+
     crate::enable_security(serde_json::json!({ "unlock_password": "synthetic-passphrase", "panic_password": "synthetic-panic" }).to_string()).await.unwrap();
+    let sealed = crate::seal_draft("secret recovery".into()).await.unwrap();
+    assert!(!sealed.contains("secret recovery"));
+    assert_eq!(
+        crate::open_draft(sealed.clone()).await.unwrap(),
+        "secret recovery"
+    );
+    assert!(crate::open_draft("plaintext".into()).await.is_err());
+    let encrypted = parse(
+        &crate::create_note(r#"{"content":"\nsecret leading newline"}"#.into())
+            .await
+            .unwrap(),
+    );
+    let encrypted_path = encrypted["path"].as_str().unwrap().to_string();
+    assert_eq!(
+        crate::read_note_for_editing(encrypted_path.clone())
+            .await
+            .unwrap()
+            .unwrap(),
+        "\nsecret leading newline"
+    );
+    crate::write_note_checked(
+        encrypted_path,
+        "encrypted edit".into(),
+        "\nsecret leading newline".into(),
+    )
+    .await
+    .unwrap();
     crate::lock_security().await.unwrap();
+    assert!(crate::git_sync_cycle("{}".into()).await.is_err());
+    assert!(crate::open_draft(sealed).await.is_err());
     assert!(
         crate::read_note_if_exists("_system/stream/missing.md".into())
             .await
             .is_err()
     );
-    assert!(
-        crate::list_note_summaries(vec![recording_note_rel])
-            .await
-            .is_err()
-    );
+    assert!(crate::list_note_summaries(vec![recording_note_rel])
+        .await
+        .is_err());
     let _ = fs::remove_dir_all(&app_dir);
 }

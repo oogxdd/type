@@ -17,6 +17,8 @@ import type {
   GitPushArgs,
   GitSyncArgs,
   GitSyncStatus,
+  GitSyncCycleResult,
+  GitSyncCycleArgs,
   GitTransferProgress,
   HandwritingAttachmentWriteResult,
   IrohAudioArchiveResult,
@@ -72,6 +74,10 @@ export const readNote = (path: string): Promise<string> =>
 
 export const readNoteIfExists = async (path: string): Promise<string | null> =>
   (await getRawCore().readNoteIfExists(path)) ?? null;
+export const readNoteForEditing = async (path: string): Promise<string | null> => {
+  const raw = getRawCore();
+  return (await (raw.readNoteForEditing ? raw.readNoteForEditing(path) : raw.readNoteIfExists(path))) ?? null;
+};
 
 export const createNote = async (
   args: CreateNoteArgs = {}
@@ -80,6 +86,47 @@ export const createNote = async (
 
 export const writeNote = (path: string, content: string): Promise<void> =>
   getRawCore().writeNote(path, content);
+
+export const writeNoteChecked = async (path: string, content: string, baseline: string): Promise<void> => {
+  const raw = getRawCore();
+  if (raw.writeNoteChecked) return raw.writeNoteChecked(path, content, baseline);
+  // Compatibility for older clients; new native builds make this check atomic.
+  const existing = await readNoteIfExists(path);
+  if (existing === null || existing !== baseline) throw new Error("This note changed outside the editor. Your draft is still here.");
+  await writeNote(path, content);
+};
+export const deleteNoteChecked = async (path: string, baseline: string): Promise<void> => {
+  const raw = getRawCore();
+  if (raw.deleteNoteChecked) return raw.deleteNoteChecked(path, baseline);
+  if (await readNoteIfExists(path) !== baseline) throw new Error("This note changed outside the editor. Your draft is still here.");
+  await raw.deleteItems([path]);
+};
+export const sealDraft = async (content: string): Promise<string> => {
+  const raw = getRawCore();
+  if (!raw.sealDraft) throw new Error("Update the native app to protect an unsaved draft before locking.");
+  return raw.sealDraft(content);
+};
+export const openDraft = async (content: string): Promise<string> => {
+  const raw = getRawCore();
+  if (!raw.openDraft) throw new Error("Update the native app to restore this draft.");
+  return raw.openDraft(content);
+};
+
+export const saveAudioRecordingFromFile = async (sourcePath: string, args: Omit<SaveRecordingArgs, "audio_base64"> = {}): Promise<RecordingWriteResult> => {
+  const method = getRawCore().saveAudioRecordingFromFile;
+  if (!method) throw new Error("Update the native app to save recordings directly from files.");
+  return parse(await method(sourcePath, JSON.stringify(args)));
+};
+export const saveHandwritingAttachmentFromFile = async (sourcePath: string, args: Omit<SaveHandwritingAttachmentArgs, "image_base64"> = {}): Promise<HandwritingAttachmentWriteResult> => {
+  const method = getRawCore().saveHandwritingAttachmentFromFile;
+  if (!method) throw new Error("Update the native app to save photos directly from files.");
+  return parse(await method(sourcePath, JSON.stringify(args)));
+};
+export const getRecordingPlaybackPath = async (path: string): Promise<string> => {
+  const method = getRawCore().getRecordingPlaybackPath;
+  if (!method) throw new Error("Update the native app to play recordings directly from files.");
+  return method(path);
+};
 
 export const setNoteTimestamp = (args: SetNoteTimestampArgs): Promise<void> =>
   getRawCore().setNoteTimestamp(JSON.stringify(args));
@@ -186,6 +233,14 @@ export const connectGitRepo = async (
   args: ConnectGitArgs
 ): Promise<GitSyncStatus> =>
   parse(await getRawCore().connectGitRepo(JSON.stringify(args)));
+
+/** Old native builds use the existing workflow until rebuilt. */
+export const supportsGitSyncCycle = () => typeof getRawCore().gitSyncCycle === "function";
+export const gitSyncCycle = async (args: GitSyncCycleArgs): Promise<GitSyncCycleResult> => {
+  const method = getRawCore().gitSyncCycle;
+  if (!method) throw new Error("Native sync core needs rebuilding.");
+  return parse(await method(JSON.stringify(args)));
+};
 
 export const gitPull = async (args: GitSyncArgs = {}): Promise<GitSyncStatus> =>
   parse(await getRawCore().gitPull(JSON.stringify(args)));

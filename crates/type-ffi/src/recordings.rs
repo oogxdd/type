@@ -20,6 +20,37 @@ fn recordings_use_cases() -> Result<RecordingsUseCases<RecordingsAdapter>, Strin
     )))
 }
 
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn save_audio_recording_from_file(
+    source_path: String,
+    args_json: String,
+) -> Result<String, CoreError> {
+    run_blocking(move || {
+        let source = crate::media_source(&source_path)?;
+        let mut value: serde_json::Value = from_json(&args_json)?;
+        value
+            .as_object_mut()
+            .ok_or("Expected media options object.")?
+            .insert(
+                "audio_base64".into(),
+                serde_json::Value::String(String::new()),
+            );
+        let args = serde_json::from_value(value).map_err(|error| error.to_string())?;
+        let env = unlocked_env()?;
+        let root = type_core::notes_root(&env)?;
+        type_core::application::workspace::with_workspace_write(&root, || {
+            to_json(&RecordingsAdapter::new(env).save_from_file(&source, args)?)
+        })
+    })
+    .await
+}
+
+#[uniffi::export(async_runtime = "tokio")]
+pub async fn get_recording_playback_path(path: String) -> Result<String, CoreError> {
+    run_blocking(move || RecordingsAdapter::new(unlocked_env()?).resolve_audio_absolute_path(&path))
+        .await
+}
+
 /// A transcription backend implemented by the host (Swift/Kotlin/JS) — e.g.
 /// native on-device speech recognition. Methods are called from the queue's
 /// Rust worker thread, one job at a time.
@@ -100,7 +131,9 @@ pub async fn queue_provider_transcriptions(
         let root = type_core::ensured_notes_root(&unlocked_env()?)?;
         let bridged: Arc<dyn type_core::ports::recordings::TranscriptionProvider> =
             Arc::new(ForeignTranscriptionProvider(provider));
-        to_json(&queue_recordings_for_provider_transcription(&root, bridged)?)
+        to_json(&queue_recordings_for_provider_transcription(
+            &root, bridged,
+        )?)
     })
     .await
 }

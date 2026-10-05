@@ -1,12 +1,12 @@
+import { capturePages, mobileRuntime } from "../core/runtime";
 // Capture keeps its draft mounted while the menu is open. HomeScreen owns
 // direction/release; this native scroll view supplies only bottom overscroll.
 
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   Alert,
-  AppState,
   type LayoutChangeEvent,
   type ScrollView,
   StyleSheet,
@@ -33,11 +33,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import * as core from "@typenotes/mobile-core/core-api";
 
-import { NotePages, type NotePageRequest } from "../lib/note-pages";
+import { type NotePageRequest } from "../lib/note-pages";
 import { isRecordingNoteType } from "@typenotes/shared/format";
 import type { NoteMeta } from "@typenotes/shared/types";
 import { RecordingAudioPlayer } from "../ui/audio-player";
-import { registerCaptureDraft } from "../lib/capture-draft";
 import { noteForegroundActivity } from "../lib/note-loading";
 import {
   isPullReady,
@@ -51,7 +50,6 @@ import * as Haptics from "expo-haptics";
 import { autoSyncLabel } from "../lib/sync-experience";
 import { type RootStackParamList } from "../navigation";
 import { useDiagnosticsStore } from "../state/diagnostics-store";
-import { useNotesStore } from "../state/notes-store";
 import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
 import { DictationButton } from "../ui/dictation-button";
@@ -105,14 +103,17 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   const {
     menuVisible, menuProgress, direction, dragging, pull, pullReady,
     transitioning, commitRequest, commitVelocity, captureScroll, openMenu,
-    suppressPressUntil, allowPrevious, allowNext, commitStep, captureRequest, showPage,
+    pressAllowed, allowPrevious, allowNext, commitStep, captureRequest, showPage,
   } = useHomeShell();
   const [readyLabel, setReadyLabel] = useState(false);
   const [previousLabel, setPreviousLabel] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [restoring, setRestoring] = useState(false);
 
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => capturePages().session.currentContent());
+  const textRef = useRef(text);
+  const [inputGeneration, setInputGeneration] = useState(0);
+  const [hasText, setHasText] = useState(() => capturePages().session.currentContent().trim().length > 0);
   const [iconsVisible, setIconsVisible] = useState(true);
   const [recordingActive, setRecordingActive] = useState(false);
   const iconsOpacity = useSharedValue(1);
@@ -120,6 +121,7 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   // recorder, and remounting it at the exact moment the fresh page arrives put
   // that allocation inside the commit window.
   const micOpacity = useSharedValue(1);
+  const runtimeStatus = useSyncExternalStore(mobileRuntime.subscribe, mobileRuntime.getStatus);
   const inputRef = useRef<TextInput>(null);
   // A plain ref, not useAnimatedRef: nothing reads the scroll view from a
   // worklet any more, and an animated ref only exists to be handed to the UI
@@ -154,32 +156,9 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
 
   const indicatorOpacity = useSharedValue(0);
 
-  const pagesRef = useRef<NotePages | null>(null);
-  if (!pagesRef.current) {
-    pagesRef.current = new NotePages({
-      createNote: async (content) => {
-        const path = (await core.createNote({ content })).path;
-        useSyncStore.getState().scheduleAutoSync("capture saved", "edit");
-        return path;
-      },
-      writeNote: async (path, content) => {
-        await core.writeNote(path, content);
-        useSyncStore.getState().scheduleAutoSync("note saved", "edit");
-      },
-      deleteNote: async (path) => {
-        await core.deleteItems([path]);
-        useSyncStore.getState().scheduleAutoSync("capture deleted");
-      },
-      readNote: core.readNoteIfExists,
-      publishNote: async (path, exists) => {
-        if (exists) await useNotesStore.getState().noteFiled(path);
-        else await useNotesStore.getState().noteRemoved(path);
-      },
-    });
-  }
-  const pages = pagesRef.current;
-  const [browsing, setBrowsing] = useState(false);
-  const [pagePath, setPagePath] = useState<string | null>(null);
+  const pages = capturePages();
+  const [browsing, setBrowsing] = useState(pages.browsing);
+  const [pagePath, setPagePath] = useState<string | null>(pages.session.currentPath());
   const [meta, setMeta] = useState<NoteMeta | null>(null);
   const mounted = useRef(true);
   useEffect(() => {
@@ -196,22 +175,9 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   }, [pagePath]);
 
   const pageQueue = useRef<Promise<void>>(Promise.resolve());
-  const persistDraft = useCallback(async () => {
-    await pageQueue.current;
-    const session = pages.session;
-    if (!session) return;
-    await session.publish();
-  }, [pages]);
-  const flushDraft = useCallback(() => { void persistDraft().catch(() => {}); }, [persistDraft]);
-  useEffect(() => registerCaptureDraft(persistDraft), [persistDraft]);
+  const flushDraft = useCallback(() => mobileRuntime.requestSave(), []);
   useEffect(() => navigation.addListener("blur", flushDraft), [navigation, flushDraft]);
   useEffect(() => { if (menuVisible) flushDraft(); }, [menuVisible, flushDraft]);
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state !== "active") flushDraft();
-    });
-    return () => { subscription.remove(); flushDraft(); };
-  }, [flushDraft]);
 
   const showIcons = useCallback(() => {
     setIconsVisible(true);
@@ -226,6 +192,9 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   const displayPage = useCallback((resetScroll = true) => {
     if (!mounted.current) return;
     setText(pages.session.currentContent());
+    setHasText(pages.session.currentContent().trim().length > 0);
+    if (resetScroll || textRef.current !== pages.session.currentContent()) setInputGeneration((value) => value + 1);
+    textRef.current = pages.session.currentContent();
     setBrowsing(pages.browsing);
     setPagePath(pages.session.currentPath());
     allowPrevious.value = pages.browsing && pages.previousPath !== null;
@@ -239,6 +208,8 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
     pullReady.value = false;
     showIcons();
   }, [pages, allowPrevious, allowNext, offsetY, pull, pullReady, showIcons]);
+
+  useEffect(() => { displayPage(false); }, [displayPage]);
 
   // Queue page requests so rapid taps cannot race two reads/saves. A failed
   // transition leaves the current session intact and editable for retry.
@@ -505,7 +476,9 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
 
   const onChange = (value: string) => {
     noteForegroundActivity();
-    setText(value);
+    textRef.current = value;
+    const nonempty = value.trim().length > 0;
+    setHasText((previous) => previous === nonempty ? previous : nonempty);
     pages.session.onChange(value);
     // Keep the page uncluttered while writing; tapping back into the text
     // brings the buttons back. While a dictation is running the stop button
@@ -519,7 +492,7 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   // a blank page (or while a recording is running and must stay stoppable).
   // It fades instead of unmounting — see micOpacity.
   // A recording started on capture must still expose Stop while browsing.
-  const micAvailable = recordingActive || (!browsing && text.trim().length === 0);
+  const micAvailable = recordingActive || (!browsing && !hasText);
   useEffect(() => {
     micOpacity.value = withTiming(micAvailable ? 1 : 0, { duration: 180 });
   }, [micAvailable, micOpacity]);
@@ -567,8 +540,10 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
                       fontFamily: theme.fontFamily,
                     },
                   ]}
-                  editable={!committing && !restoring && !menuVisible}
-                  value={text}
+                  editable={!committing && !restoring && !menuVisible && !runtimeStatus.operation}
+                  key={inputGeneration}
+                  defaultValue={text}
+                  testID="note-editor"
                   onChangeText={onChange}
                   onPressIn={showIcons}
                   placeholder={browsing ? "" : PLACEHOLDER}
@@ -631,7 +606,7 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
         >
           <ToolbarButton
             icon="menu-outline"
-            onPress={() => { if (Date.now() >= suppressPressUntil.value) openMenu(); }}
+            onPress={() => { if (pressAllowed()) openMenu(); }}
           />
         </Animated.View>
         <SyncStatusLabel top={insets.top + 18} />

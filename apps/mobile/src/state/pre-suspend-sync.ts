@@ -5,6 +5,7 @@
 // The native background task (lib/background-task) buys ~30 s; this flushes
 // every open draft to disk, then runs the owed sync inside that window.
 
+import { mobileRuntime } from "../core/runtime";
 import { finishBackgroundWindow } from "../lib/background-task";
 import { flushAllDrafts } from "../lib/capture-draft";
 import { useBackgroundOperationStore } from "./background-operation-store";
@@ -28,14 +29,18 @@ export const runPreSuspendSync = (): void => {
   const work = (async () => {
     await flushAllDrafts();
     await useSyncStore.getState().syncBeforeSuspend();
-  })().catch(() => {});
+  })().catch(mobileRuntime.saveError);
   const timeout = new Promise<void>((resolve) => {
     budget = setTimeout(resolve, PRE_SUSPEND_BUDGET_MS);
   });
   void Promise.race([work, timeout]).finally(() => {
     if (budget) clearTimeout(budget);
-    running = false;
-    useBackgroundOperationStore.getState().end();
+    // OS time expires independently of task ownership. Do not admit another
+    // sync or release the lock hold while native work is still running.
     finishBackgroundWindow();
+    void work.finally(() => {
+      running = false;
+      useBackgroundOperationStore.getState().end();
+    });
   });
 };

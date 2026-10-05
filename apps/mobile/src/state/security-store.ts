@@ -4,7 +4,7 @@ import * as core from "@typenotes/mobile-core/core-api";
 import { getErrorMessage } from "@typenotes/shared/errors";
 import type { SecurityState } from "@typenotes/shared/types";
 
-import { useNotesStore } from "./notes-store";
+import { mobileRuntime, captureStorage } from "../core/runtime";
 import { useSettingsStore } from "./settings-store";
 
 type SecurityStoreState = {
@@ -30,6 +30,7 @@ export const useSecurityStore = create<SecurityStoreState>((set) => ({
       set({ state: await core.getSecurityState(), error: null });
     } catch (error) {
       set({ error: getErrorMessage(error) });
+      throw error;
     }
   },
 
@@ -40,10 +41,11 @@ export const useSecurityStore = create<SecurityStoreState>((set) => ({
       if (result.panic_triggered) {
         // Local data was wiped and reseeded (exactly as on desktop). Reload
         // everything so the UI shows the fresh state.
+        mobileRuntime.reset();
         const state = await core.getSecurityState();
         await useSettingsStore.getState().load();
         set({ state });
-        void useNotesStore.getState().refresh();
+        void mobileRuntime.onRefreshNotes();
         return;
       }
       if (!result.unlocked) {
@@ -54,9 +56,10 @@ export const useSecurityStore = create<SecurityStoreState>((set) => ({
       // Mount Home only after its profile/root is known. Otherwise the first
       // snapshot remounts the workspace and closes a menu opened during load.
       await useSettingsStore.getState().load();
+      await mobileRuntime.resume(captureStorage(), core.openDraft);
       set({ state });
       // Not awaited — see the boot sequence in App.tsx.
-      void useNotesStore.getState().refresh();
+      void mobileRuntime.onRefreshNotes();
     } catch (error) {
       set({ error: getErrorMessage(error) });
     } finally {
@@ -66,7 +69,9 @@ export const useSecurityStore = create<SecurityStoreState>((set) => ({
 
   lock: async () => {
     try {
-      set({ state: await core.lockSecurity(), error: null });
+      await mobileRuntime.park(core.sealDraft, async () => {
+        set({ state: await core.lockSecurity(), error: null });
+      });
     } catch (error) {
       set({ error: getErrorMessage(error) });
     }

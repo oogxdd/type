@@ -1,3 +1,5 @@
+import { recordResponsiveness } from "../lib/responsiveness-trace";
+import { PressGate } from "../lib/press-gate";
 // Menu and Capture are persistent layers of one route. The native stack has
 // no pop recognizer here: one pan owns direction and release for both layers.
 import { useIsFocused, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
@@ -62,7 +64,10 @@ const HomeWorkspace = ({ note }: { note?: NotePageRequest }) => {
   const [captureRequest, setCaptureRequest] = useState(0);
   const selectingNote = useRef(false);
   const wasOpen = useRef(false);
-  const suppressPressUntil = useSharedValue(0);
+  const pressGate = useRef(new PressGate()).current;
+  const touchSequence = useSharedValue(0);
+  const beginPress = useCallback((id: number, at: number) => { pressGate.begin(id); recordResponsiveness("UI touch → JS", Date.now() - at); }, [pressGate]);
+  const cancelPress = useCallback((id: number) => pressGate.cancel(id), [pressGate]);
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
   const startProgress = useSharedValue(0);
@@ -92,13 +97,12 @@ const HomeWorkspace = ({ note }: { note?: NotePageRequest }) => {
     setMenuVisible(open);
   }, []);
   const openMenu = useCallback(() => {
-    if (transitioning.value) return;
     noteForegroundActivity(400);
     Keyboard.dismiss();
     menuProgress.value = withTiming(1, SETTLE, (finished) => {
       if (finished) runOnJS(settled)(true);
     });
-  }, [menuProgress, settled, transitioning]);
+  }, [menuProgress, settled]);
   const closeMenu = useCallback(() => {
     noteForegroundActivity(400);
     menuProgress.value = withTiming(0, SETTLE, (finished) => {
@@ -107,8 +111,8 @@ const HomeWorkspace = ({ note }: { note?: NotePageRequest }) => {
   }, [menuProgress, settled]);
 
   const openCapture = useCallback(() => {
-    if (!transitioning.value) closeMenu();
-  }, [closeMenu, transitioning]);
+    closeMenu();
+  }, [closeMenu]);
   const showPage = useCallback(() => {
     selectingNote.current = true;
     closeMenu();
@@ -117,7 +121,7 @@ const HomeWorkspace = ({ note }: { note?: NotePageRequest }) => {
   useEffect(() => {
     if (!focused) return;
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (menuProgress.value >= 0.5) return false;
+      if (wasOpen.current) return false;
       openMenu();
       return true;
     });
@@ -136,6 +140,8 @@ const HomeWorkspace = ({ note }: { note?: NotePageRequest }) => {
         manager.fail();
         return;
       }
+      touchSequence.value += 1;
+      runOnJS(beginPress)(touchSequence.value, Date.now());
       direction.value = "pending";
       dragging.value = false;
       pull.value = 0;
@@ -172,10 +178,11 @@ const HomeWorkspace = ({ note }: { note?: NotePageRequest }) => {
       if (direction.value === "pending") return;
       if (direction.value === "diagonal") {
         outcome.value = "diagonal";
-        suppressPressUntil.value = Date.now() + 250;
+        runOnJS(cancelPress)(touchSequence.value);
         manager.fail();
         return;
       }
+      runOnJS(cancelPress)(touchSequence.value);
       const horizontal = direction.value === "left" || direction.value === "right";
       if (horizontal && ((startProgress.value >= 0.999 && direction.value === "right") ||
           (startProgress.value <= 0.001 && direction.value === "left"))) {
@@ -189,12 +196,12 @@ const HomeWorkspace = ({ note }: { note?: NotePageRequest }) => {
       }
       manager.activate();
     })
+    .onTouchesUp((_event, manager) => { if (direction.value === "pending") manager.fail(); })
     .onStart(() => { dragging.value = true; })
     .onUpdate((event) => {
       if (Math.abs(event.translationX) > Math.abs(maxDx.value)) maxDx.value = event.translationX;
       if (Math.abs(event.translationY) > Math.abs(maxDy.value)) maxDy.value = event.translationY;
       maxPull.value = Math.max(maxPull.value, pull.value);
-      suppressPressUntil.value = Date.now() + 250;
       if (direction.value === "left" || direction.value === "right") {
         menuProgress.value = Math.max(0, Math.min(1,
           startProgress.value + event.translationX / Math.max(1, windowW.value)));
@@ -236,7 +243,7 @@ const HomeWorkspace = ({ note }: { note?: NotePageRequest }) => {
       pullReady.value = false;
       if (!transitioning.value) pull.value = withTiming(0, { duration: 180 });
     }), [focused, captureScroll, feedScroll, folderScroll, direction, dragging, pull,
-      pullReady, transitioning, commitRequest, commitVelocity, commitStep, allowPrevious, allowNext, suppressPressUntil, startX, startY,
+      pullReady, transitioning, commitRequest, commitVelocity, commitStep, allowPrevious, allowNext, beginPress, cancelPress, touchSequence, startX, startY,
       startProgress, startedOpen, startTime, maxDx, maxDy, maxPull, outcome,
       traceEnabled, traceEmitted, menuProgress, windowW, settled]);
 
@@ -249,10 +256,10 @@ const HomeWorkspace = ({ note }: { note?: NotePageRequest }) => {
   const dimStyle = useAnimatedStyle(() => ({ opacity: 0.08 * (1 - menuProgress.value) }));
   const shell = useMemo<HomeShell>(() => ({
     menuVisible, menuProgress, direction, dragging, pull, pullReady, transitioning,
-    commitRequest, commitVelocity, commitStep, allowPrevious, allowNext, captureRequest, showPage, suppressPressUntil, captureScroll, feedScroll,
+    commitRequest, commitVelocity, commitStep, allowPrevious, allowNext, captureRequest, showPage, pressAllowed: pressGate.allowed, captureScroll, feedScroll,
     folderScroll, openMenu, openCapture,
   }), [menuVisible, menuProgress, direction, dragging, pull, pullReady, transitioning,
-    commitRequest, commitVelocity, commitStep, allowPrevious, allowNext, captureRequest, showPage, suppressPressUntil, captureScroll, feedScroll,
+    commitRequest, commitVelocity, commitStep, allowPrevious, allowNext, captureRequest, showPage, pressGate, captureScroll, feedScroll,
     folderScroll, openMenu, openCapture]);
 
   return (

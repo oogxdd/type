@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { flushCaptureDraft } from "../lib/capture-draft";
+import { mobileRuntime } from "../core/runtime";
+import { useRecordingSessionStore } from "./recording-session-store";
 
 import * as core from "@typenotes/mobile-core/core-api";
 import { getErrorMessage } from "@typenotes/shared/errors";
@@ -97,20 +98,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
 
     createWorkingFolder: (name) =>
       guarded(async () => {
-        await flushCaptureDraft();
-        apply(await core.createProfile({ name }));
+        if (useRecordingSessionStore.getState().active) throw new Error("Finish the recording before changing working folders.");
+        await mobileRuntime.changeWorkspace(async () => apply(await core.createProfile({ name })));
       }),
 
     switchWorkingFolder: (profileId) =>
       guarded(async () => {
-        await flushCaptureDraft();
-        apply(await core.setActiveProfile(profileId));
+        if (useRecordingSessionStore.getState().active) throw new Error("Finish the recording before changing working folders.");
+        await mobileRuntime.changeWorkspace(async () => apply(await core.setActiveProfile(profileId)));
       }),
 
     setNotesRoot: (profileId, notesRoot) =>
       guarded(async () => {
-        await flushCaptureDraft();
-        apply(await core.setProfileNotesRoot(profileId, notesRoot));
+        if (useRecordingSessionStore.getState().active) throw new Error("Finish the recording before changing working folders.");
+        await mobileRuntime.changeWorkspace(async () => apply(await core.setProfileNotesRoot(profileId, notesRoot)));
       }),
 
     setTranscriptionMode: (mode) =>

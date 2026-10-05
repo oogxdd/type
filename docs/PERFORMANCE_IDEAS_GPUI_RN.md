@@ -233,3 +233,13 @@ npm run codegen:ios -w @typenotes/mobile-core
 
 Физическое iOS/Android устройство, native UI runtime и performance benchmarks
 GPUI не проверялись. Приложение пользователя не запускалось и не перезапускалось.
+
+## Mobile runtime follow-up, 2026-10-05
+
+Settings navigation now dispatches independently of saves and preview work.
+Draft ownership, workspace draining, guarded body writes, file-path media and
+a prioritized incremental feed worker are implemented in the mobile runtime.
+The existing gesture thresholds and animation timings are preserved. See
+[MOBILE_RUNTIME.md](MOBILE_RUNTIME.md) for invariants, checks, native Release
+XCTest setup and the distinction between JS timings and physical-device frame
+latency. Device feel and p95 targets still require physical iPhone measurement.

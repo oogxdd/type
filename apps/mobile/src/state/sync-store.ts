@@ -26,7 +26,7 @@ import {
   type SyncTiming,
 } from "../lib/sync-schedule";
 import { useDiagnosticsStore } from "./diagnostics-store";
-import { useNotesStore } from "./notes-store";
+import { mobileRuntime } from "../core/runtime";
 import { activeProfile, useSettingsStore } from "./settings-store";
 import { useSyncLogStore } from "./sync-log-store";
 
@@ -94,6 +94,7 @@ type SyncState = {
   setPendingLink: (link: SyncDeepLinkParams | null) => void;
   refreshIrohStatus: () => Promise<void>;
   refresh: () => Promise<void>;
+  resetForWorkspace: () => void;
   connect: (args: ConnectGitArgs) => Promise<void>;
   /** Persist a scanned sync link to the working folder's settings + connect. */
   connectFromLink: (link: SyncDeepLinkParams) => Promise<void>;
@@ -113,6 +114,8 @@ type SyncState = {
 
 export const useSyncStore = create<SyncState>((set, get) => {
   let syncInFlight: Promise<void> | null = null;
+  let localRevision = 0;
+  let historyRevision = 0;
 
   const savedGitConnection = (): SavedGitConnection | null => {
     const profile = activeProfile(useSettingsStore.getState().snapshot);
@@ -176,6 +179,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
     }
     if (audioArchiveInFlight) return;
     audioArchiveInFlight = true;
+    const token = mobileRuntime.workspace();
     set({ audioArchiveState: "archiving" });
     void (async () => {
       // Recordings travel outside Git. Trouble moving them must not stop the
@@ -183,6 +187,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
       // unpaired phone keeps its audio locally until pairing succeeds.
       try {
         const archive = await core.archiveMobileAudioWithIroh();
+        if (!mobileRuntime.isCurrent(token)) return;
         if (archive.uploaded > 0) {
           logSync(`audio archive: copied ${archive.uploaded} recording(s) to the computer over Iroh`);
         }
@@ -204,11 +209,10 @@ export const useSyncStore = create<SyncState>((set, get) => {
         set({ audioArchiveState: archive.failed > 0 || archive.skipped > 0 ? "error" : "done" });
       } catch (error) {
         logSync(`audio archive: skipped this run - ${getErrorMessage(error)}`);
-        set({ audioArchiveState: "error" });
+        if (mobileRuntime.isCurrent(token)) set({ audioArchiveState: "error" });
       }
-      pruneAudioBestEffort();
-      audioArchiveInFlight = false;
-    })();
+      if (mobileRuntime.isCurrent(token)) pruneAudioBestEffort();
+    })().finally(() => { audioArchiveInFlight = false; });
   };
 
   /**
@@ -217,13 +221,14 @@ export const useSyncStore = create<SyncState>((set, get) => {
    * transport is what actually broke, report that instead.
    */
   const explainWithTransport = async (message: string): Promise<string> => {
+    const token = mobileRuntime.workspace();
     const connection = savedGitConnection();
     if (!connection?.irohTicket || !connection.remote_url) {
       return message;
     }
     try {
       const status = await core.getIrohClientStatus(connection.remote_url);
-      if (status) {
+      if (status && mobileRuntime.isCurrent(token)) {
         set({ irohStatus: status });
       }
       return status?.last_error ?? message;
@@ -285,6 +290,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
     action: SyncAction,
     work: () => Promise<GitSyncStatus | null>
   ) => {
+    const token = mobileRuntime.workspace();
     const startedAt = Date.now();
     logSync(`${action}: started`);
     set({ action, error: null, hint: null });
@@ -294,25 +300,32 @@ export const useSyncStore = create<SyncState>((set, get) => {
       action === "refresh" || action === "commit"
         ? null
         : setInterval(() => {
+            if (!mobileRuntime.isCurrent(token)) return;
             const progress = core.getGitSyncProgress();
             set({ progress: progress.phase === "idle" ? null : progress });
           }, 250);
     try {
-      const status = await work();
-      const history = await timed("git history", () => core.getGitHistory({ limit: 30 })).catch(() => []);
+      const status = await mobileRuntime.track(work, token);
+      if (!mobileRuntime.isCurrent(token)) return;
+      const historyRequest = ++historyRevision;
+      void timed("git history", () => core.getGitHistory({ limit: 30 })).then((history) => {
+        if (mobileRuntime.isCurrent(token) && historyRequest === historyRevision) set({ history });
+      }).catch(() => {});
       logSync(`${action}: done in ${Date.now() - startedAt}ms; ${statusForLog(status)}`);
-      set({ ...(status ? { status } : {}), history, action: "idle" });
+      set({ ...(status ? { status } : {}), action: "idle" });
     } catch (error) {
+      if (!mobileRuntime.isCurrent(token)) throw error;
       const raw = getErrorMessage(error);
       logSync(`${action}: failed after ${Date.now() - startedAt}ms - ${raw}`);
       const message = await explainWithTransport(raw);
+      if (!mobileRuntime.isCurrent(token)) throw error;
       set({ action: "idle", error: message, hint: getSyncHint(message) });
       throw error;
     } finally {
       if (progressTimer) {
         clearInterval(progressTimer);
       }
-      set({ progress: null });
+      if (mobileRuntime.isCurrent(token)) set({ progress: null });
     }
   };
 
@@ -371,12 +384,14 @@ export const useSyncStore = create<SyncState>((set, get) => {
   };
 
   const armAutoSyncTimer = (reason: string) => {
+    const token = mobileRuntime.workspace();
     if (autoSyncTimer) {
       clearTimeout(autoSyncTimer);
     }
     const delayMs = Math.max(0, (pendingSync?.dueAt ?? 0) - Date.now());
     logSync(`auto: scheduled after ${reason} in ${delayMs}ms`);
     autoSyncTimer = setTimeout(() => {
+      if (!mobileRuntime.isCurrent(token)) return;
       autoSyncTimer = null;
       pendingSync = null;
       if (!savedGitConnection()) {
@@ -393,10 +408,12 @@ export const useSyncStore = create<SyncState>((set, get) => {
       void get()
         .syncNow()
         .then(() => {
+          if (!mobileRuntime.isCurrent(token)) return;
           autoSyncFailureCount = 0;
-          set({ autoSyncState: "synced", lastAutoSyncedAt: Date.now() });
+          set({ autoSyncState: pendingSync ? "saved_locally" : "synced", lastAutoSyncedAt: Date.now() });
         })
         .catch((error) => {
+          if (!mobileRuntime.isCurrent(token)) return;
           autoSyncFailureCount += 1;
           const retryMs = autoSyncRetryDelayMs(autoSyncFailureCount);
           logSync(
@@ -434,6 +451,24 @@ export const useSyncStore = create<SyncState>((set, get) => {
     });
   };
 
+  const performCycle = async () => {
+    const saved = savedGitConnection();
+    await run("pull", async () => {
+      const connection = await timed("sync connection", () => prepareIrohConnection(saved));
+      await applyAudioGitExclusionFast(saved);
+      const args = connection ? { ...connection, remote_url: connection.remote_url ? stripPairingUsernameFromSshRemote(connection.remote_url) : connection.remote_url } : {};
+      const result = await timed("git sync cycle", () => core.gitSyncCycle(args));
+      // Apply even after a failed send: the remote merge already reached disk.
+      if (result.reset_required || result.changed_paths.length) {
+        void mobileRuntime.onSyncChanges(result).catch((error) => logSync(`sync changes failed: ${getErrorMessage(error)}`));
+      }
+      set({ status: result.status });
+      if (result.push_error) throw new Error(result.push_error);
+      return result.status;
+    });
+    archiveAudioBestEffort(saved);
+  };
+
   const performPull = async () => {
     await run("pull", async () => {
       const headBefore = await headCommitId();
@@ -466,8 +501,8 @@ export const useSyncStore = create<SyncState>((set, get) => {
       // every note in the root after every captured page.
       const headAfter = await headCommitId();
       if (headBefore === null || headAfter === null || headAfter !== headBefore) {
-        await timed("pull notes refresh", () => useNotesStore.getState().refresh());
-        logSync("pull: notes refreshed after remote changes");
+        void mobileRuntime.onRefreshNotes().catch((error) => logSync(`notes refresh failed: ${getErrorMessage(error)}`));
+        logSync("pull: notes refresh scheduled after remote changes");
       } else {
         logSync("pull: nothing arrived; notes left untouched");
       }
@@ -511,6 +546,13 @@ export const useSyncStore = create<SyncState>((set, get) => {
   };
 
   return {
+    resetForWorkspace: () => {
+      if (autoSyncTimer) clearTimeout(autoSyncTimer);
+      autoSyncTimer = null;
+      pendingSync = null;
+      autoSyncFailureCount = 0;
+      set({ action: "idle", status: null, history: [], progress: null, error: null, hint: null, autoSyncState: null, irohStatus: null });
+    },
     status: null,
     history: [],
     action: "idle",
@@ -685,17 +727,28 @@ export const useSyncStore = create<SyncState>((set, get) => {
       // phases. Concurrent callers join it instead of starting another pull.
       if (syncInFlight) return syncInFlight;
       if (isBusy("sync now")) return Promise.resolve();
-      syncInFlight = Promise.resolve().then(async () => {
-        logSync("sync now: starting pull then push");
+      const token = mobileRuntime.workspace();
+      syncInFlight = mobileRuntime.track(async () => {
+        logSync("sync now: starting workflow");
         set({ autoSyncState: "syncing" });
         try {
-          await performPull();
-          logSync("sync now: pull complete; starting push");
-          await performPush(undefined, get().status);
+          await mobileRuntime.flushDurable();
+          const syncingRevision = localRevision;
+          if (core.supportsGitSyncCycle()) {
+            await performCycle();
+          } else {
+            await performPull();
+            logSync("sync now: pull complete; starting push");
+            await performPush(undefined, get().status);
+          }
+          if (!mobileRuntime.isCurrent(token)) return;
           autoSyncFailureCount = 0;
-          set({ autoSyncState: "synced", lastAutoSyncedAt: Date.now() });
+          if (get().status?.has_uncommitted_changes) {
+            get().scheduleAutoSync("changes saved during sync", "action");
+          }
+          set({ autoSyncState: localRevision !== syncingRevision ? "saved_locally" : "synced", lastAutoSyncedAt: Date.now() });
         } catch (error) {
-          set({ autoSyncState: "waiting_for_computer" });
+          if (mobileRuntime.isCurrent(token)) set({ autoSyncState: "waiting_for_computer" });
           throw error;
         }
       }).finally(() => {
@@ -707,6 +760,7 @@ export const useSyncStore = create<SyncState>((set, get) => {
     scheduleAutoSync: (reason, timing = "action") => {
       autoSyncFailureCount = 0;
       if (saveReasonHasLocalChanges(reason)) {
+        localRevision += 1;
         set({ autoSyncState: "saved_locally" });
       }
       pendingSync = nextPendingSync(pendingSync, timing, Date.now());

@@ -4,8 +4,9 @@ import * as core from "@typenotes/mobile-core/core-api";
 import { STREAM_FOLDER_PATH } from "@typenotes/shared/constants";
 import { getErrorMessage } from "@typenotes/shared/errors";
 import type { NotePreview } from "@typenotes/shared/format";
-import type { FolderNode } from "@typenotes/shared/types";
+import type { FolderNode, GitSyncCycleResult } from "@typenotes/shared/types";
 
+import { applySyncTreePatch, visibleSyncPath } from "../lib/sync-note-tree";
 import { collectNoteEntries, collectNotePaths } from "../lib/feed";
 import { runNoteJob } from "../lib/note-worker";
 import { prioritizeNotes, reconcileNoteTree, yieldForNoteHistory } from "../lib/note-loading";
@@ -20,7 +21,7 @@ import {
 // them is evaluating.
 import { useSecurityStore } from "./security-store";
 import { activeProfile, useSettingsStore } from "./settings-store";
-import { useSyncStore } from "./sync-store";
+import { mobileRuntime } from "../core/runtime";
 
 /**
  * Rust returns bounded list text, never full bodies. JSON is decoded by the
@@ -36,6 +37,7 @@ const collectPreviewsInto = async (
   into: Map<string, LoadedPreview>
 ): Promise<void> => {
   for (let index = 0; index < paths.length; index += PREVIEW_BATCH) {
+    if (index > 0) await yieldForNoteHistory();
     const raw = await core.listNoteSummariesRaw(paths.slice(index, index + PREVIEW_BATCH));
     const result = await runNoteJob({ kind: "summaries", raw });
     for (const [path, value] of result.changes ?? []) into.set(path, value);
@@ -66,6 +68,7 @@ type NotesState = {
   /** Only the affected folder gets a new map; unrelated lists keep their inputs. */
   folderPreviews: Map<string, Map<string, NotePreview>>;
   notePaths: Set<string>;
+  folderRevisions: Map<string, number>;
   processingScope: string;
   /**
    * The file version each preview was read at (`NoteEntry.version`): how a
@@ -82,6 +85,7 @@ type NotesState = {
    * Concurrent calls coalesce.
    */
   refresh: () => Promise<void>;
+  applySyncChanges: (result: GitSyncCycleResult) => Promise<void>;
   /** Refresh previews for a few paths without re-reading the whole tree. */
   refreshPreviews: (paths: string[]) => Promise<void>;
   /**
@@ -134,13 +138,18 @@ const samePreview = (a: NotePreview | undefined, b: NotePreview) => a !== undefi
 
 export const useNotesStore = create<NotesState>((set, get) => {
   let watchersInstalled = false;
+  let mutationRevision = 0;
+  const pathReads = new Map<string, number>();
+  let syncChanges: Promise<void> = Promise.resolve();
   const clearWorkspace = () => {
     epoch += 1;
+    pathReads.clear();
+    mutationRevision += 1;
     heldProfileId = activeProfileId();
     snapshotStale = false;
     treeReadShown = treeReadsStarted;
     const scope = workerScope();
-    set({ tree: null, notePaths: new Set(), previews: new Map(), folderPreviews: new Map(), previewVersions: new Map(), processingScope: scope, loading: false });
+    set({ tree: null, notePaths: new Set(), previews: new Map(), folderPreviews: new Map(), folderRevisions: new Map(), previewVersions: new Map(), processingScope: scope, loading: false });
     void runNoteJob({ kind: "reset", scope, workspace: workspaceKey() }).catch(() => {});
   };
   const watchContext = () => {
@@ -190,14 +199,18 @@ export const useNotesStore = create<NotesState>((set, get) => {
     const accepted: PreviewChange[] = [];
     const removed: string[] = [];
     set((state) => {
-      const previews = new Map(state.previews);
-      const previewVersions = new Map(state.previewVersions);
-      const folderPreviews = new Map(state.folderPreviews);
+      // Normalized indexes are internal mutable maps. Folder revision counters
+      // notify React without copying thousands of unrelated entries per batch.
+      const previews = state.previews;
+      const previewVersions = state.previewVersions;
+      const folderPreviews = state.folderPreviews;
+      const folderRevisions = new Map(state.folderRevisions);
       const touched = new Set<string>();
       const folderMap = (path: string) => {
         const folder = folderOf(path);
         if (!touched.has(folder)) {
-          folderPreviews.set(folder, new Map(folderPreviews.get(folder)));
+          if (!folderPreviews.has(folder)) folderPreviews.set(folder, new Map());
+          folderRevisions.set(folder, (folderRevisions.get(folder) ?? 0) + 1);
           touched.add(folder);
         }
         return folderPreviews.get(folder)!;
@@ -235,6 +248,7 @@ export const useNotesStore = create<NotesState>((set, get) => {
         previews: touched.size ? previews : state.previews,
         folderPreviews: touched.size ? folderPreviews : state.folderPreviews,
         previewVersions,
+        folderRevisions,
       } : state;
     });
     if (changed) {
@@ -249,11 +263,15 @@ export const useNotesStore = create<NotesState>((set, get) => {
     const loaded = new Map<string, LoadedPreview>();
     const generation = epoch;
     const profile = activeProfileId();
+    const revisions = new Map(paths.map((path) => {
+      const revision = (pathReads.get(path) ?? 0) + 1;
+      pathReads.set(path, revision);
+      return [path, revision];
+    }));
     await collectPreviewsInto(paths, loaded);
     if (!current(generation, profile)) return;
-    for (const path of paths) {
-      rereadDuringRefresh?.add(path);
-    }
+    for (const path of loaded.keys()) if (pathReads.get(path) !== revisions.get(path)) loaded.delete(path);
+    for (const path of loaded.keys()) rereadDuringRefresh?.add(path);
     mergePreviews(loaded, { prune });
   };
 
@@ -276,7 +294,7 @@ export const useNotesStore = create<NotesState>((set, get) => {
     snapshotStale = false;
     // Tree reads started for the previous folder must not land.
     treeReadShown = treeReadsStarted;
-    set({ tree: null, previews: new Map(), folderPreviews: new Map(), previewVersions: new Map(), notePaths: new Set(), processingScope: scope });
+    set({ tree: null, previews: new Map(), folderPreviews: new Map(), folderRevisions: new Map(), previewVersions: new Map(), notePaths: new Set(), processingScope: scope });
     if (profileId === null) {
       return;
     }
@@ -343,13 +361,15 @@ export const useNotesStore = create<NotesState>((set, get) => {
     reason: string,
     run: () => Promise<void>
   ): Promise<void> => {
+    const token = mobileRuntime.workspace();
+    mutationRevision += 1;
     try {
-      await run();
+      await mobileRuntime.track(run, token);
     } catch (error) {
-      set({ error: getErrorMessage(error) });
+      if (mobileRuntime.isCurrent(token)) set({ error: getErrorMessage(error) });
       throw error;
     }
-    useSyncStore.getState().scheduleAutoSync(reason);
+    if (mobileRuntime.isCurrent(token)) mobileRuntime.onSaved(reason);
   };
 
   const fullRefresh = async (): Promise<void> => {
@@ -419,6 +439,7 @@ export const useNotesStore = create<NotesState>((set, get) => {
     tree: null,
     previews: new Map(),
     folderPreviews: new Map(),
+    folderRevisions: new Map(),
     notePaths: new Set(),
     processingScope: "demo:0",
     previewVersions: new Map(),
@@ -444,6 +465,55 @@ export const useNotesStore = create<NotesState>((set, get) => {
       return refreshInFlight;
     },
 
+    applySyncChanges: (result) => {
+      const token = mobileRuntime.workspace();
+      const apply = async () => {
+        if (!mobileRuntime.isCurrent(token) || !readable()) return;
+        if (result.reset_required || !get().tree || heldProfileId !== activeProfileId()) {
+          await get().refresh(); return;
+        }
+        const paths = result.changed_paths.filter((path) => path.endsWith(".md") && visibleSyncPath(path));
+        const folders = result.tree_patch.filter((folder) => visibleSyncPath(folder.path));
+        if (!paths.length && !folders.length) return;
+        const generation = epoch, profile = activeProfileId(), mutation = mutationRevision;
+        const revisions = new Map(paths.map((path) => {
+          const revision = (pathReads.get(path) ?? 0) + 1;
+          pathReads.set(path, revision);
+          return [path, revision];
+        }));
+        const loaded = new Map<string, LoadedPreview>();
+        await collectPreviewsInto(paths, loaded);
+        if (!mobileRuntime.isCurrent(token) || !current(generation, profile)) return;
+        // Structural local work raced this snapshot. Reconcile from disk once
+        // instead of resurrecting a locally moved/deleted row or folder.
+        if (mutation !== mutationRevision) { await get().refresh(); return; }
+        const accepted = (path: string) => revisions.get(path) === pathReads.get(path);
+        for (const path of loaded.keys()) if (!accepted(path)) loaded.delete(path);
+        const entries = result.entries.filter((entry) => accepted(entry.path) && visibleSyncPath(entry.path))
+          .map((entry) => ({ ...entry, version: loaded.get(entry.path)?.version ?? entry.version }));
+        // A formerly removed file may have been recreated before its compact read.
+        for (const path of result.removed_paths) if (loaded.has(path)) entries.push({ path, name: path.split("/").at(-1)!, version: loaded.get(path)!.version });
+        const removed = result.removed_paths.filter((path) => accepted(path) && !loaded.has(path));
+        for (const path of paths) rereadDuringRefresh?.add(path);
+        const tree = applySyncTreePatch(get().tree!, entries, removed, folders);
+        treeReadShown = ++treeReadsStarted; // Older in-flight tree snapshots cannot land.
+        if (tree !== get().tree) set({ tree, notePaths: new Set(collectNotePaths(tree)) });
+        mergePreviews(loaded, { prune: true });
+        snapshotStale = true;
+        // Persisting the cache is separate from sending or applying this delta.
+        void saveSnapshot(profile).catch(() => { snapshotStale = true; });
+      };
+      const pending = syncChanges.then(apply);
+      syncChanges = pending.catch(() => {});
+      return pending.catch(async (error) => {
+        if (mobileRuntime.isCurrent(token) && readable()) {
+          set({ error: getErrorMessage(error) });
+          await get().refresh();
+        }
+        throw error;
+      });
+    },
+
     refreshPreviews: async (paths) => {
       if (paths.length === 0) {
         return;
@@ -458,6 +528,7 @@ export const useNotesStore = create<NotesState>((set, get) => {
     },
 
     noteFiled: async (path) => {
+      if (!get().notePaths.has(path)) mutationRevision += 1;
       try {
         if (!readable()) return;
         if (heldProfileId !== activeProfileId() || get().processingScope !== workerScope()) await holdProfile(activeProfileId());
@@ -470,6 +541,7 @@ export const useNotesStore = create<NotesState>((set, get) => {
     },
 
     noteRemoved: async () => {
+      mutationRevision += 1;
       await reloadTree();
       mergePreviews(new Map(), { prune: true });
     },

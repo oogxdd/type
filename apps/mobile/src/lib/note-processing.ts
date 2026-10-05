@@ -12,8 +12,9 @@ export type NoteJob =
   | { kind: "update"; scope: string; changes: PreviewChange[]; removed: string[] }
   | { kind: "snapshot"; scope: string }
   | { kind: "releaseFeed"; scope: string; key: string };
-export type FeedJob = { kind: "feed"; scope: string; key: string; notes?: NoteEntry[]; filter: "all" | "active" | "archived"; now: number };
-export type NoteJobResult = { changes?: PreviewChange[]; tree?: FolderNode; raw?: string; sections?: NoteRowSection[]; sectionTitles?: string[] };
+export type FeedJob = { kind: "feed"; scope: string; key: string; notes?: NoteEntry[]; filter: "all" | "active" | "archived"; now: number; incremental?: boolean };
+export type SectionPatch = { title: string; splices: Array<{ index: number; deleteCount: number; rows: NoteRowSection["data"] }> };
+export type NoteJobResult = { sectionPatches?: SectionPatch[]; changes?: PreviewChange[]; tree?: FolderNode; raw?: string; sections?: NoteRowSection[]; sectionTitles?: string[] };
 
 declare global {
   // Lives in the worker's own runtime; React/Zustand objects are never captured.
@@ -126,15 +127,45 @@ export function processNoteJob(job: NoteJob | FeedJob): NoteJobResult {
       sections[sections.length - 1].data.push(row);
     }
     const changed: NoteRowSection[] = [];
+    const patches: SectionPatch[] = [];
     const signatures: Record<string, NoteRowSection> = Object.create(null);
     for (const section of sections) {
       const previous = held.sections[section.title];
       const same = previous && previous.data.length === section.data.length && previous.data.every((row, index) => row === section.data[index]);
       signatures[section.title] = same ? previous : section;
-      if (!same) changed.push(section);
+      if (!same) {
+        if (!job.incremental) changed.push(section);
+        else {
+          const old = previous?.data ?? [];
+          const positions: Record<string, number> = Object.create(null);
+          for (let index = 0; index < old.length; index += 1) positions[old[index].path] = index;
+          const splices: SectionPatch["splices"] = [];
+          let oldIndex = 0, nextIndex = 0;
+          while (nextIndex < section.data.length) {
+            const row = section.data[nextIndex];
+            const position = positions[row.path];
+            if (position === undefined || position < oldIndex) {
+              const insert: NoteRowSection["data"] = [];
+              const index = nextIndex;
+              do { insert.push(section.data[nextIndex++]); }
+              while (nextIndex < section.data.length && insert.length < 200 &&
+                (positions[section.data[nextIndex].path] === undefined || positions[section.data[nextIndex].path] < oldIndex));
+              splices.push({ index, deleteCount: 0, rows: insert });
+            } else {
+              if (position > oldIndex) splices.push({ index: nextIndex, deleteCount: position - oldIndex, rows: [] });
+              oldIndex = position;
+              if (old[oldIndex] !== row) splices.push({ index: nextIndex, deleteCount: 1, rows: [row] });
+              oldIndex += 1;
+              nextIndex += 1;
+            }
+          }
+          if (oldIndex < old.length) splices.push({ index: nextIndex, deleteCount: old.length - oldIndex, rows: [] });
+          patches.push({ title: section.title, splices });
+        }
+      }
     }
     held.sections = signatures;
-    return { sections: changed, sectionTitles: sections.map((section) => section.title) };
+    return { sections: job.incremental ? undefined : changed, sectionPatches: job.incremental ? patches : undefined, sectionTitles: sections.map((section) => section.title) };
   }
   if (job.kind === "restore") {
     const changes: PreviewChange[] = [];

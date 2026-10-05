@@ -6,6 +6,7 @@ import * as core from "@typenotes/mobile-core/core-api";
 vi.mock("@typenotes/mobile-core/core-api", () => ({
   unlockSecurity: vi.fn(),
   getSecurityState: vi.fn(),
+  openDraft: vi.fn(),
 }));
 vi.mock("./notes-store", () => ({
   useNotesStore: { getState: () => ({ refresh: vi.fn(async () => {}) }) },

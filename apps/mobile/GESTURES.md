@@ -108,3 +108,12 @@ now has no native pop recognizer. Do not restore the split as a threshold fix.
 Functional checks cover ordered browsing in both directions, list boundaries,
 failed saves/reads, retaining drafts and editing the draft through the list.
 Physical startup timing and gesture feel on iOS/Android remain device checks.
+
+## Taps during background work
+
+Button handlers use the coordinator's per-touch JS press gate. Direction
+selection cancels that touch only; the next touch begins a new gate immediately.
+There is no post-swipe time window and handlers do not synchronously read UI
+shared values. A pending manual pan fails on touch release so native buttons
+can finish their tap. Opening the menu or Settings does not await storage or
+preview processing. See [runtime ownership](../../docs/MOBILE_RUNTIME.md).

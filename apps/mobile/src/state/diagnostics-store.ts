@@ -33,12 +33,14 @@ export type Diagnostics = {
    * stuck sync was actually doing. Off by default; cleared on app restart.
    */
   captureSyncLogs: boolean;
+  traceResponsiveness: boolean;
 };
 
 export const DEFAULT_DIAGNOSTICS: Diagnostics = {
   showCaptureSyncStatus: false,
   traceGestures: false,
   captureSyncLogs: false,
+  traceResponsiveness: false,
 };
 
 export const normalizeDiagnostics = (raw: unknown): Diagnostics => {
@@ -52,6 +54,7 @@ export const normalizeDiagnostics = (raw: unknown): Diagnostics => {
       typeof value.traceGestures === "boolean"
         ? value.traceGestures
         : DEFAULT_DIAGNOSTICS.traceGestures,
+    traceResponsiveness: typeof value.traceResponsiveness === "boolean" ? value.traceResponsiveness : false,
     captureSyncLogs:
       typeof value.captureSyncLogs === "boolean"
         ? value.captureSyncLogs
@@ -80,6 +83,7 @@ type DiagnosticsState = {
   setShowCaptureSyncStatus: (value: boolean) => void;
   setTraceGestures: (value: boolean) => void;
   setCaptureSyncLogs: (value: boolean) => void;
+  setTraceResponsiveness: (value: boolean) => void;
 };
 
 export const useDiagnosticsStore = create<DiagnosticsState>((set, get) => {
@@ -103,6 +107,7 @@ export const useDiagnosticsStore = create<DiagnosticsState>((set, get) => {
     },
     setShowCaptureSyncStatus: (value) => update({ showCaptureSyncStatus: value }),
     setTraceGestures: (value) => update({ traceGestures: value }),
+    setTraceResponsiveness: (value) => update({ traceResponsiveness: value }),
     setCaptureSyncLogs: (value) => update({ captureSyncLogs: value }),
   };
 });

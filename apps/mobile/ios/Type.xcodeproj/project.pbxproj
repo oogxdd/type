@@ -21,6 +21,8 @@
 		EFD60DEB3E00768BEE62833E /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7A7559077CCA355CFA9F76C /* ExpoModulesProvider.swift */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
 		FD1043907DD8D2FD07D4330A /* libPods-Type.a in Frameworks */ = {isa = PBXBuildFile; fileRef = FF726DAF3C913289727470CA /* libPods-Type.a */; };
+		2B6DB8784CE6472EAE3A00BA /* TypeUITests.mdimporter in Copy Files */ = {isa = PBXBuildFile; fileRef = 30AFBDE46E254899890F7BF4 /* TypeUITests.mdimporter */; };
+		3539D0CB5ABC47F081E7E4B3 /* ResponsivenessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86B922C600EF4AC187413321 /* ResponsivenessTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -30,6 +32,20 @@
 			proxyType = 1;
 			remoteGlobalIDString = D32D23A1370D4CD8A6A5BD19;
 			remoteInfo = RecordingWidget;
+		};
+		7B38B785EDED42139A5AE6C6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F9CA286BEFC24476B85B936E;
+			remoteInfo = "TypeUITests";
+		};
+		954F98E864CA497DAF38E977 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 13B07F861A680F5B00A75B9A;
+			remoteInfo = Type;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -69,6 +85,8 @@
 		F11748442D0722820044C1D9 /* Type-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Type-Bridging-Header.h"; path = "Type/Type-Bridging-Header.h"; sourceTree = "<group>"; };
 		F81E7A8ECBCD47B78A5602AE /* RecordingLiveActivityWidget.swift */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = sourcecode.swift; name = RecordingLiveActivityWidget.swift; path = RecordingLiveActivityWidget.swift; sourceTree = "<group>"; };
 		FF726DAF3C913289727470CA /* libPods-Type.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Type.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		30AFBDE46E254899890F7BF4 /* TypeUITests.mdimporter */ = {isa = PBXFileReference; name = "TypeUITests.mdimporter"; path = "TypeUITests.mdimporter"; sourceTree = BUILT_PRODUCTS_DIR; fileEncoding = undefined; lastKnownFileType = undefined; explicitFileType = "wrapper.cfbundle"; includeInIndex = 0; };
+		86B922C600EF4AC187413321 /* ResponsivenessTests.swift */ = {isa = PBXFileReference; name = "ResponsivenessTests.swift"; path = "TypeUITests/ResponsivenessTests.swift"; sourceTree = "<group>"; fileEncoding = 4; lastKnownFileType = sourcecode.swift; explicitFileType = undefined; includeInIndex = 0; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -159,6 +177,7 @@
 			children = (
 				13B07F961A680F5B00A75B9A /* Type.app */,
 				753C899B9DF44824AAEF8D81 /* RecordingWidget.appex */,
+				30AFBDE46E254899890F7BF4 /* TypeUITests.mdimporter */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -239,6 +258,22 @@
 			productReference = 753C899B9DF44824AAEF8D81 /* RecordingWidget.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		F9CA286BEFC24476B85B936E /* "TypeUITests" */ = {
+			isa = PBXNativeTarget;
+			name = "TypeUITests";
+			productName = "TypeUITests";
+			productReference = 30AFBDE46E254899890F7BF4;
+			productType = "com.apple.product-type.bundle.ui-testing";
+			buildConfigurationList = EDC56F0BF4E84412AEA8C8B0;
+			buildPhases = (
+				440BC4CEE3324DC4A8EE8643 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				CFAF91B956834B57B092DAC1 /* PBXTargetDependency */,
+			);
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -267,6 +302,7 @@
 			targets = (
 				13B07F861A680F5B00A75B9A /* Type */,
 				D32D23A1370D4CD8A6A5BD19 /* RecordingWidget */,
+				F9CA286BEFC24476B85B936E /* "TypeUITests" */,
 			);
 		};
 /* End PBXProject section */
@@ -431,6 +467,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		440BC4CEE3324DC4A8EE8643 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3539D0CB5ABC47F081E7E4B3 /* ResponsivenessTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -438,6 +482,16 @@
 			isa = PBXTargetDependency;
 			target = D32D23A1370D4CD8A6A5BD19 /* RecordingWidget */;
 			targetProxy = 4E00DA71509141B79214AFCB /* PBXContainerItemProxy */;
+		};
+		AF414D87A48840A09663482E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F9CA286BEFC24476B85B936E /* "TypeUITests" */;
+			targetProxy = 7B38B785EDED42139A5AE6C6 /* PBXContainerItemProxy */;
+		};
+		CFAF91B956834B57B092DAC1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 13B07F861A680F5B00A75B9A /* Type */;
+			targetProxy = 954F98E864CA497DAF38E977 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -469,13 +523,14 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = com.typenotes.mobile;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(TYPE_APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = Type;
 				SWIFT_OBJC_BRIDGING_HEADER = "Type/Type-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
+				TYPE_APP_BUNDLE_IDENTIFIER = com.typenotes.mobile;
 			};
 			name = Debug;
 		};
@@ -501,12 +556,13 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = com.typenotes.mobile;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(TYPE_APP_BUNDLE_IDENTIFIER)";
 				PRODUCT_NAME = Type;
 				SWIFT_OBJC_BRIDGING_HEADER = "Type/Type-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
+				TYPE_APP_BUNDLE_IDENTIFIER = com.typenotes.mobile;
 			};
 			name = Release;
 		};
@@ -529,12 +585,13 @@
 				);
 				MARKETING_VERSION = 1.0;
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = com.typenotes.mobile.RecordingWidget;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(TYPE_APP_BUNDLE_IDENTIFIER).RecordingWidget";
 				PRODUCT_NAME = RecordingWidget;
 				SKIP_INSTALL = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				TYPE_APP_BUNDLE_IDENTIFIER = com.typenotes.mobile;
 			};
 			name = Debug;
 		};
@@ -689,14 +746,51 @@
 				);
 				MARKETING_VERSION = 1.0;
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = com.typenotes.mobile.RecordingWidget;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(TYPE_APP_BUNDLE_IDENTIFIER).RecordingWidget";
 				PRODUCT_NAME = RecordingWidget;
 				SKIP_INSTALL = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				TYPE_APP_BUNDLE_IDENTIFIER = com.typenotes.mobile;
 			};
 			name = Release;
+		};
+		6416B3FBBDE24ABF85AC3D59 /* Debug */ = {
+			name = Debug;
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				PRODUCT_NAME = "TypeUITests";
+				SKIP_INSTALL = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typenotes.mobile.dev.uitests;
+				GENERATE_INFOPLIST_FILE = YES;
+				TEST_TARGET_NAME = Type;
+				SWIFT_VERSION = 5.9;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				CODE_SIGN_STYLE = Automatic;
+			};
+		};
+		A9AD25888B544ECFAF37BD2D /* Release */ = {
+			name = Release;
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				PRODUCT_NAME = "TypeUITests";
+				SKIP_INSTALL = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typenotes.mobile.dev.uitests;
+				GENERATE_INFOPLIST_FILE = YES;
+				TEST_TARGET_NAME = Type;
+				SWIFT_VERSION = 5.9;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				CODE_SIGN_STYLE = Automatic;
+			};
 		};
 /* End XCBuildConfiguration section */
 
@@ -724,6 +818,15 @@
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,
 				83CBBA211A601CBA00E9B192 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		EDC56F0BF4E84412AEA8C8B0 /* Build configuration list for PBXNativeTarget "TypeUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6416B3FBBDE24ABF85AC3D59 /* Debug */,
+				A9AD25888B544ECFAF37BD2D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

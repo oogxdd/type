@@ -42,6 +42,10 @@ impl<G: GitSyncGateway> GitSyncUseCases<G> {
         self.gateway.commit(args)
     }
 
+    pub fn sync_cycle(&self, args: G::CycleArgs) -> Result<G::CycleResult, String> {
+        self.gateway.sync_cycle(args)
+    }
+
     pub fn push(&self, args: G::PushArgs) -> Result<G::Status, String> {
         self.gateway.push(args)
     }

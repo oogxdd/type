@@ -6,7 +6,6 @@
 
 import { Ionicons } from "@expo/vector-icons";
 import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
-import * as FileSystem from "expo-file-system/legacy";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -14,13 +13,6 @@ import * as core from "@typenotes/mobile-core/core-api";
 import { getErrorMessage } from "@typenotes/shared/errors";
 
 import { useTheme } from "../theme";
-
-const extensionForMime = (mimeType: string) => {
-  if (mimeType.includes("mp4") || mimeType.includes("m4a")) return "m4a";
-  if (mimeType.includes("wav")) return "wav";
-  if (mimeType.includes("webm")) return "webm";
-  return "audio";
-};
 
 const formatTime = (seconds: number) => {
   if (!Number.isFinite(seconds) || seconds < 0) {
@@ -45,18 +37,9 @@ export const RecordingAudioPlayer = ({ audioPath }: { audioPath: string }) => {
     let cancelled = false;
     setAudioUri(null);
     setError(null);
-    core
-      .readRecordingAudio(audioPath)
-      .then(async (payload) => {
-        const target = `${FileSystem.cacheDirectory}playback-${encodeURIComponent(
-          audioPath
-        )}.${extensionForMime(payload.mime_type)}`;
-        await FileSystem.writeAsStringAsync(target, payload.audio_base64, {
-          encoding: "base64",
-        });
-        if (!cancelled) {
-          setAudioUri(target);
-        }
+    core.getRecordingPlaybackPath(audioPath)
+      .then((path) => {
+        if (!cancelled) setAudioUri(`file://${encodeURI(path)}`);
       })
       .catch((err) => {
         if (!cancelled) {

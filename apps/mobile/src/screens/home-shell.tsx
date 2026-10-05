@@ -22,7 +22,7 @@ export type HomeShell = {
   captureRequest: number;
   showPage: () => void;
   commitVelocity: SharedValue<number>;
-  suppressPressUntil: SharedValue<number>;
+  pressAllowed: () => boolean;
   captureScroll: NativeGesture;
   feedScroll: NativeGesture;
   folderScroll: NativeGesture;

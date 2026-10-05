@@ -186,10 +186,7 @@ fn read_security_config(app: &AppEnv) -> Result<SecurityConfigFile, String> {
     Ok(parsed)
 }
 
-fn write_security_config(
-    app: &AppEnv,
-    config: &SecurityConfigFile,
-) -> Result<(), String> {
+fn write_security_config(app: &AppEnv, config: &SecurityConfigFile) -> Result<(), String> {
     let path = security_file_path(app)?;
     let raw = serde_json::to_string_pretty(config).map_err(|err| err.to_string())?;
     fs::write(path, raw).map_err(|err| err.to_string())
@@ -262,7 +259,7 @@ fn derive_security_key(password: &str, salt: &[u8]) -> Result<[u8; SECURITY_KEY_
 
 // ── Note body encryption / decryption ──────────────────────────────────────────
 
-fn is_encrypted_note_body(body: &str) -> bool {
+pub fn is_encrypted_note_body(body: &str) -> bool {
     body.trim_start().starts_with(SECURITY_NOTE_BODY_PREFIX)
 }
 
@@ -471,9 +468,7 @@ fn panic_reset_local_data(app: &AppEnv) -> Result<(), String> {
 // ── Public command implementations ─────────────────────────────────────────────
 
 /// Called during app setup to load security config from disk.
-pub fn ensure_security_runtime_initialized_for_setup(
-    app: &AppEnv,
-) -> Result<(), String> {
+pub fn ensure_security_runtime_initialized_for_setup(app: &AppEnv) -> Result<(), String> {
     ensure_security_runtime_loaded(app)
 }
 

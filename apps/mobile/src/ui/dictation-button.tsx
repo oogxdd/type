@@ -19,7 +19,6 @@ import {
   useAudioRecorder,
   useAudioRecorderState,
 } from "expo-audio";
-import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useRef, useState } from "react";
 import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
@@ -76,6 +75,7 @@ export const DictationButton = ({
   // User, unmount, Lock Screen, and audio-interruption stops can race. One
   // shared promise makes the native stop + core save exactly-once.
   const stopPromise = useRef<Promise<void> | null>(null);
+  const pendingRecordingUri = useRef<string | null>(null);
   const suppressNextPress = useRef(false);
 
   // Wall-clock anchor for the timer. expo-audio's polled `durationMillis`
@@ -180,29 +180,27 @@ export const DictationButton = ({
       if (recorder.isRecording) {
         await recorder.stop();
       }
-      const uri = recorder.uri;
+      const uri = pendingRecordingUri.current ?? recorder.uri;
       if (!uri) {
         throw new Error("Recorder produced no file.");
       }
-      const audioBase64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: "base64",
-      });
-      await core.saveAudioRecording({
-        audio_base64: audioBase64,
+      pendingRecordingUri.current = uri;
+      const saved = await core.saveAudioRecordingFromFile(decodeURI(uri.replace(/^file:\/\//, "")), {
         mime_type: "audio/mp4",
       });
+      pendingRecordingUri.current = null;
       useSyncStore.getState().scheduleAutoSync("audio saved");
 
       let detail = MODE_SAVED_DETAIL[mode];
       if (mode === "assemblyai") {
         try {
-          await core.queueRecordingTranscriptions();
+          void core.queueRecordingTranscriptions().catch((error) => showStatus({ kind: "error", text: `Saved, but queueing failed: ${getErrorMessage(error)}` }));
         } catch (queueError) {
           detail = `Saved, but queueing failed: ${getErrorMessage(queueError)}`;
         }
       } else if (mode === "native") {
         try {
-          await core.queueProviderTranscriptions(nativeTranscriptionProvider);
+          void core.queueProviderTranscriptions(nativeTranscriptionProvider).catch((error) => showStatus({ kind: "error", text: `Saved, but queueing failed: ${getErrorMessage(error)}` }));
         } catch (queueError) {
           detail = `Saved, but queueing failed: ${getErrorMessage(queueError)}`;
         }
@@ -211,9 +209,9 @@ export const DictationButton = ({
         detail = `Recording was interrupted; ${detail.toLowerCase()}`;
       }
       showStatus({ kind: "success", text: detail });
-      void useNotesStore.getState().refresh();
+      void useNotesStore.getState().noteFiled(saved.note_path).catch(() => {});
     } catch (err) {
-      showStatus({ kind: "error", text: getErrorMessage(err) });
+      showStatus({ kind: "error", text: `${getErrorMessage(err)}${pendingRecordingUri.current ? " Tap the microphone to retry saving." : ""}` });
     } finally {
       startPromise.current = null;
       recordingStartedAt.current = null;
@@ -265,12 +263,12 @@ export const DictationButton = ({
         source === "camera"
           ? await ImagePicker.launchCameraAsync({
               mediaTypes: ["images"],
-              base64: true,
+              base64: false,
               quality: 1,
             })
           : await ImagePicker.launchImageLibraryAsync({
               mediaTypes: ["images"],
-              base64: true,
+              base64: false,
               quality: 1,
               allowsMultipleSelection: false,
             });
@@ -278,17 +276,13 @@ export const DictationButton = ({
         return;
       }
       const asset = result.assets[0];
-      const imageBase64 =
-        asset.base64 ??
-        (await FileSystem.readAsStringAsync(asset.uri, { encoding: "base64" }));
-      await core.saveHandwritingAttachment({
-        image_base64: imageBase64,
+      const saved = await core.saveHandwritingAttachmentFromFile(decodeURI(asset.uri.replace(/^file:\/\//, "")), {
         mime_type: asset.mimeType ?? "image/jpeg",
         file_name: asset.fileName ?? undefined,
       });
       useSyncStore.getState().scheduleAutoSync("attachment saved");
       showStatus({ kind: "success", text: "Saved — your desktop will recognize it" });
-      void useNotesStore.getState().refresh();
+      void useNotesStore.getState().noteFiled(saved.note_path).catch(() => {});
     } catch (err) {
       showStatus({ kind: "error", text: getErrorMessage(err) });
     } finally {
@@ -366,7 +360,7 @@ export const DictationButton = ({
     if (busy) {
       return;
     }
-    if (recorder.isRecording || startPromise.current) {
+    if (pendingRecordingUri.current || recorder.isRecording || startPromise.current) {
       void stopAndSave();
       return;
     }
