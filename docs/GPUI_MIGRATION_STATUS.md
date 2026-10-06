@@ -4,7 +4,9 @@ Updated: 2026-10-06. This is an unfinished migration; update this file after eac
 
 ## Where to continue
 
-- Current branch: `main` (GPUI 0.4.10 release); original migration branch: `codex/gpui-desktop`.
+- Current branch: `wip/gpui-audio-20261006` (audio/Whisper/AssemblyAI milestone
+  `095c2ea0`); release baseline: `main` (GPUI 0.4.10); original migration branch:
+  `codex/gpui-desktop`.
 - Current checkout: `/Volumes/KINGSTON/Projects/type/app`; original migration worktree: `.worktrees/gpui-desktop`.
 - Base: `081cc4cb`; core shell: `5ff01346`; handoff: `6bb5378a`; UI/keys/tests: `f1efa117`; launcher/CI: `e88e3635`; nested Stream calendar: `6997f7be`; Earlier click fix: `9f39b292`.
 - New shell: `apps/gpui` (`type-gpui`). Existing `experiments/gpui-demo` is untouched.
@@ -33,7 +35,7 @@ Updated: 2026-10-06. This is an unfinished migration; update this file after eac
 
 ### Manual AssemblyAI transcription for one recording (2026-10-06)
 
-- Milestone commit: `feat(gpui): add audio playback and per-recording transcription`.
+- Milestone commit: `095c2ea0` — `feat(gpui): add audio playback and per-recording transcription`.
 - Settings → Voice transcription now includes a searchable recording picker,
   selection/status/audio availability, existing Whisper/AssemblyAI JSON markers,
   an Open recording note action and explicit Transcribe with AssemblyAI button.
