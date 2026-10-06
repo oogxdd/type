@@ -2,7 +2,7 @@
   "expo": {
     "name": "Type",
     "slug": "typenotes",
-    "version": "0.4.4",
+    "version": "0.4.5",
     "scheme": [
       "typenotes",
       "type2"
@@ -18,7 +18,7 @@
     },
     "ios": {
       "bundleIdentifier": "com.typenotes.mobile",
-      "buildNumber": "2026100302",
+      "buildNumber": "2026100601",
       "supportsTablet": true,
       "infoPlist": {
         "UIFileSharingEnabled": true,
