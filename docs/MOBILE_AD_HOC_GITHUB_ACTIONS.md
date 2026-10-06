@@ -188,3 +188,55 @@ Artifacts and logs use the same paths as 0.4.3 above with `0.4.4` substituted.
 IPA SHA-256: `eb14535d4f919f8c3cbd1700b76732db3cda2f42e3568f8a49550c2e394f30ee`.
 Physical-device installation/UI feel remain for user testing; Android was not
 built. No GitHub release or tag was created.
+
+## Local release 0.4.5 (2026-10-06)
+
+Built locally and published to `https://type-ota.vercel.app` from release source
+commit `55ee28f8047bbbb3a8d908c693279028e62a9127`. Main's integrated mobile runtime,
+conditional-save/media FFI and incremental sync work are included, together with
+explicitly requested recording commit `433b8814` (merged as `a8a984ad`). Version
+metadata is committed as `55ee28f8`: iOS 0.4.5, build `2026100601`.
+
+The recording changes include prepared native capture, immediate Stop feedback,
+independent durable imports, a workspace-pinned recovery journal, background
+import tasks and interrupted iOS PCM WAV recovery. Regenerated optimized Rust
+device/simulator slices and UniFFI bindings, refreshed CocoaPods to compile
+`RecordingRecovery.swift`, and archived/exported with Xcode 26.6. Used the
+versioned native customizations and kept `EXPO_USE_PRECOMPILED_MODULES: false`;
+prebuild's unrelated project changes were restored. Pod versions stayed the
+same. Shared dependency paths and Metro watch folders were adjusted only in the
+isolated build checkout, recorded in its `native-build.diff`, and restored after
+packaging. Generated package-root bindings are retained with release evidence,
+while the committed clean-clone fallback is restored.
+
+Mobile and generated-bridge typechecks passed. All **289 TypeScript functional
+tests** passed: 202 mobile, 10 bridge and 77 shared. The standalone Swift suite
+passed real Core Audio WAV repair after process death, padded chunks, incomplete
+frames, repeated repair and invalid/empty-file retention. The core/FFI source
+trees are identical to the integrated main tree already verified by 108 core
+tests and the FFI end-to-end flow; those unchanged suites were not repeated.
+
+The exported IPA passed deep/strict signature verification and is signed by
+Apple Distribution. App/widget versions and builds agree, both profiles retain
+all three devices from 0.4.4, and both disable debugging. Embedded Expo config
+has background recording enabled. Live page, manifest and IPA returned HTTP 200
+with the expected content types; the production IPA matches the local SHA-256.
+
+Build artifacts and logs are under
+`.worktrees/mobile-release-0.4.5/apps/mobile/ios/build/`:
+
+- `Type-0.4.5.xcarchive`
+- `export-adhoc-0.4.5/Type.ipa`
+- `ota-0.4.5/`
+- `release-0.4.5/` (source, logs, native build diff and local/live verification)
+
+IPA size: `23461994` bytes.
+SHA-256: `f3d86086eb2ea6efa2dfee6e3a8fcecc3b81bd9c0616f0528cbc7454b95ed580`.
+To make room, regenerable Type Debug simulator build products were removed;
+the existing Type DerivedData cache was moved to
+`apps/mobile/ios/DerivedData/Type-mobile-local`, retaining its former Xcode path
+through a symlink. Existing release artifacts and installed-app data remain.
+
+Physical-device installation, recording through shutdown/background expiration,
+real phone-to-desktop sync timing and UI feel remain for user testing. Android
+was not built. No CI build, GitHub release or tag was created.

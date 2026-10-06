@@ -7,13 +7,13 @@ Updated: 2026-10-06. This is an unfinished migration; update this file after eac
 - Current branch: `main` (GPUI 0.4.10 release plus mobile and desktop sync work).
 - Verified main checkout: `/private/tmp/type-main-integration-20261006`.
   The primary directory `/Volumes/KINGSTON/Projects/type/app` remains on
-  `wip/gpui-audio-20261006` at `1c36d67a` with concurrent audio/Whisper work.
+  `wip/gpui-audio-20261006` with separate audio/Whisper work.
   Its files were preserved rather than applying conflicting sync changes while
   another session was actively writing. Historical worktrees remain available.
 - Base: `081cc4cb`; core shell: `5ff01346`; handoff: `6bb5378a`; UI/keys/tests: `f1efa117`; launcher/CI: `e88e3635`; nested Stream calendar: `6997f7be`; Earlier click fix: `9f39b292`.
 - New shell: `apps/gpui` (`type-gpui`). Existing `experiments/gpui-demo` is untouched.
-- The main checkout has concurrent audio-player work. Keep it outside the sync
-  integration commit; preserve all other worktree files during branch cleanup.
+- The primary checkout has separate audio-player work. Keep it outside the sync
+  integration and mobile release; preserve all other worktree files during cleanup.
 - User wants progress committed along the way. On 2026-10-01 the user requested
   setup and release work for the native updater. The user will test UI and feel;
   agents verify functionality. Production notes are not used for release tests.
@@ -32,6 +32,25 @@ Updated: 2026-10-06. This is an unfinished migration; update this file after eac
 - Investigate larger H1/H2/H3 only; do not implement yet.
 
 ## Implemented
+
+### Local iOS release 0.4.5 (2026-10-06)
+
+- At the user's request, merged mobile recording commit `433b8814` into the
+  integrated main as `a8a984ad`, then committed 0.4.5 / build `2026100601` as
+  `55ee28f8`. Built and exported locally with optimized native core/bindings and
+  Xcode 26.6; published the OTA install site. Separate GPUI audio/Whisper work
+  in the primary checkout is outside this mobile release.
+- Passed 202 mobile, 10 bridge and 77 shared tests, mobile/generated bridge
+  typechecks and the Swift interrupted-WAV recovery suite. Core and FFI trees
+  match the previously verified integration exactly (108 core tests and FFI
+  end-to-end), so those unchanged suites were not repeated.
+- Distribution signature, matching app/widget versions, all three existing
+  devices and disabled debugging are verified. Production page/manifest/IPA
+  return HTTP 200; downloaded IPA SHA-256 matches `f3d86086eb2ea6efa2dfee6e3a8fcecc3b81bd9c0616f0528cbc7454b95ed580`.
+- See `MOBILE_AD_HOC_GITHUB_ACTIONS.md` for build evidence and local artifacts.
+  Physical phone installation, recording shutdown/background limits, real sync
+  timing and UI feel remain for user testing; Android was not built. No CI
+  build or mobile tag was started.
 
 ### Mobile and desktop sync integration (2026-10-06)
 
