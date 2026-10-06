@@ -345,17 +345,14 @@ fn vim_half_page_uses_viewport_rows_and_preserves_visual_head(cx: &mut TestAppCo
     })
     .unwrap();
     cx.run_until_parked();
-    let (rows, height) = cx
+    let rows = cx
         .update_window(window, |_, _, cx| {
             let app = app.read(cx);
             let state = app.notes[&app.active].editor.as_ref().unwrap().read(cx);
             let height = state.line_height().unwrap();
-            (
-                (state.input_bounds().size.height / height / 2.)
-                    .floor()
-                    .max(1.) as usize,
-                height,
-            )
+            (state.input_bounds().size.height / height / 2.)
+                .floor()
+                .max(1.) as usize
         })
         .unwrap();
     let assert_row = |cx: &mut TestAppContext, row: usize, visual: bool| {
@@ -387,10 +384,26 @@ fn vim_half_page_uses_viewport_rows_and_preserves_visual_head(cx: &mut TestAppCo
     cx.update_window(window, |_, _, cx| {
         let app = app.read(cx);
         let state = app.notes[&app.active].editor.as_ref().unwrap().read(cx);
-        assert_eq!(state.scroll_offset().y, -height * rows as f32);
+        assert_eq!(state.scroll_offset().y, px(0.));
+        let cell = state
+            .range_to_bounds(&(app.vim.head..app.vim.head))
+            .unwrap();
+        assert!(cell.top() >= state.input_bounds().top() + state.input_bounds().size.height * 0.4);
     })
     .unwrap();
-    press(cx, window, "ctrl-u");
+    press(cx, window, "ctrl-d ctrl-d");
+    assert_row(cx, rows * 3, false);
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        let state = app.notes[&app.active].editor.as_ref().unwrap().read(cx);
+        assert!(state.scroll_offset().y < px(0.));
+        let cell = state
+            .range_to_bounds(&(app.vim.head..app.vim.head))
+            .unwrap();
+        assert!(cell.top() > state.input_bounds().top() + state.input_bounds().size.height / 2.);
+    })
+    .unwrap();
+    press(cx, window, "ctrl-u ctrl-u ctrl-u");
     assert_row(cx, 0, false);
     press(cx, window, "3 ctrl-d");
     assert_row(cx, 3, false);
@@ -439,7 +452,7 @@ fn vim_half_page_moves_through_wrapped_unicode_rows(cx: &mut TestAppContext) {
         let state = app.notes[&app.active].editor.as_ref().unwrap().read(cx);
         assert!(app.vim.head > 0);
         assert_eq!(state.text().offset_to_position(app.vim.head).line, 0);
-        assert!(state.scroll_offset().y < px(0.));
+        assert_eq!(state.scroll_offset().y, px(0.));
         assert!(body.is_char_boundary(app.vim.head));
         assert!(app.vim.head < state.selected_range().end);
         assert_eq!(state.value().as_ref(), body);
@@ -2552,6 +2565,7 @@ fn ordinary_folder_preserves_vim_history_and_half_page_movement(cx: &mut TestApp
         let editor = tab.read(cx).current_editor().unwrap();
         let state = editor.read(cx);
         assert_eq!(state.text().offset_to_position(state.cursor()).line, 3);
+        assert_eq!(state.scroll_offset().y, px(0.));
         assert!(!state.is_editable());
     })
     .unwrap();

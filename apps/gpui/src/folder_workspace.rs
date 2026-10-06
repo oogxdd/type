@@ -552,7 +552,6 @@ impl FolderWorkspace {
         // Modal edit effects temporarily enter the engine's editable path.
         editor.update(cx, |state, cx| state.set_readonly(false, cx));
         let mut native_motion = false;
-        let mut page_scroll = None;
         for effect in effects {
             match effect {
                 vim::Effect::Select(range) => {
@@ -592,12 +591,8 @@ impl FolderWorkspace {
                             })
                             .unwrap_or(1)
                     });
-                    if let Some(height) = state.line_height() {
-                        let mut offset = state.scroll_offset();
-                        offset.y = (offset.y + height * rows as f32 * if down { -1. } else { 1. })
-                            .min(px(0.));
-                        page_scroll = Some(offset);
-                    }
+                    // Native cursor-follow scrolls only when the destination leaves
+                    // the viewport; paging must not pin the new row to the top.
                     if self.vim.visual() {
                         let head = self.vim.head;
                         editor.update(cx, |state, cx| state.set_selected_range(head..head, cx));
@@ -639,9 +634,6 @@ impl FolderWorkspace {
                     }
                 }
                 editor.update(cx, |state, cx| {
-                    if let Some(offset) = page_scroll {
-                        state.set_scroll_offset(offset, cx);
-                    }
                     state.set_readonly(this.prefs.vim && this.vim.mode != vim::Mode::Insert, cx)
                 });
                 cx.notify();

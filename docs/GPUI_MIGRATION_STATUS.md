@@ -108,6 +108,23 @@ Updated: 2026-10-05. This is an unfinished migration; update this file after eac
   No sync code changes,
   automated real-notes tests, app restart during syncing, commit or publication.
 
+### Half-page cursor-follow adjustment (2026-10-05)
+
+- Per user feedback, Ctrl D / Ctrl U now move the cursor by half a viewport
+  (or the explicit row count) and scroll only when it leaves the visible area.
+  Removed the forced matching viewport shift that put the destination at the
+  top when starting from the first row. Applies to profile notes and ordinary
+  folder files; native wrapped-row movement and inclusive Visual heads remain.
+- Validation: all **79 GPUI tests passed** (36 library + 43 native), including
+  no scrolling for visible destinations, scrolling with the cursor visible near
+  the bottom after repeated paging, Ctrl U return, wrapped Unicode Visual motion
+  and counted ordinary-file paging. Formatting and diff checks passed.
+- Dev bundle refreshed at `experiments/gpui-demo/target/bundle/Type GPUI Dev.app`.
+  Committed at the user's request on 2026-10-06 as
+  `fix(gpui): scroll half-page motions only when the cursor leaves the viewport`.
+  Remaining: user UI/feel review; Linux/Windows runtime unverified.
+  Running apps were not restarted.
+
 ### Native release 0.4.10 — published (2026-10-05)
 
 - User requested a local macOS Apple Silicon build and GitHub/updater publication.
