@@ -50,7 +50,8 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Type uses the microphone to record voice notes."
+          "microphonePermission": "Type uses the microphone to record voice notes.",
+          "enableBackgroundRecording": true
         }
       ],
       [

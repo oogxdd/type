@@ -5,7 +5,7 @@
 // button uses in reverse when it saves a fresh recording).
 
 import { Ionicons } from "@expo/vector-icons";
-import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
+import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -29,9 +29,8 @@ export const RecordingAudioPlayer = ({ audioPath }: { audioPath: string }) => {
   const [audioUri, setAudioUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    void setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
-  }, []);
+  // Home's recorder owns the shared audio session. Changing it to playback
+  // here would disable its prepared recorder (or stop an active recording).
 
   useEffect(() => {
     let cancelled = false;

@@ -14,6 +14,9 @@ import {
 
 type RecordingActivityNativeModule = {
   isSupported(): boolean;
+  beginSave?(id: string): void;
+  finishSave?(id: string): void;
+  repairWave?(uri: string): Promise<void>;
   consumePendingStop(): boolean;
   start(startedAtMs: number): Promise<boolean>;
   end(): Promise<void>;
@@ -80,3 +83,12 @@ export const consumePendingRecordingStop = (): boolean => {
     return false;
   }
 };
+
+/** Separate from sync's background task so an early sync cannot suspend saving. */
+export const holdRecordingSave = (id: string): (() => void) => {
+  nativeModule?.beginSave?.(id);
+  return () => nativeModule?.finishSave?.(id);
+};
+
+export const repairRecordingWave = (uri: string): Promise<void> =>
+  nativeModule?.repairWave?.(uri) ?? Promise.resolve();

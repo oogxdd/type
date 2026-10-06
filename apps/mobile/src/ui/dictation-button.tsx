@@ -15,13 +15,14 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   AudioModule,
   RecordingPresets,
+  IOSOutputFormat,
   setAudioModeAsync,
   useAudioRecorder,
   useAudioRecorderState,
 } from "expo-audio";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useRef, useState } from "react";
-import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 import * as core from "@typenotes/mobile-core/core-api";
 import { getErrorMessage } from "@typenotes/shared/errors";
@@ -36,13 +37,28 @@ import {
   consumePendingRecordingStop,
   endRecordingActivity,
   startRecordingActivity,
+  holdRecordingSave,
+  repairRecordingWave,
 } from "../lib/recording-activity";
+import { rememberRecording, forgetRecording, pendingRecordings } from "../lib/recording-journal";
+import { RecordingSession } from "../lib/recording-session";
 import { elapsedSeconds, formatRecordingTimer } from "../lib/recording-timer";
 import { useNotesStore } from "../state/notes-store";
 import { useRecordingSessionStore } from "../state/recording-session-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";
+
+// PCM WAV needs no AAC container finalization to recover persisted samples.
+// 24 kHz mono is suitable for speech (~173 MB/hour); Android keeps AAC.
+const RECORDING_OPTIONS = {
+  ...RecordingPresets.HIGH_QUALITY,
+  directory: "document" as const,
+  ...(Platform.OS === "ios" ? {
+    extension: ".wav", sampleRate: 24000, numberOfChannels: 1,
+    ios: { ...RecordingPresets.HIGH_QUALITY.ios, outputFormat: IOSOutputFormat.LINEARPCM },
+  } : {}),
+};
 
 const STATUS_VISIBLE_MS = 4000;
 
@@ -61,7 +77,7 @@ export const DictationButton = ({
   onRecordingChange?: (recording: boolean) => void;
 }) => {
   const theme = useTheme();
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorder = useAudioRecorder(RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(recorder);
 
   const [busy, setBusy] = useState(false);
@@ -69,13 +85,9 @@ export const DictationButton = ({
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Start is async (permission prompt, prepare) — a hold can end before it
-  // finishes, so stopAndSave awaits the in-flight start before stopping.
-  const startPromise = useRef<Promise<void> | null>(null);
-  // User, unmount, Lock Screen, and audio-interruption stops can race. One
-  // shared promise makes the native stop + core save exactly-once.
-  const stopPromise = useRef<Promise<void> | null>(null);
-  const pendingRecordingUri = useRef<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const permissionRequest = useRef<Promise<void> | null>(null);
+  const stopAfterPermission = useRef(false);
   const suppressNextPress = useRef(false);
 
   // Wall-clock anchor for the timer. expo-audio's polled `durationMillis`
@@ -93,15 +105,15 @@ export const DictationButton = ({
     : "desktop";
 
   useEffect(() => {
-    onRecordingChange?.(recorderState.isRecording);
-  }, [recorderState.isRecording, onRecordingChange]);
+    onRecordingChange?.(isRecording);
+  }, [isRecording, onRecordingChange]);
 
   // Tick the wall clock while recording. A 500ms cadence keeps the seconds
   // readout crisp; the AppState 'active' listener forces an immediate recompute
   // the moment the app returns to the foreground, so the timer never shows a
   // stale value after the screen slept.
   useEffect(() => {
-    if (!recorderState.isRecording) {
+    if (!isRecording) {
       return;
     }
     if (recordingStartedAt.current == null) {
@@ -124,7 +136,7 @@ export const DictationButton = ({
     // Only (re)arm on the recording flag — durationMillis is read once for the
     // defensive anchor above and must not thrash the interval on every poll.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recorderState.isRecording]);
+  }, [isRecording]);
 
   const showStatus = (next: PillStatus) => {
     if (statusTimer.current) {
@@ -142,106 +154,92 @@ export const DictationButton = ({
     []
   );
 
-  const start = async () => {
-    const permission = await AudioModule.requestRecordingPermissionsAsync();
-    if (!permission.granted) {
-      throw new Error("Microphone permission denied — enable it in system settings.");
-    }
-    // shouldPlayInBackground keeps the audio session — and therefore the native
-    // recorder — alive when the screen locks, paired with the `audio`
-    // UIBackgroundMode already declared in Info.plist. Without it iOS tears the
-    // session down on background and the clip is silently truncated at lock time
-    // (which is what made the timer appear frozen: there was nothing to catch
-    // up to on wake).
-    await setAudioModeAsync({
-      allowsRecording: true,
-      playsInSilentMode: true,
-      shouldPlayInBackground: true,
-    });
-    await recorder.prepareToRecordAsync();
-    recorder.record();
-    // Set this synchronously after the native recorder starts. App.tsx reads
-    // it during the iOS background transition and keeps Capture mounted until
-    // this component has stopped and safely saved the clip.
-    useRecordingSessionStore.getState().setActive(true);
-    recordingStartedAt.current = Date.now();
-    setNowMs(Date.now());
-    // Mirror the session onto the Lock Screen / Dynamic Island so it stays
-    // visible (and stoppable) while the phone is asleep. No-op off iOS.
-    startRecordingActivity(recordingStartedAt.current);
-  };
-
-  const performStopAndSave = async (interrupted = false) => {
-    setBusy(true);
-    try {
-      await startPromise.current;
-      // iOS can already have stopped the recorder for an audio interruption.
-      // Its URI is still the completed clip, so do not turn that into an error.
-      if (recorder.isRecording) {
-        await recorder.stop();
-      }
-      const uri = pendingRecordingUri.current ?? recorder.uri;
-      if (!uri) {
-        throw new Error("Recorder produced no file.");
-      }
-      pendingRecordingUri.current = uri;
-      const saved = await core.saveAudioRecordingFromFile(decodeURI(uri.replace(/^file:\/\//, "")), {
-        mime_type: "audio/mp4",
-      });
-      pendingRecordingUri.current = null;
-      useSyncStore.getState().scheduleAutoSync("audio saved");
-
-      let detail = MODE_SAVED_DETAIL[mode];
-      if (mode === "assemblyai") {
-        try {
-          void core.queueRecordingTranscriptions().catch((error) => showStatus({ kind: "error", text: `Saved, but queueing failed: ${getErrorMessage(error)}` }));
-        } catch (queueError) {
-          detail = `Saved, but queueing failed: ${getErrorMessage(queueError)}`;
+  const latest = useRef({ mode, snapshot });
+  latest.current = { mode, snapshot };
+  const nativeRecordingObserved = useRef(false);
+  const sessionRef = useRef<RecordingSession | null>(null);
+  if (!sessionRef.current) {
+    sessionRef.current = new RecordingSession({
+      prepare: async () => {
+        // Background warm-up never prompts. An explicit tap can request permission.
+        const permission = await AudioModule.getRecordingPermissionsAsync();
+        if (!permission.granted) {
+          await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
+          throw new Error("Microphone permission required.");
         }
-      } else if (mode === "native") {
-        try {
-          void core.queueProviderTranscriptions(nativeTranscriptionProvider).catch((error) => showStatus({ kind: "error", text: `Saved, but queueing failed: ${getErrorMessage(error)}` }));
-        } catch (queueError) {
-          detail = `Saved, but queueing failed: ${getErrorMessage(queueError)}`;
-        }
-      }
-      if (interrupted) {
-        detail = `Recording was interrupted; ${detail.toLowerCase()}`;
-      }
-      showStatus({ kind: "success", text: detail });
-      void useNotesStore.getState().noteFiled(saved.note_path).catch(() => {});
-    } catch (err) {
-      showStatus({ kind: "error", text: `${getErrorMessage(err)}${pendingRecordingUri.current ? " Tap the microphone to retry saving." : ""}` });
-    } finally {
-      startPromise.current = null;
-      recordingStartedAt.current = null;
-      endRecordingActivity();
-      setBusy(false);
-      // Leave the play-and-record session and drop the background hold so
-      // playback routes normally again.
-      void setAudioModeAsync({
-        allowsRecording: false,
-        playsInSilentMode: true,
-        shouldPlayInBackground: false,
-      }).catch(() => {});
-      // Last: releasing this flag may let App.tsx apply a deferred app lock,
-      // which unmounts this component.
-      useRecordingSessionStore.getState().setActive(false);
-    }
-  };
-
-  const stopAndSave = (interrupted = false): Promise<void> => {
-    if (stopPromise.current) {
-      return stopPromise.current;
-    }
-    const operation: Promise<void> = performStopAndSave(interrupted).finally(() => {
-      if (stopPromise.current === operation) {
-        stopPromise.current = null;
-      }
+        await setAudioModeAsync({
+          allowsRecording: true, playsInSilentMode: true,
+          shouldPlayInBackground: true, allowsBackgroundRecording: true,
+        });
+        // Passing options creates a new output file for each recording.
+        await recorder.prepareToRecordAsync(RECORDING_OPTIONS);
+      },
+      makePending: () => {
+        const profile = activeProfile(latest.current.snapshot);
+        if (!profile || !recorder.uri) throw new Error("No working folder or recording file.");
+        return {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          uri: recorder.uri, profileId: profile.id, notesRoot: profile.notes_root,
+          mimeType: Platform.OS === "ios" ? "audio/wav" : Platform.OS === "web" ? "audio/webm" : "audio/mp4",
+          startedAt: Date.now(),
+        };
+      },
+      remember: rememberRecording,
+      record: () => {
+        recorder.record();
+        if (!recorder.isRecording) throw new Error("The recorder could not start. Try again.");
+      },
+      pause: () => { if (recorder.isRecording) recorder.pause(); },
+      stop: () => recorder.stop(),
+      hold: () => {
+        const store = useRecordingSessionStore.getState();
+        const releaseTime = holdRecordingSave(`${Date.now()}-${Math.random()}`);
+        store.begin();
+        return () => { releaseTime(); store.end(); };
+      },
+      changed: (startedAt) => {
+        nativeRecordingObserved.current = false;
+        recordingStartedAt.current = startedAt;
+        setIsRecording(startedAt !== null);
+        setNowMs(Date.now());
+        if (startedAt === null) endRecordingActivity();
+        else startRecordingActivity(startedAt);
+      },
+      save: async (clip) => {
+        if (clip.mimeType === "audio/wav") await repairRecordingWave(clip.uri);
+        const saved = await core.saveAudioRecordingFromFile(decodeURI(clip.uri.replace(/^file:\/\//, "")), {
+          mime_type: clip.mimeType,
+        });
+        return saved.note_path;
+      },
+      forget: forgetRecording,
+      saved: (clip, interrupted) => {
+        useSyncStore.getState().scheduleAutoSync("audio saved");
+        const currentMode = latest.current.mode;
+        const queue = currentMode === "assemblyai" ? () => core.queueRecordingTranscriptions()
+          : currentMode === "native" ? () => core.queueProviderTranscriptions(nativeTranscriptionProvider) : null;
+        if (queue) void queue().catch((error) => showStatus({ kind: "error", text: `Saved, but queueing failed: ${getErrorMessage(error)}` }));
+        const detail = MODE_SAVED_DETAIL[currentMode];
+        showStatus({ kind: "success", text: interrupted ? `Recovered recording. ${detail}` : detail });
+        void useNotesStore.getState().noteFiled(clip.notePath!).catch(() => {});
+      },
+      error: (error) => showStatus({ kind: "error", text: `${getErrorMessage(error)} Audio retained; tap the microphone to retry saving.` }),
     });
-    stopPromise.current = operation;
-    return operation;
-  };
+  }
+  const session = sessionRef.current;
+
+  useEffect(() => {
+    void session.warm().catch(() => {});
+    const profile = activeProfile(snapshot);
+    if (profile) {
+      try {
+        for (const clip of pendingRecordings(profile.id, profile.notes_root)) void session.import(clip);
+      } catch (error) { showStatus({ kind: "error", text: getErrorMessage(error) }); }
+    }
+    return () => session.dispose();
+    // Home is scoped to its workspace and remains mounted during backgrounding.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
 
   const choosePhoto = async (source: "camera" | "library") => {
     setAttachmentMenuOpen(false);
@@ -290,90 +288,55 @@ export const DictationButton = ({
     }
   };
 
-  // Keep the latest stopAndSave reachable from the unmount effect below.
-  const stopAndSaveRef = useRef(stopAndSave);
-  stopAndSaveRef.current = stopAndSave;
-  const recordingRef = useRef(false);
-  recordingRef.current = recorderState.isRecording;
-
-  // Calls, Siri, route loss, or another app taking the audio session can stop
-  // a recording even though the JS button was never tapped. expo-audio keeps
-  // the completed URI; observe the native transition and save it immediately.
-  const nativeRecordingObserved = useRef(false);
+  // Native interruptions and Lock Screen stops join the same stop operation.
   useEffect(() => {
-    if (recorderState.isRecording) {
-      nativeRecordingObserved.current = true;
-      return;
-    }
-    if (
-      nativeRecordingObserved.current &&
-      recordingStartedAt.current != null &&
-      useRecordingSessionStore.getState().active &&
-      !stopPromise.current
-    ) {
+    if (recorderState.isRecording) nativeRecordingObserved.current = true;
+    else if (nativeRecordingObserved.current && session.recording) {
       nativeRecordingObserved.current = false;
-      void stopAndSaveRef.current(true).catch(() => {});
+      void session.stop(true);
     }
-  }, [recorderState.isRecording]);
+  }, [recorderState.isRecording, session]);
 
-  // Best effort: navigating away (the capture page pops) while recording
-  // stops and saves the clip instead of silently dropping it.
-  useEffect(
-    () => () => {
-      if (recordingRef.current || startPromise.current) {
-        void stopAndSaveRef.current().catch(() => {});
-      }
-    },
-    []
-  );
-
-  // Stopping from the Lock Screen. The Live Activity's Stop button runs a
-  // LiveActivityIntent inside this process, which the native module forwards
-  // here — save the clip exactly as an in-app stop would.
   useEffect(() => {
-    const stopFromLockScreen = () => {
-      if (recorder.isRecording || startPromise.current) {
-        void stopAndSaveRef.current().catch(() => {});
-      }
-    };
-    const unsubscribe = addRecordingStopListener(stopFromLockScreen);
-    // If the app was suspended when Stop was tapped, the live event never
-    // arrived; honor the durable flag the intent left as soon as we're active.
-    const appStateSub = AppState.addEventListener("change", (next) => {
-      if (next === "active" && consumePendingRecordingStop()) {
-        stopFromLockScreen();
+    const stop = () => { if (session.recording) void session.stop(); };
+    const unsubscribe = addRecordingStopListener(stop);
+    const subscription = AppState.addEventListener("change", (next) => {
+      if (next === "active") {
+        if (consumePendingRecordingStop()) stop();
+        else if (!session.recording) void session.warm().catch(() => {});
       }
     });
-    return () => {
-      unsubscribe();
-      appStateSub.remove();
-    };
-  }, [recorder]);
+    return () => { unsubscribe(); subscription.remove(); };
+  }, [session]);
 
-  // Read recorder.isRecording (a live native property) instead of the polled
-  // recorderState so quick start/stop taps cannot observe stale state.
   const onPress = () => {
-    if (suppressNextPress.current) {
-      suppressNextPress.current = false;
-      return;
-    }
-    if (busy) {
-      return;
-    }
-    if (pendingRecordingUri.current || recorder.isRecording || startPromise.current) {
-      void stopAndSave();
-      return;
-    }
+    if (suppressNextPress.current) { suppressNextPress.current = false; return; }
+    if (busy) return;
+    if (permissionRequest.current) { stopAfterPermission.current = true; return; }
+    if (session.recording) { void session.stop(); return; }
+    if (session.retry()) return;
     setAttachmentMenuOpen(false);
     setStatus(null);
-    startPromise.current = start().catch((err) => {
-      startPromise.current = null;
-      showStatus({ kind: "error", text: getErrorMessage(err) });
-    });
+    // With permission granted, the warm recorder starts synchronously on tap.
+    // The first ever recording necessarily awaits the system permission prompt.
+    if (session.ready) { void session.start(); return; }
+    stopAfterPermission.current = false;
+    permissionRequest.current = AudioModule.getRecordingPermissionsAsync().then(async (permission) => {
+      if (!permission.granted) {
+        const requested = await AudioModule.requestRecordingPermissionsAsync();
+        if (!requested.granted) {
+          showStatus({ kind: "error", text: "Microphone permission denied — enable it in system settings." });
+          return;
+        }
+      }
+      await session.start();
+      if (stopAfterPermission.current) await session.stop();
+    }).catch((error) => showStatus({ kind: "error", text: getErrorMessage(error) }))
+      .finally(() => { permissionRequest.current = null; });
   };
 
   const onLongPress = () => {
-    if (busy || recorder.isRecording || startPromise.current) {
+    if (busy || session.recording) {
       return;
     }
     suppressNextPress.current = true;
@@ -388,7 +351,7 @@ export const DictationButton = ({
 
   return (
     <View style={styles.root} pointerEvents="box-none">
-      {recorderState.isRecording ? (
+      {isRecording ? (
         <View style={[styles.pill, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
           <View style={[styles.recordingDot, { backgroundColor: theme.colors.danger }]} />
           <Text style={[styles.pillText, { color: theme.colors.text }]}>{timer}</Text>
@@ -406,7 +369,7 @@ export const DictationButton = ({
           </Text>
         </View>
       ) : null}
-      {attachmentMenuOpen && !recorderState.isRecording ? (
+      {attachmentMenuOpen && !isRecording ? (
         <View style={styles.attachmentActions}>
           <Pressable
             accessibilityRole="button"
@@ -461,10 +424,10 @@ export const DictationButton = ({
         ]}
       >
         <Ionicons
-          name={recorderState.isRecording ? "stop" : "mic-outline"}
+          name={isRecording ? "stop" : "mic-outline"}
           size={25}
-          color={recorderState.isRecording ? theme.colors.danger : theme.colors.text}
-          style={{ opacity: recorderState.isRecording ? 1 : 0.8 }}
+          color={isRecording ? theme.colors.danger : theme.colors.text}
+          style={{ opacity: isRecording ? 1 : 0.8 }}
         />
       </Pressable>
     </View>

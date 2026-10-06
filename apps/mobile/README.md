@@ -126,6 +126,14 @@ leaves recordings pending for a synced desktop's local Whisper, `native` is
 the hook for an on-device recognizer via `queueProviderTranscriptions`
 (provider registration not wired yet), `off` does nothing.
 
+Recording starts from a prepared recorder after microphone permission is granted.
+Stop cuts capture immediately; native finalization and note/audio import happen
+separately, allowing the next recording while saving. Pending imports persist in
+an app-local journal and recover when their original working folder is opened.
+iOS uses recoverable PCM WAV and a separate save background task; Android keeps
+AAC. See [recording durability and device checks](../../docs/MOBILE_RUNTIME.md#mobile-recording-follow-up-2026-10-06).
+A native rebuild is required for the recovery and background-task additions.
+
 ## Appearance
 
 Settings → Appearance picks a background, a text color, and the editor text

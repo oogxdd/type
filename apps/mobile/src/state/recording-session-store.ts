@@ -1,9 +1,11 @@
 import { create } from "zustand";
 
 type RecordingSessionState = {
-  /** True from native recorder start through the final save/queue cleanup. */
+  /** True while any recording or durable audio import is still active. */
   active: boolean;
-  setActive: (active: boolean) => void;
+  count: number;
+  begin: () => void;
+  end: () => void;
 };
 
 /**
@@ -16,5 +18,7 @@ type RecordingSessionState = {
  */
 export const useRecordingSessionStore = create<RecordingSessionState>((set) => ({
   active: false,
-  setActive: (active) => set({ active }),
+  count: 0,
+  begin: () => set((s) => ({ count: s.count + 1, active: true })),
+  end: () => set((s) => ({ count: Math.max(0, s.count - 1), active: s.count > 1 })),
 }));
