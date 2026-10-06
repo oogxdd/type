@@ -91,25 +91,27 @@ impl ProfilesGateway for ProfilesAdapter {
         let profile = find_profile(&state, &args.profile_id)
             .ok_or_else(|| format!("Profile not found: {}", args.profile_id))?;
         let notes_root = Path::new(&profile.notes_root);
-        let mut settings: ProfileSettings = args.settings.into();
-        // Writers that predate transcription_mode (or simply didn't set it)
-        // must not clear a mode another device already persisted. Same for the
-        // pinned sync host key: only QR pairing sets it, every other writer
-        // sends it empty and must not un-pin the server.
-        if settings.transcription_mode.is_none()
-            || settings.git_trusted_ssh_host_key_sha256.trim().is_empty()
-        {
-            let persisted = load_profile_settings(notes_root);
-            if settings.transcription_mode.is_none() {
-                settings.transcription_mode = persisted.transcription_mode;
+        crate::application::workspace::with_workspace_write(notes_root, || {
+            let mut settings: ProfileSettings = args.settings.into();
+            // Writers that predate transcription_mode (or simply didn't set it)
+            // must not clear a mode another device already persisted. Same for the
+            // pinned sync host key: only QR pairing sets it, every other writer
+            // sends it empty and must not un-pin the server.
+            if settings.transcription_mode.is_none()
+                || settings.git_trusted_ssh_host_key_sha256.trim().is_empty()
+            {
+                let persisted = load_profile_settings(notes_root);
+                if settings.transcription_mode.is_none() {
+                    settings.transcription_mode = persisted.transcription_mode;
+                }
+                if settings.git_trusted_ssh_host_key_sha256.trim().is_empty() {
+                    settings.git_trusted_ssh_host = persisted.git_trusted_ssh_host;
+                    settings.git_trusted_ssh_host_key_sha256 =
+                        persisted.git_trusted_ssh_host_key_sha256;
+                }
             }
-            if settings.git_trusted_ssh_host_key_sha256.trim().is_empty() {
-                settings.git_trusted_ssh_host = persisted.git_trusted_ssh_host;
-                settings.git_trusted_ssh_host_key_sha256 =
-                    persisted.git_trusted_ssh_host_key_sha256;
-            }
-        }
-        save_profile_settings(notes_root, &settings)?;
+            save_profile_settings(notes_root, &settings)
+        })?;
         Ok(profiles_snapshot(&self.app, &state))
     }
 

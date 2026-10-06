@@ -57,15 +57,17 @@ impl Backend {
     /// Compare the disk body before writing: sync, OCR and another window must
     /// never be silently overwritten by an old editor buffer.
     pub fn save(&self, path: &str, expected: &str, body: &str) -> Result<(), String> {
-        let notes = self.notes()?;
-        let disk = notes.read_note(path)?;
-        if disk == body {
-            return Ok(());
-        }
-        if disk != expected {
-            return Err("This note changed outside the editor. Your draft is kept. Copy it or reload the note before saving.".into());
-        }
-        notes.write_note(path, body)
+        type_core::application::workspace::try_workspace_write(&self.root, || {
+            let notes = self.notes()?;
+            let disk = notes.read_note(path)?;
+            if disk == body {
+                return Ok(());
+            }
+            if disk != expected {
+                return Err("This note changed outside the editor. Your draft is kept. Copy it or reload the note before saving.".into());
+            }
+            notes.write_note(path, body)
+        })
     }
 
     pub fn create(

@@ -1417,6 +1417,13 @@ pub fn ensure_origin_remote(repo: &Repository, remote_url: &str) -> Result<(), S
 
 /// Switch to the target branch, creating it if it doesn't exist.
 pub fn switch_or_prepare_branch(repo: &Repository, branch: &str) -> Result<(), String> {
+    let root = repo.workdir().ok_or("A notes worktree is required.")?;
+    crate::application::workspace::with_workspace_write(root, || {
+        switch_or_prepare_branch_unlocked(repo, branch)
+    })
+}
+
+fn switch_or_prepare_branch_unlocked(repo: &Repository, branch: &str) -> Result<(), String> {
     let _timing = GitPhaseTimer::start("branch preparation");
     let name = branch.trim();
     if name.is_empty() {
@@ -1460,6 +1467,17 @@ fn default_signature(repo: &Repository) -> Result<Signature<'_>, String> {
 
 /// Stage all changes and create a commit on the given branch.
 pub fn commit_all_changes(
+    repo: &Repository,
+    message: &str,
+    branch: &str,
+) -> Result<Option<Oid>, String> {
+    let root = repo.workdir().ok_or("A notes worktree is required.")?;
+    crate::application::workspace::with_workspace_write(root, || {
+        commit_all_changes_unlocked(repo, message, branch)
+    })
+}
+
+fn commit_all_changes_unlocked(
     repo: &Repository,
     message: &str,
     branch: &str,
@@ -1846,6 +1864,17 @@ pub fn fast_forward_to(
     branch: &str,
     fetch_commit: &AnnotatedCommit<'_>,
 ) -> Result<(), String> {
+    let root = repo.workdir().ok_or("A notes worktree is required.")?;
+    crate::application::workspace::with_workspace_write(root, || {
+        fast_forward_to_unlocked(repo, branch, fetch_commit)
+    })
+}
+
+fn fast_forward_to_unlocked(
+    repo: &Repository,
+    branch: &str,
+    fetch_commit: &AnnotatedCommit<'_>,
+) -> Result<(), String> {
     let _timing = GitPhaseTimer::start("fast-forward checkout");
     let target_oid = fetch_commit.id();
     let local_ref_name = format!("refs/heads/{}", branch);
@@ -1888,6 +1917,17 @@ fn make_conflict_path(rel_path: &str) -> String {
 
 /// Merge a fetched commit, saving `.conflict` files when there are conflicts.
 pub fn merge_fetched_commit(
+    repo: &Repository,
+    branch: &str,
+    fetched_commit: &AnnotatedCommit<'_>,
+) -> Result<(), String> {
+    let root = repo.workdir().ok_or("A notes worktree is required.")?;
+    crate::application::workspace::with_workspace_write(root, || {
+        merge_fetched_commit_unlocked(repo, branch, fetched_commit)
+    })
+}
+
+fn merge_fetched_commit_unlocked(
     repo: &Repository,
     branch: &str,
     fetched_commit: &AnnotatedCommit<'_>,

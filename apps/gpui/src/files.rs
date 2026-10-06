@@ -153,6 +153,19 @@ impl Folder {
         if text == file.text {
             return Ok(());
         }
+        type_core::application::workspace::try_workspace_write(&self.root, || {
+            self.save_unlocked(relative, file, text)
+        })
+    }
+    fn save_unlocked(
+        &self,
+        relative: &Path,
+        file: &mut TextFile,
+        text: &str,
+    ) -> Result<(), String> {
+        if text == file.text {
+            return Ok(());
+        }
         let path = self.resolve(relative)?;
         let permissions = fs::metadata(&path)
             .map_err(|e| e.to_string())?

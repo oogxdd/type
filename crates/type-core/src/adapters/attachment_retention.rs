@@ -9,11 +9,7 @@ use crate::{collect_recording_notes, now_ms, time_to_ms, AppEnv, RECORDING_STATU
 use git2::Repository;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{
-    collections::BTreeMap,
-    fs,
-    path::Path,
-};
+use std::{collections::BTreeMap, fs, path::Path};
 
 pub const AUDIO_RECEIPTS_REL_PATH: &str = ".type/audio-durability-receipts.json";
 pub const AUDIO_CACHE_REL_PATH: &str = ".type/audio-cache.json";
@@ -86,35 +82,165 @@ pub struct MobileAudioPruneResult {
 
 /// Hash local desktop audio and publish/refresh receipts in a tracked manifest.
 pub fn issue_desktop_audio_receipts(root: &Path) -> Result<AudioReceiptIssueResult, String> {
-    let current =
-        read_json_or_default::<AudioReceiptManifest>(&root.join(AUDIO_RECEIPTS_REL_PATH));
-    let recordings = collect_recording_notes(root)?;
+    let state = crate::application::workspace::workspace_state(root)?;
+    let plan = prepare_desktop_audio_receipts(root, &state, &mut DesktopReceiptCache::default())?;
+    crate::application::workspace::with_workspace_write(root, || {
+        publish_desktop_audio_receipts(root, &state, plan)?
+            .ok_or_else(|| "Audio receipt snapshot changed; retry maintenance.".into())
+    })
+}
+
+/// Session-local evidence. A receipt imported from Git never seeds this cache.
+/// On Unix the fingerprint includes inode and ctime nanoseconds, so replacing
+/// bytes and restoring mtime/length still forces verification. Other platforms
+/// conservatively rehash. No plaintext note bodies or evidence persist to disk.
+#[derive(Default)]
+pub(crate) struct DesktopReceiptCache {
+    verified: BTreeMap<std::path::PathBuf, (AudioFingerprint, String, u64)>,
+    notes: BTreeMap<std::path::PathBuf, (AudioFingerprint, Option<crate::RecordingNoteInfo>)>,
+    pub(crate) hash_reads: usize,
+    pub(crate) note_reads: usize,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct AudioFingerprint {
+    length: u64,
+    modified: Option<std::time::SystemTime>,
+    #[cfg(unix)]
+    identity: (u64, u64, i64, i64),
+}
+fn audio_fingerprint(path: &Path) -> Option<AudioFingerprint> {
+    let metadata = fs::metadata(path).ok()?;
+    if !metadata.is_file() {
+        return None;
+    }
+    Some(AudioFingerprint {
+        length: metadata.len(),
+        modified: metadata.modified().ok(),
+        #[cfg(unix)]
+        identity: {
+            use std::os::unix::fs::MetadataExt;
+            (
+                metadata.dev(),
+                metadata.ino(),
+                metadata.ctime(),
+                metadata.ctime_nsec(),
+            )
+        },
+    })
+}
+pub(crate) struct DesktopReceiptPlan {
+    revision: u64,
+    source: Option<Vec<u8>>,
+    observed: BTreeMap<std::path::PathBuf, Option<AudioFingerprint>>,
+    next: AudioReceiptManifest,
+    result: AudioReceiptIssueResult,
+}
+pub(crate) fn prepare_desktop_audio_receipts(
+    root: &Path,
+    state: &crate::application::workspace::WorkspaceState,
+    cache: &mut DesktopReceiptCache,
+) -> Result<DesktopReceiptPlan, String> {
+    let revision = state.revision();
+    let source = fs::read(root.join(AUDIO_RECEIPTS_REL_PATH)).ok();
+    let current = source
+        .as_deref()
+        .and_then(|bytes| serde_json::from_slice::<AudioReceiptManifest>(bytes).ok())
+        .unwrap_or_default();
+    let mut note_files = Vec::new();
+    crate::collect_markdown_note_files(root, root, &mut note_files)?;
+    let mut note_observed = BTreeMap::new();
+    let mut recordings = Vec::new();
+    for path in note_files {
+        let Some(fingerprint) = audio_fingerprint(&path) else {
+            continue;
+        };
+        let info = if let Some((_, info)) = cache
+            .notes
+            .get(&path)
+            .filter(|(known, _)| cfg!(unix) && *known == fingerprint)
+        {
+            info.clone()
+        } else {
+            let raw = match fs::read_to_string(&path) {
+                Ok(raw) => raw,
+                Err(_) => {
+                    // Same conservative policy as collect_recording_notes:
+                    // unreadable metadata cannot authorize cache eviction.
+                    cache.notes.remove(&path);
+                    note_observed.insert(path, Some(fingerprint));
+                    continue;
+                }
+            };
+            cache.note_reads += 1;
+            if audio_fingerprint(&path).as_ref() != Some(&fingerprint) {
+                return Err("Note changed during receipt scan; retry maintenance.".into());
+            }
+            let (meta, _) = crate::parse_note_front_matter(&raw);
+            let info = crate::adapters::recordings::recording_info_from_note_meta(
+                root,
+                &path,
+                &crate::strip_root(root, &path),
+                &meta,
+            );
+            cache
+                .notes
+                .insert(path.clone(), (fingerprint.clone(), info.clone()));
+            info
+        };
+        note_observed.insert(path, Some(fingerprint));
+        if let Some(info) = info {
+            recordings.push(info);
+        }
+    }
+    cache
+        .notes
+        .retain(|path, _| note_observed.contains_key(path));
     let now = now_ms().unwrap_or(0);
     let mut next_receipts = BTreeMap::new();
+    let mut observed = note_observed;
     let mut result = AudioReceiptIssueResult {
         scanned: recordings.len(),
         issued: 0,
         revoked: 0,
         unchanged: 0,
     };
-
     for recording in recordings {
-        if !recording.audio_path.is_file() {
+        let fingerprint = audio_fingerprint(&recording.audio_path);
+        observed.insert(recording.audio_path.clone(), fingerprint.clone());
+        let Some(fingerprint) = fingerprint else {
             continue;
-        }
-        let (sha256, byte_length) = hash_file(&recording.audio_path)?;
+        };
+        let cached = cache
+            .verified
+            .get(&recording.audio_path)
+            .filter(|(known, _, _)| cfg!(unix) && *known == fingerprint);
+        let (sha256, byte_length) = if let Some((_, hash, length)) = cached {
+            (hash.clone(), *length)
+        } else {
+            let verified = hash_file(&recording.audio_path)?;
+            cache.hash_reads += 1;
+            if audio_fingerprint(&recording.audio_path).as_ref() != Some(&fingerprint) {
+                return Err("Audio changed during hash verification; retry maintenance.".into());
+            }
+            cache.verified.insert(
+                recording.audio_path.clone(),
+                (fingerprint, verified.0.clone(), verified.1),
+            );
+            verified
+        };
         let next = AudioDurabilityReceipt {
             audio_path: recording.audio_rel.clone(),
             sha256,
             byte_length,
             verified_on_desktop_ms: now,
         };
-        let unchanged = current
+        if current
             .receipts
             .get(&recording.audio_rel)
-            .map(|current| current.sha256 == next.sha256 && current.byte_length == next.byte_length)
-            .unwrap_or(false);
-        if unchanged {
+            .is_some_and(|current| {
+                current.sha256 == next.sha256 && current.byte_length == next.byte_length
+            })
+        {
             result.unchanged += 1;
             next_receipts.insert(
                 recording.audio_rel.clone(),
@@ -125,22 +251,46 @@ pub fn issue_desktop_audio_receipts(root: &Path) -> Result<AudioReceiptIssueResu
             result.issued += 1;
         }
     }
-
+    cache
+        .verified
+        .retain(|path, _| observed.get(path).is_some_and(Option::is_some));
     result.revoked = current
         .receipts
         .keys()
         .filter(|path| !next_receipts.contains_key(*path))
         .count();
-    if result.issued > 0 || result.revoked > 0 {
-        write_json(
-            &root.join(AUDIO_RECEIPTS_REL_PATH),
-            &AudioReceiptManifest {
-                version: 1,
-                receipts: next_receipts,
-            },
-        )?;
+    Ok(DesktopReceiptPlan {
+        revision,
+        source,
+        observed,
+        next: AudioReceiptManifest {
+            version: 1,
+            receipts: next_receipts,
+        },
+        result,
+    })
+}
+/// Caller holds the worktree write transaction. Git counter and revision are
+/// checked here, after all scanning/hashing outside the lock.
+pub(crate) fn publish_desktop_audio_receipts(
+    root: &Path,
+    state: &crate::application::workspace::WorkspaceState,
+    plan: DesktopReceiptPlan,
+) -> Result<Option<AudioReceiptIssueResult>, String> {
+    if state.git_active()
+        || state.revision() != plan.revision
+        || fs::read(root.join(AUDIO_RECEIPTS_REL_PATH)).ok() != plan.source
+        || plan
+            .observed
+            .iter()
+            .any(|(path, fingerprint)| &audio_fingerprint(path) != fingerprint)
+    {
+        return Ok(None);
     }
-    Ok(result)
+    if plan.result.issued > 0 || plan.result.revoked > 0 {
+        write_json(&root.join(AUDIO_RECEIPTS_REL_PATH), &plan.next)?;
+    }
+    Ok(Some(plan.result))
 }
 
 /// Apply the seven-day mobile cache policy to the active working folder.
@@ -270,12 +420,16 @@ impl AudioArchiveReceipts {
         if path.is_file() {
             Self(read_json_or_default::<AudioReceiptManifest>(&path).receipts)
         } else {
-            Self(read_json_or_default::<AudioCacheManifest>(&root.join(AUDIO_CACHE_REL_PATH)).desktop_acks)
+            Self(
+                read_json_or_default::<AudioCacheManifest>(&root.join(AUDIO_CACHE_REL_PATH))
+                    .desktop_acks,
+            )
         }
     }
 
     pub(crate) fn matches(&self, audio_rel: &str, sha256: &str, byte_length: u64) -> bool {
-        self.0.get(audio_rel)
+        self.0
+            .get(audio_rel)
             .map(|receipt| receipt.sha256 == sha256 && receipt.byte_length == byte_length)
             .unwrap_or(false)
     }
@@ -340,8 +494,13 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
     }
     let content = serde_json::to_string_pretty(value)
         .map_err(|error| format!("Failed to serialize attachment metadata: {error}"))?;
-    fs::write(path, format!("{content}\n"))
-        .map_err(|error| format!("Failed to write attachment metadata: {error}"))
+    let temporary = path.with_extension(format!("{}.tmp", uuid::Uuid::now_v7()));
+    fs::write(&temporary, format!("{content}\n"))
+        .and_then(|_| fs::rename(&temporary, path))
+        .map_err(|error| {
+            let _ = fs::remove_file(&temporary);
+            format!("Failed to write attachment metadata: {error}")
+        })
 }
 
 #[cfg(test)]
@@ -372,13 +531,167 @@ mod tests {
     }
 
     #[test]
+    fn warm_receipts_read_only_changed_notes_and_reverify_changed_bytes() {
+        let root = recording_fixture("incremental", "completed", 0);
+        for index in 0..6600 {
+            fs::write(
+                root.join(format!("_system/stream/n-{index:04}.md")),
+                format!("text {index}\n{}", "markdown body\n".repeat(75)),
+            )
+            .unwrap();
+        }
+        let state = crate::application::workspace::workspace_state(&root).unwrap();
+        let mut cache = DesktopReceiptCache::default();
+        let started = std::time::Instant::now();
+        let plan = prepare_desktop_audio_receipts(&root, &state, &mut cache).unwrap();
+        assert_eq!(cache.note_reads, 6601);
+        assert_eq!(cache.hash_reads, 1);
+        let result = crate::application::workspace::with_workspace_write(&root, || {
+            publish_desktop_audio_receipts(&root, &state, plan)
+        })
+        .unwrap()
+        .unwrap();
+        assert_eq!(result.issued, 1);
+        eprintln!(
+            "[receipt-benchmark] cold notes=6601 body_reads={} hash_reads={} elapsed_ms={}",
+            cache.note_reads,
+            cache.hash_reads,
+            started.elapsed().as_millis()
+        );
+        let started = std::time::Instant::now();
+        let plan = prepare_desktop_audio_receipts(&root, &state, &mut cache).unwrap();
+        assert_eq!(plan.result.unchanged, 1);
+        #[cfg(unix)]
+        {
+            assert_eq!(cache.note_reads, 6601);
+            assert_eq!(cache.hash_reads, 1);
+        }
+        eprintln!("[receipt-benchmark] warm additional_body_reads={} additional_hash_reads={} elapsed_ms={}", cache.note_reads - 6601, cache.hash_reads - 1, started.elapsed().as_millis());
+        let path = root.join("_system/stream/n-0001.md");
+        fs::write(&path, "one changed note").unwrap();
+        prepare_desktop_audio_receipts(&root, &state, &mut cache).unwrap();
+        #[cfg(unix)]
+        assert_eq!(cache.note_reads, 6602);
+        let audio = root.join("_system/_recordings/audio.m4a");
+        let mtime = fs::metadata(&audio).unwrap().modified().unwrap();
+        fs::write(&audio, b"other bytes").unwrap();
+        fs::File::open(&audio)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(mtime))
+            .unwrap();
+        let plan = prepare_desktop_audio_receipts(&root, &state, &mut cache).unwrap();
+        assert_eq!(plan.result.issued, 1);
+        #[cfg(unix)]
+        assert_eq!(
+            cache.hash_reads, 2,
+            "same length and restored mtime must not reuse old evidence"
+        );
+        crate::application::workspace::with_workspace_write(&root, || {
+            publish_desktop_audio_receipts(&root, &state, plan)
+        })
+        .unwrap()
+        .unwrap();
+        fs::remove_file(&audio).unwrap();
+        let plan = prepare_desktop_audio_receipts(&root, &state, &mut cache).unwrap();
+        assert_eq!(plan.result.revoked, 1);
+        crate::application::workspace::with_workspace_write(&root, || {
+            publish_desktop_audio_receipts(&root, &state, plan)
+        })
+        .unwrap()
+        .unwrap();
+        assert!(
+            read_json_or_default::<AudioReceiptManifest>(&root.join(AUDIO_RECEIPTS_REL_PATH))
+                .receipts
+                .is_empty()
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn receipt_publication_rejects_active_git_and_stale_snapshot() {
+        let root = recording_fixture("coordination", "completed", 0);
+        let state = crate::application::workspace::workspace_state(&root).unwrap();
+        let mut cache = DesktopReceiptCache::default();
+        let service =
+            crate::application::workspace::with_workspace_write(&root, || Ok(state.begin_git()))
+                .unwrap();
+        let plan = prepare_desktop_audio_receipts(&root, &state, &mut cache).unwrap();
+        assert!(
+            crate::application::workspace::with_workspace_write(&root, || {
+                publish_desktop_audio_receipts(&root, &state, plan)
+            })
+            .unwrap()
+            .is_none()
+        );
+        assert!(!root.join(AUDIO_RECEIPTS_REL_PATH).exists());
+        drop(service);
+        let plan = prepare_desktop_audio_receipts(&root, &state, &mut cache).unwrap();
+        crate::application::workspace::with_workspace_write(&root, || {
+            fs::write(root.join("other.md"), "edit").unwrap();
+            Ok(())
+        })
+        .unwrap();
+        assert!(
+            crate::application::workspace::with_workspace_write(&root, || {
+                publish_desktop_audio_receipts(&root, &state, plan)
+            })
+            .unwrap()
+            .is_none()
+        );
+        let plan = prepare_desktop_audio_receipts(&root, &state, &mut cache).unwrap();
+        fs::write(
+            root.join("_system/_recordings/audio.m4a"),
+            b"external bytes",
+        )
+        .unwrap();
+        assert!(
+            crate::application::workspace::with_workspace_write(&root, || {
+                publish_desktop_audio_receipts(&root, &state, plan)
+            })
+            .unwrap()
+            .is_none()
+        );
+        let plan = prepare_desktop_audio_receipts(&root, &state, &mut cache).unwrap();
+        assert!(
+            crate::application::workspace::with_workspace_write(&root, || {
+                publish_desktop_audio_receipts(&root, &state, plan)
+            })
+            .unwrap()
+            .is_some()
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn archive_receipt_snapshot_respects_desktop_revocation() {
         let root = recording_fixture("ack-snapshot", "completed", 0);
-        record_desktop_audio_ack(&root, "_system/_recordings/audio.m4a".into(), "hash".into(), 12).unwrap();
-        assert!(AudioArchiveReceipts::load(&root).matches("_system/_recordings/audio.m4a", "hash", 12));
-        assert!(!AudioArchiveReceipts::load(&root).matches("_system/_recordings/audio.m4a", "changed", 12));
-        write_json(&root.join(AUDIO_RECEIPTS_REL_PATH), &AudioReceiptManifest::default()).unwrap();
-        assert!(!AudioArchiveReceipts::load(&root).matches("_system/_recordings/audio.m4a", "hash", 12));
+        record_desktop_audio_ack(
+            &root,
+            "_system/_recordings/audio.m4a".into(),
+            "hash".into(),
+            12,
+        )
+        .unwrap();
+        assert!(AudioArchiveReceipts::load(&root).matches(
+            "_system/_recordings/audio.m4a",
+            "hash",
+            12
+        ));
+        assert!(!AudioArchiveReceipts::load(&root).matches(
+            "_system/_recordings/audio.m4a",
+            "changed",
+            12
+        ));
+        write_json(
+            &root.join(AUDIO_RECEIPTS_REL_PATH),
+            &AudioReceiptManifest::default(),
+        )
+        .unwrap();
+        assert!(!AudioArchiveReceipts::load(&root).matches(
+            "_system/_recordings/audio.m4a",
+            "hash",
+            12
+        ));
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -408,7 +721,10 @@ mod tests {
         let result = prune_mobile_audio_cache_at(&root, now).unwrap();
         assert_eq!(result.evicted, 1);
         assert!(!root.join("_system/_recordings/audio.m4a").exists());
-        assert!(is_audio_evicted_locally(&root, "_system/_recordings/audio.m4a"));
+        assert!(is_audio_evicted_locally(
+            &root,
+            "_system/_recordings/audio.m4a"
+        ));
         assert!(!crate::git_has_changes(&Repository::open(&root).unwrap()));
         fs::remove_dir_all(root).unwrap();
     }
@@ -434,7 +750,11 @@ mod tests {
         let now = 2_000_000_000_000i64;
         let root = recording_fixture("changed", "completed", now - 8 * DAY_MS);
         issue_desktop_audio_receipts(&root).unwrap();
-        fs::write(root.join("_system/_recordings/audio.m4a"), b"different bytes").unwrap();
+        fs::write(
+            root.join("_system/_recordings/audio.m4a"),
+            b"different bytes",
+        )
+        .unwrap();
         let result = prune_mobile_audio_cache_at(&root, now).unwrap();
         assert_eq!(result.evicted, 0);
         assert_eq!(result.waiting_for_desktop_receipt, 1);
@@ -451,9 +771,8 @@ mod tests {
 
         let result = issue_desktop_audio_receipts(&root).unwrap();
         assert_eq!(result.revoked, 1);
-        let manifest = read_json_or_default::<AudioReceiptManifest>(
-            &root.join(AUDIO_RECEIPTS_REL_PATH),
-        );
+        let manifest =
+            read_json_or_default::<AudioReceiptManifest>(&root.join(AUDIO_RECEIPTS_REL_PATH));
         assert!(manifest.receipts.is_empty());
         fs::remove_dir_all(root).unwrap();
     }
@@ -465,7 +784,9 @@ mod tests {
         let repo = Repository::open(&root).unwrap();
         crate::set_audio_git_exclusion(&repo, false).unwrap();
         let mut index = repo.index().unwrap();
-        index.add_path(Path::new("_system/_recordings/audio.m4a")).unwrap();
+        index
+            .add_path(Path::new("_system/_recordings/audio.m4a"))
+            .unwrap();
         index.write().unwrap();
         commit_all_changes(&repo, "legacy tracked audio", "main").unwrap();
         issue_desktop_audio_receipts(&root).unwrap();

@@ -189,7 +189,9 @@ impl TypeApp {
                         if let Ok(profiles) = this.backend.profiles().list() {
                             this.profiles = profiles;
                         }
-                        this.previews.clear();
+                        // File versions invalidate only changed previews. A
+                        // checkpoint, host toggle or backup changes no bodies.
+                        this.processing_updated = None;
                         this.revision += 1;
                         if let Some(path) = result.open {
                             this.open_note(path.into(), true, window, cx);
@@ -553,7 +555,13 @@ pub fn pairing_link(status: &LocalSyncServerStatus, name: &str, _env: &AppEnv) -
     Some(link)
 }
 
+#[cfg(test)]
+pub(crate) static PROCESSING_SCANS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
 pub fn processing_snapshot(b: &Backend) -> String {
+    #[cfg(test)]
+    PROCESSING_SCANS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let recordings = RecordingsUseCases::new(RecordingsAdapter::new(b.env.clone()))
         .list()
         .ok();

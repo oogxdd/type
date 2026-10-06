@@ -560,6 +560,8 @@ async fn receive_audio_blob_inner(
         if sha256 != header.sha256 || byte_length != header.byte_length {
             return Err("The desktop already has different audio at this path.".to_string());
         }
+        #[cfg(desktop)]
+        crate::request_local_sync_audio_maintenance(repo_root);
         return Ok((sha256, header.blake3, byte_length));
     }
     let parent = target
@@ -612,6 +614,8 @@ async fn receive_audio_blob_inner(
             "Could not finalize the desktop audio archive: {error}"
         ));
     }
+    #[cfg(desktop)]
+    crate::request_local_sync_audio_maintenance(repo_root);
     Ok((sha256, header.blake3, byte_length))
 }
 

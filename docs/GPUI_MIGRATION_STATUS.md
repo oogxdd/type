@@ -1,14 +1,19 @@
 # GPUI migration — handoff / live status
 
-Updated: 2026-10-05. This is an unfinished migration; update this file after each milestone.
+Updated: 2026-10-06. This is an unfinished migration; update this file after each milestone.
 
 ## Where to continue
 
-- Current branch: `main` (GPUI 0.4.10 release); original migration branch: `codex/gpui-desktop`.
-- Current checkout: `/Volumes/KINGSTON/Projects/type/app`; original migration worktree: `.worktrees/gpui-desktop`.
+- Current branch: `main` (GPUI 0.4.10 release plus mobile and desktop sync work).
+- Verified main checkout: `/private/tmp/type-main-integration-20261006`.
+  The primary directory `/Volumes/KINGSTON/Projects/type/app` remains on
+  `wip/gpui-audio-20261006` at `1c36d67a` with concurrent audio/Whisper work.
+  Its files were preserved rather than applying conflicting sync changes while
+  another session was actively writing. Historical worktrees remain available.
 - Base: `081cc4cb`; core shell: `5ff01346`; handoff: `6bb5378a`; UI/keys/tests: `f1efa117`; launcher/CI: `e88e3635`; nested Stream calendar: `6997f7be`; Earlier click fix: `9f39b292`.
 - New shell: `apps/gpui` (`type-gpui`). Existing `experiments/gpui-demo` is untouched.
-- Original worktree has unrelated dirty files (`package.json`, `crates/type-core/examples`, `docs/VOICE_MEMOS_IMPORT.md`). Do not overwrite them.
+- The main checkout has concurrent audio-player work. Keep it outside the sync
+  integration commit; preserve all other worktree files during branch cleanup.
 - User wants progress committed along the way. On 2026-10-01 the user requested
   setup and release work for the native updater. The user will test UI and feel;
   agents verify functionality. Production notes are not used for release tests.
@@ -27,6 +32,110 @@ Updated: 2026-10-05. This is an unfinished migration; update this file after eac
 - Investigate larger H1/H2/H3 only; do not implement yet.
 
 ## Implemented
+
+### Mobile and desktop sync integration (2026-10-06)
+
+- At the user's request, committed the half-page cursor-follow adjustment and
+  the desktop handoff plan as `1c36d67a`, then integrated
+  `feat/desktop-sync-performance` (`6f616b83`, `f1ec5b95`) with mobile/core
+  `ff6d162c` in an isolated checkout.
+- Kept the desktop's reentrant canonical-root write transactions, nonblocking
+  writes, revisions and active-Git tracking, preserving the mobile sync cycle,
+  changed-note publication, conditional saves/recovery and media exports.
+  Retained both branches' write-serialization regressions and the newer
+  Ctrl D / Ctrl U cursor-follow behavior. Updated handoff status from the
+  implemented desktop branch rather than retaining the original plan alone.
+- `codex/gpui-release-status` has only an obsolete in-progress release journal;
+  main already records the actual outcome. It is intentionally not merged.
+- Integration validation passed: **108 core tests**, **82 GPUI tests**
+  (36 library + 46 native), the **FFI end-to-end flow** and GPUI doctest build.
+  Fixed an automatically duplicated `pub mod workspace` during integration.
+  Fixtures run outside any Git checkout: nesting them below this worktree had
+  incorrectly shared its enclosing Git-root lease across unrelated tests.
+  Shared Cargo artifacts briefly reused the concurrent audio build script;
+  rebuilding the isolated GPUI script resolved the build/doc-check failures.
+  GPUI/new-core-file formatting and `git diff --check` passed. Full-core fmt
+  still reports pre-existing formatting in frontmatter/tree and unrelated files;
+  those baseline-only formatting changes are outside this integration.
+- Cleanup requested by the user: remove 14 integrated local branch refs and
+  10 remote branch refs; `entire/*` and other unmerged work remain untouched.
+  Existing worktrees, including their dirty files, are kept detached. Only
+  registrations for already missing temporary release worktrees are pruned.
+- Remaining: phone/Android and Linux/Windows runtime verification; user UI/feel
+  checks. No release or running-app restart is part of this integration.
+
+### Desktop incoming sync, short apply transactions and background receipts (2026-10-06)
+
+- Implemented the mandatory desktop work from
+  `DESKTOP_SYNC_PERFORMANCE_HANDOFF.md` in an isolated branch. GPUI subscribes
+  through a root-scoped, lifetime-managed event channel; callbacks never touch
+  UI. Successful incoming HEAD changes enqueue a refresh before SSH close or
+  receipts. Empty and rejected pushes do not produce refresh events. A cheap
+  200 ms event drain coalesces updates; busy/locked shells retain pending work.
+  Profile generations and shared root revisions reject stale background results.
+  Refresh also covers the home profile while a folder workspace is active,
+  retaining dirty drafts, disk baselines and navigation state.
+- Removed processing queue scans from note refresh and cache invalidation from
+  unrelated jobs. File-version checks preserve unchanged previews. External-file
+  reconciliation walks metadata every 15 seconds; cheap host status remains at
+  3 seconds. Processing scans run separately, only when the relevant settings
+  view is visible, with a 10-second throttle and one task at a time.
+- Server preparation asks relevant windows to flush before taking the write
+  lease. Canonical-root, reentrant transactions cover note/settings/order,
+  transcription/OCR and Git apply writers. UI writes use a nonblocking attempt
+  and retry, retaining drafts. Git network transfer does not hold this lease.
+  Kept Git `updateInstead`: ephemeral child-only hooks coordinate checkout and
+  ref update inside the transaction, releasing before custom post-receive hooks
+  or subsequent maintenance. Original hooks/configuration are preserved.
+  Tracked edits made after pre-commit reject checkout; pull/merge/retry keeps
+  both histories. Pre-commit errors are reported to the client. Git completion
+  releases service coordination independently of SSH channel backpressure.
+- Receipts use one coalescing worker per host lifetime, after host readiness.
+  Scanning/hashing happens outside write transactions; publication revalidates
+  revision, source manifest and file fingerprints, and waits for active Git
+  services. Session caches avoid rereading unchanged notes/audio. Synced receipts
+  alone never authorize eviction: actual local hashes, replacement detection
+  and missing-file revocation remain required. Audio arriving over Iroh schedules
+  maintenance too. No plaintext note-body cache was introduced.
+- Validation: `cargo test -p type-core --lib --offline` passed **105 tests**;
+  `cargo test -p type-gpui --offline -- --test-threads=1` passed **82 tests**
+  (36 library + 46 native). Loopback tests ran with socket access. Regressions
+  cover events across roots/windows, stale refresh, busy/locked/folder states,
+  draft preservation, serialized/reentrant writers and receipt integrity.
+  The real OpenSSH integration test uses 6,600 synthetic Markdown files, checks
+  daily edits/deletion/rename/settings/order, empty push, failed preparation,
+  late desktop edits and successful retry. A stalled actual receipt worker does
+  not block host readiness, Git or notification; a stalled custom post-receive
+  hook does not retain the root write lease. Only synthetic profiles were used.
+- Mac loopback profiling on the already populated fixture: daily delta push
+  **1.593 s**, empty push **0.386 s**; daily preparation **33 ms**, Git child
+  **1.219 s**, guarded apply **512 ms**, channel close **0 ms**. These nested
+  phase timings must not be added together. Cold receipt preparation/publication
+  with 6,601 synthetic notes and one audio file took **256 ms** (6,601 body
+  reads, one hash); warm preparation took **83 ms**, with **zero additional
+  body/hash reads**. This is a local Mac test, not a phone/Iroh speed estimate.
+  Ignored logs: `.tmp/{core-tests-final,gpui-tests-final,dev-build,ssh-benchmark,
+  receipt-benchmark}.log` in this worktree.
+- Native dev build passed with `gpui-kit/test-support`; private bundle is
+  `.tmp/desktop-bundle/bundle/Type GPUI Dev.app`, identity
+  `com.digital.type2.gpui.dev`. Existing unused-method/dependency warnings remain.
+  No live-app restart, production-note access, mobile install, push or release.
+  Local implementation commit: `6f616b83` —
+  `perf(sync): refresh desktop on push and decouple audio maintenance`.
+- Remaining: real phone/native desktop end-to-end timing and user UI checks.
+  Reconciliation still enumerates/stat-checks the tree; changed-path events and
+  optional desktop-to-phone Iroh revision hints are future work requiring mobile
+  agreement. Linux/Windows checkout-hook runtime is unverified; the bridge uses
+  Bash `/dev/tcp`. Arbitrary external editors do not participate in the Rust
+  write lease; Git dirty checks, buffer baselines and fallback reconciliation
+  provide protection without claiming OS-wide atomicity.
+- Integration with the mobile agent: no mobile, FFI or TS files/exports changed.
+  Both branches touch core writers/Git. Keep the new **reentrant**
+  `application/workspace.rs` implementation, including `try_workspace_write`,
+  root revision and active-Git tracking. Its `with_workspace_write` API is
+  compatible with the parallel mobile work; substituting a nonreentrant lock
+  would deadlock nested guarded helpers. Merge the concurrent changes explicitly
+  instead of replacing shared core files wholesale.
 
 ### Sync latency investigation and Git work reduction (2026-10-05)
 

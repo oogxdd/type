@@ -357,6 +357,10 @@ impl FolderWorkspace {
         for (path, buffer) in &mut self.documents {
             let text = buffer.editor.read(cx).value().to_string();
             if let Err(error) = self.folder.save(path, &mut buffer.file, &text) {
+                if error == type_core::application::workspace::WORKSPACE_BUSY {
+                    self.schedule_save(cx);
+                    return Err(error);
+                }
                 let error = format!("{}: {error}", path.display());
                 self.error = Some(error.clone());
                 cx.notify();
