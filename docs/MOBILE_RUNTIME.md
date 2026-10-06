@@ -216,3 +216,60 @@ coalescing frequency, Git worktree cost, transport latency, preview publication
 and rendered-frame responsiveness are different measurements. The synthetic
 Release UI tests establish tap delivery and draft retention; they do not
 establish a physical-device p95 latency or validate the full IME experience.
+
+## Mobile recording follow-up (2026-10-06)
+
+`RecordingSession` separates native capture from durable import. A foreground
+recorder is prepared without prompting once microphone permission exists. A tap
+on the prepared mic calls native record in that handler; Stop synchronously
+pauses capture and changes the button/timer before awaiting native finalization.
+The first permission prompt and a tap before preparation completes still require
+OS/setup time. Completed imports run independently, so another recording can
+start while a previous clip is saving. Recording/import holds are counted;
+finishing one clip cannot auto-lock or repoint a workspace beneath another.
+Home's recorder owns the shared audio session; mounting an inline player no
+longer disables a prepared recorder or stops an active clip.
+
+Audio goes into Documents (ExpoAudio on iOS, Audio on Android) instead of evictable cache, as supported
+by [Expo's recording API](https://docs.expo.dev/versions/latest/sdk/audio/).
+Before record begins, a small local journal pins its source to the profile ID
+and notes root. An immutable entry and separate saved receipt avoid unlinking
+the only recovery record during updates. Home recovers pending imports for its
+own unlocked workspace on mount. Failed imports retain source audio and offer
+mic retry. Successful imports remove only their temporary source, after core
+has copied audio and written its note; synced attachments are never evicted here.
+
+On iOS, every import takes its own background task before native Stop, independent
+of the pre-suspend sync task. OS expiration still bounds available time; if a
+save cannot finish before suspension/termination, its journal allows retry on
+the next launch. This is eventual recovery rather than an unlimited background
+execution guarantee. A crash between core's successful write and the saved
+receipt can produce a duplicate note on recovery; core import does not yet have
+an idempotency key. The original audio remains available through that window.
+
+New iOS recordings use 24 kHz mono 16-bit PCM WAV (about 173 MB/hour). This is
+larger than AAC but allows recovery without a finalized compressed container.
+`RecordingRecovery` repairs RIFF/data lengths from persisted samples, preserves
+unknown padded chunks, trims an incomplete PCM frame, and refuses invalid/empty
+input without deleting it. On next launch this recovers a clip interrupted by
+process death or battery shutdown; samples not yet flushed by OS/hardware may
+be lost. Android retains AAC and gets the durable journal, but unfinished AAC
+recovery after abrupt power loss is not provided. Background recording is
+explicitly enabled in the Expo plugin and audio mode.
+
+Verified: 202 mobile tests, mobile TypeScript typecheck, all RecordingActivity
+Swift sources typechecked against installed Expo dependencies for arm64 iOS
+Simulator, and the standalone Swift recovery suite. The latter writes a real
+Core Audio WAV in a child process, exits without closing its writer, repairs the
+file, and reads all 4096 frames back through AVAudioFile; it also covers padded
+chunks, incomplete frames, repeat repair, and retaining invalid/empty files.
+No physical iPhone shutdown/background deadline test, Android native build, or
+end-to-end desktop Whisper/sync run was performed. A native rebuild (including
+pod install to register the new Swift source, and Android prebuild for its
+foreground-service declarations) is required; an OTA update alone is insufficient.
+
+```sh
+npm run test -w @typenotes/mobile
+npm run typecheck -w @typenotes/mobile
+sh apps/mobile/modules/recording-activity/tests/test-recovery.sh
+```

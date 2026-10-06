@@ -1,5 +1,6 @@
 import ExpoModulesCore
 import Foundation
+import UIKit
 
 #if canImport(ActivityKit)
 import ActivityKit
@@ -9,6 +10,7 @@ import ActivityKit
 // unsupported OS / disabled Live Activities so the JS layer can call it blindly.
 public class RecordingActivityModule: Module {
   private var darwinObserverRegistered = false
+  private var saveTasks: [String: UIBackgroundTaskIdentifier] = [:]
 
   public func definition() -> ModuleDefinition {
     Name("RecordingActivity")
@@ -22,6 +24,35 @@ public class RecordingActivityModule: Module {
 
     OnDestroy {
       self.unregisterDarwinObserver()
+      self.onMain {
+        for id in Array(self.saveTasks.keys) { self.finishSave(id) }
+      }
+    }
+
+    // Each audio import owns time independently of pre-suspend Git sync.
+    Function("beginSave") { (id: String) in
+      self.onMain {
+        guard self.saveTasks[id] == nil else { return }
+        self.saveTasks[id] = UIApplication.shared.beginBackgroundTask(withName: "type-recording-save") { [weak self] in
+          self?.finishSave(id)
+        }
+      }
+    }
+
+    Function("finishSave") { (id: String) in
+      self.onMain { self.finishSave(id) }
+    }
+
+    AsyncFunction("repairWave") { (uri: String) in
+      guard let url = URL(string: uri), url.isFileURL else {
+        throw NSError(domain: "TypeRecordingRecovery", code: 2)
+      }
+      let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("ExpoAudio").resolvingSymlinksInPath().path + "/"
+      guard url.resolvingSymlinksInPath().path.hasPrefix(documents) else {
+        throw NSError(domain: "TypeRecordingRecovery", code: 3)
+      }
+      try RecordingRecovery.repairWave(url)
     }
 
     // True only when Live Activities are available and enabled by the user.
@@ -94,6 +125,15 @@ public class RecordingActivityModule: Module {
       #endif
       promise.resolve(nil)
     }
+  }
+
+  private func onMain(_ work: () -> Void) {
+    if Thread.isMainThread { work() } else { DispatchQueue.main.sync(execute: work) }
+  }
+
+  private func finishSave(_ id: String) {
+    guard let task = saveTasks.removeValue(forKey: id), task != .invalid else { return }
+    UIApplication.shared.endBackgroundTask(task)
   }
 
   // MARK: - Darwin notification (Lock Screen Stop -> running JS)
