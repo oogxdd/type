@@ -1,9 +1,11 @@
+mod audio_player;
 mod commands;
 mod cursor;
 mod editor;
 mod folder_tabs;
 mod folder_workspace;
 mod jobs;
+mod recordings;
 mod settings;
 mod ui;
 mod updater;
@@ -99,6 +101,13 @@ struct TypeApp {
     capture: Option<jobs::Capture>,
     pending_recording: Option<std::sync::Arc<(Vec<u8>, String)>>,
     processing_status: String,
+    recordings: Option<type_core::RecordingsListResult>,
+    playback: Option<recordings::Playback>,
+    playback_task: Option<Task<()>>,
+    playback_error: Option<String>,
+    audio_details: bool,
+    transcription_selection: Option<String>,
+    transcription_search: Entity<InputState>,
     local_server: Option<type_core::LocalSyncServerStatus>,
     job_status: String,
     vim: vim::Vim,
@@ -543,7 +552,7 @@ impl TypeApp {
         let folders = self.folder_ids.clone();
         let multi = self.selected.clone();
         let stream = self.view == View::Feed;
-        let note_markers: HashMap<SharedString, (bool, bool)> = self
+        let note_markers: HashMap<SharedString, (bool, bool, bool)> = self
             .previews
             .iter()
             .map(|(path, preview)| {
@@ -552,6 +561,12 @@ impl TypeApp {
                     (
                         preview.meta.archived_ms.is_some(),
                         preview.meta.reviewed_ms.is_some(),
+                        preview.meta.note_type.as_deref() == Some("audio_recording")
+                            || preview
+                                .meta
+                                .recording_audio_path
+                                .as_ref()
+                                .is_some_and(|path| !path.trim().is_empty()),
                     ),
                 )
             })
@@ -586,7 +601,8 @@ impl TypeApp {
             let is_folder = folders.contains(&id);
             let is_section = stream && id.starts_with("feed:section:");
             let is_earlier = id == "feed:section:earlier";
-            let (archived, reviewed) = note_markers.get(&id).copied().unwrap_or_default();
+            let (archived, reviewed, recording) =
+                note_markers.get(&id).copied().unwrap_or_default();
             let click_view = view.clone();
             let click_id = id.clone();
             let drop_view = view.clone();
@@ -675,6 +691,30 @@ impl TypeApp {
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
                                     .child(if archived { "Archived" } else { "Reviewed" }),
+                            )
+                        })
+                        .when(recording && !is_folder, |row| {
+                            row.child(
+                                div()
+                                    .id(SharedString::from(format!("nav-audio-{id}")))
+                                    .size(px(14.))
+                                    .flex_none()
+                                    .map(|element| {
+                                        #[cfg(test)]
+                                        {
+                                            use gpui_kit::test::TestSupportExt;
+                                            element.test_support()
+                                        }
+                                        #[cfg(not(test))]
+                                        {
+                                            element
+                                        }
+                                    })
+                                    .child(
+                                        Icon::new(gpui_kit::assets::IconName::Mic)
+                                            .size(px(14.))
+                                            .text_color(cx.theme().muted_foreground),
+                                    ),
                             )
                         }),
                 )

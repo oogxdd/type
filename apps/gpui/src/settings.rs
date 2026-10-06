@@ -1,6 +1,7 @@
 use super::*;
 use commands::Choice;
 use gpui_kit::base::{Disableable, Selectable};
+use gpui_kit::component::checkbox::Checkbox;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Section {
@@ -71,6 +72,217 @@ impl Section {
 }
 
 impl TypeApp {
+    pub fn refresh_recording_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.refreshing = true;
+        let backend = self.backend.clone();
+        let revision = self.revision;
+        let task = cx
+            .background_executor()
+            .spawn(async move { jobs::processing_snapshot(&backend, false) });
+        self.refresh_task = Some(cx.spawn_in(window, async move |view, cx| {
+            let (status, recordings) = task.await;
+            let _ = view.update_in(cx, |this, _, cx| {
+                this.refreshing = false;
+                if this.locked || this.revision != revision {
+                    return;
+                }
+                this.processing_status = status;
+                this.recordings = recordings;
+                cx.notify();
+            });
+        }));
+    }
+
+    pub(super) fn selected_recording(&self) -> Option<&type_core::RecordingListItem> {
+        let path = self.transcription_selection.as_deref()?;
+        self.recordings
+            .as_ref()?
+            .recordings
+            .iter()
+            .find(|item| item.note_path == path)
+    }
+
+    pub(super) fn assembly_recording_args(
+        &self,
+    ) -> Result<type_core::RetriggerTranscriptionArgs, String> {
+        let item = self
+            .selected_recording()
+            .ok_or("Select a recording first.")?;
+        if item.audio_path.is_none() {
+            return Err("Audio is unavailable on this device. Sync or restore it first.".into());
+        }
+        if item.is_processing || item.is_queued {
+            return Err("This recording is already being transcribed.".into());
+        }
+        if self
+            .profiles
+            .app_config
+            .assemblyai_api_key
+            .trim()
+            .is_empty()
+        {
+            return Err("Add an AssemblyAI API key in these settings first.".into());
+        }
+        Ok(type_core::RetriggerTranscriptionArgs {
+            note_path: item.note_path.clone(),
+            provider: Some("assemblyai".into()),
+            model: None,
+            assembly_api_key: None,
+            replace_note_body: self.prefs.assembly_replace_note_body,
+        })
+    }
+
+    fn transcribe_selected_with_assembly(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        match self.assembly_recording_args() {
+            Ok(args) => self.run_job(
+                "Queuing AssemblyAI transcription…",
+                window,
+                cx,
+                move |backend| {
+                    type_core::application::recordings::RecordingsUseCases::new(
+                        type_core::RecordingsAdapter::new(backend.env),
+                    )
+                    .retrigger(args)?;
+                    Ok(jobs::ResultData::message("AssemblyAI transcription queued"))
+                },
+            ),
+            Err(error) => {
+                self.error = Some(error);
+                cx.notify();
+            }
+        }
+    }
+
+    fn render_manual_transcription(&self, cx: &mut Context<Self>) -> Div {
+        let query = self.transcription_search.read(cx).value().to_lowercase();
+        let mut list = v_flex()
+            .id("manual-recording-list")
+            .max_h(px(240.))
+            .overflow_y_scroll()
+            .gap_1();
+        let matches: Vec<_> = self
+            .recordings
+            .as_ref()
+            .into_iter()
+            .flat_map(|list| &list.recordings)
+            .filter(|item| item.note_path.to_lowercase().contains(&query))
+            .collect();
+        for item in matches.iter().take(100) {
+            let path = item.note_path.clone();
+            let status = if item.is_processing {
+                "processing"
+            } else if item.is_queued {
+                "queued"
+            } else if item.audio_path.is_none() {
+                "audio unavailable"
+            } else {
+                &item.status
+            };
+            list = list.child(
+                Button::new(SharedString::from(format!("manual-recording-{}", path)))
+                    .ghost()
+                    .w_full()
+                    .label(format!("{} · {}", path, status))
+                    .selected(self.transcription_selection.as_deref() == Some(path.as_str()))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.transcription_selection = Some(path.clone());
+                        cx.notify();
+                    })),
+            );
+        }
+        if matches.is_empty() {
+            list = list.child(
+                div()
+                    .text_sm()
+                    .text_color(cx.theme().muted_foreground)
+                    .child(if self.recordings.is_none() {
+                        "Loading recordings…"
+                    } else {
+                        "No recordings found."
+                    }),
+            );
+        } else if matches.len() > 100 {
+            list = list.child(div().text_sm().child(format!(
+                "Showing 100 of {}. Narrow the search to find a recording.",
+                matches.len()
+            )));
+        }
+        let mut card = self.settings_card("Transcribe one recording with AssemblyAI",
+            "Choose a recording for an additional cloud transcript. Clicking Transcribe uploads only this recording to AssemblyAI. Your default provider stays unchanged; both providers’ JSON results are kept.", cx)
+            .child(Input::new(&self.transcription_search))
+            .child(list)
+            .child(Checkbox::new("assembly-replace-note-text").label("Replace note text after successful transcription")
+                .checked(self.prefs.assembly_replace_note_body)
+                .on_click(cx.listener(|this, checked: &bool, _, cx| {
+                    this.prefs.assembly_replace_note_body = *checked;
+                    this.persist_preferences();
+                    cx.notify();
+                })))
+            .child(div().text_sm().text_color(cx.theme().muted_foreground).whitespace_normal()
+                .child("When off, only the AssemblyAI JSON is saved. Existing note text stays available while processing and after errors."));
+        if let Some(item) = self.selected_recording() {
+            card = card.child(
+                div()
+                    .text_sm()
+                    .whitespace_normal()
+                    .child(format!("Selected: {}", item.note_path)),
+            );
+            if let Some(audio) = &item.audio_path {
+                let paths = type_core::transcript_json_paths(&self.backend.root.join(audio));
+                card = card.child(
+                    div()
+                        .text_sm()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(format!(
+                            "Saved JSON · Whisper: {} · AssemblyAI: {}",
+                            if paths.whisper.is_file() || paths.legacy_whisper.is_file() {
+                                "yes"
+                            } else {
+                                "no"
+                            },
+                            if paths.assemblyai.is_file() {
+                                "yes"
+                            } else {
+                                "no"
+                            },
+                        )),
+                );
+            }
+            if let Some(error) = &item.error {
+                card = card.child(div().text_sm().whitespace_normal().child(error.clone()));
+            }
+            let path = item.note_path.clone();
+            card = card.child(
+                Button::new("manual-recording-open")
+                    .ghost()
+                    .label("Open recording note")
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.open_note(path.clone().into(), true, window, cx);
+                    })),
+            );
+        }
+        card.child(
+            Button::new("manual-assembly-transcribe")
+                .label("Transcribe with AssemblyAI")
+                .disabled(
+                    self.busy
+                        || self.locked
+                        || self.selected_recording().is_none_or(|item| {
+                            item.audio_path.is_none() || item.is_queued || item.is_processing
+                        }),
+                )
+                .on_click(cx.listener(|this, _, window, cx| {
+                    this.transcribe_selected_with_assembly(window, cx)
+                })),
+        )
+        .child(
+            div()
+                .text_sm()
+                .whitespace_normal()
+                .child(self.processing_status.clone()),
+        )
+    }
+
     fn editor_preference(
         &self,
         id: &'static str,
@@ -146,6 +358,9 @@ impl TypeApp {
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.settings_section = section;
                         this.navigation_focus.focus(window, cx);
+                        if section == Section::Transcription {
+                            this.refresh(window, cx);
+                        }
                         cx.notify();
                     })),
             );
@@ -584,19 +799,27 @@ impl TypeApp {
                 }
             }
             Section::Transcription => {
-                settings = settings.child(self.settings_card("Recording destination", "This preference syncs with the profile folder. Processing is currently started manually with Process queue.", cx)
+                settings = settings.child(self.settings_card("Recording destination", "Desktop automatically processes new recordings after capture or sync. Other destinations are handled by the phone. Failed recordings can be retried from their note.", cx)
                     .child(self.setting_options("transcription_mode", &[("off", "Off"), ("desktop", "Desktop"), ("assemblyai", "AssemblyAI"), ("native", "Native mobile")], cx)))
                     .child(self.settings_card("Desktop provider", "Whisper processes audio locally. AssemblyAI uploads recordings to its cloud service when processing.", cx)
                         .child(self.setting_options("transcription_provider", &[("whisper", "Local Whisper"), ("assemblyai", "AssemblyAI cloud")], cx))
                         .child(if self.profiles.app_config.transcription_provider == "assemblyai" {
-                            self.setting_row("assemblyai_api_key", "AssemblyAI API key", "Stored on this device.", true, cx).into_any_element()
+                            div().text_sm().child("AssemblyAI uploads audio when processing.").into_any_element()
                         } else {
-                            self.setting_row("whisper_model", "Whisper model", "Local speech recognition model.", false, cx).into_any_element()
-                        }))
+                            v_flex().gap_2()
+                                .child(self.setting_row("whisper_model", "Whisper model / path", "Model name (large-v3, medium, small) or a local folder containing model.bin. Ready cached models are loaded without a network refresh.", false, cx))
+                                .child(h_flex().gap_2()
+                                    .child(self.command_button("whisper-browse", "Browse model folder", Choice::PickWhisper, cx).disabled(self.busy))
+                                    .child(self.command_button("whisper-check", "Check / set up model", Choice::CheckWhisper, cx).disabled(self.busy)))
+                                .child(div().text_sm().whitespace_normal().child(self.status.clone()))
+                                .into_any_element()
+                        })
+                        .child(self.setting_row("assemblyai_api_key", "AssemblyAI API key", "Stored on this device. Also used for manual runs when the default provider is Whisper.", true, cx)))
                     .child(self.settings_card("Recording & queue", "Capture audio or process pending recordings.", cx)
                         .child(h_flex().gap_2().child(self.command_button("recording", if self.recording { "Stop recording" } else { "Start recording" }, Choice::Record, cx))
                             .child(self.command_button("queue", "Process queue", Choice::Queue, cx)))
-                        .child(div().text_sm().whitespace_normal().child(self.processing_status.clone())));
+                        .child(div().text_sm().whitespace_normal().child(self.processing_status.clone())))
+                    .child(self.render_manual_transcription(cx));
             }
             Section::Handwriting => {
                 let provider = self.profiles.app_config.handwriting_ocr_provider.as_str();

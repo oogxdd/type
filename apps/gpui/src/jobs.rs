@@ -300,6 +300,46 @@ impl TypeApp {
                 )))
             }),
             Choice::Queue => self.run_job("Queuing transcription and OCR…", window, cx, queue),
+            Choice::CheckWhisper => {
+                self.run_job("Checking Whisper engine and model…", window, cx, |b| {
+                    let config = load_app_config(&b.env.app_data_dir);
+                    let status = RecordingsUseCases::new(RecordingsAdapter::new(b.env))
+                        .whisper_status(CheckWhisperStatusArgs {
+                            model: Some(config.whisper_model),
+                            setup: true,
+                        });
+                    if !status.available {
+                        return Err(status
+                            .error
+                            .unwrap_or_else(|| "Whisper is not ready.".into()));
+                    }
+                    Ok(ResultData::message("Whisper engine and model are ready"))
+                })
+            }
+            Choice::PickWhisper => {
+                let picker = cx.prompt_for_paths(PathPromptOptions {
+                    files: false,
+                    directories: true,
+                    multiple: false,
+                    prompt: Some("Select Whisper model folder".into()),
+                });
+                cx.spawn_in(window, async move |view, cx| {
+                    match picker.await {
+                        Ok(Ok(Some(paths))) => if let Some(path) = paths.first() {
+                            let _ = view.update(cx, |this, cx| {
+                                if this.locked || this.busy { return; }
+                                let result = if ["model.bin", "config.json", "tokenizer.json"].iter().all(|name| path.join(name).is_file()) {
+                                    this.save_setting("whisper_model", path.to_string_lossy().into_owned())
+                                } else { Err("Select the model folder containing model.bin, config.json and tokenizer.json.".into()) };
+                                if let Err(error) = result { this.error = Some(error); }
+                                cx.notify();
+                            });
+                        },
+                        Ok(Err(error)) => { let _ = view.update(cx, |this, cx| { this.error = Some(error.to_string()); cx.notify(); }); }
+                        _ => {}
+                    }
+                }).detach();
+            }
             Choice::Retry => {
                 let note_path = self.active.to_string();
                 self.run_job("Retrying transcription…", window, cx, move |b| {
@@ -309,6 +349,7 @@ impl TypeApp {
                             model: None,
                             provider: None,
                             assembly_api_key: None,
+                            replace_note_body: true,
                         },
                     )?;
                     Ok(ResultData::message("Transcription queued"))
@@ -318,12 +359,21 @@ impl TypeApp {
             Choice::Handwriting => self.pick_image(window, cx),
             Choice::Import => self.pick_import(window, cx),
             Choice::Play => {
+                ensure_security_unlocked_for_app(&self.backend.env)?;
                 let meta = self.backend.notes()?.get_note_meta(&self.active)?;
+                let recording = meta.recording_audio_path.is_some();
                 let relative = meta
                     .recording_audio_path
                     .or(meta.handwriting_attachment_path)
                     .ok_or("This note has no media attachment.")?;
-                let path = type_core::resolve_path(&self.backend.env, &relative)?;
+                let path = if recording {
+                    std::path::PathBuf::from(
+                        RecordingsAdapter::new(self.backend.env.clone())
+                            .resolve_audio_absolute_path(&relative)?,
+                    )
+                } else {
+                    type_core::resolve_path(&self.backend.env, &relative)?
+                };
                 cx.open_url(&format!("file://{}", percent(&path.to_string_lossy())));
             }
             _ => {}
@@ -553,10 +603,32 @@ pub fn pairing_link(status: &LocalSyncServerStatus, name: &str, _env: &AppEnv) -
     Some(link)
 }
 
-pub fn processing_snapshot(b: &Backend) -> String {
-    let recordings = RecordingsUseCases::new(RecordingsAdapter::new(b.env.clone()))
-        .list()
-        .ok();
+pub fn processing_snapshot(
+    b: &Backend,
+    auto_transcribe: bool,
+) -> (String, Option<RecordingsListResult>) {
+    let service = RecordingsUseCases::new(RecordingsAdapter::new(b.env.clone()));
+    let mut recordings = service.list().ok();
+    // A synced recording's note and audio can arrive in separate phases. Only
+    // process available, nonterminal work, using the profile's routing fallback.
+    if auto_transcribe
+        && desktop_transcription_enabled(b)
+        && recordings.as_ref().is_some_and(|list| {
+            list.recordings.iter().any(|r| {
+                r.audio_path.is_some()
+                    && !r.is_processing
+                    && !r.is_queued
+                    && (r.status != "completed" && r.status != "failed"
+                        || r.error.as_deref() == Some("Audio file is missing."))
+            })
+        })
+    {
+        let result = queue_recordings(b);
+        if let Err(error) = result {
+            eprintln!("[recordings] automatic queue failed: {error}");
+        }
+        recordings = service.list().ok();
+    }
     let handwriting = HandwritingUseCases::new(HandwritingAdapter::new(b.env.clone()))
         .list()
         .ok();
@@ -564,7 +636,7 @@ pub fn processing_snapshot(b: &Backend) -> String {
         .status()
         .ok();
     let mut lines = vec![];
-    if let Some(list) = recordings {
+    if let Some(list) = &recordings {
         lines.push(format!("Transcription: {} in flight", list.queue.in_flight));
         for recording in list
             .recordings
@@ -600,5 +672,39 @@ pub fn processing_snapshot(b: &Backend) -> String {
             lines.push("Apple Notes import is running".into());
         }
     }
-    lines.join("\n")
+    (lines.join("\n"), recordings)
+}
+
+pub fn desktop_transcription_enabled(b: &Backend) -> bool {
+    b.profiles()
+        .list()
+        .ok()
+        .and_then(|snapshot| {
+            snapshot
+                .profiles
+                .into_iter()
+                .find(|p| p.id == snapshot.active_profile_id)
+        })
+        .is_some_and(|p| {
+            p.settings.transcription_mode.unwrap_or(
+                if p.settings.mobile_auto_transcription_enabled {
+                    TranscriptionMode::AssemblyAi
+                } else {
+                    TranscriptionMode::Desktop
+                },
+            ) == TranscriptionMode::Desktop
+        })
+}
+
+fn queue_recordings(b: &Backend) -> Result<RecordingTranscriptionQueueResult, String> {
+    ensure_security_unlocked_for_app(&b.env)?;
+    let config = b.profiles().list()?.app_config;
+    let service = RecordingsUseCases::new(RecordingsAdapter::new(b.env.clone()));
+    if config.transcription_provider == "assemblyai" {
+        service.queue_cloud(QueueRecordingsArgs {
+            assembly_api_key: Some(config.assemblyai_api_key),
+        })
+    } else {
+        service.queue_local(QueueLocalTranscriptionsArgs { model: None })
+    }
 }

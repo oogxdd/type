@@ -10,6 +10,9 @@ impl TypeApp {
         Self::apply_theme(prefs.dark, window, cx);
         let tree = cx.new(|cx| TreeState::new(cx));
         let pane_state = cx.new(|_| ResizableState::default());
+        let transcription_search = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("Search recordings by name or folder…")
+        });
         let mut app = Self {
             pane_state: pane_state.clone(),
             updater: None,
@@ -52,6 +55,13 @@ impl TypeApp {
             capture: None,
             pending_recording: None,
             processing_status: String::new(),
+            recordings: None,
+            playback: None,
+            playback_task: None,
+            playback_error: None,
+            audio_details: false,
+            transcription_selection: None,
+            transcription_search: transcription_search.clone(),
             local_server: None,
             job_status: String::new(),
             vim: vim::Vim::default(),
@@ -85,6 +95,11 @@ impl TypeApp {
         // navigation work consistently rather than only for unmatched keys.
         app.subscriptions
             .push(cx.observe(&pane_state, |_, _, cx| cx.notify()));
+        app.subscriptions.push(
+            cx.subscribe(&transcription_search, |_, _, _: &InputEvent, cx| {
+                cx.notify()
+            }),
+        );
         let owner = cx.weak_entity();
         let app_window = window.window_handle();
         app.subscriptions
@@ -240,12 +255,19 @@ impl TypeApp {
     }
 
     pub fn refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.locked || self.refreshing || self.busy || self.active_folder.is_some() {
+        if self.locked || self.refreshing || self.busy {
+            return;
+        }
+        if self.active_folder.is_some() {
+            if self.settings && self.settings_section == settings::Section::Transcription {
+                self.refresh_recording_settings(window, cx);
+            }
             return;
         }
         self.refreshing = true;
         let backend = self.backend.clone();
         let revision = self.revision;
+        let auto_transcribe = !self.notes.values().any(|note| note.dirty);
         let versions: HashMap<_, _> = self
             .previews
             .iter()
@@ -253,7 +275,7 @@ impl TypeApp {
             .collect();
         let task = cx.background_executor().spawn(async move {
             let server = type_core::local_sync_server_status(&backend.env).ok();
-            let processing = jobs::processing_snapshot(&backend);
+            let (processing, recordings) = jobs::processing_snapshot(&backend, auto_transcribe);
             let notes = backend.notes()?;
             let root = notes.get_tree()?;
             fn changed(
@@ -273,7 +295,7 @@ impl TypeApp {
             let mut paths = vec![];
             changed(&root, &versions, &mut paths);
             let previews = notes.list_note_previews(paths)?;
-            Ok::<_, String>((root, previews, server, processing))
+            Ok::<_, String>((root, previews, server, processing, recordings))
         });
         self.refresh_task = Some(cx.spawn_in(window, async move |view, cx| {
             let result = task.await;
@@ -283,11 +305,12 @@ impl TypeApp {
                     return;
                 }
                 match result {
-                    Ok((root, previews, server, processing)) => {
+                    Ok((root, previews, server, processing, recordings)) => {
                         if let Some(server) = server {
                             this.local_server = Some(server);
                         }
                         this.processing_status = processing;
+                        this.recordings = recordings;
                         let paths: HashSet<_> = navigation::note_paths(&root).into_iter().collect();
                         this.previews.retain(|p, _| paths.contains(p));
                         for preview in previews {
@@ -572,6 +595,9 @@ impl TypeApp {
         let Some(editor) = self.ensure_editor(&id, window, cx) else {
             return;
         };
+        if self.active != id {
+            self.stop_playback();
+        }
         self.active = id;
         self.settings = false;
         self.vim.reset();

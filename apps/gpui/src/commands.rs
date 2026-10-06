@@ -71,6 +71,8 @@ pub enum Choice {
     Queue,
     Retry,
     Play,
+    CheckWhisper,
+    PickWhisper,
     Config(&'static str),
     Lock,
     Enable,
@@ -121,7 +123,7 @@ impl Choice {
             | Self::Retry
             | Self::Play => "Capture and processing",
             Self::Lock | Self::Enable => "Security",
-            Self::Config(_) => "Settings",
+            Self::Config(_) | Self::CheckWhisper | Self::PickWhisper => "Settings",
         }
     }
 }
@@ -353,6 +355,7 @@ impl TypeApp {
             ("Import exported Apple Notes folder…", Choice::Import),
             ("Queue transcription and OCR", Choice::Queue),
             ("Retry transcription for open note", Choice::Retry),
+            ("Check / set up local Whisper model", Choice::CheckWhisper),
             ("Play note audio in default player", Choice::Play),
             ("Lock app", Choice::Lock),
             ("Enable note encryption…", Choice::Enable),
@@ -1032,6 +1035,9 @@ impl TypeApp {
     }
 
     pub fn reload_profiles(&mut self) -> Result<(), String> {
+        self.stop_playback();
+        self.recordings = None;
+        self.transcription_selection = None;
         self.backend = Backend::new(self.backend.env.clone())?;
         self.profiles = self.backend.profiles().list()?;
         self.notes.clear();
@@ -1060,6 +1066,9 @@ impl TypeApp {
         {
             match self.backend.security().lock() {
                 Ok(_) => {
+                    self.stop_playback();
+                    self.recordings = None;
+                    self.transcription_selection = None;
                     self.locked = true;
                     self.notes.clear();
                     self.previews.clear();

@@ -15,6 +15,7 @@ pub struct Preferences {
     pub line_numbers: bool,
     pub heading_folding: bool,
     pub current_line_highlight: bool,
+    pub assembly_replace_note_body: bool,
 }
 impl Default for Preferences {
     fn default() -> Self {
@@ -29,6 +30,7 @@ impl Default for Preferences {
             line_numbers: true,
             heading_folding: true,
             current_line_highlight: true,
+            assembly_replace_note_body: true,
         }
     }
 }
@@ -99,6 +101,7 @@ mod tests {
         assert!(!prefs.dark && !prefs.vim && !prefs.sidebar && !prefs.rail);
         assert_eq!(prefs.font_size, 22.);
         assert!(prefs.line_numbers && prefs.heading_folding && prefs.current_line_highlight);
+        assert!(prefs.assembly_replace_note_body);
     }
     #[test]
     fn development_identity_and_explicit_paths_are_isolated() {

@@ -1,6 +1,6 @@
 # GPUI migration — handoff / live status
 
-Updated: 2026-10-05. This is an unfinished migration; update this file after each milestone.
+Updated: 2026-10-06. This is an unfinished migration; update this file after each milestone.
 
 ## Where to continue
 
@@ -12,7 +12,10 @@ Updated: 2026-10-05. This is an unfinished migration; update this file after eac
 - User wants progress committed along the way. On 2026-10-01 the user requested
   setup and release work for the native updater. The user will test UI and feel;
   agents verify functionality. Production notes are not used for release tests.
-- Current priority for this production trial is everyday text notes and the nested Stream. Audio recording and OCR are not important to the user now; automatic transcription matters somewhat but is not essential for cutover. Multi-note viewing and similar extras are outside the requested core scope.
+- Everyday text notes and the nested Stream remain the production-trial baseline.
+  On 2026-10-06 the user also requested audio playback, recovery of local Whisper
+  after moving its model, and optional per-recording AssemblyAI transcription.
+  OCR and multi-note viewing remain outside this audio milestone.
 
 ## User requirements
 
@@ -27,6 +30,105 @@ Updated: 2026-10-05. This is an unfinished migration; update this file after eac
 - Investigate larger H1/H2/H3 only; do not implement yet.
 
 ## Implemented
+
+### Manual AssemblyAI transcription for one recording (2026-10-06)
+
+- Milestone commit: `feat(gpui): add audio playback and per-recording transcription`.
+- Settings → Voice transcription now includes a searchable recording picker,
+  selection/status/audio availability, existing Whisper/AssemblyAI JSON markers,
+  an Open recording note action and explicit Transcribe with AssemblyAI button.
+  The device-local API key is editable even while Whisper is the desktop default.
+  Manual dispatch selects AssemblyAI only for that job and never changes the
+  configured default. Queued/running recordings cannot be submitted twice.
+- Replace note text is enabled by default and persisted as a device-local GPUI
+  preference. Disabling it saves AssemblyAI JSON without changing the note body.
+  Queue/processing/failure updates now retain existing text and unknown
+  frontmatter. Successful replacement happens only after artifact persistence.
+- Full provider results are stored beside the audio as
+  `<stem>.whisper.transcription.json` and `<stem>.assemblyai.transcription.json`.
+  Existing `<stem>.transcription.json` remains the Whisper compatibility artifact;
+  AssemblyAI never overwrites it. JSON writes use atomic replacement; enabled
+  note encryption stores ciphertext in a JSON envelope instead of plaintext.
+  Locked retry requests are rejected. Existing plaintext artifacts are not
+  migrated automatically.
+- AssemblyAI retains the full completed response, including word timestamps,
+  confidence and detected language. Requests use language detection with the
+  official ordered `universal-3-pro` / `universal-2` model fallback. Primary API
+  source: https://www.assemblyai.com/docs/coding-agent-prompts.
+- Recordings also refresh in Settings while an ordinary folder tab is active,
+  without switching back to profile notes. UI/feel remains user review.
+- Sidebar note rows show a small microphone at the right edge for recording
+  metadata (`audio_recording` or a nonempty recording audio path), independently
+  of transcription status/audio availability, in both Stream and Folders.
+- Validation: all **108 core tests** and **83 GPUI functional tests** passed
+  (36 library + 47 native), plus GPUI doc checks. Core includes synthetic
+  upload/create/poll HTTP coverage that preserves all AssemblyAI response fields,
+  independent artifacts, default/backward-compatible replacement, edits during
+  processing, failure retention, unknown frontmatter and artifact write failures.
+  GPUI verifies real selection/checkbox interaction, persisted replacement,
+  explicit per-job provider with unchanged Whisper default, missing key/audio,
+  active jobs, profile-selection reset, the right-edge microphone marker and
+  Settings refresh with an ordinary folder open. Loopback HTTP/SSH and native audio checks used sandbox escalation;
+  no actual recording or API key was sent to AssemblyAI. A final focused core
+  regression also verifies clearing a stale AssemblyAI ID on Whisper completion.
+  Formatting and diff checks passed. Cloud quality, microphone capture and
+  Linux/Windows runtime remain untested; see the remaining-work list below.
+- Built the final Dev binary in the isolated cache, refreshed
+  `experiments/gpui-demo/target/bundle/Type GPUI Dev.app` using the launcher's
+  atomic executable replacement, and verified its refreshed ad-hoc signature
+  with `codesign --verify --deep --strict`. The running shell remains on its
+  original executable until the user relaunches. No app restart, installed
+  production app replacement, live cloud upload, push or publication.
+
+### Recording playback and local Whisper recovery (2026-10-06)
+
+- Added a compact recording panel above the Markdown editor: lazy native macOS
+  playback, pause/resume, elapsed/duration display, ±10-second seek, transcription
+  status/queue position/progress, Transcribe/Retranscribe and external opening.
+  Missing audio explains phone sync; failed transcription has a short error and
+  expandable details. Playback stops on note/profile/workspace/settings changes,
+  locking or disappearing audio. Validates recording storage through core and
+  checks the security gate; no copied audio or plaintext preview files.
+- GPUI now automatically queues available nonterminal recordings in Desktop
+  routing mode during its existing background refresh, including capture and
+  later audio arrival from sync. Off/Native/AssemblyAI routing and the legacy
+  fallback are respected. Unknown desktop providers use local Whisper. Dirty
+  buffers defer automatic queuing; completed and terminal failures are not
+  silently reprocessed. Existing failures use the explicit per-note retry.
+- Added local-model folder selection and Check / set up model in Voice
+  transcription settings. Both embedded Whisper scripts first resolve a complete
+  cached snapshot read-only and load it directly. Uncached model names retain
+  first-download support; missing explicit paths produce an actionable error.
+  This avoids unnecessary Hub/ref writes when existing weights have moved or
+  their cache is read-only. Primary API source:
+  https://github.com/SYSTRAN/faster-whisper/blob/master/faster_whisper/utils.py.
+- Read-only diagnosis of the active production profile found 248 stored failures
+  referring to the former `/Volumes/KINGSTON/DevStorage/huggingface` cache with
+  `Permission denied`, plus unrelated malformed-audio failures. The current
+  cache symlink points to `/Volumes/KINGSTON/Development/AI/huggingface`; all
+  large-v3 snapshot files exist. The managed Python imports and offline model
+  loading passed. Updated only the device-local production `whisper_model` to
+  that verified snapshot directory, preserving all other config fields. No
+  production recording bodies/statuses changed or failed backlog retried.
+- Validation: all **81 GPUI functional tests passed** (36 library + 45 native),
+  including silent native WAV play/pause, seek bounds, lazy loading, navigation,
+  Settings/lock cleanup, absent audio and automatic routing/worker completion
+  with a fake interpreter. Six synthetic model-loader checks and all **104 core
+  tests passed**. Core loopback and native playback checks used sandbox
+  escalation; fixtures never use maintainer notes. GPUI doc checks passed after
+  restoring a missing shared-cache core artifact. Targeted formatting and diff
+  checks passed. The real managed large-v3 engine transcribed a synthetic
+  3.184-second macOS-generated speech file with the expected text and word
+  timestamps using the new local path. The final Dev binary was built in an
+  isolated cloned cache after the shared cache reused an older native build
+  script. Refreshed `experiments/gpui-demo/target/bundle/Type GPUI Dev.app` from
+  that binary; verified the native audio symbols and initial matching executable
+  SHA-256, then refreshed the development bundle’s ad-hoc signature and verified
+  it with `codesign --verify --deep --strict`. The running production app remains on its original binary.
+- Included in the audio/transcription milestone commit. No publication,
+  installed production app replacement or restart. UI/feel remains user review. Inline playback currently
+  uses macOS AVAudioPlayer; unsupported codecs use the external-player action;
+  Linux/Windows use external playback and were not runtime-tested.
 
 ### Sync latency investigation and Git work reduction (2026-10-05)
 
@@ -763,7 +865,7 @@ Current bundle: `/Volumes/KINGSTON/Projects/type/app/experiments/gpui-demo/targe
 
 1. Continue functional coverage: editor-only Tab, Normal/Visual paste/IME guards, move/rename after autosave, multi-selection, profile-switch flush, close/quit conflicts. Existing tests cover Ctrl+W, nav Tab, Unicode insert/save, Visual inclusive selection and mode preservation, grouped palette confirmation, backdrop click, filesystem conflicts/collisions, date groups and pure DnD.
 2. Stream/Folders expansion now survives switching views. Confirm the nested Stream presentation with the user; headless tests do not judge appearance.
-3. Lower priority for the user's current text-notes cutover: retain failed recording bytes + retry (`pending_recording` is not populated on stop), and add automatic processing after capture/import/sync respecting settings. Recording/OCR are not important to the user now; transcription is useful later but manual Queue is acceptable for the trial. No microphone permission/test has been performed. Validate filename format / OCR provider settings when revisiting these workflows.
+3. Recording playback and automatic Desktop transcription are now implemented (2026-10-06). Remaining: retain failed capture bytes + retry (`pending_recording` is not populated on stop), automatic OCR, microphone/permission checks, legacy codec playback review and Linux/Windows inline playback. Validate filename format / OCR provider settings when revisiting these workflows.
 4. Review profile rename/forget and standalone folder creation. Profile rename is now available under Settings → Working folders; profile deletion and standalone folder creation now have GPUI UI. Security panic reset clears profiles via reload, but needs a functional isolated-fixture test. Optional extension policy needs review before production use.
 5. Root app/dev/build scripts target GPUI; explicit `desktop:tauri:*` aliases and `desktop:dmg:dev` retain Tauri. Local `desktop:release` emits an unsigned `.app`; `desktop:release:package` and the native candidate workflow build universal signed/notarized DMGs with Sparkle. Python >=3.12 is configured in release/CI (launcher alone needs >=3.11). Real Developer ID/notary and installer validation await the first candidate; isolated ad-hoc bundle verification passed.
 6. CI adds native macOS tests/bundle; Linux Rust job excludes type-gpui so Tauri/core checks keep their existing dependencies. Remote CI and Linux/Windows runtime remain unverified.

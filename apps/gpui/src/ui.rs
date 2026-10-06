@@ -616,6 +616,7 @@ impl TypeApp {
 
 impl Render for TypeApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.reconcile_playback();
         if self.modal.is_none() {
             self.navigation_focused = self.navigation_focus.contains_focused(window, cx);
         }
@@ -661,12 +662,20 @@ impl Render for TypeApp {
             self.render_settings(cx).into_any_element()
         } else if let Some(note) = self.notes.get(&self.active).filter(|n| n.editor.is_some()) {
             let editor = note.editor.as_ref().unwrap();
-            editor::EditorAppearance {
+            let editor = editor::EditorAppearance {
                 prefs: &self.prefs,
                 vim: &self.vim,
             }
             .render(editor, self.busy, self.replaying_vim_history, cx)
-            .into_any_element()
+            .into_any_element();
+            v_flex()
+                .size_full()
+                .min_h_0()
+                .when_some(self.render_recording(cx), |pane, recording| {
+                    pane.child(recording)
+                })
+                .child(div().flex_1().min_h_0().child(editor))
+                .into_any_element()
         } else {
             div()
                 .p_6()
