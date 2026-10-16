@@ -109,6 +109,24 @@ Functional checks cover ordered browsing in both directions, list boundaries,
 failed saves/reads, retaining drafts and editing the draft through the list.
 Physical startup timing and gesture feel on iOS/Android remain device checks.
 
+## Keeping the caret visible while typing
+
+On iOS the `EditorScroll` local Expo module reads UIKit's actual collapsed
+selection after text, selection, input layout or keyboard viewport changes.
+It scrolls the enclosing paper only far enough to reveal the caret with a
+16pt margin, rather than pinning every edit to the bottom of the note. This
+also follows soft wraps and edits in the middle of long notes without
+estimating line positions from Markdown or measuring a second copy of the text.
+Native drag/deceleration and nonempty selections retain control; an unfocused
+or disabled editor cannot move the paper. Calls are coalesced to one per frame.
+Android and clients without the module retain the existing bottom anchoring.
+
+This requires `pod install` and a native rebuild. Geometry checks:
+`sh apps/mobile/modules/editor-scroll/tests/test-scroll.sh`.
+On the device, check typing past the keyboard, soft wraps, inserting/deleting
+in the middle of a long note, moving the caret, selection, keyboard reopening,
+manual scrolling and pull-to-new-note.
+
 ## Taps during background work
 
 Button handlers use the coordinator's per-touch JS press gate. Direction

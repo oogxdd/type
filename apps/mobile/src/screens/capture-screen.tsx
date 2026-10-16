@@ -38,6 +38,7 @@ import { isRecordingNoteType } from "@typenotes/shared/format";
 import type { NoteMeta } from "@typenotes/shared/types";
 import { RecordingAudioPlayer } from "../ui/audio-player";
 import { noteForegroundActivity } from "../lib/note-loading";
+import { hasNativeEditorScroll, revealEditorSelection } from "../lib/editor-scroll";
 import {
   isPullReady,
   overscrollPastEnd,
@@ -123,6 +124,19 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   const micOpacity = useSharedValue(1);
   const runtimeStatus = useSyncExternalStore(mobileRuntime.subscribe, mobileRuntime.getStatus);
   const inputRef = useRef<TextInput>(null);
+  const revealFrame = useRef<number | null>(null);
+  const revealSelection = () => {
+    if (!hasNativeEditorScroll || menuVisible || committing || restoring) return;
+    if (revealFrame.current !== null) cancelAnimationFrame(revealFrame.current);
+    // Read UIKit's caret after Fabric has applied the input's new height.
+    revealFrame.current = requestAnimationFrame(() => {
+      revealFrame.current = null;
+      revealEditorSelection(inputRef.current);
+    });
+  };
+  useEffect(() => () => {
+    if (revealFrame.current !== null) cancelAnimationFrame(revealFrame.current);
+  }, []);
   // A plain ref, not useAnimatedRef: nothing reads the scroll view from a
   // worklet any more, and an animated ref only exists to be handed to the UI
   // runtime. See scrollToY below.
@@ -371,6 +385,10 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
     const previous = prevContentHRef.current;
     prevContentHRef.current = contentHeight;
     contentH.value = contentHeight;
+    if (hasNativeEditorScroll) {
+      revealSelection();
+      return;
+    }
     const viewport = viewportHRef.current;
     if (viewport <= 0 || contentHeight <= viewport) {
       return;
@@ -389,6 +407,10 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
     const viewport = event.nativeEvent.layout.height;
     viewportHRef.current = viewport;
     viewportH.value = viewport;
+    if (hasNativeEditorScroll) {
+      revealSelection();
+      return;
+    }
     const content = prevContentHRef.current;
     if (viewport < previous && content > viewport) {
       const wasAtBottom = offsetY.value >= content - previous - 48;
@@ -475,6 +497,7 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   }));
 
   const onChange = (value: string) => {
+    revealSelection();
     noteForegroundActivity();
     textRef.current = value;
     const nonempty = value.trim().length > 0;
@@ -545,6 +568,9 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
                   defaultValue={text}
                   testID="note-editor"
                   onChangeText={onChange}
+                  onSelectionChange={revealSelection}
+                  onFocus={revealSelection}
+                  onLayout={revealSelection}
                   onPressIn={showIcons}
                   placeholder={browsing ? "" : PLACEHOLDER}
                   placeholderTextColor={theme.colors.secondaryText}

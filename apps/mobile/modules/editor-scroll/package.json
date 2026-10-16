@@ -1,0 +1,6 @@
+{
+  "name": "editor-scroll",
+  "version": "0.1.0",
+  "description": "Keeps the native iOS editor selection visible in its parent scroll view.",
+  "private": true
+}
