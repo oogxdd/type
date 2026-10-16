@@ -1,4 +1,7 @@
 {
   "platforms": ["apple"],
-  "apple": { "modules": ["EditorScrollModule"] }
+  "apple": {
+    "modules": ["EditorScrollModule"],
+    "podspecPath": "EditorScroll.podspec"
+  }
 }

@@ -123,6 +123,8 @@ Android and clients without the module retain the existing bottom anchoring.
 
 This requires `pod install` and a native rebuild. Geometry checks:
 `sh apps/mobile/modules/editor-scroll/tests/test-scroll.sh`.
+Expo module registration:
+`node apps/mobile/modules/editor-scroll/tests/test-autolinking.cjs`.
 On the device, check typing past the keyboard, soft wraps, inserting/deleting
 in the middle of a long note, moving the caret, selection, keyboard reopening,
 manual scrolling and pull-to-new-note.
