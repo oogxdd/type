@@ -1,3 +1,4 @@
+mod attachments;
 mod audio_player;
 mod commands;
 mod cursor;
@@ -57,6 +58,7 @@ struct Note {
     draft_folder: Option<String>,
     fills: Option<RangeDecorationCollection>,
     markers: Option<TextDecorationCollection>,
+    images: Vec<(std::ops::Range<usize>, std::sync::Arc<std::path::Path>)>,
     editor: Option<Entity<EditorState>>,
 }
 struct TypeApp {
@@ -370,10 +372,18 @@ impl TypeApp {
     }
 
     fn refresh_tags(&mut self, cx: &mut Context<Self>) {
-        let Some(note) = self.notes.get(&self.active) else {
+        let root = self.backend.root.clone();
+        let Some(note) = self.notes.get_mut(&self.active) else {
             return;
         };
         let text = note.editor.as_ref().unwrap().read(cx).value();
+        note.images = document::image_lines(&text)
+            .into_iter()
+            .filter_map(|image| {
+                let path = type_core::resolve_note_attachment(&root, &self.active, &image.target)?;
+                Some((image.line, path.into()))
+            })
+            .collect();
         let regions = document::tag_regions(&text);
         self.tag_count = regions.len();
         note.fills.as_ref().unwrap().set(

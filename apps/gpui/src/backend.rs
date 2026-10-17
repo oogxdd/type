@@ -70,6 +70,12 @@ impl Backend {
         })
     }
 
+    /// Store image bytes for embedding; returns the Markdown link target.
+    pub fn save_attachment(&self, bytes: &[u8], extension: &str) -> Result<String, String> {
+        self.notes()?;
+        save_note_attachment(&self.root, bytes, extension)
+    }
+
     pub fn create(
         &self,
         folder: &str,

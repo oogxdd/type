@@ -161,6 +161,91 @@ pub fn whole_lines(text: &str, selection: Range<usize>) -> Range<usize> {
     start..end
 }
 
+/// A line holding exactly one Markdown image, e.g. `![alt](/path.png)`.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ImageLine {
+    /// Byte range of the line without its newline.
+    pub line: Range<usize>,
+    pub target: String,
+}
+
+/// Image-only lines outside fenced code. The editor previews these in place
+/// of their Markdown source; mid-line images stay ordinary text.
+pub fn image_lines(text: &str) -> Vec<ImageLine> {
+    let mut lines = Vec::new();
+    let mut code_fence: Option<(char, usize)> = None;
+    let mut offset = 0;
+    for raw in text.split_inclusive('\n') {
+        let line = raw.trim_end_matches(['\r', '\n']);
+        let trimmed = line.trim();
+        let first = trimmed.chars().next();
+        if let Some(ch @ ('`' | '~')) = first {
+            let count = trimmed.chars().take_while(|c| *c == ch).count();
+            if count >= 3 {
+                match code_fence {
+                    Some((open, size)) if open == ch && count >= size => code_fence = None,
+                    None => code_fence = Some((ch, count)),
+                    _ => {}
+                }
+            }
+        } else if code_fence.is_none() {
+            if let Some(target) = image_target(trimmed) {
+                lines.push(ImageLine {
+                    line: offset..offset + line.len(),
+                    target: target.into(),
+                });
+            }
+        }
+        offset += raw.len();
+    }
+    lines
+}
+
+fn image_target(line: &str) -> Option<&str> {
+    let rest = line.strip_prefix("![")?;
+    let close = rest.find("](")?;
+    let inner = rest[close + 2..].strip_suffix(')')?;
+    let inner = inner.trim();
+    // `<...>` destinations may contain spaces; an optional title follows.
+    let target = if let Some(rest) = inner.strip_prefix('<') {
+        let (target, title) = rest.split_once('>')?;
+        if !title.is_empty() && !title.trim_start().starts_with('"') {
+            return None;
+        }
+        target
+    } else {
+        match inner.split_once(char::is_whitespace) {
+            Some((target, title)) if title.trim_start().starts_with('"') => target,
+            Some(_) => return None,
+            None => inner,
+        }
+    };
+    (!target.is_empty() && !target.contains(['(', ')'])).then_some(target)
+}
+
+/// Markdown that puts each image link on its own line at `offset`.
+/// Returns the text to insert and the cursor offset within it.
+pub fn image_insertion(text: &str, offset: usize, targets: &[String]) -> (String, usize) {
+    let links = targets
+        .iter()
+        .map(|target| format!("![]({target})"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let before = &text[..offset];
+    let prefix = if before.is_empty() || before.ends_with('\n') {
+        ""
+    } else {
+        "\n"
+    };
+    let cursor = prefix.len() + links.len();
+    let suffix = if text[offset..].starts_with('\n') {
+        ""
+    } else {
+        "\n"
+    };
+    (format!("{prefix}{links}{suffix}"), cursor)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,5 +288,39 @@ mod tests {
     fn whole_line_selection_does_not_include_next_line_when_ending_at_its_start() {
         assert_eq!(whole_lines("one\ntwo\nthree", 0..4), 0..3);
         assert_eq!(whole_lines("one\ntwo\nthree", 5..9), 4..13);
+    }
+
+    #[test]
+    fn image_lines_are_whole_line_images_outside_code() {
+        let text = "a\n![](/_system/_attachments/x.png)\n  ![cat](img/c.jpg \"Cat\")\nsee ![](y.png) here\n```\n![](z.png)\n```\n![](<sp ace.png>)";
+        let lines = image_lines(text);
+        let targets: Vec<_> = lines.iter().map(|l| l.target.as_str()).collect();
+        assert_eq!(
+            targets,
+            ["/_system/_attachments/x.png", "img/c.jpg", "sp ace.png"]
+        );
+        assert_eq!(
+            &text[lines[0].line.clone()],
+            "![](/_system/_attachments/x.png)"
+        );
+    }
+
+    #[test]
+    fn inserted_images_get_their_own_lines() {
+        let one = vec!["/a.png".to_string()];
+        assert_eq!(image_insertion("", 0, &one), ("![](/a.png)\n".into(), 11));
+        assert_eq!(
+            image_insertion("ab", 1, &one),
+            ("\n![](/a.png)\n".into(), 12)
+        );
+        assert_eq!(
+            image_insertion("ab\n", 2, &one),
+            ("\n![](/a.png)".into(), 12)
+        );
+        let two = vec!["/a.png".to_string(), "/b.png".to_string()];
+        assert_eq!(
+            image_insertion("x\n", 2, &two).0,
+            "![](/a.png)\n![](/b.png)\n"
+        );
     }
 }

@@ -665,6 +665,7 @@ impl Render for TypeApp {
             let editor = editor::EditorAppearance {
                 prefs: &self.prefs,
                 vim: &self.vim,
+                images: &note.images,
             }
             .render(editor, self.busy, self.replaying_vim_history, cx)
             .into_any_element();
@@ -674,7 +675,19 @@ impl Render for TypeApp {
                 .when_some(self.render_recording(cx), |pane, recording| {
                     pane.child(recording)
                 })
-                .child(div().flex_1().min_h_0().child(editor))
+                .child(
+                    div()
+                        .id("editor-drop")
+                        .flex_1()
+                        .min_h_0()
+                        .drag_over::<ExternalPaths>(|style, _, _, cx| {
+                            style.bg(cx.theme().accent.opacity(0.35))
+                        })
+                        .on_drop(cx.listener(|this, paths: &ExternalPaths, window, cx| {
+                            this.drop_images(paths, window, cx)
+                        }))
+                        .child(editor),
+                )
                 .into_any_element()
         } else {
             div()

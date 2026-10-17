@@ -1,6 +1,6 @@
 # GPUI migration — handoff / live status
 
-Updated: 2026-10-17. This is an unfinished migration; update this file after each milestone.
+Updated: 2026-10-18. This is an unfinished migration; update this file after each milestone.
 
 ## Where to continue
 
@@ -32,6 +32,29 @@ Updated: 2026-10-17. This is an unfinished migration; update this file after eac
 - Investigate larger H1/H2/H3 only; do not implement yet.
 
 ## Implemented
+
+### Image attachments in profile notes (2026-10-18, branch `feat/gpui-image-attachments`)
+
+- Dropping image files on the editor pane, or Cmd/Ctrl+V with image data or
+  copied image files on the clipboard, copies the bytes into
+  `_system/_attachments/<UTC yyyymmdd-hhmmss>-<6 hex>.<ext>` through core
+  `save_note_attachment` (create-new, never overwrites, 50 MB cap) and inserts
+  `![](/_system/_attachments/…)` on its own line. A leading `/` means
+  notes-root relative, so links survive note moves; `resolve_note_attachment`
+  also accepts note-relative targets and rejects URLs and root escapes.
+- png/jpg/webp/gif are stored as-is; TIFF/BMP (macOS screenshots, Safari) are
+  re-encoded as PNG so mobile can display them later. Other dropped files are
+  rejected with an error. Drops insert after the line under the pointer.
+- Image-only lines outside fenced code render as a one-row thumbnail painted
+  over their source (`EditorAppearance::render_images`). The cursor line,
+  loading images and unreadable links show the Markdown source instead.
+- Not done: ordinary folder tabs, mobile, larger-than-one-row previews (gpui-kit
+  0.7 has no block decorations), orphan cleanup after a link is deleted, HEIC.
+  Attachment bytes are not covered by note-body encryption (same as handwriting
+  and recordings). GPUI's macOS pasteboard prefers plain text over image data,
+  so a browser copy that also carries text pastes the text; needs user testing.
+- Checks: `cargo test -p type-gpui -- --test-threads=1`, `cargo test -p
+  type-core --lib`.
 
 ### Published GPUI 0.4.11 Apple Silicon (2026-10-17)
 

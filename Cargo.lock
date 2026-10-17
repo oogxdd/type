@@ -12483,6 +12483,7 @@ dependencies = [
  "dirs 6.0.0",
  "gpui-kit",
  "hound",
+ "image",
  "qrcode",
  "serde",
  "serde_json",

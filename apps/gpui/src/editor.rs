@@ -1,9 +1,12 @@
 use super::*;
 use gpui_kit::base::input::RopeExt;
+use std::{ops::Range, path::Path, sync::Arc};
 
 pub(crate) struct EditorAppearance<'a> {
     pub prefs: &'a Preferences,
     pub vim: &'a vim::Vim,
+    /// Image-only lines (source byte range, resolved local file) to preview.
+    pub images: &'a [(Range<usize>, Arc<Path>)],
 }
 
 #[cfg(test)]
@@ -12,6 +15,7 @@ impl TypeApp {
         EditorAppearance {
             prefs: &self.prefs,
             vim: &self.vim,
+            images: &[],
         }
         .line_number_width(editor, cx)
     }
@@ -57,6 +61,9 @@ impl EditorAppearance<'_> {
                     .when(self.prefs.current_line_highlight, |pane| {
                         pane.child(self.render_current_line(editor.clone()))
                     })
+                    .when(!self.images.is_empty(), |pane| {
+                        pane.child(PaintLayer::new(self.render_images(editor.clone())))
+                    })
                     .when(self.block_cursor(), |pane| {
                         pane.child(PaintLayer::new(self.render_cursor(editor.clone(), cx)))
                     }),
@@ -64,6 +71,79 @@ impl EditorAppearance<'_> {
             .when(self.prefs.line_numbers, |pane| {
                 pane.child(self.render_line_numbers(editor.clone(), cx))
             })
+    }
+
+    /// Paint each image line as a one-row thumbnail over its Markdown source.
+    /// The line under the cursor, and images that are loading or unreadable,
+    /// keep showing their source so the link stays editable.
+    pub fn render_images(&self, editor: Entity<EditorState>) -> impl IntoElement + use<> {
+        let visual_head = (self.prefs.vim
+            && matches!(self.vim.mode, vim::Mode::Visual | vim::Mode::VisualLine))
+        .then_some(self.vim.head);
+        let images = self.images.to_vec();
+        canvas(
+            |_, _, _| (),
+            move |_, _, window, cx| {
+                let (input, cells) = {
+                    let state = editor.read(cx);
+                    let cursor_line = editor.focus_handle(cx).is_focused(window).then(|| {
+                        let offset = visual_head.unwrap_or_else(|| state.cursor());
+                        state.text().offset_to_position(offset).line as usize
+                    });
+                    let Some(rows) = state.visible_row_range() else {
+                        return;
+                    };
+                    let cells = images
+                        .iter()
+                        .filter_map(|(range, path)| {
+                            let line = state.text().offset_to_position(range.start).line as usize;
+                            if !rows.contains(&line) || Some(line) == cursor_line {
+                                return None;
+                            }
+                            let start = state.range_to_bounds(&(range.start..range.start))?;
+                            let end = state.range_to_bounds(&(range.end..range.end))?;
+                            Some((start, end, path.clone()))
+                        })
+                        .collect::<Vec<_>>();
+                    (state.input_bounds(), cells)
+                };
+                let background = cx.theme().background;
+                window.with_content_mask(Some(ContentMask { bounds: input }), |window| {
+                    for (start, end, path) in cells {
+                        let resource = Resource::Path(path);
+                        let Some(Ok(image)) = window.use_asset::<ImgResourceLoader>(&resource, cx)
+                        else {
+                            continue;
+                        };
+                        let cover = Bounds::from_corners(
+                            point(start.left(), start.top()),
+                            point(input.right(), end.bottom().max(start.bottom())),
+                        );
+                        window.paint_quad(fill(cover, background));
+                        let pixels = image.size(0);
+                        let row = start.size.height;
+                        let height = (row - px(4.)).max(px(1.));
+                        let aspect = pixels.width.0 as f32 / pixels.height.0.max(1) as f32;
+                        let width = (height * aspect).min(input.right() - start.left());
+                        let bounds = Bounds::new(
+                            point(start.left(), start.top() + (row - height) / 2.),
+                            size(width, height),
+                        );
+                        let _ = window.paint_image(
+                            bounds,
+                            bounds,
+                            Corners::all(px(3.)),
+                            image,
+                            0,
+                            false,
+                        );
+                    }
+                });
+            },
+        )
+        .absolute()
+        .inset_0()
+        .size_full()
     }
 
     pub fn render_current_line(&self, editor: Entity<EditorState>) -> impl IntoElement + use<> {
@@ -200,6 +280,25 @@ pub(crate) fn visible_line_numbers(
         }
     }
     labels
+}
+
+/// End of the logical line rendered at window `y`, clamped to the visible
+/// rows; drops insert their images after that line.
+pub(crate) fn line_end_at(editor: &Entity<EditorState>, y: Pixels, cx: &App) -> Option<usize> {
+    let state = editor.read(cx);
+    let rows = state.visible_row_range()?;
+    let mut found = None;
+    for row in rows {
+        let start = state.text().line_start_offset(row);
+        let Some(cell) = state.range_to_bounds(&(start..start)) else {
+            break;
+        };
+        if cell.top() > y && found.is_some() {
+            break;
+        }
+        found = Some(row);
+    }
+    Some(state.text().line_end_offset(found?))
 }
 
 /// Reserve a background layer before painting the editor. The editor's own

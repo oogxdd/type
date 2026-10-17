@@ -790,6 +790,7 @@ impl Render for FolderWorkspace {
                     editor::EditorAppearance {
                         prefs: &self.prefs,
                         vim: &self.vim,
+                        images: &[],
                     }
                     .render(&editor, false, self.replaying_vim_history, cx),
                 )

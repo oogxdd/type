@@ -3055,3 +3055,143 @@ fn stale_reconcile_keeps_pending_and_idle_poll_does_not_scan_processing(cx: &mut
     })
     .unwrap();
 }
+
+fn synthetic_image(format: image::ImageFormat) -> Vec<u8> {
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+        8,
+        4,
+        image::Rgba([200, 40, 40, 255]),
+    ))
+    .write_to(&mut bytes, format)
+    .unwrap();
+    bytes.into_inner()
+}
+
+#[gpui_kit::test]
+fn pasted_and_dropped_images_are_stored_linked_and_previewed(cx: &mut TestAppContext) {
+    use gpui_kit::{ClipboardEntry, ClipboardItem, ExternalPaths, Image, ImageFormat};
+    let f = Fixture::new();
+    let path =
+        f.0.create(STREAM_FOLDER, "first line".into(), None)
+            .unwrap();
+    let (window, app) = launch(&f, cx);
+    let png = synthetic_image(image::ImageFormat::Png);
+    cx.write_to_clipboard(ClipboardItem {
+        entries: vec![ClipboardEntry::Image(Image::from_bytes(
+            ImageFormat::Png,
+            png.clone(),
+        ))],
+    });
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.open_note(path.clone().into(), true, window, cx)
+        });
+        window.render_frame(cx);
+        let editor = app.read(cx).notes[&app.read(cx).active]
+            .editor
+            .clone()
+            .unwrap();
+        editor.update(cx, |state, cx| state.set_selected_range(10..10, cx));
+    })
+    .unwrap();
+    press(
+        cx,
+        window,
+        if cfg!(target_os = "macos") {
+            "cmd-v"
+        } else {
+            "ctrl-v"
+        },
+    );
+    let (body, target) = cx
+        .update_window(window, |_, _, cx| {
+            let app = app.read(cx);
+            let body = app.notes[&app.active]
+                .editor
+                .as_ref()
+                .unwrap()
+                .read(cx)
+                .value()
+                .to_string();
+            (body.clone(), body.lines().nth(1).unwrap().to_string())
+        })
+        .unwrap();
+    assert!(
+        target.starts_with("![](/_system/_attachments/") && target.ends_with(".png)"),
+        "{body:?}"
+    );
+    assert_eq!(body, format!("first line\n{target}\n"));
+    let stored = f.0.root.join(&target[5..target.len() - 1]);
+    assert_eq!(std::fs::read(&stored).unwrap(), png);
+
+    // Dropped TIFF files are converted so every client can show them.
+    let tiff = f.0.env.app_data_dir.join("drop.tiff");
+    std::fs::write(&tiff, synthetic_image(image::ImageFormat::Tiff)).unwrap();
+    let text = f.0.env.app_data_dir.join("notes.txt");
+    std::fs::write(&text, "x").unwrap();
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.drop_images(&ExternalPaths(vec![text.clone()].into()), window, cx);
+            assert!(app.error.take().unwrap().contains("Only images"));
+            app.drop_images(&ExternalPaths(vec![tiff.clone()].into()), window, cx);
+            assert!(app.error.is_none());
+            let note = &app.notes[&app.active];
+            assert_eq!(note.images.len(), 2);
+            assert!(note.images.iter().all(|(_, path)| path.is_file()));
+        });
+    })
+    .unwrap();
+    let stored: Vec<_> = std::fs::read_dir(f.0.root.join(type_core::ATTACHMENTS_STORAGE_FOLDER))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    assert_eq!(stored.len(), 2);
+    assert!(stored.iter().all(|path| path.extension().unwrap() == "png"));
+
+    // Away from the cursor line, the source is covered by the decoded preview.
+    cx.update_window(window, |_, window, cx| {
+        let editor = app.read(cx).notes[&app.read(cx).active]
+            .editor
+            .clone()
+            .unwrap();
+        editor.update(cx, |state, cx| state.set_selected_range(0..0, cx));
+        window.render_frame(cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        let editor = app.read(cx).notes[&app.read(cx).active]
+            .editor
+            .clone()
+            .unwrap();
+        let state = editor.read(cx);
+        let line = state
+            .range_to_bounds(&(11..11))
+            .unwrap()
+            .top()
+            .scale(window.scale_factor());
+        let background: gpui_kit::Background = super::Theme::global(cx).background.into();
+        assert!(
+            window
+                .painted_quads()
+                .iter()
+                .any(|quad| quad.background == background
+                    && (quad.bounds.top() - line).0.abs() <= 1.),
+            "image line is not covered by its preview"
+        );
+        // On the cursor line the Markdown source stays visible and editable.
+        editor.update(cx, |state, cx| state.set_selected_range(12..12, cx));
+        window.render_frame(cx);
+        assert!(
+            !window
+                .painted_quads()
+                .iter()
+                .any(|quad| quad.background == background
+                    && (quad.bounds.top() - line).0.abs() <= 1.),
+            "cursor line must show its source"
+        );
+    })
+    .unwrap();
+}

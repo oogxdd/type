@@ -589,6 +589,9 @@ impl TypeApp {
             cx.notify();
             return;
         }
+        if self.paste_images(event, window, cx) {
+            return;
+        }
         if self.locked || self.busy {
             return;
         }

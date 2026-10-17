@@ -687,6 +687,7 @@ impl TypeApp {
                     draft_folder: None,
                     fills: None,
                     markers: None,
+                    images: Vec::new(),
                     editor: None,
                 },
             );

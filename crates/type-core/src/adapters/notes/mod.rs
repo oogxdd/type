@@ -38,7 +38,7 @@ pub const ORDER_FILE: &str = ".notes-order.json";
 //
 //     <notes root>/
 //       _system/
-//         _attachments/    inline note attachments (reserved; see below)
+//         _attachments/    images embedded in note bodies
 //         _handwriting/    handwriting source images
 //         _recordings/     recorded audio
 //         agent/           the agent's own notes (MCP write boundary)
@@ -49,8 +49,8 @@ pub const ORDER_FILE: &str = ".notes-order.json";
 //       <user folders>/
 //
 // Underscore-prefixed children hold binary storage and never contain notes;
-// `_attachments` is reserved for attachments embedded in a note body and is
-// empty until that exists. `_system` is not browsable: shells drop it from the
+// `_attachments` holds images embedded in note bodies (see
+// `note_attachments.rs`). `_system` is not browsable: shells drop it from the
 // folder tree and reach `stream`/`archive` through their pinned entries.
 
 /// The one root-level folder the app owns. Everything below is relative to the
