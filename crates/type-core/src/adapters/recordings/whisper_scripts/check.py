@@ -10,7 +10,7 @@ try:
             # Try to load the model to verify it's available.
             # This will trigger a download if model_size is a name and not yet cached.
             # We use CPU and int8 for a lightweight check.
-            WhisperModel(model_size, device="cpu", compute_type="int8", local_files_only=False)
+            load_model(model_size, device="cpu", compute_type="int8")
         except Exception as e:
             available = False
             error = str(e)

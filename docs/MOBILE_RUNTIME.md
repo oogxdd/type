@@ -273,3 +273,48 @@ npm run test -w @typenotes/mobile
 npm run typecheck -w @typenotes/mobile
 sh apps/mobile/modules/recording-activity/tests/test-recovery.sh
 ```
+
+## iOS editor scrolling follow-up (2026-10-17)
+
+Reproduced the keyboard obstruction in an isolated iPhone 17 Pro / iOS 26.1
+simulator with the real Release native bridge and synthetic profiles. After
+typing 32 lines (887 UTF-16 units), both the uncontrolled input and paper
+content remained 455pt high with zero scroll range; the previous caret-only
+module was registered and running but had invalid text geometry.
+
+`EditorScroll` now measures UIKit's text with `sizeThatFits` and returns its
+height. Capture applies that as the input's minimum height, allowing Yoga to
+grow/shrink the enclosing paper while keeping text and selection native. Page
+replacement resets the measurement and ignores replies from an old input.
+The resulting layout triggers the existing caret reveal. The same 32-line
+case now has 926pt of content, roughly 464pt of scroll offset, and a visible
+caret above the keyboard. New-page focus also waits until React has applied
+`editable=true`; focusing in the transition-ending callback could leave the
+fresh draft without its keyboard.
+
+Verified: mobile TypeScript typecheck, 29 capture/page/draft functional tests,
+nine Swift geometry checks, native module autolinking, and Release XCTest
+cases `testTypingPastKeyboard` and `testSoftWrappedTypingPastKeyboard`. These
+check actual UIKit caret geometry, soft wraps and Cyrillic input, native
+scrolling to the beginning, retaining the page during ordinary upward scrolling,
+pulling a fresh draft and immediately typing into it. The geometry accessibility
+probe is restricted to explicitly opted-in Dev simulators and contains no note
+text. One local XCTest rerun executed an older gesture sequence; uninstalling
+only the test Runner and using `test-without-building` installed the current
+binary and the complete scrolling/pull/focus case passed.
+
+Native test artifacts: `/tmp/type-keyboard-focus.xcresult` (soft wraps) and
+`/tmp/type-keyboard-reinstalled.xcresult` (complete scrolling/pull/focus flow).
+Android and physical iPhone keyboard/IME/gesture feel remain untested. This
+change requires a native rebuild, not only a JavaScript update.
+
+Pull-label follow-up: the strip now has a single numeric position relative to
+the measured capture surface, instead of toggling animated `top`/`bottom` to
+`undefined`. This prevents a prior downward gesture's top anchor from surviving
+the next upward pull. Mobile typecheck and a temporary Release XCTest holding
+upward pulls after downward gestures passed; live simulator screenshots confirm
+the strip directly above the keyboard, and filing/refocusing still works.
+The attempt to capture a keyboard-hidden pull refocused the editor on touch,
+so both screenshots show the keyboard; the hidden-keyboard position follows the
+same measured-surface calculation with zero keyboard height. Artifacts:
+`/tmp/type-pull-position.xcresult`, `/tmp/type-pull-keyboard.png`.

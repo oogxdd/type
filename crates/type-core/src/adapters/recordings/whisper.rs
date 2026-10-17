@@ -13,12 +13,20 @@ use super::WhisperStatusResult;
 
 /// Python script executed as a subprocess for local whisper transcription.
 /// Source lives in `whisper_scripts/transcribe.py` (embedded at compile time).
-const WHISPER_TRANSCRIBE_SCRIPT: &str = include_str!("whisper_scripts/transcribe.py");
+const WHISPER_TRANSCRIBE_SCRIPT: &str = concat!(
+    include_str!("whisper_scripts/model.py"),
+    "\n",
+    include_str!("whisper_scripts/transcribe.py")
+);
 
 /// Lightweight check script — just verifies faster_whisper can be imported.
 /// If a model is provided as an argument, it also tries to load it (which may trigger download).
 /// Source lives in `whisper_scripts/check.py` (embedded at compile time).
-const WHISPER_CHECK_SCRIPT: &str = include_str!("whisper_scripts/check.py");
+const WHISPER_CHECK_SCRIPT: &str = concat!(
+    include_str!("whisper_scripts/model.py"),
+    "\n",
+    include_str!("whisper_scripts/check.py")
+);
 
 /// JSON output from the local whisper Python script.
 #[derive(Deserialize)]
@@ -230,21 +238,9 @@ pub fn transcribe_audio_local_whisper(
 
 /// Save word-level transcription JSON alongside the audio file.
 /// e.g. audio-xxxx.webm → audio-xxxx.transcription.json
-pub fn save_word_level_json(
-    audio_path: &Path,
-    json_content: &str,
-) -> Result<PathBuf, String> {
-    let stem = audio_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("audio");
-    let json_path = audio_path
-        .parent()
-        .unwrap_or(audio_path)
-        .join(format!("{}.transcription.json", stem));
-    fs::write(&json_path, json_content)
-        .map_err(|e| format!("Failed to write transcription JSON: {}", e))?;
-    Ok(json_path)
+pub fn save_word_level_json(audio_path: &Path, json_content: &str) -> Result<PathBuf, String> {
+    super::save_transcription_json(audio_path, "whisper", json_content)?;
+    Ok(super::transcript_json_paths(audio_path).legacy_whisper)
 }
 
 // ── Word-gap reflow ───────────────────────────────────────────────────────

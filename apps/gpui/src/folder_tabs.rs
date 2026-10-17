@@ -112,6 +112,7 @@ impl TypeApp {
             return;
         }
         self.refresh_task = None;
+        self.stop_playback();
         self.refreshing = false;
         self.revision += 1;
         self.active_folder = id;

@@ -49,6 +49,9 @@ One root Cargo workspace/lock/target; npm workspaces for TypeScript packages.
 
 ## Storage and security
 
+- For requested Voice Memos/audio imports, follow `docs/VOICE_MEMOS_IMPORT.md`.
+  Keep the last successful import timestamp in the target notes root at
+  `.type/voice-memos-last-import.txt`; never put personal import history in this repo.
 - Each profile has a configurable notes root. Owned content lives under `_system`:
   `stream`, `archive`, `agent`, `me`, `reviews`, `_recordings`, `_handwriting`,
   `_attachments`. `_system` itself, internal agent/memory/storage folders and
@@ -71,6 +74,15 @@ One root Cargo workspace/lock/target; npm workspaces for TypeScript packages.
   requires dropping shell buffers/state. Security config lives in app data.
 - Old flat layouts are not migrated automatically. See
   `docs/FOLDER_STRUCTURE_MIGRATION.md`. Keep migration compatibility spellings.
+
+## Apple Notes imports
+
+For a repeat or incremental Apple Notes import, read
+`docs/APPLE_NOTES_IMPORT.md` first. In the user-confirmed notes root, look for
+`.type/apple-notes-last-import.json` and `_system/agent/imports/` before guessing
+the previous cutoff. Reconcile the full export with the last manifest: timestamps
+alone miss backdated notes and edits. Preserve attachments and existing notes;
+when requested, commit the notes repository before and after the import.
 
 ## MCP privacy and observer
 

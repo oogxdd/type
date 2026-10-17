@@ -9,9 +9,7 @@ def main():
     audio_path = sys.argv[1]
     model_size = sys.argv[2] if len(sys.argv) > 2 else "large-v3"
 
-    from faster_whisper import WhisperModel
-
-    model = WhisperModel(model_size, device="auto", compute_type="auto")
+    model = load_model(model_size, device="auto", compute_type="auto")
     segments, info = model.transcribe(audio_path, word_timestamps=True)
 
     # info.duration is known before any segment is consumed (faster-whisper

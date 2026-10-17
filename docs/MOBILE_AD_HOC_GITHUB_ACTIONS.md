@@ -240,3 +240,43 @@ through a symlink. Existing release artifacts and installed-app data remain.
 Physical-device installation, recording through shutdown/background expiration,
 real phone-to-desktop sync timing and UI feel remain for user testing. Android
 was not built. No CI build, GitHub release or tag was created.
+
+## Local release 0.4.6 (2026-10-16)
+
+Built locally with Xcode 26.6 and published to `https://type-ota.vercel.app`:
+version **0.4.6**, build **2026101601**, source commit
+`43b5207d69024c96b0e59865afb41b22edc2f309`. This release fixes iOS typing
+scrolling: the native `EditorScroll` Expo module reveals UIKit's actual caret
+inside the enclosing paper ScrollView after edits, selection and layout changes.
+It supports wrapped lines and editing inside long notes without jumping to EOF;
+active scroll gestures, nonempty selections and inactive editors retain control.
+
+Checks passed: 289 TypeScript tests (202 mobile, 10 bridge, 77 shared), mobile
+and bridge typechecks before and after native codegen, 108 core tests and the
+FFI end-to-end test, nine Swift scroll geometry checks, native Expo registration,
+and the existing Swift recording recovery suite. Regenerated the optimized Rust
+device/simulator framework and bindings and refreshed CocoaPods while preserving
+`EXPO_USE_PRECOMPILED_MODULES: false`. New local modules with root-level podspecs
+need explicit `apple.podspecPath` for Expo's provider discovery; the registration
+test covers this, and the generated provider and archived binary both contain
+`EditorScrollModule`. The initial archive was stopped to correct that registration;
+the final archive and ad-hoc export succeeded. Temporary generated package entry
+and unrelated CocoaPods project rewrites were restored after packaging.
+
+The exported IPA passed deep/strict signature verification in the actual macOS
+session with Apple Distribution signing. App/widget versions and builds agree;
+both profiles retain all three devices from 0.4.5 and disable debugging. Production
+page, manifest and full IPA returned HTTP 200 with expected content types. The
+downloaded production IPA matches the verified local SHA-256.
+
+Artifacts/logs are under `apps/mobile/ios/build/`:
+
+- `Type-0.4.6.xcarchive`
+- `export-adhoc-0.4.6/Type.ipa`
+- `ota-0.4.6/`
+- `release-0.4.6/` (source, build/export/deploy logs and local/live verification)
+
+IPA size: `23042950` bytes.
+SHA-256: `c00ddf26f2d59188ebc6dbb2968e34077851588727247e19dc5b42a0d1424db6`.
+Physical iPhone installation, typing/IME and gesture feel remain for user testing;
+Android was not built. No CI build, GitHub release or tag was created.

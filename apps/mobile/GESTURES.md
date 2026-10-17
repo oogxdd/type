@@ -51,7 +51,16 @@ finger movement can scroll to the end and continue into a pull.
   transition. Speed is deliberately absent from this decision.
 - Momentum, cancelled touches and layout-only scroll events cannot commit.
   Overscroll updates readiness only while the shared pan is actively vertical.
-- The strip sits above the keyboard. The fresh page receives typing focus.
+- The strip sits above the keyboard. The fresh page receives typing focus after
+  React has applied `editable=true` to the replacement native input; requesting
+  focus in the same callback that ends the transition can leave UIKit read-only
+  and dismiss the keyboard.
+
+The strip uses one numeric `top` coordinate computed from the measured capture
+surface height, keyboard height and strip height. Switching animated `top` and
+`bottom` values to `undefined` can retain an old edge after a downward gesture,
+causing the next upward pull's label to appear at the top. Upward pulls always
+align the strip with the visible bottom; browsing backward retains the top edge.
 
 Capture retains the old draft until its save succeeds. If storage fails, the
 old page returns with its text. Opening the menu flushes without clearing it.
@@ -108,6 +117,38 @@ now has no native pop recognizer. Do not restore the split as a threshold fix.
 Functional checks cover ordered browsing in both directions, list boundaries,
 failed saves/reads, retaining drafts and editing the draft through the list.
 Physical startup timing and gesture feel on iOS/Android remain device checks.
+
+## Keeping the caret visible while typing
+
+On iOS the `EditorScroll` local Expo module reads UIKit's actual collapsed
+selection after text, selection, input layout or keyboard viewport changes.
+It also measures the native text with `sizeThatFits` and returns only its height
+to the shell. The uncontrolled, non-scrolling Fabric input can otherwise stay
+at its initial viewport height after typing: neither the enclosing paper nor
+the caret geometry then reflects the text below the keyboard. The measured
+minimum height lets Yoga grow (and shrink) the paper; the resulting layout runs
+the caret reveal again. It resets when replacing the native input for a page.
+It scrolls the enclosing paper only far enough to reveal the caret with a
+16pt margin, rather than pinning every edit to the bottom of the note. This
+also follows soft wraps and edits in the middle of long notes without
+estimating line positions from Markdown or measuring a second copy of the text.
+Native drag/deceleration and nonempty selections retain control; an unfocused
+or disabled editor cannot move the paper. Calls are coalesced to one per frame.
+Android and clients without the module retain the existing bottom anchoring.
+
+This requires `pod install` and a native rebuild. Geometry checks:
+`sh apps/mobile/modules/editor-scroll/tests/test-scroll.sh`.
+Expo module registration:
+`node apps/mobile/modules/editor-scroll/tests/test-autolinking.cjs`.
+The `TypeResponsiveness` iOS XCTest harness also covers typing 32 lines, native
+scrolling back to the beginning, pulling a fresh draft, and soft wraps with
+Unicode input. Its simulator-only, opted-in Dev accessibility probe reports
+UIKit caret/scroll geometry without note content. Run the
+`testTypingPastKeyboard` and `testSoftWrappedTypingPastKeyboard` cases using
+the isolated simulator instructions in `docs/MOBILE_RUNTIME.md`.
+On the device, check typing past the keyboard, soft wraps, inserting/deleting
+in the middle of a long note, moving the caret, selection, keyboard reopening,
+manual scrolling and pull-to-new-note.
 
 ## Taps during background work
 

@@ -26,8 +26,10 @@ use base64::Engine as _;
 // Transcription backends — the worker below dispatches to whichever the job
 // selects (local Whisper on desktop, AssemblyAI on iOS).
 mod assembly;
+mod transcripts;
 mod whisper;
 pub use assembly::transcribe_audio_bytes_with_assembly;
+pub use transcripts::{save_transcription_json, transcript_json_paths, TranscriptJsonPaths};
 pub use whisper::{
     check_whisper_availability, reformat_transcript_with_word_gaps, save_word_level_json,
     transcribe_audio_local_whisper,
@@ -89,6 +91,13 @@ pub struct RetriggerTranscriptionArgs {
     pub provider: Option<String>,
     /// Overrides the stored AssemblyAI key, same as the cloud queue args.
     pub assembly_api_key: Option<String>,
+    /// Save the provider's JSON either way; replace the note body only when true.
+    #[serde(default = "default_replace_note_body")]
+    pub replace_note_body: bool,
+}
+
+fn default_replace_note_body() -> bool {
+    true
 }
 
 #[derive(Deserialize)]
@@ -205,6 +214,7 @@ pub struct QueuedTranscriptionJob {
     pub note_path: PathBuf,
     pub audio_path: PathBuf,
     pub method: TranscriptionMethod,
+    pub replace_note_body: bool,
 }
 
 /// Core recordings gateway. It owns native-recorder state, note/audio
@@ -338,6 +348,7 @@ impl RecordingsGateway for RecordingsAdapter {
     }
 
     fn retrigger(&self, args: Self::RetriggerArgs) -> Result<(), String> {
+        crate::ensure_security_unlocked_for_app(&self.app)?;
         let root = crate::ensured_notes_root(&self.app)?;
         let note_rel = args.note_path.trim();
         if note_rel.is_empty() {
@@ -348,7 +359,7 @@ impl RecordingsGateway for RecordingsAdapter {
             args.model.as_deref(),
             args.assembly_api_key.as_deref(),
         )?;
-        retrigger_single_transcription(&root, note_rel, method)
+        retrigger_with_options(&root, note_rel, method, args.replace_note_body)
     }
 
     fn whisper_status(&self, args: Self::WhisperArgs) -> Self::WhisperStatus {
@@ -799,7 +810,7 @@ fn update_recording_note_status_unlocked(
     transcript_text: Option<&str>,
 ) -> Result<(), String> {
     let raw = fs::read_to_string(note_path).map_err(|issue| issue.to_string())?;
-    let (mut meta, _) = parse_note_front_matter(&raw);
+    let (mut meta, body) = parse_note_front_matter(&raw);
     if meta.id.is_none() {
         meta.id = Some(generate_note_id());
     }
@@ -812,8 +823,14 @@ fn update_recording_note_status_unlocked(
     meta.transcription_status = Some(status.to_string());
     meta.transcription_error = error.clone();
     meta.transcription_updated_ms = now.or(meta.transcription_updated_ms);
-    meta.transcription_id = transcript_id;
-    let next_body = recording_note_body(status, transcript_text);
+    if status == RECORDING_STATUS_COMPLETED || transcript_id.is_some() {
+        meta.transcription_id = transcript_id;
+    }
+    // Queued/processing/error updates must preserve an existing transcript or
+    // user edits. A successful job explicitly supplies replacement text.
+    let next_body = transcript_text
+        .map(|text| recording_note_body(status, Some(text)))
+        .unwrap_or(body);
     write_note_with_front_matter(note_path, &meta, &next_body)
 }
 
@@ -844,7 +861,12 @@ fn process_transcription_job(job: QueuedTranscriptionJob) {
                     model,
                     &python,
                     |processed, total| set_transcription_progress(processed, total),
-                ),
+                )
+                .map(|(text, json)| CompletedTranscription {
+                    text,
+                    id: None,
+                    json: Some(("whisper", json)),
+                }),
                 Err(error) => Err(format!("Failed to set up local transcription: {error}")),
             }
         }
@@ -866,61 +888,39 @@ fn process_transcription_job(job: QueuedTranscriptionJob) {
                     return;
                 }
             };
-            transcribe_audio_bytes_with_assembly(audio_bytes, api_key)
+            assembly::transcribe_with_assembly(audio_bytes, api_key).map(|result| {
+                CompletedTranscription {
+                    text: result.text,
+                    id: Some(result.id),
+                    json: Some(("assemblyai", result.json)),
+                }
+            })
         }
         TranscriptionMethod::Provider { provider } => provider
             .transcribe(&job.audio_path)
-            .map(|transcript| (transcript, String::new()))
+            .map(|text| CompletedTranscription {
+                text,
+                id: None,
+                json: None,
+            })
             .map_err(|error| format!("{} transcription failed: {}", provider.id(), error)),
     };
 
-    match result {
-        Ok((transcript, id_or_json)) => {
-            // For local whisper, id_or_json is the full JSON with word timestamps.
-            // Save word-level JSON alongside the audio file, and reflow the saved
-            // transcript's line breaks from those same timestamps (pauses become
-            // line/paragraph breaks — see whisper::LINE_BREAK_GAP_SECONDS /
-            // PARAGRAPH_GAP_SECONDS).
-            let transcript = if matches!(job.method, TranscriptionMethod::LocalWhisper { .. }) {
-                if let Err(e) = save_word_level_json(&job.audio_path, &id_or_json) {
-                    eprintln!(
-                        "[recordings] failed to save word-level JSON for {}: {}",
-                        job.note_rel, e
-                    );
-                }
-                reformat_transcript_with_word_gaps(&id_or_json).unwrap_or(transcript)
-            } else {
-                transcript
-            };
-
-            let transcript_id = match &job.method {
-                TranscriptionMethod::AssemblyAi { .. } => Some(id_or_json),
-                TranscriptionMethod::LocalWhisper { .. } | TranscriptionMethod::Provider { .. } => {
-                    None
-                }
-            };
-
-            if let Err(error) = update_recording_note_status(
-                &job.note_path,
-                RECORDING_STATUS_COMPLETED,
-                None,
-                transcript_id,
-                Some(&transcript),
-            ) {
-                eprintln!(
-                    "[recordings] failed to write transcript for {}: {}",
-                    job.note_rel, error
-                );
-            }
-        }
+    match result.and_then(|result| complete_transcription(&job, result)) {
+        Ok(()) => {}
         Err(error) => {
-            let _ = update_recording_note_status(
+            if let Err(issue) = update_recording_note_status(
                 &job.note_path,
                 RECORDING_STATUS_FAILED,
                 Some(error.clone()),
                 None,
                 None,
-            );
+            ) {
+                eprintln!(
+                    "[recordings] failed to mark transcription error for {}: {}",
+                    job.note_rel, issue
+                );
+            }
             eprintln!(
                 "[recordings] transcription failed for {}: {}",
                 job.note_rel, error
@@ -928,6 +928,32 @@ fn process_transcription_job(job: QueuedTranscriptionJob) {
         }
     }
     clear_transcription_progress();
+}
+
+struct CompletedTranscription {
+    text: String,
+    id: Option<String>,
+    json: Option<(&'static str, String)>,
+}
+
+fn complete_transcription(
+    job: &QueuedTranscriptionJob,
+    result: CompletedTranscription,
+) -> Result<(), String> {
+    let mut text = result.text;
+    if let Some((provider, json)) = result.json {
+        save_transcription_json(&job.audio_path, provider, &json)?;
+        if provider == "whisper" {
+            text = reformat_transcript_with_word_gaps(&json).unwrap_or(text);
+        }
+    }
+    update_recording_note_status(
+        &job.note_path,
+        RECORDING_STATUS_COMPLETED,
+        None,
+        result.id,
+        job.replace_note_body.then_some(text.as_str()),
+    )
 }
 
 /// Start a background worker thread if jobs are queued and none is running.
@@ -1040,6 +1066,7 @@ fn queue_recordings_with_method(
             note_path: recording.note_path,
             audio_path: recording.audio_path,
             method: method.clone(),
+            replace_note_body: true,
         });
     }
 
@@ -1090,13 +1117,25 @@ pub fn retrigger_single_transcription(
     note_rel: &str,
     method: TranscriptionMethod,
 ) -> Result<(), String> {
-    let note_path = root.join(note_rel);
+    retrigger_with_options(root, note_rel, method, true)
+}
+
+fn retrigger_with_options(
+    root: &Path,
+    note_rel: &str,
+    method: TranscriptionMethod,
+    replace_note_body: bool,
+) -> Result<(), String> {
+    let note_rel = sanitize_relative(note_rel)?
+        .to_string_lossy()
+        .replace('\\', "/");
+    let note_path = root.join(&note_rel);
     if !note_path.exists() {
         return Err(format!("Note not found: {}", note_rel));
     }
     let raw = fs::read_to_string(&note_path).map_err(|e| e.to_string())?;
     let (meta, _) = parse_note_front_matter(&raw);
-    let info = recording_info_from_note_meta(root, &note_path, note_rel, &meta)
+    let info = recording_info_from_note_meta(root, &note_path, &note_rel, &meta)
         .ok_or_else(|| format!("Not a recording note: {}", note_rel))?;
 
     if !info.audio_path.is_file() {
@@ -1109,7 +1148,7 @@ pub fn retrigger_single_transcription(
     {
         let queue = transcription_queue_state();
         let mut state = queue.lock().expect("transcription queue poisoned");
-        if state.known_recordings.contains(note_rel) {
+        if state.known_recordings.contains(&note_rel) {
             return Ok(());
         }
         update_recording_note_status(&note_path, crate::RECORDING_STATUS_QUEUED, None, None, None)?;
@@ -1119,6 +1158,7 @@ pub fn retrigger_single_transcription(
             note_path,
             audio_path: info.audio_path,
             method,
+            replace_note_body,
         });
     }
 
@@ -1133,6 +1173,137 @@ mod tests {
         RECORDING_STATUS_COMPLETED, RECORDING_STATUS_FAILED, RECORDING_STATUS_PENDING,
         RECORDING_STATUS_PROCESSING, RECORDING_STATUS_QUEUED,
     };
+
+    #[test]
+    fn manual_retry_defaults_to_replacing_text_and_can_preserve_it() {
+        let old: super::RetriggerTranscriptionArgs =
+            serde_json::from_str(r#"{"note_path":"note.md"}"#).unwrap();
+        assert!(old.replace_note_body);
+        let keep: super::RetriggerTranscriptionArgs = serde_json::from_str(
+            r#"{"note_path":"note.md","provider":"assemblyai","replace_note_body":false}"#,
+        )
+        .unwrap();
+        assert!(!keep.replace_note_body);
+    }
+
+    #[test]
+    fn provider_results_coexist_and_optional_replacement_preserves_edits() {
+        use super::*;
+        let root = std::env::temp_dir().join(format!("type-provider-results-{}", Uuid::now_v7()));
+        fs::create_dir_all(&root).unwrap();
+        crate::ensure_security_unlocked_for_app(&AppEnv::new(root.join("app"))).unwrap();
+        let note_path = root.join("recording.md");
+        let audio_path = root.join("recording.wav");
+        fs::write(&audio_path, b"synthetic audio").unwrap();
+        fs::write(&note_path, "---\nid: fixture\ntype: audio_recording\ncustom: retained\nrecording_audio_path: recording.wav\ntranscription_status: completed\ntranscription_id: legacy-assembly\n---\n\nOriginal local transcript.\n").unwrap();
+        let mut job = QueuedTranscriptionJob {
+            note_rel: "recording.md".into(),
+            note_path: note_path.clone(),
+            audio_path: audio_path.clone(),
+            method: TranscriptionMethod::AssemblyAi {
+                api_key: "synthetic".into(),
+            },
+            replace_note_body: true,
+        };
+        let whisper = r#"{"text":"Local transcript.","segments":[]}"#;
+        complete_transcription(
+            &job,
+            CompletedTranscription {
+                text: "Local transcript.".into(),
+                id: None,
+                json: Some(("whisper", whisper.into())),
+            },
+        )
+        .unwrap();
+        let paths = transcript_json_paths(&audio_path);
+        assert_eq!(fs::read_to_string(&paths.whisper).unwrap(), whisper);
+        assert_eq!(fs::read_to_string(&paths.legacy_whisper).unwrap(), whisper);
+        let body = parse_note_front_matter(&fs::read_to_string(&note_path).unwrap()).1;
+        assert!(
+            parse_note_front_matter(&fs::read_to_string(&note_path).unwrap())
+                .0
+                .transcription_id
+                .is_none()
+        );
+        for status in [
+            RECORDING_STATUS_QUEUED,
+            RECORDING_STATUS_PROCESSING,
+            RECORDING_STATUS_FAILED,
+        ] {
+            update_recording_note_status(
+                &note_path,
+                status,
+                Some("synthetic failure".into()),
+                None,
+                None,
+            )
+            .unwrap();
+            assert_eq!(
+                parse_note_front_matter(&fs::read_to_string(&note_path).unwrap()).1,
+                body
+            );
+        }
+        // Edits made while waiting remain intact when replacement is disabled.
+        let (meta, _) = parse_note_front_matter(&fs::read_to_string(&note_path).unwrap());
+        write_note_with_front_matter(&note_path, &meta, "Edited 🦀 transcript.\n").unwrap();
+        job.replace_note_body = false;
+        let assembly = r#"{"id":"assembly-fixture","text":"Cloud transcript.","words":[{"text":"Cloud","start":0,"end":500,"confidence":0.99}]}"#;
+        complete_transcription(
+            &job,
+            CompletedTranscription {
+                text: "Cloud transcript.".into(),
+                id: Some("assembly-fixture".into()),
+                json: Some(("assemblyai", assembly.into())),
+            },
+        )
+        .unwrap();
+        let raw = fs::read_to_string(&note_path).unwrap();
+        let (meta, body) = parse_note_front_matter(&raw);
+        assert_eq!(body, "Edited 🦀 transcript.\n");
+        assert_eq!(
+            meta.transcription_status.as_deref(),
+            Some(RECORDING_STATUS_COMPLETED)
+        );
+        assert!(raw.contains("custom: retained"));
+        assert_eq!(fs::read_to_string(&paths.assemblyai).unwrap(), assembly);
+        assert_eq!(fs::read_to_string(&paths.whisper).unwrap(), whisper);
+        assert_eq!(fs::read_to_string(&paths.legacy_whisper).unwrap(), whisper);
+        job.replace_note_body = true;
+        complete_transcription(
+            &job,
+            CompletedTranscription {
+                text: "New cloud text.".into(),
+                id: Some("assembly-new".into()),
+                json: Some((
+                    "assemblyai",
+                    r#"{"id":"assembly-new","text":"New cloud text."}"#.into(),
+                )),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            parse_note_front_matter(&fs::read_to_string(&note_path).unwrap())
+                .1
+                .trim(),
+            "New cloud text."
+        );
+        assert_eq!(fs::read_to_string(&paths.whisper).unwrap(), whisper);
+        // Artifact write failures must fail the job without replacing the note.
+        fs::remove_file(&paths.assemblyai).unwrap();
+        fs::create_dir(&paths.assemblyai).unwrap();
+        let before = fs::read(&note_path).unwrap();
+        assert!(complete_transcription(
+            &job,
+            CompletedTranscription {
+                text: "Should not be written.".into(),
+                id: None,
+                json: Some(("assemblyai", assembly.into()))
+            }
+        )
+        .is_err());
+        assert_eq!(fs::read(&note_path).unwrap(), before);
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn automatic_scan_leaves_completed_and_failed_recordings_terminal() {

@@ -64,6 +64,334 @@ fn press(cx: &mut TestAppContext, window: AnyWindowHandle, keys: &str) {
     }
 }
 
+fn synthetic_recording(f: &Fixture) -> type_core::RecordingWriteResult {
+    use type_core::*;
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    let mut writer = hound::WavWriter::new(
+        &mut bytes,
+        hound::WavSpec {
+            channels: 1,
+            sample_rate: 8000,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        },
+    )
+    .unwrap();
+    for _ in 0..(22 * 8000) {
+        writer.write_sample(0i16).unwrap();
+    }
+    writer.finalize().unwrap();
+    application::recordings::RecordingsUseCases::new(RecordingsAdapter::new(f.0.env.clone()))
+        .save(SaveRecordingArgs {
+            audio_base64: BASE64.encode(bytes.into_inner()),
+            mime_type: Some("audio/wav".into()),
+            folder_path: None,
+            file_name_format: NoteFileNameFormat::UtcTimestampSlug,
+        })
+        .unwrap()
+}
+
+#[gpui_kit::test]
+fn manual_assembly_selection_preserves_default_and_persists_replace_option(
+    cx: &mut TestAppContext,
+) {
+    use super::{commands::Choice, preferences::Preferences, settings::Section};
+    let f = Fixture::new();
+    std::fs::create_dir_all(f.0.root.join(".type")).unwrap();
+    std::fs::write(
+        f.0.root.join(".type/settings.json"),
+        r#"{"transcription_mode":"off"}"#,
+    )
+    .unwrap();
+    let recording = synthetic_recording(&f);
+    let (window, app) = launch_sized(&f, cx, size(px(1150.), px(1600.)));
+    cx.update_window(window, |_, window, cx| {
+        let microphone = window
+            .find(gpui_kit::SharedString::from(format!(
+                "nav-audio-{}",
+                recording.note_path
+            )))
+            .bounds();
+        let row = window
+            .find(gpui_kit::SharedString::from(format!(
+                "nav-row-{}",
+                recording.note_path
+            )))
+            .bounds();
+        assert_eq!(microphone.size.width, px(14.));
+        assert!(microphone.left() > row.left() + row.size.width / 2.);
+        app.update(cx, |app, cx| {
+            app.execute(Choice::Settings, window, cx);
+            app.settings_section = Section::Transcription;
+        });
+        window.render_frame(cx);
+        window.click(
+            gpui_kit::SharedString::from(format!("manual-recording-{}", recording.note_path)),
+            cx,
+        );
+        app.update(cx, |app, cx| {
+            assert_eq!(
+                app.selected_recording().unwrap().note_path,
+                recording.note_path
+            );
+            assert!(
+                app.assembly_recording_args()
+                    .err()
+                    .unwrap()
+                    .contains("API key")
+            );
+            // Only inspect the request: never upload a fixture to a real endpoint.
+            app.profiles.app_config.assemblyai_api_key = "synthetic".into();
+            let args = app.assembly_recording_args().unwrap();
+            assert_eq!(args.provider.as_deref(), Some("assemblyai"));
+            assert_eq!(args.note_path, recording.note_path);
+            assert!(args.replace_note_body);
+            assert_eq!(app.profiles.app_config.transcription_provider, "whisper");
+        });
+        window.click("assembly-replace-note-text", cx);
+        app.update(cx, |app, cx| {
+            assert!(!app.assembly_recording_args().unwrap().replace_note_body);
+            assert!(!Preferences::load(&app.backend.env).assembly_replace_note_body);
+            app.recordings.as_mut().unwrap().recordings[0].is_processing = true;
+            assert!(
+                app.assembly_recording_args()
+                    .err()
+                    .unwrap()
+                    .contains("already")
+            );
+            app.recordings.as_mut().unwrap().recordings[0].is_processing = false;
+            app.recordings.as_mut().unwrap().recordings[0].audio_path = None;
+            assert!(
+                app.assembly_recording_args()
+                    .err()
+                    .unwrap()
+                    .contains("unavailable")
+            );
+            app.reload_profiles().unwrap();
+            assert!(app.transcription_selection.is_none());
+            cx.notify();
+        });
+    })
+    .unwrap();
+    assert_eq!(
+        f.0.profiles()
+            .list()
+            .unwrap()
+            .app_config
+            .transcription_provider,
+        "whisper"
+    );
+}
+
+#[gpui_kit::test]
+fn transcription_settings_refresh_when_an_ordinary_folder_is_open(cx: &mut TestAppContext) {
+    use super::{commands::Choice, settings::Section};
+    let f = Fixture::new();
+    std::fs::create_dir_all(f.0.root.join(".type")).unwrap();
+    std::fs::write(
+        f.0.root.join(".type/settings.json"),
+        r#"{"transcription_mode":"off"}"#,
+    )
+    .unwrap();
+    let recording = synthetic_recording(&f);
+    let folder = f.0.env.app_data_dir.join("ordinary-folder");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("note.txt"), "ordinary file").unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.open_folder_path(&folder, window, cx);
+            app.execute(Choice::Settings, window, cx);
+            app.settings_section = Section::Transcription;
+            app.recordings = None;
+            app.refresh(window, cx);
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, _, cx| {
+        assert!(app.read(cx).settings);
+        assert!(app.read(cx).active_folder.is_some());
+        assert!(
+            app.read(cx)
+                .recordings
+                .as_ref()
+                .unwrap()
+                .recordings
+                .iter()
+                .any(|item| item.note_path == recording.note_path)
+        );
+    })
+    .unwrap();
+}
+
+#[cfg(target_os = "macos")]
+#[gpui_kit::test]
+fn recording_player_seeks_and_stops_on_navigation_and_missing_audio(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    std::fs::create_dir_all(f.0.root.join(".type")).unwrap();
+    std::fs::write(
+        f.0.root.join(".type/settings.json"),
+        r#"{"transcription_mode":"off"}"#,
+    )
+    .unwrap();
+    let recording = synthetic_recording(&f);
+    let text =
+        f.0.create(STREAM_FOLDER, "An ordinary note".into(), None)
+            .unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.open_note(recording.note_path.clone().into(), true, window, cx)
+        });
+        window.render_frame(cx);
+        assert!(window.find("recording-panel").bounds().size.height > px(0.));
+        assert!(
+            app.read(cx).playback.is_none(),
+            "Opening a note must not load or autoplay audio"
+        );
+        window.click("audio-forward", cx);
+        let player = &app.read(cx).playback.as_ref().unwrap().player;
+        assert!((player.duration() - 22.).abs() < 0.1);
+        assert!((player.position() - 10.).abs() < 0.1);
+        assert!(!player.playing());
+        window.click("audio-toggle", cx);
+        assert!(
+            app.read(cx).playback.as_ref().unwrap().player.playing(),
+            "Playback error: {:?}",
+            app.read(cx).playback_error
+        );
+        window.click("audio-toggle", cx);
+        assert!(!app.read(cx).playback.as_ref().unwrap().player.playing());
+        window.click("audio-back", cx);
+        assert!(app.read(cx).playback.as_ref().unwrap().player.position() < 0.1);
+        app.update(cx, |app, cx| app.seek_playback(1000., cx));
+        assert!(app.read(cx).playback.as_ref().unwrap().player.position() <= 22.);
+        app.update(cx, |app, cx| {
+            app.open_note(text.clone().into(), true, window, cx)
+        });
+        assert!(app.read(cx).playback.is_none());
+        app.update(cx, |app, cx| {
+            app.open_note(recording.note_path.clone().into(), true, window, cx);
+            app.prepare_playback().unwrap();
+            app.settings = true;
+            app.reconcile_playback();
+            assert!(app.playback.is_none());
+            app.settings = false;
+            app.prepare_playback().unwrap();
+            app.locked = true;
+            app.reconcile_playback();
+            assert!(app.playback.is_none());
+            assert!(app.prepare_playback().is_err());
+            app.locked = false;
+        });
+    })
+    .unwrap();
+    std::fs::remove_file(f.0.root.join(&recording.audio_path)).unwrap();
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| app.refresh(window, cx));
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("audio-toggle", cx);
+        assert!(app.read(cx).playback.is_none());
+        assert!(
+            app.read(cx)
+                .recordings
+                .as_ref()
+                .unwrap()
+                .recordings
+                .iter()
+                .find(|r| r.note_path == recording.note_path)
+                .unwrap()
+                .audio_path
+                .is_none()
+        );
+    })
+    .unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn automatic_transcription_obeys_routing_and_completes_synthetic_work() {
+    use std::os::unix::fs::PermissionsExt;
+    use type_core::*;
+    let f = Fixture::new();
+    let settings = f.0.root.join(".type/settings.json");
+    std::fs::create_dir_all(settings.parent().unwrap()).unwrap();
+    let recording = synthetic_recording(&f);
+    for mode in ["off", "native", "assemblyai"] {
+        std::fs::write(&settings, format!(r#"{{"transcription_mode":"{mode}"}}"#)).unwrap();
+        assert!(!super::jobs::desktop_transcription_enabled(&f.0));
+        super::jobs::processing_snapshot(&f.0, true);
+        assert_eq!(
+            f.0.notes()
+                .unwrap()
+                .get_note_meta(&recording.note_path)
+                .unwrap()
+                .transcription_status
+                .as_deref(),
+            Some("pending")
+        );
+    }
+    std::fs::write(&settings, r#"{"mobile_auto_transcription_enabled":true}"#).unwrap();
+    assert!(!super::jobs::desktop_transcription_enabled(&f.0));
+    std::fs::write(&settings, r#"{"mobile_auto_transcription_enabled":false}"#).unwrap();
+    assert!(
+        super::jobs::desktop_transcription_enabled(&f.0),
+        "Legacy routing with mobile processing disabled defaults to Desktop"
+    );
+    // A synthetic interpreter returns a deterministic transcript. No engine,
+    // network, microphone, maintainer notes or model installation is used.
+    let python = f.0.env.app_data_dir.join("whisper/env/bin/python3");
+    std::fs::create_dir_all(python.parent().unwrap()).unwrap();
+    std::fs::write(&python, "#!/bin/sh\ncat <<'JSON'\n{\"type\":\"result\",\"text\":\"Synthetic transcript\",\"words\":[]}\nJSON\n").unwrap();
+    std::fs::set_permissions(&python, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::write(f.0.env.app_data_dir.join("whisper/.ready"), "fixture").unwrap();
+    let mut config = load_app_config(&f.0.env.app_data_dir);
+    config.transcription_provider = "unknown-provider".into();
+    save_app_config(&f.0.env.app_data_dir, &config).unwrap();
+    super::jobs::processing_snapshot(&f.0, false);
+    assert_eq!(
+        f.0.notes()
+            .unwrap()
+            .get_note_meta(&recording.note_path)
+            .unwrap()
+            .transcription_status
+            .as_deref(),
+        Some("pending")
+    );
+    super::jobs::processing_snapshot(&f.0, true);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while f
+        .0
+        .notes()
+        .unwrap()
+        .get_note_meta(&recording.note_path)
+        .unwrap()
+        .transcription_status
+        .as_deref()
+        != Some("completed")
+    {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Synthetic worker did not complete"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert_eq!(
+        f.0.notes()
+            .unwrap()
+            .read_note(&recording.note_path)
+            .unwrap(),
+        "Synthetic transcript\n"
+    );
+    super::jobs::processing_snapshot(&f.0, true);
+    assert_eq!(recording_queue_snapshot().in_flight, 0);
+}
+
 #[gpui_kit::test]
 fn phone_sync_restore_respects_preference_and_lock_and_reports_failure(cx: &mut TestAppContext) {
     let f = Fixture::new();
@@ -2694,10 +3022,12 @@ fn incoming_push_reconciles_home_with_active_folder_and_survives_lock(cx: &mut T
 
 #[gpui_kit::test]
 fn stale_reconcile_keeps_pending_and_idle_poll_does_not_scan_processing(cx: &mut TestAppContext) {
-    let scans = super::jobs::PROCESSING_SCANS.load(std::sync::atomic::Ordering::SeqCst);
     let f = Fixture::new();
     f.0.create(STREAM_FOLDER, "original".into(), None).unwrap();
     let (window, app) = launch(&f, cx);
+    // Launch queues pending recordings once; idle work must not scan again.
+    cx.run_until_parked();
+    let scans = super::jobs::PROCESSING_SCANS.load(std::sync::atomic::Ordering::SeqCst);
     cx.update_window(window, |_, window, cx| {
         app.update(cx, |app, cx| {
             app.refresh(window, cx);

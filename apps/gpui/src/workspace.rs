@@ -14,6 +14,9 @@ impl TypeApp {
         let sync_subscription = type_core::subscribe_local_sync_events(move |event| {
             let _ = sync_sender.send(event);
         });
+        let transcription_search = cx.new(|cx| {
+            InputState::new(window, cx).placeholder("Search recordings by name or folder…")
+        });
         let mut app = Self {
             pane_state: pane_state.clone(),
             updater: None,
@@ -51,6 +54,7 @@ impl TypeApp {
             processing_task: None,
             server_status_task: None,
             processing_updated: None,
+            transcribe_pending: true,
             suppress_selection: false,
             revision: 0,
             refresh_task: None,
@@ -62,6 +66,13 @@ impl TypeApp {
             capture: None,
             pending_recording: None,
             processing_status: String::new(),
+            recordings: None,
+            playback: None,
+            playback_task: None,
+            playback_error: None,
+            audio_details: false,
+            transcription_selection: None,
+            transcription_search: transcription_search.clone(),
             local_server: None,
             job_status: String::new(),
             vim: vim::Vim::default(),
@@ -95,6 +106,11 @@ impl TypeApp {
         // navigation work consistently rather than only for unmatched keys.
         app.subscriptions
             .push(cx.observe(&pane_state, |_, _, cx| cx.notify()));
+        app.subscriptions.push(
+            cx.subscribe(&transcription_search, |_, _, _: &InputEvent, cx| {
+                cx.notify()
+            }),
+        );
         let owner = cx.weak_entity();
         let app_window = window.window_handle();
         app.subscriptions
@@ -255,6 +271,7 @@ impl TypeApp {
                 type_core::LocalSyncEvent::Push { root } => {
                     if root == self.backend.root {
                         self.refresh_pending = true;
+                        self.transcribe_pending = true;
                         pushed = true;
                     }
                     if !self.locked {
@@ -296,36 +313,54 @@ impl TypeApp {
         }));
     }
 
-    fn refresh_processing(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.settings
-            || !matches!(
+    pub(crate) fn refresh_processing(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Launch, pushes and jobs may deliver synced recordings; queue them once
+        // no draft is dirty. Otherwise scan only while processing is visible:
+        // the relevant Settings view or an open recording note's panel.
+        let auto_transcribe = self.transcribe_pending && !self.notes.values().any(|n| n.dirty);
+        let throttle = if self.settings {
+            matches!(
                 self.settings_section,
                 settings::Section::Transcription
                     | settings::Section::Handwriting
                     | settings::Section::Import
             )
+            .then_some(Duration::from_secs(10))
+        } else {
+            (self.active_folder.is_none() && self.active_is_recording())
+                .then_some(Duration::from_secs(3))
+        };
+        if self.locked
             || self.processing_task.is_some()
-            || self
-                .processing_updated
-                .is_some_and(|at| at.elapsed() < Duration::from_secs(10))
+            || !auto_transcribe
+                && throttle.is_none_or(|throttle| {
+                    self.processing_updated
+                        .is_some_and(|at| at.elapsed() < throttle)
+                })
         {
             return;
         }
+        self.transcribe_pending &= !auto_transcribe;
+        let visible = throttle.is_some();
         let backend = self.backend.clone();
         let root = backend.root.clone();
         let revision = self.revision;
         let task = cx
             .background_executor()
-            .spawn(async move { jobs::processing_snapshot(&backend) });
+            .spawn(async move { jobs::processing_snapshot(&backend, auto_transcribe) });
         self.processing_task = Some(cx.spawn_in(window, async move |view, cx| {
-            let result = task.await;
+            let (status, recordings) = task.await;
             let _ = view.update_in(cx, |this, _, cx| {
                 this.processing_task = None;
                 if this.locked || this.backend.root != root || this.revision != revision {
                     return;
                 }
-                this.processing_status = result;
-                this.processing_updated = Some(Instant::now());
+                this.recordings = recordings;
+                // A hidden queuing scan must not throttle the next visible one.
+                if visible {
+                    this.processing_status = status;
+                    this.processing_updated = Some(Instant::now());
+                }
                 cx.notify();
             });
         }));
@@ -369,6 +404,9 @@ impl TypeApp {
     }
 
     pub fn refresh(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // A reconcile may change recordings; rescan only what is visible.
+        self.processing_updated = None;
+        self.refresh_processing(window, cx);
         self.refresh_pending = true;
         if self.locked || self.refreshing || self.busy {
             return;
@@ -724,6 +762,9 @@ impl TypeApp {
         let Some(editor) = self.ensure_editor(&id, window, cx) else {
             return;
         };
+        if self.active != id {
+            self.stop_playback();
+        }
         self.active = id;
         self.settings = false;
         self.vim.reset();
