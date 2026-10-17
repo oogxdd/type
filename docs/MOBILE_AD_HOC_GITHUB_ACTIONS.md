@@ -280,3 +280,42 @@ IPA size: `23042950` bytes.
 SHA-256: `c00ddf26f2d59188ebc6dbb2968e34077851588727247e19dc5b42a0d1424db6`.
 Physical iPhone installation, typing/IME and gesture feel remain for user testing;
 Android was not built. No CI build, GitHub release or tag was created.
+
+## Local release 0.4.7 (2026-10-18)
+
+Built locally with Xcode 26.6 and published to `https://type-ota.vercel.app`:
+version **0.4.7**, build **2026101801**, release source commit
+`88c27161f6fe32db0117ee945606f92eccfd9f82`. Includes the requested configurable
+fresh-note transitions (`7d3dcfe1`) and the follow-up iOS typing scroll fix
+(`a9769870`): the native editor measures its actual text height so the paper
+can grow and keep the caret visible, with the pull hint above the keyboard.
+
+Checks passed: 292 TypeScript tests (205 mobile, 10 bridge, 77 shared), mobile
+and generated-bridge typechecks, 114 core tests, the FFI end-to-end test, nine
+Swift scroll geometry checks, both EditorScroll and BackgroundTask native
+registration checks, and the Swift recording recovery suite. Regenerated the
+optimized Rust device/simulator framework and bindings, refreshed CocoaPods
+with precompiled Expo modules disabled, and successfully archived/exported.
+The generated Expo provider contains both native modules. Saved and restored
+the generated package entry and unrelated CocoaPods project changes after
+packaging.
+
+The IPA passed deep/strict signature verification and is signed by Apple
+Distribution. App/widget versions and build numbers agree; both profiles
+retain all three devices supported by 0.4.6 and disable debugging. Production
+page, manifest and full IPA returned HTTP 200 with expected content types;
+the downloaded IPA SHA-256 matches the verified local artifact.
+
+Artifacts/logs are under `apps/mobile/ios/build/`:
+
+- `Type-0.4.7.xcarchive`
+- `export-adhoc-0.4.7/Type.ipa`
+- `ota-0.4.7/`
+- `release-0.4.7/` (source, build/export/deploy logs, native build diff,
+  generated entry, verification script and local/live verification)
+
+IPA size: `23048674` bytes.
+SHA-256: `fe6a2d30860c07b1428674c78cce04aecaa67cc352c20e06465b883510261a35`.
+Physical iPhone installation, typing/IME, scrolling and transition feel remain
+for user testing. Android was not built. No CI build, GitHub release or tag
+was created.
