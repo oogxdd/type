@@ -12475,7 +12475,7 @@ dependencies = [
 
 [[package]]
 name = "type-gpui"
-version = "0.4.10"
+version = "0.4.11"
 dependencies = [
  "cc",
  "chrono",
