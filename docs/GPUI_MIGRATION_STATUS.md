@@ -33,6 +33,19 @@ Updated: 2026-10-17. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Published GPUI 0.4.11 Apple Silicon (2026-10-17)
+
+- Release commit `24c60d69` (merge `5bd287b4`), built locally from clean worktree
+  `.worktrees/gpui-release-0.4.11` with `--architecture arm64`; app and DMG
+  notarized (DMG submission `c69fd949-575a-4cdc-b349-071084cbe5a2`), DMG SHA-256
+  `790e8883932044b29942ee533243d34b329963f46a6846909b8c4040685a0ca8`.
+- The first attempt hit a `notarytool` SIGBUS during DMG upload; later attempts
+  failed preflight on intermittent GitHub connectivity and passed on retry.
+- Tag pushed without disabling `gpui-release.yml`; its duplicate run stops on the
+  existing-release guard. Draft uploaded, then promoted by run `39059914009`
+  with rollout interval `0`. The live feed lists 0.4.11. The user skipped
+  pre-promotion DMG testing; install/update feel remains for user review.
+
 ### Audio branch merged into main (2026-10-17)
 
 - Merged `wip/gpui-audio-20261006` (audio playback, per-recording transcription,
