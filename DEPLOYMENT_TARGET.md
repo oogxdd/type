@@ -4,7 +4,7 @@ Production hosting for this project must move to Hetzner. Vercel and ngrok are n
 
 ## Current deployment that needs retirement
 
-The `mobile-adhoc.yml` workflow currently publishes the iOS OTA install site to Vercel on `mobile-v*` releases, and the README documents `https://type-ota.vercel.app`. This existing production path is non-compliant with the target. It must be retired, and the Vercel project shut down, as part of the migration.
+The `.github/workflows/mobile-adhoc.yml` workflow currently deploys iOS OTA install assets to Vercel for `mobile-v*` tags. It defaults to `https://type-ota.vercel.app` through `IOS_AD_HOC_BASE_URL`; repository variables can override the URL and Vercel project identifiers. This path is not the target. Migrate the OTA site and release verification to Hetzner, confirm the Vercel endpoint is retired, then shut down the Vercel project.
 
 ## Migration requirements
 
