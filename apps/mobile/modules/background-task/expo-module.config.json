@@ -1,6 +1,7 @@
 {
   "platforms": ["apple"],
   "apple": {
-    "modules": ["BackgroundTaskModule"]
+    "modules": ["BackgroundTaskModule"],
+    "podspecPath": "BackgroundTask.podspec"
   }
 }

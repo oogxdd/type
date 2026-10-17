@@ -137,7 +137,8 @@ A native rebuild is required for the recovery and background-task additions.
 ## Appearance
 
 Settings → Appearance picks a background, a text color, and the editor text
-size. These are **device-local**: they persist to `appearance.json` beside
+size. The same screen selects **New layer** or **Pause** for swipe-up new
+notes, and **Gradient** / **On sheet** pull hints for New layer. These are **device-local**: they persist to `appearance.json` beside
 the core's app data (never inside a notes root), so they cannot reach a
 notes root and cannot sync to another device — one phone can be sepia while
 the desktop stays light.

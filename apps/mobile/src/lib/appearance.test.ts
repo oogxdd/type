@@ -221,6 +221,8 @@ describe("normalizeAppearance", () => {
       accentColor: "#abcdef",
       fontSize: 19,
       fontFamily: "unbounded",
+      freshNoteTransition: "pause",
+      freshNoteHint: "sheet",
     };
     expect(normalizeAppearance(stored)).toEqual(stored);
   });

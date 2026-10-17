@@ -363,6 +363,8 @@ export const SettingsAppearanceScreen = () => {
   const setFontSize = useAppearanceStore((s) => s.setFontSize);
   const setFontFamily = useAppearanceStore((s) => s.setFontFamily);
   const reset = useAppearanceStore((s) => s.reset);
+  const setFreshNoteTransition = useAppearanceStore((s) => s.setFreshNoteTransition);
+  const setFreshNoteHint = useAppearanceStore((s) => s.setFreshNoteHint);
   const [colorTarget, setColorTarget] = useState<
     "background" | "text" | "accent" | null
   >(null);
@@ -411,6 +413,21 @@ export const SettingsAppearanceScreen = () => {
       style={{ backgroundColor: theme.colors.background }}
       contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 48 }]}
     >
+      <SettingsGroup header="New note transition" footer="Pull past the end of a note, then release to start a fresh page.">
+        <SettingsRow title="New layer" subtitle="A fresh sheet covers the old note; its shadow settles as it lands."
+          checked={appearance.freshNoteTransition === "layer"} onPress={() => setFreshNoteTransition("layer")} />
+        <SettingsRow title="Pause" subtitle="The hint fades in place, then the old note dissolves."
+          checked={appearance.freshNoteTransition === "pause"} onPress={() => setFreshNoteTransition("pause")} />
+      </SettingsGroup>
+      {appearance.freshNoteTransition === "layer" ? (
+        <SettingsGroup header="Pull hint" footer="Both keep the old text still. On sheet previews the incoming page while you pull.">
+          <SettingsRow title="Gradient" subtitle="Arrow and hint above a fade at the bottom of the note."
+            checked={appearance.freshNoteHint === "gradient"} onPress={() => setFreshNoteHint("gradient")} />
+          <SettingsRow title="On sheet" subtitle="Pull out the new sheet; release continues the same motion."
+            checked={appearance.freshNoteHint === "sheet"} onPress={() => setFreshNoteHint("sheet")} />
+        </SettingsGroup>
+      ) : null}
+
       <SettingsGroup
         header="Background"
         footer="System follows your phone's light/dark setting. Cards, separators, and the status bar follow whichever background you pick."

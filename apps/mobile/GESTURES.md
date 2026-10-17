@@ -35,13 +35,18 @@ The native ScrollView's bottom overscroll supplies the pull distance. Scrolling
 through a long note contributes zero to the threshold. The same continuous
 finger movement can scroll to the end and continue into a pull.
 
-- The overscroll opens a strip below the page whose height *is* the pull, so the
-  paper lifts off a slightly darker surface instead of a control flying in.
-  The strip tints from `surface` toward `border` as the threshold approaches —
-  both derived from the background, so it reads the same in either theme.
-- At 52pt the label fades in, centered in the strip, reaching full opacity at
-  72pt: **Pull up to start a new note**. It is held back until the strip can
-  hold a line of text.
+- Capture counter-translates only native bottom rubber-banding inside the
+  content, keeping the old text stationary. Ordinary scrolling is unchanged.
+- Settings → Appearance → New note transition selects **New layer** (study A,
+  with a settling shadow) or **Pause** (fade on the same surface). Preferences
+  live in device-local `appearance.json`, outside the notes root.
+- New layer's **Gradient** hint stays above a background-colored fade. **On
+  sheet** reveals up to 92pt of the incoming sheet while pulling, with the hint
+  on its leading edge. Release continues from the actual released pose, including
+  a retracted-but-still-ready pull; it never resets the sheet first.
+- At 52pt the arrow and label fade in, reaching full opacity at 72pt. Pause
+  always uses the gradient hint and fades it in place after release; its height
+  never collapses down. Neither capture hint has a gray strip.
 - At 100pt it changes to **Release to start a new note** and its color goes from
   secondary to primary, with a light selection haptic. These are rubber-banded
   content points, not finger travel.
@@ -51,19 +56,20 @@ finger movement can scroll to the end and continue into a pull.
   transition. Speed is deliberately absent from this decision.
 - Momentum, cancelled touches and layout-only scroll events cannot commit.
   Overscroll updates readiness only while the shared pan is actively vertical.
-- The strip sits above the keyboard. The fresh page receives typing focus after
+- The hint and incoming sheet sit above the keyboard. The fresh page receives typing focus after
   React has applied `editable=true` to the replacement native input; requesting
   focus in the same callback that ends the transition can leave UIKit read-only
   and dismiss the keyboard.
 
-The strip uses one numeric `top` coordinate computed from the measured capture
+The saved-note browsing strip uses one numeric `top` coordinate computed from the measured capture
 surface height, keyboard height and strip height. Switching animated `top` and
 `bottom` values to `undefined` can retain an old edge after a downward gesture,
 causing the next upward pull's label to appear at the top. Upward pulls always
 align the strip with the visible bottom; browsing backward retains the top edge.
 
 Capture retains the old draft until its save succeeds. If storage fails, the
-old page returns with its text. Opening the menu flushes without clearing it.
+old page returns with its text. The replacement editor is installed only behind
+the fully covering sheet/fade; focus waits for the editable native input. Opening the menu flushes without clearing it.
 A registered flush runs before switching working folders; Home's state is
 scoped to the profile/root. Returning from the menu reloads a saved draft to
 respect edits, moves or deletion performed there.

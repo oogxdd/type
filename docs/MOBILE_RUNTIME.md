@@ -318,3 +318,41 @@ The attempt to capture a keyboard-hidden pull refocused the editor on touch,
 so both screenshots show the keyboard; the hidden-keyboard position follows the
 same measured-surface calculation with zero keyboard height. Artifacts:
 `/tmp/type-pull-position.xcresult`, `/tmp/type-pull-keyboard.png`.
+
+## Fresh-note motion settings (2026-10-18)
+
+Settings → Appearance now selects **New layer** (study A, with depth conveyed
+by a settling shadow) or **Pause**. New layer has **Gradient** and **On sheet**
+pull hints. These preferences persist in device-local `appearance.json` and
+never enter a working folder or Git sync. Existing preference files default to
+New layer / Gradient. Saved-note browsing retains its existing transition.
+
+Capture compensates only the ScrollView's bottom rubber band inside its content;
+normal scrolling still belongs to UIKit. The old text stays still during a pull.
+On sheet previews the same incoming sheet, and its released position is captured
+before the UI-thread timing animation starts. Study A travels for 756ms and
+settles its shadow over the remainder of the 876ms release. Pause fades the hint
+in place and then dissolves the old surface over an 818ms release. The incoming
+surface covers the old editor until the serialized save succeeds; save failure
+reveals the retained draft. Replacement/focus still waits for native editability.
+
+This run also found that Expo's resolver omitted BackgroundTask from its Swift
+module registry despite linking its pod. Its config now specifies `podspecPath`,
+verified by `node apps/mobile/modules/background-task/tests/test-autolinking.cjs`.
+The isolated XCTest setup now selects its empty working-folder root *before*
+populating it: the core correctly rejects relocating onto a filled destination.
+Both changes require rebuilding the native app for the fixture/module check.
+
+Verified: mobile TypeScript typecheck; 205 mobile functional tests; the new
+motion geometry/preferences tests (including the home-indicator inset); native
+module autolinking; and Release iOS 26.1 XCTest
+`testFreshNoteMotionModes`, `testTypingPastKeyboard`, and
+`testSoftWrappedTypingPastKeyboard` (3 tests, zero failures). The first covers
+New layer / Gradient, New layer / On sheet, and Pause, with short-pull
+cancellation, filing and immediate typing into each fresh editor. The final
+run used real native bindings, 1,000-note temporary profiles and a 750ms save
+admission delay. Filesystem verification found all three original synthetic
+notes retained and both preference keys persisted. Artifact:
+`/tmp/type-note-motion-final.xcresult`. Physical iPhone animation feel,
+keyboard-hidden gestures and Android remain device checks; functional geometry
+for the hidden-keyboard safe area is covered by the pure motion tests.

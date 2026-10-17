@@ -1,3 +1,5 @@
+import type { FreshNoteTransition, FreshNoteHint } from "./capture-motion";
+
 // Device-local visual preferences (background, text color, editor font size)
 // and the pure derivation from them to a Theme.
 //
@@ -75,6 +77,8 @@ export type Appearance = {
   accentColor: string | null;
   fontSize: number;
   fontFamily: FontFamilyId;
+  freshNoteTransition: FreshNoteTransition;
+  freshNoteHint: FreshNoteHint;
 };
 
 /** A palette entry; `color: null` means "follow the system light/dark theme". */
@@ -96,6 +100,8 @@ export const DEFAULT_APPEARANCE: Appearance = {
   accentColor: null,
   fontSize: DEFAULT_FONT_SIZE,
   fontFamily: "system",
+  freshNoteTransition: "layer",
+  freshNoteHint: "gradient",
 };
 
 export type FontOption = {
@@ -385,6 +391,8 @@ export const deriveTheme = (
 export const normalizeAppearance = (raw: unknown): Appearance => {
   const value = (raw ?? {}) as Partial<Record<keyof Appearance, unknown>>;
   return {
+    freshNoteTransition: value.freshNoteTransition === "pause" ? "pause" : "layer",
+    freshNoteHint: value.freshNoteHint === "sheet" ? "sheet" : "gradient",
     background:
       value.background === "custom" ||
       BACKGROUNDS.some((option) => option.id === value.background)

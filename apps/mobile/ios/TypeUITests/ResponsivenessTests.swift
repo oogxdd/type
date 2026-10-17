@@ -140,4 +140,62 @@ final class ResponsivenessTests: XCTestCase {
     screenshot.lifetime = .keepAlways
     add(screenshot)
   }
+
+  private func selectMotion(_ app: XCUIApplication, transition: String, hint: String? = nil) {
+    if !app.buttons["Open menu"].isHittable { app.textViews["note-editor"].tap() }
+    app.buttons["Open menu"].tap()
+    app.buttons["menu-settings"].tap()
+    XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Appearance"].waitForExistence(timeout: 5))
+    app.buttons["Appearance"].tap()
+    let row = app.buttons[transition]
+    for _ in 0..<12 {
+      if row.isHittable { break }
+      app.scrollViews.firstMatch.swipeUp()
+    }
+    XCTAssertTrue(row.isHittable)
+    row.tap()
+    if let hint {
+      let hintRow = app.buttons[hint]
+      for _ in 0..<4 {
+        if hintRow.isHittable { break }
+        app.scrollViews.firstMatch.swipeUp()
+      }
+      XCTAssertTrue(hintRow.isHittable)
+      hintRow.tap()
+    }
+    let shot = XCTAttachment(screenshot: app.screenshot())
+    shot.name = "Motion settings: \(transition) \(hint ?? "")"
+    shot.lifetime = .keepAlways
+    add(shot)
+    app.navigationBars.buttons.element(boundBy: 0).tap()
+    app.navigationBars.buttons.element(boundBy: 0).tap()
+    app.buttons["Return to note"].tap()
+  }
+
+  func testFreshNoteMotionModes() {
+    for (transition, hint) in [("New layer", "Gradient"), ("New layer", "On sheet"), ("Pause", "")] {
+      let app = launch(1000)
+      selectMotion(app, transition: transition, hint: hint.isEmpty ? nil : hint)
+      let editor = app.textViews["note-editor"]
+      editor.tap()
+      let text = "Synthetic \(transition) \(hint) note"
+      editor.typeText(text)
+      let paper = app.scrollViews.containing(.textView, identifier: "note-editor").firstMatch
+      let start = paper.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
+      let shortEnd = start.withOffset(CGVector(dx: 0, dy: -45))
+      start.press(forDuration: 0.05, thenDragTo: shortEnd, withVelocity: .slow, thenHoldForDuration: 0.1)
+      XCTAssertEqual(editor.value as? String, text, "A short pull must retain the note")
+      let end = paper.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05))
+      start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.2)
+      expectation(for: NSPredicate { _, _ in
+        !(editor.value as? String ?? "").contains("Synthetic")
+      }, evaluatedWith: editor)
+      waitForExpectations(timeout: 10)
+      XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+      editor.typeText("Fresh after \(transition) \(hint)")
+      XCTAssertEqual(editor.value as? String, "Fresh after \(transition) \(hint)")
+      app.terminate()
+    }
+  }
 }

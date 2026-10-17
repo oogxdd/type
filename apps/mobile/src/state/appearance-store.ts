@@ -3,6 +3,8 @@
 // persists to a small JSON file beside the core's app data (never inside a
 // notes root, so it cannot end up in a git sync).
 
+import type { FreshNoteTransition, FreshNoteHint } from "../lib/capture-motion";
+
 import * as FileSystem from "expo-file-system/legacy";
 import { create } from "zustand";
 
@@ -32,6 +34,8 @@ type AppearanceState = {
   setAccentColor: (color: string | null) => void;
   setFontSize: (fontSize: number) => void;
   setFontFamily: (fontFamily: FontFamilyId) => void;
+  setFreshNoteTransition: (transition: FreshNoteTransition) => void;
+  setFreshNoteHint: (hint: FreshNoteHint) => void;
   reset: () => void;
 };
 
@@ -98,6 +102,9 @@ export const useAppearanceStore = create<AppearanceState>((set, get) => {
     setAccentColor: (accentColor) => update({ accentColor }),
     setFontSize: (fontSize) => update({ fontSize: clampFontSize(fontSize) }),
     setFontFamily: (fontFamily) => update({ fontFamily }),
+
+    setFreshNoteTransition: (freshNoteTransition) => update({ freshNoteTransition }),
+    setFreshNoteHint: (freshNoteHint) => update({ freshNoteHint }),
 
     reset: () => {
       set({ appearance: DEFAULT_APPEARANCE });

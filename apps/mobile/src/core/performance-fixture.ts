@@ -18,6 +18,10 @@ export const preparePerformanceFixture = async () => {
   const fixture = native?.performanceFixture?.();
   if (!fixture) return null;
   delayMs = fixture.delayMs;
-  await native!.preparePerformanceFixture!(fixture.root, fixture.count);
-  return { appData: `${fixture.root}/app`, documents: `${fixture.root}/documents`, notes: `${fixture.root}/documents/notes` };
+  // Move the empty default profile into its fixture root before filling it.
+  // The core correctly rejects moving a profile onto a populated directory.
+  return {
+    appData: `${fixture.root}/app`, documents: `${fixture.root}/documents`, notes: `${fixture.root}/documents/notes`,
+    populate: () => native!.preparePerformanceFixture!(fixture.root, fixture.count),
+  };
 };

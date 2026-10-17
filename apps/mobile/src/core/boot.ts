@@ -42,6 +42,7 @@ export const bootCore = async (): Promise<BootResult> => {
   if (fixture) {
     const profiles = await getProfiles();
     await setProfileNotesRoot(profiles.active_profile_id, fixture.notes);
+    await fixture.populate();
   }
   return { demoMode };
 };

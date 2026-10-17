@@ -18,6 +18,8 @@ import {
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   interpolateColor,
+  Easing,
+  cancelAnimation,
   runOnJS,
   useAnimatedKeyboard,
   useAnimatedProps,
@@ -33,6 +35,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import * as core from "@typenotes/mobile-core/core-api";
 
+import { useAppearanceStore } from "../state/appearance-store";
+import {
+  clampUnit,
+  sheetStartY,
+  releaseFraction,
+  pauseOldOpacity,
+  freshPlaceholderOpacity,
+  releaseHintOpacity,
+  LAYER_TRAVEL_MS,
+  LAYER_RELEASE_MS,
+  PAUSE_RELEASE_MS,
+} from "../lib/capture-motion";
 import { type NotePageRequest } from "../lib/note-pages";
 import { isRecordingNoteType } from "@typenotes/shared/format";
 import type { NoteMeta } from "@typenotes/shared/types";
@@ -98,6 +112,8 @@ const SyncStatusLabel = ({ top }: { top: number }) => {
 export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const transition = useAppearanceStore((state) => state.appearance.freshNoteTransition);
+  const hint = useAppearanceStore((state) => state.appearance.freshNoteHint);
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { height } = useWindowDimensions();
@@ -176,6 +192,16 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
 
   // 0..-V — how far the current page has slid up (V = visible page height).
   const pageY = useSharedValue(0);
+  const freshActive = useSharedValue(false);
+  const freshProgress = useSharedValue(0);
+  const freshTravel = useSharedValue(0);
+  const freshStartY = useSharedValue(0);
+  const releasedHintOpacity = useSharedValue(0);
+  useEffect(() => () => {
+    cancelAnimation(pageY);
+    cancelAnimation(freshProgress);
+    cancelAnimation(freshTravel);
+  }, [pageY, freshProgress, freshTravel]);
 
   const indicatorOpacity = useSharedValue(0);
 
@@ -293,12 +319,15 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
       requestAnimationFrame(() => {
         if (!mounted.current) return;
         pageY.value = 0;
+        freshActive.value = false;
+        freshProgress.value = 0;
+        freshTravel.value = 0;
         focusFreshPage.current = !pages.browsing;
         setCommitting(false);
         transitioning.value = false;
       })
     );
-  }, [displayPage, pages, pageY, showIcons, transitioning]);
+  }, [displayPage, pages, pageY, freshActive, freshProgress, freshTravel, showIcons, transitioning]);
 
   // Keep the old draft until storage succeeds. Failure restores the page,
   // rather than abandoning a dirty session behind a fresh empty input.
@@ -311,12 +340,24 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
       }
     }).catch(() => {
       if (!mounted.current) return;
-      setCommitting(false);
-      transitioning.value = false;
-      pageY.value = withTiming(0, { duration: 220 });
+      if (freshActive.value) {
+        // Keep the intact old editor covered until rollback finishes.
+        freshTravel.value = withTiming(0, { duration: 220 });
+        freshProgress.value = withTiming(0, { duration: 220 }, (finished) => {
+          if (!finished) return;
+          freshActive.value = false;
+          pull.value = 0;
+          transitioning.value = false;
+          runOnJS(setCommitting)(false);
+        });
+      } else {
+        setCommitting(false);
+        transitioning.value = false;
+        pageY.value = withTiming(0, { duration: 220 });
+      }
       Alert.alert("Could not save note", "Your text is still here. Try again before starting a new note.");
     });
-  }, [pages, commitStep, openBlankPage, pageY, transitioning]);
+  }, [pages, commitStep, openBlankPage, pageY, freshActive, freshProgress, freshTravel, pull, transitioning]);
 
   // A worklet that outlives the render that created it must not hold a
   // per-render function. The commit spring's callback runs on the UI runtime
@@ -331,6 +372,23 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   useAnimatedReaction(() => commitRequest.value, (request, previous) => {
     if (previous === null || request === previous) return;
     runOnJS(setCommitting)(true);
+    if (!browsing) {
+      freshStartY.value = sheetStartY(Math.max(1, surfaceH.value - keyboard.height.value), pull.value, hint, keyboard.height.value === 0 ? insets.bottom : 0);
+      releasedHintOpacity.value = pullLabelOpacity(pull.value);
+      freshActive.value = true;
+      freshTravel.value = 0;
+      freshProgress.value = 0;
+      if (transition === "layer") {
+        freshTravel.value = withTiming(1, {
+          duration: LAYER_TRAVEL_MS, easing: Easing.bezier(.3, .55, .35, 1),
+        });
+      }
+      freshProgress.value = withTiming(1, {
+        duration: transition === "layer" ? LAYER_RELEASE_MS : PAUSE_RELEASE_MS,
+        easing: Easing.linear,
+      }, (finished) => { if (finished) runOnJS(runFinishCommit)(); });
+      return;
+    }
     // Start where the finger left off. Without the release velocity the spring
     // begins at rest, so a fast throw visibly stalls at the hand-off before the
     // page starts moving.
@@ -343,7 +401,7 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
       runOnJS(setPreviousLabel)(value === "down");
     }
   });
-  useAnimatedReaction(() => pullReady.value, (ready, previous) => {
+  useAnimatedReaction(() => pullReady.value || freshActive.value, (ready, previous) => {
     if (ready === previous) return;
     runOnJS(setReadyLabel)(ready);
     if (ready) runOnJS(thresholdHaptic)();
@@ -469,22 +527,74 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
     opacity: pullLabelOpacity(pull.value),
   }));
 
-  // The page rides the swipe and its bottom padding tracks the keyboard so
-  // the caret is never covered.
+  // Browsing keeps its page motion; capture keeps the old surface stationary.
+  // Bottom padding follows the keyboard so the caret is never covered.
   const pageStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: pageY.value }],
+    transform: [{ translateY: browsing ? pageY.value : 0 }],
+    opacity: !browsing && freshActive.value && transition === "pause" ? pauseOldOpacity(freshProgress.value) : 1,
     paddingBottom: keyboard.height.value,
+  }));
+
+  // UIScrollView still owns scrolling and supplies overscroll. Counter only
+  // its bottom rubber band inside the content, so text stays put while pulling.
+  const stationaryContentStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: browsing ? 0 : overscrollPastEnd(offsetY.value, contentH.value, viewportH.value) }],
   }));
 
   // The fresh page enters from the bottom of the *visible* area — with the
   // keyboard up that's the keyboard's top edge, so it never hides behind it.
   const ghostStyle = useAnimatedStyle(() => {
-    const pageHeight = Math.max(1, height - keyboard.height.value);
-    return {
-      transform: [{ translateY: pageY.value + commitStep.value * pageHeight }],
+    const visible = Math.max(1, surfaceH.value - keyboard.height.value);
+    if (browsing) return {
+      height: surfaceH.value,
+      transform: [{ translateY: pageY.value + commitStep.value * visiblePageHeight(windowH.value, keyboard.height.value) }],
       paddingBottom: keyboard.height.value,
+      opacity: 1, shadowOpacity: .05, shadowRadius: 12,
+      shadowOffset: { width: 0, height: -2 },
+    };
+    const active = freshActive.value;
+    const t = releaseFraction(freshProgress.value);
+    const settled = clampUnit((t - .9) / .1);
+    const approaching = clampUnit((t - .27) / .63);
+    const altitude = active ? 1 - approaching : clampUnit(pull.value / PULL_READY);
+    return {
+      height: visible,
+      paddingBottom: 0,
+      transform: [{ translateY: transition === "pause" ? 0 : active
+        ? freshStartY.value * (1 - freshTravel.value)
+        : sheetStartY(visible, pull.value, hint, keyboard.height.value === 0 ? insets.bottom : 0) }],
+      opacity: transition === "pause"
+        ? active ? clampUnit((t - .61) / .07) : 0
+        : active || pull.value > 0 ? 1 : 0,
+      shadowOpacity: transition === "layer" ? (active ? (.13 + .07 * altitude) * (1 - settled) : .2 * altitude) : 0,
+      shadowRadius: active ? (13 + 27 * altitude) * (1 - settled) : 40 * altitude,
+      shadowOffset: { width: 0, height: active ? (5 + 13 * altitude) * (1 - settled) : 18 * altitude },
     };
   });
+  const placeholderStyle = useAnimatedStyle(() => ({
+    opacity: browsing ? 1 : freshActive.value ? freshPlaceholderOpacity(freshProgress.value, transition) : 0,
+  }));
+  const feedbackViewportStyle = useAnimatedStyle(() => ({
+    height: Math.max(1, surfaceH.value - keyboard.height.value),
+  }));
+  const captureHintStyle = useAnimatedStyle(() => {
+    const visible = Math.max(1, surfaceH.value - keyboard.height.value);
+    const onSheet = transition === "layer" && hint === "sheet";
+    const sheetY = freshActive.value
+      ? freshStartY.value * (1 - freshTravel.value)
+      : sheetStartY(visible, pull.value, hint, keyboard.height.value === 0 ? insets.bottom : 0);
+    return {
+      top: onSheet ? sheetY + 12 : visible - 88 - (keyboard.height.value === 0 ? insets.bottom : 0),
+      opacity: freshActive.value
+        ? releasedHintOpacity.value * releaseHintOpacity(freshProgress.value, transition)
+        : pullLabelOpacity(pull.value),
+    };
+  });
+  const gradientStyle = useAnimatedStyle(() => ({
+    opacity: transition === "layer" && hint === "sheet" ? 0 : freshActive.value
+      ? releasedHintOpacity.value * (1 - clampUnit((releaseFraction(freshProgress.value) - .6) / .07))
+      : pullLabelOpacity(pull.value),
+  }));
 
   // Custom scroll indicator: a hair of a bar a few tints off the background,
   // visible only while scrolling. (The native one can't be styled on a
@@ -578,6 +688,7 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
                 directionalLockEnabled
                 alwaysBounceVertical
               >
+                <Animated.View style={[styles.stationaryContent, stationaryContentStyle]}>
                 {isRecordingNoteType(meta?.note_type, meta?.recording_audio_path) && meta?.recording_audio_path
                   ? <RecordingAudioPlayer audioPath={meta.recording_audio_path} /> : null}
                 <TextInput
@@ -608,6 +719,7 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
                   textAlignVertical="top"
                   keyboardAppearance={theme.dark ? "dark" : "light"}
                 />
+                </Animated.View>
               </Animated.ScrollView>
               </GestureDetector>
               <View pointerEvents="none" style={styles.indicatorTrack}>
@@ -625,33 +737,32 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
               </View>
             </Animated.View>
 
-            {/* The incoming blank page trails exactly one visible-page
-                height below the current one. The real input is cleared only
-                while this ghost fully covers it, avoiding a text flash. */}
+            {/* Capture covers the stationary editor with the chosen sheet/fade.
+                Browsing retains its original page-to-page motion. The input
+                changes only while this surface completely covers it. */}
             <Animated.View
               pointerEvents="none"
               style={[
                 styles.ghost,
                 {
                   backgroundColor: theme.colors.background,
-                  borderTopColor: theme.colors.border,
                   paddingTop: insets.top + 12 + 44,
                 },
                 ghostStyle,
               ]}
             >
-              <Text
-                style={{
+              <Animated.Text
+                style={[{
                   color: theme.colors.secondaryText,
                   // Must track the real input, or the incoming page's
                   // placeholder would not land where the caret will.
                   fontSize: theme.fontSize,
                   lineHeight: theme.lineHeight,
                   fontFamily: theme.fontFamily,
-                }}
+                }, placeholderStyle]}
               >
                 {browsing ? "" : PLACEHOLDER}
-              </Text>
+              </Animated.Text>
             </Animated.View>
           </View>
 
@@ -672,6 +783,19 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
           <DictationButton onRecordingChange={setRecordingActive} />
         </Animated.View>
       </View>
+      {!browsing ? (
+        <Animated.View pointerEvents="none" style={[styles.captureFeedback, feedbackViewportStyle]}>
+          <Animated.View style={[styles.hintGradient, {
+            experimental_backgroundImage: `linear-gradient(to bottom, ${theme.colors.background}00 0%, ${theme.colors.background}e0 37%, ${theme.colors.background} 65%)`,
+          }, gradientStyle]} />
+          <Animated.View style={[styles.captureHint, captureHintStyle]}>
+            <Text style={[styles.pullArrow, { color: readyLabel ? theme.colors.text : theme.colors.secondaryText }]}>↑</Text>
+            <Text accessibilityLiveRegion="polite" style={[styles.captureHintText, { color: readyLabel ? theme.colors.text : theme.colors.secondaryText }]}>
+              {readyLabel ? "Release to start a new note" : "Pull to start a new note"}
+            </Text>
+          </Animated.View>
+        </Animated.View>
+      ) : (
       <Animated.View pointerEvents="none" style={[styles.pullZone, pullZoneStyle]}>
         <Animated.Text
           accessibilityLiveRegion="polite"
@@ -689,6 +813,7 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
             : readyLabel ? "Release to start a new note" : "Pull up to start a new note"}
         </Animated.Text>
       </Animated.View>
+      )}
     </View>
   );
 };
@@ -710,6 +835,12 @@ const styles = StyleSheet.create({
   // flexGrow (not flex) so the input fills the viewport at minimum but the
   // container still grows with the input's content beyond it.
   scrollContent: { flexGrow: 1 },
+  stationaryContent: { flexGrow: 1 },
+  captureFeedback: { position: "absolute", top: 0, left: 0, right: 0, overflow: "hidden" },
+  hintGradient: { position: "absolute", bottom: 0, left: 0, right: 0, height: 164 },
+  captureHint: { position: "absolute", left: 0, right: 0, height: 68, alignItems: "center", justifyContent: "center", gap: 7 },
+  pullArrow: { fontSize: 26, lineHeight: 28, fontWeight: "300" },
+  captureHintText: { fontSize: 12, paddingHorizontal: 16, textAlign: "center" },
   // fontSize/lineHeight come from the theme (Settings → Appearance).
   input: {
     flexGrow: 1,
@@ -736,9 +867,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
     paddingHorizontal: 20,
-    borderTopWidth: StyleSheet.hairlineWidth,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.05,
