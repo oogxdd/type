@@ -4,6 +4,65 @@ Use the repository utility to import a Finder-exported Voice Memos folder into
 the active Type profile. It hashes the audio before importing, so rerunning it
 does not create duplicate recordings. Source files are never modified.
 
+## Agent workflow and profile-local state
+
+Read this document before acting on a request to import recordings. The CLI is
+`crates/type-core/examples/import_voice_memos.rs`, invoked through the npm script
+below. Importing requested user data is distinct from testing: use synthetic
+profiles for tests.
+
+1. Identify the requested source files. For a shared folder such as Downloads,
+   select only the requested batch and stage copies in a temporary directory;
+   do not import unrelated audio. The importer scans one directory, not subfolders.
+2. Resolve the active profile using `.notes-profiles.json` in the selected
+   app-data directory. Confirm its `notes_root` matches the user's intended
+   destination before importing. Do not change the active profile implicitly or
+   print unrelated config values/API keys. `--app-data-dir` selects an installation,
+   not a profile within it.
+3. Read `<notes-root>/.type/voice-memos-last-import.txt` if present. It contains
+   only the ISO 8601 timestamp (with timezone) of the last verified successful
+   import. It is a reminder, not a cutoff for source recordings or proof that
+   audio has been listened to, reviewed or transcribed. Always deduplicate by hash.
+4. Check original recording dates as described below, then run the preview.
+   Even `--dry-run` resolves the profile and ensures its system folders, so it
+   may require filesystem write permission.
+5. Import the missing recordings and verify the result: match the imported audio
+   SHA-256 hashes and corresponding Stream notes' `recording_audio_path` and
+   `created_ms` against the selected files and intended original timestamps.
+6. Only after a successful import and verification, atomically replace
+   `<notes-root>/.type/voice-memos-last-import.txt` with the completion timestamp
+   and a trailing newline. The CLI does **not** update this marker automatically;
+   the agent must do it. Leave it unchanged on failure or a run with no new audio.
+   Keep just this timestamp, not a per-file journal. Remove temporary staging
+   copies after verification; retain the user's source files.
+
+Keep personal paths, timestamps, filenames and import history in the user's
+profile, outside the project repository. Do not restart their running app just
+to import files.
+
+## Preserve original recording dates
+
+The importer uses the source file's filesystem creation time, falling back to
+modification time; it does not read embedded audio dates or preserve Voice Memos
+display names. Sharing/AirDrop can reset filesystem dates to the transfer time.
+Check embedded metadata before importing an exported batch, for example:
+
+```sh
+ffprobe -v error -show_entries format_tags=creation_time -of json "/path/to/recording.m4a"
+```
+
+If the embedded `creation_time` preserves the recording date while the filesystem
+date reflects the transfer, copy the selected files into a temporary directory.
+On macOS, use `SetFile -d 'MM/DD/YYYY HH:MM:SS' "/path/to/staged-copy.m4a"` to set
+each copy's creation time. Convert the embedded timestamp to the local timezone
+first: `SetFile` interprets this value as local time. Verify `stat().st_birthtime`
+matches the intended instant, then use the staged directory for both preview and
+import. Changing only modification time with `touch`/`os.utime` is insufficient
+when creation time is available. Never change the original Downloads files.
+
+If no reliable original timestamp is available, report that limitation rather
+than inventing a recording date.
+
 ## 1. Export from Voice Memos storage
 
 Voice Memos on macOS does not provide a reliable Select All action. In Finder,
@@ -45,7 +104,7 @@ The utility:
 
 - targets the active profile in the production app data directory;
 - compares SHA-256 hashes against `_system/_recordings`;
-- creates one recording note per new file in Feed;
+- creates one recording note per new file in Stream (`_system/stream`);
 - preserves the source file creation timestamp;
 - follows the configured note filename format;
 - skips zero-byte and duplicate files.
@@ -61,26 +120,9 @@ npm run voice-memos:import -- \
 If Type is open with desktop transcription enabled, newly imported recordings
 may be queued for transcription automatically.
 
-## Zero-byte files found on 2026-09-27
+## Empty or incomplete exports
 
-The full export contained 363 `.m4a` files. Of those, 355 contained audio and
-the following eight originals were zero bytes, so the importer skipped them:
-
-```text
-20260119 001911-340C0FC1.m4a
-20260208 071159-D9D69601.m4a
-20260216 232135-BFF56C66.m4a
-20260613 050942-13D7A168.m4a
-20260614 063947-E0523DC7.m4a
-20260707 161205-21C6B196.m4a
-20260808 183221-94EAE06F.m4a
-20260810 052220-4A014EEB.m4a
-```
-
-If Voice Memos later downloads or repairs any of these, copy the export again
-and rerun the utility. Hash-based deduplication will import only newly valid or
-previously missing audio.
-
-On 2026-09-29 all eight recordings were exported again with valid audio and
-successfully imported into Type. The list remains here as recovery history; it
-does not describe the current state of the repaired exports.
+Zero-byte files are skipped. Let Voice Memos download or repair the originals,
+export them again, and rerun the utility. Hash-based deduplication imports only
+newly valid or previously missing audio. Keep any personal recovery history in
+the profile rather than this document.
