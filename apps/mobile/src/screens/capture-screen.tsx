@@ -124,6 +124,8 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   const micOpacity = useSharedValue(1);
   const runtimeStatus = useSyncExternalStore(mobileRuntime.subscribe, mobileRuntime.getStatus);
   const inputRef = useRef<TextInput>(null);
+  const focusFreshPage = useRef(false);
+  const [inputHeight, setInputHeight] = useState(0);
   const revealFrame = useRef<number | null>(null);
   const revealSelection = () => {
     if (!hasNativeEditorScroll || menuVisible || committing || restoring) return;
@@ -131,7 +133,13 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
     // Read UIKit's caret after Fabric has applied the input's new height.
     revealFrame.current = requestAnimationFrame(() => {
       revealFrame.current = null;
-      revealEditorSelection(inputRef.current);
+      const input = inputRef.current;
+      void revealEditorSelection(input).then((height) => {
+        if (input !== inputRef.current || !mounted.current) return;
+        if (typeof height === "number" && Number.isFinite(height) && height > 0) {
+          setInputHeight(height);
+        }
+      });
     });
   };
   useEffect(() => () => {
@@ -161,6 +169,7 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   // The window as shared values. The gesture worklets need these, and a
   // memoized gesture cannot close over a prop that changes on rotation.
   const windowH = useSharedValue(height);
+  const surfaceH = useSharedValue(height);
   useEffect(() => {
     windowH.value = height;
   }, [height, windowH]);
@@ -179,6 +188,16 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
+  useEffect(() => {
+    if (!focusFreshPage.current || committing || restoring || menuVisible || runtimeStatus.operation) return;
+    // Fabric must apply editable=true before UIKit receives the focus command.
+    const frame = requestAnimationFrame(() => {
+      if (!mounted.current) return;
+      focusFreshPage.current = false;
+      inputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [committing, restoring, menuVisible, runtimeStatus.operation]);
   useEffect(() => {
     let cancelled = false;
     setMeta(null);
@@ -207,7 +226,10 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
     if (!mounted.current) return;
     setText(pages.session.currentContent());
     setHasText(pages.session.currentContent().trim().length > 0);
-    if (resetScroll || textRef.current !== pages.session.currentContent()) setInputGeneration((value) => value + 1);
+    if (resetScroll || textRef.current !== pages.session.currentContent()) {
+      setInputHeight(0);
+      setInputGeneration((value) => value + 1);
+    }
     textRef.current = pages.session.currentContent();
     setBrowsing(pages.browsing);
     setPagePath(pages.session.currentPath());
@@ -271,9 +293,9 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
       requestAnimationFrame(() => {
         if (!mounted.current) return;
         pageY.value = 0;
+        focusFreshPage.current = !pages.browsing;
         setCommitting(false);
         transitioning.value = false;
-        if (!pages.browsing) inputRef.current?.focus();
       })
     );
   }, [displayPage, pages, pageY, showIcons, transitioning]);
@@ -424,20 +446,23 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   // itself, so nothing slides in over the paper. It darkens slightly on the way
   // to the threshold (surface → border, both derived from the background, so
   // this reads the same in either theme) and stays deliberately faint.
-  const pullZoneStyle = useAnimatedStyle(() => ({
-    // Flush to the screen edge, *not* above the home indicator: the strip is
-    // what lies under the page, so any inset below it reads as a stray band of
-    // paper beneath the gap. Only the keyboard actually shortens the page.
-    top: direction.value === "down" ? insets.top : undefined,
-    bottom: direction.value === "down" ? undefined : keyboard.height.value,
-    height: pullZoneHeight(pull.value),
-    opacity: transitioning.value ? 0 : 1,
-    backgroundColor: interpolateColor(
-      Math.min(pull.value, PULL_READY),
-      [0, PULL_READY],
-      [theme.colors.surface, theme.colors.border]
-    ),
-  }));
+  const pullZoneStyle = useAnimatedStyle(() => {
+    const stripHeight = pullZoneHeight(pull.value);
+    return {
+      // Keep one numeric anchor. Reanimated can retain an old top/bottom
+      // constraint when the opposite edge is subsequently set to undefined.
+      top: direction.value === "down"
+        ? insets.top
+        : Math.max(0, surfaceH.value - keyboard.height.value - stripHeight),
+      height: stripHeight,
+      opacity: transitioning.value ? 0 : 1,
+      backgroundColor: interpolateColor(
+        Math.min(pull.value, PULL_READY),
+        [0, PULL_READY],
+        [theme.colors.surface, theme.colors.border]
+      ),
+    };
+  });
 
   // Held back until the strip can actually hold a centered line of text.
   const pullLabelStyle = useAnimatedStyle(() => ({
@@ -521,7 +546,10 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
   }, [micAvailable, micOpacity]);
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[styles.root, { backgroundColor: theme.colors.background }]}
+      onLayout={(event) => { surfaceH.value = event.nativeEvent.layout.height; }}
+    >
       <View style={styles.depth}>
           <View style={styles.gestureHost} collapsable={false}>
             <Animated.View
@@ -556,6 +584,7 @@ export const CaptureScreen = ({ note }: { note?: NotePageRequest }) => {
                   ref={inputRef}
                   style={[
                     styles.input,
+                    inputHeight > 0 ? { minHeight: inputHeight } : null,
                     {
                       color: theme.colors.text,
                       fontSize: theme.fontSize,
