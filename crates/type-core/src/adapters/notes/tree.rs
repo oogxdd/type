@@ -338,10 +338,8 @@ mod tests {
 
     /// Unique scratch dir — the crate has no tempdir dev-dependency.
     fn scratch_dir(label: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "type-core-tree-{label}-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("type-core-tree-{label}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("create scratch dir");
         dir
@@ -383,8 +381,14 @@ mod tests {
         fs::write(root.join("edited.md"), "after, and longer").unwrap();
         let second = build_folder_node(&root, "").expect("build tree");
 
-        assert_eq!(version_of(&first, "kept.md"), version_of(&second, "kept.md"));
-        assert_ne!(version_of(&first, "edited.md"), version_of(&second, "edited.md"));
+        assert_eq!(
+            version_of(&first, "kept.md"),
+            version_of(&second, "kept.md")
+        );
+        assert_ne!(
+            version_of(&first, "edited.md"),
+            version_of(&second, "edited.md")
+        );
 
         fs::remove_dir_all(&root).ok();
     }
@@ -446,10 +450,7 @@ mod tests {
 
         let mut files = Vec::new();
         collect_markdown_note_files(&root, &root, &mut files).expect("collect");
-        let mut names: Vec<String> = files
-            .iter()
-            .map(|path| strip_root(&root, path))
-            .collect();
+        let mut names: Vec<String> = files.iter().map(|path| strip_root(&root, path)).collect();
         names.sort();
         // Storage is binary-only; agent notes are real notes and stay collectable.
         assert_eq!(

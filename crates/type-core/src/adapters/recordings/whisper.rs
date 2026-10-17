@@ -230,10 +230,7 @@ pub fn transcribe_audio_local_whisper(
 
 /// Save word-level transcription JSON alongside the audio file.
 /// e.g. audio-xxxx.webm → audio-xxxx.transcription.json
-pub fn save_word_level_json(
-    audio_path: &Path,
-    json_content: &str,
-) -> Result<PathBuf, String> {
+pub fn save_word_level_json(audio_path: &Path, json_content: &str) -> Result<PathBuf, String> {
     let stem = audio_path
         .file_stem()
         .and_then(|s| s.to_str())

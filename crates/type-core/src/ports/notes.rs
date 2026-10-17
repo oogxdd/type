@@ -70,7 +70,11 @@ pub trait NotesRepository {
         body: &str,
     ) -> Result<(), String>;
     /// Replace the frontmatter while preserving the persisted body bytes, including ciphertext.
-    fn write_note_metadata(&self, path: &std::path::Path, meta: &NoteFrontMatter) -> Result<(), String>;
+    fn write_note_metadata(
+        &self,
+        path: &std::path::Path,
+        meta: &NoteFrontMatter,
+    ) -> Result<(), String>;
     fn allocate_note_file_name(
         &self,
         folder: &std::path::Path,

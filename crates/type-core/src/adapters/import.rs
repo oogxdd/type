@@ -22,8 +22,8 @@
 //! `write_note_with_front_matter` reads the unlocked key from the global
 //! security runtime.
 
-use crate::AppEnv;
 use crate::ports::import::ImportGateway;
+use crate::AppEnv;
 use crate::*;
 use serde::{Deserialize, Serialize};
 use std::path::Path;

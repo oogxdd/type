@@ -94,16 +94,8 @@ mod tests {
     #[test]
     fn resolves_every_supported_icon() {
         for icon_id in [
-            "stone",
-            "stone-xl",
-            "glass",
-            "glass-xl",
-            "paper",
-            "forest",
-            "garnet",
-            "ice",
-            "charcoal",
-            "steel",
+            "stone", "stone-xl", "glass", "glass-xl", "paper", "forest", "garnet", "ice",
+            "charcoal", "steel",
         ] {
             assert!(!icon_bytes(icon_id).unwrap().is_empty());
         }

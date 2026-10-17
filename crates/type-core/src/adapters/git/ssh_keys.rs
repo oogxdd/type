@@ -48,11 +48,8 @@ pub fn generate_ssh_keypair(app: &AppEnv) -> Result<String, String> {
         .to_openssh()
         .map_err(|e| format!("Failed to encode public key: {e}"))?;
     fs::write(&private_path, private_openssh.as_bytes()).map_err(|e| e.to_string())?;
-    fs::write(
-        dir.join(SSH_PUBLIC_KEY_NAME),
-        format!("{public_openssh}\n"),
-    )
-    .map_err(|e| e.to_string())?;
+    fs::write(dir.join(SSH_PUBLIC_KEY_NAME), format!("{public_openssh}\n"))
+        .map_err(|e| e.to_string())?;
     // Set restrictive permissions on the private key.
     #[cfg(unix)]
     {

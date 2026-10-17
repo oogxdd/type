@@ -133,10 +133,7 @@ pub fn allocate_prefixed_note_file_name(
 }
 
 /// Find an available filename using the full UUIDv7 as base name.
-pub fn allocate_uuid_v7_note_file_name(
-    folder: &Path,
-    note_id: &str,
-) -> Result<String, String> {
+pub fn allocate_uuid_v7_note_file_name(folder: &Path, note_id: &str) -> Result<String, String> {
     let base = note_id.to_lowercase();
     for attempt in 0..=512usize {
         let candidate = if attempt == 0 {

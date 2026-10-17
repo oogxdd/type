@@ -132,7 +132,10 @@ pub(super) fn set_order(app: tauri::AppHandle, args: SetOrderArgs) -> Result<(),
 }
 
 #[tauri::command]
-pub(super) fn update_note_tags(app: tauri::AppHandle, args: type_core::domain::notes::SetNoteTagsArgs) -> Result<(), String> {
+pub(super) fn update_note_tags(
+    app: tauri::AppHandle,
+    args: type_core::domain::notes::SetNoteTagsArgs,
+) -> Result<(), String> {
     ensure_security_unlocked_for_app(&crate::app_env(&app)?)?;
     notes_service(&app)?.update_note_tags(&args.path, args.tags)
 }

@@ -37,7 +37,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 26.12.0
           cache: npm
       - name: Install dependencies
         run: npm install
@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: dtolnay/rust-toolchain@1.99.1
       - uses: swatinem/rust-cache@v2
       # Tauri's Linux build needs these system libraries to compile the lib
       # (and therefore its test harness).
@@ -72,7 +72,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: dtolnay/rust-toolchain@1.99.1
       - uses: swatinem/rust-cache@v2
       - name: Native unit and headless UI tests
         run: cargo test -p type-gpui -- --test-threads=1

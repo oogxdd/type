@@ -173,9 +173,7 @@ fn copy_path_with_stats(
 }
 
 /// Create a zip archive containing all profiles' notes and state.
-pub fn create_profiles_backup_zip_impl(
-    app: &AppEnv,
-) -> Result<ProfilesBackupArchive, String> {
+pub fn create_profiles_backup_zip_impl(app: &AppEnv) -> Result<ProfilesBackupArchive, String> {
     let state = ensure_profiles_state(app)?;
     let export_root = app_data_dir(app)?.join("exports");
     fs::create_dir_all(&export_root).map_err(|error| error.to_string())?;
@@ -234,9 +232,7 @@ pub fn create_profiles_backup_zip_impl(
 }
 
 /// Export all profiles to the system Documents directory as plain files.
-pub fn export_profiles_to_documents_impl(
-    app: &AppEnv,
-) -> Result<ProfilesDocumentsExport, String> {
+pub fn export_profiles_to_documents_impl(app: &AppEnv) -> Result<ProfilesDocumentsExport, String> {
     let state = ensure_profiles_state(app)?;
     let documents_root = documents_dir(app)?.join("Type Export");
     fs::create_dir_all(&documents_root).map_err(|err| err.to_string())?;

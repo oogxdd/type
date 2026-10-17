@@ -46,13 +46,24 @@ pub fn parse_note_front_matter(raw: &str) -> (NoteFrontMatter, String) {
         match key.as_str() {
             "tags" => {
                 let raw_tags = value_raw.trim();
-                let parsed = serde_json::from_str::<Vec<String>>(raw_tags).ok().or_else(|| {
-                    let inner = raw_tags.strip_prefix('[')?.strip_suffix(']')?;
-                    let tags: Vec<String> = inner.split(',').map(|v| v.trim().trim_matches('\'').to_string()).filter(|v| !v.is_empty()).collect();
-                    tags.iter().all(|tag| crate::domain::tag_registry::valid_tag_name(tag)).then_some(tags)
-                });
-                if let Some(tags) = parsed { meta.tags = Some(tags); }
-                else { meta.passthrough_lines.push(trimmed.to_string()); }
+                let parsed = serde_json::from_str::<Vec<String>>(raw_tags)
+                    .ok()
+                    .or_else(|| {
+                        let inner = raw_tags.strip_prefix('[')?.strip_suffix(']')?;
+                        let tags: Vec<String> = inner
+                            .split(',')
+                            .map(|v| v.trim().trim_matches('\'').to_string())
+                            .filter(|v| !v.is_empty())
+                            .collect();
+                        tags.iter()
+                            .all(|tag| crate::domain::tag_registry::valid_tag_name(tag))
+                            .then_some(tags)
+                    });
+                if let Some(tags) = parsed {
+                    meta.tags = Some(tags);
+                } else {
+                    meta.passthrough_lines.push(trimmed.to_string());
+                }
             }
             "id" => {
                 if !value.is_empty() {
@@ -172,7 +183,10 @@ pub fn render_note_with_front_matter(meta: &NoteFrontMatter, body: &str) -> Stri
     let mut output = String::new();
     output.push_str("---\n");
     if let Some(tags) = &meta.tags {
-        output.push_str(&format!("tags: {}\n", serde_json::to_string(tags).expect("string list")));
+        output.push_str(&format!(
+            "tags: {}\n",
+            serde_json::to_string(tags).expect("string list")
+        ));
     }
     if let Some(id) = &meta.id {
         output.push_str(&format!("id: {}\n", front_matter_safe_value(id)));
@@ -338,10 +352,14 @@ mod tests {
 
     #[test]
     fn parse_keeps_a_deliberately_blank_first_body_line() {
-        let meta = NoteFrontMatter { id: Some("n".to_string()), ..Default::default() };
+        let meta = NoteFrontMatter {
+            id: Some("n".to_string()),
+            ..Default::default()
+        };
         // Only the one separator newline is structural; a second blank line is
         // the user's and must survive.
-        let (_, body) = parse_note_front_matter(&render_note_with_front_matter(&meta, "\nIndented start"));
+        let (_, body) =
+            parse_note_front_matter(&render_note_with_front_matter(&meta, "\nIndented start"));
         assert_eq!(body, "\nIndented start");
     }
 }
@@ -352,7 +370,10 @@ mod tag_tests {
     #[test]
     fn note_tags_round_trip() {
         let (meta, _) = parse_note_front_matter("---\ntags: [todo, urgent, работа]\n---\nbody");
-        assert_eq!(meta.tags.as_ref().unwrap(), &vec!["todo", "urgent", "работа"]);
+        assert_eq!(
+            meta.tags.as_ref().unwrap(),
+            &vec!["todo", "urgent", "работа"]
+        );
         let rendered = render_note_with_front_matter(&meta, "body");
         assert_eq!(parse_note_front_matter(&rendered).0.tags, meta.tags);
     }
@@ -361,10 +382,15 @@ mod tag_tests {
 /// Header-only writes must not add separator blank lines or re-encrypt the body.
 pub(super) fn write_note_metadata(path: &Path, meta: &NoteFrontMatter) -> Result<(), String> {
     let raw = fs::read_to_string(path).map_err(|e| e.to_string())?;
-    let body = [("---\n", "\n---\n"), ("---\r\n", "\r\n---\r\n")].iter()
-        .find_map(|(opening, closing)| raw.strip_prefix(opening).and_then(|rest| {
-            rest.find(closing).map(|index| &rest[index + closing.len()..])
-        })).unwrap_or(&raw);
+    let body = [("---\n", "\n---\n"), ("---\r\n", "\r\n---\r\n")]
+        .iter()
+        .find_map(|(opening, closing)| {
+            raw.strip_prefix(opening).and_then(|rest| {
+                rest.find(closing)
+                    .map(|index| &rest[index + closing.len()..])
+            })
+        })
+        .unwrap_or(&raw);
     let mut header = render_note_with_front_matter(meta, "");
     header.pop(); // renderer's extra blank separator already belongs to the persisted body
     header.push_str(body);

@@ -3,9 +3,9 @@
 //! JSON `NotesProfilesSnapshot` so the host can refresh its state in one go.
 
 use type_core::{
-    application::profiles::ProfilesUseCases, CreateProfileArgs, DeleteProfileArgs,
-    ProfilesAdapter, SetActiveProfileArgs, SetProfileNotesRootArgs, UpdateAppConfigArgs,
-    UpdateProfileArgs, UpdateProfileSettingsArgs,
+    application::profiles::ProfilesUseCases, CreateProfileArgs, DeleteProfileArgs, ProfilesAdapter,
+    SetActiveProfileArgs, SetProfileNotesRootArgs, UpdateAppConfigArgs, UpdateProfileArgs,
+    UpdateProfileSettingsArgs,
 };
 
 use crate::{from_json, run_blocking, to_json, unlocked_env, CoreError};

@@ -1,4 +1,3 @@
-mod tag_registry;
 mod app_icon;
 mod git_sync;
 mod handwriting;
@@ -8,6 +7,7 @@ mod notes;
 mod profiles;
 mod recordings;
 mod security;
+mod tag_registry;
 
 #[cfg(target_os = "macos")]
 use tauri::Manager;

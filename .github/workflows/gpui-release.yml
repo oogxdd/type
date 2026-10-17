@@ -45,7 +45,7 @@ jobs:
             echo 'Release already exists; do not replace candidate assets. Use a new version.' >&2
             exit 1
           fi
-      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: dtolnay/rust-toolchain@1.99.1
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
       - uses: swatinem/rust-cache@v2
