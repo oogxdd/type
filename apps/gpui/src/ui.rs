@@ -506,7 +506,7 @@ impl TypeApp {
                             .when(self.view == View::Folders, |tree| {
                                 // Let the tree shrink when scrolling is needed, but use its
                                 // content height for short lists. The rest is a root target.
-                                tree.h(px(folder_rows as f32 * 32.)).min_h_0()
+                                tree.h(px(folder_rows as f32 * tree_moves::ROW_HEIGHT)).min_h_0()
                             }),
                     )
                     .when(self.view == View::Folders, |panel| {

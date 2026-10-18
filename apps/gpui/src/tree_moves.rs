@@ -8,6 +8,15 @@ pub enum Placement {
     Root,
 }
 
+/// Height of a Folders tree row. Rendering, layout and drag hit testing share it.
+pub const ROW_HEIGHT: f32 = 32.;
+
+/// Row index and the pointer's fraction within it for a content-space y.
+pub fn row_at(content_y: f32) -> (usize, f32) {
+    let y = content_y.max(0.);
+    ((y / ROW_HEIGHT).floor() as usize, (y % ROW_HEIGHT) / ROW_HEIGHT)
+}
+
 pub fn placement_at(fraction: f32, folder: bool) -> Placement {
     if folder && (0.25..0.75).contains(&fraction) {
         Placement::Inside
@@ -138,6 +147,15 @@ mod tests {
         assert_eq!(placement_at(0.9, true), Placement::After);
         assert_eq!(placement_at(0.4, false), Placement::Before);
         assert_eq!(placement_at(0.6, false), Placement::After);
+    }
+
+    #[test]
+    fn hit_rows_match_rendered_row_height() {
+        assert_eq!(row_at(-4.), (0, 0.));
+        assert_eq!(row_at(ROW_HEIGHT * 5. + 2.), (5, 2. / ROW_HEIGHT));
+        let (index, fraction) = row_at(ROW_HEIGHT * 9.5);
+        assert_eq!(index, 9);
+        assert_eq!(placement_at(fraction, true), Placement::Inside);
     }
 
     #[test]

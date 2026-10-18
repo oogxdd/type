@@ -3383,3 +3383,92 @@ fn palette_flags_and_tags_multiple_notes_and_active_hides_reflections(cx: &mut T
     })
     .unwrap();
 }
+
+#[gpui_kit::test]
+fn dragged_root_folders_hit_rendered_rows_reorder_and_nest(cx: &mut TestAppContext) {
+    use super::tree_moves::{self, Placement};
+    let f = Fixture::new();
+    for name in ["Alpha", "Beta", "Gamma"] {
+        f.0.create_folder(name).unwrap();
+    }
+    let (window, app) = launch(&f, cx);
+    let order = cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| app.set_view(View::Folders, window, cx));
+        window.render_frame(cx);
+        let ids = |app: &TypeApp| app.roots.iter().map(|i| i.id.to_string()).collect::<Vec<_>>();
+        let order = app.read_with(cx, |app, _| ids(app));
+        // Drag hit testing maps viewport y to rows; it must agree with layout.
+        let top = window.find(format!("nav-row-{}", order[0])).bounds().top();
+        for (index, id) in order.iter().enumerate() {
+            let row = window.find(format!("nav-row-{id}")).bounds();
+            assert_eq!(row.size.height, px(tree_moves::ROW_HEIGHT));
+            let middle = f32::from(row.top() - top) + tree_moves::ROW_HEIGHT / 2.;
+            let (hit, fraction) = tree_moves::row_at(middle);
+            assert_eq!(hit, index);
+            assert_eq!(tree_moves::placement_at(fraction, true), Placement::Inside);
+        }
+        (order, ids)
+    })
+    .unwrap();
+    let (order, ids) = order;
+    let (first, last) = (order[0].clone(), order[2].clone());
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.move_row(last.clone().into(), Some(first.clone().into()), Placement::Before, window, cx);
+            assert_eq!(app.error, None);
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        assert_eq!(app.read_with(cx, |app, _| ids(app)), [last.clone(), first.clone(), order[1].clone()]);
+        app.update(cx, |app, cx| {
+            app.move_row(order[1].clone().into(), Some(last.clone().into()), Placement::Inside, window, cx);
+            assert_eq!(app.error, None);
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    assert!(f.0.root.join(&last).join(&order[1]).is_dir());
+    assert!(!f.0.root.join(&order[1]).exists());
+    cx.update_window(window, |_, _, cx| {
+        assert_eq!(app.read_with(cx, |app, _| ids(app)), [last.clone(), first.clone()]);
+    })
+    .unwrap();
+    // Sibling folders inside a folder reorder the same way.
+    for name in ["One", "Two", "Three"] {
+        f.0.create_folder(&format!("{first}/{name}")).unwrap();
+    }
+    let children = |app: &TypeApp| {
+        tree_moves::find(&app.roots, &first.clone().into())
+            .unwrap()
+            .children
+            .iter()
+            .map(|i| i.id.to_string())
+            .collect::<Vec<_>>()
+    };
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| app.refresh(window, cx));
+    })
+    .unwrap();
+    cx.run_until_parked();
+    let nested = cx
+        .update_window(window, |_, _, cx| app.read_with(cx, |app, _| children(app)))
+        .unwrap();
+    assert_eq!(nested.len(), 3);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.move_row(nested[0].clone().into(), Some(nested[2].clone().into()), Placement::After, window, cx);
+            assert_eq!(app.error, None);
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(window, |_, _, cx| {
+        assert_eq!(
+            app.read_with(cx, |app, _| children(app)),
+            [nested[1].clone(), nested[2].clone(), nested[0].clone()]
+        );
+    })
+    .unwrap();
+}

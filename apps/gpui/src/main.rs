@@ -504,10 +504,9 @@ impl TypeApp {
             scroll.set_offset(point(offset.x, offset.y + px(velocity)));
         }
         let content_y = y - f32::from(scroll.offset().y);
-        let index = (content_y.max(0.) / 36.).floor() as usize;
+        let (index, fraction) = tree_moves::row_at(content_y);
         let candidate = self.tree.read(cx).entry(index).and_then(|entry| {
             let id = &entry.item().id;
-            let fraction = (content_y % 36.) / 36.;
             let placement = tree_moves::placement_at(fraction, self.folder_ids.contains(id));
             (!id.starts_with("feed:")
                 && !id.starts_with(navigation::PIN_PREFIX)
@@ -667,7 +666,7 @@ impl TypeApp {
             ListItem::new(SharedString::from(format!("nav-row-{id}")))
                 .selected(selected)
                 .when(multi.contains(&id), |row| row.bg(cx.theme().accent))
-                .h(px(if is_section { 29. } else { 32. }))
+                .h(px(if is_section { 29. } else { tree_moves::ROW_HEIGHT }))
                 .when(is_section, |row| row.text_xs())
                 .when(!is_section, |row| row.text_sm())
                 .px_2()
