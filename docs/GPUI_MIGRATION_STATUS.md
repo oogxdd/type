@@ -4,9 +4,9 @@ Updated: 2026-10-19. This is an unfinished migration; update this file after eac
 
 ## Where to continue
 
-- Current branch: `main` (GPUI 0.4.10 release, desktop sync work and the
-  audio/Whisper/AssemblyAI milestone `095c2ea0` merged from
-  `wip/gpui-audio-20261006`).
+- Current branch: `main`; latest published release GPUI 0.4.13 (2026-10-19,
+  Apple Silicon). Feature work continues on `feat/gpui-image-attachments`;
+  merge `main` into it before more work to pick up the release commits.
 - Current checkout: `/Volumes/KINGSTON/Projects/type/app`; historical worktrees
   remain under `.worktrees/`.
 - Base: `081cc4cb`; core shell: `5ff01346`; handoff: `6bb5378a`; UI/keys/tests: `f1efa117`; launcher/CI: `e88e3635`; nested Stream calendar: `6997f7be`; Earlier click fix: `9f39b292`.

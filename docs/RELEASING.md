@@ -32,7 +32,7 @@ remains universal for CI and earlier releases.
 
 ## Install the first native version
 
-[Type 0.4.10 Apple Silicon DMG](https://github.com/oogxdd/type/releases/download/gpui-v0.4.10/Type-0.4.10-arm64.dmg)
+[Type 0.4.13 Apple Silicon DMG](https://github.com/oogxdd/type/releases/download/gpui-v0.4.13/Type-0.4.13-arm64.dmg)
 is published, signed and notarized for M-series Macs (macOS 12+). Quit Type normally, open the DMG and drag
 `Type.app` to Applications. Launch that installed app. This first installation
 is manual when coming from `Type GPUI Dev` or the previous Tauri shell.
@@ -47,7 +47,7 @@ normally and retained as a hidden backup; legacy Type 0.8.1 was left unchanged.
 
 After installing the signed native build, use **Settings → Updates → Check for
 updates** for subsequent GPUI releases. The production feed is already live;
-0.4.10 is its current Apple Silicon version, with immediate availability.
+0.4.13 (2026-10-19) is its current Apple Silicon version, with immediate availability.
 An existing native GPUI installation can update through that feed; Intel
 remains on the previous universal release. Automatic checks are
 available; installation requires confirmation.
@@ -55,7 +55,8 @@ available; installation requires confirmation.
 Release execution and verification are recorded in
 [GPUI migration status](GPUI_MIGRATION_STATUS.md). The real isolated Sparkle
 0.0.1 → 0.0.2 replacement/relaunch test passed with exact Unicode text preserved.
-The published 0.4.10 app/DMG and live feed passed signature, notarization,
+The published 0.4.10 app/DMG (the last fully inspected release; 0.4.11–0.4.13
+were checked through the build log, notarization and the live feed) and live feed passed signature, notarization,
 Gatekeeper, checksum and arm64 architecture inspection. Signed app launch,
 normal quit and reopen used a synthetic profile. UI/feel and production updater
 installation remain for user review; no Intel build is included in 0.4.10.
@@ -355,6 +356,13 @@ gh workflow disable gpui-release.yml --repo oogxdd/type
 git tag "gpui-v$VERSION"
 git push origin "gpui-v$VERSION"
 ```
+
+Agents in auto mode may be refused `gh workflow disable`. 0.4.11–0.4.13 instead
+pushed the tag and uploaded the draft in the same command: the duplicate
+candidate run stops at its guard with "Release already exists; do not replace
+candidate assets" and shows as failed. This relies on the draft existing before
+that guard runs (about 30 seconds after the push for 0.4.13); a slower upload
+would let the duplicate run build until release creation is refused.
 
 In GitHub → Releases → **Draft a new release**, select that existing tag,
 use title `Type VERSION`, copy `docs/releases/gpui-vVERSION.md`, and attach
