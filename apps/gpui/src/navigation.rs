@@ -187,6 +187,63 @@ pub fn note_paths(root: &FolderNode) -> Vec<String> {
         .collect()
 }
 
+/// The note's own instant: creation, or last update for legacy notes.
+pub fn note_ms(note: &NotePreviewEntry) -> Option<i64> {
+    note.meta.created_ms.or(note.meta.updated_ms)
+}
+
+fn calendar_day<Tz: TimeZone>(ms: i64, tz: &Tz) -> Option<NaiveDate> {
+    tz.timestamp_millis_opt(ms).single().map(|t| t.date_naive())
+}
+
+/// Manual day boundaries (`.type/day-cutoffs.json`): an instant at or before a
+/// cutoff on the cutoff's calendar date belongs to the previous day.
+pub fn effective_day<Tz: TimeZone>(ms: i64, cutoffs: &[i64], tz: &Tz) -> Option<NaiveDate> {
+    let day = calendar_day(ms, tz)?;
+    let shifted = cutoffs
+        .iter()
+        .any(|&cutoff| ms <= cutoff && calendar_day(cutoff, tz) == Some(day));
+    Some(if shifted { day.pred_opt()? } else { day })
+}
+
+pub fn day_shifted(ms: i64, cutoffs: &[i64]) -> bool {
+    effective_day(ms, cutoffs, &Local) != calendar_day(ms, &Local)
+}
+
+pub fn note_day(note: &NotePreviewEntry, cutoffs: &[i64]) -> Option<NaiveDate> {
+    note_ms(note).and_then(|ms| effective_day(ms, cutoffs, &Local))
+}
+
+/// Ends the previous day at `ms`: it and every earlier instant of its calendar
+/// date join the day before. Replaces any other cutoff on that date.
+pub fn cutoffs_ending_day_at<Tz: TimeZone>(cutoffs: &[i64], ms: i64, tz: &Tz) -> Vec<i64> {
+    let day = calendar_day(ms, tz);
+    let mut next: Vec<i64> = cutoffs
+        .iter()
+        .copied()
+        .filter(|&cutoff| calendar_day(cutoff, tz) != day)
+        .collect();
+    next.push(ms);
+    next.sort_unstable();
+    next
+}
+
+/// Returns `ms` and every later instant to its calendar date; earlier shifted
+/// instants stay in the previous day.
+pub fn cutoffs_starting_day_at<Tz: TimeZone>(cutoffs: &[i64], ms: i64, tz: &Tz) -> Vec<i64> {
+    let day = calendar_day(ms, tz);
+    let mut next: Vec<i64> = cutoffs
+        .iter()
+        .copied()
+        .filter(|&cutoff| calendar_day(cutoff, tz) != day)
+        .collect();
+    if calendar_day(ms - 1, tz) == day {
+        next.push(ms - 1);
+    }
+    next.sort_unstable();
+    next
+}
+
 /// Date groups are projections, never filesystem destinations. Assign a whole
 /// ISO week to its Thursday's month so a month boundary cannot split it.
 pub fn feed(
@@ -194,9 +251,10 @@ pub fn feed(
     filter: Filter,
     today: NaiveDate,
     trash: bool,
+    cutoffs: &[i64],
 ) -> Vec<Item> {
     if !trash {
-        return stream(notes, filter, today);
+        return stream(notes, filter, today, cutoffs);
     }
     let folder = if trash { ARCHIVE_FOLDER } else { STREAM_FOLDER };
     let mut ordered: Vec<_> = notes
@@ -217,8 +275,7 @@ pub fn feed(
         let date = note
             .meta
             .created_ms
-            .and_then(|t| Local.timestamp_millis_opt(t).single())
-            .map(|t| t.date_naive());
+            .and_then(|t| effective_day(t, cutoffs, &Local));
         let (key, label) = match date {
             Some(d) if d == today => ("9-today".into(), "Today".into()),
             Some(d) if Some(d) == today.pred_opt() => ("8-yesterday".into(), "Yesterday".into()),
@@ -285,6 +342,7 @@ fn stream(
     notes: &std::collections::HashMap<String, NotePreviewEntry>,
     filter: Filter,
     today: NaiveDate,
+    cutoffs: &[i64],
 ) -> Vec<Item> {
     let monday = today - chrono::Duration::days(today.weekday().num_days_from_monday() as i64);
     let mut days = BTreeMap::<NaiveDate, Vec<&NotePreviewEntry>>::new();
@@ -296,13 +354,7 @@ fn stream(
     for note in notes.values().filter(|note| {
         type_core::note_parent_folder_path(&note.path) == STREAM_FOLDER && filter.matches(note)
     }) {
-        let date = note
-            .meta
-            .created_ms
-            .or(note.meta.updated_ms)
-            .and_then(|t| Local.timestamp_millis_opt(t).single())
-            .map(|t| t.date_naive());
-        match date {
+        match note_day(note, cutoffs) {
             Some(date) if date >= monday && date <= today => {
                 days.entry(date).or_default().push(note)
             }
@@ -433,6 +485,21 @@ fn stream(
     result
 }
 
+/// Folder/date-group ids from the root down to `id`, or empty when absent.
+pub fn ancestors(items: &[Item], id: &str) -> Vec<String> {
+    for item in items {
+        if item.id == id {
+            return vec![];
+        }
+        if contains(&item.children, id) {
+            let mut path = vec![item.id.clone()];
+            path.extend(ancestors(&item.children, id));
+            return path;
+        }
+    }
+    vec![]
+}
+
 pub fn contains(items: &[Item], id: &str) -> bool {
     items
         .iter()
@@ -465,17 +532,17 @@ pub fn retain_day(
     items: &mut Vec<Item>,
     notes: &std::collections::HashMap<String, NotePreviewEntry>,
     day: NaiveDate,
+    cutoffs: &[i64],
 ) {
     items.retain_mut(|item| {
         if item.folder {
-            retain_day(&mut item.children, notes, day);
+            retain_day(&mut item.children, notes, day, cutoffs);
             !item.children.is_empty()
         } else {
             notes
                 .get(&item.id)
-                .and_then(|n| n.meta.created_ms.or(n.meta.updated_ms))
-                .and_then(|ms| Local.timestamp_millis_opt(ms).single())
-                .is_some_and(|t| t.date_naive() == day)
+                .and_then(|n| note_day(n, cutoffs))
+                .is_some_and(|d| d == day)
         }
     });
 }
@@ -584,6 +651,7 @@ mod tests {
             Filter::All,
             NaiveDate::from_ymd_opt(2026, 9, 30).unwrap(),
             false,
+            &[],
         );
         assert_eq!(groups[0].label, "This week");
         assert_eq!(groups[0].children[0].label, "Today");
@@ -603,6 +671,38 @@ mod tests {
         assert_eq!(ids.iter().filter(|id| id.ends_with(".md")).count(), 3);
     }
     #[test]
+    fn day_cutoffs_move_the_early_hours_into_the_previous_day() {
+        let tz = chrono::FixedOffset::east_opt(3 * 3600).unwrap();
+        let at = |d: u32, h: u32, m: u32| {
+            tz.with_ymd_and_hms(2026, 10, d, h, m, 0)
+                .unwrap()
+                .timestamp_millis()
+        };
+        let day = |d: u32| NaiveDate::from_ymd_opt(2026, 10, d).unwrap();
+        let cutoffs = cutoffs_ending_day_at(&[], at(18, 4, 0), &tz);
+        assert_eq!(effective_day(at(18, 0, 5), &cutoffs, &tz), Some(day(17)));
+        assert_eq!(effective_day(at(18, 4, 0), &cutoffs, &tz), Some(day(17)));
+        assert_eq!(effective_day(at(18, 4, 1), &cutoffs, &tz), Some(day(18)));
+        assert_eq!(effective_day(at(17, 2, 0), &cutoffs, &tz), Some(day(17)));
+        // A later choice on the same date replaces the earlier cutoff.
+        let later = cutoffs_ending_day_at(&cutoffs, at(18, 5, 0), &tz);
+        assert_eq!(later, [at(18, 5, 0)]);
+        // Moving a note back keeps only the earlier notes in the previous day.
+        let back = cutoffs_starting_day_at(&later, at(18, 3, 0), &tz);
+        assert_eq!(effective_day(at(18, 2, 0), &back, &tz), Some(day(17)));
+        assert_eq!(effective_day(at(18, 3, 0), &back, &tz), Some(day(18)));
+        assert_eq!(effective_day(at(18, 4, 30), &back, &tz), Some(day(18)));
+        // Returning the first instant of a date removes its cutoff entirely.
+        assert!(cutoffs_starting_day_at(&back, at(18, 0, 0), &tz).is_empty());
+        // Cutoffs on other dates survive both operations.
+        let both = cutoffs_ending_day_at(&cutoffs, at(19, 1, 0), &tz);
+        assert_eq!(both, [at(18, 4, 0), at(19, 1, 0)]);
+        assert_eq!(
+            cutoffs_starting_day_at(&both, at(19, 1, 0), &tz),
+            [at(18, 4, 0), at(19, 1, 0) - 1]
+        );
+    }
+    #[test]
     fn filters_are_independent_and_empty_groups_disappear() {
         let p = format!("{STREAM_FOLDER}/a.md");
         let mut n = note(&p, 1);
@@ -617,7 +717,7 @@ mod tests {
         assert!(Filter::Reflections.matches(&reflection));
         assert!(Filter::Unreviewed.matches(&reflection));
         let map = [(p, n)].into();
-        let active = feed(&map, Filter::Active, Local::now().date_naive(), false);
+        let active = feed(&map, Filter::Active, Local::now().date_naive(), false, &[]);
         assert_eq!(active.len(), 1); // the current week keeps an empty Today
         assert_eq!(active[0].children.len(), 1);
         assert!(active[0].children[0].children.is_empty());

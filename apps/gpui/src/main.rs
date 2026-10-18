@@ -128,6 +128,8 @@ struct TypeApp {
     folder_ids: HashSet<SharedString>,
     /// Synced `.type/pinned-folders.json`, reloaded with the folder tree.
     pins: Vec<String>,
+    /// Synced `.type/day-cutoffs.json`: manual ends of days for date grouping.
+    day_cutoffs: Vec<i64>,
     drop_target: Option<(SharedString, tree_moves::Placement)>,
     drag_task: Option<Task<()>>,
     drag_pointer: Option<(SharedString, Point<Pixels>, Bounds<Pixels>)>,

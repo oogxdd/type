@@ -33,6 +33,15 @@ Updated: 2026-10-18. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Manual Stream day cutoffs (2026-10-18, branch `feat/gpui-image-attachments`)
+
+- Cmd+K / note context menu “Move to previous day” groups the selected note and
+  every earlier note of its calendar date under the day before; “Move back to
+  its day” undoes from a note onward. Files are untouched; storage is synced
+  `.type/day-cutoffs.json`. Design, rule and rejected options:
+  [STREAM_DAY_CUTOFFS.md](STREAM_DAY_CUTOFFS.md).
+- Not done: mobile and MCP still group by calendar date.
+
 ### Pinned folders, note flags/tags and compact Stream week (2026-10-18, branch `feat/gpui-image-attachments`)
 
 - Pinned folders: `p` on a folder in Folders, Cmd+K “Pin folder …”, or the

@@ -83,6 +83,7 @@ impl TypeApp {
             active: "".into(),
             folder_ids: HashSet::new(),
             pins: Vec::new(),
+            day_cutoffs: Vec::new(),
             drop_target: None,
             drag_task: None,
             drag_pointer: None,
@@ -499,6 +500,7 @@ impl TypeApp {
                         });
                         this.folder_tree = Some(root);
                         this.pins = type_core::load_pinned_folders(&this.backend.root);
+                        this.day_cutoffs = type_core::load_day_cutoffs(&this.backend.root);
                         this.rebuild_navigation(cx);
                         this.loading = false;
                         if this.active_folder.is_none()
@@ -551,11 +553,12 @@ impl TypeApp {
                 self.filter,
                 chrono::Local::now().date_naive(),
                 self.view == View::Trash,
+                &self.day_cutoffs,
             ),
         };
         if self.view == View::Feed {
             if let Some(day) = self.prefs.stream_day {
-                navigation::retain_day(&mut self.nav_items, &self.previews, day);
+                navigation::retain_day(&mut self.nav_items, &self.previews, day, &self.day_cutoffs);
             }
         }
         fn live_titles(items: &mut [navigation::Item], notes: &HashMap<SharedString, Note>) {
@@ -1250,6 +1253,71 @@ pub(crate) fn file_id(id: &SharedString) -> SharedString {
 impl TypeApp {
     pub fn pinned(&self, folder: &str) -> bool {
         self.pins.iter().any(|pin| pin == folder)
+    }
+
+    /// Ends the previous day after the latest targeted note, or returns the
+    /// earliest shifted target and everything after it to its calendar date.
+    pub fn shift_day(&mut self, previous: bool, cx: &mut Context<Self>) -> Result<(), String> {
+        let instants: Vec<_> = self
+            .targets(cx)
+            .iter()
+            .filter_map(|path| self.previews.get(path))
+            .filter_map(|note| Some((navigation::note_ms(note)?, note.path.clone())))
+            .collect();
+        let (next, path, status) = if previous {
+            let Some((ms, path)) = instants.iter().cloned().max() else {
+                return Err("Select a dated note".into());
+            };
+            (
+                navigation::cutoffs_ending_day_at(&self.day_cutoffs, ms, &chrono::Local),
+                path,
+                "Moved to previous day",
+            )
+        } else {
+            let Some((ms, path)) = instants
+                .iter()
+                .cloned()
+                .filter(|(ms, _)| navigation::day_shifted(*ms, &self.day_cutoffs))
+                .min()
+            else {
+                return Err("Selection is already on its own day".into());
+            };
+            let mut next =
+                navigation::cutoffs_starting_day_at(&self.day_cutoffs, ms, &chrono::Local);
+            // A cutoff that no longer moves any note is dropped.
+            if !self
+                .previews
+                .values()
+                .filter_map(navigation::note_ms)
+                .any(|other| other < ms && navigation::day_shifted(other, &next))
+            {
+                next.retain(|&cutoff| cutoff != ms - 1);
+            }
+            (next, path, "Moved back to its day")
+        };
+        type_core::save_day_cutoffs(&self.backend.root, &next)?;
+        self.day_cutoffs = next;
+        self.status = status.into();
+        self.rebuild_navigation(cx);
+        // Follow the anchor note into its new day group.
+        let groups: HashSet<_> = navigation::ancestors(&self.nav_items, &path)
+            .into_iter()
+            .collect();
+        if !groups.is_empty() {
+            fn open(items: &[TreeItem], groups: &HashSet<String>) {
+                for item in items {
+                    if groups.contains(item.id.as_ref()) {
+                        let _ = item.clone().expanded(true);
+                        open(&item.children, groups);
+                    }
+                }
+            }
+            open(&self.roots, &groups);
+            self.rebuild_navigation(cx);
+            self.select_row(&path.into(), cx);
+        }
+        cx.notify();
+        Ok(())
     }
 
     /// Pins/unpins a real folder path in the synced pin file.

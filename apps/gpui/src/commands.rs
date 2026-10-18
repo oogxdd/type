@@ -36,6 +36,8 @@ pub enum Choice {
     Filter(Filter),
     StreamDate,
     ClearDate,
+    PreviousDay,
+    NextDay,
     Feed,
     Folders,
     TrashView,
@@ -106,6 +108,8 @@ impl Choice {
             | Self::Tag(_)
             | Self::FlagMode
             | Self::Flag(_)
+            | Self::PreviousDay
+            | Self::NextDay
             | Self::Reload => "Selection",
             Self::New | Self::NewProfile | Self::NewFolder(_) => "Create",
             Self::Filter(_) | Self::StreamDate | Self::ClearDate => "View",
@@ -445,6 +449,8 @@ impl TypeApp {
             ("Move selection to Trash", Choice::Trash),
             ("Delete selection permanently…", Choice::Delete),
             ("Mark / unmark reviewed · next note", Choice::Reviewed),
+            ("Move to previous day", Choice::PreviousDay),
+            ("Move back to its day", Choice::NextDay),
             ("Archive / unarchive note · next note", Choice::ArchiveFlag),
             ("Duplicate note", Choice::Duplicate),
             ("Split note at cursor", Choice::Split),
@@ -509,6 +515,21 @@ impl TypeApp {
                 );
             }
         }
+        // Day moves need a dated note; moving back needs one already moved.
+        let instants: Vec<_> = self
+            .targets(cx)
+            .iter()
+            .filter_map(|path| self.previews.get(path))
+            .filter_map(navigation::note_ms)
+            .collect();
+        let shifted = instants
+            .iter()
+            .any(|&ms| navigation::day_shifted(ms, &self.day_cutoffs));
+        entries.retain(|entry| match entry.choice {
+            Choice::PreviousDay => !instants.is_empty(),
+            Choice::NextDay => shifted,
+            _ => true,
+        });
         let target = self.palette_target_label(cx);
         for entry in &mut entries {
             entry.label = match entry.choice {
@@ -518,6 +539,10 @@ impl TypeApp {
                 Choice::Rename => format!("Rename {target}…"),
                 Choice::Trash => format!("Move {target} to Trash"),
                 Choice::Delete => format!("Delete {target} permanently…"),
+                Choice::PreviousDay => {
+                    format!("Move {target} and earlier notes of its day to previous day")
+                }
+                Choice::NextDay => format!("Move {target} and later notes back to its day"),
                 _ => continue,
             };
         }
@@ -1259,6 +1284,8 @@ impl TypeApp {
                     window,
                     cx,
                 ),
+                Choice::PreviousDay => self.shift_day(true, cx)?,
+                Choice::NextDay => self.shift_day(false, cx)?,
                 Choice::ClearDate => {
                     self.flush(true, cx)?;
                     self.prefs.stream_day = None;
@@ -1696,6 +1723,8 @@ impl TypeApp {
                 ("Rename…", Choice::Rename),
                 ("Toggle reviewed", Choice::Reviewed),
                 ("Toggle archived", Choice::ArchiveFlag),
+                ("Move to previous day", Choice::PreviousDay),
+                ("Move back to its day", Choice::NextDay),
                 ("Copy body", Choice::Copy),
                 ("Move to Trash", Choice::Trash),
                 ("Delete permanently…", Choice::Delete),

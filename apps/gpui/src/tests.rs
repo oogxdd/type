@@ -3235,6 +3235,94 @@ fn pinned_folders_repeat_first_sync_to_disk_and_act_on_real_paths(cx: &mut TestA
 }
 
 #[gpui_kit::test]
+fn day_moves_regroup_early_notes_without_touching_files(cx: &mut TestAppContext) {
+    use super::commands::Choice;
+    use super::navigation::{self, Item};
+    use chrono::TimeZone;
+    let f = Fixture::new();
+    let day = chrono::NaiveDate::from_ymd_opt(2026, 1, 14).unwrap();
+    let at = |day: chrono::NaiveDate, hour| {
+        chrono::Local
+            .from_local_datetime(&day.and_hms_opt(hour, 0, 0).unwrap())
+            .single()
+            .unwrap()
+            .timestamp_millis()
+    };
+    let create = |title: &str, ms| f.0.create(STREAM_FOLDER, title.into(), Some(ms)).unwrap();
+    let late = create("late evening", at(day.pred_opt().unwrap(), 22));
+    let one = create("one am", at(day, 1));
+    let three = create("three am", at(day, 3));
+    let four = create("four am", at(day, 4));
+    let noon = create("noon", at(day, 12));
+    let body = std::fs::read_to_string(f.0.root.join(&four)).unwrap();
+    fn day_notes(items: &[Item], day: chrono::NaiveDate) -> Vec<String> {
+        let id = format!("feed:day:{}", day.format("%Y-%m-%d"));
+        for item in items {
+            if item.id == id {
+                let mut notes: Vec<_> = item.children.iter().map(|i| i.id.clone()).collect();
+                notes.sort();
+                return notes;
+            }
+            let found = day_notes(&item.children, day);
+            if !found.is_empty() {
+                return found;
+            }
+        }
+        vec![]
+    }
+    let sorted = |mut v: Vec<String>| {
+        v.sort();
+        v
+    };
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.set_view(View::Feed, window, cx);
+            let yesterday = day.pred_opt().unwrap();
+            assert_eq!(day_notes(&app.nav_items, yesterday), [late.clone()]);
+            app.navigation_focused = true;
+            app.select_row(&four.clone().into(), cx);
+            let labels: Vec<_> = app
+                .entries("day", cx)
+                .into_iter()
+                .map(|e| e.choice)
+                .collect();
+            assert!(labels.iter().any(|c| matches!(c, Choice::PreviousDay)));
+            assert!(!labels.iter().any(|c| matches!(c, Choice::NextDay)));
+            app.execute(Choice::PreviousDay, window, cx);
+            assert_eq!(
+                day_notes(&app.nav_items, yesterday),
+                sorted(vec![late.clone(), one.clone(), three.clone(), four.clone()])
+            );
+            assert_eq!(day_notes(&app.nav_items, day), [noon.clone()]);
+            assert_eq!(type_core::load_day_cutoffs(&f.0.root), [at(day, 4)]);
+            assert_eq!(std::fs::read_to_string(f.0.root.join(&four)).unwrap(), body);
+            assert!(
+                app.entries("day", cx)
+                    .iter()
+                    .any(|e| matches!(e.choice, Choice::NextDay))
+            );
+            app.select_row(&three.clone().into(), cx);
+            app.execute(Choice::NextDay, window, cx);
+            assert_eq!(
+                day_notes(&app.nav_items, yesterday),
+                sorted(vec![late.clone(), one.clone()])
+            );
+            assert_eq!(
+                day_notes(&app.nav_items, day),
+                sorted(vec![three.clone(), four.clone(), noon.clone()])
+            );
+            assert!(navigation::day_shifted(at(day, 1), &app.day_cutoffs));
+            app.select_row(&one.clone().into(), cx);
+            app.execute(Choice::NextDay, window, cx);
+            assert!(type_core::load_day_cutoffs(&f.0.root).is_empty());
+            assert_eq!(day_notes(&app.nav_items, yesterday), [late.clone()]);
+        });
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
 fn palette_flags_and_tags_multiple_notes_and_active_hides_reflections(cx: &mut TestAppContext) {
     use super::commands::Choice;
     use super::navigation::{self, Filter};
