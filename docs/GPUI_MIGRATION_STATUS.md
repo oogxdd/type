@@ -33,6 +33,18 @@ Updated: 2026-10-18. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Published GPUI 0.4.12 Apple Silicon (2026-10-18)
+
+- Release commit `031fef67` (features fast-forwarded from
+  `feat/gpui-image-attachments`), built locally from clean worktree
+  `.worktrees/gpui-release-0.4.12` with `--architecture arm64`; app and DMG
+  notarized (DMG submission `d704ec9a-60ae-4b86-a120-3b1bd4c458e1`), DMG SHA-256
+  `5c2c4c801fa01e179d729494d8adf1eb781d7ed6853001ec1d555512eb5368e7`.
+- Tag pushed without disabling `gpui-release.yml`; its duplicate run
+  `39157992574` failed. Draft uploaded, then promoted by run `39160335108`
+  with rollout interval `0`. The live feed lists 0.4.12. Pre-promotion DMG
+  testing skipped; the user updates through the in-app updater.
+
 ### Manual Stream day cutoffs (2026-10-18, branch `feat/gpui-image-attachments`)
 
 - Cmd+K / note context menu “Move to previous day” groups the selected note and
