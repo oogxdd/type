@@ -1,6 +1,6 @@
 # GPUI migration — handoff / live status
 
-Updated: 2026-10-18. This is an unfinished migration; update this file after each milestone.
+Updated: 2026-10-19. This is an unfinished migration; update this file after each milestone.
 
 ## Where to continue
 
@@ -32,6 +32,20 @@ Updated: 2026-10-18. This is an unfinished migration; update this file after eac
 - Investigate larger H1/H2/H3 only; do not implement yet.
 
 ## Implemented
+
+### Folder drag targets and `mv` ranking (2026-10-19, branch `feat/gpui-image-attachments`)
+
+- `2943d261`: Folders drag hit testing assumed 36px rows while rows render at
+  32px, so the target drifted above the pointer and row drops were ignored
+  (root reorder, nesting, and sibling reorder inside a folder). Rendering,
+  layout and hit testing share `tree_moves::ROW_HEIGHT`; a UI test checks row
+  bounds against `row_at` and the three moves persist through refresh.
+- `2401788d`: `mv` suggestions rank exact, prefix, word-start, substring, then
+  letter-order folder-name matches, shallower first, instead of alphabetical.
+- Checks: `cargo test -p type-gpui -- --test-threads=1` (40 + 56). Pointer drag
+  feel is untested by automation; the user reported the drag visuals still feel
+  hard to read. Candidate polish: depth-indented insertion line, larger Inside
+  zone, compact drag ghost, shorter auto-expand delay.
 
 ### Published GPUI 0.4.12 Apple Silicon (2026-10-18)
 
