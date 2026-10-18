@@ -489,6 +489,30 @@ upload competing assets. Local upload of an already-existing tag does not need
 another tag push or a duplicate CI build. If packaging succeeded but only
 promotion failed, retry promotion while its live-feed baseline remains valid.
 
+## Faster releases while there is one user (ideas, not implemented)
+
+Measured for 0.4.12 (2026-10-18, warm `target/`, arm64): local candidate
+6m23s — functional tests ~2.5 min (1m18s + 29s compile, ~35s run), release
+compile 1m13s, signing + app/DMG notarization + staple + feed ~2.5 min.
+Promotion run `39160335108` took 28s. Most wall-clock time was the agent running
+each step separately and waiting for permission approvals.
+
+1. One command (e.g. `desktop:ship VERSION`): bump version, commit to `main`,
+   build, tag, upload draft, promote with interval `0`. Release notes are
+   written before. Biggest saving: no manual steps or repeated approvals.
+2. Skip the wrapper's repeated functional tests when CI already passed on that
+   exact commit (~2.5 min).
+3. Skip DMG notarization (~1 min). Sparkle verifies the EdDSA archive
+   signature and the app inside stays notarized and stapled; Gatekeeper
+   should not need a notarized DMG for a Sparkle update. Unverified on a real
+   update; a browser-downloaded first install would lose the clean Gatekeeper
+   path.
+
+Release compile and app notarization (~2 min together) stay while updates
+are signed. Rejected: unsigned `desktop:release` bundles copied to
+Applications (~1.5 min) — no Sparkle updater, and returning to signed
+releases needs a manual install.
+
 ## Withdraw a problem release
 
 Run **GPUI promote or withdraw**, select `withdraw` and the problematic version.
