@@ -33,6 +33,16 @@ Updated: 2026-10-19. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Published GPUI 0.4.13 Apple Silicon (2026-10-19)
+
+- Release commit `040557ee` (merge `7893d912` of the drag hit-test and `mv`
+  ranking fixes), built locally from `.worktrees/gpui-release-0.4.13` with
+  `--architecture arm64` in 6m31s; app and DMG notarized (DMG submission
+  `110bbd42-9930-44d3-b35e-0d87340fbad3`), DMG SHA-256
+  `fd5beaab31b764786004517d2ab67cfeca135570ef118ff63b900f3509839bf4`.
+- Draft uploaded, promoted by run `39170617043` with rollout interval `0`;
+  the live feed lists 0.4.13. Speed-up ideas: RELEASING.md "Faster releases".
+
 ### Folder drag targets and `mv` ranking (2026-10-19, branch `feat/gpui-image-attachments`)
 
 - `2943d261`: Folders drag hit testing assumed 36px rows while rows render at
