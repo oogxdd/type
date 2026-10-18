@@ -407,10 +407,11 @@ impl TypeApp {
                     .read(cx)
                     .selected_item()
                     .map(|i| {
+                        let path = navigation::path(&i.id);
                         if self.folder_ids.contains(&i.id) {
-                            i.id.to_string()
+                            path.to_string()
                         } else {
-                            note_parent_folder_path(&i.id)
+                            note_parent_folder_path(path)
                         }
                     })
                     .unwrap_or(STREAM_FOLDER.into())

@@ -30,6 +30,8 @@ export type NoteMeta = {
   ocr_status?: string | null;
   ocr_error?: string | null;
   ocr_updated_ms?: number | null;
+  /** User frontmatter properties; flags carry the value "true". Omitted when empty. */
+  properties?: Record<string, string>;
 };
 
 export type NotePreviewEntry = {

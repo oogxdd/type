@@ -16,14 +16,33 @@ pub enum Filter {
     Reviewed,
     Unreviewed,
     Archived,
+    Reflections,
 }
+/// Frontmatter flag (`reflection: true`) that keeps a note out of Active.
+pub const REFLECTION_FLAG: &str = "reflection";
+
+pub fn has_flag(note: &NotePreviewEntry, flag: &str) -> bool {
+    note.meta
+        .properties
+        .get(flag)
+        .is_some_and(|value| value == type_core::FLAG_VALUE)
+}
+
+pub fn has_tag(note: &NotePreviewEntry, tag: &str) -> bool {
+    note.meta
+        .tags
+        .as_ref()
+        .is_some_and(|tags| tags.iter().any(|t| t.eq_ignore_ascii_case(tag)))
+}
+
 impl Filter {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::All,
         Self::Active,
         Self::Reviewed,
         Self::Unreviewed,
         Self::Archived,
+        Self::Reflections,
     ];
     pub fn label(self) -> &'static str {
         match self {
@@ -32,15 +51,17 @@ impl Filter {
             Self::Reviewed => "Reviewed",
             Self::Unreviewed => "Unreviewed",
             Self::Archived => "Archived",
+            Self::Reflections => "Reflections",
         }
     }
     pub fn matches(self, note: &NotePreviewEntry) -> bool {
         match self {
             Self::All => true,
-            Self::Active => note.meta.archived_ms.is_none(),
+            Self::Active => note.meta.archived_ms.is_none() && !has_flag(note, REFLECTION_FLAG),
             Self::Reviewed => note.meta.reviewed_ms.is_some(),
             Self::Unreviewed => note.meta.reviewed_ms.is_none() && note.meta.archived_ms.is_none(),
             Self::Archived => note.meta.archived_ms.is_some(),
+            Self::Reflections => has_flag(note, REFLECTION_FLAG),
         }
     }
 }
@@ -95,6 +116,38 @@ pub fn title(body: &str) -> String {
     "New note".into()
 }
 
+/// Pinned rows repeat real folders above the tree. Their ids carry this prefix
+/// so tree rows stay unique; strip it with `path` before touching files.
+pub const PIN_PREFIX: &str = "pin:";
+
+pub fn path(id: &str) -> &str {
+    id.strip_prefix(PIN_PREFIX).unwrap_or(id)
+}
+
+/// Copies pinned folders (in pin order) from the built folder tree. Pins whose
+/// folder no longer exists are skipped, not dropped from preferences.
+pub fn pinned(items: &[Item], pins: &[String]) -> Vec<Item> {
+    fn find<'a>(items: &'a [Item], id: &str) -> Option<&'a Item> {
+        items
+            .iter()
+            .find_map(|i| (i.id == id).then_some(i).or_else(|| find(&i.children, id)))
+    }
+    fn prefixed(item: &Item) -> Item {
+        Item {
+            id: format!("{PIN_PREFIX}{}", item.id),
+            children: item.children.iter().map(prefixed).collect(),
+            ..item.clone()
+        }
+    }
+    pins.iter()
+        .filter_map(|pin| find(items, pin).filter(|i| i.folder && !i.synthetic))
+        .map(prefixed)
+        .collect()
+}
+
+/// The root AGENTS.md only points agents at `_system/agent`; it is not a note.
+const ROOT_AGENT_POINTER: &str = "AGENTS.md";
+
 pub fn folders(
     root: &FolderNode,
     notes: &std::collections::HashMap<String, NotePreviewEntry>,
@@ -109,15 +162,20 @@ pub fn folders(
             synthetic: false,
             children: folders(f, notes),
         })
-        .chain(root.notes.iter().map(|entry| {
-            notes.get(&entry.path).map(Item::note).unwrap_or(Item {
-                id: entry.path.clone(),
-                label: entry.name.clone(),
-                folder: false,
-                synthetic: false,
-                children: vec![],
-            })
-        }))
+        .chain(
+            root.notes
+                .iter()
+                .filter(|entry| entry.path != ROOT_AGENT_POINTER)
+                .map(|entry| {
+                    notes.get(&entry.path).map(Item::note).unwrap_or(Item {
+                        id: entry.path.clone(),
+                        label: entry.name.clone(),
+                        folder: false,
+                        synthetic: false,
+                        children: vec![],
+                    })
+                }),
+        )
         .collect()
 }
 
@@ -274,10 +332,14 @@ fn stream(
         });
         entries.into_iter().map(Item::note).collect()
     }
+    // Empty days are hidden; Today stays as the anchor for new notes.
     let this_week = (0..=today.signed_duration_since(monday).num_days())
         .rev()
-        .map(|offset| {
-            let date = monday + chrono::Duration::days(offset);
+        .map(|offset| monday + chrono::Duration::days(offset))
+        .filter(|date| *date == today || days.contains_key(date))
+        .collect::<Vec<_>>()
+        .into_iter()
+        .map(|date| {
             let label = if date == today {
                 "Today".into()
             } else if date == today - chrono::Duration::days(1) {
@@ -501,6 +563,7 @@ mod tests {
                 ocr_status: None,
                 ocr_error: None,
                 ocr_updated_ms: None,
+                properties: Default::default(),
             },
         }
     }
@@ -524,7 +587,7 @@ mod tests {
         );
         assert_eq!(groups[0].label, "This week");
         assert_eq!(groups[0].children[0].label, "Today");
-        assert_eq!(groups[0].children.len(), 3); // Monday through Wednesday, including empty days
+        assert_eq!(groups[0].children.len(), 1); // empty Monday and Tuesday are hidden
         assert_eq!(groups[1].label, "Earlier");
         assert_eq!(groups[1].children[0].label, "September");
         assert_eq!(groups[1].children[0].children.len(), 1); // boundary week belongs to September
@@ -548,11 +611,56 @@ mod tests {
         assert!(Filter::Reviewed.matches(&n));
         assert!(Filter::Archived.matches(&n));
         assert!(!Filter::Active.matches(&n));
+        let mut reflection = note("r.md", 1);
+        reflection.meta.properties = [("reflection".into(), "true".into())].into();
+        assert!(!Filter::Active.matches(&reflection));
+        assert!(Filter::Reflections.matches(&reflection));
+        assert!(Filter::Unreviewed.matches(&reflection));
         let map = [(p, n)].into();
         let active = feed(&map, Filter::Active, Local::now().date_naive(), false);
-        assert_eq!(active.len(), 1); // current-week calendar remains visible when empty
-        assert!(active[0].children.iter().all(|day| day.children.is_empty()));
+        assert_eq!(active.len(), 1); // the current week keeps an empty Today
+        assert_eq!(active[0].children.len(), 1);
+        assert!(active[0].children[0].children.is_empty());
     }
+    #[test]
+    fn pinned_folders_repeat_with_prefixed_ids_in_pin_order() {
+        let leaf = |id: &str, folder: bool, children: Vec<Item>| Item {
+            id: id.into(),
+            label: id.rsplit('/').next().unwrap().into(),
+            folder,
+            synthetic: false,
+            children,
+        };
+        let items = vec![
+            leaf(
+                "projects",
+                true,
+                vec![leaf(
+                    "projects/type",
+                    true,
+                    vec![leaf("projects/type/a.md", false, vec![])],
+                )],
+            ),
+            leaf("cv", true, vec![]),
+            leaf("note.md", false, vec![]),
+        ];
+        let pins = [
+            "cv".into(),
+            "projects/type".into(),
+            "gone".into(),
+            "note.md".into(),
+        ];
+        let rows = pinned(&items, &pins);
+        assert_eq!(
+            rows.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(),
+            ["pin:cv", "pin:projects/type"]
+        );
+        assert_eq!(rows[1].label, "type");
+        assert_eq!(rows[1].children[0].id, "pin:projects/type/a.md");
+        assert_eq!(path(&rows[1].children[0].id), "projects/type/a.md");
+        assert_eq!(path("projects/type"), "projects/type");
+    }
+
     #[test]
     fn collapsed_descendants_and_system_destinations_are_excluded() {
         let rows = vec![Item {

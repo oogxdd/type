@@ -82,6 +82,7 @@ impl TypeApp {
             notes: HashMap::new(),
             active: "".into(),
             folder_ids: HashSet::new(),
+            pins: Vec::new(),
             drop_target: None,
             drag_task: None,
             drag_pointer: None,
@@ -144,7 +145,7 @@ impl TypeApp {
                     this.saved_selection.insert(this.view, id.clone());
                     if this.selected.is_empty()
                         && !this.folder_ids.contains(&id)
-                        && id != this.active
+                        && navigation::path(&id) != this.active.as_ref()
                     {
                         this.open_note(id, false, window, cx);
                     }
@@ -497,6 +498,7 @@ impl TypeApp {
                             n.dirty || n.draft_folder.is_some() || paths.contains(p.as_str())
                         });
                         this.folder_tree = Some(root);
+                        this.pins = type_core::load_pinned_folders(&this.backend.root);
                         this.rebuild_navigation(cx);
                         this.loading = false;
                         if this.active_folder.is_none()
@@ -538,7 +540,12 @@ impl TypeApp {
             return;
         };
         self.nav_items = match self.view {
-            View::Folders => navigation::folders(root, &self.previews),
+            View::Folders => {
+                let folders = navigation::folders(root, &self.previews);
+                let mut items = navigation::pinned(&folders, &self.pins);
+                items.extend(folders);
+                items
+            }
             View::Feed | View::Trash => navigation::feed(
                 &self.previews,
                 self.filter,
@@ -553,7 +560,7 @@ impl TypeApp {
         }
         fn live_titles(items: &mut [navigation::Item], notes: &HashMap<SharedString, Note>) {
             for item in items {
-                if let Some(note) = notes.get(item.id.as_str()) {
+                if let Some(note) = notes.get(navigation::path(&item.id)) {
                     item.label = note.title.to_string();
                 }
                 live_titles(&mut item.children, notes);
@@ -757,6 +764,7 @@ impl TypeApp {
         if self.locked || self.busy {
             return;
         }
+        let id = file_id(&id);
         if id != self.active && self.flush(true, cx).is_err() {
             return;
         }
@@ -1043,9 +1051,10 @@ impl TypeApp {
                 .selected
                 .iter()
                 .filter(|p| !p.starts_with("draft:") && !p.starts_with("feed:"))
-                .map(ToString::to_string)
+                .map(|p| navigation::path(p).to_string())
                 .collect();
             paths.sort();
+            paths.dedup(); // A pinned row and its tree row are one target.
             // A selected folder already carries its selected descendants.
             let all = paths.clone();
             paths.retain(|path| {
@@ -1062,7 +1071,7 @@ impl TypeApp {
             .read(cx)
             .selected_item()
             .filter(|i| !i.id.starts_with("feed:") && !i.id.starts_with("draft:"))
-            .map(|i| vec![i.id.to_string()])
+            .map(|i| vec![navigation::path(&i.id).to_string()])
             .unwrap_or_default()
     }
 
@@ -1082,6 +1091,12 @@ impl TypeApp {
             .map(|(p, n)| (map(&p, old, new).into(), n))
             .collect();
         self.active = map(&self.active, old, new).into();
+        if let Some(pins) = type_core::remap_pinned_folders(&self.pins, old, new) {
+            if let Err(e) = type_core::save_pinned_folders(&self.backend.root, &pins) {
+                self.error = Some(e);
+            }
+            self.pins = pins;
+        }
         self.previews = self
             .previews
             .drain()
@@ -1106,6 +1121,14 @@ impl TypeApp {
         cx: &mut Context<Self>,
     ) {
         if self.flush(false, cx).is_err() || source.starts_with("feed:") {
+            return;
+        }
+        if source.starts_with(navigation::PIN_PREFIX)
+            || target
+                .as_ref()
+                .is_some_and(|t| t.starts_with(navigation::PIN_PREFIX))
+        {
+            self.error = Some("Pinned rows are shortcuts. Move the folder in the tree.".into());
             return;
         }
         if target.as_ref().is_some_and(|t| t.starts_with("feed:")) {
@@ -1213,5 +1236,42 @@ impl TypeApp {
                 note.draft_folder = Some(folder.to_string());
             }
         }
+    }
+}
+
+/// Tree rows may be pinned copies; notes and files are keyed by real paths.
+pub(crate) fn file_id(id: &SharedString) -> SharedString {
+    match id.strip_prefix(navigation::PIN_PREFIX) {
+        Some(path) => path.to_string().into(),
+        None => id.clone(),
+    }
+}
+
+impl TypeApp {
+    pub fn pinned(&self, folder: &str) -> bool {
+        self.pins.iter().any(|pin| pin == folder)
+    }
+
+    /// Pins/unpins a real folder path in the synced pin file.
+    pub fn toggle_pin(&mut self, folder: &str, cx: &mut Context<Self>) {
+        let mut pins = self.pins.clone();
+        if self.pinned(folder) {
+            pins.retain(|pin| pin != folder);
+        } else {
+            pins.push(folder.to_string());
+        }
+        match type_core::save_pinned_folders(&self.backend.root, &pins) {
+            Ok(()) => {
+                self.status = if pins.len() > self.pins.len() {
+                    "Pinned".into()
+                } else {
+                    "Unpinned".into()
+                };
+                self.pins = pins;
+                self.rebuild_navigation(cx);
+            }
+            Err(e) => self.error = Some(e),
+        }
+        cx.notify();
     }
 }

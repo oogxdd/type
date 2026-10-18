@@ -28,6 +28,9 @@ pub struct NoteMeta {
     pub ocr_status: Option<String>,
     pub ocr_error: Option<String>,
     pub ocr_updated_ms: Option<i64>,
+    /// User frontmatter properties (`reflection: true`, `status: done`).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub properties: std::collections::BTreeMap<String, String>,
 }
 
 /// One note's metadata plus decrypted body, returned in bulk for list previews.

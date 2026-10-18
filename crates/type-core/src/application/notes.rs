@@ -283,6 +283,32 @@ where
             ocr_status: front_matter_meta.ocr_status.clone(),
             ocr_error: front_matter_meta.ocr_error.clone(),
             ocr_updated_ms: front_matter_meta.ocr_updated_ms,
+            properties: crate::note_properties(&front_matter_meta.passthrough_lines),
+        })
+    }
+
+    /// Sets or removes (`None`) one user property; flags use `FLAG_VALUE`.
+    pub fn set_note_property(
+        &self,
+        path: &str,
+        key: &str,
+        value: Option<&str>,
+    ) -> Result<(), String> {
+        let root = self.repository.ensured_root()?;
+        crate::application::workspace::with_workspace_write(&root, || {
+            let full_path = self.repository.resolve_path(path)?;
+            if self.repository.entry_kind(&full_path)? != Some(NoteStorageEntryKind::File) {
+                return Err("Note file does not exist.".into());
+            }
+            let raw = self.repository.read_to_string(&full_path)?;
+            let (mut meta, _) = self.documents.parse(&raw);
+            let before = meta.passthrough_lines.clone();
+            crate::set_property_line(&mut meta.passthrough_lines, key, value)?;
+            if meta.passthrough_lines == before {
+                return Ok(());
+            }
+            meta.updated_ms = self.clock.now_ms().or(meta.updated_ms);
+            self.repository.write_note_metadata(&full_path, &meta)
         })
     }
 

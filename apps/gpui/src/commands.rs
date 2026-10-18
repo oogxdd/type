@@ -28,6 +28,11 @@ pub enum Choice {
     CommandPalette,
     New,
     NewFolder(String),
+    TogglePin(String),
+    TagMode,
+    Tag(String),
+    FlagMode,
+    Flag(String),
     Filter(Filter),
     StreamDate,
     ClearDate,
@@ -96,6 +101,11 @@ impl Choice {
             | Self::Duplicate
             | Self::Split
             | Self::Copy
+            | Self::TogglePin(_)
+            | Self::TagMode
+            | Self::Tag(_)
+            | Self::FlagMode
+            | Self::Flag(_)
             | Self::Reload => "Selection",
             Self::New | Self::NewProfile | Self::NewFolder(_) => "Create",
             Self::Filter(_) | Self::StreamDate | Self::ClearDate => "View",
@@ -245,7 +255,111 @@ impl TypeApp {
         }
     }
 
+    /// `tag name` toggles a note-wide frontmatter tag on every selected note.
+    fn tag_entries(&self, query: &str, cx: &App) -> Vec<Entry> {
+        let query = query.trim().trim_start_matches('#');
+        let target = self.palette_target_label(cx);
+        let notes: Vec<_> = self
+            .targets(cx)
+            .into_iter()
+            .filter(|path| path.ends_with(".md"))
+            .collect();
+        let mut names: Vec<String> = self
+            .previews
+            .values()
+            .flat_map(|note| note.meta.tags.clone().unwrap_or_default())
+            .collect();
+        names.sort_by_key(|name| name.to_lowercase());
+        names.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+        let lower = query.to_lowercase();
+        names.retain(|name| name.to_lowercase().contains(&lower));
+        names.sort_by_key(|name| !name.eq_ignore_ascii_case(query));
+        // A new name goes last so Enter prefers an existing completion.
+        if !query.is_empty()
+            && type_core::domain::tag_registry::valid_tag_name(query)
+            && !names.iter().any(|name| name.eq_ignore_ascii_case(query))
+        {
+            names.push(query.to_string());
+        }
+        names
+            .into_iter()
+            .map(|name| {
+                let tagged = !notes.is_empty()
+                    && notes.iter().all(|path| {
+                        self.previews
+                            .get(path)
+                            .is_some_and(|note| navigation::has_tag(note, &name))
+                    });
+                Entry {
+                    label: if tagged {
+                        format!("Remove tag #{name} from {target}")
+                    } else {
+                        format!("Tag {target} #{name}")
+                    },
+                    choice: Choice::Tag(name),
+                }
+            })
+            .collect()
+    }
+
+    /// `fl name` toggles a `name: true` frontmatter flag on selected notes.
+    fn flag_entries(&self, query: &str, cx: &App) -> Vec<Entry> {
+        let query = query.trim().to_lowercase();
+        let target = self.palette_target_label(cx);
+        let notes: Vec<_> = self
+            .targets(cx)
+            .into_iter()
+            .filter(|path| path.ends_with(".md"))
+            .collect();
+        let mut names: Vec<String> = self
+            .previews
+            .values()
+            .flat_map(|note| {
+                note.meta
+                    .properties
+                    .iter()
+                    .filter(|(_, value)| *value == type_core::FLAG_VALUE)
+                    .map(|(key, _)| key.clone())
+                    .collect::<Vec<_>>()
+            })
+            .chain([navigation::REFLECTION_FLAG.to_string()])
+            .filter(|name| name.contains(&query))
+            .collect();
+        names.sort();
+        names.dedup();
+        names.sort_by_key(|name| *name != query);
+        // A new name goes last so Enter prefers an existing completion.
+        if type_core::valid_property_key(&query) && !names.contains(&query) {
+            names.push(query.clone());
+        }
+        names
+            .into_iter()
+            .map(|name| {
+                let flagged = !notes.is_empty()
+                    && notes.iter().all(|path| {
+                        self.previews
+                            .get(path)
+                            .is_some_and(|note| navigation::has_flag(note, &name))
+                    });
+                Entry {
+                    label: if flagged {
+                        format!("Unflag {target} · {name}")
+                    } else {
+                        format!("Flag {target} · {name}")
+                    },
+                    choice: Choice::Flag(name),
+                }
+            })
+            .collect()
+    }
+
     pub fn entries(&self, query: &str, cx: &App) -> Vec<Entry> {
+        if let Some(query) = query.strip_prefix("fl ") {
+            return self.flag_entries(query, cx);
+        }
+        if let Some(query) = query.strip_prefix("tag ") {
+            return self.tag_entries(query, cx);
+        }
         if let Some(query) = query.strip_prefix("mv ") {
             let items = self
                 .folder_tree
@@ -310,9 +424,10 @@ impl TypeApp {
             ("Stream: review a day…", Choice::StreamDate),
             ("Stream: all dates", Choice::ClearDate),
             (
-                "Stream: active (hide archived)",
+                "Stream: active (hide archived and reflections)",
                 Choice::Filter(Filter::Active),
             ),
+            ("Stream: reflections", Choice::Filter(Filter::Reflections)),
             (
                 "Stream: unreviewed (hide reviewed and archived)",
                 Choice::Filter(Filter::Unreviewed),
@@ -324,6 +439,8 @@ impl TypeApp {
             ("Open Folders", Choice::Folders),
             ("Open Trash", Choice::TrashView),
             ("Move selection to folder… (mv)", Choice::MoveMode),
+            ("Tag selection… (tag)", Choice::TagMode),
+            ("Flag selection… (fl)", Choice::FlagMode),
             ("Rename selection…", Choice::Rename),
             ("Move selection to Trash", Choice::Trash),
             ("Delete selection permanently…", Choice::Delete),
@@ -373,12 +490,21 @@ impl TypeApp {
                 .selected_item()
                 .filter(|item| self.folder_ids.contains(&item.id))
             {
+                let path = navigation::path(&folder.id).to_string();
+                entries.push(Entry {
+                    label: if self.pinned(&path) {
+                        format!("Unpin folder “{path}”")
+                    } else {
+                        format!("Pin folder “{path}”")
+                    },
+                    choice: Choice::TogglePin(path.clone()),
+                });
                 // Put the contextual destination first when searching “new folder”.
                 entries.insert(
                     1,
                     Entry {
-                        label: format!("New folder inside “{}”…", folder.id),
-                        choice: Choice::NewFolder(folder.id.to_string()),
+                        label: format!("New folder inside “{path}”…"),
+                        choice: Choice::NewFolder(path),
                     },
                 );
             }
@@ -387,6 +513,8 @@ impl TypeApp {
         for entry in &mut entries {
             entry.label = match entry.choice {
                 Choice::MoveMode => format!("Move {target} to folder… (mv)"),
+                Choice::TagMode => format!("Tag {target}… (tag)"),
+                Choice::FlagMode => format!("Flag {target}… (fl)"),
                 Choice::Rename => format!("Rename {target}…"),
                 Choice::Trash => format!("Move {target} to Trash"),
                 Choice::Delete => format!("Delete {target} permanently…"),
@@ -409,6 +537,12 @@ impl TypeApp {
         let mut entries = self.entries(query, cx);
         if query.starts_with("mv ") {
             return vec![("Move to folder", entries)];
+        }
+        if query.starts_with("tag ") {
+            return vec![("Tag", entries)];
+        }
+        if query.starts_with("fl ") {
+            return vec![("Flag", entries)];
         }
         // Stable note ordering prevents a HashMap refresh from changing Enter's target.
         entries.sort_by(|a, b| match (&a.choice, &b.choice) {
@@ -528,8 +662,9 @@ impl TypeApp {
             if let Some(palette) = &modal.palette {
                 if matches!(key.as_str(), "tab" | "right") {
                     let query = palette.read(cx).query(cx);
-                    if key == "tab" && query == "mv" {
-                        palette.update(cx, |state, cx| state.set_query("mv ", window, cx));
+                    if key == "tab" && matches!(query.as_str(), "mv" | "tag" | "fl") {
+                        let prefix = format!("{query} ");
+                        palette.update(cx, |state, cx| state.set_query(prefix, window, cx));
                         window.prevent_default();
                         cx.stop_propagation();
                         cx.notify();
@@ -730,15 +865,21 @@ impl TypeApp {
                     String::new()
                 } else {
                     id.map(|id| {
+                        let path = navigation::path(&id);
                         if self.folder_ids.contains(&id) {
-                            id.to_string()
+                            path.to_string()
                         } else {
-                            type_core::note_parent_folder_path(&id)
+                            type_core::note_parent_folder_path(path)
                         }
                     })
                     .unwrap_or_default()
                 };
                 self.execute(Choice::NewFolder(parent), window, cx);
+            }
+            "p" if self.view == View::Folders => {
+                if let Some(id) = id.filter(|id| self.folder_ids.contains(id)) {
+                    self.toggle_pin(navigation::path(&id), cx);
+                }
             }
             "enter" => {
                 if let Some(id) = id {
@@ -1107,6 +1248,7 @@ impl TypeApp {
                 Choice::NewFolder(parent) => {
                     self.show_modal(ModalKind::CreateFolder(parent), "", window, cx)
                 }
+                Choice::TogglePin(folder) => self.toggle_pin(&folder, cx),
                 Choice::StreamDate => self.show_modal(
                     ModalKind::StreamDate,
                     &self
@@ -1142,6 +1284,96 @@ impl TypeApp {
                         return Err("Select a note or folder first.".into());
                     }
                     self.show_modal(ModalKind::Palette, "mv ", window, cx);
+                }
+                Choice::FlagMode => {
+                    if !self.targets(cx).iter().any(|p| p.ends_with(".md")) {
+                        return Err("Select notes first.".into());
+                    }
+                    self.show_modal(ModalKind::Palette, "fl ", window, cx);
+                }
+                Choice::Flag(name) => {
+                    self.flush(false, cx)?;
+                    let paths: Vec<_> = self
+                        .targets(cx)
+                        .into_iter()
+                        .filter(|p| p.ends_with(".md"))
+                        .collect();
+                    if paths.is_empty() {
+                        return Err("Select notes first.".into());
+                    }
+                    let next_note = self.next_review_note(&paths, cx);
+                    let notes = self.backend.notes()?;
+                    let flagged = |path: &String| {
+                        notes.get_note_meta(path).map(|meta| {
+                            meta.properties.get(&name).map(String::as_str)
+                                == Some(type_core::FLAG_VALUE)
+                        })
+                    };
+                    // Mixed selections converge on flagged; a uniform one toggles.
+                    let mut add = false;
+                    for path in &paths {
+                        add |= !flagged(path)?;
+                    }
+                    for path in &paths {
+                        notes.set_note_property(
+                            path,
+                            &name,
+                            add.then_some(type_core::FLAG_VALUE),
+                        )?;
+                    }
+                    for preview in notes.list_note_previews(paths)? {
+                        self.previews.insert(preview.path.clone(), preview);
+                    }
+                    self.status = if add { "Flagged" } else { "Unflagged" }.into();
+                    self.revision += 1;
+                    self.rebuild_navigation(cx);
+                    self.advance_review(next_note, window, cx);
+                    self.refresh(window, cx);
+                }
+                Choice::TagMode => {
+                    if !self.targets(cx).iter().any(|p| p.ends_with(".md")) {
+                        return Err("Select notes first.".into());
+                    }
+                    self.show_modal(ModalKind::Palette, "tag ", window, cx);
+                }
+                Choice::Tag(name) => {
+                    self.flush(false, cx)?;
+                    let paths: Vec<_> = self
+                        .targets(cx)
+                        .into_iter()
+                        .filter(|p| p.ends_with(".md"))
+                        .collect();
+                    if paths.is_empty() {
+                        return Err("Select notes first.".into());
+                    }
+                    let next_note = self.next_review_note(&paths, cx);
+                    let notes = self.backend.notes()?;
+                    let metas = paths
+                        .iter()
+                        .map(|path| notes.get_note_meta(path))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let has = |tags: &Option<Vec<String>>| {
+                        tags.as_ref()
+                            .is_some_and(|t| t.iter().any(|x| x.eq_ignore_ascii_case(&name)))
+                    };
+                    // Mixed selections converge on tagged; a uniform one toggles.
+                    let add = !metas.iter().all(|meta| has(&meta.tags));
+                    for (path, meta) in paths.iter().zip(metas) {
+                        let mut tags = meta.tags.unwrap_or_default();
+                        tags.retain(|t| !t.eq_ignore_ascii_case(&name));
+                        if add {
+                            tags.push(name.clone());
+                        }
+                        notes.update_note_tags(path, tags)?;
+                    }
+                    for preview in notes.list_note_previews(paths)? {
+                        self.previews.insert(preview.path.clone(), preview);
+                    }
+                    self.status = if add { "Tagged" } else { "Untagged" }.into();
+                    self.revision += 1;
+                    self.rebuild_navigation(cx);
+                    self.advance_review(next_note, window, cx);
+                    self.refresh(window, cx);
                 }
                 Choice::Move(_) | Choice::Trash => {
                     self.flush(false, cx)?;
@@ -1437,14 +1669,20 @@ impl TypeApp {
         view: WeakEntity<Self>,
         id: SharedString,
         folder: bool,
+        pinned: bool,
         menu: PopupMenu,
     ) -> PopupMenu {
         let mut menu = menu.label(if folder { "Folder" } else { "Note" });
+        let path = navigation::path(&id).to_string();
         let actions = if folder {
             vec![
                 ("New note here", Choice::New),
-                ("New folder here…", Choice::NewFolder(id.to_string())),
+                ("New folder here…", Choice::NewFolder(path.clone())),
                 ("New folder at root…", Choice::NewFolder(String::new())),
+                (
+                    if pinned { "Unpin" } else { "Pin" },
+                    Choice::TogglePin(path.clone()),
+                ),
                 ("Move…", Choice::MoveMode),
                 ("Rename…", Choice::Rename),
                 ("Move to Trash", Choice::Trash),
@@ -1452,7 +1690,7 @@ impl TypeApp {
             ]
         } else {
             vec![
-                ("Open", Choice::MoveNote(id.to_string())),
+                ("Open", Choice::MoveNote(path.clone())),
                 ("Duplicate", Choice::Duplicate),
                 ("Move…", Choice::MoveMode),
                 ("Rename…", Choice::Rename),
@@ -1485,7 +1723,7 @@ impl TypeApp {
                         this.open_note(id.clone(), false, window, cx);
                     }
                     if folder && matches!(choice, Choice::New) {
-                        this.add_note(id.clone(), None, window, cx);
+                        this.add_note(workspace::file_id(&id), None, window, cx);
                     } else {
                         this.execute(choice.clone(), window, cx);
                     }

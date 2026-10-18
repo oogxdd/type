@@ -3195,3 +3195,103 @@ fn pasted_and_dropped_images_are_stored_linked_and_previewed(cx: &mut TestAppCon
     })
     .unwrap();
 }
+
+#[gpui_kit::test]
+fn pinned_folders_repeat_first_sync_to_disk_and_act_on_real_paths(cx: &mut TestAppContext) {
+    use super::commands::Choice;
+    let f = Fixture::new();
+    let note =
+        f.0.create("projects/type", "Type plan".into(), None)
+            .unwrap();
+    f.0.create("Work", "Other".into(), None).unwrap();
+    std::fs::write(f.0.root.join("AGENTS.md"), "# Agents\n").unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.set_view(View::Folders, window, cx);
+            app.execute(Choice::TogglePin("projects/type".into()), window, cx);
+            assert_eq!(app.roots[0].id.as_ref(), "pin:projects/type");
+            assert!(app.roots.iter().any(|i| i.id.as_ref() == "projects"));
+            assert!(app.roots.iter().all(|i| i.id.as_ref() != "AGENTS.md"));
+            assert_eq!(type_core::load_pinned_folders(&f.0.root), ["projects/type"]);
+            let pinned_note: gpui_kit::SharedString = format!("pin:{note}").into();
+            app.click_row("pin:projects/type".into(), true, false, window, cx);
+            app.click_row(pinned_note.clone(), false, false, window, cx);
+            assert_eq!(app.active.as_ref(), note);
+            app.navigation_focused = true;
+            app.select_row(&pinned_note, cx);
+            assert_eq!(app.targets(cx), [note.clone()]);
+            app.remap("projects/type", "projects/type2");
+            assert_eq!(
+                type_core::load_pinned_folders(&f.0.root),
+                ["projects/type2"]
+            );
+            app.execute(Choice::TogglePin("projects/type2".into()), window, cx);
+            assert!(type_core::load_pinned_folders(&f.0.root).is_empty());
+            assert!(!app.roots[0].id.starts_with("pin:"));
+        });
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn palette_flags_and_tags_multiple_notes_and_active_hides_reflections(cx: &mut TestAppContext) {
+    use super::commands::Choice;
+    use super::navigation::{self, Filter};
+    let f = Fixture::new();
+    let a =
+        f.0.create(STREAM_FOLDER, "First thought".into(), None)
+            .unwrap();
+    let b =
+        f.0.create(STREAM_FOLDER, "Second thought".into(), None)
+            .unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.navigation_focused = true;
+            app.selected.insert(a.clone().into());
+            app.selected.insert(b.clone().into());
+            let entries = app.entries("fl refl", cx);
+            assert_eq!(entries[0].label, "Flag 2 notes · reflection");
+            assert!(
+                app.entries("", cx)
+                    .iter()
+                    .any(|e| e.label == "Flag 2 notes… (fl)")
+            );
+            assert!(
+                app.entries("", cx)
+                    .iter()
+                    .any(|e| e.label == "Tag 2 notes… (tag)")
+            );
+            app.execute(Choice::Flag("reflection".into()), window, cx);
+            for path in [&a, &b] {
+                let raw = std::fs::read_to_string(f.0.root.join(path)).unwrap();
+                assert!(raw.contains("reflection: true"), "{raw}");
+                assert!(raw.ends_with("thought"), "body is untouched: {raw}");
+            }
+            assert_eq!(app.filter, Filter::Active);
+            assert!(!navigation::contains(&app.nav_items, &a));
+            app.execute(Choice::Filter(Filter::Reflections), window, cx);
+            assert!(navigation::contains(&app.nav_items, &a));
+            assert!(navigation::contains(&app.nav_items, &b));
+            app.navigation_focused = true;
+            app.selected.clear();
+            app.selected.insert(a.clone().into());
+            app.execute(Choice::Tag("work".into()), window, cx);
+            assert_eq!(
+                f.0.notes().unwrap().get_note_meta(&a).unwrap().tags,
+                Some(vec!["work".into()])
+            );
+            app.navigation_focused = true;
+            app.selected.insert(a.clone().into());
+            app.execute(Choice::Flag("reflection".into()), window, cx);
+            assert!(
+                !std::fs::read_to_string(f.0.root.join(&a))
+                    .unwrap()
+                    .contains("reflection")
+            );
+        });
+    })
+    .unwrap();
+}

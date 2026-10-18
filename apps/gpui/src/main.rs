@@ -126,6 +126,8 @@ struct TypeApp {
     notes: HashMap<SharedString, Note>,
     active: SharedString,
     folder_ids: HashSet<SharedString>,
+    /// Synced `.type/pinned-folders.json`, reloaded with the folder tree.
+    pins: Vec<String>,
     drop_target: Option<(SharedString, tree_moves::Placement)>,
     drag_task: Option<Task<()>>,
     drag_pointer: Option<(SharedString, Point<Pixels>, Bounds<Pixels>)>,
@@ -505,8 +507,11 @@ impl TypeApp {
             let id = &entry.item().id;
             let fraction = (content_y % 36.) / 36.;
             let placement = tree_moves::placement_at(fraction, self.folder_ids.contains(id));
-            (!id.starts_with("feed:") && tree_moves::can_move(&self.roots, &source, id))
-                .then(|| (id.clone(), placement))
+            (!id.starts_with("feed:")
+                && !id.starts_with(navigation::PIN_PREFIX)
+                && !source.starts_with(navigation::PIN_PREFIX)
+                && tree_moves::can_move(&self.roots, &source, id))
+            .then(|| (id.clone(), placement))
         });
         if candidate != self.drop_target {
             self.hover_since = Instant::now();
@@ -588,6 +593,21 @@ impl TypeApp {
                 )
             })
             .collect();
+        let note_tags: HashMap<SharedString, SharedString> = self
+            .previews
+            .iter()
+            .filter_map(|(path, preview)| {
+                let flags = preview
+                    .meta
+                    .properties
+                    .iter()
+                    .filter(|(_, value)| *value == type_core::FLAG_VALUE)
+                    .map(|(key, _)| key.clone());
+                let tags = preview.meta.tags.iter().flatten().map(|t| format!("#{t}"));
+                let label = flags.chain(tags).collect::<Vec<_>>();
+                (!label.is_empty()).then(|| (path.clone().into(), label.join(" ").into()))
+            })
+            .collect();
         let drop_target = cx
             .has_active_drag()
             .then(|| self.drop_target.clone())
@@ -613,13 +633,18 @@ impl TypeApp {
         count_notes(&self.nav_items, &mut counts);
         let menu_view = view.clone();
         let menu_folders = folders.clone();
+        let menu_pins = self.pins.clone();
         tree(&self.tree, move |_, entry, selected, _, cx| {
             let id = entry.item().id.clone();
             let is_folder = folders.contains(&id);
             let is_section = stream && id.starts_with("feed:section:");
             let is_earlier = id == "feed:section:earlier";
-            let (archived, reviewed, recording) =
-                note_markers.get(&id).copied().unwrap_or_default();
+            let (archived, reviewed, recording) = note_markers
+                .get(navigation::path(&id))
+                .copied()
+                .unwrap_or_default();
+            let pinned_root = entry.depth() == 0 && id.starts_with(navigation::PIN_PREFIX);
+            let tags = note_tags.get(navigation::path(&id)).cloned();
             let click_view = view.clone();
             let click_id = id.clone();
             let drop_view = view.clone();
@@ -688,6 +713,14 @@ impl TypeApp {
                                 .text_ellipsis()
                                 .child(entry.item().label.clone()),
                         )
+                        .when(pinned_root, |row| {
+                            row.child(
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("Pinned"),
+                            )
+                        })
                         .when(is_folder && !is_section, |row| {
                             row.child(
                                 div()
@@ -700,6 +733,15 @@ impl TypeApp {
                                             .map(ToString::to_string)
                                             .unwrap_or_default(),
                                     ),
+                            )
+                        })
+                        .when_some(tags, |row, tags| {
+                            row.child(
+                                div()
+                                    .flex_none()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(tags),
                             )
                         })
                         .when(archived || reviewed, |row| {
@@ -780,10 +822,13 @@ impl TypeApp {
                 })
         })
         .context_menu(move |_, entry, menu, _, _| {
+            let id = entry.item().id.clone();
+            let pinned = menu_pins.iter().any(|pin| pin == navigation::path(&id));
             Self::menu_for(
                 menu_view.clone(),
-                entry.item().id.clone(),
-                menu_folders.contains(&entry.item().id),
+                id.clone(),
+                menu_folders.contains(&id),
+                pinned,
                 menu,
             )
         })

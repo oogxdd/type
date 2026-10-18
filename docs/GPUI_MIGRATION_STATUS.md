@@ -33,6 +33,32 @@ Updated: 2026-10-18. This is an unfinished migration; update this file after eac
 
 ## Implemented
 
+### Pinned folders, note flags/tags and compact Stream week (2026-10-18, branch `feat/gpui-image-attachments`)
+
+- Pinned folders: `p` on a folder in Folders, Cmd+K “Pin folder …”, or the
+  folder context menu. Pins render first (badge “Pinned”) and stay in the tree.
+  Pinned copies use `pin:`-prefixed row ids (`navigation::PIN_PREFIX`); every
+  file action strips it (`navigation::path`, `workspace::file_id`). Pinned rows
+  are not drag sources or targets. Storage is the synced
+  `.type/pinned-folders.json` (`{"folders": [...]}`, other keys preserved) via
+  core `load/save/remap_pinned_folders`; folder rename/move remaps pins.
+- Root `AGENTS.md` (an agent pointer to `_system/agent`) is hidden from Folders.
+- Note properties in core: plain `key: value` frontmatter lines exposed as
+  `NoteMeta.properties` and written by `Notes::set_note_property`. A flag is a
+  property with value `true`. Reasoning and next steps:
+  [NOTE_TAGS_PROPERTIES_FLAGS.md](NOTE_TAGS_PROPERTIES_FLAGS.md).
+- Cmd+K: `fl <name>` toggles a flag on the selected notes, `tag <name>` toggles
+  a frontmatter tag (`Tab` after `fl`/`tag` enters the mode). Mixed selections
+  converge on set. Rows show flags and frontmatter tags as a badge.
+- Active now hides archived **and** `reflection: true`; new Reflections filter.
+- Stream's current week hides empty days; Today always stays.
+- Not done: enum property commands (`set status done`) and value lists, a
+  configurable Active-hidden list instead of the hard-coded `reflection`,
+  mobile/MCP awareness of properties and pins.
+- Checks: `cargo test -p type-gpui -- --test-threads=1` (53 + 39),
+  `cargo test -p type-core --lib` (117; the AssemblyAI local-socket test flaked
+  once and passed on rerun), `cargo check -p type-ffi`, `npm run typecheck`.
+
 ### Image attachments in profile notes (2026-10-18, branch `feat/gpui-image-attachments`)
 
 - Dropping image files on the editor pane, or Cmd/Ctrl+V with image data or

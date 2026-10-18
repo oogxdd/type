@@ -21,10 +21,14 @@ use crate::{
 
 mod front_matter;
 mod naming;
+mod pins;
+mod properties;
 mod tree;
 
 pub use front_matter::*;
 pub use naming::*;
+pub use pins::*;
+pub use properties::*;
 pub use tree::*;
 
 // ── Constants ──────────────────────────────────────────────────────────────────

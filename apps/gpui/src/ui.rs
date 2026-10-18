@@ -116,6 +116,10 @@ impl TypeApp {
                 .child(div().id("palette-panel").occlude().child(command
                     .placeholder(if query.starts_with("mv ") {
                         format!("Move {} · destination folder path", self.palette_target_label(cx))
+                    } else if query.starts_with("fl ") {
+                        format!("Flag {} · flag name", self.palette_target_label(cx))
+                    } else if query.starts_with("tag ") {
+                        format!("Tag {} · tag name", self.palette_target_label(cx))
                     } else {
                         format!("Commands for {} · mv to folder", self.palette_target_label(cx))
                     })
