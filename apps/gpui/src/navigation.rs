@@ -561,32 +561,55 @@ pub fn destinations(items: &[Item]) -> Vec<String> {
         .collect()
 }
 
+/// Folder name match quality, best first: exact, prefix, word start,
+/// substring, then in-order letters. `None` means no match.
+fn name_rank(name: &str, query: &str) -> Option<u8> {
+    if name == query {
+        return Some(0);
+    }
+    if name.starts_with(query) {
+        return Some(1);
+    }
+    let word_start = name
+        .match_indices(query)
+        .any(|(i, _)| !name[..i].ends_with(|c: char| c.is_alphanumeric()));
+    if word_start {
+        return Some(2);
+    }
+    if name.contains(query) {
+        return Some(3);
+    }
+    let mut chars = query.chars();
+    let mut next = chars.next();
+    for ch in name.chars() {
+        if Some(ch) == next {
+            next = chars.next();
+        }
+    }
+    next.is_none().then_some(4)
+}
+
 pub fn move_suggestions(folders: &[String], query: &str) -> Vec<String> {
     let query = query.trim().to_lowercase();
     let mut matches: Vec<_> = folders
         .iter()
-        .filter(|path| {
-            let path = path.to_lowercase();
-            if query.ends_with('/') {
-                let tail = path.strip_prefix(&query);
+        .filter_map(|path| {
+            let lower = path.to_lowercase();
+            let rank = if query.ends_with('/') {
+                let tail = lower.strip_prefix(&query);
                 tail.is_some_and(|tail| !tail.is_empty() && !tail.contains('/'))
+                    .then_some(0)
             } else if query.contains('/') {
-                path.starts_with(&query)
+                lower.starts_with(&query).then_some(0)
             } else {
-                let mut chars = query.chars();
-                let mut next = chars.next();
-                for ch in path.rsplit('/').next().unwrap_or("").chars() {
-                    if Some(ch) == next {
-                        next = chars.next();
-                    }
-                }
-                next.is_none()
-            }
+                name_rank(lower.rsplit('/').next().unwrap_or(""), &query)
+            }?;
+            Some(((rank, path.matches('/').count(), lower), path.clone()))
         })
-        .cloned()
         .collect();
+    // Better matches first, then shallower folders, then alphabetical.
     matches.sort();
-    matches
+    matches.into_iter().map(|(_, path)| path).collect()
 }
 
 #[cfg(test)]
@@ -786,6 +809,23 @@ mod tests {
         assert_eq!(
             move_suggestions(&["Projects".into(), "Work".into()], "pj"),
             vec!["Projects"]
+        );
+        let folders = [
+            "_/unsorted_apple_import/projects/_backlog/drone game".to_string(),
+            "_/unsorted_apple_import/projects/programming".into(),
+            "games".into(),
+            "Work/games".into(),
+            "Work/endgame".into(),
+        ];
+        assert_eq!(
+            move_suggestions(&folders, "gam"),
+            vec![
+                "games",
+                "Work/games",
+                "_/unsorted_apple_import/projects/_backlog/drone game",
+                "Work/endgame",
+                "_/unsorted_apple_import/projects/programming",
+            ]
         );
     }
 }
