@@ -3600,7 +3600,7 @@ fn ordinary_folder_previews_csv_json_and_readonly_docx(cx: &mut TestAppContext) 
     let f = Fixture::new();
     let folder = f.0.env.app_data_dir.join("ordinary-folder");
     fs::create_dir_all(&folder).unwrap();
-    let csv = "name;city\nAnn;\"Paris | FR\"\n";
+    let csv = "name;n\nAnn;10\nBob;9\n";
     let json = r#"[{"id":1,"ok":true}]"#;
     fs::write(folder.join("people.csv"), csv).unwrap();
     fs::write(folder.join("rows.json"), json).unwrap();
@@ -3639,18 +3639,41 @@ fn ordinary_folder_previews_csv_json_and_readonly_docx(cx: &mut TestAppContext) 
         })
         .unwrap()
     };
+    let dump = |cx: &mut TestAppContext| {
+        cx.update_window(window, |_, window, cx| {
+            window.render_frame(cx);
+            assert!(window.try_find("note-preview").is_some());
+            let tab = app.read(cx).current_folder().unwrap();
+            let table = tab.read(cx).preview_grid().unwrap();
+            assert!(table.focus_handle(cx).is_focused(window));
+            table.read(cx).dump(cx)
+        })
+        .unwrap()
+    };
     open(cx, "people.csv");
     press(cx, window, if mac { "cmd-e" } else { "ctrl-e" });
-    press(cx, window, "x d d");
-    assert_eq!(
-        preview(cx),
-        "| name | city |\n| --- | --- |\n| Ann | Paris \\| FR |\n"
-    );
+    press(cx, window, "x d d j");
+    let (header, rows) = dump(cx);
+    assert_eq!(header, ["name", "n"]);
+    assert_eq!(rows, [["Ann", "10"], ["Bob", "9"]]);
+    cx.update_window(window, |_, window, cx| {
+        let tab = app.read(cx).current_folder().unwrap();
+        let table = tab.read(cx).preview_grid().unwrap();
+        assert!(table.read(cx).selected_cell().is_some() || table.read(cx).selected_row().is_some());
+        table.update(cx, |table, cx| {
+            use gpui_kit::component::table::{ColumnSort, TableDelegate};
+            table
+                .delegate_mut()
+                .perform_sort(1, ColumnSort::Ascending, window, cx)
+        });
+    })
+    .unwrap();
+    // Numbers sort numerically; the file keeps its order.
+    assert_eq!(dump(cx).1, [["Bob", "9"], ["Ann", "10"]]);
     open(cx, "rows.json");
-    assert_eq!(
-        preview(cx),
-        "| id | ok |\n| --- | --- |\n| `1` | `true` |\n"
-    );
+    let (header, rows) = dump(cx);
+    assert_eq!(header, ["id", "ok"]);
+    assert_eq!(rows, [["1", "true"]]);
     open(cx, "report.docx");
     press(cx, window, "x d d i escape");
     press(cx, window, if mac { "cmd-e" } else { "ctrl-e" });

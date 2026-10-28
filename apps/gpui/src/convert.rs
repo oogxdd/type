@@ -22,6 +22,48 @@ pub fn preview_markdown(path: &Path, text: &str) -> Option<String> {
     }
 }
 
+/// Header and body rows for the table view of tabular files.
+#[derive(Debug, PartialEq)]
+pub struct Grid {
+    pub columns: Vec<String>,
+    pub rows: Vec<Vec<String>>,
+}
+
+/// CSV/TSV and JSON arrays of objects open as a table; everything else as Markdown.
+pub fn grid(path: &Path, text: &str) -> Option<Grid> {
+    let ext = path.extension()?.to_string_lossy().to_ascii_lowercase();
+    let (columns, rows) = match ext.as_str() {
+        "csv" | "tsv" | "tab" => {
+            let delimiter = (ext != "csv").then_some('\t');
+            let mut rows = parse_csv(text, delimiter).into_iter();
+            (rows.next()?, rows.collect())
+        }
+        "json" | "geojson" | "jsonc" => {
+            let serde_json::Value::Array(items) = serde_json::from_str(text).ok()? else {
+                return None;
+            };
+            let columns = records(&items)?;
+            let rows: Vec<Vec<String>> = items
+                .iter()
+                .map(|item| {
+                    let map = item.as_object().unwrap();
+                    columns
+                        .iter()
+                        .map(|key| match map.get(key) {
+                            Some(serde_json::Value::String(text)) => text.clone(),
+                            Some(value) => value.to_string(),
+                            None => String::new(),
+                        })
+                        .collect()
+                })
+                .collect();
+            (columns, rows)
+        }
+        _ => return None,
+    };
+    (!columns.iter().all(String::is_empty) || !rows.is_empty()).then_some(Grid { columns, rows })
+}
+
 pub fn is_docx(path: &Path) -> bool {
     path.extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("docx"))
@@ -894,6 +936,23 @@ mod tests {
         );
         assert_eq!(parse_csv("a\tb", Some('\t')), vec![vec!["a", "b"]]);
         assert_eq!(csv_to_markdown("", None), "*Empty table.*\n");
+    }
+
+    #[test]
+    fn tabular_files_become_grids() {
+        let csv = grid(Path::new("a.CSV"), "x;y\n1;\"a\nb\"\n2\n").unwrap();
+        assert_eq!(csv.columns, ["x", "y"]);
+        assert_eq!(csv.rows, vec![vec!["1", "a\nb"], vec!["2"]]);
+        let json = grid(
+            Path::new("a.json"),
+            r#"[{"id":1,"name":"Ann"},{"tags":[1]}]"#,
+        )
+        .unwrap();
+        assert_eq!(json.columns, ["id", "name", "tags"]);
+        assert_eq!(json.rows, vec![vec!["1", "Ann", ""], vec!["", "", "[1]"]]);
+        assert!(grid(Path::new("a.json"), r#"{"a":[{"id":1}]}"#).is_none());
+        assert!(grid(Path::new("a.csv"), "").is_none());
+        assert!(grid(Path::new("a.md"), "a,b").is_none());
     }
 
     #[test]

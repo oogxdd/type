@@ -5,6 +5,7 @@ mod cursor;
 mod editor;
 mod folder_tabs;
 mod folder_workspace;
+mod grid;
 mod jobs;
 mod recordings;
 mod settings;

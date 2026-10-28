@@ -48,11 +48,15 @@ Updated: 2026-10-28. This is an unfinished migration; update this file after eac
   palette with folder-safe commands only (preview, theme); previously it was
   swallowed, and profile commands still never act on an ordinary folder.
 - Folder-tab previews of other formats (`convert.rs`, pure and read-only):
-  CSV/TSV render as a table (RFC 4180 quoting; `,`/`;`/tab detected from the
-  header), JSON as an outline with arrays of objects as tables (key order kept,
-  invalid JSON shows the error and source). Both keep their editor; ⌘E toggles,
-  conversion is cached while the text is unchanged. Tables cap at 1000 rows,
-  JSON at 5000 nodes.
+  CSV/TSV (RFC 4180 quoting; `,`/`;`/tab detected from the header) and
+  top-level JSON arrays of objects open in gpui-component `DataTable`
+  (`grid.rs`): virtualized rows (no row cap), resizable columns, click-to-sort
+  (numeric-aware, display order only), cell selection with arrows or hjkl;
+  multiline cells show on one row. Other JSON renders as a Markdown outline
+  (nested record arrays as GFM tables, 1000 rows / 5000 nodes cap; invalid
+  JSON shows the error and source). Both keep their editor; ⌘E toggles, and
+  the conversion is cached while the text is unchanged. Tables inside Markdown
+  and DOCX stay in `TextView` because they flow with the document.
 - `.docx` opens without an editor, always rendered: zip + quick-xml read
   `word/document.xml` with styles (headings by name/outline level), numbering
   (bullet vs ordered, nesting), bold/italic/strike, external hyperlinks, tables
@@ -64,7 +68,7 @@ Updated: 2026-10-28. This is an unfinished migration; update this file after eac
 - Not done: a preference to remember the mode, scroll sync with the editor
   cursor. Real Word-authored files were not available here (only textutil
   output, which has no semantic styles); rendering feel needs user testing.
-- Checks: `cargo test -p type-gpui -- --test-threads=1` (43 + 59).
+- Checks: `cargo test -p type-gpui -- --test-threads=1` (44 + 59).
 
 ### Published GPUI 0.4.13 Apple Silicon (2026-10-19)
 

@@ -1,4 +1,5 @@
 use super::*;
+use gpui_kit::component::table::{DataTable, TableState};
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -18,6 +19,13 @@ struct FileBuffer {
 struct DocumentView {
     markdown: SharedString,
     images: Arc<HashMap<String, Arc<Image>>>,
+}
+
+/// The preview of an editor buffer: a table for tabular data, else Markdown.
+#[derive(Clone)]
+enum Rendered {
+    Markdown(SharedString),
+    Grid(Entity<TableState<grid::GridDelegate>>),
 }
 
 /// Session-only state for an ordinary folder. It never calls the notes backend.
@@ -43,7 +51,7 @@ pub(crate) struct FolderWorkspace {
     preview_focus: FocusHandle,
     views: HashMap<PathBuf, DocumentView>,
     /// The active buffer's converted preview, reused while its text is unchanged.
-    preview_cache: Option<(PathBuf, SharedString, SharedString)>,
+    preview_cache: Option<(PathBuf, SharedString, Rendered)>,
     save_task: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
@@ -219,7 +227,45 @@ impl FolderWorkspace {
     pub(crate) fn preview_text(&self) -> Option<SharedString> {
         self.current_view()
             .map(|view| view.markdown.clone())
-            .or_else(|| self.preview_cache.as_ref().map(|cache| cache.2.clone()))
+            .or_else(|| match &self.preview_cache.as_ref()?.2 {
+                Rendered::Markdown(text) => Some(text.clone()),
+                Rendered::Grid(_) => None,
+            })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn preview_grid(&self) -> Option<Entity<TableState<grid::GridDelegate>>> {
+        match &self.preview_cache.as_ref()?.2 {
+            Rendered::Grid(table) if self.preview => Some(table.clone()),
+            _ => None,
+        }
+    }
+
+    /// Convert the active buffer for the preview, reusing it while the text is unchanged.
+    fn rendered_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<Rendered> {
+        let editor = self.current_editor().filter(|_| self.preview)?;
+        let path = self.entries.get(self.active.as_ref()?)?.path.clone();
+        let text = editor.read(cx).value();
+        if let Some((cached, source, out)) = &self.preview_cache {
+            if *cached == path && *source == text {
+                return Some(out.clone());
+            }
+        }
+        let out = match convert::grid(&path, &text) {
+            Some(data) => Rendered::Grid(cx.new(|cx| {
+                TableState::new(grid::GridDelegate::new(data), window, cx)
+                    .sortable(true)
+                    .col_movable(false)
+                    .cell_selectable(true)
+            })),
+            None => Rendered::Markdown(
+                convert::preview_markdown(&path, &text)
+                    .map(Into::into)
+                    .unwrap_or_else(|| text.clone()),
+            ),
+        };
+        self.preview_cache = Some((path, text, out.clone()));
+        Some(out)
     }
 
     #[cfg(test)]
@@ -286,8 +332,10 @@ impl FolderWorkspace {
         cx.notify();
     }
 
-    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.current_view().is_some() || self.preview && self.current_editor().is_some() {
+    pub fn focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(Rendered::Grid(table)) = self.rendered_preview(window, cx) {
+            table.focus_handle(cx).focus(window, cx);
+        } else if self.current_view().is_some() || self.preview && self.current_editor().is_some() {
             self.preview_focus.focus(window, cx);
         } else if let Some(editor) = self.current_editor() {
             editor.update(cx, |editor, cx| {
@@ -498,7 +546,7 @@ impl FolderWorkspace {
         let editor_focused = self
             .current_editor()
             .is_some_and(|e| e.focus_handle(cx).is_focused(window));
-        let content_focused = editor_focused || self.preview_focus.is_focused(window);
+        let content_focused = editor_focused || self.preview_focus.contains_focused(window, cx);
         if let Some(command) = keyboard::command(event, cfg!(target_os = "macos"), editor_focused) {
             window.prevent_default();
             cx.stop_propagation();
@@ -604,6 +652,21 @@ impl FolderWorkspace {
                 window.prevent_default();
                 cx.stop_propagation();
                 self.toggle_preview(window, cx);
+            } else if let Some(Rendered::Grid(_)) = self.preview_cache.as_ref().map(|c| &c.2) {
+                use gpui_kit::base::actions::{
+                    SelectDown, SelectNextColumn, SelectPrevColumn, SelectUp,
+                };
+                // Vim motions move the table selection like the arrow keys.
+                let action: Box<dyn Action> = match stroke.key.as_str() {
+                    "j" if plain => Box::new(SelectDown),
+                    "k" if plain => Box::new(SelectUp),
+                    "h" if plain => Box::new(SelectPrevColumn),
+                    "l" if plain => Box::new(SelectNextColumn),
+                    _ => return,
+                };
+                window.prevent_default();
+                cx.stop_propagation();
+                window.dispatch_action(action, cx);
             }
         } else {
             self.vim_key(event, window, cx);
@@ -875,7 +938,7 @@ impl FolderWorkspace {
 }
 
 impl Render for FolderWorkspace {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let editor = self.current_editor();
         let has_editor = editor.is_some();
         let path = self
@@ -885,20 +948,7 @@ impl Render for FolderWorkspace {
             .map(|entry| entry.path.clone())
             .unwrap_or_default();
         let id = path.to_string_lossy().into_owned();
-        // CSV and JSON render as converted Markdown; other files as themselves.
-        let preview = editor.as_ref().filter(|_| self.preview).map(|editor| {
-            let text = editor.read(cx).value();
-            match &self.preview_cache {
-                Some((cached, source, out)) if *cached == path && *source == text => out.clone(),
-                _ => {
-                    let out: SharedString = convert::preview_markdown(&path, &text)
-                        .map(Into::into)
-                        .unwrap_or_else(|| text.clone());
-                    self.preview_cache = Some((path.clone(), text, out.clone()));
-                    out
-                }
-            }
-        });
+        let preview = self.rendered_preview(window, cx);
         let view = self
             .current_view()
             .map(|view| (view.markdown.clone(), view.images.clone()));
@@ -935,7 +985,18 @@ impl Render for FolderWorkspace {
                 )
             })
             .when_some(editor, |pane, editor| {
-                if let Some(preview) = preview {
+                if let Some(Rendered::Grid(table)) = preview {
+                    pane.child(
+                        div()
+                            .id("note-preview")
+                            .test_support()
+                            .size_full()
+                            .px_4()
+                            .pb_6()
+                            .track_focus(&self.preview_focus)
+                            .child(DataTable::new(&table).stripe(true)),
+                    )
+                } else if let Some(Rendered::Markdown(preview)) = preview {
                     pane.child(
                         div()
                             .size_full()
