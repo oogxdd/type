@@ -244,6 +244,17 @@ impl Folder {
     }
 }
 
+impl Folder {
+    /// DOCX is shown as a read-only Markdown rendering and never saved.
+    pub fn read_docx(&self, relative: &Path) -> Result<crate::convert::Docx, String> {
+        let path = self.resolve(relative)?;
+        if !fs::metadata(&path).map_err(|e| e.to_string())?.is_file() {
+            return Err("This entry is not a regular file.".into());
+        }
+        crate::convert::docx_to_markdown(fs::File::open(path).map_err(|e| e.to_string())?)
+    }
+}
+
 fn read_bytes(path: &Path) -> Result<Vec<u8>, String> {
     // Inspect before opening: opening a named pipe can wait indefinitely.
     if !fs::metadata(path).map_err(|e| e.to_string())?.is_file() {

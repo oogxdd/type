@@ -1,4 +1,5 @@
 pub mod backend;
+pub mod convert;
 pub mod document;
 pub mod files;
 pub mod keyboard;

@@ -1,11 +1,23 @@
 use super::*;
-use std::path::{Path, PathBuf};
-use type_gpui::files::{Entry, Folder, TextFile};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
+use type_gpui::{
+    convert,
+    files::{Entry, Folder, TextFile},
+};
 
 struct FileBuffer {
     file: TextFile,
     editor: Entity<EditorState>,
     _subscriptions: Vec<Subscription>,
+}
+
+/// A file that has no editor and is only shown rendered (DOCX).
+struct DocumentView {
+    markdown: SharedString,
+    images: Arc<HashMap<String, Arc<Image>>>,
 }
 
 /// Session-only state for an ordinary folder. It never calls the notes backend.
@@ -29,6 +41,9 @@ pub(crate) struct FolderWorkspace {
     /// Show the open file as rendered Markdown; the pane takes `preview_focus`.
     pub preview: bool,
     preview_focus: FocusHandle,
+    views: HashMap<PathBuf, DocumentView>,
+    /// The active buffer's converted preview, reused while its text is unchanged.
+    preview_cache: Option<(PathBuf, SharedString, SharedString)>,
     save_task: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
@@ -61,6 +76,8 @@ impl FolderWorkspace {
             replaying_vim_history: false,
             preview: false,
             preview_focus: cx.focus_handle(),
+            views: HashMap::new(),
+            preview_cache: None,
             save_task: None,
             _subscriptions: vec![],
         };
@@ -186,6 +203,11 @@ impl FolderWorkspace {
         self.refresh(window, cx);
     }
 
+    fn current_view(&self) -> Option<&DocumentView> {
+        let entry = self.entries.get(self.active.as_ref()?)?;
+        self.views.get(&entry.path)
+    }
+
     pub fn current_editor(&self) -> Option<Entity<EditorState>> {
         let entry = self.entries.get(self.active.as_ref()?)?;
         self.documents
@@ -194,11 +216,24 @@ impl FolderWorkspace {
     }
 
     #[cfg(test)]
+    pub(crate) fn preview_text(&self) -> Option<SharedString> {
+        self.current_view()
+            .map(|view| view.markdown.clone())
+            .or_else(|| self.preview_cache.as_ref().map(|cache| cache.2.clone()))
+    }
+
+    #[cfg(test)]
     pub(crate) fn entry_id(&self, path: &Path) -> SharedString {
         self.ids[path].clone()
     }
 
     pub fn refresh_from_disk(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.views.clear();
+        if let Some(id) = self.active.clone() {
+            if self.entries.get(&id).is_some_and(|e| convert::is_docx(&e.path)) {
+                self.open_file(id, false, window, cx);
+            }
+        }
         if self.flush(cx).is_ok() {
             self.refresh(window, cx);
         } else {
@@ -252,7 +287,7 @@ impl FolderWorkspace {
     }
 
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.preview && self.current_editor().is_some() {
+        if self.current_view().is_some() || self.preview && self.current_editor().is_some() {
             self.preview_focus.focus(window, cx);
         } else if let Some(editor) = self.current_editor() {
             editor.update(cx, |editor, cx| {
@@ -265,6 +300,9 @@ impl FolderWorkspace {
     }
 
     pub fn toggle_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.current_view().is_some() {
+            return;
+        }
         self.preview = !self.preview;
         if !self.navigation_focus.contains_focused(window, cx) {
             self.focus(window, cx);
@@ -288,6 +326,47 @@ impl FolderWorkspace {
         self.active = Some(id);
         self.error = None;
         self.vim.reset();
+        if convert::is_docx(&entry.path) {
+            if !self.views.contains_key(&entry.path) {
+                match self.folder.read_docx(&entry.path) {
+                    Ok(doc) => {
+                        let images = doc
+                            .images
+                            .into_iter()
+                            .filter_map(|(name, bytes)| {
+                                let format = match convert::image_format(&name)? {
+                                    "png" => ImageFormat::Png,
+                                    "jpeg" => ImageFormat::Jpeg,
+                                    "gif" => ImageFormat::Gif,
+                                    "webp" => ImageFormat::Webp,
+                                    "bmp" => ImageFormat::Bmp,
+                                    "tiff" => ImageFormat::Tiff,
+                                    _ => ImageFormat::Svg,
+                                };
+                                Some((name, Arc::new(Image::from_bytes(format, bytes))))
+                            })
+                            .collect();
+                        self.views.insert(
+                            entry.path.clone(),
+                            DocumentView {
+                                markdown: doc.markdown.into(),
+                                images: Arc::new(images),
+                            },
+                        );
+                    }
+                    Err(message) => {
+                        self.message = message;
+                        cx.notify();
+                        return;
+                    }
+                }
+            }
+            if focus {
+                self.focus(window, cx);
+            }
+            cx.notify();
+            return;
+        }
         if !self.documents.contains_key(&entry.path) {
             let file = match self.folder.read(&entry.path) {
                 Ok(file) if !entry.symlink => file,
@@ -419,6 +498,7 @@ impl FolderWorkspace {
         let editor_focused = self
             .current_editor()
             .is_some_and(|e| e.focus_handle(cx).is_focused(window));
+        let content_focused = editor_focused || self.preview_focus.is_focused(window);
         if let Some(command) = keyboard::command(event, cfg!(target_os = "macos"), editor_focused) {
             window.prevent_default();
             cx.stop_propagation();
@@ -428,7 +508,7 @@ impl FolderWorkspace {
                 }
                 keyboard::Command::Refresh => self.refresh_from_disk(window, cx),
                 keyboard::Command::Focus | keyboard::Command::Cycle => {
-                    if editor_focused {
+                    if content_focused {
                         self.prefs.sidebar = true;
                         self.tree.update(cx, |tree, cx| tree.focus(window, cx));
                     } else {
@@ -798,6 +878,31 @@ impl Render for FolderWorkspace {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let editor = self.current_editor();
         let has_editor = editor.is_some();
+        let path = self
+            .active
+            .as_ref()
+            .and_then(|id| self.entries.get(id))
+            .map(|entry| entry.path.clone())
+            .unwrap_or_default();
+        let id = path.to_string_lossy().into_owned();
+        // CSV and JSON render as converted Markdown; other files as themselves.
+        let preview = editor.as_ref().filter(|_| self.preview).map(|editor| {
+            let text = editor.read(cx).value();
+            match &self.preview_cache {
+                Some((cached, source, out)) if *cached == path && *source == text => out.clone(),
+                _ => {
+                    let out: SharedString = convert::preview_markdown(&path, &text)
+                        .map(Into::into)
+                        .unwrap_or_else(|| text.clone());
+                    self.preview_cache = Some((path.clone(), text, out.clone()));
+                    out
+                }
+            }
+        });
+        let view = self
+            .current_view()
+            .map(|view| (view.markdown.clone(), view.images.clone()));
+        let has_view = view.is_some();
         let dirty = self
             .active
             .as_ref()
@@ -810,24 +915,36 @@ impl Render for FolderWorkspace {
             .min_w_0()
             .min_h_0()
             .pt(px(64.))
+            .when_some(view, |pane, (markdown, images)| {
+                pane.child(
+                    div()
+                        .size_full()
+                        .track_focus(&self.preview_focus)
+                        .child(editor::markdown_preview(
+                            markdown,
+                            self.prefs.font_size,
+                            &id,
+                            move |uri| {
+                                uri.strip_prefix("docx:")
+                                    .and_then(|part| images.get(part))
+                                    .map(|image| ImageSource::from(image.clone()))
+                                    .unwrap_or_else(|| ImageSource::from(uri.clone()))
+                            },
+                            cx,
+                        )),
+                )
+            })
             .when_some(editor, |pane, editor| {
-                if self.preview {
-                    let path = self
-                        .active
-                        .as_ref()
-                        .and_then(|id| self.entries.get(id))
-                        .and_then(|entry| entry.path.strip_prefix(&self.folder.root).ok())
-                        .map(|path| path.to_string_lossy().into_owned())
-                        .unwrap_or_default();
+                if let Some(preview) = preview {
                     pane.child(
                         div()
                             .size_full()
                             .track_focus(&self.preview_focus)
                             .child(editor::markdown_preview(
-                                editor.read(cx).value(),
+                                preview,
                                 self.prefs.font_size,
-                                self.folder.root.clone(),
-                                path,
+                                &id,
+                                editor::attachment_images(self.folder.root.clone(), id.clone()),
                                 cx,
                             )),
                     )
@@ -842,7 +959,7 @@ impl Render for FolderWorkspace {
                     )
                 }
             })
-            .when(!has_editor, |pane| {
+            .when(!has_editor && !has_view, |pane| {
                 pane.child(
                     div()
                         .p_6()

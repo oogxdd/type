@@ -670,8 +670,11 @@ impl Render for TypeApp {
                 editor::markdown_preview(
                     editor.read(cx).value(),
                     self.prefs.font_size,
-                    self.backend.root.clone(),
-                    self.active.to_string(),
+                    &self.active,
+                    editor::attachment_images(
+                        self.backend.root.clone(),
+                        self.active.to_string(),
+                    ),
                     cx,
                 )
                 .into_any_element()

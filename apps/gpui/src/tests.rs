@@ -3593,3 +3593,76 @@ fn ordinary_folder_palette_is_folder_safe_and_previews_markdown(cx: &mut TestApp
     .unwrap();
     assert_eq!(fs::read_to_string(folder.join("roadmap.md")).unwrap(), body);
 }
+
+#[gpui_kit::test]
+fn ordinary_folder_previews_csv_json_and_readonly_docx(cx: &mut TestAppContext) {
+    use std::{fs, io::Write, path::Path};
+    let f = Fixture::new();
+    let folder = f.0.env.app_data_dir.join("ordinary-folder");
+    fs::create_dir_all(&folder).unwrap();
+    let csv = "name;city\nAnn;\"Paris | FR\"\n";
+    let json = r#"[{"id":1,"ok":true}]"#;
+    fs::write(folder.join("people.csv"), csv).unwrap();
+    fs::write(folder.join("rows.json"), json).unwrap();
+    let mut docx = std::io::Cursor::new(vec![]);
+    let mut zip = zip::ZipWriter::new(&mut docx);
+    zip.start_file("word/document.xml", zip::write::FileOptions::default())
+        .unwrap();
+    zip.write_all(br#"<w:document xmlns:w="w"><w:body><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Report</w:t></w:r></w:p></w:body></w:document>"#)
+        .unwrap();
+    zip.finish().unwrap();
+    drop(zip);
+    let docx = docx.into_inner();
+    fs::write(folder.join("report.docx"), &docx).unwrap();
+    let (window, app) = launch(&f, cx);
+    let mac = cfg!(target_os = "macos");
+    let open = |cx: &mut TestAppContext, name: &'static str| {
+        cx.update_window(window, |_, window, cx| {
+            let tab = app.read(cx).current_folder().unwrap();
+            tab.update(cx, |tab, cx| {
+                tab.open_file(tab.entry_id(Path::new(name)), true, window, cx)
+            });
+            window.render_frame(cx);
+        })
+        .unwrap();
+    };
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| app.open_folder_path(&folder, window, cx));
+    })
+    .unwrap();
+    let preview = |cx: &mut TestAppContext| {
+        cx.update_window(window, |_, window, cx| {
+            window.render_frame(cx);
+            assert!(window.try_find("note-preview").is_some());
+            let tab = app.read(cx).current_folder().unwrap();
+            tab.read(cx).preview_text().unwrap().to_string()
+        })
+        .unwrap()
+    };
+    open(cx, "people.csv");
+    press(cx, window, if mac { "cmd-e" } else { "ctrl-e" });
+    press(cx, window, "x d d");
+    assert_eq!(
+        preview(cx),
+        "| name | city |\n| --- | --- |\n| Ann | Paris \\| FR |\n"
+    );
+    open(cx, "rows.json");
+    assert_eq!(
+        preview(cx),
+        "| id | ok |\n| --- | --- |\n| `1` | `true` |\n"
+    );
+    open(cx, "report.docx");
+    press(cx, window, "x d d i escape");
+    press(cx, window, if mac { "cmd-e" } else { "ctrl-e" });
+    assert_eq!(preview(cx), "**Report**\n");
+    cx.update_window(window, |_, window, cx| {
+        let tab = app.read(cx).current_folder().unwrap();
+        assert!(tab.read(cx).current_editor().is_none());
+        assert!(window.try_find("editor-pane").is_none());
+    })
+    .unwrap();
+    cx.run_until_parked();
+    assert_eq!(fs::read_to_string(folder.join("people.csv")).unwrap(), csv);
+    assert_eq!(fs::read_to_string(folder.join("rows.json")).unwrap(), json);
+    assert_eq!(fs::read(folder.join("report.docx")).unwrap(), docx);
+}

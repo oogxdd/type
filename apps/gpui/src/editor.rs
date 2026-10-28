@@ -253,13 +253,28 @@ impl EditorAppearance<'_> {
 /// Read-only rendered Markdown (GFM tables, lists, code, quotes, images).
 /// `note` is relative to `root`; attachment links resolve like editor
 /// thumbnails and other image URIs load as-is.
-pub(crate) fn markdown_preview(
-    text: SharedString,
-    font_size: f32,
+/// Resolve image links the way attachments are stored next to a note.
+pub(crate) fn attachment_images(
     root: PathBuf,
     note: String,
+) -> impl Fn(&SharedUri) -> ImageSource + Send + Sync + 'static {
+    move |uri| {
+        type_core::resolve_note_attachment(&root, &note, uri.as_ref())
+            .map(ImageSource::from)
+            .unwrap_or_else(|| ImageSource::from(uri.clone()))
+    }
+}
+
+pub(crate) fn markdown_preview<F>(
+    text: SharedString,
+    font_size: f32,
+    id: &str,
+    images: F,
     cx: &App,
-) -> impl IntoElement + use<> {
+) -> impl IntoElement + use<F>
+where
+    F: Fn(&SharedUri) -> ImageSource + Send + Sync + 'static,
+{
     div()
         .id("note-preview")
         .test_support()
@@ -269,14 +284,10 @@ pub(crate) fn markdown_preview(
         .text_size(px(font_size))
         .font_family(cx.theme().font_family.clone())
         .child(
-            TextView::markdown(SharedString::from(format!("preview:{note}")), text)
+            TextView::markdown(SharedString::from(format!("preview:{id}")), text)
                 .scrollable(true)
                 .selectable(true)
-                .image_source(move |uri| {
-                    type_core::resolve_note_attachment(&root, &note, uri.as_ref())
-                        .map(ImageSource::from)
-                        .unwrap_or_else(|| ImageSource::from(uri.clone()))
-                })
+                .image_source(images)
                 .size_full()
                 .px_4()
                 .pb_6(),

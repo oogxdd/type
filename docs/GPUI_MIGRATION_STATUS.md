@@ -47,9 +47,24 @@ Updated: 2026-10-28. This is an unfinished migration; update this file after eac
   attachment resolution relative to the folder root. Cmd+K there now opens the
   palette with folder-safe commands only (preview, theme); previously it was
   swallowed, and profile commands still never act on an ordinary folder.
+- Folder-tab previews of other formats (`convert.rs`, pure and read-only):
+  CSV/TSV render as a table (RFC 4180 quoting; `,`/`;`/tab detected from the
+  header), JSON as an outline with arrays of objects as tables (key order kept,
+  invalid JSON shows the error and source). Both keep their editor; ⌘E toggles,
+  conversion is cached while the text is unchanged. Tables cap at 1000 rows,
+  JSON at 5000 nodes.
+- `.docx` opens without an editor, always rendered: zip + quick-xml read
+  `word/document.xml` with styles (headings by name/outline level), numbering
+  (bullet vs ordered, nesting), bold/italic/strike, external hyperlinks, tables
+  (nested ones flattened), embedded raster/SVG images served from memory
+  (`docx:` URIs). Deleted revisions, field codes and fallbacks are skipped;
+  footnotes, comments, headers/footers, EMF/WMF images and legacy `.doc` are
+  not shown. Refresh re-reads the file; nothing is ever written back.
+- Ctrl+W from the preview pane now moves to the folder tree.
 - Not done: a preference to remember the mode, scroll sync with the editor
-  cursor. Rendering feel needs user testing.
-- Checks: `cargo test -p type-gpui -- --test-threads=1` (40 + 58).
+  cursor. Real Word-authored files were not available here (only textutil
+  output, which has no semantic styles); rendering feel needs user testing.
+- Checks: `cargo test -p type-gpui -- --test-threads=1` (43 + 59).
 
 ### Published GPUI 0.4.13 Apple Silicon (2026-10-19)
 

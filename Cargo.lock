@@ -12485,9 +12485,11 @@ dependencies = [
  "hound",
  "image",
  "qrcode",
+ "quick-xml 0.38.4",
  "serde",
  "serde_json",
  "type-core",
+ "zip 0.6.6",
 ]
 
 [[package]]
