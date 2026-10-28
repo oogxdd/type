@@ -1,6 +1,7 @@
 use super::*;
 use commands::{Choice, ModalKind};
 use gpui_kit::base::Disableable;
+use gpui_kit::base::TextView;
 
 impl TypeApp {
     pub(crate) fn command_button(
@@ -618,6 +619,36 @@ impl TypeApp {
     }
 }
 
+impl TypeApp {
+    /// Read-only rendered Markdown (GFM tables, lists, code, quotes, images).
+    /// Attachment links resolve like editor thumbnails; web images load as-is.
+    fn render_preview(&self, text: SharedString, cx: &App) -> impl IntoElement + use<> {
+        let root = self.backend.root.clone();
+        let note = self.active.clone();
+        div()
+            .id("note-preview")
+            .test_support()
+            .size_full()
+            .min_w_0()
+            .min_h_0()
+            .text_size(px(self.prefs.font_size))
+            .font_family(cx.theme().font_family.clone())
+            .child(
+                TextView::markdown(SharedString::from(format!("preview:{note}")), text)
+                    .scrollable(true)
+                    .selectable(true)
+                    .image_source(move |uri| {
+                        type_core::resolve_note_attachment(&root, &note, uri.as_ref())
+                            .map(ImageSource::from)
+                            .unwrap_or_else(|| ImageSource::from(uri.clone()))
+                    })
+                    .size_full()
+                    .px_4()
+                    .pb_6(),
+            )
+    }
+}
+
 impl Render for TypeApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.reconcile_playback();
@@ -666,13 +697,18 @@ impl Render for TypeApp {
             self.render_settings(cx).into_any_element()
         } else if let Some(note) = self.notes.get(&self.active).filter(|n| n.editor.is_some()) {
             let editor = note.editor.as_ref().unwrap();
-            let editor = editor::EditorAppearance {
-                prefs: &self.prefs,
-                vim: &self.vim,
-                images: &note.images,
-            }
-            .render(editor, self.busy, self.replaying_vim_history, cx)
-            .into_any_element();
+            let editor = if self.preview {
+                self.render_preview(editor.read(cx).value(), cx)
+                    .into_any_element()
+            } else {
+                editor::EditorAppearance {
+                    prefs: &self.prefs,
+                    vim: &self.vim,
+                    images: &note.images,
+                }
+                .render(editor, self.busy, self.replaying_vim_history, cx)
+                .into_any_element()
+            };
             v_flex()
                 .size_full()
                 .min_h_0()

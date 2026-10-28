@@ -19,6 +19,7 @@ pub enum Command {
     Save,
     Settings,
     Refresh,
+    Preview,
 }
 pub const SHORTCUTS: &[(&str, Command)] = &[
     ("k", Command::Palette),
@@ -37,6 +38,7 @@ pub const SHORTCUTS: &[(&str, Command)] = &[
     ("s", Command::Save),
     (",", Command::Settings),
     ("r", Command::Refresh),
+    ("e", Command::Preview),
 ];
 
 pub fn command(event: &KeyDownEvent, mac: bool, editor_focused: bool) -> Option<Command> {

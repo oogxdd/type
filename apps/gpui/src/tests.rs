@@ -3472,3 +3472,52 @@ fn dragged_root_folders_hit_rendered_rows_reorder_and_nest(cx: &mut TestAppConte
     })
     .unwrap();
 }
+
+#[gpui_kit::test]
+fn markdown_preview_replaces_the_editor_and_blocks_hidden_vim_edits(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let body = "## Steps\n\n| No | Step |\n| --- | --- |\n| 1 | First<br>- item |\n";
+    let path = f.0.create(STREAM_FOLDER, body.into(), None).unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.open_note(path.clone().into(), true, window, cx)
+        });
+        window.render_frame(cx);
+        assert!(window.try_find("editor-pane").is_some());
+    })
+    .unwrap();
+    let primary = if cfg!(target_os = "macos") {
+        "cmd-e"
+    } else {
+        "ctrl-e"
+    };
+    press(cx, window, primary);
+    // Vim Normal keys must not edit the hidden buffer.
+    press(cx, window, "x d d");
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(app.read(cx).preview);
+        assert!(window.try_find("note-preview").is_some());
+        assert!(window.try_find("editor-pane").is_none());
+        let app = app.read(cx);
+        let text = app.notes[&app.active]
+            .editor
+            .as_ref()
+            .unwrap()
+            .read(cx)
+            .value();
+        assert_eq!(text.as_ref(), body);
+    })
+    .unwrap();
+    press(cx, window, "escape");
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(!app.read(cx).preview);
+        assert!(window.try_find("editor-pane").is_some());
+        let app = app.read(cx);
+        let editor = app.notes[&app.active].editor.as_ref().unwrap();
+        assert!(editor.focus_handle(cx).is_focused(window));
+    })
+    .unwrap();
+}

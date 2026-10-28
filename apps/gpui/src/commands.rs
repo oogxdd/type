@@ -57,6 +57,7 @@ pub enum Choice {
     BackToNotes,
     Theme,
     Vim,
+    Preview,
     Profile(String),
     NewProfile,
     PickProfile,
@@ -114,9 +115,12 @@ impl Choice {
             Self::New | Self::NewProfile | Self::NewFolder(_) => "Create",
             Self::Filter(_) | Self::StreamDate | Self::ClearDate => "View",
             Self::Feed | Self::Folders | Self::TrashView | Self::MoveNote(_) => "Navigate",
-            Self::CommandPalette | Self::Settings | Self::BackToNotes | Self::Theme | Self::Vim => {
-                "View"
-            }
+            Self::CommandPalette
+            | Self::Settings
+            | Self::BackToNotes
+            | Self::Theme
+            | Self::Vim
+            | Self::Preview => "View",
             Self::Profile(_) | Self::PickProfile | Self::RevealProfile | Self::RemoveProfile => {
                 "Profiles"
             }
@@ -219,7 +223,12 @@ impl TypeApp {
             }
         } else if navigation {
             self.tree.update(cx, |s, cx| s.focus(window, cx));
-        } else if let Some(editor) = self.notes.get(&self.active).and_then(|n| n.editor.as_ref()) {
+        } else if let Some(editor) = self
+            .notes
+            .get(&self.active)
+            .and_then(|n| n.editor.as_ref())
+            .filter(|_| !self.preview)
+        {
             editor.focus_handle(cx).focus(window, cx);
         } else {
             self.focus.focus(window, cx);
@@ -459,6 +468,7 @@ impl TypeApp {
             ("Settings", Choice::Settings),
             ("Toggle light / dark theme", Choice::Theme),
             ("Toggle Vim", Choice::Vim),
+            ("Toggle Markdown preview", Choice::Preview),
             ("Add profile by path…", Choice::NewProfile),
             ("Add profile: choose folder…", Choice::PickProfile),
             ("Show profile in Finder", Choice::RevealProfile),
@@ -678,6 +688,7 @@ impl TypeApp {
                         self.refresh(window, cx);
                     }
                 }
+                Preview => self.toggle_preview(window, cx),
             }
             cx.notify();
             return;
@@ -784,6 +795,17 @@ impl TypeApp {
             return;
         }
         self.navigation_focused = false;
+        if self.preview {
+            // The hidden editor must not receive Vim edits. Esc or i edits again.
+            let stroke = &event.keystroke;
+            let plain = !stroke.modifiers.control && !stroke.modifiers.platform;
+            if plain && matches!(stroke.key.as_str(), "escape" | "i") {
+                window.prevent_default();
+                cx.stop_propagation();
+                self.toggle_preview(window, cx);
+            }
+            return;
+        }
         self.vim_key(event, window, cx);
     }
 
@@ -801,7 +823,22 @@ impl TypeApp {
         }
     }
 
+    /// Rendered Markdown replaces the editor for every profile note until
+    /// toggled back; the pane keeps the app focus so chords still work.
+    pub fn toggle_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.preview = !self.preview;
+        if !self.navigation_focus.contains_focused(window, cx) {
+            self.focus_editor(window, cx);
+        }
+        cx.notify();
+    }
+
     pub fn focus_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.preview {
+            self.navigation_focused = false;
+            self.focus.focus(window, cx);
+            return;
+        }
         if let Some(editor) = self.notes.get(&self.active).and_then(|n| n.editor.as_ref()) {
             self.navigation_focused = false;
             editor.update(cx, |s, cx| {
@@ -1571,6 +1608,7 @@ impl TypeApp {
                     self.persist_preferences();
                 }
                 Choice::Vim => self.toggle_vim(window, cx),
+                Choice::Preview => self.toggle_preview(window, cx),
                 Choice::Profile(profile_id) => {
                     self.flush(true, cx)?;
                     self.ensure_profile_switch()?;

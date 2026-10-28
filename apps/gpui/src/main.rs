@@ -121,6 +121,8 @@ struct TypeApp {
     job_status: String,
     vim: vim::Vim,
     replaying_vim_history: bool,
+    /// Show the active note as rendered Markdown instead of the editor.
+    preview: bool,
     roots: Vec<TreeItem>,
     tree: Entity<TreeState>,
     notes: HashMap<SharedString, Note>,

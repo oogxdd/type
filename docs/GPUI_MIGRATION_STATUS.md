@@ -1,6 +1,6 @@
 # GPUI migration — handoff / live status
 
-Updated: 2026-10-19. This is an unfinished migration; update this file after each milestone.
+Updated: 2026-10-28. This is an unfinished migration; update this file after each milestone.
 
 ## Where to continue
 
@@ -32,6 +32,20 @@ Updated: 2026-10-19. This is an unfinished migration; update this file after eac
 - Investigate larger H1/H2/H3 only; do not implement yet.
 
 ## Implemented
+
+### Markdown preview (2026-10-28, branch `feat/gpui-markdown-preview`)
+
+- Cmd/Ctrl+E or Cmd+K “Toggle Markdown preview” replaces the profile-note
+  editor with gpui-base `TextView::markdown`: GFM tables (including `<br>` in
+  cells), lists, quotes, code blocks, links and images. Attachment targets
+  resolve through core `resolve_note_attachment`; other URIs load as-is.
+- The toggle persists across note switches for the session. The pane holds app
+  focus, so chords and Ctrl+W still work; plain Esc or `i` returns to the
+  editor, and every other plain key is swallowed so Vim cannot edit the hidden
+  buffer.
+- Not done: ordinary folder tabs, a preference to remember the mode, scroll
+  sync with the editor cursor. Rendering feel needs user testing.
+- Checks: `cargo test -p type-gpui -- --test-threads=1` (40 + 57).
 
 ### Published GPUI 0.4.13 Apple Silicon (2026-10-19)
 
