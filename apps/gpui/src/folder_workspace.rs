@@ -26,6 +26,9 @@ pub(crate) struct FolderWorkspace {
     pub error: Option<String>,
     vim: vim::Vim,
     replaying_vim_history: bool,
+    /// Show the open file as rendered Markdown; the pane takes `preview_focus`.
+    pub preview: bool,
+    preview_focus: FocusHandle,
     save_task: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
@@ -56,6 +59,8 @@ impl FolderWorkspace {
             error: None,
             vim: vim::Vim::default(),
             replaying_vim_history: false,
+            preview: false,
+            preview_focus: cx.focus_handle(),
             save_task: None,
             _subscriptions: vec![],
         };
@@ -247,7 +252,9 @@ impl FolderWorkspace {
     }
 
     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(editor) = self.current_editor() {
+        if self.preview && self.current_editor().is_some() {
+            self.preview_focus.focus(window, cx);
+        } else if let Some(editor) = self.current_editor() {
             editor.update(cx, |editor, cx| {
                 editor.set_readonly(self.prefs.vim && self.vim.mode != vim::Mode::Insert, cx);
                 editor.focus(window, cx);
@@ -255,6 +262,14 @@ impl FolderWorkspace {
         } else {
             self.tree.update(cx, |tree, cx| tree.focus(window, cx));
         }
+    }
+
+    pub fn toggle_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.preview = !self.preview;
+        if !self.navigation_focus.contains_focused(window, cx) {
+            self.focus(window, cx);
+        }
+        cx.notify();
     }
 
     pub fn open_file(
@@ -433,6 +448,7 @@ impl FolderWorkspace {
                     self.prefs.font_size = (self.prefs.font_size - 1.).max(10.)
                 }
                 keyboard::Command::FontReset => self.prefs.font_size = 17.,
+                keyboard::Command::Preview => self.toggle_preview(window, cx),
                 // Profile CRUD and sync commands never act on an ordinary folder.
                 _ => {}
             }
@@ -500,6 +516,15 @@ impl FolderWorkspace {
             window.prevent_default();
             cx.stop_propagation();
             cx.notify();
+        } else if self.preview && self.current_editor().is_some() {
+            // The hidden editor must not receive Vim edits. Esc or i edits again.
+            let stroke = &event.keystroke;
+            let plain = !stroke.modifiers.control && !stroke.modifiers.platform;
+            if plain && matches!(stroke.key.as_str(), "escape" | "i") {
+                window.prevent_default();
+                cx.stop_propagation();
+                self.toggle_preview(window, cx);
+            }
         } else {
             self.vim_key(event, window, cx);
         }
@@ -786,14 +811,36 @@ impl Render for FolderWorkspace {
             .min_h_0()
             .pt(px(64.))
             .when_some(editor, |pane, editor| {
-                pane.child(
-                    editor::EditorAppearance {
-                        prefs: &self.prefs,
-                        vim: &self.vim,
-                        images: &[],
-                    }
-                    .render(&editor, false, self.replaying_vim_history, cx),
-                )
+                if self.preview {
+                    let path = self
+                        .active
+                        .as_ref()
+                        .and_then(|id| self.entries.get(id))
+                        .and_then(|entry| entry.path.strip_prefix(&self.folder.root).ok())
+                        .map(|path| path.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    pane.child(
+                        div()
+                            .size_full()
+                            .track_focus(&self.preview_focus)
+                            .child(editor::markdown_preview(
+                                editor.read(cx).value(),
+                                self.prefs.font_size,
+                                self.folder.root.clone(),
+                                path,
+                                cx,
+                            )),
+                    )
+                } else {
+                    pane.child(
+                        editor::EditorAppearance {
+                            prefs: &self.prefs,
+                            vim: &self.vim,
+                            images: &[],
+                        }
+                        .render(&editor, false, self.replaying_vim_history, cx),
+                    )
+                }
             })
             .when(!has_editor, |pane| {
                 pane.child(

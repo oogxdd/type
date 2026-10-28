@@ -2801,8 +2801,13 @@ fn external_folder_shortcuts_cannot_create_or_delete_profile_notes(cx: &mut Test
         fs::read_to_string(folder.join("plain.txt")).unwrap(),
         "hello"
     );
+    // Cmd+K opens, but only with commands that never touch profile notes.
     cx.update_window(window, |_, _, cx| {
-        assert!(app.read(cx).modal.is_none());
+        let app = app.read(cx);
+        assert!(app.modal.is_some());
+        let labels: Vec<_> = app.entries("", cx).into_iter().map(|e| e.label).collect();
+        assert_eq!(labels, ["Toggle Markdown preview", "Toggle light / dark theme"]);
+        assert!(app.entries("mv ", cx).iter().all(|e| !e.label.starts_with("Move")));
     })
     .unwrap();
 }
@@ -3520,4 +3525,71 @@ fn markdown_preview_replaces_the_editor_and_blocks_hidden_vim_edits(cx: &mut Tes
         assert!(editor.focus_handle(cx).is_focused(window));
     })
     .unwrap();
+}
+
+#[gpui_kit::test]
+fn ordinary_folder_palette_is_folder_safe_and_previews_markdown(cx: &mut TestAppContext) {
+    use std::{fs, path::Path};
+    let f = Fixture::new();
+    let folder = f.0.env.app_data_dir.join("ordinary-folder");
+    fs::create_dir_all(&folder).unwrap();
+    let body = "| No | Step |\n| --- | --- |\n| 1 | First<br>- item |\n";
+    fs::write(folder.join("roadmap.md"), body).unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| app.open_folder_path(&folder, window, cx));
+        let tab = app.read(cx).current_folder().unwrap();
+        tab.update(cx, |tab, cx| {
+            tab.open_file(tab.entry_id(Path::new("roadmap.md")), true, window, cx)
+        });
+        window.render_frame(cx);
+    })
+    .unwrap();
+    let mac = cfg!(target_os = "macos");
+    press(cx, window, if mac { "cmd-k" } else { "ctrl-k" });
+    cx.update_window(window, |_, _, cx| {
+        let app = app.read(cx);
+        assert!(app.modal.is_some());
+        let labels: Vec<_> = app.entries("", cx).into_iter().map(|e| e.label).collect();
+        assert_eq!(labels, ["Toggle Markdown preview", "Toggle light / dark theme"]);
+    })
+    .unwrap();
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.close_modal(window, cx);
+            app.execute(super::commands::Choice::Preview, window, cx);
+        });
+    })
+    .unwrap();
+    cx.run_until_parked();
+    press(cx, window, "x d d");
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        let tab = app.read(cx).current_folder().unwrap();
+        assert!(tab.read(cx).preview);
+        assert!(window.try_find("note-preview").is_some());
+        assert!(window.try_find("editor-pane").is_none());
+        let text = tab.read(cx).current_editor().unwrap().read(cx).value();
+        assert_eq!(text.as_ref(), body);
+    })
+    .unwrap();
+    press(cx, window, "escape");
+    press(cx, window, if mac { "cmd-e" } else { "ctrl-e" });
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        let tab = app.read(cx).current_folder().unwrap();
+        assert!(tab.read(cx).preview);
+    })
+    .unwrap();
+    press(cx, window, "escape");
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        let tab = app.read(cx).current_folder().unwrap();
+        assert!(!tab.read(cx).preview);
+        assert!(window.try_find("editor-pane").is_some());
+        let editor = tab.read(cx).current_editor().unwrap();
+        assert!(editor.focus_handle(cx).is_focused(window));
+    })
+    .unwrap();
+    assert_eq!(fs::read_to_string(folder.join("roadmap.md")).unwrap(), body);
 }

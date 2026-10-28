@@ -215,7 +215,9 @@ impl TypeApp {
         let navigation = self.modal.take().map(|m| m.navigation).unwrap_or(false);
         self.modal_subscription = None;
         self.navigation_focused = navigation;
-        if self.settings {
+        if let Some(tab) = self.current_folder() {
+            tab.update(cx, |tab, cx| tab.focus(window, cx));
+        } else if self.settings {
             if navigation {
                 self.navigation_focus.focus(window, cx);
             } else {
@@ -367,6 +369,21 @@ impl TypeApp {
     }
 
     pub fn entries(&self, query: &str, cx: &App) -> Vec<Entry> {
+        // Profile commands never act on an ordinary folder tab.
+        if self.current_folder().is_some() {
+            let query = query.trim().to_lowercase();
+            return [
+                ("Toggle Markdown preview", Choice::Preview),
+                ("Toggle light / dark theme", Choice::Theme),
+            ]
+            .into_iter()
+            .filter(|(label, _)| label.to_lowercase().contains(&query))
+            .map(|(label, choice)| Entry {
+                label: label.into(),
+                choice,
+            })
+            .collect();
+        }
         if let Some(query) = query.strip_prefix("fl ") {
             return self.flag_entries(query, cx);
         }
@@ -614,6 +631,14 @@ impl TypeApp {
     pub fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         if !self.locked && self.modal.is_none() {
             if let Some(tab) = self.current_folder() {
+                // Cmd+K opens the palette with folder-safe commands only.
+                let mac = cfg!(target_os = "macos");
+                if keyboard::command(event, mac, false) == Some(keyboard::Command::Palette) {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    self.show_modal(ModalKind::Palette, "", window, cx);
+                    return;
+                }
                 tab.update(cx, |tab, cx| tab.key_down(event, window, cx));
                 return;
             }
@@ -1608,7 +1633,10 @@ impl TypeApp {
                     self.persist_preferences();
                 }
                 Choice::Vim => self.toggle_vim(window, cx),
-                Choice::Preview => self.toggle_preview(window, cx),
+                Choice::Preview => match self.current_folder() {
+                    Some(tab) => tab.update(cx, |tab, cx| tab.toggle_preview(window, cx)),
+                    None => self.toggle_preview(window, cx),
+                },
                 Choice::Profile(profile_id) => {
                     self.flush(true, cx)?;
                     self.ensure_profile_switch()?;

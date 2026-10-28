@@ -1,6 +1,11 @@
 use super::*;
 use gpui_kit::base::input::RopeExt;
-use std::{ops::Range, path::Path, sync::Arc};
+use gpui_kit::base::TextView;
+use std::{
+    ops::Range,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 pub(crate) struct EditorAppearance<'a> {
     pub prefs: &'a Preferences,
@@ -243,6 +248,39 @@ impl EditorAppearance<'_> {
         .h_full()
         .w(width)
     }
+}
+
+/// Read-only rendered Markdown (GFM tables, lists, code, quotes, images).
+/// `note` is relative to `root`; attachment links resolve like editor
+/// thumbnails and other image URIs load as-is.
+pub(crate) fn markdown_preview(
+    text: SharedString,
+    font_size: f32,
+    root: PathBuf,
+    note: String,
+    cx: &App,
+) -> impl IntoElement + use<> {
+    div()
+        .id("note-preview")
+        .test_support()
+        .size_full()
+        .min_w_0()
+        .min_h_0()
+        .text_size(px(font_size))
+        .font_family(cx.theme().font_family.clone())
+        .child(
+            TextView::markdown(SharedString::from(format!("preview:{note}")), text)
+                .scrollable(true)
+                .selectable(true)
+                .image_source(move |uri| {
+                    type_core::resolve_note_attachment(&root, &note, uri.as_ref())
+                        .map(ImageSource::from)
+                        .unwrap_or_else(|| ImageSource::from(uri.clone()))
+                })
+                .size_full()
+                .px_4()
+                .pb_6(),
+        )
 }
 
 // Query logical line starts, avoiding Kit's IME hit-testing path (which does

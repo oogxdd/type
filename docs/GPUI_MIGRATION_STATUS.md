@@ -43,9 +43,13 @@ Updated: 2026-10-28. This is an unfinished migration; update this file after eac
   focus, so chords and Ctrl+W still work; plain Esc or `i` returns to the
   editor, and every other plain key is swallowed so Vim cannot edit the hidden
   buffer.
-- Not done: ordinary folder tabs, a preference to remember the mode, scroll
-  sync with the editor cursor. Rendering feel needs user testing.
-- Checks: `cargo test -p type-gpui -- --test-threads=1` (40 + 57).
+- Ordinary folder tabs (Open Folder) have their own toggle, focus handle and
+  attachment resolution relative to the folder root. Cmd+K there now opens the
+  palette with folder-safe commands only (preview, theme); previously it was
+  swallowed, and profile commands still never act on an ordinary folder.
+- Not done: a preference to remember the mode, scroll sync with the editor
+  cursor. Rendering feel needs user testing.
+- Checks: `cargo test -p type-gpui -- --test-threads=1` (40 + 58).
 
 ### Published GPUI 0.4.13 Apple Silicon (2026-10-19)
 
