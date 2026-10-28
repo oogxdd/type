@@ -820,6 +820,14 @@ impl TypeApp {
             return;
         }
         self.navigation_focused = false;
+        if self.current_table().is_some() {
+            if let grid::TableKey::Close = grid::key(event, true, window, cx) {
+                self.preview_table = None;
+                self.focus_editor(window, cx);
+                cx.notify();
+            }
+            return;
+        }
         if self.preview {
             // The hidden editor must not receive Vim edits. Esc or i edits again.
             let stroke = &event.keystroke;
@@ -858,7 +866,18 @@ impl TypeApp {
         cx.notify();
     }
 
+    /// The opened Markdown table, while its note is still previewed.
+    pub(crate) fn current_table(&self) -> Option<grid::Table> {
+        let (note, table) = self.preview_table.as_ref()?;
+        (self.preview && *note == self.active).then(|| table.clone())
+    }
+
     pub fn focus_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(table) = self.current_table() {
+            self.navigation_focused = false;
+            table.focus_handle(cx).focus(window, cx);
+            return;
+        }
         if self.preview {
             self.navigation_focused = false;
             self.focus.focus(window, cx);

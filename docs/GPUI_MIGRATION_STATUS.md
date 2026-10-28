@@ -65,10 +65,18 @@ Updated: 2026-10-28. This is an unfinished migration; update this file after eac
   footnotes, comments, headers/footers, EMF/WMF images and legacy `.doc` are
   not shown. Refresh re-reads the file; nothing is ever written back.
 - Ctrl+W from the preview pane now moves to the folder tree.
+- Markdown/DOCX tables in the preview (profile notes and folder tabs): the
+  `TextView` style mirrors the component theme's rich-text style plus
+  `overflow-x: scroll`, so wide tables keep measured column widths and scroll
+  sideways while cells still wrap `<br>`/lists. Each table has an
+  "Open as table" action (`table_actions`) that opens its plain-text cells in
+  the same `DataTable` over the document; Esc or "Back to document" returns,
+  hjkl/arrows move the selection. The opened table is session-only and tied to
+  its note/file.
 - Not done: a preference to remember the mode, scroll sync with the editor
   cursor. Real Word-authored files were not available here (only textutil
   output, which has no semantic styles); rendering feel needs user testing.
-- Checks: `cargo test -p type-gpui -- --test-threads=1` (44 + 59).
+- Checks: `cargo test -p type-gpui -- --test-threads=1` (44 + 60).
 
 ### Published GPUI 0.4.13 Apple Silicon (2026-10-19)
 

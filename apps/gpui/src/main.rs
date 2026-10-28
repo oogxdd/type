@@ -124,6 +124,8 @@ struct TypeApp {
     replaying_vim_history: bool,
     /// Show the active note as rendered Markdown instead of the editor.
     preview: bool,
+    /// A Markdown table opened from the preview of this note.
+    preview_table: Option<(SharedString, grid::Table)>,
     roots: Vec<TreeItem>,
     tree: Entity<TreeState>,
     notes: HashMap<SharedString, Note>,

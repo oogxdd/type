@@ -3591,6 +3591,21 @@ fn ordinary_folder_palette_is_folder_safe_and_previews_markdown(cx: &mut TestApp
         assert!(editor.focus_handle(cx).is_focused(window));
     })
     .unwrap();
+    press(cx, window, if mac { "cmd-e" } else { "ctrl-e" });
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("open-table", cx);
+        window.render_frame(cx);
+        assert!(window.try_find("table-overlay").is_some());
+    })
+    .unwrap();
+    press(cx, window, "x d d escape");
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("table-overlay").is_none());
+        assert!(window.try_find("note-preview").is_some());
+    })
+    .unwrap();
     assert_eq!(fs::read_to_string(folder.join("roadmap.md")).unwrap(), body);
 }
 
@@ -3688,4 +3703,47 @@ fn ordinary_folder_previews_csv_json_and_readonly_docx(cx: &mut TestAppContext) 
     assert_eq!(fs::read_to_string(folder.join("people.csv")).unwrap(), csv);
     assert_eq!(fs::read_to_string(folder.join("rows.json")).unwrap(), json);
     assert_eq!(fs::read(folder.join("report.docx")).unwrap(), docx);
+}
+
+#[gpui_kit::test]
+fn markdown_preview_opens_a_table_as_a_sortable_grid(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let body = "Intro\n\n| No | Step |\n| --- | --- |\n| 2 | Second |\n| 1 | First<br>- item |\n";
+    let path = f.0.create(STREAM_FOLDER, body.into(), None).unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.open_note(path.clone().into(), true, window, cx)
+        });
+        window.render_frame(cx);
+    })
+    .unwrap();
+    press(cx, window, if cfg!(target_os = "macos") { "cmd-e" } else { "ctrl-e" });
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("open-table", cx);
+        window.render_frame(cx);
+        assert!(window.try_find("table-overlay").is_some());
+        assert!(window.try_find("note-preview").is_none());
+        let table = app.read(cx).current_table().unwrap();
+        assert!(table.focus_handle(cx).is_focused(window));
+        let (header, rows) = table.read(cx).dump(cx);
+        assert_eq!(header, ["No", "Step"]);
+        assert_eq!(rows[0], ["2", "Second"]);
+        assert_eq!(rows.len(), 2);
+    })
+    .unwrap();
+    // Vim keys move the selection and never reach the hidden editor.
+    press(cx, window, "j x d d");
+    press(cx, window, "escape");
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("table-overlay").is_none());
+        assert!(window.try_find("note-preview").is_some());
+        let app = app.read(cx);
+        assert!(app.preview && app.current_table().is_none());
+        let text = app.notes[&app.active].editor.as_ref().unwrap().read(cx).value();
+        assert_eq!(text.as_ref(), body);
+    })
+    .unwrap();
 }

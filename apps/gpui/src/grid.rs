@@ -1,6 +1,7 @@
 //! Virtualized, sortable table view for CSV/TSV and JSON record arrays.
 use super::*;
-use gpui_kit::component::table::{Column, ColumnSort, TableDelegate, TableState};
+use gpui_kit::base::text::TableData;
+use gpui_kit::component::table::{Column, ColumnSort, DataTable, TableDelegate, TableState};
 use type_gpui::convert::Grid;
 
 pub(crate) struct GridDelegate {
@@ -117,4 +118,98 @@ impl TableDelegate for GridDelegate {
     fn cell_text(&self, row_ix: usize, col_ix: usize, _: &App) -> String {
         self.cell(row_ix, col_ix).to_string()
     }
+}
+
+pub(crate) type Table = Entity<TableState<GridDelegate>>;
+
+pub(crate) fn table(grid: Grid, window: &mut Window, cx: &mut App) -> Table {
+    cx.new(|cx| {
+        TableState::new(GridDelegate::new(grid), window, cx)
+            .sortable(true)
+            .col_movable(false)
+            .cell_selectable(true)
+    })
+}
+
+/// A Markdown table opened from the preview's "Open as table" action.
+pub(crate) fn from_markdown(data: &TableData, window: &mut Window, cx: &mut App) -> Table {
+    let grid = Grid {
+        columns: data.headers.clone(),
+        rows: data.rows.clone(),
+    };
+    let table = table(grid, window, cx);
+    table.focus_handle(cx).focus(window, cx);
+    table
+}
+
+/// The table over the document preview; Esc or the button returns to it.
+pub(crate) fn overlay(
+    table: &Table,
+    on_close: impl Fn(&mut Window, &mut App) + 'static,
+    cx: &App,
+) -> impl IntoElement {
+    v_flex()
+        .id("table-overlay")
+        .test_support()
+        .size_full()
+        .px_4()
+        .pb_6()
+        .gap_2()
+        .child(
+            h_flex()
+                .gap_2()
+                .text_sm()
+                .text_color(cx.theme().muted_foreground)
+                .child(
+                    Button::new("table-overlay-close")
+                        .ghost()
+                        .small()
+                        .icon(IconName::ArrowLeft)
+                        .label("Back to document")
+                        .on_click(move |_, window, cx| on_close(window, cx)),
+                )
+                .child("Esc"),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_h_0()
+                .child(DataTable::new(table).stripe(true)),
+        )
+}
+
+pub(crate) enum TableKey {
+    Close,
+    Handled,
+    Ignored,
+}
+
+/// Esc closes a table view; Vim motions move its selection like the arrows.
+pub(crate) fn key(
+    event: &KeyDownEvent,
+    close: bool,
+    window: &mut Window,
+    cx: &mut App,
+) -> TableKey {
+    use gpui_kit::base::actions::{SelectDown, SelectNextColumn, SelectPrevColumn, SelectUp};
+    let stroke = &event.keystroke;
+    if stroke.modifiers.control || stroke.modifiers.platform || stroke.modifiers.alt {
+        return TableKey::Ignored;
+    }
+    let action: Box<dyn Action> = match stroke.key.as_str() {
+        "escape" if close => {
+            window.prevent_default();
+            cx.stop_propagation();
+            return TableKey::Close;
+        }
+        "j" => Box::new(SelectDown),
+        "k" => Box::new(SelectUp),
+        "h" => Box::new(SelectPrevColumn),
+        "l" => Box::new(SelectNextColumn),
+        _ => return TableKey::Ignored,
+    };
+    window.prevent_default();
+    cx.stop_propagation();
+    window.dispatch_action(action, cx);
+    TableKey::Handled
 }

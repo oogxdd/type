@@ -78,6 +78,7 @@ impl TypeApp {
             vim: vim::Vim::default(),
             replaying_vim_history: false,
             preview: false,
+            preview_table: None,
             roots: vec![],
             tree: tree.clone(),
             notes: HashMap::new(),

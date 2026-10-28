@@ -666,7 +666,23 @@ impl Render for TypeApp {
             self.render_settings(cx).into_any_element()
         } else if let Some(note) = self.notes.get(&self.active).filter(|n| n.editor.is_some()) {
             let editor = note.editor.as_ref().unwrap();
-            let editor = if self.preview {
+            let editor = if let Some(table) = self.current_table() {
+                let view = cx.weak_entity();
+                grid::overlay(
+                    &table,
+                    move |window, cx| {
+                        let _ = view.update(cx, |this, cx| {
+                            this.preview_table = None;
+                            this.focus_editor(window, cx);
+                            cx.notify();
+                        });
+                    },
+                    cx,
+                )
+                .into_any_element()
+            } else if self.preview {
+                let view = cx.weak_entity();
+                let note = self.active.clone();
                 editor::markdown_preview(
                     editor.read(cx).value(),
                     self.prefs.font_size,
@@ -675,6 +691,13 @@ impl Render for TypeApp {
                         self.backend.root.clone(),
                         self.active.to_string(),
                     ),
+                    move |data, window, cx| {
+                        let table = grid::from_markdown(data, window, cx);
+                        let _ = view.update(cx, |this, cx| {
+                            this.preview_table = Some((note.clone(), table));
+                            cx.notify();
+                        });
+                    },
                     cx,
                 )
                 .into_any_element()

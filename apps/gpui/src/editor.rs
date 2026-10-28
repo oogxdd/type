@@ -265,16 +265,52 @@ pub(crate) fn attachment_images(
     }
 }
 
-pub(crate) fn markdown_preview<F>(
+/// The component theme's rich-text style, with wide tables scrolling sideways
+/// instead of squeezing their columns to the pane width.
+fn preview_style(cx: &App) -> gpui_kit::base::TextViewStyle {
+    let theme = cx.theme();
+    let mut table = StyleRefinement::default();
+    table.overflow.x = Some(Overflow::Scroll);
+    table.corner_radii.top_left = Some(theme.radius.into());
+    table.corner_radii.top_right = Some(theme.radius.into());
+    table.corner_radii.bottom_left = Some(theme.radius.into());
+    table.corner_radii.bottom_right = Some(theme.radius.into());
+    let mut code_block = StyleRefinement::default();
+    code_block.corner_radii = table.corner_radii.clone();
+    gpui_kit::base::TextViewStyle::default()
+        .with_foreground(theme.foreground)
+        .with_muted_foreground(theme.muted_foreground)
+        .with_link(theme.link)
+        .with_selection(theme.selection)
+        .with_code_background(theme.muted)
+        .with_border(theme.border)
+        .with_code_block(code_block)
+        .with_table(table)
+        .with_table_head(
+            StyleRefinement::default()
+                .bg(theme.table_head)
+                .text_color(theme.table_head_foreground),
+        )
+        .with_inline_code(HighlightStyle {
+            background_color: Some(theme.accent),
+            ..Default::default()
+        })
+        .with_dark(theme.is_dark())
+}
+
+pub(crate) fn markdown_preview<F, T>(
     text: SharedString,
     font_size: f32,
     id: &str,
     images: F,
+    open_table: T,
     cx: &App,
-) -> impl IntoElement + use<F>
+) -> impl IntoElement + use<F, T>
 where
     F: Fn(&SharedUri) -> ImageSource + Send + Sync + 'static,
+    T: Fn(&gpui_kit::base::text::TableData, &mut Window, &mut App) + Send + Sync + 'static,
 {
+    let open_table = Arc::new(open_table);
     div()
         .id("note-preview")
         .test_support()
@@ -288,6 +324,16 @@ where
                 .scrollable(true)
                 .selectable(true)
                 .image_source(images)
+                .style(preview_style(cx))
+                .table_actions(move |data, _, _| {
+                    let (data, open_table) = (data.clone(), open_table.clone());
+                    Button::new("open-table")
+                        .ghost()
+                        .xsmall()
+                        .icon(IconName::Maximize)
+                        .label("Open as table")
+                        .on_click(move |_, window, cx| open_table(&data, window, cx))
+                })
                 .size_full()
                 .px_4()
                 .pb_6(),

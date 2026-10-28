@@ -1,4 +1,5 @@
 use super::*;
+use gpui_kit::base::text::TableData;
 use gpui_kit::component::table::{DataTable, TableState};
 use std::{
     path::{Path, PathBuf},
@@ -52,6 +53,8 @@ pub(crate) struct FolderWorkspace {
     views: HashMap<PathBuf, DocumentView>,
     /// The active buffer's converted preview, reused while its text is unchanged.
     preview_cache: Option<(PathBuf, SharedString, Rendered)>,
+    /// A Markdown table opened from the preview, shown over its document.
+    table: Option<(PathBuf, grid::Table)>,
     save_task: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
@@ -86,6 +89,7 @@ impl FolderWorkspace {
             preview_focus: cx.focus_handle(),
             views: HashMap::new(),
             preview_cache: None,
+            table: None,
             save_task: None,
             _subscriptions: vec![],
         };
@@ -252,12 +256,7 @@ impl FolderWorkspace {
             }
         }
         let out = match convert::grid(&path, &text) {
-            Some(data) => Rendered::Grid(cx.new(|cx| {
-                TableState::new(grid::GridDelegate::new(data), window, cx)
-                    .sortable(true)
-                    .col_movable(false)
-                    .cell_selectable(true)
-            })),
+            Some(data) => Rendered::Grid(grid::table(data, window, cx)),
             None => Rendered::Markdown(
                 convert::preview_markdown(&path, &text)
                     .map(Into::into)
@@ -332,8 +331,33 @@ impl FolderWorkspace {
         cx.notify();
     }
 
+    fn table_opener(
+        &self,
+        path: PathBuf,
+        cx: &Context<Self>,
+    ) -> impl Fn(&TableData, &mut Window, &mut App) + Send + Sync + 'static {
+        let view = cx.weak_entity();
+        move |data, window, cx| {
+            let table = grid::from_markdown(data, window, cx);
+            let _ = view.update(cx, |this, cx| {
+                this.table = Some((path.clone(), table));
+                cx.notify();
+            });
+        }
+    }
+
+    /// The opened Markdown table, while its document is still previewed.
+    fn current_table(&self) -> Option<grid::Table> {
+        let path = &self.entries.get(self.active.as_ref()?)?.path;
+        let (owner, table) = self.table.as_ref()?;
+        let previewed = self.current_view().is_some() || self.preview;
+        (owner == path && previewed).then(|| table.clone())
+    }
+
     pub fn focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(Rendered::Grid(table)) = self.rendered_preview(window, cx) {
+        if let Some(table) = self.current_table() {
+            table.focus_handle(cx).focus(window, cx);
+        } else if let Some(Rendered::Grid(table)) = self.rendered_preview(window, cx) {
             table.focus_handle(cx).focus(window, cx);
         } else if self.current_view().is_some() || self.preview && self.current_editor().is_some() {
             self.preview_focus.focus(window, cx);
@@ -644,6 +668,12 @@ impl FolderWorkspace {
             window.prevent_default();
             cx.stop_propagation();
             cx.notify();
+        } else if self.current_table().is_some() {
+            if let grid::TableKey::Close = grid::key(event, true, window, cx) {
+                self.table = None;
+                self.focus(window, cx);
+                cx.notify();
+            }
         } else if self.preview && self.current_editor().is_some() {
             // The hidden editor must not receive Vim edits. Esc or i edits again.
             let stroke = &event.keystroke;
@@ -653,20 +683,7 @@ impl FolderWorkspace {
                 cx.stop_propagation();
                 self.toggle_preview(window, cx);
             } else if let Some(Rendered::Grid(_)) = self.preview_cache.as_ref().map(|c| &c.2) {
-                use gpui_kit::base::actions::{
-                    SelectDown, SelectNextColumn, SelectPrevColumn, SelectUp,
-                };
-                // Vim motions move the table selection like the arrow keys.
-                let action: Box<dyn Action> = match stroke.key.as_str() {
-                    "j" if plain => Box::new(SelectDown),
-                    "k" if plain => Box::new(SelectUp),
-                    "h" if plain => Box::new(SelectPrevColumn),
-                    "l" if plain => Box::new(SelectNextColumn),
-                    _ => return,
-                };
-                window.prevent_default();
-                cx.stop_propagation();
-                window.dispatch_action(action, cx);
+                grid::key(event, false, window, cx);
             }
         } else {
             self.vim_key(event, window, cx);
@@ -953,6 +970,9 @@ impl Render for FolderWorkspace {
             .current_view()
             .map(|view| (view.markdown.clone(), view.images.clone()));
         let has_view = view.is_some();
+        let overlay = self.current_table();
+        let view = view.filter(|_| overlay.is_none());
+        let editor = editor.filter(|_| overlay.is_none());
         let dirty = self
             .active
             .as_ref()
@@ -980,9 +1000,24 @@ impl Render for FolderWorkspace {
                                     .map(|image| ImageSource::from(image.clone()))
                                     .unwrap_or_else(|| ImageSource::from(uri.clone()))
                             },
+                            self.table_opener(path.clone(), cx),
                             cx,
                         )),
                 )
+            })
+            .when_some(overlay, |pane, table| {
+                let view = cx.weak_entity();
+                pane.child(grid::overlay(
+                    &table,
+                    move |window, cx| {
+                        let _ = view.update(cx, |this, cx| {
+                            this.table = None;
+                            this.focus(window, cx);
+                            cx.notify();
+                        });
+                    },
+                    cx,
+                ))
             })
             .when_some(editor, |pane, editor| {
                 if let Some(Rendered::Grid(table)) = preview {
@@ -1006,6 +1041,7 @@ impl Render for FolderWorkspace {
                                 self.prefs.font_size,
                                 &id,
                                 editor::attachment_images(self.folder.root.clone(), id.clone()),
+                                self.table_opener(path.clone(), cx),
                                 cx,
                             )),
                     )
