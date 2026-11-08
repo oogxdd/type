@@ -1,5 +1,5 @@
-import { recordResponsiveness } from "../lib/responsiveness-trace";
-import { PressGate } from "../lib/press-gate";
+import { recordResponsiveness } from "../platform/responsiveness-trace";
+import { PressGate } from "../domain/press-gate";
 // Menu and Capture are persistent layers of one route. The native stack has
 // no pop recognizer here: one pan owns direction and release for both layers.
 import { useIsFocused, useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
@@ -13,14 +13,14 @@ import Animated, {
 import {
   menuReleaseTarget, resolveSwipeDirection, pageReleaseStep,
   type SwipeDirection,
-} from "../lib/capture-gesture";
-import { recordGestureAttempt, type GestureOutcome } from "../lib/gesture-trace";
-import { noteForegroundActivity } from "../lib/note-loading";
+} from "../domain/capture-gesture";
+import { recordGestureAttempt, type GestureOutcome } from "../platform/gesture-trace";
+import { noteForegroundActivity } from "../domain/note-loading";
 import { useDiagnosticsStore } from "../state/diagnostics-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useTheme } from "../theme";
 import type { RootStackParamList } from "../navigation";
-import type { NotePageRequest } from "../lib/note-pages";
+import type { NotePageRequest } from "../application/note-pages";
 import { CaptureScreen } from "./capture-screen";
 import { HomeShellProvider, type HomeShell } from "./home-shell";
 import { MenuScreen } from "./menu-screen";

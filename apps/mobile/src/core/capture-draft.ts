@@ -1,4 +1,4 @@
-import { mobileRuntime } from "../core/runtime";
+import { mobileRuntime } from "./runtime";
 // Persistent Capture survives navigation to Settings. Flush it before changing
 // the backend's active notes root, while its paths still refer to that root.
 let flush: (() => Promise<void>) | null = null;

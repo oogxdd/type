@@ -1,4 +1,4 @@
-import type { FeedJob, NoteJob, NoteJobResult } from "./note-processing";
+import type { FeedJob, NoteJob, NoteJobResult } from "../domain/note-processing";
 
 type Pending = { job: NoteJob | FeedJob; resolve: (result: NoteJobResult) => void; reject: (error: unknown) => void };
 /** One worker call at a time; obsolete feed requests never build up a backlog. */

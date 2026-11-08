@@ -7,7 +7,7 @@
 //
 //   assemblyai → cloud queue now, on this device
 //   native     → on-device speech recognition via the expo-speech-recognition
-//                provider (lib/native-transcription), run by the core's queue
+//                provider (platform/native-transcription), run by the core's queue
 //   desktop    → stays pending; a synced desktop picks it up (local Whisper)
 //   off        → stays pending until triggered manually
 
@@ -31,7 +31,7 @@ import {
   type TranscriptionMode,
 } from "@typenotes/shared/types";
 
-import { nativeTranscriptionProvider } from "../lib/native-transcription";
+import { nativeTranscriptionProvider } from "../platform/native-transcription";
 import {
   addRecordingStopListener,
   consumePendingRecordingStop,
@@ -39,10 +39,10 @@ import {
   startRecordingActivity,
   holdRecordingSave,
   repairRecordingWave,
-} from "../lib/recording-activity";
-import { rememberRecording, forgetRecording, pendingRecordings } from "../lib/recording-journal";
-import { RecordingSession } from "../lib/recording-session";
-import { elapsedSeconds, formatRecordingTimer } from "../lib/recording-timer";
+} from "../platform/recording-activity";
+import { rememberRecording, forgetRecording, pendingRecordings } from "../platform/recording-journal";
+import { RecordingSession } from "../application/recording-session";
+import { elapsedSeconds, formatRecordingTimer } from "../domain/recording-timer";
 import { useNotesStore } from "../state/notes-store";
 import { useRecordingSessionStore } from "../state/recording-session-store";
 import { activeProfile, useSettingsStore } from "../state/settings-store";

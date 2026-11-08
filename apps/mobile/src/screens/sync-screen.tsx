@@ -32,7 +32,7 @@ import {
 import { parseSyncDeepLink, type SyncDeepLinkParams } from "@typenotes/shared/sync-link";
 import type { IrohClientStatus } from "@typenotes/shared/types";
 
-import { autoSyncLabel, audioSyncLabel } from "../lib/sync-experience";
+import { autoSyncLabel, audioSyncLabel } from "../domain/sync-experience";
 import { activeProfile, useSettingsStore } from "../state/settings-store";
 import { useSyncStore } from "../state/sync-store";
 import { useTheme } from "../theme";

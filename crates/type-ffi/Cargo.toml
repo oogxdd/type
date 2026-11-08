@@ -21,3 +21,12 @@ uniffi = { version = "0.31", features = ["tokio"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+
+# Opt-in host tool; never linked into either mobile app.
+[features]
+bindgen = ["uniffi/cli"]
+
+[[bin]]
+name = "type-swift-bindgen"
+path = "src/bin/swift_bindgen.rs"
+required-features = ["bindgen"]

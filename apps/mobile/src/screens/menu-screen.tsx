@@ -1,4 +1,4 @@
-import { beginNavigationTrace, recordResponsiveness } from "../lib/responsiveness-trace";
+import { beginNavigationTrace, recordResponsiveness } from "../platform/responsiveness-trace";
 // Persistent menu layer. HomeScreen owns all directional gestures.
 
 import { Ionicons } from "@expo/vector-icons";
@@ -26,16 +26,16 @@ import {
   folderNoteCount,
   type NoteRow,
   type NoteRowSection,
-} from "../lib/feed";
+} from "../domain/feed";
 import {
   flattenFolderTree,
   toggleExpanded,
   type FolderTreeRow,
-} from "../lib/folder-tree";
+} from "../domain/folder-tree";
 import { mobileRuntime } from "../core/runtime";
-import { formatRelativeTime } from "../lib/relative-time";
-import { useFeedSections } from "../lib/use-feed-sections";
-import { autoSyncLabel } from "../lib/sync-experience";
+import { formatRelativeTime } from "../domain/relative-time";
+import { useFeedSections } from "../hooks/use-feed-sections";
+import { autoSyncLabel } from "../domain/sync-experience";
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useSyncStore } from "../state/sync-store";

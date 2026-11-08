@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { MobileRuntime } from "./mobile-runtime";
 import type { NotePageStorage } from "./note-pages";
-import { PressGate } from "./press-gate";
+import { PressGate } from "../domain/press-gate";
 
 const deferred = () => {
   let resolve!: () => void;

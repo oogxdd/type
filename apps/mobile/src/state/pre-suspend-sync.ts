@@ -2,12 +2,12 @@
 //
 // Timers do not fire while iOS has the app suspended, so an edit still waiting
 // for its typing pause would otherwise sit on the phone until the next launch.
-// The native background task (lib/background-task) buys ~30 s; this flushes
+// The native background task (platform/background-task) buys ~30 s; this flushes
 // every open draft to disk, then runs the owed sync inside that window.
 
 import { mobileRuntime } from "../core/runtime";
-import { finishBackgroundWindow } from "../lib/background-task";
-import { flushAllDrafts } from "../lib/capture-draft";
+import { finishBackgroundWindow } from "../platform/background-task";
+import { flushAllDrafts } from "../core/capture-draft";
 import { useBackgroundOperationStore } from "./background-operation-store";
 import { useSyncStore } from "./sync-store";
 

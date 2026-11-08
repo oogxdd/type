@@ -1,5 +1,25 @@
 # GPUI migration — handoff / live status
 
+## Commit and dev launch checkpoint (2026-11-09)
+
+- User requested committing and pushing all pending work on
+  `feat/gpui-markdown-preview`, then launching the isolated desktop dev app.
+  This checkpoint includes editor links/optional listing previews, the React
+  Native domain/application/platform reorganization, and the first native Swift
+  iOS shell with its opt-in UniFFI binding generator.
+- Checks: mobile Vitest 30 files / 206 tests passed; mobile TypeScript check
+  passed; Swift domain tests 6 passed; `git diff --check` passed. GPUI tests:
+  49 library tests and 65 binary tests passed; the remaining recording-player
+  test failed twice because audio output could not start. Audio playback needs
+  checking with an available output device. No unrelated audio changes made.
+- Fresh native dev build with `gpui-kit/test-support` passed. Build profiles
+  used debug info disabled and incremental compilation disabled to limit disk
+  use. Existing dead-code and upstream `block` warnings remain.
+- Launch target is the separate `Type GPUI Dev.app` bundle with `--dev` and
+  its default isolated data. The running production `Type GPUI.app` is left
+  open. UI/feel, physical iOS/Android workflows, and audio output remain for
+  user testing; native iOS scope/limitations are in `apps/ios/MIGRATION.md`.
+
 Updated: 2026-10-28. This is an unfinished migration; update this file after each milestone.
 
 ## Where to continue
@@ -77,6 +97,52 @@ Updated: 2026-10-28. This is an unfinished migration; update this file after eac
   cursor. Real Word-authored files were not available here (only textutil
   output, which has no semantic styles); rendering feel needs user testing.
 - Checks: `cargo test -p type-gpui -- --test-threads=1` (44 + 60).
+
+### Clickable links in editors (2026-11-01)
+
+- `http(s)://` links in notes and Open Folder text tabs are coloured with the
+  theme link colour and open in the default browser on Cmd+click (Cmd-hover
+  underlines them). `document::link_ranges` finds bare URLs, `<autolinks>` and
+  `[label](url)` targets, trimming trailing punctuation and unbalanced brackets.
+- Wiring: `editor::link_support` installs a Kit `DefinitionProvider`
+  (`LinkTargets`, non-ASCII paths percent-encoded) plus a `TextDecorationCollection`
+  refreshed by `editor::color_links` (notes: with the 120ms tag refresh; folder
+  tabs: on every change). Kit finds the link only on pointer movement, so the
+  editor pane replays the pointer when Cmd goes down on a still mouse.
+- Not done: rendered Markdown preview links (not touched), `[[wiki]]`/relative
+  note links, non-http schemes such as `mailto:`. Real-browser opening and feel
+  are untested here (tests assert `open_url`).
+- Checks: `cargo test -p type-gpui -- --test-threads=1` (45 + 61).
+
+### Hover preview for list.am links (2026-11-02)
+
+- Hovering a `list.am/.../item/<id>` link in notes or Open Folder text tabs
+  shows a popup with the listing title and a photo slider (arrows, wrap-around,
+  `n / total`). Other links get no preview and cause no network traffic.
+- Why a web view: list.am answers plain HTTP with a Cloudflare challenge
+  (`403`, `cf-mitigated: challenge`). A hidden `wry` WKWebView child of the main
+  window (parked off-screen, created on the first hover) passes it by itself in
+  about 3s with no captcha; no fingerprint spoofing. The rendered DOM is polled
+  until the URL contains `/item/<id>` and the gallery script
+  (`po127.init('#po127', {img:[...]})`, fallback `og:image`) is present. Photos
+  (only `*.list.am` https) are then downloaded with plain `reqwest` and need no
+  browser.
+- Code: `link_preview.rs` (lib, pure: `previewable`, `parse`, cache key, 7-day
+  disk cache under `<app data>/link-previews/<fnv>/{meta.json,N.jpg}`,
+  `download`), `link_hover.rs` (bin: global hub, one-at-a-time fetch queue,
+  Kit `HoverProvider` that always returns `None` so the engine draws nothing,
+  popup in `EditorAppearance::render`). The popup closes after a 250ms grace
+  when the pointer is on neither link nor popup, when the pane is left, or on
+  any text change (`color_links`).
+- Checked: 4 parser/cache unit tests, a UI test (hover opens the popup, arrow
+  clicks cycle 1/2/0, leaving closes it, other links ignored) using a seeded
+  cache, and a manual run of the real app against the real listing
+  (`--data-dir` temp profile): title plus 7 photos cached. Totals: 49 + 62.
+- Untested: how the popup looks and feels with real JPEGs, behaviour when
+  Cloudflare shows an interactive captcha, other windows/profile switches (the
+  web view belongs to the window it was created in), non-macOS. Failed loads
+  show "Preview unavailable" and are retried after 30s. Other sites would need
+  their own `previewable`/`parse`.
 
 ### Published GPUI 0.4.13 Apple Silicon (2026-10-19)
 
@@ -1196,3 +1262,40 @@ ran outside the sandbox to permit loopback sockets. Native build with
 `gpui-kit/test-support` and `git diff --check` passed. Rebuilt the dev bundle and
 atomically updated `/Applications/Type GPUI Dev.app` (binary hash verified);
 the running app was left open. Restart it to use the new Profiles controls.
+
+## Link clicks and previews (2026-11-03)
+
+Cmd-click on an `http(s)` link opens the browser; the listing preview popup is a
+separate hover provider. Two blockers made links below the first viewport
+unreachable. The popup occludes the text under the pointer, so with it open the
+links below it could not be hovered or Cmd-clicked — in the maintainer's note
+the third listing link was unreachable because an earlier preview covered it.
+
+Hover previews now sit behind `Preferences::link_previews` (default off, and
+absent in older `gpui-appearance.json` files, so the popup stays off after
+upgrade). Settings → Appearance → Editor has a "Link previews" toggle that
+adds or removes the hover provider on every open note and folder buffer and
+dismisses an open popup. Cmd-click is unaffected by the flag. Pressing Cmd also
+dismisses an open popup, so a link under it stays clickable when previews are
+enabled.
+
+Cmd-click still failed for links below the first viewport. The engine's
+`on_mouse_move` rejects any pointer outside `last_bounds`, and that rect is the
+paint bounds shifted by the scroll offset, so after scrolling only the top
+`height - scroll` strip of the editor can arm a hover definition. The preview
+popup was a second, independent blocker. The app now owns Cmd-link handling:
+the editor pane hit-tests links against their per-row glyph geometry (wrapped
+links included), underlines the hovered link with its own decoration
+collection, and opens the URI from `capture_any_mouse_down` before the engine
+sees the press. The engine's definition provider stays installed as a fallback
+for the unscrolled case. Hover previews still rely on the engine path, so they
+only appear for links in the initial viewport; previews are off by default.
+
+Validation: `cargo test -p type-gpui -- --test-threads=1` (66 passed), including
+`cmd_click_opens_the_link_under_an_open_preview` (fails with the popup left
+open), `cmd_click_opens_a_link_below_the_first_viewport` (fails with the engine
+path alone), `link_previews_are_off_by_default_and_cmd_click_still_opens_links`
+and `toggling_link_previews_in_settings_arms_open_editors`. UI feel is untested.
+
+Measured bounds, upstream line references, the reproduction recipe and the
+remaining preview limitation: `docs/GPUI_EDITOR_LINKS.md`.

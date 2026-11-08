@@ -3,7 +3,7 @@
 // persists to a small JSON file beside the core's app data (never inside a
 // notes root, so it cannot end up in a git sync).
 
-import type { FreshNoteTransition, FreshNoteHint } from "../lib/capture-motion";
+import type { FreshNoteTransition, FreshNoteHint } from "../domain/capture-motion";
 
 import * as FileSystem from "expo-file-system/legacy";
 import { create } from "zustand";
@@ -16,7 +16,7 @@ import {
   type BackgroundId,
   type FontFamilyId,
   type TextColorId,
-} from "../lib/appearance";
+} from "../domain/appearance";
 
 // Mirrors core/boot.ts: the core's app_data_dir is `<documents>/typenotes`.
 const APPEARANCE_DIR = `${FileSystem.documentDirectory ?? ""}typenotes`;

@@ -6,7 +6,7 @@ import {
   createNativeStackNavigator,
 } from "@react-navigation/native-stack";
 
-import type { NotePageRequest } from "./lib/note-pages";
+import type { NotePageRequest } from "./application/note-pages";
 
 // Home owns the persistent menu/capture layers and their shared gesture.
 // Detail screens use the native stack above it.

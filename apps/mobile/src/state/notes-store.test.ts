@@ -9,7 +9,7 @@ import type { ProfilesSnapshot } from "@typenotes/shared/types";
 import { useNotesStore } from "./notes-store";
 import { useSecurityStore } from "./security-store";
 import { useSettingsStore } from "./settings-store";
-import { findFolder, folderNoteCount } from "../lib/feed";
+import { findFolder, folderNoteCount } from "../domain/feed";
 
 /** The preview snapshots on "disk", by working folder id. */
 const snapshotFiles = vi.hoisted(() => new Map<string, string>());
@@ -452,7 +452,7 @@ describe("notes store", () => {
     await refresh;
     expect(useNotesStore.getState().previews.has(path)).toBe(false);
     expect(useNotesStore.getState().tree).toBeNull();
-    const { runNoteJob } = await import("../lib/note-worker");
+    const { runNoteJob } = await import("../platform/note-worker");
     const cached = await runNoteJob({ kind: "snapshot", scope: useNotesStore.getState().processingScope });
     expect(cached.raw).not.toContain("secret");
     expect(snapshotFiles.has("journal")).toBe(false);

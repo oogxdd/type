@@ -1,0 +1,3 @@
+[bindings.swift]
+module_name = "TypeCoreBindings"
+ffi_module_name = "TypeCoreFFI"

@@ -1,6 +1,6 @@
 import { createWorkletRuntime, runOnRuntimeAsync } from "react-native-worklets";
-import { processNoteJob, type NoteJob, type FeedJob } from "./note-processing";
-import { NoteJobScheduler } from "./note-job-scheduler";
+import { processNoteJob, type NoteJob, type FeedJob } from "../domain/note-processing";
+import { NoteJobScheduler } from "../application/note-job-scheduler";
 
 let runtime: ReturnType<typeof createWorkletRuntime> | undefined;
 const scheduler = new NoteJobScheduler(async (job) => {

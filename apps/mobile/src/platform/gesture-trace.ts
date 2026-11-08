@@ -1,5 +1,5 @@
 // Session-only trace of the unified home gesture. No note text is recorded.
-import type { SwipeDirection } from "./capture-gesture";
+import type { SwipeDirection } from "../domain/capture-gesture";
 
 export type GestureOutcome = "filed" | "released" | "menu-open" | "menu-close" |
   "cancelled" | "scroll" | "diagonal" | "blocked" | "idle";

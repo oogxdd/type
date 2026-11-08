@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getErrorMessage } from "@typenotes/shared/errors";
 import type { FolderNode } from "@typenotes/shared/types";
 
-import type { NoteRow } from "../lib/feed";
+import type { NoteRow } from "../domain/feed";
 import { useNotesStore } from "../state/notes-store";
 import { useTheme } from "../theme";
 import { FolderPickerModal } from "./folder-picker";

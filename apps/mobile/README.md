@@ -61,6 +61,9 @@ working folder is a later step.
 
 ## Layout
 
+See [architecture and Swift migration contracts](ARCHITECTURE.md) for ownership,
+dependency boundaries and the suggested native migration order.
+
 ```
 src/
   App.tsx                 boot + navigation container + demo banner
@@ -68,16 +71,16 @@ src/
                           menu and capture layers)
   theme.ts                the useTheme hook (system scheme + appearance prefs)
   core/boot.ts            wires RawCore (generated native module or mock) + initCore
-  lib/appearance.ts       palette + theme derivation (pure, tested)
-  lib/capture.ts          capture-page note lifecycle (pure, tested)
-  lib/feed.ts             tree+previews → list rows (pure, tested)
-  lib/note-processing.ts  pure worker jobs: JSON cache + incremental Feed sections
-  lib/note-worker.native.ts dedicated Worklet Runtime (separate from animations)
-  lib/note-loading.ts     local-week priority + foreground yielding + tree reuse
-  lib/folder-tree.ts      folder tree → flat expandable rows (pure, tested)
-  lib/backup-export.ts    native Files / SAF backup bridge
-  lib/backup-naming.ts    provider-safe timestamped backup folder names
-  lib/capture-gesture.ts  swipe thresholds + decisions (pure, tested)
+  domain/appearance.ts       palette + theme derivation (pure, tested)
+  application/capture.ts          capture-page note lifecycle (pure, tested)
+  domain/feed.ts             tree+previews → list rows (pure, tested)
+  domain/note-processing.ts  pure worker jobs: JSON cache + incremental Feed sections
+  platform/note-worker.native.ts dedicated Worklet Runtime (separate from animations)
+  domain/note-loading.ts     local-week priority + foreground yielding + tree reuse
+  domain/folder-tree.ts      folder tree → flat expandable rows (pure, tested)
+  platform/backup-export.ts    native Files / SAF backup bridge
+  domain/backup-naming.ts    provider-safe timestamped backup folder names
+  domain/capture-gesture.ts  swipe thresholds + decisions (pure, tested)
   state/                  zustand stores: notes (incl. move/delete/archive),
                           settings (working folders), sync, appearance
                           (device-local, no core)
@@ -147,7 +150,7 @@ the desktop stays light.
 switching between fixed light/dark tables: the background's luminance
 decides the dark variant (status bar, keyboard appearance), and surface,
 border, and secondary text are blends of the background, so a custom color
-still yields a coherent theme. `readableOn` in `lib/appearance.ts` enforces
+still yields a coherent theme. `readableOn` in `domain/appearance.ts` enforces
 a WCAG-AA floor on the body text/background pair — without it, picking
 white-on-white would leave the user unable to read the screen that undoes
 it. Text size applies to the capture page and the note editor only.

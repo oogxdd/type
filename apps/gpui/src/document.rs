@@ -246,6 +246,66 @@ pub fn image_insertion(text: &str, offset: usize, targets: &[String]) -> (String
     (format!("{prefix}{links}{suffix}"), cursor)
 }
 
+/// Byte ranges of `http://` and `https://` links in `text`: bare URLs,
+/// `<autolinks>` and the target of `[label](url)`. Trailing sentence
+/// punctuation and unbalanced closing brackets are not part of the link.
+pub fn link_ranges(text: &str) -> Vec<Range<usize>> {
+    let mut links = Vec::new();
+    let mut from = 0;
+    while let Some(found) = text[from..].find("http") {
+        let start = from + found;
+        let rest = &text[start..];
+        let scheme = if rest.starts_with("https://") {
+            8
+        } else if rest.starts_with("http://") {
+            7
+        } else {
+            0
+        };
+        let word_start = text[..start]
+            .chars()
+            .next_back()
+            .is_none_or(|before| !before.is_alphanumeric());
+        if scheme == 0 || !word_start {
+            from = start + 4;
+            continue;
+        }
+        let mut end = start + scheme;
+        for (index, ch) in rest[scheme..].char_indices() {
+            let at = start + scheme + index;
+            if ch.is_whitespace()
+                || matches!(ch, '<' | '>' | '"' | '`' | '\\')
+                || text[at..].starts_with("](")
+            {
+                break;
+            }
+            end = at + ch.len_utf8();
+        }
+        while let Some(last) = text[start + scheme..end].chars().next_back() {
+            let url = &text[start..end];
+            let unbalanced = |open: char, close: char| {
+                last == close && url.matches(close).count() > url.matches(open).count()
+            };
+            if matches!(
+                last,
+                '.' | ',' | ';' | ':' | '!' | '?' | '\'' | '*' | '_' | '~'
+            ) || unbalanced('(', ')')
+                || unbalanced('[', ']')
+                || unbalanced('{', '}')
+            {
+                end -= last.len_utf8();
+            } else {
+                break;
+            }
+        }
+        if text[start + scheme..end].chars().any(char::is_alphanumeric) {
+            links.push(start..end);
+        }
+        from = end.max(start + 4);
+    }
+    links
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -321,6 +381,24 @@ mod tests {
         assert_eq!(
             image_insertion("x\n", 2, &two).0,
             "![](/a.png)\n![](/b.png)\n"
+        );
+    }
+
+    #[test]
+    fn links_are_bare_urls_autolinks_and_markdown_targets() {
+        let text = "See https://example.com/a?b=1#c, then (http://x.org/p_(q)) and <https://ru.wikipedia.org/wiki/Привет>.\n[Docs](https://docs.rs/gpui) **https://bold.dev**! ftp://no.example nohttp://x https://\n[https://a.io](https://a.io)";
+        let found: Vec<_> = link_ranges(text).into_iter().map(|r| &text[r]).collect();
+        assert_eq!(
+            found,
+            [
+                "https://example.com/a?b=1#c",
+                "http://x.org/p_(q)",
+                "https://ru.wikipedia.org/wiki/Привет",
+                "https://docs.rs/gpui",
+                "https://bold.dev",
+                "https://a.io",
+                "https://a.io",
+            ]
         );
     }
 }

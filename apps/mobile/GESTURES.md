@@ -9,7 +9,7 @@ scroll, menu filter and expanded folders. No replica page is used for the menu.
 ## One direction owner
 
 `home-screen.tsx` owns one memoized `Gesture.Pan` with manual activation. All
-four directions use `resolveSwipeDirection` in `lib/capture-gesture.ts`:
+four directions use `resolveSwipeDirection` in `domain/capture-gesture.ts`:
 
 - Ignore movement under 12pt.
 - Choose an axis only when it dominates the other by 1.6×.

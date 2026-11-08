@@ -1,4 +1,4 @@
-import { finishNavigationTrace } from "./lib/responsiveness-trace";
+import { finishNavigationTrace } from "./platform/responsiveness-trace";
 import {
   DarkTheme,
   DefaultTheme,

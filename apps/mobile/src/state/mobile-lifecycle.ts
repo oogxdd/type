@@ -1,4 +1,4 @@
-import { configureResponsivenessTrace, startResponsivenessHeartbeat } from "../lib/responsiveness-trace";
+import { configureResponsivenessTrace, startResponsivenessHeartbeat } from "../platform/responsiveness-trace";
 import { runWithFixtureDelay } from "../core/performance-fixture";
 import { AppState } from "react-native";
 import { setCoreCallRunner } from "@typenotes/mobile-core/raw-core";

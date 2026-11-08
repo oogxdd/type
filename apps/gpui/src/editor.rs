@@ -1,6 +1,7 @@
 use super::*;
-use gpui_kit::base::input::RopeExt;
 use gpui_kit::base::TextView;
+use gpui_kit::base::input::RopeExt;
+use gpui_kit::component::input::DefinitionProvider;
 use std::{
     ops::Range,
     path::{Path, PathBuf},
@@ -41,6 +42,72 @@ impl EditorAppearance<'_> {
         div()
             .id("editor-pane")
             .test_support()
+            // The engine's Cmd-hover path compares the pointer against the
+            // scroll-shifted text bounds, so every link below the first
+            // viewport never reaches it. Track the link under the pointer here.
+            .on_mouse_move({
+                let links = editor.clone();
+                move |event, _, cx| {
+                    let hovered = event
+                        .modifiers
+                        .secondary()
+                        .then(|| link_at(&links, event.position, cx))
+                        .flatten();
+                    set_link_underline(&links, hovered, cx);
+                }
+            })
+            .capture_any_mouse_down({
+                let links = editor.clone();
+                move |event, window, cx| {
+                    if event.button != MouseButton::Left || !event.modifiers.secondary() {
+                        return;
+                    }
+                    let Some(range) = link_at(&links, event.position, cx) else {
+                        return;
+                    };
+                    let text = links.read(cx).value();
+                    let Some(uri) = link_uri(&text[range]) else {
+                        return;
+                    };
+                    cx.open_url(&uri.to_string());
+                    window.prevent_default();
+                    cx.stop_propagation();
+                }
+            })
+            // The engine finds the link under the pointer only on pointer
+            // movement. Replay the pointer when Cmd goes down on a still mouse.
+            .on_modifiers_changed({
+                let links = editor.clone();
+                move |event, window, cx| {
+                    if event.modifiers.secondary() {
+                        // The preview popup occludes the text beneath it, which
+                        // would eat the Cmd-click on a link under the popup.
+                        crate::link_hover::dismiss(cx);
+                        let position = window.mouse_position();
+                        let hovered = link_at(&links, position, cx);
+                        set_link_underline(&links, hovered, cx);
+                        window.dispatch_event(
+                            PlatformInput::MouseMove(MouseMoveEvent {
+                                position,
+                                pressed_button: None,
+                                modifiers: event.modifiers,
+                            }),
+                            cx,
+                        );
+                    } else {
+                        set_link_underline(&links, None, cx);
+                    }
+                }
+            })
+            .on_hover({
+                let links = editor.clone();
+                move |hovered, _, cx| {
+                    crate::link_hover::pane_hover(*hovered, cx);
+                    if !hovered {
+                        set_link_underline(&links, None, cx);
+                    }
+                }
+            })
             .relative()
             .size_full()
             .min_w_0()
@@ -76,6 +143,7 @@ impl EditorAppearance<'_> {
             .when(self.prefs.line_numbers, |pane| {
                 pane.child(self.render_line_numbers(editor.clone(), cx))
             })
+            .children(crate::link_hover::popup(cx))
     }
 
     /// Paint each image line as a one-row thumbnail over its Markdown source.
@@ -455,4 +523,211 @@ impl Element for PaintLayer {
     ) {
         window.paint_layer(bounds, |window| self.0.paint(window, cx));
     }
+}
+
+/// Cmd+click on a `http(s)` link opens it in the browser. The editor engine
+/// asks this provider while Cmd is held and underlines the hovered link.
+struct LinkTargets;
+
+impl DefinitionProvider for LinkTargets {
+    fn definitions(
+        &self,
+        text: &gpui_kit::base::input::Rope,
+        offset: usize,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) -> Task<anyhow::Result<Vec<lsp_types::LocationLink>>> {
+        let source = text.to_string();
+        let found = document::link_ranges(&source)
+            .into_iter()
+            .find(|range| range.contains(&offset));
+        let links = found
+            .and_then(|range| {
+                let uri = link_uri(&source[range.clone()])?;
+                let start = text.offset_to_position(range.start);
+                let end = text.offset_to_position(range.end);
+                let origin = lsp_types::Range { start, end };
+                let target = lsp_types::Range {
+                    start: lsp_types::Position::new(0, 0),
+                    end: lsp_types::Position::new(0, 0),
+                };
+                Some(lsp_types::LocationLink {
+                    origin_selection_range: Some(origin),
+                    target_uri: uri,
+                    target_range: target,
+                    target_selection_range: target,
+                })
+            })
+            .into_iter()
+            .collect();
+        Task::ready(Ok(links))
+    }
+}
+
+/// The decoration that underlines the link under the Cmd-hovered pointer. The
+/// engine cannot draw it: its hover-definition path rejects pointers outside
+/// the scroll-shifted text bounds, so it never sees links below the viewport.
+#[derive(Default)]
+struct LinkUnderlines(std::cell::RefCell<HashMap<EntityId, LinkUnderline>>);
+
+struct LinkUnderline {
+    collection: TextDecorationCollection,
+    hovered: Option<Range<usize>>,
+}
+
+impl Global for LinkUnderlines {}
+
+fn link_underlines(cx: &mut App) -> &LinkUnderlines {
+    if !cx.has_global::<LinkUnderlines>() {
+        cx.set_global(LinkUnderlines::default());
+    }
+    cx.global::<LinkUnderlines>()
+}
+
+/// The link under `position`, if any.
+fn link_at(editor: &Entity<EditorState>, position: Point<Pixels>, cx: &App) -> Option<Range<usize>> {
+    let state = editor.read(cx);
+    let rows = state.visible_row_range()?;
+    let text = state.value();
+    document::link_ranges(&text).into_iter().find(|range| {
+        let line = state.text().offset_to_position(range.start).line as usize;
+        rows.contains(&line) && link_contains(state, &text, range, position)
+    })
+}
+
+/// A soft-wrapped link spans several rows; the first row ends at the pane edge
+/// and the last one starts at it, so the bounding box of the whole range would
+/// miss most of the link.
+fn link_contains(
+    state: &EditorState,
+    text: &str,
+    range: &Range<usize>,
+    position: Point<Pixels>,
+) -> bool {
+    let mut last_char = range.end - 1;
+    while last_char > range.start && !text.is_char_boundary(last_char) {
+        last_char -= 1;
+    }
+    let (Some(first), Some(last)) = (
+        state.range_to_bounds(&(range.start..range.start)),
+        state.range_to_bounds(&(last_char..range.end)),
+    ) else {
+        return false;
+    };
+    if position.y < first.top() || position.y >= last.bottom() {
+        return false;
+    }
+    if first.top() == last.top() {
+        return position.x >= first.left() && position.x < last.right();
+    }
+    let line_height = f32::from(first.size.height);
+    if line_height <= 0. {
+        return false;
+    }
+    let row = ((f32::from(position.y) - f32::from(first.top())) / line_height).floor();
+    let rows = ((f32::from(last.top()) - f32::from(first.top())) / line_height).round();
+    if row <= 0. {
+        position.x >= first.left()
+    } else if row >= rows {
+        position.x <= last.right()
+    } else {
+        true
+    }
+}
+
+/// The ranges currently underlined by the Cmd-hover, for tests.
+#[cfg(test)]
+pub(crate) fn underline_ranges(editor: &Entity<EditorState>, cx: &App) -> Vec<Range<usize>> {
+    if !cx.has_global::<LinkUnderlines>() {
+        return Vec::new();
+    }
+    let map = cx.global::<LinkUnderlines>().0.borrow();
+    map.get(&editor.entity_id())
+        .map(|entry| entry.collection.get_ranges(cx))
+        .unwrap_or_default()
+}
+
+fn set_link_underline(editor: &Entity<EditorState>, hovered: Option<Range<usize>>, cx: &mut App) {
+    let id = editor.entity_id();
+    let collection = {
+        let mut map = link_underlines(cx).0.borrow_mut();
+        let Some(entry) = map.get_mut(&id) else {
+            return;
+        };
+        if entry.hovered == hovered {
+            return;
+        }
+        entry.hovered = hovered.clone();
+        entry.collection.clone()
+    };
+    let decorations = hovered
+        .map(|range| {
+            let mut style = HighlightStyle::color(cx.theme().link);
+            style.underline = Some(UnderlineStyle {
+                thickness: px(1.),
+                ..UnderlineStyle::default()
+            });
+            vec![TextDecoration::new(range, style)]
+        })
+        .unwrap_or_default();
+    collection.set(decorations, cx);
+}
+
+/// The link as a URI, with spaces-free non-ASCII text (Cyrillic paths) escaped.
+fn link_uri(link: &str) -> Option<lsp_types::Uri> {
+    let mut escaped = String::with_capacity(link.len());
+    for byte in link.bytes() {
+        if byte.is_ascii() && !byte.is_ascii_control() && !b"{}|^[]".contains(&byte) {
+            escaped.push(byte as char);
+        } else {
+            escaped.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    escaped.parse().ok()
+}
+
+/// Make links in a text editor clickable and return the collection that colors
+/// them. Call [`color_links`] after the text changes. `previews` installs the
+/// hover preview provider; Cmd-click works either way.
+pub(crate) fn link_support(
+    editor: &Entity<EditorState>,
+    previews: bool,
+    cx: &mut App,
+) -> TextDecorationCollection {
+    let (links, underline) = editor.update(cx, |state, cx| {
+        state.lsp_mut().definition_provider = Some(std::rc::Rc::new(LinkTargets));
+        state.lsp_mut().hover_provider = previews.then(crate::link_hover::provider);
+        (
+            state.create_decorations_collection(vec![], cx),
+            state.create_decorations_collection(vec![], cx),
+        )
+    });
+    link_underlines(cx).0.borrow_mut().insert(
+        editor.entity_id(),
+        LinkUnderline {
+            collection: underline,
+            hovered: None,
+        },
+    );
+    links
+}
+
+/// Add or remove hover previews on an editor that already exists.
+pub(crate) fn set_link_previews(editor: &Entity<EditorState>, previews: bool, cx: &mut App) {
+    editor.update(cx, |state, _| {
+        state.lsp_mut().hover_provider = previews.then(crate::link_hover::provider);
+    });
+}
+
+pub(crate) fn color_links(links: &TextDecorationCollection, text: &str, cx: &mut App) {
+    // The link under an open preview may have just been edited away.
+    crate::link_hover::dismiss(cx);
+    let color = cx.theme().link;
+    links.set(
+        document::link_ranges(text)
+            .into_iter()
+            .map(|range| TextDecoration::new(range, HighlightStyle::color(color)))
+            .collect(),
+        cx,
+    );
 }

@@ -12,8 +12,8 @@ import {
 
 import { formatRecordingStatusLabel, formatNoteDateLabel } from "@typenotes/shared/format";
 
-import type { NoteRow } from "../lib/feed";
-import { useFeedSections } from "../lib/use-feed-sections";
+import type { NoteRow } from "../domain/feed";
+import { useFeedSections } from "../hooks/use-feed-sections";
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useTheme, type Theme } from "../theme";

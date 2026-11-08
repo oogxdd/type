@@ -6,11 +6,11 @@ import { getErrorMessage } from "@typenotes/shared/errors";
 import type { NotePreview } from "@typenotes/shared/format";
 import type { FolderNode, GitSyncCycleResult } from "@typenotes/shared/types";
 
-import { applySyncTreePatch, visibleSyncPath } from "../lib/sync-note-tree";
-import { collectNoteEntries, collectNotePaths } from "../lib/feed";
-import { runNoteJob } from "../lib/note-worker";
-import { prioritizeNotes, reconcileNoteTree, yieldForNoteHistory } from "../lib/note-loading";
-import type { PreviewChange } from "../lib/note-processing";
+import { applySyncTreePatch, visibleSyncPath } from "../domain/sync-note-tree";
+import { collectNoteEntries, collectNotePaths } from "../domain/feed";
+import { runNoteJob } from "../platform/note-worker";
+import { prioritizeNotes, reconcileNoteTree, yieldForNoteHistory } from "../domain/note-loading";
+import type { PreviewChange } from "../domain/note-processing";
 import {
   deletePreviewSnapshot,
   readPreviewSnapshot,

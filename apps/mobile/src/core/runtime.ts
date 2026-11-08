@@ -1,5 +1,5 @@
 import * as core from "@typenotes/mobile-core/core-api";
-import { MobileRuntime } from "../lib/mobile-runtime";
+import { MobileRuntime } from "../application/mobile-runtime";
 
 export const mobileRuntime = new MobileRuntime();
 
@@ -22,6 +22,6 @@ export const captureStorage = () => {
     readNote: (path) => mobileRuntime.track(() => core.readNoteForEditing(path), token),
     publishNote: (path, exists) => mobileRuntime.isCurrent(token) ? mobileRuntime.onNotesChanged(path, exists) : Promise.resolve(),
     onSaveError: (error: unknown) => { if (mobileRuntime.isCurrent(token)) mobileRuntime.saveError(error); },
-  } satisfies import("../lib/note-pages").NotePageStorage;
+  } satisfies import("../application/note-pages").NotePageStorage;
 };
 export const capturePages = () => mobileRuntime.capture(captureStorage());

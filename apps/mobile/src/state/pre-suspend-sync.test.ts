@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ flush: vi.fn(async () => {}), sync: vi.fn(), finish: vi.fn(), error: vi.fn() }));
 vi.mock("../core/runtime", () => ({ mobileRuntime: { saveError: mocks.error } }));
-vi.mock("../lib/capture-draft", () => ({ flushAllDrafts: mocks.flush }));
-vi.mock("../lib/background-task", () => ({ finishBackgroundWindow: mocks.finish }));
+vi.mock("../core/capture-draft", () => ({ flushAllDrafts: mocks.flush }));
+vi.mock("../platform/background-task", () => ({ finishBackgroundWindow: mocks.finish }));
 vi.mock("./sync-store", () => ({ useSyncStore: { getState: () => ({ syncBeforeSuspend: mocks.sync }) } }));
 import { runPreSuspendSync } from "./pre-suspend-sync";
 import { useBackgroundOperationStore } from "./background-operation-store";

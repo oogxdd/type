@@ -1,3 +1,3 @@
 // Web/test fallback; Metro resolves note-worker.native.ts on iOS/Android.
-import { processNoteJob, type NoteJob, type FeedJob } from "./note-processing";
+import { processNoteJob, type NoteJob, type FeedJob } from "../domain/note-processing";
 export const runNoteJob = async (job: NoteJob | FeedJob) => processNoteJob(job);

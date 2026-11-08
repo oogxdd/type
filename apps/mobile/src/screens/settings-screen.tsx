@@ -1,4 +1,4 @@
-import { clearResponsivenessTrace, exportResponsivenessTrace } from "../lib/responsiveness-trace";
+import { clearResponsivenessTrace, exportResponsivenessTrace } from "../platform/responsiveness-trace";
 // Settings is a two-level menu: this file's default export lands on a list
 // of sections, each of which pushes into its own dedicated screen (also
 // exported from here) rather than showing everything in one long scroll.
@@ -36,19 +36,19 @@ import {
   resolveFontFamily,
   resolveTextColor,
   TEXT_COLORS,
-} from "../lib/appearance";
+} from "../domain/appearance";
 import {
   copyWorkingFolderToFiles,
   exportArchiveToFiles,
-} from "../lib/backup-export";
-import { backupFolderName } from "../lib/backup-naming";
+} from "../platform/backup-export";
+import { backupFolderName } from "../domain/backup-naming";
 import {
   clearGestureAttempts,
   getGestureAttempts,
   outcomeOf,
   subscribeToGestureAttempts,
   summarizeGestureAttempts,
-} from "../lib/gesture-trace";
+} from "../platform/gesture-trace";
 import type { RootStackParamList } from "../navigation";
 import { useAppearanceStore } from "../state/appearance-store";
 import { useBackgroundOperationStore } from "../state/background-operation-store";

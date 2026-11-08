@@ -3,8 +3,8 @@ import { AppState } from "react-native";
 import { STREAM_FOLDER_PATH } from "@typenotes/shared/constants";
 import type { NoteEntry } from "@typenotes/shared/types";
 import { useNotesStore } from "../state/notes-store";
-import { findFolder, type NoteRowSection } from "./feed";
-import { runNoteJob } from "./note-worker";
+import { findFolder, type NoteRowSection } from "../domain/feed";
+import { runNoteJob } from "../platform/note-worker";
 
 const calendarKey = () => {
   const now = new Date();

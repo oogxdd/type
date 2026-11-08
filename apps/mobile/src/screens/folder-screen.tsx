@@ -15,8 +15,8 @@ import {
   View,
 } from "react-native";
 
-import { browsableFolders, findFolder, folderNoteCount, folderNoteRows } from "../lib/feed";
-import type { NoteRow } from "../lib/feed";
+import { browsableFolders, findFolder, folderNoteCount, folderNoteRows } from "../domain/feed";
+import type { NoteRow } from "../domain/feed";
 import type { RootStackParamList } from "../navigation";
 import { useNotesStore } from "../state/notes-store";
 import { useTheme } from "../theme";

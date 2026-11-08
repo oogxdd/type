@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { backupFolderName } from "./backup-naming";
+import { backupFolderName } from "../domain/backup-naming";
 
 describe("backupFolderName", () => {
   it("creates a deterministic provider-safe name", () => {

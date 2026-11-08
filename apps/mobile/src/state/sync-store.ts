@@ -19,12 +19,12 @@ import {
   autoSyncRetryDelayMs,
   saveReasonHasLocalChanges,
   type AutoSyncState,
-} from "../lib/sync-experience";
+} from "../domain/sync-experience";
 import {
   nextPendingSync,
   type PendingSync,
   type SyncTiming,
-} from "../lib/sync-schedule";
+} from "../domain/sync-schedule";
 import { useDiagnosticsStore } from "./diagnostics-store";
 import { mobileRuntime } from "../core/runtime";
 import { activeProfile, useSettingsStore } from "./settings-store";
@@ -105,7 +105,7 @@ type SyncState = {
   /** The one-button flow: pull, then push. */
   syncNow: () => Promise<void>;
   /** Best-effort sync after saves and foregrounding; `timing` picks the delay
-   * (see lib/sync-schedule). Defaults to a finished action. */
+   * (see domain/sync-schedule). Defaults to a finished action. */
   scheduleAutoSync: (reason: string, timing?: SyncTiming) => void;
   /** Run any owed sync now, because the app is about to be suspended.
    * Resolves when it finished or failed; never schedules retries. */

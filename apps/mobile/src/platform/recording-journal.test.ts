@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PendingRecording } from "./recording-session";
+import type { PendingRecording } from "../application/recording-session";
 
 const disk = vi.hoisted(() => new Map<string, string>());
 vi.mock("expo-file-system", () => {

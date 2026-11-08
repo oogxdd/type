@@ -1,4 +1,4 @@
-// Where the note-preview snapshots (lib/preview-snapshot.ts) live: one file
+// Where the note-preview snapshots (domain/preview-snapshot.ts) live: one file
 // per working folder beside the core's app data, like appearance.json — never
 // inside a notes root, so a snapshot never syncs.
 //

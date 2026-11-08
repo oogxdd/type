@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 import type { Gesture } from "react-native-gesture-handler";
 import type { SharedValue } from "react-native-reanimated";
-import type { SwipeDirection } from "../lib/capture-gesture";
+import type { SwipeDirection } from "../domain/capture-gesture";
 
 type NativeGesture = ReturnType<typeof Gesture.Native>;
 

@@ -3747,3 +3747,355 @@ fn markdown_preview_opens_a_table_as_a_sortable_grid(cx: &mut TestAppContext) {
     })
     .unwrap();
 }
+
+#[gpui_kit::test]
+fn links_are_colored_and_cmd_click_opens_them_in_the_browser(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let (window, app) = launch(&f, cx);
+    press(cx, window, "cmd-n");
+    let body = "Read https://example.com/Привет?a=1 now and https://rust-lang.org.";
+    cx.simulate_input(window, body);
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(300));
+    cx.run_until_parked();
+    let link = body.find("https").unwrap()..body.find(" now").unwrap();
+    let (editor, links) = app.read_with(cx, |app, cx| {
+        let note = &app.notes[&app.active];
+        (
+            note.editor.clone().unwrap(),
+            note.links.as_ref().unwrap().get_ranges(cx),
+        )
+    });
+    assert_eq!(links.len(), 2);
+    assert_eq!(links[0], link);
+
+    cx.update_window(window, |_, window, _| window.refresh())
+        .unwrap();
+    cx.run_until_parked();
+    let middle = link.start + 8;
+    let bounds = editor
+        .read_with(cx, |state, _| {
+            state.range_to_bounds(&(middle..middle + 1))
+        })
+        .unwrap();
+    let target = bounds.center();
+    let mut visual = VisualTestContext::from_window(window, cx);
+    // A plain click only places the caret.
+    visual.simulate_click(target, gpui_kit::Modifiers::default());
+    visual.run_until_parked();
+    assert_eq!(visual.opened_url(), None);
+    let command = gpui_kit::Modifiers::secondary_key();
+    visual.simulate_mouse_move(target, None, command);
+    visual.run_until_parked();
+    visual.simulate_click(target, command);
+    visual.run_until_parked();
+    assert_eq!(
+        visual.opened_url().as_deref(),
+        Some("https://example.com/%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82?a=1")
+    );
+    // Cmd pressed while the pointer already rests on another link.
+    let second = body.rfind("https").unwrap() + 8;
+    let rest = editor
+        .read_with(&visual, |state, _| {
+            state.range_to_bounds(&(second..second + 1))
+        })
+        .unwrap()
+        .center();
+    visual.simulate_mouse_move(rest, None, gpui_kit::Modifiers::default());
+    visual.run_until_parked();
+    visual.simulate_modifiers_change(command);
+    visual.run_until_parked();
+    visual.simulate_click(rest, command);
+    visual.run_until_parked();
+    assert_eq!(visual.opened_url().as_deref(), Some("https://rust-lang.org"));
+}
+
+#[gpui_kit::test]
+fn hovering_a_listing_link_opens_a_photo_slider_and_leaving_closes_it(cx: &mut TestAppContext) {
+    use type_gpui::link_preview::cache_key;
+    let f = Fixture::new();
+    let url = "https://www.list.am/ru/item/24148278?ld_src=2";
+    // A fresh cache entry stands in for the page load and the photo downloads.
+    let root = f.0.env.app_data_dir.join("link-previews");
+    let dir = root.join(cache_key(url));
+    std::fs::create_dir_all(&dir).unwrap();
+    for name in ["0.jpg", "1.jpg", "2.jpg"] {
+        std::fs::write(dir.join(name), b"not decoded in this test").unwrap();
+    }
+    std::fs::write(
+        dir.join("meta.json"),
+        r#"{"title":"House","files":["0.jpg","1.jpg","2.jpg"]}"#,
+    )
+    .unwrap();
+    let (window, app) = launch(&f, cx);
+    cx.update(|cx| crate::link_hover::install(root, cx));
+    app.update(cx, |app, _| app.prefs.link_previews = true);
+    press(cx, window, "cmd-n");
+    let body = format!("See {url} ok and https://example.com/x");
+    cx.simulate_input(window, &body);
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(300));
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, _| window.refresh())
+        .unwrap();
+    cx.run_until_parked();
+    let editor = app.read_with(cx, |app, _| app.notes[&app.active].editor.clone().unwrap());
+    let center = |range: std::ops::Range<usize>| {
+        editor
+            .read_with(cx, |state, _| state.range_to_bounds(&range))
+            .unwrap()
+            .center()
+    };
+    let on_link = center(body.find("list.am").unwrap()..body.find("list.am").unwrap() + 1);
+    let mut visual = VisualTestContext::from_window(window, cx);
+    let snapshot = |visual: &mut VisualTestContext| visual.update(|_, cx| crate::link_hover::snapshot(cx));
+    assert_eq!(snapshot(&mut visual), None);
+
+    // Hover waits for the pointer to rest on the link; other links have no preview.
+    visual.simulate_mouse_move(on_link, None, gpui_kit::Modifiers::default());
+    visual.executor().advance_clock(std::time::Duration::from_millis(200));
+    visual.run_until_parked();
+    assert_eq!(snapshot(&mut visual), Some((url.to_string(), 0, 3)));
+
+    // The right arrow of the slider shows the next photo, and wraps around.
+    let next = point(on_link.x - px(16.) + px(360.) - px(24.), on_link.y + px(14. + 135.));
+    for expected in [1, 2, 0] {
+        visual.simulate_click(next, gpui_kit::Modifiers::default());
+        visual.run_until_parked();
+        assert_eq!(snapshot(&mut visual).map(|s| s.1), Some(expected));
+    }
+
+    // Moving to plain text closes the preview after a short grace period.
+    let plain = point(px(900.), on_link.y);
+    visual.simulate_mouse_move(plain, None, gpui_kit::Modifiers::default());
+    visual.executor().advance_clock(std::time::Duration::from_millis(200));
+    visual.run_until_parked();
+    visual.executor().advance_clock(std::time::Duration::from_millis(300));
+    visual.run_until_parked();
+    assert_eq!(snapshot(&mut visual), None);
+
+    let other = center(body.rfind("example").unwrap()..body.rfind("example").unwrap() + 1);
+    visual.simulate_mouse_move(other, None, gpui_kit::Modifiers::default());
+    visual.executor().advance_clock(std::time::Duration::from_millis(200));
+    visual.run_until_parked();
+    assert_eq!(snapshot(&mut visual), None);
+}
+
+/// The user's note: three listing links, the third one below the second.
+const LISTING_BODY: &str = "\n\n\n\n\n\n\n\n000\nhttps://www.list.am/ru/item/995222164?ld_src=2&ld_pos=1&ld_layout=1&ld_pv=68453260115ca29a\n\nхз будто по местности хуйня\n\n\n\n++\nhttps://www.list.am/ru/item/23283831?ld_src=14&ld_pos=2\n\nмне нрав\n\nпотому что rented for foreigners\n\nможно за счет аренды покупать всякое\n\nно пишут что нет газа\n\nглавное чтобы было отопление\n\n\n\n\n\n--\nhttps://www.list.am/ru/item/22668879?ld_src=2&ld_pos=307&ld_layout=1&ld_pv=88a6538e172b924f\n\nтолько первый этаж\n\nно 80к\n";
+
+const LISTING_URLS: [&str; 3] = [
+    "https://www.list.am/ru/item/995222164?ld_src=2&ld_pos=1&ld_layout=1&ld_pv=68453260115ca29a",
+    "https://www.list.am/ru/item/23283831?ld_src=14&ld_pos=2",
+    "https://www.list.am/ru/item/22668879?ld_src=2&ld_pos=307&ld_layout=1&ld_pv=88a6538e172b924f",
+];
+
+/// Cached previews stand in for the page load and the photo downloads.
+fn cache_listing_previews(f: &Fixture) -> std::path::PathBuf {
+    use type_gpui::link_preview::cache_key;
+    let root = f.0.env.app_data_dir.join("link-previews");
+    for url in LISTING_URLS {
+        let dir = root.join(cache_key(url));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("0.jpg"), b"not decoded in this test").unwrap();
+        std::fs::write(
+            dir.join("meta.json"),
+            r#"{"title":"House","files":["0.jpg"]}"#,
+        )
+        .unwrap();
+    }
+    root
+}
+
+/// A preview popup covers the text below its link. Cmd must get it out of the
+/// way, or the links under the popup cannot be Cmd-clicked at all.
+#[gpui_kit::test]
+fn cmd_click_opens_the_link_under_an_open_preview(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let root = cache_listing_previews(&f);
+    // Tall enough that all three links are laid out at once.
+    let (window, app) = launch_sized(&f, cx, size(px(1150.), px(2400.)));
+    cx.update(|cx| crate::link_hover::install(root, cx));
+    app.update(cx, |app, _| app.prefs.link_previews = true);
+    press(cx, window, "cmd-n");
+    cx.simulate_input(window, LISTING_BODY);
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(300));
+    cx.run_until_parked();
+    let editor = app.read_with(cx, |app, _| app.notes[&app.active].editor.clone().unwrap());
+    cx.update_window(window, |_, window, _| window.refresh())
+        .unwrap();
+    cx.run_until_parked();
+    let mut visual = VisualTestContext::from_window(window, cx);
+    let command = gpui_kit::Modifiers::secondary_key();
+    let plain = gpui_kit::Modifiers::default();
+    for (url, needle) in LISTING_URLS
+        .iter()
+        .zip(["995222164", "23283831", "22668879"])
+    {
+        let at = LISTING_BODY.find(needle).unwrap();
+        let target = editor
+            .read_with(&visual, |state, _| state.range_to_bounds(&(at..at + 1)))
+            .unwrap_or_else(|| panic!("{needle} is not laid out"))
+            .center();
+        visual.simulate_mouse_move(target, None, plain);
+        visual.executor().advance_clock(std::time::Duration::from_millis(200));
+        visual.run_until_parked();
+        assert_eq!(
+            visual.update(|_, cx| crate::link_hover::snapshot(cx)),
+            Some((url.to_string(), 0, 1)),
+            "{needle} preview"
+        );
+        visual.simulate_modifiers_change(command);
+        visual.run_until_parked();
+        assert_eq!(
+            visual.update(|_, cx| crate::link_hover::snapshot(cx)),
+            None,
+            "{needle} preview stays open under Cmd"
+        );
+        visual.simulate_mouse_move(target, None, command);
+        visual.run_until_parked();
+        let start = LISTING_BODY.find(url).unwrap();
+        assert_eq!(
+            visual.update(|_, cx| super::editor::underline_ranges(&editor, cx)),
+            vec![start..start + url.len()],
+            "{needle} underline"
+        );
+        visual.simulate_click(target, command);
+        visual.run_until_parked();
+        assert_eq!(visual.opened_url().as_deref(), Some(*url), "{needle}");
+        visual.simulate_modifiers_change(plain);
+        visual.run_until_parked();
+    }
+}
+
+#[gpui_kit::test]
+fn link_previews_are_off_by_default_and_cmd_click_still_opens_links(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let root = cache_listing_previews(&f);
+    let (window, app) = launch(&f, cx);
+    cx.update(|cx| crate::link_hover::install(root, cx));
+    press(cx, window, "cmd-n");
+    let url = LISTING_URLS[0];
+    cx.simulate_input(window, &format!("See {url} ok"));
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(300));
+    cx.run_until_parked();
+    let editor = app.read_with(cx, |app, cx| {
+        assert!(!app.prefs.link_previews);
+        let editor = app.notes[&app.active].editor.clone().unwrap();
+        assert!(editor.read(cx).lsp().hover_provider.is_none());
+        editor
+    });
+    cx.update_window(window, |_, window, _| window.refresh())
+        .unwrap();
+    cx.run_until_parked();
+    let mut visual = VisualTestContext::from_window(window, cx);
+    let at = 4;
+    let target = editor
+        .read_with(&visual, |state, _| state.range_to_bounds(&(at..at + 1)))
+        .unwrap()
+        .center();
+    visual.simulate_mouse_move(target, None, gpui_kit::Modifiers::default());
+    visual.executor().advance_clock(std::time::Duration::from_millis(200));
+    visual.run_until_parked();
+    assert_eq!(visual.update(|_, cx| crate::link_hover::snapshot(cx)), None);
+    let command = gpui_kit::Modifiers::secondary_key();
+    visual.simulate_mouse_move(target, None, command);
+    visual.run_until_parked();
+    visual.simulate_click(target, command);
+    visual.run_until_parked();
+    assert_eq!(visual.opened_url().as_deref(), Some(url));
+}
+
+#[gpui_kit::test]
+fn toggling_link_previews_in_settings_arms_open_editors(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let root = cache_listing_previews(&f);
+    let (window, app) = launch(&f, cx);
+    cx.update(|cx| crate::link_hover::install(root, cx));
+    press(cx, window, "cmd-n");
+    cx.simulate_input(window, &format!("See {} ok", LISTING_URLS[0]));
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(300));
+    cx.run_until_parked();
+    let editor = app.read_with(cx, |app, _| app.notes[&app.active].editor.clone().unwrap());
+    let hover_provider = |cx: &mut TestAppContext| {
+        editor.read_with(cx, |state, _| state.lsp().hover_provider.is_some())
+    };
+    assert!(!hover_provider(cx));
+    press(cx, window, "cmd-,");
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("settings-Appearance", cx);
+        window.render_frame(cx);
+        window.click("link-previews", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    assert!(app.read_with(cx, |app, _| app.prefs.link_previews));
+    assert!(hover_provider(cx));
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("link-previews", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    assert!(!app.read_with(cx, |app, _| app.prefs.link_previews));
+    assert!(!hover_provider(cx));
+    assert!(!super::Preferences::load(&f.0.env).link_previews);
+}
+
+/// The engine's Cmd-hover path rejects pointers outside the scroll-shifted
+/// text bounds, so every link below the first viewport was unreachable.
+#[gpui_kit::test]
+fn cmd_click_opens_a_link_below_the_first_viewport(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let (window, app) = launch(&f, cx);
+    press(cx, window, "cmd-n");
+    cx.simulate_input(window, LISTING_BODY);
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(300));
+    cx.run_until_parked();
+    let editor = app.read_with(cx, |app, _| app.notes[&app.active].editor.clone().unwrap());
+    cx.update_window(window, |_, window, _| window.refresh())
+        .unwrap();
+    cx.run_until_parked();
+    let mut visual = VisualTestContext::from_window(window, cx);
+    for _ in 0..3 {
+        visual.simulate_event(gpui_kit::ScrollWheelEvent {
+            position: point(px(700.), px(400.)),
+            delta: gpui_kit::ScrollDelta::Lines(point(0., -6.)),
+            modifiers: gpui_kit::Modifiers::default(),
+            touch_phase: Default::default(),
+        });
+        visual.run_until_parked();
+    }
+    let url = LISTING_URLS[2];
+    let start = LISTING_BODY.find(url).unwrap();
+    let target = editor
+        .read_with(&visual, |state, _| state.range_to_bounds(&(start..start + 1)))
+        .unwrap()
+        .center();
+    let command = gpui_kit::Modifiers::secondary_key();
+    visual.simulate_mouse_move(target, None, command);
+    visual.run_until_parked();
+    assert_eq!(
+        visual.update(|_, cx| super::editor::underline_ranges(&editor, cx)),
+        vec![start..start + url.len()]
+    );
+    visual.simulate_click(target, command);
+    visual.run_until_parked();
+    assert_eq!(visual.opened_url().as_deref(), Some(url));
+    // A plain click still places the caret instead of opening anything.
+    visual.simulate_modifiers_change(gpui_kit::Modifiers::default());
+    visual.run_until_parked();
+    assert_eq!(
+        visual.update(|_, cx| super::editor::underline_ranges(&editor, cx)),
+        Vec::<std::ops::Range<usize>>::new()
+    );
+    visual.simulate_click(target, gpui_kit::Modifiers::default());
+    visual.run_until_parked();
+    assert_eq!(visual.opened_url().as_deref(), Some(url));
+    assert!((start..start + url.len()).contains(&editor.read_with(&visual, |state, _| state.cursor())));
+}

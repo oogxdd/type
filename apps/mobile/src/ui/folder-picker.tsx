@@ -26,7 +26,7 @@ import {
 } from "@typenotes/shared/constants";
 import type { FolderNode } from "@typenotes/shared/types";
 
-import { allFolderPaths } from "../lib/folder-tree";
+import { allFolderPaths } from "../domain/folder-tree";
 import { useTheme } from "../theme";
 import { Button } from "./controls";
 

@@ -227,6 +227,14 @@ impl FolderWorkspace {
             .map(|buffer| buffer.editor.clone())
     }
 
+    /// Add or remove hover previews on every open buffer.
+    pub fn set_link_previews(&mut self, previews: bool, cx: &mut App) {
+        self.prefs.link_previews = previews;
+        for buffer in self.documents.values() {
+            editor::set_link_previews(&buffer.editor, previews, cx);
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn preview_text(&self) -> Option<SharedString> {
         self.current_view()
@@ -482,10 +490,13 @@ impl FolderWorkspace {
                     state
                 }
             });
+            let links = editor::link_support(&editor, self.prefs.link_previews, cx);
+            editor::color_links(&links, &editor.read(cx).value(), cx);
             let subscriptions = vec![
                 cx.observe(&editor, |_, _, cx| cx.notify()),
-                cx.subscribe(&editor, |this, _, event: &InputEvent, cx| {
+                cx.subscribe(&editor, move |this, editor, event: &InputEvent, cx| {
                     if matches!(event, InputEvent::Change) {
+                        editor::color_links(&links, &editor.read(cx).value(), cx);
                         this.schedule_save(cx);
                         cx.notify();
                     }

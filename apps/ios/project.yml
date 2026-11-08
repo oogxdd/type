@@ -1,0 +1,78 @@
+name: Type
+options:
+  bundleIdPrefix: com.digital.type.swift
+  deploymentTarget:
+    # Current core's netdev dependency imports an iOS 26 Network symbol directly.
+    iOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    # prepare.sh builds arm64 device + Apple Silicon simulator slices.
+    ARCHS: arm64
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+targets:
+  TypeDomain:
+    type: framework
+    platform: iOS
+    sources: [Sources/TypeDomain]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+  TypeCoreBindings:
+    type: framework
+    platform: iOS
+    sources:
+      - path: Generated
+        includes: ["*.swift"]
+    dependencies:
+      - framework: Frameworks/TypeCore.xcframework
+        embed: false
+      - sdk: Security.framework
+      - sdk: SystemConfiguration.framework
+      - sdk: Network.framework
+      - sdk: libresolv.tbd
+      - sdk: libz.tbd
+      - sdk: libiconv.tbd
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        # UniFFI 0.31's foreign callback helpers require Swift 5 language mode.
+        # Keep this compatibility setting confined to generated code.
+        SWIFT_VERSION: "5.0"
+  TypeCoreAdapter:
+    type: framework
+    platform: iOS
+    sources: [Sources/TypeCoreAdapter]
+    dependencies:
+      - target: TypeCoreBindings
+      - target: TypeDomain
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+  Type:
+    type: application
+    platform: iOS
+    sources: [Sources/TypeApp]
+    dependencies:
+      - target: TypeCoreAdapter
+      - target: TypeDomain
+      - target: TypeCoreBindings
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.digital.type.swift.dev
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Type Swift
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+schemes:
+  Type:
+    build:
+      targets:
+        Type: all

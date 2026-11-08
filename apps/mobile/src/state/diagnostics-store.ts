@@ -22,7 +22,7 @@ export type Diagnostics = {
   showCaptureSyncStatus: boolean;
   /**
    * Record one entry per capture-screen touch into the in-memory gesture trace
-   * (src/lib/gesture-trace.ts) and show the readout on this screen. Off by
+   * (src/platform/gesture-trace.ts) and show the readout on this screen. Off by
    * default: it is a debugging instrument, not a feature.
    */
   traceGestures: boolean;

@@ -7,6 +7,7 @@ mod folder_tabs;
 mod folder_workspace;
 mod grid;
 mod jobs;
+mod link_hover;
 mod recordings;
 mod settings;
 mod ui;
@@ -59,6 +60,7 @@ struct Note {
     draft_folder: Option<String>,
     fills: Option<RangeDecorationCollection>,
     markers: Option<TextDecorationCollection>,
+    links: Option<TextDecorationCollection>,
     images: Vec<(std::ops::Range<usize>, std::sync::Arc<std::path::Path>)>,
     editor: Option<Entity<EditorState>>,
 }
@@ -406,6 +408,7 @@ impl TypeApp {
                 .collect(),
             cx,
         );
+        editor::color_links(note.links.as_ref().unwrap(), &text, cx);
         note.markers.as_ref().unwrap().set(
             regions
                 .iter()
@@ -910,10 +913,12 @@ fn main() {
             return;
         }
     };
+    let previews = env.app_data_dir.join("link-previews");
     gpui_kit::application()
         .with_assets(AppAssets)
         .run(move |cx| {
             gpui_kit::init(cx);
+            link_hover::install(previews, cx);
             cx.bind_keys([
                 KeyBinding::new("secondary-q", Quit, Some("Type")),
                 KeyBinding::new("secondary-o", OpenFolder, Some("Type")),

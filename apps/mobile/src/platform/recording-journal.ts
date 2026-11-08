@@ -1,5 +1,5 @@
 import { Directory, File, Paths } from "expo-file-system";
-import type { PendingRecording } from "./recording-session";
+import type { PendingRecording } from "../application/recording-session";
 
 const directory = () => {
   const dir = new Directory(Paths.document, "typenotes", "pending-recordings");

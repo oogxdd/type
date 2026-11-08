@@ -46,13 +46,13 @@ import {
   LAYER_TRAVEL_MS,
   LAYER_RELEASE_MS,
   PAUSE_RELEASE_MS,
-} from "../lib/capture-motion";
-import { type NotePageRequest } from "../lib/note-pages";
+} from "../domain/capture-motion";
+import { type NotePageRequest } from "../application/note-pages";
 import { isRecordingNoteType } from "@typenotes/shared/format";
 import type { NoteMeta } from "@typenotes/shared/types";
 import { RecordingAudioPlayer } from "../ui/audio-player";
-import { noteForegroundActivity } from "../lib/note-loading";
-import { hasNativeEditorScroll, revealEditorSelection } from "../lib/editor-scroll";
+import { noteForegroundActivity } from "../domain/note-loading";
+import { hasNativeEditorScroll, revealEditorSelection } from "../platform/editor-scroll";
 import {
   isPullReady,
   overscrollPastEnd,
@@ -60,9 +60,9 @@ import {
   pullLabelOpacity,
   pullZoneHeight,
   visiblePageHeight,
-} from "../lib/capture-gesture";
+} from "../domain/capture-gesture";
 import * as Haptics from "expo-haptics";
-import { autoSyncLabel } from "../lib/sync-experience";
+import { autoSyncLabel } from "../domain/sync-experience";
 import { type RootStackParamList } from "../navigation";
 import { useDiagnosticsStore } from "../state/diagnostics-store";
 import { useSyncStore } from "../state/sync-store";
