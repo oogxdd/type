@@ -12527,11 +12527,9 @@ dependencies = [
  "lsp-types",
  "qrcode",
  "quick-xml 0.38.4",
- "reqwest 0.12.28",
  "serde",
  "serde_json",
  "type-core",
- "wry",
  "zip 0.6.6",
 ]
 

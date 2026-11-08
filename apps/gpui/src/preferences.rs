@@ -15,9 +15,6 @@ pub struct Preferences {
     pub line_numbers: bool,
     pub heading_folding: bool,
     pub current_line_highlight: bool,
-    /// Hover previews for listing links. Off by default: the popup covers the
-    /// text under the pointer, so it also swallows Cmd-clicks on links below.
-    pub link_previews: bool,
     pub assembly_replace_note_body: bool,
 }
 impl Default for Preferences {
@@ -33,7 +30,6 @@ impl Default for Preferences {
             line_numbers: true,
             heading_folding: true,
             current_line_highlight: true,
-            link_previews: false,
             assembly_replace_note_body: true,
         }
     }

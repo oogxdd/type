@@ -376,22 +376,6 @@ impl TypeApp {
         }
     }
 
-    /// Add or remove hover previews on every open editor.
-    pub fn apply_link_previews(&self, cx: &mut App) {
-        let previews = self.prefs.link_previews;
-        for note in self.notes.values() {
-            if let Some(editor) = note.editor.as_ref() {
-                editor::set_link_previews(editor, previews, cx);
-            }
-        }
-        for tab in self.folder_tabs.clone() {
-            tab.update(cx, |tab, cx| tab.set_link_previews(previews, cx));
-        }
-        if !previews {
-            crate::link_hover::dismiss(cx);
-        }
-    }
-
     pub fn recover_drafts(&self, cx: &App) {
         // Encryption users must never get plaintext recovery files.
         let encrypted = self
@@ -773,7 +757,7 @@ impl TypeApp {
         note.editor = Some(editor.clone());
         note.fills = Some(fills);
         note.markers = Some(markers);
-        let links = editor::link_support(&editor, self.prefs.link_previews, cx);
+        let links = editor::link_support(&editor, cx);
         editor::color_links(&links, &editor.read(cx).value(), cx);
         self.notes.get_mut(id).unwrap().links = Some(links);
         Some(editor)

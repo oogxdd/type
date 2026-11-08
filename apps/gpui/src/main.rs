@@ -7,7 +7,6 @@ mod folder_tabs;
 mod folder_workspace;
 mod grid;
 mod jobs;
-mod link_hover;
 mod recordings;
 mod settings;
 mod ui;
@@ -913,12 +912,10 @@ fn main() {
             return;
         }
     };
-    let previews = env.app_data_dir.join("link-previews");
     gpui_kit::application()
         .with_assets(AppAssets)
         .run(move |cx| {
             gpui_kit::init(cx);
-            link_hover::install(previews, cx);
             cx.bind_keys([
                 KeyBinding::new("secondary-q", Quit, Some("Type")),
                 KeyBinding::new("secondary-o", OpenFolder, Some("Type")),

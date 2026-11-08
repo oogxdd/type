@@ -1,5 +1,19 @@
 # GPUI migration — handoff / live status
 
+## Link previews moved to an experiment (2026-11-09)
+
+- User requested removing listing hover previews while retaining Cmd-click.
+  Preserved the full implementation at `5570bf5` on
+  `experiment/gpui-link-previews`. The working branch removes preview fetching,
+  popup/cache modules, the settings toggle, and direct `wry`/`reqwest`
+  dependencies. Existing cached files/preferences are harmless and ignored.
+- Link colors, Cmd-hover underlines and Cmd-click remain, including links below
+  the first viewport. The scroll regression uses a synthetic fixture.
+- Previous preview milestones below describe the experimental branch only.
+- Verification after removal: 45 library and 61 binary tests passed, including
+  Cmd-click after scrolling. The same recording-player test still cannot start
+  audio output; this failure was present before removing previews.
+
 ## Commit and dev launch checkpoint (2026-11-09)
 
 - User requested committing and pushing all pending work on

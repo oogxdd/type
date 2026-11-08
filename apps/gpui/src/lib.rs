@@ -2,7 +2,6 @@ pub mod backend;
 pub mod convert;
 pub mod document;
 pub mod files;
-pub mod link_preview;
 pub mod keyboard;
 pub mod navigation;
 pub mod preferences;

@@ -292,10 +292,6 @@ impl TypeApp {
                     "current-line-highlight" => {
                         this.prefs.current_line_highlight = !this.prefs.current_line_highlight
                     }
-                    "link-previews" => {
-                        this.prefs.link_previews = !this.prefs.link_previews;
-                        this.apply_link_previews(cx);
-                    }
                     _ => unreachable!(),
                 }
                 this.persist_preferences();
@@ -670,12 +666,6 @@ impl TypeApp {
                         "current-line-highlight",
                         "Highlight current line",
                         self.prefs.current_line_highlight,
-                        cx,
-                    ))
-                    .child(self.editor_preference(
-                        "link-previews",
-                        "Link previews",
-                        self.prefs.link_previews,
                         cx,
                     ))
                     .child(self.command_button(

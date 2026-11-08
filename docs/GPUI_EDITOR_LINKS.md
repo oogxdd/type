@@ -1,8 +1,9 @@
-# GPUI editor links: detection, Cmd-click and hover previews
+# GPUI editor links: detection and Cmd-click
 
-Status: implemented in `apps/gpui`; one engine limitation remains (see
-[Remaining limitation](#remaining-limitation)). Kit version: `gpui-kit =0.7.0`
-(`gpui-base` 0.7.0, `gpui-component` 0.7.0).
+Status: editor links open with Cmd-click. Listing hover previews and their
+setting were removed from the working branch at the user's request. The
+experiment is preserved on `experiment/gpui-link-previews` at `5570bf5`.
+Kit version: `gpui-kit =0.7.0` (`gpui-base` and `gpui-component` 0.7.0).
 
 ## Pipeline
 
@@ -13,7 +14,6 @@ Status: implemented in `apps/gpui`; one engine limitation remains (see
 | Cmd-hover underline | `editor::LinkUnderlines` (app-owned decoration collection) |
 | Cmd-click opens the browser | `capture_any_mouse_down` on `editor-pane` |
 | Unscrolled fallback (engine path) | `editor::LinkTargets` (`DefinitionProvider`) |
-| Listing hover preview | `link_hover.rs` + `link_preview.rs`, behind `Preferences::link_previews` (default off) |
 
 `link_ranges` accepts bare `https://…`, `<autolinks>` and `[label](url)`
 targets. A candidate needs a non-alphanumeric character before `http`, at least
@@ -72,19 +72,6 @@ Reproduction: open any note longer than the viewport, scroll, Cmd-hover a link
 below `input_bounds.top() + input_bounds.height - scroll`. Nothing underlines
 and Cmd-click does nothing. A plain click still moves the caret into the link.
 
-## Second blocker: the preview popup occludes the text
-
-`link_hover::popup` is a `deferred(anchored())` element with `.occlude()`,
-placed at pointer `+(16, 14)`, 360 wide and roughly 330 tall once a listing
-preview is ready. It swallows mouse events over whatever it covers, including
-the links below the hovered one; near the bottom edge
-`snap_to_window_with_margin` can place it over the hovered link itself. With the
-engine path, that produced "the second link does not open and the preview stays
-on the first".
-
-Mitigations: pressing Cmd dismisses the popup before the pointer is replayed,
-and previews default to off.
-
 ## Fix in the app
 
 `EditorAppearance::render` (`apps/gpui/src/editor.rs`) owns Cmd-link handling:
@@ -106,25 +93,6 @@ and previews default to off.
    engine's `GoToDefinition` action is registered on the editor but the app
    binds no key to it, so in practice it only serves that fallback path.
 
-The preview popup is dismissed on Cmd-down so it cannot eat the press.
-
-## Preferences
-
-`Preferences::link_previews` (`apps/gpui/src/preferences.rs`, default `false`)
-is passed to `editor::link_support`, which installs the hover provider only when
-enabled. `TypeApp::apply_link_previews` rewires every open note editor and every
-`FolderWorkspace` buffer when the toggle changes, and dismisses an open popup
-when turning previews off. The toggle lives in Settings → Appearance → Editor →
-"Link previews". Older `gpui-appearance.json` files have no key, so previews
-stay off after upgrade. Cmd-click is unaffected by the flag.
-
-## Remaining limitation
-
-Hover previews still depend on the engine path, so with previews enabled they
-appear only for links inside the initial viewport. Fixing that requires the app
-to drive `link_hover::pointer_at` itself with its own rest delay; the engine's
-150 ms delay currently lives in `handle_hover_popover`.
-
 ## Upstream fix
 
 The bounds check should compare against `input_bounds` (the viewport) instead of
@@ -133,13 +101,9 @@ handler stays.
 
 ## Tests
 
-`cargo test -p type-gpui -- --test-threads=1` (66 passed):
-
-- `cmd_click_opens_a_link_below_the_first_viewport` — scrolls, asserts the
-  underline range and that the URI opens; fails with the engine path alone.
-- `cmd_click_opens_the_link_under_an_open_preview` — popup open, Cmd dismisses
-  it, all three links open; fails when the popup is left open.
-- `link_previews_are_off_by_default_and_cmd_click_still_opens_links`.
-- `toggling_link_previews_in_settings_arms_open_editors`.
-- `links_are_colored_and_cmd_click_opens_them_in_the_browser` (pre-existing).
+- `cmd_click_opens_a_link_below_the_first_viewport` uses a synthetic multi-link
+  note, scrolls, checks the underline, opens the URL, and verifies plain clicks
+  still place the caret.
+- `links_are_colored_and_cmd_click_opens_them_in_the_browser` checks ordinary
+  links and Cmd pressed while the mouse is still.
 - `document::link_ranges` unit test covers detection rules.

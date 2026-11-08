@@ -80,9 +80,6 @@ impl EditorAppearance<'_> {
                 let links = editor.clone();
                 move |event, window, cx| {
                     if event.modifiers.secondary() {
-                        // The preview popup occludes the text beneath it, which
-                        // would eat the Cmd-click on a link under the popup.
-                        crate::link_hover::dismiss(cx);
                         let position = window.mouse_position();
                         let hovered = link_at(&links, position, cx);
                         set_link_underline(&links, hovered, cx);
@@ -102,7 +99,6 @@ impl EditorAppearance<'_> {
             .on_hover({
                 let links = editor.clone();
                 move |hovered, _, cx| {
-                    crate::link_hover::pane_hover(*hovered, cx);
                     if !hovered {
                         set_link_underline(&links, None, cx);
                     }
@@ -143,7 +139,6 @@ impl EditorAppearance<'_> {
             .when(self.prefs.line_numbers, |pane| {
                 pane.child(self.render_line_numbers(editor.clone(), cx))
             })
-            .children(crate::link_hover::popup(cx))
     }
 
     /// Paint each image line as a one-row thumbnail over its Markdown source.
@@ -585,7 +580,11 @@ fn link_underlines(cx: &mut App) -> &LinkUnderlines {
 }
 
 /// The link under `position`, if any.
-fn link_at(editor: &Entity<EditorState>, position: Point<Pixels>, cx: &App) -> Option<Range<usize>> {
+fn link_at(
+    editor: &Entity<EditorState>,
+    position: Point<Pixels>,
+    cx: &App,
+) -> Option<Range<usize>> {
     let state = editor.read(cx);
     let rows = state.visible_row_range()?;
     let text = state.value();
@@ -687,16 +686,10 @@ fn link_uri(link: &str) -> Option<lsp_types::Uri> {
 }
 
 /// Make links in a text editor clickable and return the collection that colors
-/// them. Call [`color_links`] after the text changes. `previews` installs the
-/// hover preview provider; Cmd-click works either way.
-pub(crate) fn link_support(
-    editor: &Entity<EditorState>,
-    previews: bool,
-    cx: &mut App,
-) -> TextDecorationCollection {
+/// them. Call [`color_links`] after the text changes.
+pub(crate) fn link_support(editor: &Entity<EditorState>, cx: &mut App) -> TextDecorationCollection {
     let (links, underline) = editor.update(cx, |state, cx| {
         state.lsp_mut().definition_provider = Some(std::rc::Rc::new(LinkTargets));
-        state.lsp_mut().hover_provider = previews.then(crate::link_hover::provider);
         (
             state.create_decorations_collection(vec![], cx),
             state.create_decorations_collection(vec![], cx),
@@ -712,16 +705,7 @@ pub(crate) fn link_support(
     links
 }
 
-/// Add or remove hover previews on an editor that already exists.
-pub(crate) fn set_link_previews(editor: &Entity<EditorState>, previews: bool, cx: &mut App) {
-    editor.update(cx, |state, _| {
-        state.lsp_mut().hover_provider = previews.then(crate::link_hover::provider);
-    });
-}
-
 pub(crate) fn color_links(links: &TextDecorationCollection, text: &str, cx: &mut App) {
-    // The link under an open preview may have just been edited away.
-    crate::link_hover::dismiss(cx);
     let color = cx.theme().link;
     links.set(
         document::link_ranges(text)
