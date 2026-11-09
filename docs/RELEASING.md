@@ -187,7 +187,19 @@ profile avoids exporting Apple passwords during later builds. An existing
 App Store Connect API key can also be stored in the same profile using
 `xcrun notarytool store-credentials type-gpui-notary --key /path/to/AuthKey_KEYID.p8 --key-id KEYID --issuer ISSUER_ID`;
 team API keys need their issuer ID. Never copy credential values into a commit
-or chat. `APPLE_NOTARIZATION_PROFILE` selects a different existing profile.
+or chat.
+
+On 2026-11-09 the named Apple ID/password items and the saved notarization
+profile were absent, but the existing team App Store Connect key documented in
+[`apps/mobile/LOCAL_TESTFLIGHT.md`](../apps/mobile/LOCAL_TESTFLIGHT.md) was
+available at its documented local path. Its `notarytool history --key …
+--key-id … --issuer …` check succeeded for the desktop release team, and
+`notarytool store-credentials type-gpui-notary` with the same API-key options
+restored the local profile. If the password profile disappears, check this
+existing API-key route before asking the maintainer to enter credentials or
+falling back to CI. Check key availability without printing the key contents;
+validate the restored profile with
+`xcrun notarytool history --keychain-profile type-gpui-notary --output-format json`. `APPLE_NOTARIZATION_PROFILE` selects a different existing profile.
 
 ### Prepare the Mac once
 

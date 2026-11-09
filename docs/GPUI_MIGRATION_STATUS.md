@@ -2,6 +2,11 @@
 
 ## GPUI 0.4.14 release preparation (2026-11-09)
 
+Active release handoff: [HANDOFF_GPUI_0.4.14.md](HANDOFF_GPUI_0.4.14.md).
+Snapshot 01:11 UTC: ordinary CI passed; candidate run `42541710814` is still
+building/signing/notarizing universal. No draft/public release yet. Do not cancel
+the job (explicit user instruction).
+
 - User requested a new release and publication through the native updater.
   Local preflight passed in the actual login session: Developer ID,
   notarization profile, existing production Sparkle key, GitHub and arm64 target.
@@ -22,7 +27,18 @@
   so release notes now describe both architectures, with Intel runtime untested.
   Main push through `2fa91d8` was explicitly confirmed by the user after the
   automatic review rejected the broader accumulated source push. Ordinary CI
-  is running. No candidate tag has been pushed yet.
+  is running. The universal candidate uses tag `gpui-v0.4.14` at `cedc84e`,
+  workflow run `42541710814`; no public installer/feed update yet.
+- After the user asked for a wider credential search, found the existing team
+  App Store Connect API key at the path documented in mobile's local TestFlight
+  guide. `notarytool history` with that key succeeded against the same team's
+  desktop submissions. Restored and validated `type-gpui-notary` using that key;
+  no new secret was entered or printed. Keep the already-running universal CI
+  build as the sole candidate producer.
+- Local Developer ID arm64 app functional smoke passed on a synthetic profile:
+  Unicode text entered/saved, normal Cmd+Q, relaunch, exact saved text retained.
+  CoreGraphics events targeted the test PID; AppleScript Unicode/quit attempts
+  were unreliable. Dev and production app instances were left running.
 
 ## Writing practice timer and command shortcuts (2026-11-09)
 
