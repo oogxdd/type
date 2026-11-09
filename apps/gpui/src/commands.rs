@@ -3,6 +3,7 @@ use type_core::{application::git_sync::GitSyncUseCases, *};
 
 #[derive(Clone)]
 pub enum ModalKind {
+    Writing,
     Palette,
     Rename(String),
     CreateFolder(String),
@@ -25,6 +26,9 @@ pub struct Modal {
 }
 #[derive(Clone)]
 pub enum Choice {
+    Writing,
+    EndWriting,
+    LineNumbers,
     CommandPalette,
     New,
     NewFolder(String),
@@ -112,10 +116,12 @@ impl Choice {
             | Self::PreviousDay
             | Self::NextDay
             | Self::Reload => "Selection",
-            Self::New | Self::NewProfile | Self::NewFolder(_) => "Create",
+            Self::New | Self::Writing | Self::NewProfile | Self::NewFolder(_) => "Create",
             Self::Filter(_) | Self::StreamDate | Self::ClearDate => "View",
             Self::Feed | Self::Folders | Self::TrashView | Self::MoveNote(_) => "Navigate",
             Self::CommandPalette
+            | Self::EndWriting
+            | Self::LineNumbers
             | Self::Settings
             | Self::BackToNotes
             | Self::Theme
@@ -373,6 +379,7 @@ impl TypeApp {
         if self.current_folder().is_some() {
             let query = query.trim().to_lowercase();
             return [
+                ("Toggle line numbers", Choice::LineNumbers),
                 ("Toggle Markdown preview", Choice::Preview),
                 ("Toggle light / dark theme", Choice::Theme),
             ]
@@ -449,6 +456,8 @@ impl TypeApp {
             return entries;
         }
         let mut entries = vec![
+            ("Start writing timer…", Choice::Writing),
+            ("Toggle line numbers", Choice::LineNumbers),
             ("New note", Choice::New),
             ("New folder at root…", Choice::NewFolder(String::new())),
             ("Stream: review a day…", Choice::StreamDate),
@@ -516,6 +525,12 @@ impl TypeApp {
             choice,
         })
         .collect::<Vec<_>>();
+        if self.writing.is_some() {
+            entries.push(Entry {
+                label: "End writing session".into(),
+                choice: Choice::EndWriting,
+            });
+        }
         if self.navigation_focused && self.view == View::Folders {
             if let Some(folder) = self
                 .tree
@@ -668,6 +683,7 @@ impl TypeApp {
                     self.persist_preferences();
                 }
                 Sidebar => {
+                    self.writing = None;
                     self.prefs.sidebar = !self.prefs.sidebar;
                     self.persist_preferences();
                     if !self.prefs.sidebar {
@@ -675,6 +691,7 @@ impl TypeApp {
                     }
                 }
                 Focus | Cycle => {
+                    self.writing = None;
                     if self.settings {
                         if self.navigation_focus.contains_focused(window, cx) {
                             self.focus.focus(window, cx);
@@ -1098,6 +1115,19 @@ impl TypeApp {
         };
         let value = modal.input.read(cx).value().to_string();
         let kind = modal.kind.clone();
+        if matches!(kind, ModalKind::Writing) {
+            if self.busy {
+                return;
+            }
+            match value.trim().parse::<u64>() {
+                Ok(minutes @ 1..=180) => self.start_writing(minutes, window, cx),
+                _ => {
+                    self.error = Some("Enter a whole number of minutes from 1 to 180.".into());
+                    cx.notify();
+                }
+            }
+            return;
+        }
         let selection = modal.selected;
         if matches!(kind, ModalKind::Palette) {
             let choice = self
@@ -1349,6 +1379,21 @@ impl TypeApp {
         }
         let result: Result<(), String> = (|| {
             match choice {
+                Choice::Writing => self.show_modal(ModalKind::Writing, "15", window, cx),
+                Choice::EndWriting => {
+                    self.writing = None;
+                    self.focus_editor(window, cx);
+                }
+                Choice::LineNumbers => {
+                    self.prefs.line_numbers = !self.prefs.line_numbers;
+                    self.persist_preferences();
+                    for tab in &self.folder_tabs {
+                        tab.update(cx, |tab, cx| {
+                            tab.prefs.line_numbers = self.prefs.line_numbers;
+                            cx.notify();
+                        });
+                    }
+                }
                 Choice::CommandPalette => self.show_modal(ModalKind::Palette, "", window, cx),
                 Choice::New => self.new_note(window, cx),
                 Choice::NewFolder(parent) => {

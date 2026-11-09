@@ -18,6 +18,7 @@ impl TypeApp {
             InputState::new(window, cx).placeholder("Search recordings by name or folder…")
         });
         let mut app = Self {
+            writing: None,
             pane_state: pane_state.clone(),
             updater: None,
             folder_tabs: vec![],
@@ -225,6 +226,7 @@ impl TypeApp {
                 fallback_ticks += 1;
                 if view
                     .update_in(cx, |this, window, cx| {
+                        this.tick_writing(cx);
                         this.drain_sync_events(window, cx);
                         if !this.locked && !this.busy && !this.recording {
                             if fallback_ticks >= 75 {

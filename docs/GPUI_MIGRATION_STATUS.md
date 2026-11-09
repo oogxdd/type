@@ -1,5 +1,29 @@
 # GPUI migration — handoff / live status
 
+## Writing practice timer and command shortcuts (2026-11-09)
+
+- Working-tree implementation: timer icon to the right of New note, duration
+  modal (15 minutes by default, whole minutes 1–180), and Start creates a normal
+  Stream note in Insert mode with Markdown preview off. The sidebar and folder
+  tabs are hidden for the session, without changing the saved sidebar preference.
+- A small countdown and Finish action remain above the editor. At zero it shows
+  “Time is up” without stealing focus or blocking further writing. Finish restores
+  the usual layout; navigation away, locking, settings or profile changes end the
+  session. Timers are session-only and do not resume after restarting the app.
+  Existing autosave and draft/conflict guards apply to the new note.
+- Cmd+/ (Ctrl+/ off macOS) aliases Cmd+K in the single keyboard owner. The palette
+  includes Toggle line numbers for profile notes and ordinary folder tabs, using
+  the existing persisted preference, plus Start / End writing commands.
+- Checks: full GPUI suite: 45 library + 63 binary tests passed; the existing audio
+  player test failed because audio output could not start (same documented
+  environment failure as before). Both new writing/shortcut tests passed again
+  after extending coverage for a custom duration, navigation and preservation of
+  a hidden-sidebar preference. Fixtures use synthetic notes only.
+- UI/feel, real-time waiting through sleep/backgrounding and non-macOS runtime
+  remain for manual review. No commit, publication or app restart performed.
+- Dev bundle built successfully with `desktop.py bundle --test-support` at
+  `target/bundle/Type GPUI Dev.app`; the running app was left open.
+
 ## Link previews moved to an experiment (2026-11-09)
 
 - User requested removing listing hover previews while retaining Cmd-click.

@@ -23,6 +23,7 @@ pub enum Command {
 }
 pub const SHORTCUTS: &[(&str, Command)] = &[
     ("k", Command::Palette),
+    ("/", Command::Palette),
     ("b", Command::Rail),
     ("t", Command::Sidebar),
     ("w", Command::Focus),

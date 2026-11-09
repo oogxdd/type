@@ -6,6 +6,122 @@ use gpui_kit::{
 };
 use type_core::{AppEnv, STREAM_FOLDER};
 
+#[gpui_kit::test]
+fn writing_timer_creates_editable_note_and_finishes_without_losing_text(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        window.click("writing-timer", cx);
+        assert_eq!(
+            app.read(cx)
+                .modal
+                .as_ref()
+                .unwrap()
+                .input
+                .read(cx)
+                .value()
+                .as_ref(),
+            "15"
+        );
+    })
+    .unwrap();
+    press(cx, window, "enter");
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        let app = app.read(cx);
+        assert!(app.modal.is_none());
+        assert!(app.writing.is_some());
+        assert!(window.try_find("new").is_none());
+        assert!(window.try_find("end-writing").is_some());
+        assert_eq!(app.vim.mode, vim::Mode::Insert);
+        assert!(!app.preview);
+        let editor = app.notes[&app.active].editor.as_ref().unwrap();
+        assert!(editor.focus_handle(cx).is_focused(window));
+    })
+    .unwrap();
+    cx.simulate_input(window, "Разгружаю мысли 🧠");
+    cx.run_until_parked();
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.writing.as_mut().unwrap().deadline = std::time::Instant::now();
+            app.tick_writing(cx);
+            assert_eq!(app.writing.as_ref().unwrap().seconds, 0);
+            app.flush(false, cx).unwrap();
+            let text = app.notes[&app.active]
+                .editor
+                .as_ref()
+                .unwrap()
+                .read(cx)
+                .value();
+            assert_eq!(text.as_ref(), "Разгружаю мысли 🧠");
+            assert!(
+                std::fs::read_to_string(f.0.root.join(app.active.as_str()))
+                    .unwrap()
+                    .contains("Разгружаю мысли 🧠")
+            );
+        });
+        window.render_frame(cx);
+        window.click("end-writing", cx);
+        window.render_frame(cx);
+        assert!(app.read(cx).writing.is_none());
+        assert!(window.try_find("new").is_some());
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn writing_duration_validation_and_slash_palette_line_numbers(cx: &mut TestAppContext) {
+    use super::commands::{Choice, ModalKind};
+    let f = Fixture::new();
+    let (window, app) = launch(&f, cx);
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            let before = app.active.clone();
+            for value in ["0", "-1", "181", "1.5", "no"] {
+                app.show_modal(ModalKind::Writing, value, window, cx);
+                app.submit_modal(window, cx);
+                assert!(app.error.is_some());
+                assert!(app.writing.is_none());
+                assert_eq!(app.active, before);
+                assert!(app.modal.is_some());
+            }
+            app.close_modal(window, cx);
+            app.prefs.line_numbers = true;
+            app.execute(Choice::New, window, cx);
+        });
+    })
+    .unwrap();
+    press(cx, window, "cmd-/");
+    assert!(cx.update(|cx| app.read(cx).modal.is_some()));
+    cx.simulate_input(window, "Toggle line numbers");
+    cx.run_until_parked();
+    press(cx, window, "enter");
+    cx.update_window(window, |_, _, cx| {
+        assert!(!app.read(cx).prefs.line_numbers);
+        let prefs = super::Preferences::load(&f.0.env);
+        assert!(!prefs.line_numbers);
+        assert!(app.read(cx).modal.is_none());
+    })
+    .unwrap();
+    cx.update_window(window, |_, window, cx| {
+        app.update(cx, |app, cx| {
+            app.prefs.sidebar = false;
+            app.show_modal(ModalKind::Writing, "1", window, cx);
+            app.submit_modal(window, cx);
+            assert_eq!(app.writing.as_ref().unwrap().seconds, 60);
+            app.execute(Choice::EndWriting, window, cx);
+            assert!(!app.prefs.sidebar);
+            // Navigating to a different note ends the session.
+            app.show_modal(ModalKind::Writing, "15", window, cx);
+            app.submit_modal(window, cx);
+            app.new_note(window, cx);
+            app.tick_writing(cx);
+            assert!(app.writing.is_none());
+        });
+    })
+    .unwrap();
+}
+
 struct Fixture(Backend);
 impl Fixture {
     fn new() -> Self {
@@ -2806,7 +2922,7 @@ fn external_folder_shortcuts_cannot_create_or_delete_profile_notes(cx: &mut Test
         let app = app.read(cx);
         assert!(app.modal.is_some());
         let labels: Vec<_> = app.entries("", cx).into_iter().map(|e| e.label).collect();
-        assert_eq!(labels, ["Toggle Markdown preview", "Toggle light / dark theme"]);
+        assert_eq!(labels, ["Toggle line numbers", "Toggle Markdown preview", "Toggle light / dark theme"]);
         assert!(app.entries("mv ", cx).iter().all(|e| !e.label.starts_with("Move")));
     })
     .unwrap();
@@ -3551,7 +3667,7 @@ fn ordinary_folder_palette_is_folder_safe_and_previews_markdown(cx: &mut TestApp
         let app = app.read(cx);
         assert!(app.modal.is_some());
         let labels: Vec<_> = app.entries("", cx).into_iter().map(|e| e.label).collect();
-        assert_eq!(labels, ["Toggle Markdown preview", "Toggle light / dark theme"]);
+        assert_eq!(labels, ["Toggle line numbers", "Toggle Markdown preview", "Toggle light / dark theme"]);
     })
     .unwrap();
     cx.update_window(window, |_, window, cx| {

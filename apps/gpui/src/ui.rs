@@ -135,6 +135,7 @@ impl TypeApp {
                 .into_any_element();
         }
         let title = match &modal.kind {
+            ModalKind::Writing => "Writing practice · duration in minutes".into(),
             ModalKind::Palette => "Commands · type mv to file notes".into(),
             ModalKind::CreateFolder(parent) => format!(
                 "New folder in {}",
@@ -253,7 +254,13 @@ impl TypeApp {
                     .child(
                         Button::new("submit")
                             .primary()
-                            .label(if self.locked { "Unlock" } else { "Apply" })
+                            .label(if matches!(modal.kind, ModalKind::Writing) {
+                                "Start"
+                            } else if self.locked {
+                                "Unlock"
+                            } else {
+                                "Apply"
+                            })
                             .on_click(
                                 cx.listener(|this, _, window, cx| this.submit_modal(window, cx)),
                             ),
@@ -364,18 +371,33 @@ impl TypeApp {
             .track_focus(&self.navigation_focus)
             .when(self.prefs.rail, |panel| {
                 panel.child(
-                    h_flex().h(px(70.)).px_3().flex_none().child(
-                        self.sidebar_button("new", "New note", Choice::New, cx)
-                            .w_full()
-                            .context_menu(|menu, _, _| {
-                                // Placeholder only: recording is not part of this action.
-                                menu.item(
-                                    PopupMenuItem::new("Start a voice note")
-                                        .icon(Icons::Mic)
-                                        .on_click(|_, _, _| {}),
-                                )
-                            }),
-                    ),
+                    h_flex()
+                        .h(px(70.))
+                        .px_3()
+                        .flex_none()
+                        .child(
+                            self.sidebar_button("new", "New note", Choice::New, cx)
+                                .flex_1()
+                                .context_menu(|menu, _, _| {
+                                    // Placeholder only: recording is not part of this action.
+                                    menu.item(
+                                        PopupMenuItem::new("Start a voice note")
+                                            .icon(Icons::Mic)
+                                            .on_click(|_, _, _| {}),
+                                    )
+                                }),
+                        )
+                        .child(
+                            Button::new("writing-timer")
+                                .ghost()
+                                .small()
+                                .icon(Icons::Timer)
+                                .accessibility_label("Start writing timer")
+                                .tooltip("Writing practice")
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.execute(Choice::Writing, window, cx)
+                                })),
+                        ),
                 )
             })
             .child(
@@ -620,6 +642,7 @@ impl TypeApp {
 
 impl Render for TypeApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.tick_writing(cx);
         self.reconcile_playback();
         if self.modal.is_none() {
             self.navigation_focused = self.navigation_focus.contains_focused(window, cx);
@@ -653,7 +676,7 @@ impl Render for TypeApp {
             .on_action(cx.listener(Self::on_open_folder))
             .on_action(cx.listener(Self::on_close_folder))
             .on_action(cx.listener(Self::on_save_file));
-        let top_inset = if !self.folder_tabs.is_empty() && !self.locked {
+        let top_inset = if !self.folder_tabs.is_empty() && !self.locked && self.writing.is_none() {
             px(64.)
         } else {
             px(28.)
@@ -713,6 +736,35 @@ impl Render for TypeApp {
             v_flex()
                 .size_full()
                 .min_h_0()
+                .when_some(self.writing.as_ref(), |pane, session| {
+                    pane.child(
+                        h_flex()
+                            .px_3()
+                            .h(px(36.))
+                            .gap_3()
+                            .flex_none()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(if session.seconds == 0 {
+                                        "Time is up".to_string()
+                                    } else {
+                                        format!(
+                                            "{}:{:02}",
+                                            session.seconds / 60,
+                                            session.seconds % 60
+                                        )
+                                    }),
+                            )
+                            .child(self.command_button(
+                                "end-writing",
+                                "Finish",
+                                Choice::EndWriting,
+                                cx,
+                            )),
+                    )
+                })
                 .when_some(self.render_recording(cx), |pane, recording| {
                     pane.child(recording)
                 })
@@ -743,7 +795,7 @@ impl Render for TypeApp {
         };
         if let Some(tab) = self.current_folder().filter(|_| !self.locked) {
             body = body.child(div().size_full().min_h_0().child(tab));
-        } else if (self.prefs.sidebar || self.settings) && !self.locked {
+        } else if (self.prefs.sidebar || self.settings) && !self.locked && self.writing.is_none() {
             body = body.child(
                 div().size_full().min_h_0().child(
                     h_resizable("main-panes")
@@ -782,7 +834,7 @@ impl Render for TypeApp {
                     .child(content),
             );
         }
-        if !self.folder_tabs.is_empty() && !self.locked {
+        if !self.folder_tabs.is_empty() && !self.locked && self.writing.is_none() {
             body = body.child(self.render_workspace_tabs(cx));
         }
         // Open-folder navigation is one uninterrupted strip across the window.

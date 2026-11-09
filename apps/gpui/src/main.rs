@@ -12,6 +12,7 @@ mod settings;
 mod ui;
 mod updater;
 mod workspace;
+mod writing;
 use std::{
     collections::{HashMap, HashSet},
     time::{Duration, Instant},
@@ -64,6 +65,7 @@ struct Note {
     editor: Option<Entity<EditorState>>,
 }
 struct TypeApp {
+    writing: Option<writing::Session>,
     pane_state: Entity<ResizableState>,
     folder_tabs: Vec<Entity<folder_workspace::FolderWorkspace>>,
     active_folder: Option<EntityId>,
