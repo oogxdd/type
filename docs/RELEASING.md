@@ -32,8 +32,8 @@ remains universal for CI and earlier releases.
 
 ## Install the first native version
 
-[Type 0.4.13 Apple Silicon DMG](https://github.com/oogxdd/type/releases/download/gpui-v0.4.13/Type-0.4.13-arm64.dmg)
-is published, signed and notarized for M-series Macs (macOS 12+). Quit Type normally, open the DMG and drag
+[Type 0.4.14 universal DMG](https://github.com/oogxdd/type/releases/download/gpui-v0.4.14/Type-0.4.14-universal.dmg)
+is published, signed and notarized for Apple Silicon and Intel Macs (macOS 12+). Quit Type normally, open the DMG and drag
 `Type.app` to Applications. Launch that installed app. This first installation
 is manual when coming from `Type GPUI Dev` or the previous Tauri shell.
 The Dev bundle has no updater, and Tauri does not install native GPUI releases.
@@ -47,19 +47,19 @@ normally and retained as a hidden backup; legacy Type 0.8.1 was left unchanged.
 
 After installing the signed native build, use **Settings → Updates → Check for
 updates** for subsequent GPUI releases. The production feed is already live;
-0.4.13 (2026-10-19) is its current Apple Silicon version, with immediate availability.
-An existing native GPUI installation can update through that feed; Intel
-remains on the previous universal release. Automatic checks are
-available; installation requires confirmation.
+0.4.14 (2026-11-09) is its current universal version, with immediate availability.
+An existing native GPUI installation can update through that feed. Automatic
+checks are available; installation requires confirmation.
 
 Release execution and verification are recorded in
 [GPUI migration status](GPUI_MIGRATION_STATUS.md). The real isolated Sparkle
 0.0.1 → 0.0.2 replacement/relaunch test passed with exact Unicode text preserved.
-The published 0.4.10 app/DMG (the last fully inspected release; 0.4.11–0.4.13
-were checked through the build log, notarization and the live feed) and live feed passed signature, notarization,
-Gatekeeper, checksum and arm64 architecture inspection. Signed app launch,
-normal quit and reopen used a synthetic profile. UI/feel and production updater
-installation remain for user review; no Intel build is included in 0.4.10.
+The published 0.4.14 universal app/DMG and live feed passed signature, notarization,
+Gatekeeper, checksum and both-architecture inspection. Signed app launch, Unicode
+editing/save, normal quit and reopen passed on an Apple Silicon Mac with a
+synthetic profile. UI/feel, production updater installation and physical Intel
+execution remain for user review. The completed
+[0.4.14 handoff](HANDOFF_GPUI_0.4.14.md) records artifacts, checks and CI runs.
 
 ## One-time configuration
 

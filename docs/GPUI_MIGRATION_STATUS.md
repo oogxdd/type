@@ -1,44 +1,44 @@
 # GPUI migration — handoff / live status
 
-## GPUI 0.4.14 release preparation (2026-11-09)
+## Published GPUI 0.4.14 universal (2026-11-09)
 
-Active release handoff: [HANDOFF_GPUI_0.4.14.md](HANDOFF_GPUI_0.4.14.md).
-Snapshot 01:11 UTC: ordinary CI passed; candidate run `42541710814` is still
-building/signing/notarizing universal. No draft/public release yet. Do not cancel
-the job (explicit user instruction).
+Release/handoff details: [HANDOFF_GPUI_0.4.14.md](HANDOFF_GPUI_0.4.14.md).
 
-- User requested a new release and publication through the native updater.
-  Local preflight passed in the actual login session: Developer ID,
-  notarization profile, existing production Sparkle key, GitHub and arm64 target.
-- Feature commit: `ea95979` (writing timer, Cmd+/ palette, line-number command).
-  Release source is a clean main checkout at `.worktrees/gpui-release-0.4.14`,
-  fast-forwarded to the tested desktop branch, with version and release notes
-  prepared for 0.4.14 Apple Silicon. Existing mobile/iOS commits are retained;
-  this release distributes only the desktop app.
-- Local release checks passed outside the sandbox: GPUI 45 library + 64
-  binary tests (including audio), core 118 tests, release scripts 19 tests.
-  The optimized arm64 app built in 6m18s and Developer ID signing passed.
-  Local notarization then failed with exit 69: the `type-gpui-notary` password
-  item is absent even when login Keychain is selected explicitly, and neither
-  named Apple credential is available. The earlier preflight reported success;
-  that report did not establish usable credentials at upload time.
-- Offered local interactive credential setup; continuing via the existing CI
-  candidate workflow and its saved secrets. That workflow builds universal,
-  so release notes now describe both architectures, with Intel runtime untested.
-  Main push through `2fa91d8` was explicitly confirmed by the user after the
-  automatic review rejected the broader accumulated source push. Ordinary CI
-  is running. The universal candidate uses tag `gpui-v0.4.14` at `cedc84e`,
-  workflow run `42541710814`; no public installer/feed update yet.
-- After the user asked for a wider credential search, found the existing team
-  App Store Connect API key at the path documented in mobile's local TestFlight
-  guide. `notarytool history` with that key succeeded against the same team's
-  desktop submissions. Restored and validated `type-gpui-notary` using that key;
-  no new secret was entered or printed. Keep the already-running universal CI
-  build as the sole candidate producer.
-- Local Developer ID arm64 app functional smoke passed on a synthetic profile:
-  Unicode text entered/saved, normal Cmd+Q, relaunch, exact saved text retained.
-  CoreGraphics events targeted the test PID; AppleScript Unicode/quit attempts
-  were unreliable. Dev and production app instances were left running.
+- Published [0.4.14](https://github.com/oogxdd/type/releases/tag/gpui-v0.4.14),
+  immutable source `cedc84e`, feature commit `ea95979`. Includes writing practice
+  timer, Cmd+/ palette, line-number command and accumulated Markdown/folder
+  preview improvements. Existing mobile/iOS source commits were explicitly
+  approved for main; this release distributes only macOS desktop.
+- Ordinary CI `42541204658` passed TypeScript, Linux workspace and native GPUI.
+  Local and candidate release checks passed: GPUI 45 library + 64 binary tests,
+  core 118 tests, release scripts 19 tests. The earlier sandbox audio failure
+  passed outside the sandbox; no audio code changes or skipped tests.
+- First local arm64 build compiled in 6m18s and signed, then failed notarization
+  because the saved password profile was absent. The user asked for a wider
+  search: found an existing team App Store Connect API key documented in mobile's
+  local TestFlight guide; validated it against Apple's desktop history, restored
+  `type-gpui-notary`, and reran local preflight successfully. No new secret was
+  entered, printed or rotated. RELEASING.md documents this recovery route.
+- Kept the already-running CI build as the sole universal candidate producer.
+  Candidate run `42541710814` succeeded; its functional checks took 16m38s and
+  packaging ran 01:00–01:21 UTC. Apple accepted app submission
+  `3655f263-48a5-4ce2-84ea-79e63c1ffb8a` and DMG submission
+  `a767cc89-7d07-4ae8-bb42-7b364ed57581`.
+- Actual downloaded candidate passed source/manifest/SHA-256, Sparkle signatures,
+  Developer ID, app/DMG staples, Gatekeeper, arm64 + x86_64 slices and updater
+  configuration checks. A synthetic-profile Unicode/save/Cmd+Q/reopen smoke
+  passed for both the local arm64 and downloaded universal builds. CoreGraphics
+  events targeted exact test PIDs; AppleScript Unicode/quit/AX were unreliable.
+- Promotion `42586170786` succeeded at 08:28–08:29 UTC with rollout interval `0`.
+  GitHub-download and public-URL live feeds passed signature/version/URL checks.
+  Legacy GitHub latest stays `desktop-v0.8.1`.
+- DMG SHA-256:
+  `248b4e783e64873613032ba8c57d7bd21fb9c1e7dd128d3febdbdf1afd561ee3`.
+- Disk filled during candidate copying; removed only obsolete generated test
+  executables and temporary bundles created in this session. Release caches
+  preserved; about 400 MiB free remains. No personal notes used or user apps
+  restarted. UI/feel, production updater installation and physical Intel
+  execution remain for user review. Release publication is complete.
 
 ## Writing practice timer and command shortcuts (2026-11-09)
 

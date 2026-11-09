@@ -1,10 +1,36 @@
-# Handoff: GPUI 0.4.14 release in progress
+# Handoff: GPUI 0.4.14 release — completed
 
-Snapshot: **2026-11-09 01:11 UTC** (05:11 Asia/Tbilisi).
+Updated: **2026-11-09 08:30 UTC** (12:30 Asia/Tbilisi).
 
-**The release is not published. Do not cancel the running job.** The user
-explicitly asked to keep it running while preparing this handoff. Continue
-through candidate verification and production promotion when it finishes.
+**Published successfully. No release work remains. Do not republish or rebuild
+this version.** The user asked to continue; the running candidate job was never
+cancelled and completed successfully.
+
+## Final outcome
+
+- Public release: https://github.com/oogxdd/type/releases/tag/gpui-v0.4.14.
+- Universal candidate run `42541710814`: success. Apple accepted app submission
+  `3655f263-48a5-4ce2-84ea-79e63c1ffb8a` and DMG submission
+  `a767cc89-7d07-4ae8-bb42-7b364ed57581`.
+- Promotion run `42586170786`: success, rollout interval `0`.
+- Actual downloaded candidate passed manifest/source/checksum, Sparkle feed and
+  archive signatures, Developer ID, both Apple staples, Gatekeeper, both Mach-O
+  slices and updater plist checks. Its isolated Unicode/save/normal quit/reopen
+  smoke passed; log `.tmp/release-smoke-0.4.14-ci.log`.
+- Both GitHub-downloaded and public-URL live feeds passed signature checks and
+  describe 0.4.14 with the correct universal DMG URL and immediate rollout.
+  Legacy GitHub latest remains `desktop-v0.8.1`.
+- DMG SHA-256:
+  `248b4e783e64873613032ba8c57d7bd21fb9c1e7dd128d3febdbdf1afd561ee3`.
+- Local Apple profile was restored using the existing API key. Release caches
+  are retained. Some obsolete session-generated test executables and bundles
+  were removed when disk space ran out during candidate copying; about 400 MiB
+  remained after cleanup. Address disk capacity before another local build.
+- Production updater installation/UI feel and physical Intel execution remain
+  for manual review; no user application was restarted for publication.
+
+The following sections preserve the **01:11 UTC pre-publication snapshot** and
+commands used for diagnostics. They are historical context, not pending work.
 
 ## User authorization and scope
 
@@ -24,7 +50,7 @@ correctly describe **universal** (Apple Silicon + Intel); Intel runtime has not
 been tested on physical hardware. The first local attempt was arm64, but the
 existing CI candidate workflow builds universal.
 
-## Source, worktrees and live jobs
+## Source, worktrees and jobs at the original snapshot
 
 - Repository: `oogxdd/type` (`https://github.com/oogxdd/type`).
 - Project: `/Users/digital/Projects/type`.
@@ -132,7 +158,7 @@ Once the job finishes:
 gh run view 42541710814 --repo oogxdd/type --log > /private/tmp/type-gpui-0.4.14-ci.log
 ```
 
-## Remaining work: verify the actual candidate, then publish
+## Verification/publication procedure used (completed; do not repeat)
 
 1. Wait for the active candidate workflow to finish successfully and create its
    draft. There should be exactly these candidate assets:
@@ -195,13 +221,14 @@ gh run view 42541710814 --repo oogxdd/type --log > /private/tmp/type-gpui-0.4.14
 
 - Current release notes: [gpui-v0.4.14.md](releases/gpui-v0.4.14.md).
 - Local build log: project `.cargo-release-0.4.14.log` (ignored).
-- Failed local output `/private/tmp/type-release-0.4.14/` has only an intermediate
-  arm64 binary. **It is not a release candidate; do not upload it.**
-- `target/bundle/Type.app` is the signed local arm64 smoke build, not notarized.
-  Do not publish/install it as the final universal release.
+- Failed local intermediate `/private/tmp/type-release-0.4.14/type-gpui-release`
+  and the non-notarized local `target/bundle/Type.app` were removed for space.
+- Downloaded official assets remain in `/private/tmp/type-release-0.4.14-ci/`;
+  the DMG is detached. Its copied smoke app `.tmp/gpui-0.4.14-ci` was removed
+  after testing. Synthetic profiles and logs remain for diagnostics.
 - Reuse root `target/` for future local builds; arm64 release cache is now warm.
-  Intel target/cache state was not checked. Free disk was about 3 GB; a new
-  universal local build may need more room. Preserve release caches.
+  Intel target/cache state was not checked. Free disk fell to about 400 MiB;
+  another local build needs more room. Preserve release caches where possible.
 - Running dev process at last check: PID `28252`, root
   `target/bundle/Type GPUI Dev.app/Contents/MacOS/type-gpui --dev`.
 - Running production process: PID `77005`,
