@@ -10,8 +10,19 @@
   fast-forwarded to the tested desktop branch, with version and release notes
   prepared for 0.4.14 Apple Silicon. Existing mobile/iOS commits are retained;
   this release distributes only the desktop app.
-- Packaging, release checks, isolated signed-bundle smoke test and promotion
-  are pending. No candidate tag has been pushed yet.
+- Local release checks passed outside the sandbox: GPUI 45 library + 64
+  binary tests (including audio), core 118 tests, release scripts 19 tests.
+  The optimized arm64 app built in 6m18s and Developer ID signing passed.
+  Local notarization then failed with exit 69: the `type-gpui-notary` password
+  item is absent even when login Keychain is selected explicitly, and neither
+  named Apple credential is available. The earlier preflight reported success;
+  that report did not establish usable credentials at upload time.
+- Offered local interactive credential setup; continuing via the existing CI
+  candidate workflow and its saved secrets. That workflow builds universal,
+  so release notes now describe both architectures, with Intel runtime untested.
+  Main push through `2fa91d8` was explicitly confirmed by the user after the
+  automatic review rejected the broader accumulated source push. Ordinary CI
+  is running. No candidate tag has been pushed yet.
 
 ## Writing practice timer and command shortcuts (2026-11-09)
 

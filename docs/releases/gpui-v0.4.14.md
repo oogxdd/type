@@ -1,6 +1,6 @@
 # Type 0.4.14
 
-Native GPUI desktop release for macOS 12 or newer on Apple Silicon (M-series).
+Native GPUI desktop release for macOS 12 or newer on Apple Silicon (M-series) and Intel Macs.
 
 - Writing practice: use the timer next to New note, choose a duration (15 minutes by default), and start writing in a new note with the sidebar hidden. A countdown stays visible; when time is up you can keep writing or choose Finish. Notes use normal autosave.
 - Commands: Cmd+/ now opens the same palette as Cmd+K. Toggle line numbers directly from the palette; the choice is remembered.
@@ -8,4 +8,4 @@ Native GPUI desktop release for macOS 12 or newer on Apple Silicon (M-series).
 - Open Folder: preview CSV/TSV and JSON records in sortable tables, and read DOCX documents without modifying the originals.
 - Links: HTTP and HTTPS links are colored and open with Cmd-click, including after scrolling. Listing hover previews are kept out of the release.
 
-Built locally, signed with Developer ID, notarized by Apple and delivered through the native GPUI updater. Intel, Linux and Windows builds are not included in this release.
+Universal macOS build signed with Developer ID, notarized by Apple and delivered through the native GPUI updater. Intel runtime execution has not been tested on a physical Intel Mac. Linux and Windows builds are not included in this release.
