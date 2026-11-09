@@ -1,5 +1,18 @@
 # GPUI migration — handoff / live status
 
+## GPUI 0.4.14 release preparation (2026-11-09)
+
+- User requested a new release and publication through the native updater.
+  Local preflight passed in the actual login session: Developer ID,
+  notarization profile, existing production Sparkle key, GitHub and arm64 target.
+- Feature commit: `ea95979` (writing timer, Cmd+/ palette, line-number command).
+  Release source is a clean main checkout at `.worktrees/gpui-release-0.4.14`,
+  fast-forwarded to the tested desktop branch, with version and release notes
+  prepared for 0.4.14 Apple Silicon. Existing mobile/iOS commits are retained;
+  this release distributes only the desktop app.
+- Packaging, release checks, isolated signed-bundle smoke test and promotion
+  are pending. No candidate tag has been pushed yet.
+
 ## Writing practice timer and command shortcuts (2026-11-09)
 
 - Working-tree implementation: timer icon to the right of New note, duration
