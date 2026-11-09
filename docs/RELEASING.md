@@ -18,6 +18,51 @@ Dev bundles and standalone binaries never start Sparkle. A plain
 updater; use the packaging command or CI for distribution. Nothing is published
 by a local build.
 
+## Agent execution path
+
+Use this sequence for a requested release; the dated release reports below are
+examples, not a substitute for checking the current machine and repository.
+
+1. Inspect the live feed/latest native tag, `origin/main..HEAD`, working tree and
+   existing candidate runs. Establish the exact source being shipped, honoring
+   the user's existing scope/publication authorization. Prepare release work in
+   a clean persistent worktree under `.worktrees/`; never use a temporary worktree.
+2. **Choose build route and architecture before tagging.** CI currently builds
+   universal; local packaging supports universal or `--architecture arm64`.
+   Match the committed notes to the actual artifact. Finish local preflight
+   (including existing API-key recovery below) before choosing CI merely because
+   a password profile is missing. Keep one candidate producer: if CI is already
+   running, restoring local credentials does not require a competing local build.
+3. Check real login-session signing access, notarization and the existing
+   production Sparkle key. Use `release_local.py --check` with the selected
+   architecture. If credentials appear absent, follow the inventory in
+   **Agent preflight** below before requesting new credentials. Never infer
+   absence from sandbox-only Keychain results.
+4. Check `df -h` and the existing Cargo cache before building. Leave room for
+   compiler outputs, app, archive, DMG and a second app copy for smoke testing.
+   A warm debug cache does not make a release build warm. Preserve release caches;
+   remove only identified disposable generated artifacts if space is needed.
+5. Bump `apps/gpui/Cargo.toml` and its Cargo.lock entry, write accurate release
+   notes, commit the source to main and complete required checks. The local
+   wrapper and CI candidate workflow run GPUI/core/release-script checks
+   themselves; there is no implemented skip-checks option. Do not add extra
+   repeated checks once those pass without a new change or unresolved failure.
+6. Build exactly one signed/notarized candidate. For a local release, finish
+   packaging before pushing its tag and follow **Upload to GitHub without a
+   duplicate CI build**. For CI, the immutable tag starts the candidate workflow.
+   Missing local credentials alone do not justify racing both producers. Do not
+   cancel an active job the user explicitly asked to retain.
+7. Download and verify the actual candidate, including inner app, rather than
+   substituting a previously built local app. Validate provenance/checksum,
+   Sparkle signatures, Developer ID, app/DMG staples, Gatekeeper and architecture;
+   test Unicode/save/quit/reopen with a fresh synthetic profile. See **Test and
+   promote**. Close only the synthetic process and detach its DMG afterward.
+8. Promote using `gpui-promote.yml` and verify completion, not just dispatch.
+   Verify both the downloaded and public-URL signed live feed, version/enclosure
+   and rollout interval. Preserve legacy Tauri Latest. Document the source,
+   candidate/promotion run IDs, checks and manual-review limits. Do not restart
+   the user's production app just to publish an update.
+
 ## Apple Silicon local candidates
 
 For an M-series-only release, pass `--architecture arm64` to
@@ -165,16 +210,16 @@ CI. GitHub does not rebuild an uploaded local candidate. A plain
 ### One command for the local path
 
 ```sh
-npm run desktop:release:local -- --check
+npm run desktop:release:local -- --check --architecture universal
 # One-time interactive setup in the user's Terminal, if credentials are missing:
 npm run desktop:release:local -- --setup --apple-id YOUR_APPLE_ID_EMAIL
 # After committing the new version and release notes:
-npm run desktop:release:local -- VERSION --target-dir /absolute/path/to/existing/cargo/cache
+npm run desktop:release:local -- VERSION --architecture universal --target-dir /absolute/path/to/existing/cargo/cache
 ```
 
 The local wrapper detects the Developer ID identity and team, validates an
 existing notarization Keychain profile or reads the named Apple credential
-items, checks GitHub authentication/both Rust targets, and compares the local
+items, checks GitHub authentication/the selected Rust targets, and compares the local
 Sparkle public key with the production repository variable. It runs functional
 checks, retains the current signed feed, exports the dedicated Sparkle key only
 to a private temporary directory, and builds the candidate. It publishes nothing;
@@ -237,16 +282,50 @@ for each release. On a new Mac, securely restore the existing key first.
 
 Read this section before pushing a `gpui-v*` tag. A tag starts the CI candidate
 build; complete local packaging first to avoid duplicate builds. If the user
-asks for a local release, check credentials locally and offer the one-time
-Keychain setup above if they are missing, before choosing CI. Explain the
-missing credential and let the user enter it locally. Do not generate a new
-Sparkle key or replace an existing release.
+asks for a local release, check all existing credential routes below before
+concluding that setup is needed or choosing CI. If none works, offer the local
+interactive setup; explain what is missing and let the user enter credentials
+in their Terminal. Do not generate a new Sparkle key or replace an existing release.
 
 Check signing and Keychain access in the actual macOS user session. The Codex
 sandbox can report zero signing identities even when the login Keychain has
 one; retry through the normal approval mechanism before concluding that the
 certificate or credentials are absent. Never dump Keychain contents or print
-credential values. This check reports only availability:
+credential values.
+
+Check notarization credentials in this order:
+
+1. Validate an existing `APPLE_NOTARIZATION_PROFILE` or `type-gpui-notary` with
+   `xcrun notarytool history --keychain-profile PROFILE --output-format json`.
+   Explicitly select the login Keychain if default-search behavior is uncertain.
+2. If the profile is missing/unusable, inspect the documented App Store Connect
+   API-key path and nonsecret key/issuer identifiers in
+   [mobile local TestFlight instructions](../apps/mobile/LOCAL_TESTFLIGHT.md).
+   The release wrapper does **not** auto-discover that key. Check file existence,
+   then validate it with the command below. A missing password profile is not
+   evidence that all local Apple credentials are absent.
+3. If that existing key works, store it as the notarization profile and validate
+   history through the profile again. This uses the existing secret; no new
+   password, key rotation or private-key output is necessary.
+4. Otherwise check existing environment credentials and the named
+   `type-apple-id` / `type-apple-app-password` services, reporting availability
+   only. Offer interactive Apple ID/app-specific-password setup only after the
+   existing profile/API-key routes have been checked.
+
+For an existing **team** API key (use the documented path/identifiers):
+
+```sh
+xcrun notarytool history --key /absolute/path/to/AuthKey_KEYID.p8 \
+  --key-id KEYID --issuer ISSUER_ID --output-format json
+xcrun notarytool store-credentials type-gpui-notary \
+  --key /absolute/path/to/AuthKey_KEYID.p8 --key-id KEYID --issuer ISSUER_ID
+xcrun notarytool history --keychain-profile type-gpui-notary --output-format json
+```
+
+Do not overwrite a working profile unnecessarily. An Individual API Key uses
+Apple's documented options without an issuer; the known local Type key is a
+team key. The following legacy password/Sparkle inventory reports only
+availability; it does not replace the API-key/profile checks above:
 
 ```sh
 security find-identity -v -p codesigning
@@ -277,8 +356,8 @@ print("Sparkle key: " + (
 CHECK
 ```
 
-Also check `gh auth status` and `rustup target list --installed`; both macOS
-architectures are required. Environment credentials can be used instead of
+Also check `gh auth status` and `rustup target list --installed`; universal
+needs both macOS targets, while arm64 packaging needs only aarch64. Environment credentials can be used instead of
 these named Keychain items. A pre-existing notarytool profile may also be useful,
 and `release.py` now accepts `APPLE_NOTARIZATION_PROFILE` directly. Without
 that option it still requires `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID`
@@ -405,6 +484,23 @@ notarization, DMG hash and unchanged feed baseline before publication.
 
 ## Test and promote
 
+Verify the downloaded candidate's `release.json` (version, architecture, source
+commit, bundle ID, DMG SHA-256 and previous-feed baseline). Verify DMG signature
+and staple, mount it read-only, and verify the app inside with `codesign --verify
+--deep --strict`, `stapler validate`, `spctl --assess --type execute`, plist and
+`lipo` checks. Avoid a failed/partial app copy when local storage is low.
+
+For manual Sparkle verification, the tool can use the existing Keychain account
+without exporting a private key:
+
+```sh
+/path/to/sparkle/bin/sign_update --account type-gpui --verify /path/to/appcast.xml
+/path/to/sparkle/bin/sign_update --account type-gpui --verify /path/to/Type-VERSION-universal.dmg ENCLOSURE_SIGNATURE
+```
+
+Read the archive signature from that version's enclosure in the verified XML.
+These commands only verify; retain the normal packaging/promotion signing path.
+
 Download the draft DMG using authenticated GitHub/`gh`. Test on an isolated
 profile: installation, launch, Unicode editing/save, restart and any sync used.
 For the first release also test the real Sparkle old→new replacement path with
@@ -458,6 +554,33 @@ cache does not accelerate these builds. Keep the machine awake and the KINGSTON
 volume connected while running locally. A codesign Keychain dialog requires
 local confirmation; the app-specific Apple password is separate from the Mac
 login password. Never launch a test against production notes.
+
+### Monitoring an active GitHub build
+
+Inspect per-step start/end timestamps and conclusions with `gh run view RUN_ID
+--json status,conclusion,jobs`. The workflow's `updated_at` can remain at its
+original start while later steps advance; it is not a runner heartbeat.
+
+For a running job, REST job logs and direct step-log URLs may return 404;
+`gh --log` is available after completion. The web live-log page requires an
+authenticated browser. If that access is unavailable, state the limit: an
+`in_progress` label and elapsed time alone prove neither progress nor a hang.
+Do not repeatedly probe the same unavailable log endpoints.
+
+The restored local notarization profile gives an independent progress signal:
+
+```sh
+xcrun notarytool history --keychain-profile type-gpui-notary --output-format json
+```
+
+Look for new app ZIP/DMG submissions and their statuses. Once a submission ID
+exists, inspect it rather than uploading duplicates. No new Apple submission
+only establishes that notarization has not been reached; it does not locate a
+problem within compilation/signing.
+
+For scale, 0.4.14's CI functional checks took 16m38s; the combined universal
+build/sign/notarize step took about 20 minutes. Its local arm64 release compile
+alone took 6m18s. These are measurements, not timeout or health thresholds.
 
 ### Required bounds and visible progress
 

@@ -22,6 +22,9 @@ cancelled and completed successfully.
   Legacy GitHub latest remains `desktop-v0.8.1`.
 - DMG SHA-256:
   `248b4e783e64873613032ba8c57d7bd21fb9c1e7dd128d3febdbdf1afd561ee3`.
+- Canonical RELEASING.md now incorporates the execution path, credential
+  inventory/API-key recovery, architecture/producer choice, actual-candidate
+  verification and limits of active-job monitoring (not just this release report).
 - Local Apple profile was restored using the existing API key. Release caches
   are retained. Some obsolete session-generated test executables and bundles
   were removed when disk space ran out during candidate copying; about 400 MiB
