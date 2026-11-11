@@ -1,5 +1,40 @@
 # GPUI migration — handoff / live status
 
+## Grep-style note search (2026-11-11)
+
+- Commit `797ebe9`, branch `feat/gpui-search`, based on current `origin/main`
+  `8c7d3cb` (published GPUI 0.4.14 plus release documentation). Prior six
+  unpushed feature-branch commits were pushed before starting, as requested.
+- User chose direct file search after discussing memory and SQLite indexes.
+  No index or corpus loading at startup/open: query scans Markdown through
+  core reads on the background executor, with 180ms debounce, cooperative
+  cancellation and generation guards. Literal Unicode case-insensitive words
+  match body/path; all terms required. No external grep executable needed.
+- Search icon beside Stream/Folders filter, Cmd/Ctrl+Shift+F and palette command;
+  arrows/Enter/Esc, bounded 100 results and six rendered rows, title/path/snippet,
+  total and unreadable-file counts. Flush drafts before search; outside click
+  consumes the full click. Stream/user folders included; Trash, internal content,
+  dot entries, root AGENTS.md and symlinks excluded. Lock/profile switch clears
+  results and cancels work. Encrypted bodies use existing unlocked core access;
+  no plaintext search cache or network calls.
+- Synthetic 3000 files (~54MB): six complete scans took 208–216ms in debug/test
+  build on this Mac, with OS cache warmed by fixture creation; debounce adds
+  180ms. Not a cold-cache or production-data measurement. Literal regex matchers
+  replaced a slower per-file lowercase copy (578–762ms).
+- Validation: full `cargo test -p type-gpui -- --test-threads=1` passed outside
+  sandbox (47 library + 66 binary tests, including audio). Synthetic disk tests
+  cover full bodies, Unicode, scope, edits/moves/deletes, limits and cancellation;
+  UI tests cover debounce, replacing queries, result opening, draft flush and
+  closing/backdrop consumption. `git diff --check` passed. Existing unused helper,
+  test-variable and upstream `block` warnings remain.
+- Design and future path: [SEARCH.md](SEARCH.md), including measured baseline,
+  persistent FTS only if needed, optional multilingual embeddings/chunks/hybrid
+  ranking, local storage, encryption and MCP privacy boundaries.
+- Remaining: user review of UI/feel, cold-cache/real-corpus latency, non-macOS
+  execution; no mobile/Open Folder search, phrase/regex/fuzzy syntax, match
+  highlighting or jump to matching offset yet. App not restarted or released.
+
+
 ## Published GPUI 0.4.14 universal (2026-11-09)
 
 Release/handoff details: [HANDOFF_GPUI_0.4.14.md](HANDOFF_GPUI_0.4.14.md).
