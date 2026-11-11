@@ -18,6 +18,7 @@ impl TypeApp {
             InputState::new(window, cx).placeholder("Search recordings by name or folder…")
         });
         let mut app = Self {
+            search: search_ui::State::default(),
             writing: None,
             pane_state: pane_state.clone(),
             updater: None,

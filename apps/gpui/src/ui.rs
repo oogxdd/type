@@ -135,6 +135,7 @@ impl TypeApp {
                 .into_any_element();
         }
         let title = match &modal.kind {
+            ModalKind::Search => "Search notes · all words, any case".into(),
             ModalKind::Writing => "Writing practice · duration in minutes".into(),
             ModalKind::Palette => "Commands · type mv to file notes".into(),
             ModalKind::CreateFolder(parent) => format!(
@@ -224,6 +225,64 @@ impl TypeApp {
                             ),
                         ),
                 );
+        } else if matches!(modal.kind, ModalKind::Search) {
+            let summary = if self.search.pending {
+                "Searching…".to_string()
+            } else if modal.input.read(cx).value().trim().is_empty() {
+                "Type to search Stream and folders".to_string()
+            } else {
+                format!(
+                    "{} matches · showing {}{}",
+                    self.search.results.total,
+                    self.search.results.hits.len(),
+                    if self.search.results.skipped > 0 {
+                        format!(" · {} unreadable files", self.search.results.skipped)
+                    } else {
+                        String::new()
+                    }
+                )
+            };
+            panel = panel.child(div().text_xs().child(summary));
+            let start = modal.selected.saturating_sub(3);
+            for (ix, hit) in self
+                .search
+                .results
+                .hits
+                .iter()
+                .enumerate()
+                .skip(start)
+                .take(6)
+            {
+                panel = panel.child(
+                    div()
+                        .id(SharedString::from(format!("search-hit-{ix}")))
+                        .px_2()
+                        .py_1()
+                        .rounded_md()
+                        .cursor_pointer()
+                        .when(ix == modal.selected, |row| row.bg(cx.theme().accent))
+                        .child(div().text_sm().truncate().child(hit.title.clone()))
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .truncate()
+                                .child(hit.path.clone()),
+                        )
+                        .child(div().text_xs().truncate().child(hit.snippet.clone()))
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            if let Some(modal) = &mut this.modal {
+                                modal.selected = ix;
+                            }
+                            this.open_search_result(window, cx);
+                        })),
+                );
+            }
+            panel = panel.child(
+                div()
+                    .text_xs()
+                    .child("↑/↓ select · Enter open · Esc close · first 100 results"),
+            );
         } else if matches!(modal.kind, ModalKind::Palette) {
             let entries = self.entries(&modal.input.read(cx).value(), cx);
             let start = modal.selected.saturating_sub(5);
@@ -289,8 +348,30 @@ impl TypeApp {
             .items_start()
             .justify_center()
             .pt(px(90.))
-            .bg(rgba(0x00000088))
-            .child(panel)
+            .child(
+                div()
+                    .id("modal-backdrop")
+                    .absolute()
+                    .inset_0()
+                    .occlude()
+                    .bg(rgba(0x00000088))
+                    .on_mouse_down(MouseButton::Left, |_, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                    })
+                    .on_mouse_down(MouseButton::Right, |_, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                    })
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                        if !this.locked {
+                            this.close_modal(window, cx);
+                        }
+                    })),
+            )
+            .child(panel.occlude())
             .into_any_element()
     }
 }
@@ -430,6 +511,17 @@ impl TypeApp {
                     )
                     .child(div().flex_1())
                     .child(
+                        Button::new("search-notes")
+                            .ghost()
+                            .xsmall()
+                            .icon(Icons::Search)
+                            .accessibility_label("Search notes")
+                            .tooltip("Search notes · Cmd+Shift+F")
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.execute(Choice::Search, window, cx)
+                            })),
+                    )
+                    .child(
                         Button::new("nav-filter")
                             .ghost()
                             .xsmall()
@@ -528,7 +620,8 @@ impl TypeApp {
                             .when(self.view == View::Folders, |tree| {
                                 // Let the tree shrink when scrolling is needed, but use its
                                 // content height for short lists. The rest is a root target.
-                                tree.h(px(folder_rows as f32 * tree_moves::ROW_HEIGHT)).min_h_0()
+                                tree.h(px(folder_rows as f32 * tree_moves::ROW_HEIGHT))
+                                    .min_h_0()
                             }),
                     )
                     .when(self.view == View::Folders, |panel| {
@@ -710,10 +803,7 @@ impl Render for TypeApp {
                     editor.read(cx).value(),
                     self.prefs.font_size,
                     &self.active,
-                    editor::attachment_images(
-                        self.backend.root.clone(),
-                        self.active.to_string(),
-                    ),
+                    editor::attachment_images(self.backend.root.clone(), self.active.to_string()),
                     move |data, window, cx| {
                         let table = grid::from_markdown(data, window, cx);
                         let _ = view.update(cx, |this, cx| {

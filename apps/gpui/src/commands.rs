@@ -3,6 +3,7 @@ use type_core::{application::git_sync::GitSyncUseCases, *};
 
 #[derive(Clone)]
 pub enum ModalKind {
+    Search,
     Writing,
     Palette,
     Rename(String),
@@ -26,6 +27,7 @@ pub struct Modal {
 }
 #[derive(Clone)]
 pub enum Choice {
+    Search,
     Writing,
     EndWriting,
     LineNumbers,
@@ -118,7 +120,9 @@ impl Choice {
             | Self::Reload => "Selection",
             Self::New | Self::Writing | Self::NewProfile | Self::NewFolder(_) => "Create",
             Self::Filter(_) | Self::StreamDate | Self::ClearDate => "View",
-            Self::Feed | Self::Folders | Self::TrashView | Self::MoveNote(_) => "Navigate",
+            Self::Search | Self::Feed | Self::Folders | Self::TrashView | Self::MoveNote(_) => {
+                "Navigate"
+            }
             Self::CommandPalette
             | Self::EndWriting
             | Self::LineNumbers
@@ -160,6 +164,14 @@ impl TypeApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let is_search = matches!(kind, ModalKind::Search);
+        if is_search && (self.locked || self.busy || self.flush(false, cx).is_err()) {
+            return;
+        }
+        self.clear_search();
+        if is_search {
+            self.error = None;
+        }
         let secret = matches!(
             &kind,
             ModalKind::Unlock
@@ -180,6 +192,13 @@ impl TypeApp {
         self.modal_subscription = Some(cx.subscribe(&input, |this, _, _: &InputEvent, cx| {
             if let Some(m) = &mut this.modal {
                 m.selected = 0;
+            }
+            if this
+                .modal
+                .as_ref()
+                .is_some_and(|m| matches!(m.kind, ModalKind::Search))
+            {
+                this.query_search(cx);
             }
             cx.notify();
         }));
@@ -213,11 +232,15 @@ impl TypeApp {
             navigation,
             delete_focus,
         });
+        if is_search {
+            self.query_search(cx);
+        }
         window.defer(cx, move |window, cx| handle.focus(window, cx));
         cx.notify();
     }
 
     pub fn close_modal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.clear_search();
         let navigation = self.modal.take().map(|m| m.navigation).unwrap_or(false);
         self.modal_subscription = None;
         self.navigation_focused = navigation;
@@ -491,6 +514,7 @@ impl TypeApp {
             ("Split note at cursor", Choice::Split),
             ("Copy note body", Choice::Copy),
             ("Reload note from disk (discard draft)", Choice::Reload),
+            ("Search notes… (⌘⇧F)", Choice::Search),
             ("Settings", Choice::Settings),
             ("Toggle light / dark theme", Choice::Theme),
             ("Toggle Vim", Choice::Vim),
@@ -677,6 +701,7 @@ impl TypeApp {
                 return;
             }
             match command {
+                Search => self.show_modal(ModalKind::Search, "", window, cx),
                 Palette => self.show_modal(ModalKind::Palette, "", window, cx),
                 Rail => {
                     self.prefs.rail = !self.prefs.rail;
@@ -737,6 +762,10 @@ impl TypeApp {
         }
         if let Some(modal) = &self.modal {
             let key = &event.keystroke.key;
+            if matches!(modal.kind, ModalKind::Search) {
+                self.search_key(event, window, cx);
+                return;
+            }
             if let Some(palette) = &modal.palette {
                 if matches!(key.as_str(), "tab" | "right") {
                     let query = palette.read(cx).query(cx);
@@ -1115,6 +1144,10 @@ impl TypeApp {
         };
         let value = modal.input.read(cx).value().to_string();
         let kind = modal.kind.clone();
+        if matches!(kind, ModalKind::Search) {
+            self.open_search_result(window, cx);
+            return;
+        }
         if matches!(kind, ModalKind::Writing) {
             if self.busy {
                 return;
@@ -1161,6 +1194,7 @@ impl TypeApp {
         };
         let result: Result<(), String> = (|| {
             match kind {
+                ModalKind::Search => unreachable!(),
                 ModalKind::CreateFolder(parent) => {
                     if value.is_empty() || value.contains(['/', '\\']) {
                         return Err("Enter a folder name without separators.".into());
@@ -1315,6 +1349,7 @@ impl TypeApp {
     }
 
     pub fn reload_profiles(&mut self) -> Result<(), String> {
+        self.clear_search();
         self.refresh_task = None;
         self.refreshing = false;
         self.refresh_pending = true;
@@ -1356,6 +1391,7 @@ impl TypeApp {
                     self.stop_playback();
                     self.recordings = None;
                     self.transcription_selection = None;
+                    self.clear_search();
                     self.locked = true;
                     self.notes.clear();
                     self.previews.clear();
@@ -1379,6 +1415,7 @@ impl TypeApp {
         }
         let result: Result<(), String> = (|| {
             match choice {
+                Choice::Search => self.show_modal(ModalKind::Search, "", window, cx),
                 Choice::Writing => self.show_modal(ModalKind::Writing, "15", window, cx),
                 Choice::EndWriting => {
                     self.writing = None;

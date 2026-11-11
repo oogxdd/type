@@ -3991,3 +3991,82 @@ fn cmd_click_opens_a_link_below_the_first_viewport(cx: &mut TestAppContext) {
         (start..start + url.len()).contains(&editor.read_with(&visual, |state, _| state.cursor()))
     );
 }
+
+#[gpui_kit::test]
+fn grep_search_debounces_opens_results_and_cancels_on_close(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let target =
+        f.0.create("Work", "Other title\nПРИВЕТ searchable 🦀".into(), None)
+            .unwrap();
+    let (window, app) = launch(&f, cx);
+    press(cx, window, "cmd-shift-f");
+    assert!(app.read_with(cx, |app, _| app.modal.is_some() && !app.search.pending));
+    cx.simulate_input(window, "searchable");
+    cx.run_until_parked();
+    assert!(app.read_with(cx, |app, _| app.search.pending
+        && app.search.results.hits.is_empty()));
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(200));
+    cx.run_until_parked();
+    app.read_with(cx, |app, _| {
+        assert!(!app.search.pending);
+        assert_eq!(app.search.results.total, 1);
+        assert_eq!(app.search.results.hits[0].path, target);
+    });
+    press(cx, window, "enter");
+    app.read_with(cx, |app, _| {
+        assert_eq!(app.active.as_ref(), target);
+        assert!(app.modal.is_none());
+        assert!(app.search.results.hits.is_empty());
+    });
+    // Pending work cannot repopulate a closed modal or a newer query.
+    press(cx, window, "cmd-shift-f");
+    cx.simulate_input(window, "searchable");
+    press(cx, window, "escape");
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(300));
+    cx.run_until_parked();
+    assert!(app.read_with(cx, |app, _| app.modal.is_none()
+        && app.search.results.hits.is_empty()));
+    press(cx, window, "cmd-shift-f");
+    cx.simulate_input(window, "searchable");
+    press(cx, window, "cmd-a");
+    cx.simulate_input(window, "absent");
+    cx.run_until_parked();
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(300));
+    cx.run_until_parked();
+    assert_eq!(app.read_with(cx, |app, _| app.search.results.total), 0);
+}
+
+#[gpui_kit::test]
+fn grep_search_flushes_drafts_and_backdrop_consumes_click(cx: &mut TestAppContext) {
+    let f = Fixture::new();
+    let (window, app) = launch(&f, cx);
+    press(cx, window, "cmd-n");
+    cx.simulate_input(window, "unsavedneedle");
+    press(cx, window, "cmd-shift-f");
+    cx.simulate_input(window, "unsavedneedle");
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(200));
+    cx.run_until_parked();
+    let before = app.read_with(cx, |app, _| {
+        assert_eq!(app.search.results.total, 1);
+        app.active.clone()
+    });
+    let target = cx
+        .update_window(window, |_, window, cx| {
+            window.render_frame(cx);
+            window.find("new").bounds().center()
+        })
+        .unwrap();
+    let mut visual = VisualTestContext::from_window(window, cx);
+    visual.simulate_click(target, Default::default());
+    visual.run_until_parked();
+    drop(visual);
+    cx.run_until_parked();
+    app.read_with(cx, |app, _| {
+        assert!(app.modal.is_none());
+        assert_eq!(app.active, before);
+    });
+}

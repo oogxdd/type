@@ -8,6 +8,7 @@ mod folder_workspace;
 mod grid;
 mod jobs;
 mod recordings;
+mod search_ui;
 mod settings;
 mod ui;
 mod updater;
@@ -65,6 +66,7 @@ struct Note {
     editor: Option<Entity<EditorState>>,
 }
 struct TypeApp {
+    search: search_ui::State,
     writing: Option<writing::Session>,
     pane_state: Entity<ResizableState>,
     folder_tabs: Vec<Entity<folder_workspace::FolderWorkspace>>,

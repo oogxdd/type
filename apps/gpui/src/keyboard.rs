@@ -5,6 +5,7 @@ use gpui_kit::{KeyDownEvent, Keystroke};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Command {
     Palette,
+    Search,
     Rail,
     Sidebar,
     Focus,
@@ -23,6 +24,7 @@ pub enum Command {
 }
 pub const SHORTCUTS: &[(&str, Command)] = &[
     ("k", Command::Palette),
+    ("shift-f", Command::Search),
     ("/", Command::Palette),
     ("b", Command::Rail),
     ("t", Command::Sidebar),
